@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import {
   buildJobFileDossier,
+  fileKnowsCopy,
   hasMicOnFile,
   hasVideoOnFile,
   jobFileMatches,
@@ -225,22 +226,29 @@ export function JobsPage() {
     hasMic: hasMicOnFile(proofs),
     hasVideo: hasVideoOnFile(proofs),
     latestDate: latestFilmedDate(proofs),
+    beats: dossier,
+  });
+  const knows = fileKnowsCopy({
+    clipCount: proofs?.videos.length ?? 0,
+    hasMic: hasMicOnFile(proofs),
+    hasNotes: (record?.messages.length ?? 0) > 0,
   });
   const empty = Boolean(requestedJob) && turns.length === 0 && !asking && !fileLoading;
   const site = siteLine(record);
+  const recentFiles = (jobs ?? []).slice(0, 4);
 
   return (
     <div className="gpt-shell flex h-screen overflow-hidden" data-testid="job-file">
       <aside className={`gpt-sidebar ${sidebarOpen ? 'gpt-sidebar-open' : ''}`} aria-label="Job files">
         <div className="border-b border-line px-4 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Job files</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">Ask what the file already knows.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Files</p>
+          <p className="mt-1 text-sm font-semibold text-ink-900">I've already read them.</p>
           <label className="mt-3 block">
             <span className="sr-only">Find a job file</span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Find a job file…"
+              placeholder="Find a file…"
               className="w-full rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
@@ -268,10 +276,7 @@ export function JobsPage() {
                 </span>
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium text-ink-900">{job.title}</span>
-                  <span className="block truncate text-xs text-ink-500">
-                    #{job.jobNumber}
-                    {job.lastEvent ? ` · ${job.lastEvent}` : ''}
-                  </span>
+                  <span className="block truncate text-xs text-ink-500">#{job.jobNumber}</span>
                 </span>
               </button>
             ))
@@ -303,13 +308,12 @@ export function JobsPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
                   <p className="truncate text-xs text-ink-500">
-                    Job file
+                    {site ?? 'Job file'}
                     {openJob ? ` · #${openJob.jobNumber}` : ''}
-                    {site ? ` · ${site}` : ''}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-ink-600">Open a job file to ask about it</p>
+                <p className="text-sm text-ink-600">Pick a file, or just ask</p>
               )}
             </div>
             {requestedJob && (
@@ -332,9 +336,24 @@ export function JobsPage() {
                   I forgot something — let me ask
                 </h1>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">
-                  Open a job file. The assistant has already read the clips from the Dashboard —
-                  what happened on site, and what was said on the mic.
+                  Name the job. I've already read the clips — what happened on site, and what was said
+                  on the mic.
                 </p>
+                {recentFiles.length > 0 && (
+                  <div className="mt-8 flex max-w-lg flex-wrap justify-center gap-2">
+                    {recentFiles.map((job) => (
+                      <button
+                        key={job.jobId}
+                        type="button"
+                        onClick={() => openFile(job)}
+                        aria-label={`Ask about ${job.title}`}
+                        className="gpt-suggest rounded-full border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-50 hover:shadow-card"
+                      >
+                        {job.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : fileLoading && turns.length === 0 ? (
               <p className="flex items-center justify-center gap-2 py-16 text-sm text-ink-500">
@@ -344,40 +363,27 @@ export function JobsPage() {
             ) : empty ? (
               <EmptyFile
                 title={title}
-                site={site}
-                dossier={dossier}
+                knows={knows}
                 suggestions={suggestions}
                 onSuggest={(s) => void ask(s)}
               />
             ) : (
-              <>
-                {dossier.length > 0 && (
-                  <details className="mb-6 rounded-2xl border border-line bg-paper-0 text-left">
-                    <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink-800 marker:content-none [&::-webkit-details-marker]:hidden">
-                      Already in this file
-                      <span className="ml-2 text-xs font-normal text-ink-500">
-                        {dossier.length} note{dossier.length === 1 ? '' : 's'} from clips and the record
-                      </span>
-                    </summary>
-                    <ol className="divide-y divide-line border-t border-line">
-                      {dossier.map((beat) => (
-                        <li key={beat.id} className="px-4 py-3">
-                          <p className="text-xs font-medium text-ink-500">{beat.title}</p>
-                          <p className="mt-0.5 text-sm text-ink-800">{beat.detail}</p>
-                        </li>
-                      ))}
-                    </ol>
-                  </details>
-                )}
-                <ul className="space-y-5">
+              <ul className="space-y-5">
                 {turns.map((turn) => (
                   <li
                     key={turn.id}
                     className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-3'}
                   >
                     {turn.role === 'assistant' && (
-                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-paper-0 text-[11px] font-semibold text-ink-600 shadow-card">
-                        AI
+                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-paper-0 text-ink-600 shadow-card">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                          <path
+                            d="M7 3.5h7.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1.5-1.5Z"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                          />
+                          <path d="M14 3.5V8h5" stroke="currentColor" strokeWidth="1.6" />
+                        </svg>
                       </span>
                     )}
                     <div
@@ -401,8 +407,7 @@ export function JobsPage() {
                     <TypingDots />
                   </li>
                 )}
-                </ul>
-              </>
+              </ul>
             )}
           </div>
         </div>
@@ -423,7 +428,7 @@ export function JobsPage() {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder={
-                  requestedJob ? 'I forgot something — ask the file…' : 'Find a job file, then ask…'
+                  requestedJob ? 'Ask what you forgot…' : 'Name the job you forgot something about…'
                 }
                 disabled={asking}
                 className="gpt-textarea"
@@ -438,7 +443,7 @@ export function JobsPage() {
               </button>
             </form>
             <p className="mt-2 text-center text-[11px] text-ink-400">
-              Answers come from the video analysis on this job. If it is not in the clips, the file says so.
+              I answer from the clips on this file. If it isn't in them, I'll say so.
             </p>
           </div>
         </div>
@@ -449,53 +454,31 @@ export function JobsPage() {
 
 function EmptyFile({
   title,
-  site,
-  dossier,
+  knows,
   suggestions,
   onSuggest,
 }: {
   title: string;
-  site: string | null;
-  dossier: ReturnType<typeof buildJobFileDossier>;
+  knows: string;
   suggestions: string[];
   onSuggest: (s: string) => void;
 }) {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center px-2 text-center">
-      <div className="gpt-empty-mark mt-6">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center px-2 text-center">
+      <div className="gpt-empty-mark">
         <FileMark />
       </div>
       <h1 className="mt-5 text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">{title}</h1>
-      <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">
-        {site ? `${site}. ` : ''}
-        Ask anything you forgot — what happened on site, what the homeowner said, whether the work
-        actually got done. The assistant already read the clips.
-      </p>
-
-      {dossier.length > 0 && (
-        <section className="mt-8 w-full max-w-xl text-left" aria-label="What this file already knows">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-500">
-            Already in this file
-          </p>
-          <ol className="mt-2 divide-y divide-line rounded-2xl border border-line bg-paper-0">
-            {dossier.map((beat) => (
-              <li key={beat.id} className="px-4 py-3">
-                <p className="text-xs font-medium text-ink-500">{beat.title}</p>
-                <p className="mt-0.5 text-sm text-ink-800">{beat.detail}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">{knows}</p>
 
       {suggestions.length > 0 && (
-        <div className="mt-7 grid w-full max-w-xl gap-2 sm:grid-cols-2">
+        <div className="mt-8 flex max-w-lg flex-wrap justify-center gap-2">
           {suggestions.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => onSuggest(s)}
-              className="gpt-suggest rounded-2xl border border-line bg-paper-0 px-4 py-3 text-left text-sm text-ink-700 transition hover:bg-paper-50 hover:shadow-card"
+              className="gpt-suggest rounded-full border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-50 hover:shadow-card"
             >
               {s}
             </button>

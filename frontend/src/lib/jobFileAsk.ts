@@ -103,20 +103,72 @@ export function buildJobFileDossier(input: {
   return beats.slice(0, 8);
 }
 
+const FILE_TOPICS =
+  /\b(skylights?|tarp|underlayment|decking|oak floors?|north slope|south slope|ridge vent|flashing|gutters?|shingles?|drywall|insulation|mold|kitchen|bath(?:room)?)\b/i;
+
+function topicFrom(detail: string): string | null {
+  const match = detail.match(FILE_TOPICS);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function uniquePush(list: string[], next: string) {
+  if (!list.some((item) => item.toLowerCase() === next.toLowerCase())) list.push(next);
+}
+
+/**
+ * Prompts that sound like the assistant already read the file — not a menu of
+ * restoration KPIs. Specific when the clips mention a thing; otherwise the
+ * question you came here to ask: what did I forget?
+ */
 export function jobFileSuggestions(input: {
   hasMic: boolean;
   hasVideo: boolean;
   latestDate: string | null;
+  beats?: JobFileBeat[];
 }): string[] {
   const suggestions: string[] = [];
-  if (input.hasMic) suggestions.push('What did the homeowner say?');
-  suggestions.push('What happened on this job?');
-  if (input.latestDate) {
-    suggestions.push(`What did the crew do on ${formatWorkDate(input.latestDate)}?`);
+  const beats = input.beats ?? [];
+  const said = beats.find((beat) => beat.kind === 'said');
+  const clip = beats.find((beat) => beat.kind === 'video');
+
+  if (said) {
+    const topic = topicFrom(said.detail);
+    uniquePush(
+      suggestions,
+      topic ? `What did the homeowner say about the ${topic}?` : 'What did the homeowner say?',
+    );
+  } else if (input.hasMic) {
+    uniquePush(suggestions, 'What did the homeowner say?');
   }
-  suggestions.push(input.hasVideo ? 'Is anything still unfinished?' : 'Has anything been filmed yet?');
-  if (!input.hasMic) suggestions.push('Did anyone on site mention a change?');
+
+  if (clip) {
+    const topic = topicFrom(clip.detail);
+    uniquePush(suggestions, topic ? `What happened with the ${topic}?` : 'What happened on this job?');
+  } else {
+    uniquePush(suggestions, input.hasVideo ? 'What happened on this job?' : 'Has anything been filmed yet?');
+  }
+
+  if (input.latestDate) {
+    uniquePush(suggestions, `What did the crew do on ${formatWorkDate(input.latestDate)}?`);
+  }
+
+  uniquePush(suggestions, input.hasVideo ? 'Is anything still unfinished?' : 'Did anyone on site mention a change?');
   return suggestions.slice(0, 4);
+}
+
+/** One line so the empty file feels known, not like a dashboard you have to scan. */
+export function fileKnowsCopy(input: { clipCount: number; hasMic: boolean; hasNotes: boolean }): string {
+  if (input.clipCount <= 0 && !input.hasNotes && !input.hasMic) {
+    return "Nothing filmed yet — I still know the job. Ask what you forgot.";
+  }
+  const read: string[] = [];
+  if (input.clipCount === 1) read.push('1 clip');
+  else if (input.clipCount > 1) read.push(`${input.clipCount} clips`);
+  if (input.hasMic) read.push('what was said on the mic');
+  else if (input.hasNotes) read.push('the notes on file');
+  if (read.length === 0) return "I've already read this file. Ask what you forgot.";
+  if (read.length === 1) return `I've already read ${read[0]}. Ask what you forgot.`;
+  return `I've already read ${read[0]} and ${read[1]}. Ask what you forgot.`;
 }
 
 export function latestFilmedDate(proofs: ProofResponse | null): string | null {

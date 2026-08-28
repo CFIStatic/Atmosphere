@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildJobFileDossier,
+  fileKnowsCopy,
   jobFileMatches,
   jobFilePath,
   jobFileSuggestions,
@@ -83,6 +84,33 @@ describe('jobFileSuggestions', () => {
       'What did the homeowner say?',
     );
   });
+
+  it('asks about what is already in the clips, not a restoration menu', () => {
+    const beats = buildJobFileDossier({
+      proofs,
+      messages: [
+        {
+          id: 'm1',
+          party_id: null,
+          author_label: 'Homeowner',
+          body: 'Please do not touch the skylights.',
+          scope_item_id: null,
+          is_decision: false,
+          created_at: '2026-08-04T10:00:00Z',
+        },
+      ],
+    });
+    const prompts = jobFileSuggestions({
+      hasMic: true,
+      hasVideo: true,
+      latestDate: '2026-08-05',
+      beats,
+    });
+    expect(prompts[0]).toBe('What did the homeowner say about the skylights?');
+    expect(prompts[1]).toBe('What happened with the tarp?');
+    expect(prompts.some((prompt) => /crew do on/.test(prompt))).toBe(true);
+    expect(prompts).toContain('Is anything still unfinished?');
+  });
 });
 
 describe('turnsFromQuestions', () => {
@@ -109,6 +137,15 @@ describe('turnsFromQuestions', () => {
       'Was the tarp removed?',
       'Yes. Twelve seconds into the after clip.',
     ]);
+  });
+});
+
+describe('fileKnowsCopy', () => {
+  it('sounds like the file is already read, not like a dashboard', () => {
+    expect(fileKnowsCopy({ clipCount: 2, hasMic: true, hasNotes: true })).toBe(
+      "I've already read 2 clips and what was said on the mic. Ask what you forgot.",
+    );
+    expect(fileKnowsCopy({ clipCount: 0, hasMic: false, hasNotes: false })).toMatch(/ask what you forgot/i);
   });
 });
 

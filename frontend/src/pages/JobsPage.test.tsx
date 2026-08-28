@@ -146,28 +146,37 @@ describe('JobsPage job file', () => {
     renderJobs();
 
     expect(await screen.findByText('I forgot something — let me ask')).toBeInTheDocument();
-    expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    expect(screen.getAllByText('Cedar Ridge — storm damage').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /open a job/i })).not.toBeInTheDocument();
     expect(screen.queryByText('In progress')).not.toBeInTheDocument();
     expect(screen.queryByText(/tasks/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/on crew/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Already in this file')).not.toBeInTheDocument();
+    expect(screen.queryByText(/After clip read/i)).not.toBeInTheDocument();
   });
 
   it('opens a file and answers from the video analysis', async () => {
     const user = userEvent.setup();
     renderJobs();
 
-    await user.click(await screen.findByRole('button', { name: /Cedar Ridge/ }));
+    await user.click(await screen.findByRole('button', { name: 'Ask about Cedar Ridge — storm damage' }));
 
-    expect(await screen.findByText('Already in this file')).toBeInTheDocument();
-    expect(screen.getByText('Please do not touch the skylights.')).toBeInTheDocument();
-    expect(screen.getByText('The tarp is gone from the north slope.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'What did the homeowner say?' })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/I've already read 1 clip and what was said on the mic/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Already in this file')).not.toBeInTheDocument();
+    expect(screen.queryByText('Please do not touch the skylights.')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'What did the homeowner say about the skylights?' }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'What did the homeowner say?' }));
+    await user.click(screen.getByRole('button', { name: 'What did the homeowner say about the skylights?' }));
 
     await waitFor(() => {
-      expect(askAboutProofs).toHaveBeenCalledWith('job-1038', 'What did the homeowner say?');
+      expect(askAboutProofs).toHaveBeenCalledWith(
+        'job-1038',
+        'What did the homeowner say about the skylights?',
+      );
     });
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
@@ -189,11 +198,11 @@ describe('JobsPage job file', () => {
     const user = userEvent.setup();
     renderJobs();
 
-    expect(await screen.findByText('Cedar Ridge — storm damage')).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText('Find a job file, then ask…'), 'Cedar');
+    expect((await screen.findAllByText('Cedar Ridge — storm damage')).length).toBeGreaterThan(0);
+    await user.type(screen.getByPlaceholderText('Name the job you forgot something about…'), 'Cedar');
     await user.click(screen.getByRole('button', { name: 'Find a job file' }));
 
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'What did the homeowner say?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What did the homeowner say about the skylights?' })).toBeInTheDocument();
   });
 });
