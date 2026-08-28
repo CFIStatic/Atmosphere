@@ -295,7 +295,7 @@ export function JobsPage() {
     beats: dossier,
   });
   const knows = fileKnowsCopy({
-    clipCount: proofs?.videos.length ?? 0,
+    clipCount: proofs?.videos?.length ?? 0,
     hasMic: hasMicOnFile(proofs),
     hasNotes: (record?.messages.length ?? 0) > 0,
   });
