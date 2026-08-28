@@ -422,9 +422,16 @@
     return '';
   }
 
-  /** Office Overview — same host on /fieldcapture/, live office on the standalone app. */
+  /**
+   * Office web console (Work Verification Platform).
+   *
+   * Same-origin when Field Capture is served under /fieldcapture/ on the
+   * office host. On the standalone Field Capture Railway app, /field is
+   * this same static app (nginx try_files → index.html) — so the Platform
+   * tab must leave for the live office origin.
+   */
   function resolveOfficePlatformHref(pathname) {
-    var path = pathname || '/field';
+    var path = pathname || '/verifier-library';
     if (path.charAt(0) !== '/') path = '/' + path;
     var hostname = '';
     try {

@@ -84,5 +84,7 @@ describe('phone home-screen manifests', () => {
     );
     expect(app).toContain('Core.loginWithPassword');
     expect(app).not.toContain('Core.joinCrew');
+    expect(app).toContain("Core.resolveOfficePlatformHref('/verifier-library')");
+    expect(core).toContain('function resolveOfficePlatformHref');
   });
 });

@@ -95,7 +95,14 @@ assert.match(
   'the Field Capture / Platform bar returns after sign-in',
 );
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
-assert.match(appSrc, /resolveOfficePlatformHref/, 'Platform tab must point at the office Overview');
+assert.match(appSrc, /resolveOfficePlatformHref\('\/verifier-library'\)/, 'Platform tab opens the office web console');
+assert.match(
+  html,
+  /id="platform-link"[^>]*href="https:\/\/atmosphere-web-production\.up\.railway\.app\/verifier-library"/,
+  'standalone Field Capture must not use /field — that path is this same app',
+);
+assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library');
+assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
 assert.match(html, /Welcome back/);
 assert.match(html, /same email and password as the office Platform/);
 assert.match(html, /id="login-email"/);
@@ -107,8 +114,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=switch-after-login/);
-assert.match(html, /js\/app\.js\?v=switch-after-login/);
+assert.match(html, /js\/capture-core\.js\?v=platform-web/);
+assert.match(html, /js\/app\.js\?v=platform-web/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
 assert.match(appSrc, /resolveOfficePlatformHref\('\/forgot-password'\)/);

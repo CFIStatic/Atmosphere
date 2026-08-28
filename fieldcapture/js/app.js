@@ -796,7 +796,7 @@
   (function bindProductSwitch() {
     var link = document.getElementById('platform-link');
     if (link && Core.resolveOfficePlatformHref) {
-      link.href = Core.resolveOfficePlatformHref('/field');
+      link.href = Core.resolveOfficePlatformHref('/verifier-library');
     }
     var forgot = document.getElementById('forgot-link');
     if (forgot && Core.resolveOfficePlatformHref) {
