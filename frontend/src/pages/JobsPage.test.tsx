@@ -9,7 +9,6 @@ vi.mock('../hooks/useFeatureTimer', () => ({
 }));
 
 const getJobs = vi.fn();
-const createJob = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -18,7 +17,6 @@ vi.mock('../lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       getJobs: (...args: unknown[]) => getJobs(...args),
-      createJob: (...args: unknown[]) => createJob(...args),
     },
   };
 });
@@ -57,6 +55,7 @@ function renderJobs() {
       <Routes>
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:id" element={<h1>Job profile</h1>} />
+        <Route path="/intake" element={<h1>Start a job</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -65,26 +64,29 @@ function renderJobs() {
 describe('JobsPage', () => {
   beforeEach(() => {
     getJobs.mockReset();
-    createJob.mockReset();
     getJobs.mockResolvedValue({ jobs });
   });
 
   it('lists jobs as cards that open the job profile', async () => {
     renderJobs();
 
-    expect(await screen.findByRole('heading', { name: 'Jobs' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'My jobs' })).toBeInTheDocument();
+    expect(screen.getByText(/Every job file the office has opened/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Start a job/ })).toHaveAttribute('href', '/intake');
     expect(screen.queryByText('I forgot something — let me ask')).not.toBeInTheDocument();
+    expect(screen.queryByText(/tasks/i)).not.toBeInTheDocument();
     const card = await screen.findByRole('link', { name: /Cedar Ridge/ });
     expect(card).toHaveAttribute('href', '/jobs/job-1038');
+    expect(card).toHaveTextContent('4 clips on file');
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
   });
 
   it('searches jobs from the list', async () => {
     const user = userEvent.setup();
     renderJobs();
-    await screen.findByRole('heading', { name: 'Jobs' });
+    await screen.findByRole('heading', { name: 'My jobs' });
 
-    await user.type(screen.getByLabelText('Search jobs'), 'Cedar');
+    await user.type(screen.getByLabelText('Search job files'), 'Cedar');
     await waitFor(() => {
       expect(getJobs).toHaveBeenCalledWith(expect.objectContaining({ q: 'Cedar' }));
     });

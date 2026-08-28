@@ -167,7 +167,7 @@ export function JobDetailPage() {
       <div className="mx-auto max-w-lg pt-10">
         <ErrorNote message={error} />
         <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-300 hover:text-brand-200">
-          ← Back to jobs
+          ← Back to My jobs
         </Link>
       </div>
     );
@@ -189,7 +189,7 @@ export function JobDetailPage() {
         className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
       >
         <ChevronLeftIcon width={16} height={16} />
-        All jobs
+        My jobs
       </Link>
 
       {/* Header */}
@@ -197,6 +197,9 @@ export function JobDetailPage() {
         <div className="min-w-0">
           <p className="font-mono text-sm tracking-wider text-brand-300">Job #{job.jobNumber}</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            The job file — ask what was filmed, then crew and history if you need them.
+          </p>
           <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-ink-600">
             <span>{WORK_TYPE_LABELS[job.workType]}</span>
             {job.lossType && <span>· {LOSS_TYPE_LABELS[job.lossType]}</span>}

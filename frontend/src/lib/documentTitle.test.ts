@@ -12,6 +12,7 @@ describe('documentTitleFor', () => {
     expect(documentTitleFor('/verifier-library')).toBe('Dashboard · Atmosphere');
     expect(documentTitleFor('/intake')).toBe('Start a job · Atmosphere');
     expect(documentTitleFor('/jobs/abc')).toBe('My jobs · Atmosphere');
+    expect(documentTitleFor('/my-jobs')).toBe('My jobs · Atmosphere');
     expect(documentTitleFor('/field')).toBe('Overview · Atmosphere');
     expect(documentTitleFor('/settings')).toBe('Settings · Atmosphere');
   });

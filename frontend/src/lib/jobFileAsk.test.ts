@@ -51,7 +51,7 @@ const proofs: ProofResponse = {
 };
 
 describe('jobFilePath', () => {
-  it('opens My jobs as the job file', () => {
+  it('opens a My jobs card as the job file', () => {
     expect(jobFilePath('job-1038', { title: 'Cedar Ridge' })).toBe('/jobs/job-1038');
   });
 });
