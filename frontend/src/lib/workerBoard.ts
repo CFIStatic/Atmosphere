@@ -69,7 +69,7 @@ export function mergeWorkerJobs(
 ): WorkerJobCard[] {
   const byId = new Map(jobs.map((job) => [job.jobId, job]));
 
-  if (today && today.length > 0) {
+  if (today) {
     return today.map((row) => {
       const job = byId.get(row.id);
       const crew = job?.crew ?? [];
@@ -96,7 +96,9 @@ export function mergeWorkerJobs(
   }
 
   const open = jobs.filter(isOpenJob);
-  const mine = userId ? open.filter((job) => (job.crew ?? []).some((p) => p.userId === userId)) : [];
+  const mine = userId
+    ? open.filter((job) => (job.crew ?? []).some((p) => p.userId === userId))
+    : [];
   return (mine.length ? mine : open).map((job) => cardFromSummary(job, userId));
 }
 

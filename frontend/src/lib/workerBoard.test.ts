@@ -78,13 +78,14 @@ describe('mergeWorkerJobs', () => {
     expect(cards[0].href).toContain('job-1041');
   });
 
-  it('falls back to jobs this person is on when today is empty', () => {
+  it('keeps a successful empty today list instead of showing every open job', () => {
     const cards = mergeWorkerJobs(
       [],
       [
         job({
-          jobId: 'mine',
-          title: 'Mine',
+          jobId: 'done',
+          title: 'Done',
+          status: 'completed',
           crew: [{ userId: 'u-marcus', name: 'Marcus' }],
         }),
         job({
@@ -95,7 +96,7 @@ describe('mergeWorkerJobs', () => {
       ],
       'u-marcus',
     );
-    expect(cards.map((c) => c.id)).toEqual(['mine']);
+    expect(cards).toEqual([]);
   });
 
   it('shows every open job when this person is not on a crew', () => {
