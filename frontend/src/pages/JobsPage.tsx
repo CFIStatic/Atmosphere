@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type EvidenceItem,
+  type EvidenceShare,
   type JobSummary,
   type ProofQuestion,
   type ProofResponse,
@@ -10,17 +12,21 @@ import {
 } from '../lib/api';
 import {
   buildJobFileDossier,
+  buildJobFileSearchHaystack,
   fileKnowsCopy,
   hasMicOnFile,
   hasVideoOnFile,
   jobFileMatches,
   jobFileSuggestions,
   latestFilmedDate,
-  siteLine,
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
-import { SpinnerIcon } from '../components/icons';
+import { PersonAvatar } from '../components/PersonAvatar';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { SearchIcon, SpinnerIcon } from '../components/icons';
+import { useAuth } from '../context/AuthContext';
+import { displayName } from '../lib/display';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
@@ -74,16 +80,22 @@ function FileMark() {
   );
 }
 
+const SEARCH_PLACEHOLDER = 'Search by job, company, date, address, ID, or hash';
+
 export function JobsPage() {
   useFeatureTimer('jobs');
+  const { user, profile, membership } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
   const requestedTitle = searchParams.get('title');
 
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
+  const [searchExtra, setSearchExtra] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const signedInName = displayName(profile?.fullName, user?.email);
+  const orgName = membership?.org?.name?.trim() || null;
 
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
@@ -114,7 +126,52 @@ export function JobsPage() {
     };
   }, []);
 
-  const listed = useMemo(() => (jobs ?? []).filter((job) => jobFileMatches(job, query)), [jobs, query]);
+  useEffect(() => {
+    if (!jobs?.length) return;
+    let cancelled = false;
+    void (async () => {
+      const [sharesRes, ...jobExtras] = await Promise.all([
+        api.evidenceShares().catch(() => ({ shares: [] as EvidenceShare[] })),
+        ...jobs.map(async (job) => {
+          const [record, proofs, evidence] = await Promise.all([
+            api.sharedJob(job.jobId).catch(() => null),
+            api.jobProofs(job.jobId).catch(() => null),
+            api.jobEvidence(job.jobId).catch(() => ({ items: [] as EvidenceItem[] })),
+          ]);
+          return { job, record, proofs, evidence };
+        }),
+      ]);
+      if (cancelled) return;
+      const sharesByJob = new Map<string, EvidenceShare[]>();
+      for (const share of sharesRes.shares ?? []) {
+        const list = sharesByJob.get(share.jobId) ?? [];
+        list.push(share);
+        sharesByJob.set(share.jobId, list);
+      }
+      setSearchExtra(
+        Object.fromEntries(
+          jobExtras.map(({ job, record, proofs, evidence }) => [
+            job.jobId,
+            buildJobFileSearchHaystack({
+              job,
+              record,
+              proofs,
+              evidence: evidence?.items ?? [],
+              shares: sharesByJob.get(job.jobId) ?? [],
+            }),
+          ]),
+        ),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobs]);
+
+  const listed = useMemo(
+    () => (jobs ?? []).filter((job) => jobFileMatches(job, query, searchExtra[job.jobId])),
+    [jobs, query, searchExtra],
+  );
   const openJob = listed.find((job) => job.jobId === requestedJob) ?? jobs?.find((job) => job.jobId === requestedJob);
   const title = record?.job.title || openJob?.title || requestedTitle || 'Job file';
 
@@ -156,13 +213,22 @@ export function JobsPage() {
     setSearchParams({ job: job.jobId, title: job.title, number: String(job.jobNumber) }, { replace: true });
   }
 
+  function submitHeaderSearch() {
+    const matches = listed;
+    if (matches.length === 1) {
+      openFile(matches[0]);
+      return;
+    }
+    if (matches.length > 1) setSidebarOpen(true);
+  }
+
   async function ask(textRaw: string) {
     const text = textRaw.trim();
     if (!text || asking) return;
 
     if (!requestedJob) {
       setDraft('');
-      const matches = (jobs ?? []).filter((job) => jobFileMatches(job, text));
+      const matches = (jobs ?? []).filter((job) => jobFileMatches(job, text, searchExtra[job.jobId]));
       if (matches.length === 1) {
         openFile(matches[0]);
         return;
@@ -234,8 +300,7 @@ export function JobsPage() {
     hasNotes: (record?.messages.length ?? 0) > 0,
   });
   const empty = Boolean(requestedJob) && turns.length === 0 && !asking && !fileLoading;
-  const site = siteLine(record);
-  const recentFiles = (jobs ?? []).slice(0, 4);
+  const recentFiles = listed.slice(0, 4);
 
   return (
     <div className="gpt-shell flex h-screen overflow-hidden" data-testid="job-file">
@@ -243,15 +308,6 @@ export function JobsPage() {
         <div className="border-b border-line px-4 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Files</p>
           <p className="mt-1 text-sm font-semibold text-ink-900">I've already read them.</p>
-          <label className="mt-3 block">
-            <span className="sr-only">Find a job file</span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Find a file…"
-              className="w-full rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
-            />
-          </label>
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
           {jobs === null ? (
@@ -295,35 +351,50 @@ export function JobsPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="gpt-header shrink-0">
-          <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <button
-                type="button"
-                className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs font-medium text-ink-700 lg:hidden"
-                onClick={() => setSidebarOpen(true)}
-              >
-                Files
-              </button>
-              {requestedJob ? (
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
-                  <p className="truncate text-xs text-ink-500">
-                    {site ?? 'Job file'}
-                    {openJob ? ` · #${openJob.jobNumber}` : ''}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-ink-600">Pick a file, or just ask</p>
-              )}
+          <div className="flex items-center gap-3 px-3 py-3 sm:gap-5 sm:px-5 sm:py-3.5">
+            <button
+              type="button"
+              className="shrink-0 rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs font-medium text-ink-700 lg:hidden"
+              onClick={() => setSidebarOpen(true)}
+            >
+              Files
+            </button>
+            <form
+              className="min-w-0 flex-1"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitHeaderSearch();
+              }}
+            >
+              <label className="job-file-search">
+                <SearchIcon width={16} height={16} className="shrink-0" aria-hidden />
+                <span className="sr-only">{SEARCH_PLACEHOLDER}</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={SEARCH_PLACEHOLDER}
+                  autoComplete="off"
+                  enterKeyHint="search"
+                  data-testid="job-file-search"
+                />
+              </label>
+            </form>
+            <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
+              <ThemeToggle />
+              <div className="min-w-0 max-w-[10rem] text-right sm:max-w-[14rem]">
+                <p className="truncate text-sm font-medium leading-tight text-ink-900">{signedInName}</p>
+                {orgName ? (
+                  <p className="truncate text-xs leading-tight text-ink-500">{orgName}</p>
+                ) : null}
+              </div>
+              <PersonAvatar
+                fullName={profile?.fullName}
+                email={user?.email}
+                avatarUrl={profile?.avatarUrl}
+                size="md"
+              />
             </div>
-            {requestedJob && (
-              <Link
-                to={`/job-progress?job=${encodeURIComponent(requestedJob)}`}
-                className="shrink-0 text-xs font-medium text-ink-500 hover:text-ink-800"
-              >
-                Scope & proofs
-              </Link>
-            )}
           </div>
         </header>
 
@@ -366,6 +437,7 @@ export function JobsPage() {
                 knows={knows}
                 suggestions={suggestions}
                 onSuggest={(s) => void ask(s)}
+                scopeHref={`/job-progress?job=${encodeURIComponent(requestedJob)}`}
               />
             ) : (
               <ul className="space-y-5">
@@ -457,11 +529,13 @@ function EmptyFile({
   knows,
   suggestions,
   onSuggest,
+  scopeHref,
 }: {
   title: string;
   knows: string;
   suggestions: string[];
   onSuggest: (s: string) => void;
+  scopeHref: string;
 }) {
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center px-2 text-center">
@@ -470,6 +544,9 @@ function EmptyFile({
       </div>
       <h1 className="mt-5 text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">{title}</h1>
       <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">{knows}</p>
+      <Link to={scopeHref} className="mt-3 text-xs font-medium text-ink-500 hover:text-ink-800">
+        Scope & proofs
+      </Link>
 
       {suggestions.length > 0 && (
         <div className="mt-8 flex max-w-lg flex-wrap justify-center gap-2">

@@ -1,4 +1,10 @@
-import type { JobSummary, ProofQuestion, ProofResponse, SharedJobRecord } from './api';
+import type {
+  EvidenceItem,
+  JobSummary,
+  ProofQuestion,
+  ProofResponse,
+  SharedJobRecord,
+} from './api';
 
 /** Office path for a job file you can ask. */
 export function jobFilePath(jobId: string, extra?: { title?: string; number?: string | number | null }): string {
@@ -216,14 +222,144 @@ export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
     });
 }
 
-export function jobFileMatches(job: Pick<JobSummary, 'title' | 'jobNumber' | 'claimNumber'>, query: string): boolean {
+const MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTHS_LONG = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
+
+/** Calendar tokens so "Aug 5", "2026-08-05", and "8/5/2026" all find the same day. */
+export function dateSearchTokens(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const isoDay = value.slice(0, 10);
+  const parsed = new Date(/T/.test(value) ? value : `${isoDay}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return [value.toLowerCase()];
+  const year = parsed.getUTCFullYear();
+  const month = parsed.getUTCMonth() + 1;
+  const day = parsed.getUTCDate();
+  const short = MONTHS_SHORT[month - 1];
+  const long = MONTHS_LONG[month - 1];
+  const paddedDay = String(day).padStart(2, '0');
+  const paddedMonth = String(month).padStart(2, '0');
+  return [
+    isoDay,
+    `${short} ${day}`,
+    `${short} ${paddedDay}`,
+    `${long} ${day}`,
+    `${short} ${day} ${year}`,
+    `${short} ${day}, ${year}`,
+    `${long} ${day} ${year}`,
+    `${long} ${day}, ${year}`,
+    `${month}/${day}`,
+    `${month}/${day}/${year}`,
+    `${paddedMonth}/${paddedDay}/${year}`,
+  ];
+}
+
+/** Fields the header search can match, from the job row plus anything already on the file. */
+export interface JobFileSearchFields {
+  title: string;
+  jobNumber: number | string | null;
+  jobId?: string | null;
+  claimNumber?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  scheduledStart?: string | null;
+  lastEventAt?: string | null;
+}
+
+export interface JobFileSearchSource {
+  job: JobFileSearchFields;
+  record?: SharedJobRecord | null;
+  proofs?: ProofResponse | null;
+  evidence?: Array<Pick<EvidenceItem, 'id' | 'company' | 'contentHash' | 'workDate'>> | null;
+  shares?: Array<{ id?: string | null; path?: string | null }> | null;
+}
+
+function pushHay(parts: string[], value: string | number | null | undefined) {
+  if (value == null) return;
+  const text = String(value).trim();
+  if (text) parts.push(text);
+}
+
+/**
+ * One searchable string for a job file: title, company, date, address, ID, hash.
+ * Built from the list row plus shared job, proofs, evidence, and share links
+ * when those have been loaded — never displayed, only matched.
+ */
+export function buildJobFileSearchHaystack(source: JobFileSearchSource): string {
+  const parts: string[] = [];
+  const { job, record, proofs, evidence, shares } = source;
+
+  pushHay(parts, job.title);
+  pushHay(parts, job.jobNumber);
+  pushHay(parts, job.jobId);
+  pushHay(parts, job.claimNumber);
+  for (const date of [job.createdAt, job.updatedAt, job.scheduledStart, job.lastEventAt]) {
+    parts.push(...dateSearchTokens(date));
+  }
+
+  if (record) {
+    pushHay(parts, siteLine(record));
+    pushHay(parts, record.job.id);
+    pushHay(parts, record.job.jobNumber);
+    pushHay(parts, record.job.claimNumber);
+    for (const party of record.parties) {
+      pushHay(parts, party.company);
+      pushHay(parts, party.contactName ?? party.contact_name);
+      pushHay(parts, party.email);
+      pushHay(parts, party.id);
+      pushHay(parts, party.accessToken);
+    }
+  }
+
+  for (const video of proofs?.videos ?? []) {
+    pushHay(parts, video.company);
+    pushHay(parts, video.id);
+    parts.push(...dateSearchTokens(video.workDate));
+  }
+  for (const day of proofs?.days ?? []) {
+    pushHay(parts, day.company);
+    parts.push(...dateSearchTokens(day.workDate));
+    for (const id of day.proofIds ?? []) pushHay(parts, id);
+  }
+
+  for (const item of evidence ?? []) {
+    pushHay(parts, item.company);
+    pushHay(parts, item.id);
+    pushHay(parts, item.contentHash);
+    parts.push(...dateSearchTokens(item.workDate));
+  }
+
+  for (const share of shares ?? []) {
+    pushHay(parts, share.id);
+    pushHay(parts, share.path);
+    const slug = share.path?.split('/').filter(Boolean).pop();
+    pushHay(parts, slug);
+  }
+
+  return parts.join('\n').toLowerCase();
+}
+
+export function jobFileMatches(
+  job: JobFileSearchFields | Pick<JobSummary, 'title' | 'jobNumber' | 'claimNumber'>,
+  query: string,
+  extraHaystack?: string,
+): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return (
-    job.title.toLowerCase().includes(needle) ||
-    String(job.jobNumber).includes(needle) ||
-    (job.claimNumber ?? '').toLowerCase().includes(needle)
-  );
+  const haystack = `${buildJobFileSearchHaystack({ job })}\n${extraHaystack ?? ''}`;
+  return haystack.includes(needle);
 }
 
 export function siteLine(record: SharedJobRecord | null): string | null {
