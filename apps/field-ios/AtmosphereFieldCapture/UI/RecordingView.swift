@@ -50,10 +50,6 @@ struct RecordingView: View {
                         .padding(.vertical, 8)
                         .background(.black.opacity(0.4))
                         .cornerRadius(8)
-
-                    Text("ON THE RECORD · video + audio")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.85))
                 }
                 .padding(.bottom, 24)
 

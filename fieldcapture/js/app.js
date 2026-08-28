@@ -364,7 +364,6 @@
       .then(function () {
         show('s-rec');
         $('#rec-since').textContent = 'since ' + new Date().toLocaleTimeString();
-        $('#live-text').textContent = 'Recording video + audio. Keep the phone on you.';
         state.stopWatch = state.recorder.watchPosition(function (site) {
           state.site = site;
           $('#site-text').textContent = site.label;
@@ -615,7 +614,6 @@
           seconds += 1;
           $('#clock').textContent = fmt(seconds);
         }, 1000);
-        $('#live-text').textContent = 'Demo recording — no bytes leave this phone.';
         $('#site-text').textContent = 'Demo site';
       };
     });
