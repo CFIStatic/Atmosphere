@@ -12,6 +12,8 @@ const RAIL_W = 248;
  * the same anchored rail. The one light/dark control lives in the top-right
  * of these React pages because the verifier top bar is hidden in rail-only
  * mode. The rail itself only has Settings — no second moon/sun button.
+ * Settings stays in this shell so that one top-right toggle is the only
+ * light/dark control on office pages.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();

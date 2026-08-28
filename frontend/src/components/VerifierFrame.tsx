@@ -26,16 +26,18 @@ export function VerifierFrame({
   const { theme } = usePreferences();
   const { user, profile, membership, logout } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const startRailOnly = useRef(railOnly);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
 
   useEffect(() => {
     const inline = document.getElementById('atm-verify-src');
     if (inline?.textContent) {
+      const railAttr = startRailOnly.current ? ' data-atm-rail-only="1"' : '';
       setSrcDoc(
         inline.textContent
           .replace(/<\\\/script/gi, '</script')
-          .replace('<body>', '<body data-atm-embed="1">'),
+          .replace('<body>', `<body data-atm-embed="1"${railAttr}>`),
       );
     }
   }, []);
@@ -107,7 +109,9 @@ export function VerifierFrame({
   }, [logout, navigate, postSession]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1';
+  const frameSrc = srcDoc
+    ? undefined
+    : `/verifier/?embed=1${startRailOnly.current ? '&rail=1' : ''}`;
 
   return (
     <div className={className} style={style}>

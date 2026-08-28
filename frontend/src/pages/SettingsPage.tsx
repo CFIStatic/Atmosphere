@@ -17,8 +17,6 @@ import {
   type ContractorType,
   type OrgMember,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
 import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
@@ -85,59 +83,51 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-paper-100">
-      <header className="border-b border-line bg-paper-0/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Logo />
-          <ThemeToggle />
-        </div>
+    <div className="mx-auto max-w-5xl">
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
+        <p className="mt-1.5 text-sm text-ink-600">
+          Manage your account, organization, and how Atmosphere behaves on this device.
+        </p>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
-          <p className="mt-1.5 text-sm text-ink-600">
-            Manage your account, organization, and how Atmosphere behaves on this device.
-          </p>
-        </header>
 
-        <nav className="mt-8 border-b border-line" aria-label="Settings sections">
-          <ul className="flex gap-1 overflow-x-auto pb-px">
-            {SECTIONS.map((section) => {
-              const isActive = section.id === active;
-              return (
-                <li key={section.id} className="shrink-0">
-                  <button
-                    onClick={() => select(section.id)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-2 rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition ${
-                      isActive
-                        ? 'border border-b-0 border-line bg-paper-0 text-brand-700'
-                        : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
-                    }`}
-                  >
-                    <section.icon width={18} height={18} />
-                    {section.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+      <nav className="mt-8 border-b border-line" aria-label="Settings sections">
+        <ul className="flex gap-1 overflow-x-auto pb-px">
+          {SECTIONS.map((section) => {
+            const isActive = section.id === active;
+            return (
+              <li key={section.id} className="shrink-0">
+                <button
+                  onClick={() => select(section.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`flex items-center gap-2 rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition ${
+                    isActive
+                      ? 'border border-b-0 border-line bg-paper-0 text-brand-700'
+                      : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
+                  }`}
+                >
+                  <section.icon width={18} height={18} />
+                  {section.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
-        <div className="mt-8 min-w-0 space-y-6">
-          {active === 'profile' && <ProfileSection />}
-          {active === 'security' && <SecuritySection />}
-          {active === 'organization' && (
-            <>
-              <OrganizationSection />
-              <FieldCaptureAppSection />
-              <InvitePanel />
-              <LinkedAccountsCard />
-            </>
-          )}
-          {active === 'billing' && <BillingSection />}
-          {active === 'preferences' && <PreferencesSection />}
-        </div>
+      <div className="mt-8 min-w-0 space-y-6">
+        {active === 'profile' && <ProfileSection />}
+        {active === 'security' && <SecuritySection />}
+        {active === 'organization' && (
+          <>
+            <OrganizationSection />
+            <FieldCaptureAppSection />
+            <InvitePanel />
+            <LinkedAccountsCard />
+          </>
+        )}
+        {active === 'billing' && <BillingSection />}
+        {active === 'preferences' && <PreferencesSection />}
       </div>
     </div>
   );
