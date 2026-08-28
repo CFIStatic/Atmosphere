@@ -21,54 +21,61 @@ struct RecordingView: View {
                 .ignoresSafeArea()
                 .accessibilityLabel("Live camera — what is being recorded")
 
-            VStack {
-                HStack {
-                    Circle()
-                        .fill(FieldTheme.rec)
-                        .frame(width: 8, height: 8)
-                    Text("RECORDING THE DAY")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(formatClock(session.recorder.elapsedSeconds))
-                        .font(FieldTheme.mono)
-                        .foregroundStyle(.white)
-                }
-                .padding(12)
-                .background(.black.opacity(0.45))
-
+            VStack(spacing: 0) {
+                recChrome
                 Spacer()
-
-                VStack(spacing: 10) {
-                    Text(formatClock(session.recorder.elapsedSeconds))
-                        .font(.system(size: 44, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.white)
-                    Text(session.locator.siteLabel)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.black.opacity(0.4))
-                        .cornerRadius(8)
-                }
-                .padding(.bottom, 24)
-
                 holdToFinish
                     .padding(.horizontal, 18)
                     .padding(.bottom, 28)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.ignoresSafeArea())
+        .ignoresSafeArea()
+        .statusBarHidden(true)
         .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
             session.tickFromRecorder()
         }
     }
 
+    private var recChrome: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(FieldTheme.rec)
+                .frame(width: 8, height: 8)
+            Text("REC")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+            Text(formatClock(session.recorder.elapsedSeconds))
+                .font(FieldTheme.mono)
+                .foregroundStyle(.white)
+            Spacer(minLength: 8)
+            Text(session.locator.siteLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.black.opacity(0.35))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 28)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0.5), Color.clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
     private var holdToFinish: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(FieldTheme.ink)
+                .fill(Color.black.opacity(0.45))
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.white.opacity(0.55), lineWidth: 2)
             GeometryReader { geo in
                 FieldTheme.rec
                     .frame(width: pressing ? geo.size.width : 0, height: geo.size.height)
@@ -123,6 +130,10 @@ struct CameraPreview: UIViewRepresentable {
 
     func makeUIView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .vertical)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         view.session = session
         return view
     }
@@ -148,6 +159,7 @@ final class CameraPreviewView: UIView {
         set {
             previewLayer.session = newValue
             previewLayer.videoGravity = .resizeAspectFill
+            previewLayer.frame = bounds
             syncVideoOrientation()
         }
     }
@@ -171,24 +183,30 @@ final class CameraPreviewView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        previewLayer.frame = bounds
+        previewLayer.videoGravity = .resizeAspectFill
         syncVideoOrientation()
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        previewLayer.frame = bounds
         syncVideoOrientation()
     }
 
     func syncVideoOrientation() {
-        guard let connection = previewLayer.connection else { return }
+        guard let connection = previewLayer.connection, connection.isEnabled else { return }
         let orientation = window?.windowScene?.interfaceOrientation ?? .portrait
         if #available(iOS 17.0, *) {
             let angle = Self.rotationAngle(for: orientation)
-            if connection.isVideoRotationAngleSupported(angle) {
+            if connection.isVideoRotationAngleSupported(angle), connection.videoRotationAngle != angle {
                 connection.videoRotationAngle = angle
             }
         } else if connection.isVideoOrientationSupported {
-            connection.videoOrientation = Self.videoOrientation(for: orientation)
+            let next = Self.videoOrientation(for: orientation)
+            if connection.videoOrientation != next {
+                connection.videoOrientation = next
+            }
         }
     }
 

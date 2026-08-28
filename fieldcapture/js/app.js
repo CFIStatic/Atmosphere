@@ -42,7 +42,19 @@
       var el = document.getElementById(s);
       if (el) el.setAttribute('data-on', s === id ? '1' : '0');
     });
+    document.body.setAttribute('data-screen', id);
     window.scrollTo(0, 0);
+  }
+
+  function stopDemoPreview() {
+    if (state.demoStream) {
+      state.demoStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      state.demoStream = null;
+    }
+    var preview = $('#preview');
+    if (preview) preview.srcObject = null;
   }
 
   /**
@@ -95,6 +107,7 @@
     jobs: [],
     activeJobId: null,
     account: false,
+    demoStream: null,
   };
 
   function readStoredSession() {
@@ -363,7 +376,6 @@
       .start()
       .then(function () {
         show('s-rec');
-        $('#rec-since').textContent = 'since ' + new Date().toLocaleTimeString();
         state.stopWatch = state.recorder.watchPosition(function (site) {
           state.site = site;
           $('#site-text').textContent = site.label;
@@ -607,18 +619,29 @@
       btn.onclick = function () {
         show('s-rec');
         $('#scene').innerHTML = '';
-        $('#preview').hidden = true;
-        $('#rec-since').textContent = 'demo';
+        var preview = $('#preview');
+        if (preview) preview.hidden = false;
         seconds = 0;
+        $('#clock').textContent = fmt(0);
         timer = setInterval(function () {
           seconds += 1;
           $('#clock').textContent = fmt(seconds);
         }, 1000);
         $('#site-text').textContent = 'Demo site';
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+            .then(function (stream) {
+              state.demoStream = stream;
+              Core.bindLivePreview(preview, stream);
+            })
+            .catch(function () {});
+        }
       };
     });
     window.__demoFinish = function () {
       if (timer) clearInterval(timer);
+      stopDemoPreview();
       show('s-door');
       $('#ledger').innerHTML =
         '<div class="lrow on"><span>Demo only</span><em>nothing uploaded</em><span class="ok">✓</span></div>';

@@ -54,6 +54,16 @@ assert.match(html, /Hold 5 seconds to finish/);
 assert.match(html, /id="preview"/);
 assert.match(html, /webkit-playsinline/);
 assert.match(html, /#preview \{/);
+assert.match(html, /body\[data-screen="s-rec"\]/);
+assert.match(html, /<span class="reclabel">REC<\/span>/);
+assert.match(html, /id="clock"/);
+assert.doesNotMatch(html, /ON THE RECORD/);
+assert.doesNotMatch(html, /class="grain"/);
+assert.doesNotMatch(html, /Filming for/);
+assert.doesNotMatch(html, /RECORDING THE DAY/);
+assert.doesNotMatch(appSrc, /preview\.hidden = true/);
+assert.match(appSrc, /data-screen/);
+assert.match(appSrc, /Core\.bindLivePreview/);
 
 assert.equal(typeof Core.resolveApiBase, 'function');
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
