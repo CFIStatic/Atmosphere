@@ -67,19 +67,20 @@ export function JobAskPanel({
   const seq = useRef(0);
   const record = file ? file.record : ownRecord;
   const proofs = file ? file.proofs : ownProofs;
+  const preloaded = file !== undefined;
 
   useEffect(() => {
     const n = ++seq.current;
     setLoading(true);
     setError(null);
     Promise.all([
-      file ? Promise.resolve(file.record) : api.sharedJob(jobId).catch(() => null),
-      file ? Promise.resolve(file.proofs) : api.jobProofs(jobId).catch(() => null),
+      preloaded ? Promise.resolve(record) : api.sharedJob(jobId).catch(() => null),
+      preloaded ? Promise.resolve(proofs) : api.jobProofs(jobId).catch(() => null),
       api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
     ])
       .then(([nextRecord, nextProofs, nextQuestions]) => {
         if (n !== seq.current) return;
-        if (!file) {
+        if (!preloaded) {
           setOwnRecord(nextRecord);
           setOwnProofs(nextProofs);
         }
@@ -88,7 +89,10 @@ export function JobAskPanel({
       .finally(() => {
         if (n === seq.current) setLoading(false);
       });
-  }, [jobId, file]);
+    // Reload when the job changes — not when the parent passes a new file object
+    // for the same clips, or a typed answer disappears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- record/proofs are the preloaded snapshot
+  }, [jobId, preloaded]);
 
   useEffect(() => {
     const el = scrollerRef.current;
