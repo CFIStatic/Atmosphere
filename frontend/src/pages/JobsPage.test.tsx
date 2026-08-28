@@ -9,7 +9,6 @@ vi.mock('../hooks/useFeatureTimer', () => ({
 }));
 
 const getJobs = vi.fn();
-const createJob = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -18,7 +17,6 @@ vi.mock('../lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       getJobs: (...args: unknown[]) => getJobs(...args),
-      createJob: (...args: unknown[]) => createJob(...args),
     },
   };
 });
@@ -88,7 +86,6 @@ function renderJobs() {
 describe('JobsPage', () => {
   beforeEach(() => {
     getJobs.mockReset();
-    createJob.mockReset();
     getJobs.mockResolvedValue({ jobs });
   });
 
@@ -96,6 +93,7 @@ describe('JobsPage', () => {
     renderJobs();
 
     expect(await screen.findByRole('heading', { name: 'Job Files' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open a job/i })).not.toBeInTheDocument();
     expect(screen.queryByText('I forgot something — let me ask')).not.toBeInTheDocument();
     const card = await screen.findByRole('link', { name: /Cedar Ridge/ });
     expect(card).toHaveAttribute('href', '/jobs/job-1038');
