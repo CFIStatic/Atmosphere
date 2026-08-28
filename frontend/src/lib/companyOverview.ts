@@ -223,7 +223,15 @@ function candidatesFor(input: {
       detail: input.job.lastEvent || 'The office flagged this ahead of everything else.',
     });
   }
-  if (input.stale != null && input.stale >= 3 && failed === 0 && unread === 0 && awaiting === 0) {
+  const hasFilm = (input.pulse?.clips ?? 0) > 0;
+  if (
+    input.stale != null &&
+    input.stale >= 3 &&
+    failed === 0 &&
+    unread === 0 &&
+    awaiting === 0 &&
+    !hasFilm
+  ) {
     out.push({
       kind: 'quiet',
       headline: `${input.stale}d quiet`,

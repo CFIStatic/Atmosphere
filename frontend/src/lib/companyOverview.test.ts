@@ -231,6 +231,43 @@ describe('buildOverview', () => {
     expect(model.jobs[0].stage).toBe('being_read');
   });
 
+  it('does not call a job quiet while the assistant is still reading its film', () => {
+    const model = buildOverview(
+      [
+        job({
+          jobId: 'live',
+          title: 'Meridian Ave — water loss',
+          lastEventAt: '2026-08-01T12:20:00Z',
+        }),
+      ],
+      [shared({ jobId: 'live', title: 'Meridian Ave — water loss' })],
+      {
+        clips: 4,
+        read: 3,
+        analysing: 1,
+        failed: 0,
+        unread: 0,
+        heard: 1,
+        filmedToday: 2,
+        byJob: [
+          {
+            jobId: 'live',
+            clips: 4,
+            read: 3,
+            analysing: 1,
+            failed: 0,
+            unread: 0,
+            heard: 1,
+            filmedToday: 2,
+          },
+        ],
+      },
+      NOW,
+    );
+    expect(model.actions).toEqual([]);
+    expect(model.jobs[0].stage).toBe('being_read');
+  });
+
   it('treats a missing byJob payload as empty, not as a crash', () => {
     const model = buildOverview(
       [job({ jobId: 'live', title: 'Meridian Ave — water loss', lastEventAt: NOW.toISOString() })],
