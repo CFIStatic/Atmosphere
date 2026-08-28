@@ -22,6 +22,7 @@ import {
   type WorkLogKind,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote, EmptyState } from '../components/AppShell';
+import { JobAskPanel } from '../components/JobAskPanel';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -29,7 +30,7 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 const inputClass =
   'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
-const TABS = ['Work', 'Crew', 'History'] as const;
+const TABS = ['Ask', 'Work', 'Crew', 'History'] as const;
 type Tab = (typeof TABS)[number];
 
 function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -122,7 +123,7 @@ export function JobDetailPage() {
   const { id = '' } = useParams();
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);
-  const [tab, setTab] = useState<Tab>('Work');
+  const [tab, setTab] = useState<Tab>('Ask');
   const [error, setError] = useState<string | null>(null);
 
   const [newTask, setNewTask] = useState('');
@@ -267,6 +268,8 @@ export function JobDetailPage() {
       </div>
 
       <div className="mt-6 space-y-6">
+        {tab === 'Ask' && <JobAskPanel jobId={job.id} />}
+
         {tab === 'Work' && (
           <>
             <Card title="Tasks">

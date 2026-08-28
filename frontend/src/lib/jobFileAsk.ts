@@ -6,12 +6,9 @@ import type {
   SharedJobRecord,
 } from './api';
 
-/** Office path for a job file you can ask. */
-export function jobFilePath(jobId: string, extra?: { title?: string; number?: string | number | null }): string {
-  const q = new URLSearchParams({ job: jobId });
-  if (extra?.title) q.set('title', extra.title);
-  if (extra?.number != null && extra.number !== '') q.set('number', String(extra.number));
-  return `/jobs?${q.toString()}`;
+/** Office path for a job profile you can ask. */
+export function jobFilePath(jobId: string, _extra?: { title?: string; number?: string | number | null }): string {
+  return `/jobs/${encodeURIComponent(jobId)}`;
 }
 
 export interface JobFileBeat {

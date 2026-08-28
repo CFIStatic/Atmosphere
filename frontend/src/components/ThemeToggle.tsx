@@ -1,5 +1,5 @@
 import { setPreference, usePreferences } from '../lib/preferences';
-import { cycleThemePreference, themeLabel } from '../lib/theme';
+import { cycleThemePreference, setThemePreference, themeLabel } from '../lib/theme';
 import { MoonIcon, SunIcon } from './icons';
 
 /**
@@ -13,7 +13,10 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      onClick={() => setPreference('theme', next)}
+      onClick={() => {
+        setThemePreference(next);
+        setPreference('theme', next);
+      }}
       aria-label={`Switch to ${themeLabel(next).toLowerCase()} mode`}
       title={`${label} mode. Click for ${themeLabel(next).toLowerCase()}.`}
       className="grid h-8 w-8 place-items-center rounded-full border border-line text-ink-600 transition hover:border-line-strong hover:text-ink-900"

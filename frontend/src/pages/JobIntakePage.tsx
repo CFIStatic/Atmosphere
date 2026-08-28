@@ -198,7 +198,7 @@ export function JobIntakePage() {
       });
       const handoff = handoffFromApprove(res, proposal, scope);
       setResult(res);
-      navigate(`/jobs?job=${encodeURIComponent(res.job.id)}`, {
+      navigate(`/jobs/${encodeURIComponent(res.job.id)}`, {
         replace: true,
         state: {
           freshJob: handoff.summary,
@@ -321,7 +321,7 @@ export function JobIntakePage() {
               type="button"
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
               onClick={() =>
-                navigate(`/jobs?job=${encodeURIComponent(result.job.id)}`)
+                navigate(`/jobs/${encodeURIComponent(result.job.id)}`)
               }
             >
               Open this job file

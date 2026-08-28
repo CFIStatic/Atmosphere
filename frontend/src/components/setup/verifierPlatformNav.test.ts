@@ -27,8 +27,9 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
 
-  it('opens a Dashboard job name as the My jobs file you can ask', () => {
-    expect(verifierHtml).toContain("var to = '/jobs?job=' + encodeURIComponent(id);");
+  it('opens a Dashboard job name as the job profile', () => {
+    expect(verifierHtml).toContain("var to = '/jobs/' + encodeURIComponent(id);");
+    expect(verifierHtml).not.toContain("var to = '/jobs?job=' + encodeURIComponent(id);");
     expect(verifierHtml).not.toContain("var to = '/job-progress?job=' + encodeURIComponent(id);");
   });
 

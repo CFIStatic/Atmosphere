@@ -52,9 +52,7 @@ const proofs: ProofResponse = {
 
 describe('jobFilePath', () => {
   it('opens My jobs as the job file', () => {
-    expect(jobFilePath('job-1038', { title: 'Cedar Ridge' })).toBe(
-      '/jobs?job=job-1038&title=Cedar+Ridge',
-    );
+    expect(jobFilePath('job-1038', { title: 'Cedar Ridge' })).toBe('/jobs/job-1038');
   });
 });
 

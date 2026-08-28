@@ -375,9 +375,9 @@ body::before {
 /* ---- HomeOwner Report — ChatGPT-style chat portal -------------------- */
 .gpt-shell {
   background:
-    radial-gradient(40rem 28rem at 50% -20%, rgba(11, 61, 46, 0.06), transparent 60%),
-    linear-gradient(180deg, #f7f7f5 0%, #f3f2ef 100%);
-  color: #1c1917;
+    radial-gradient(40rem 28rem at 50% -20%, rgb(var(--brand-600) / 0.06), transparent 60%),
+    linear-gradient(180deg, rgb(var(--paper-50)) 0%, rgb(var(--paper-100)) 100%);
+  color: rgb(var(--ink-900));
 }
 
 .gpt-sidebar {

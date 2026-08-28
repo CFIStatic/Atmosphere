@@ -265,7 +265,7 @@ export default function App() {
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
-            {/* Operational record (scope, legal hold). My jobs is the askable file. */}
+            {/* Job profile (tasks, crew, and ask). Scope & proofs is /job-progress. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>

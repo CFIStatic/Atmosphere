@@ -1,567 +1,314 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
-  type EvidenceItem,
-  type EvidenceShare,
+  JOB_STATUS_LABELS,
+  JOB_STATUS_STYLES,
+  JOB_PRIORITY_LABELS,
+  JOB_PRIORITY_STYLES,
+  LOSS_TYPE_LABELS,
+  WORK_TYPE_LABELS,
+  formatMinutes,
+  timeAgo,
+  type CreateJobInput,
   type JobSummary,
-  type ProofQuestion,
-  type ProofResponse,
-  type SharedJobRecord,
+  type JobPriority,
+  type LossType,
 } from '../lib/api';
-import {
-  buildJobFileDossier,
-  buildJobFileSearchHaystack,
-  fileKnowsCopy,
-  hasMicOnFile,
-  hasVideoOnFile,
-  jobFileMatches,
-  jobFileSuggestions,
-  latestFilmedDate,
-  turnsFromQuestions,
-  type JobFileTurn,
-} from '../lib/jobFileAsk';
-import { PersonAvatar } from '../components/PersonAvatar';
-import { ThemeToggle } from '../components/ThemeToggle';
-import { SearchIcon, SpinnerIcon } from '../components/icons';
-import { useAuth } from '../context/AuthContext';
-import { displayName } from '../lib/display';
+import { PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
+import { SpinnerIcon, PlusIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
-/**
- * My jobs is the job file.
- *
- * Not a restoration dashboard. A file you open when you forgot something —
- * what a homeowner said, whether the tarp came off, what the last clip showed —
- * and ask. The answers come from the video analysis on the Dashboard.
- */
+const FILTERS: { value: string; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'all', label: 'All' },
+];
 
-function SendIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 19V5M12 5l-6 6M12 5l6 6"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const inputClass =
+  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+const labelClass = 'block text-xs font-medium uppercase tracking-wide text-ink-500';
 
-function TypingDots() {
-  return (
-    <span className="gpt-typing inline-flex items-center gap-1 rounded-full bg-paper-0 px-3 py-2 ring-1 ring-line">
-      <span />
-      <span />
-      <span />
-    </span>
-  );
-}
+function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const [form, setForm] = useState<CreateJobInput>({ title: '', workType: 'mitigation' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function FileMark() {
+  function set<K extends keyof CreateJobInput>(key: K, value: CreateJobInput[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      // Blank optional fields are dropped rather than sent as '' — an empty
+      // string is a value, and the memory would record it as one.
+      const payload = Object.fromEntries(
+        Object.entries(form).filter(([, v]) => v !== '' && v !== undefined),
+      ) as unknown as CreateJobInput;
+      await api.createJob(payload);
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not open that job.');
+      setSaving(false);
+    }
+  }
+
   return (
-    <span
-      className="grid h-11 w-11 place-items-center rounded-2xl bg-paper-0 text-ink-700 shadow-card"
-      aria-hidden
+    <form
+      onSubmit={submit}
+      className="mb-6 animate-fade-in-up rounded-xl glass-card p-5 backdrop-blur"
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M7 3.5h7.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1.5-1.5Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-        />
-        <path d="M14 3.5V8h5" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M9 13h6M9 16.5h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    </span>
+      <h2 className="text-base font-semibold text-ink-900">Open a job</h2>
+      <p className="mt-1 text-sm text-ink-600">
+        The job number is assigned automatically, and everything from here on is recorded.
+      </p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className={labelClass} htmlFor="job-name">
+            Job name
+          </label>
+          <input
+            id="job-name"
+            required
+            autoFocus
+            value={form.title}
+            onChange={(e) => set('title', e.target.value)}
+            placeholder="Burst pipe — 14 Alder St"
+            className={`mt-1 ${inputClass}`}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="job-loss-type">
+            Loss type
+          </label>
+          <select
+            id="job-loss-type"
+            value={form.lossType ?? ''}
+            onChange={(e) => set('lossType', (e.target.value || undefined) as LossType | undefined)}
+            className={`mt-1 ${inputClass}`}
+          >
+            <option value="">Not specified</option>
+            {(Object.keys(LOSS_TYPE_LABELS) as LossType[]).map((v) => (
+              <option key={v} value={v}>
+                {LOSS_TYPE_LABELS[v]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="job-priority">
+            Priority
+          </label>
+          <select
+            id="job-priority"
+            value={form.priority ?? 3}
+            onChange={(e) => set('priority', Number(e.target.value) as JobPriority)}
+            className={`mt-1 ${inputClass}`}
+          >
+            {([1, 2, 3, 4, 5] as JobPriority[]).map((v) => (
+              <option key={v} value={v}>
+                {JOB_PRIORITY_LABELS[v]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4">
+          <ErrorNote message={error} />
+        </div>
+      )}
+
+      <div className="mt-5 flex gap-3">
+        <button
+          type="submit"
+          disabled={saving || form.title.trim().length < 2}
+          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
+        >
+          {saving && <SpinnerIcon className="animate-spin" width={16} height={16} />}
+          {saving ? 'Opening…' : 'Open job'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
-const SEARCH_PLACEHOLDER = 'Search by job, company, date, address, ID, or hash';
+function JobCard({ job }: { job: JobSummary }) {
+  const progress = job.taskCount ? Math.round((job.tasksDone / job.taskCount) * 100) : 0;
+
+  return (
+    <Link
+      to={`/jobs/${job.jobId}`}
+      className="block rounded-xl glass-card p-5 transition hover:border-brand-400/40 hover:bg-paper-200"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-xs tracking-wider text-brand-300">#{job.jobNumber}</p>
+          <h3 className="mt-0.5 truncate text-base font-semibold text-ink-900">{job.title}</h3>
+        </div>
+        <span
+          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
+        >
+          {JOB_STATUS_LABELS[job.status]}
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
+        <span>{WORK_TYPE_LABELS[job.workType]}</span>
+        <span className={JOB_PRIORITY_STYLES[job.priority]}>{JOB_PRIORITY_LABELS[job.priority]}</span>
+        <span>
+          {job.tasksDone}/{job.taskCount} tasks
+        </span>
+        <span>
+          {job.crewSize} on crew
+        </span>
+        {job.minutesLogged > 0 && <span>{formatMinutes(job.minutesLogged)} logged</span>}
+        <span>{job.eventCount} recorded</span>
+      </div>
+
+      {job.taskCount > 0 && (
+        <div
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-300"
+          role="progressbar"
+          aria-valuenow={progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${job.jobNumber} task progress`}
+        >
+          <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+
+      {job.lastEvent && (
+        <p className="mt-3 truncate text-xs text-ink-600">
+          <span className="text-ink-500">Last:</span> {job.lastEvent}{' '}
+          <span className="text-ink-500">· {timeAgo(job.lastEventAt)}</span>
+        </p>
+      )}
+    </Link>
+  );
+}
 
 export function JobsPage() {
   useFeatureTimer('jobs');
-  const { user, profile, membership } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedJob = searchParams.get('job');
-  const requestedTitle = searchParams.get('title');
-
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
-  const [searchExtra, setSearchExtra] = useState<Record<string, string>>({});
-  const [query, setQuery] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [status, setStatus] = useState('open');
+  const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const signedInName = displayName(profile?.fullName, user?.email);
-  const orgName = membership?.org?.name?.trim() || null;
 
-  const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [proofs, setProofs] = useState<ProofResponse | null>(null);
-  const [turns, setTurns] = useState<JobFileTurn[]>([]);
-  const [fileLoading, setFileLoading] = useState(false);
-
-  const [draft, setDraft] = useState('');
-  const [asking, setAsking] = useState(false);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const openSeq = useRef(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getJobs({ status: 'all' })
-      .then(({ jobs: next }) => {
-        if (!cancelled) setJobs(next);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Could not load job files.');
-          setJobs([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!jobs?.length) return;
-    let cancelled = false;
-    void (async () => {
-      const [sharesRes, ...jobExtras] = await Promise.all([
-        api.evidenceShares().catch(() => ({ shares: [] as EvidenceShare[] })),
-        ...jobs.map(async (job) => {
-          const [record, proofs, evidence] = await Promise.all([
-            api.sharedJob(job.jobId).catch(() => null),
-            api.jobProofs(job.jobId).catch(() => null),
-            api.jobEvidence(job.jobId).catch(() => ({ items: [] as EvidenceItem[] })),
-          ]);
-          return { job, record, proofs, evidence };
-        }),
-      ]);
-      if (cancelled) return;
-      const sharesByJob = new Map<string, EvidenceShare[]>();
-      for (const share of sharesRes.shares ?? []) {
-        const list = sharesByJob.get(share.jobId) ?? [];
-        list.push(share);
-        sharesByJob.set(share.jobId, list);
-      }
-      setSearchExtra(
-        Object.fromEntries(
-          jobExtras.map(({ job, record, proofs, evidence }) => [
-            job.jobId,
-            buildJobFileSearchHaystack({
-              job,
-              record,
-              proofs,
-              evidence: evidence?.items ?? [],
-              shares: sharesByJob.get(job.jobId) ?? [],
-            }),
-          ]),
-        ),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [jobs]);
-
-  const listed = useMemo(
-    () => (jobs ?? []).filter((job) => jobFileMatches(job, query, searchExtra[job.jobId])),
-    [jobs, query, searchExtra],
-  );
-  const openJob = listed.find((job) => job.jobId === requestedJob) ?? jobs?.find((job) => job.jobId === requestedJob);
-  const title = record?.job.title || openJob?.title || requestedTitle || 'Job file';
-
-  useEffect(() => {
-    if (!requestedJob) {
-      setRecord(null);
-      setProofs(null);
-      setTurns([]);
-      setFileLoading(false);
-      return;
-    }
-    const seq = ++openSeq.current;
-    setFileLoading(true);
+  const load = useCallback(async () => {
     setError(null);
-    Promise.all([
-      api.sharedJob(requestedJob).catch(() => null),
-      api.jobProofs(requestedJob).catch(() => null),
-      api.proofQuestions(requestedJob).catch(() => ({ questions: [] as ProofQuestion[] })),
-    ])
-      .then(([nextRecord, nextProofs, nextQuestions]) => {
-        if (seq !== openSeq.current) return;
-        setRecord(nextRecord);
-        setProofs(nextProofs);
-        setTurns(turnsFromQuestions(nextQuestions.questions));
-      })
-      .finally(() => {
-        if (seq === openSeq.current) setFileLoading(false);
-      });
-  }, [requestedJob]);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [turns, asking, requestedJob]);
-
-  function openFile(job: JobSummary) {
-    setSidebarOpen(false);
-    setSearchParams({ job: job.jobId, title: job.title, number: String(job.jobNumber) }, { replace: true });
-  }
-
-  function submitHeaderSearch() {
-    const matches = listed;
-    if (matches.length === 1) {
-      openFile(matches[0]);
-      return;
-    }
-    if (matches.length > 1) setSidebarOpen(true);
-  }
-
-  async function ask(textRaw: string) {
-    const text = textRaw.trim();
-    if (!text || asking) return;
-
-    if (!requestedJob) {
-      setDraft('');
-      const matches = (jobs ?? []).filter((job) => jobFileMatches(job, text, searchExtra[job.jobId]));
-      if (matches.length === 1) {
-        openFile(matches[0]);
-        return;
-      }
-      setQuery(text);
-      setSidebarOpen(true);
-      return;
-    }
-
-    const jobId = requestedJob;
-    setAsking(true);
-    setDraft('');
-    setError(null);
-    const now = new Date().toISOString();
-    const pendingId = `local-${now}`;
-    setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
     try {
-      const res = await api.askAboutProofs(jobId, text);
-      setTurns((prev) => [
-        ...prev.filter((turn) => turn.id !== pendingId),
-        {
-          id: res.question?.id ? `${res.question.id}-q` : pendingId,
-          role: 'user',
-          content: text,
-          at: res.question?.created_at ?? now,
-        },
-        {
-          id: res.question?.id ? `${res.question.id}-a` : `${pendingId}-a`,
-          role: 'assistant',
-          content: res.answer,
-          groundedOn: res.groundedOn,
-          at: res.question?.created_at ?? now,
-        },
-      ]);
+      const { jobs } = await api.getJobs({ status, q: search || undefined });
+      setJobs(jobs);
     } catch (err) {
-      setTurns((prev) => prev.filter((turn) => turn.id !== pendingId));
-      setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
-    } finally {
-      setAsking(false);
-      inputRef.current?.focus();
+      setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
+      setJobs([]);
     }
-  }
+  }, [status, search]);
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    void ask(draft);
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void ask(draft);
-    }
-  }
-
-  const dossier = useMemo(
-    () => buildJobFileDossier({ proofs, messages: record?.messages ?? [] }),
-    [proofs, record],
-  );
-  const suggestions = jobFileSuggestions({
-    hasMic: hasMicOnFile(proofs),
-    hasVideo: hasVideoOnFile(proofs),
-    latestDate: latestFilmedDate(proofs),
-    beats: dossier,
-  });
-  const knows = fileKnowsCopy({
-    clipCount: proofs?.videos?.length ?? 0,
-    hasMic: hasMicOnFile(proofs),
-    hasNotes: (record?.messages.length ?? 0) > 0,
-  });
-  const empty = Boolean(requestedJob) && turns.length === 0 && !asking && !fileLoading;
-  const recentFiles = listed.slice(0, 4);
+  useEffect(() => {
+    // Debounced so typing in the search box does not fire a request per keystroke.
+    const timer = setTimeout(load, search ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [load, search]);
 
   return (
-    <div className="gpt-shell flex h-screen overflow-hidden" data-testid="job-file">
-      <aside className={`gpt-sidebar ${sidebarOpen ? 'gpt-sidebar-open' : ''}`} aria-label="Job files">
-        <div className="border-b border-line px-4 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500">Files</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">I've already read them.</p>
-        </div>
-        <nav className="flex-1 overflow-y-auto p-2">
-          {jobs === null ? (
-            <p className="flex items-center gap-2 px-3 py-6 text-sm text-ink-500">
-              <SpinnerIcon className="animate-spin" width={14} height={14} />
-              Opening files…
-            </p>
-          ) : listed.length === 0 ? (
-            <p className="px-3 py-6 text-sm text-ink-500">
-              {query ? 'No file matches that.' : 'No job files yet. Start a job, then come back here to ask.'}
-            </p>
-          ) : (
-            listed.map((job) => (
-              <button
-                key={job.jobId}
-                type="button"
-                onClick={() => openFile(job)}
-                className={`gpt-convo ${requestedJob === job.jobId ? 'gpt-convo-active' : ''}`}
-              >
-                <span className="gpt-convo-icon" aria-hidden>
-                  {String(job.jobNumber).slice(-2)}
-                </span>
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-medium text-ink-900">{job.title}</span>
-                  <span className="block truncate text-xs text-ink-500">#{job.jobNumber}</span>
-                </span>
-              </button>
-            ))
-          )}
-        </nav>
-      </aside>
+    <>
+      <PageHeader
+        title="Jobs"
+        description="Every job the organization has opened. Each one carries its own complete history."
+        action={
+          !creating && (
+            <button
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+            >
+              <PlusIcon width={17} height={17} />
+              Open a job
+            </button>
+          )
+        }
+      />
 
-      {sidebarOpen && (
-        <button
-          type="button"
-          className="gpt-sidebar-scrim lg:hidden"
-          aria-label="Close job files"
-          onClick={() => setSidebarOpen(false)}
+      {creating && (
+        <NewJobForm
+          onCreated={() => {
+            setCreating(false);
+            setJobs(null);
+            void load();
+          }}
+          onCancel={() => setCreating(false)}
         />
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="gpt-header shrink-0">
-          <div className="flex items-center gap-3 px-3 py-3 sm:gap-5 sm:px-5 sm:py-3.5">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => (
             <button
-              type="button"
-              className="shrink-0 rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs font-medium text-ink-700 lg:hidden"
-              onClick={() => setSidebarOpen(true)}
-            >
-              Files
-            </button>
-            <form
-              className="min-w-0 flex-1"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitHeaderSearch();
+              key={f.value}
+              onClick={() => {
+                setStatus(f.value);
+                setJobs(null);
               }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                status === f.value
+                  ? 'bg-brand-600 text-ink-900'
+                  : 'border border-line text-ink-600 hover:bg-paper-200 hover:text-ink-800'
+              }`}
             >
-              <label className="job-file-search">
-                <SearchIcon width={16} height={16} className="shrink-0" aria-hidden />
-                <span className="sr-only">{SEARCH_PLACEHOLDER}</span>
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={SEARCH_PLACEHOLDER}
-                  autoComplete="off"
-                  enterKeyHint="search"
-                  data-testid="job-file-search"
-                />
-              </label>
-            </form>
-            <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
-              <ThemeToggle />
-              <div className="min-w-0 max-w-[10rem] text-right sm:max-w-[14rem]">
-                <p className="truncate text-sm font-medium leading-tight text-ink-900">{signedInName}</p>
-                {orgName ? (
-                  <p className="truncate text-xs leading-tight text-ink-500">{orgName}</p>
-                ) : null}
-              </div>
-              <PersonAvatar
-                fullName={profile?.fullName}
-                email={user?.email}
-                avatarUrl={profile?.avatarUrl}
-                size="md"
-              />
-            </div>
-          </div>
-        </header>
-
-        <div ref={scrollerRef} className="gpt-scroll flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-            {!requestedJob ? (
-              <div className="flex min-h-[50vh] flex-col items-center justify-center px-2 text-center">
-                <FileMark />
-                <h1 className="mt-5 text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
-                  I forgot something — let me ask
-                </h1>
-                <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">
-                  Name the job. I've already read the clips — what happened on site, and what was said
-                  on the mic.
-                </p>
-                {recentFiles.length > 0 && (
-                  <div className="mt-8 flex max-w-lg flex-wrap justify-center gap-2">
-                    {recentFiles.map((job) => (
-                      <button
-                        key={job.jobId}
-                        type="button"
-                        onClick={() => openFile(job)}
-                        aria-label={`Ask about ${job.title}`}
-                        className="gpt-suggest rounded-full border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-50 hover:shadow-card"
-                      >
-                        {job.title}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : fileLoading && turns.length === 0 ? (
-              <p className="flex items-center justify-center gap-2 py-16 text-sm text-ink-500">
-                <SpinnerIcon className="animate-spin" width={14} height={14} />
-                Reading the file…
-              </p>
-            ) : empty ? (
-              <EmptyFile
-                title={title}
-                knows={knows}
-                suggestions={suggestions}
-                onSuggest={(s) => void ask(s)}
-                scopeHref={`/job-progress?job=${encodeURIComponent(requestedJob)}`}
-              />
-            ) : (
-              <ul className="space-y-5">
-                {turns.map((turn) => (
-                  <li
-                    key={turn.id}
-                    className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-3'}
-                  >
-                    {turn.role === 'assistant' && (
-                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-paper-0 text-ink-600 shadow-card">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                          <path
-                            d="M7 3.5h7.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1.5-1.5Z"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                          />
-                          <path d="M14 3.5V8h5" stroke="currentColor" strokeWidth="1.6" />
-                        </svg>
-                      </span>
-                    )}
-                    <div
-                      className={
-                        turn.role === 'user'
-                          ? 'max-w-[85%] rounded-2xl bg-ink-900 px-4 py-2.5 text-sm text-white'
-                          : 'max-w-[85%] rounded-2xl bg-paper-0 px-4 py-2.5 text-sm text-ink-800 shadow-card'
-                      }
-                    >
-                      <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
-                      {turn.role === 'assistant' && turn.groundedOn != null && (
-                        <p className="mt-1.5 text-[11px] text-ink-400">
-                          From {turn.groundedOn} clip{turn.groundedOn === 1 ? '' : 's'} on this file
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-                {asking && (
-                  <li className="flex items-start gap-3">
-                    <TypingDots />
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="gpt-composer shrink-0">
-          <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 sm:px-6 sm:pb-6">
-            {error && <p className="mb-2 text-center text-xs text-danger-700">{error}</p>}
-            <form onSubmit={onSubmit} className="gpt-input-shell">
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  const el = e.currentTarget;
-                  el.style.height = 'auto';
-                  el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
-                }}
-                onKeyDown={onKeyDown}
-                rows={1}
-                placeholder={
-                  requestedJob ? 'Ask what you forgot…' : 'Name the job you forgot something about…'
-                }
-                disabled={asking}
-                className="gpt-textarea"
-              />
-              <button
-                type="submit"
-                disabled={asking || !draft.trim()}
-                aria-label={requestedJob ? 'Ask the job file' : 'Find a job file'}
-                className="gpt-send"
-              >
-                <SendIcon />
-              </button>
-            </form>
-            <p className="mt-2 text-center text-[11px] text-ink-400">
-              I answer from the clips on this file. If it isn't in them, I'll say so.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyFile({
-  title,
-  knows,
-  suggestions,
-  onSuggest,
-  scopeHref,
-}: {
-  title: string;
-  knows: string;
-  suggestions: string[];
-  onSuggest: (s: string) => void;
-  scopeHref: string;
-}) {
-  return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center px-2 text-center">
-      <div className="gpt-empty-mark">
-        <FileMark />
-      </div>
-      <h1 className="mt-5 text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">{title}</h1>
-      <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">{knows}</p>
-      <Link to={scopeHref} className="mt-3 text-xs font-medium text-ink-500 hover:text-ink-800">
-        Scope & proofs
-      </Link>
-
-      {suggestions.length > 0 && (
-        <div className="mt-8 flex max-w-lg flex-wrap justify-center gap-2">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onSuggest(s)}
-              className="gpt-suggest rounded-full border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-50 hover:shadow-card"
-            >
-              {s}
+              {f.label}
             </button>
           ))}
         </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search jobs…"
+          aria-label="Search jobs"
+          className={`ml-auto sm:max-w-xs ${inputClass}`}
+        />
+      </div>
+
+      {error && (
+        <div className="mb-4">
+          <ErrorNote message={error} />
+        </div>
       )}
-    </div>
+
+      {jobs === null ? (
+        <PanelSpinner label="Loading jobs" />
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          title={search ? 'No jobs match that search.' : 'No jobs yet.'}
+          hint={search ? undefined : 'Open one and the record starts from the first keystroke.'}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {jobs.map((job) => (
+            <JobCard key={job.jobId} job={job} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }

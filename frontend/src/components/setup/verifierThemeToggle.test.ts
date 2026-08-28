@@ -23,6 +23,10 @@ describe('verifier dashboard theme toggle', () => {
     expect(topbar![0]).toMatch(/aria-label="Switch to (dark|light) mode"/);
   });
 
+  it('puts a light/dark button in the office rail for pages that hide the top bar', () => {
+    expect(verifierHtml).toContain('id="theme-toggle-rail"');
+  });
+
   it('shows the destination icon for the current theme', () => {
     expect(verifierHtml).toContain(':root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }');
     expect(verifierHtml).toContain(':root[data-theme="light"] .theme-toggle .icon-moon { display: block; }');
