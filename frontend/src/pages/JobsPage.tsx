@@ -167,7 +167,7 @@ export function JobsPage() {
       ) : visible.length === 0 ? (
         <EmptyState
           title={search ? 'No job files match that search.' : 'No job files yet.'}
-          hint={search ? undefined : 'Open one and the record starts from the first keystroke.'}
+          hint={search ? undefined : 'Start a job from the rail and it will show up here.'}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
