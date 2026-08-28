@@ -25,3 +25,14 @@ describe('isJobFilePath', () => {
     expect(isJobFilePath('/field')).toBe(false);
   });
 });
+
+describe('job-file viewport lock', () => {
+  it('locks the job file to the viewport so Ask can stay pinned on the right', () => {
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('lg:h-screen lg:overflow-hidden');
+    expect(shell).toContain('lg:overflow-hidden');
+  });
+});

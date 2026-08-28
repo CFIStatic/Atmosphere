@@ -114,7 +114,7 @@ export function JobDetailPage() {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col lg:flex-row"
+      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
       data-testid="job-file"
     >
       <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">

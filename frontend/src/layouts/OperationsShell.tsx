@@ -29,11 +29,24 @@ export function OperationsShell() {
         }
       />
       {!isLibrary && (
-        <main className="flex min-h-screen flex-col" style={{ paddingLeft: RAIL_W }}>
+        <main
+          className={
+            isJobFile
+              ? 'flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
+              : 'min-h-screen'
+          }
+          style={{ paddingLeft: RAIL_W }}
+        >
           <div className="flex shrink-0 items-center justify-end border-b border-line px-4 py-2.5 sm:px-6">
             <ThemeToggle />
           </div>
-          <div className={isJobFile ? 'flex min-h-0 flex-1 flex-col' : 'px-4 py-6 sm:px-6'}>
+          <div
+            className={
+              isJobFile
+                ? 'flex min-h-0 flex-1 flex-col lg:overflow-hidden'
+                : 'px-4 py-6 sm:px-6'
+            }
+          >
             <Outlet />
           </div>
         </main>
