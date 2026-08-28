@@ -64,12 +64,13 @@ struct RootView: View {
                     TodayView()
                 case .recording:
                     RecordingView()
+                        .ignoresSafeArea()
                 case .door:
                     DoorView()
                 }
             }
         }
-        .background(FieldTheme.bg.ignoresSafeArea())
+        .background((session.phase == .recording ? Color.black : FieldTheme.bg).ignoresSafeArea())
         .overlay {
             if showElevate {
                 ElevateSplashView {
