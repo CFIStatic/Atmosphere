@@ -625,7 +625,7 @@ Great — I've booked an Atmosphere product demo for us:
 ${formatSlot(slot.startsAt, slot.endsAt)}
 Location / join: ${location}
 
-We'll walk through estimators, web access, technician tools, and the audit trail so you can see how it fits ${business?.name ?? 'your team'}. A calendar invite is attached conceptually (ICS stored on the meeting).
+We'll walk through work verification, field capture, web access, and the audit trail so you can see how it fits ${business?.name ?? 'your team'}. A calendar invite is attached conceptually (ICS stored on the meeting).
 
 – ${campaign.sender_name || DEFAULT_SENDER_NAME}`;
 

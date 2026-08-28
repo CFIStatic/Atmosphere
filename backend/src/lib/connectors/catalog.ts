@@ -159,23 +159,6 @@ const CATALOG: ConnectorDefinition[] = [
     ],
   },
   {
-    key: 'mica',
-    name: 'MICA',
-    blurb: 'Drying documentation and moisture logs for mitigation jobs.',
-    category: 'restoration',
-    accessModes: ['web'],
-    contractorTypes: ['restoration', 'all'],
-    siteUrl: 'https://www.micaplus.com',
-    taskTemplates: [
-      {
-        id: 'pull-drying-log',
-        label: 'Pull a drying log',
-        kind: 'pull',
-        instruction: 'Sign in to MICA, open the job matching the claim or job number, and pull the latest drying readings and equipment list.',
-      },
-    ],
-  },
-  {
     key: 'encircle',
     name: 'Encircle',
     blurb: 'Field documentation, photos, and claim packages for restoration crews.',

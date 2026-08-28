@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTakeoff, workLinesOf, type WorkLine } from '../src/purchasing/takeoff.js';
 import { DEMANDS_BY_CODE, MATERIAL_BY_KEY, NO_MATERIALS_REASON } from '../src/purchasing/materials.js';
-import { CATALOG } from '../src/estimator/mitigation/catalog/lineItems.js';
+import { CATALOG } from '../src/estimator/pricing/catalog.js';
 
 /**
  * The takeoff.
@@ -108,7 +108,7 @@ test('every catalog code is either mapped or classified — no silent gaps', () 
   // estimator without a decision here shows up as unmapped in the UI. This
   // test makes that decision visible at build time instead.
   const known = new Set([...Object.keys(DEMANDS_BY_CODE), ...Object.keys(NO_MATERIALS_REASON)]);
-  const gaps = CATALOG.map((item) => item.key).filter((key) => !known.has(key));
+  const gaps = Object.keys(CATALOG).filter((key) => !known.has(key));
   assert.deepEqual(gaps, [], `estimator codes with no takeoff decision: ${gaps.join(', ')}`);
 });
 

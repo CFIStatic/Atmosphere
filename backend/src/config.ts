@@ -106,58 +106,23 @@ export const config = {
   // custom domain. Override with PASSWORD_RESET_REDIRECT_URL.
   passwordResetRedirectUrl: process.env.PASSWORD_RESET_REDIRECT_URL ?? '',
 
-  xactimate: {
-    // Which driver reaches Xactimate. 'mock' is the default deliberately: the
-    // whole estimator is exercisable — consent flow, price-list reconciliation,
-    // estimate writing — without anyone typing a real Xactimate password into a
-    // development machine. Switching this on is a deployment decision, never a
-    // per-request one, so a caller cannot talk the server into launching a
-    // browser by passing a parameter.
-    driver: parseDriver(process.env.XACTIMATE_DRIVER),
-
-    // Verisk partner API. Present only for orgs with an integration agreement;
-    // when it is available it is strictly better than browser automation,
-    // because it never replays a password.
-    apiBaseUrl: process.env.XACTIMATE_API_BASE_URL ?? '',
-    apiKey: process.env.XACTIMATE_API_KEY ?? '',
-
-    // Browser automation is off unless explicitly enabled. Whether automating a
-    // given Xactimate account is permitted depends on that account's terms with
-    // Verisk, which is the account holder's call — so it takes a deliberate act
-    // to turn on, not a default.
-    webAutomationEnabled: process.env.XACTIMATE_WEB_AUTOMATION === 'true',
-    headless: process.env.XACTIMATE_HEADLESS !== 'false',
-    // Xactimate Online's DOM is not a public interface. Keeping selectors in
-    // config makes a UI change a config edit instead of a redeploy.
-    webSelectors: parseJsonRecord(process.env.XACTIMATE_WEB_SELECTORS),
-
-    // Server-only key for the credential vault. Like DEVICE_PEPPER it must never
-    // reach the database — that separation is the whole protection, since a
-    // password that has to be replayed into a login form cannot be hashed.
-    // Unset means at-rest storage is unavailable and users may only connect in
-    // session-only mode, which is the safer configuration anyway.
-    encryptionKey: process.env.XACTIMATE_ENC_KEY ?? '',
-  },
-
   symbility: {
-    // CoreLogic Symbility (Claims Connect) — the other estimating platform a
-    // restoration org lives in, and for many carrier programs the required
-    // one. Same posture as Xactimate: 'mock' by default so the whole connect
-    // flow is exercisable without real credentials, and which driver runs is a
-    // deployment decision, never a per-request one.
+    // CoreLogic Symbility (Claims Connect) — estimating platform some carrier
+    // programs require. 'mock' by default so the connect flow is exercisable
+    // without real credentials; which driver runs is a deployment decision,
+    // never a per-request one.
     driver: (process.env.SYMBILITY_DRIVER === 'web' ? 'web' : 'mock') as 'mock' | 'web',
 
     // There is no partner API wired here yet, so web login is the live path —
-    // and like Xactimate it is off unless explicitly enabled, because whether
-    // automating a Claims Connect account is permitted is between the account
-    // holder and CoreLogic.
+    // and it is off unless explicitly enabled, because whether automating a
+    // Claims Connect account is permitted is between the account holder and
+    // CoreLogic.
     webAutomationEnabled: process.env.SYMBILITY_WEB_AUTOMATION === 'true',
     headless: process.env.SYMBILITY_HEADLESS !== 'false',
     webSelectors: parseJsonRecord(process.env.SYMBILITY_WEB_SELECTORS),
 
-    // Sealed with its own key; falls back to the Xactimate vault key so a
-    // server configured for one estimating vault covers both.
-    encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
+    // Server-only key for the Symbility credential vault.
+    encryptionKey: process.env.SYMBILITY_ENC_KEY ?? '',
   },
 
   verification: {
@@ -242,17 +207,6 @@ export const config = {
     // 'api' turns on the per-vendor clients once a deployment configures
     // them. Which driver runs is a deployment decision, never per-request.
     driver: (process.env.CRM_SYNC_DRIVER === 'api' ? 'api' : 'mock') as 'mock' | 'api',
-  },
-
-  sla: {
-    // Where carrier program agreements come from. 'manual' is the default and
-    // the only source guaranteed to match what the franchise actually signed —
-    // someone reads the contract and enters its terms. 'portal' pulls from a
-    // franchisor endpoint speaking the documented JSON contract; 'mock' serves
-    // representative demo terms.
-    source: parseSlaSource(process.env.SLA_SOURCE),
-    portalBaseUrl: process.env.SLA_PORTAL_BASE_URL ?? '',
-    portalApiKey: process.env.SLA_PORTAL_API_KEY ?? '',
   },
 
   technician: {
@@ -977,29 +931,6 @@ export const config = {
     docusketchBaseUrl: process.env.DOCUSKETCH_BASE_URL ?? '',
     dashBaseUrl: process.env.DASH_BASE_URL ?? '',
     xactimateBaseUrl: process.env.XACTIMATE_BASE_URL ?? '',
-    /** MICA Dash API root for automatic drying-export pulls. */
-    micaDashBaseUrl: process.env.MICA_DASH_BASE_URL ?? '',
-    micaDashApiKey: process.env.MICA_DASH_API_KEY ?? '',
-    /** Microsoft Graph base for Outlook drying-report mail sync. */
-    outlookGraphBaseUrl: process.env.OUTLOOK_GRAPH_BASE_URL ?? 'https://graph.microsoft.com/v1.0',
-    outlookAccessToken: process.env.OUTLOOK_ACCESS_TOKEN ?? '',
-    outlookMailbox: process.env.OUTLOOK_MAILBOX ?? 'me',
-    outlookFolder: process.env.OUTLOOK_FOLDER ?? 'inbox',
-
-    /**
-     * Background capture agent. On by default — this is an agent platform, so
-     * MICA Dash / Outlook visits update estimates without a human clicking Sync.
-     * Set CAPTURE_AGENT_ENABLED=false to disable. Still requires the service-role
-     * key for the unattended pass.
-     */
-    captureAgent: {
-      enabled: (process.env.CAPTURE_AGENT_ENABLED ?? 'true').toLowerCase() !== 'false',
-      intervalMinutes: Math.max(
-        5,
-        Number(process.env.CAPTURE_AGENT_INTERVAL_MINUTES ?? 15),
-      ),
-      sources: parseCaptureSources(process.env.CAPTURE_AGENT_SOURCES),
-    },
 
     // `live` talks to the vendors; `sandbox` serves deterministic fixtures so
     // the whole pipeline can be exercised end-to-end without credentials.
@@ -1069,23 +1000,6 @@ function parseEmailList(value: string | undefined, fallback: string[]): string[]
         .filter(Boolean),
     ),
   ];
-}
-
-function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
-  return value === 'portal' || value === 'mock' ? value : 'manual';
-}
-
-function parseDriver(value: string | undefined): 'mock' | 'api' | 'web' {
-  return value === 'api' || value === 'web' ? value : 'mock';
-}
-
-function parseCaptureSources(value: string | undefined): Array<'mica_dash' | 'outlook'> {
-  const allowed = new Set(['mica_dash', 'outlook']);
-  const parts = (value ?? 'mica_dash,outlook')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is 'mica_dash' | 'outlook' => allowed.has(s));
-  return parts.length ? parts : ['mica_dash', 'outlook'];
 }
 
 function parseWeatherProvider(value: string | undefined): 'nws' | 'demo' | 'auto' {

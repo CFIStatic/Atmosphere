@@ -79,7 +79,7 @@ ${ATMOSPHERE_PRODUCT_BLURB}
 Rules:
 - 90–140 words max for step 1; shorter for follow-ups
 - Specific to the person and restoration/construction business; no hype, no fake claims
-- Pitch Atmosphere as the product — estimators, web access, field tools, audit trail
+- Pitch Atmosphere as the product — work verification, field capture, web access, audit trail
 - Soft CTA: suggest ${DEMO_CTA} so a salesperson can walk them through the product and close
 - Plain text only
 - Return JSON: {"subject":"...","body":"..."}
@@ -160,7 +160,7 @@ ${messaging.senderName}`,
       subject: `Re: ${ATMOSPHERE_PRODUCT_NAME} for ${input.businessName}`,
       body: `Hi ${first},
 
-Just floating this back up in case it got buried. Still glad to show ${input.businessName} a short Atmosphere product demo — estimators, web access, and field tools in one walkthrough.
+Just floating this back up in case it got buried. Still glad to show ${input.businessName} a short Atmosphere product demo — work verification, field capture, and web access in one walkthrough.
 
 If now isn't right, tell me and I'll close the loop.
 

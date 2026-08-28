@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError } from '../lib/errors.js';
-import { resolveOrgId } from '../estimator/mitigation/store.js';
+import { resolveOrgId } from '../lib/org.js';
 import {
   SYMBILITY_SCOPES,
   SYMBILITY_SCOPE_DESCRIPTIONS,

@@ -189,7 +189,6 @@ export const CONTRACTOR_TYPES = [
 
 /** How a member plans to use Atmosphere — multi-select during onboarding. */
 export const USAGE_INTENTS = [
-  'mitigation_estimating',
   'construction_estimating',
   'project_management',
   'crm',

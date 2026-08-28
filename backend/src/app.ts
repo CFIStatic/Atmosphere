@@ -45,8 +45,6 @@ import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
-import { mitigationRouter } from './routes/mitigation.js';
-import { xactimateRouter } from './routes/xactimate.js';
 import { salesRouter } from './routes/sales.js';
 import { emailMarketingRouter } from './routes/emailMarketing.js';
 import { cyberRouter } from './routes/cyber.js';
@@ -166,10 +164,8 @@ export function createApp(): Express {
   //
   // CRM writes are bigger than an auth payload but still small, so the cap
   // stays tight everywhere except the routes that legitimately carry more: a
-  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model, a
-  // pasted mitigation estimate (a whole-house Xactimate export) on the
-  // construction estimator, and a DocuSketch scan plus a MICA drying log on
-  // /api/mitigation.
+  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model,
+  // or a pasted estimate on the construction estimator.
   //
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
@@ -181,14 +177,10 @@ export function createApp(): Express {
   // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
-  const mitigationPath = /^\/api\/mitigation(\/|$)/;
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const bulkTextJson = express.json({ limit: '2mb' });
-  // The mitigation estimator takes raw vendor exports rather than pasted text,
-  // so its ceiling is an order of magnitude above the others'.
-  const mitigationJson = express.json({ limit: '8mb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
@@ -196,13 +188,11 @@ export function createApp(): Express {
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
-      : mitigationPath.test(req.path)
-        ? mitigationJson
-        : avatarPath.test(req.path)
-          ? avatarJson
-          : bulkTextPath.test(req.path)
-            ? bulkTextJson
-            : standardJson;
+      : avatarPath.test(req.path)
+        ? avatarJson
+        : bulkTextPath.test(req.path)
+          ? bulkTextJson
+          : standardJson;
     parse(req, res, next);
   });
 
@@ -223,8 +213,6 @@ export function createApp(): Express {
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
-  app.use('/api/mitigation', mitigationRouter);
-  app.use('/api/xactimate', xactimateRouter);
   app.use('/api/symbility', symbilityRouter);
   app.use('/api/crm-sync', crmSyncRouter);
   app.use('/api/jobs', jobsRouter);

@@ -29,7 +29,6 @@ export type ContractorType =
   | 'other';
 
 export type UsageIntent =
-  | 'mitigation_estimating'
   | 'construction_estimating'
   | 'project_management'
   | 'crm'
@@ -6367,7 +6366,6 @@ export const CONTRACTOR_TYPE_ORDER: ContractorType[] = [
 ];
 
 export const USAGE_INTENT_LABELS: Record<UsageIntent, string> = {
-  mitigation_estimating: 'Mitigation estimating',
   construction_estimating: 'Construction estimating',
   project_management: 'Project management',
   crm: 'CRM / leads and jobs',
