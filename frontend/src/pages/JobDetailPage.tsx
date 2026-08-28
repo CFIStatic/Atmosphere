@@ -113,81 +113,84 @@ export function JobDetailPage() {
   const lastFilmed = filmedDateLabel(pulse.lastDate);
 
   return (
-    <div data-testid="job-file">
-      <Link
-        to="/jobs"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
-      >
-        <ChevronLeftIcon width={16} height={16} />
-        My jobs
-      </Link>
+    <div
+      className="flex min-h-0 flex-1 flex-col lg:flex-row"
+      data-testid="job-file"
+    >
+      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+        <Link
+          to="/jobs"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
+        >
+          <ChevronLeftIcon width={16} height={16} />
+          My jobs
+        </Link>
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-mono text-sm tracking-wider text-brand-600">Job #{job.jobNumber}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-600">
-            {address && <span>{address}</span>}
-            {address && <span aria-hidden="true">·</span>}
-            <span>{WORK_TYPE_LABELS[job.workType]}</span>
-            {job.claimNumber && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>Claim {job.claimNumber}</span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
-          >
-            {JOB_STATUS_LABELS[job.status]}
-          </span>
-          <select
-            value={job.status}
-            onChange={(e) => void changeStatus(e.target.value as JobStatus)}
-            aria-label="Change job status"
-            className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
-          >
-            {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((status) => (
-              <option key={status} value={status}>
-                {JOB_STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-sm tracking-wider text-brand-600">Job #{job.jobNumber}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-600">
+              {address && <span>{address}</span>}
+              {address && <span aria-hidden="true">·</span>}
+              <span>{WORK_TYPE_LABELS[job.workType]}</span>
+              {job.claimNumber && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>Claim {job.claimNumber}</span>
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
+            >
+              {JOB_STATUS_LABELS[job.status]}
+            </span>
+            <select
+              value={job.status}
+              onChange={(e) => void changeStatus(e.target.value as JobStatus)}
+              aria-label="Change job status"
+              className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
+            >
+              {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {JOB_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </header>
 
-      <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <PulseTile label="Clips on file" value={String(pulse.clips)} />
-        <PulseTile label="Read" value={String(pulse.read)} />
-        <PulseTile label="Heard on mic" value={String(pulse.heard)} />
-        <PulseTile label="Last filmed" value={lastFilmed ?? '—'} />
-      </dl>
+        <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <PulseTile label="Clips on file" value={String(pulse.clips)} />
+          <PulseTile label="Read" value={String(pulse.read)} />
+          <PulseTile label="Heard on mic" value={String(pulse.heard)} />
+          <PulseTile label="Last filmed" value={lastFilmed ?? '—'} />
+        </dl>
 
-      {error && (
-        <div className="mt-4">
-          <ErrorNote message={error} />
-        </div>
-      )}
+        {error && (
+          <div className="mt-4">
+            <ErrorNote message={error} />
+          </div>
+        )}
 
-      {blockers.length > 0 && (
-        <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">
-          <h2 className="text-sm font-semibold text-ink-900">Needs a look</h2>
-          <ul className="mt-2 space-y-2">
-            {blockers.map((risk) => (
-              <li key={risk.key}>
-                <p className="text-sm font-medium text-ink-800">{risk.title}</p>
-                <p className="mt-0.5 text-xs text-ink-600">{risk.action}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        {blockers.length > 0 && (
+          <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">
+            <h2 className="text-sm font-semibold text-ink-900">Needs a look</h2>
+            <ul className="mt-2 space-y-2">
+              {blockers.map((risk) => (
+                <li key={risk.key}>
+                  <p className="text-sm font-medium text-ink-800">{risk.title}</p>
+                  <p className="mt-0.5 text-xs text-ink-600">{risk.action}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <section className="rounded-xl glass-card p-5" data-testid="job-file-knows">
+        <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-knows">
           <h2 className="text-base font-semibold text-ink-900">On this file</h2>
           <p className="mt-0.5 text-xs text-ink-500">
             What the clips and the record already know — read this first, then ask.
@@ -223,22 +226,28 @@ export function JobDetailPage() {
           )}
         </section>
 
-        <JobAskPanel jobId={job.id} file={file} />
+        {(record?.parties.length ?? 0) > 0 && (
+          <section className="mt-5 rounded-xl glass-card p-5" data-testid="job-file-people">
+            <h2 className="text-base font-semibold text-ink-900">Invited</h2>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Who has the job link, and whether they are on the current brief.
+            </p>
+            <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line">
+              {record!.parties.map((party) => (
+                <PartyRow key={party.id} party={party} />
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
 
-      {(record?.parties.length ?? 0) > 0 && (
-        <section className="mt-5 rounded-xl glass-card p-5" data-testid="job-file-people">
-          <h2 className="text-base font-semibold text-ink-900">Invited</h2>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Who has the job link, and whether they are on the current brief.
-          </p>
-          <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line">
-            {record!.parties.map((party) => (
-              <PartyRow key={party.id} party={party} />
-            ))}
-          </ul>
-        </section>
-      )}
+      <aside
+        className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
+        aria-label="Ask this job"
+        data-testid="job-file-ask"
+      >
+        <JobAskPanel jobId={job.id} file={file} fill />
+      </aside>
     </div>
   );
 }

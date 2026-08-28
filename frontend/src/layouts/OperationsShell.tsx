@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { isJobFilePath } from './jobFilePath';
 
 const RAIL_W = 248;
 
@@ -14,6 +15,7 @@ const RAIL_W = 248;
 export function OperationsShell() {
   const { pathname } = useLocation();
   const isLibrary = pathname === '/verifier-library';
+  const isJobFile = isJobFilePath(pathname);
   useFeatureTimer('verifier_library', isLibrary);
 
   return (
@@ -27,11 +29,11 @@ export function OperationsShell() {
         }
       />
       {!isLibrary && (
-        <main className="min-h-screen" style={{ paddingLeft: RAIL_W }}>
-          <div className="flex items-center justify-end border-b border-line px-4 py-2.5 sm:px-6">
+        <main className="flex min-h-screen flex-col" style={{ paddingLeft: RAIL_W }}>
+          <div className="flex shrink-0 items-center justify-end border-b border-line px-4 py-2.5 sm:px-6">
             <ThemeToggle />
           </div>
-          <div className="px-4 py-6 sm:px-6">
+          <div className={isJobFile ? 'flex min-h-0 flex-1 flex-col' : 'px-4 py-6 sm:px-6'}>
             <Outlet />
           </div>
         </main>

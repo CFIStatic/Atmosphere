@@ -51,9 +51,12 @@ function TypingDots() {
 export function JobAskPanel({
   jobId,
   file,
+  fill = false,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
+  /** Fill a docked column instead of sitting as a card with a capped thread. */
+  fill?: boolean;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
@@ -165,13 +168,27 @@ export function JobAskPanel({
   }
 
   return (
-    <section className="flex min-h-[28rem] flex-col rounded-xl glass-card" data-testid="job-ask-panel">
-      <div className="border-b border-line px-5 py-4">
+    <section
+      className={
+        fill
+          ? 'flex h-full min-h-0 flex-col bg-paper-50'
+          : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
+      }
+      data-testid="job-ask-panel"
+    >
+      <div className="shrink-0 border-b border-line px-5 py-4">
         <h2 className="text-base font-semibold text-ink-900">Ask this job</h2>
         <p className="mt-0.5 text-xs text-ink-500">{knows}</p>
       </div>
 
-      <div ref={scrollerRef} className="max-h-[28rem] flex-1 overflow-y-auto px-5 py-4">
+      <div
+        ref={scrollerRef}
+        className={
+          fill
+            ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4'
+            : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
+        }
+      >
         {loading && turns.length === 0 ? (
           <p className="flex items-center gap-2 py-10 text-sm text-ink-500">
             <SpinnerIcon className="animate-spin" width={14} height={14} />
@@ -227,7 +244,7 @@ export function JobAskPanel({
         )}
       </div>
 
-      <div className="border-t border-line px-5 py-3">
+      <div className="shrink-0 border-t border-line px-5 py-3">
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
         <form onSubmit={onSubmit} className="flex items-end gap-2">
           <textarea
