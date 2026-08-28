@@ -145,9 +145,10 @@ function stageFor(input: {
   brief: SharedJobSummary | undefined;
   pulse: ProofPulseJob | undefined;
 }): PipelineStage {
-  const revision = input.brief?.currentRevision ?? null;
   const pulse = input.pulse;
-  if (revision == null && !pulse?.clips) return 'needs_brief';
+  // Only call it "needs a brief" when we have the shared record and it has
+  // no revision. A missing record is not evidence — sharedJobs may have failed.
+  if (input.brief && input.brief.currentRevision == null && !pulse?.clips) return 'needs_brief';
   if ((pulse?.failed ?? 0) > 0 || (input.brief?.awaiting ?? 0) > 0) return 'needs_review';
   if ((pulse?.unread ?? 0) > 0 || (pulse?.analysing ?? 0) > 0) return 'being_read';
   if ((pulse?.clips ?? 0) > 0) return 'proving';
