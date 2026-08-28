@@ -410,10 +410,9 @@ const PURCHASES = [
 ];
 
 const PAYMENTS = [
-  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, July 15 to August 15', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', failureReason: null, createdAt: '2026-07-15T00:05:00Z' },
-  { id: 'pay-2', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-28T14:00:05Z' },
-  { id: 'pay-3', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack — auto-reload', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-18T03:20:04Z' },
-  { id: 'pay-4', kind: 'subscription' as const, status: 'failed' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, June 15 to July 15', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-06-15T00:00:00Z', periodEnd: '2026-07-15T00:00:00Z', failureReason: 'Card declined — insufficient funds. Retried successfully two days later.', createdAt: '2026-06-15T00:04:00Z' },
+  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 59900, currency: 'usd', description: 'Work Verification — August', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-08-01T00:00:00Z', periodEnd: '2026-09-01T00:00:00Z', failureReason: null, createdAt: '2026-08-01T00:05:00Z' },
+  { id: 'pay-2', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 9000, currency: 'usd', description: '3 additional jobs beyond 50 included', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-overage', invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-01T00:00:00Z', periodEnd: '2026-08-01T00:00:00Z', failureReason: null, createdAt: '2026-08-01T00:06:00Z' },
+  { id: 'pay-3', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 59900, currency: 'usd', description: 'Work Verification — July', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice-july', invoicePdfUrl: 'about:blank#demo-invoice-july-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-01T00:00:00Z', periodEnd: '2026-08-01T00:00:00Z', failureReason: null, createdAt: '2026-07-01T00:05:00Z' },
 ];
 
 /* ------------------------------------------------------------------ usage */
@@ -2055,6 +2054,40 @@ const routes: Array<[string, RegExp, Handler]> = [
     },
   })],
   ['GET', /^\/api\/billing\/overview$/, () => ({ body: OVERVIEW() })],
+  ['GET', /^\/api\/billing\/workspace$/, () => ({
+    body: {
+      paymentProvider: CATALOG.paymentProvider,
+      canManage: true,
+      required: false,
+      complete: true,
+      isCreator: true,
+      subscription: {
+        name: 'Work Verification',
+        baseMonthlyFeeCents: 59900,
+        includedJobs: 50,
+        additionalJobPriceCents: 3000,
+        status: 'active',
+        periodStart: '2026-08-01T00:00:00Z',
+        periodEnd: '2026-09-01T00:00:00Z',
+        cancelAtPeriodEnd: false,
+        hasStripeSubscription: true,
+      },
+      usage: {
+        periodStart: '2026-08-01T00:00:00Z',
+        periodEnd: '2026-09-01T00:00:00Z',
+        planName: 'Work Verification',
+        processedJobs: 18,
+        includedJobs: 50,
+        excessJobs: 0,
+        videoVerificationHours: 4.2,
+        computeOverage: null,
+        basePlatformChargeCents: 59900,
+        jobOverageChargeCents: 0,
+        videoProcessingChargeCents: 0,
+        estimatedUpcomingBillCents: 59900,
+      },
+    },
+  })],
   ['GET', /^\/api\/billing\/ledger$/, () => ({ body: { entries: LEDGER } })],
   ['GET', /^\/api\/billing\/purchases$/, () => ({ body: { purchases: PURCHASES } })],
   ['GET', /^\/api\/billing\/payments$/, () => ({ body: { payments: PAYMENTS } })],

@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import {
   adminClient,
   cardDetails,
+  invoiceChargeId,
   isConfiguredOnboardingPrice,
   mapSubscriptionStatus,
   meteringPlanForPrice,
@@ -179,7 +180,7 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Pr
   );
 
   const line = invoice.lines?.data?.[0] as any;
-  const chargeId = (invoice as any).charge as string | null;
+  const chargeId = invoiceChargeId(invoice);
 
   let charge: Stripe.Charge | null = null;
   if (chargeId) {
@@ -240,6 +241,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
       p_status: mapSubscriptionStatus(sub.status),
       p_period_start: periodStart,
       p_period_end: periodEnd,
+      p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
     });
     if (error) throw new Error(`subscription sync failed: ${error.message}`);
     return;
@@ -262,7 +264,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
     return;
   }
 
-  console.warn(`[stripe] price ${priceId} is not mapped to a plan; skipping sync`);
+  throw new Error(`[stripe] price ${priceId ?? 'unknown'} is not mapped to a plan`);
 }
 
 async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Promise<void> {

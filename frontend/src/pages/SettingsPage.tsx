@@ -61,7 +61,7 @@ const SECTIONS: SettingsSection[] = [
   {
     id: 'billing',
     label: 'Billing',
-    blurb: 'Seats, what Atmosphere costs, and past charges',
+    blurb: 'Plan, usage, and receipts',
     icon: CreditCardIcon,
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },

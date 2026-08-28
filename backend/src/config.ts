@@ -375,9 +375,13 @@ export const config = {
     // refuses every request rather than trusting an unverified payload.
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
     // Where Stripe returns the customer after checkout or the billing portal.
-    successUrl: process.env.STRIPE_SUCCESS_URL ?? `${frontendOrigins[0]}/billing?checkout=success`,
-    cancelUrl: process.env.STRIPE_CANCEL_URL ?? `${frontendOrigins[0]}/billing?checkout=cancelled`,
-    portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
+    successUrl:
+      process.env.STRIPE_SUCCESS_URL ??
+      `${frontendOrigins[0]}/settings?section=billing&checkout=success`,
+    cancelUrl:
+      process.env.STRIPE_CANCEL_URL ??
+      `${frontendOrigins[0]}/settings?section=billing&checkout=cancelled`,
+    portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/settings?section=billing`,
     /** Fallback Stripe price when metering_plan_versions.stripe_price_id is unset. */
     onboardingPriceId: process.env.STRIPE_ONBOARDING_PRICE_ID ?? '',
     /** Base path for signup billing return URLs (step 3 + checkout query params appended). */

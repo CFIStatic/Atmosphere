@@ -9,6 +9,8 @@ import {
   calculateMeteringPeriod,
   closeMeteringPeriod,
 } from '../metering/periodAggregation.js';
+import { invoiceMeteringOverage } from '../lib/stripeOverage.js';
+import type { MeteringPeriodCalculation } from '../metering/types.js';
 import { recordAiUsageEvent } from '../metering/usageEvents.js';
 import { registerBillableJob } from '../metering/jobMetering.js';
 import { z } from 'zod';
@@ -146,7 +148,14 @@ meteringRouter.post('/period/close', async (req: Request, res: Response, next: N
 
     const periodStart = typeof req.body?.periodStart === 'string' ? req.body.periodStart : undefined;
     const result = await closeMeteringPeriod(supabase, req.orgId!, periodStart);
-    res.json(result);
+    const summary = result.summary as MeteringPeriodCalculation;
+    const invoice = await invoiceMeteringOverage(
+      supabase,
+      req.orgId!,
+      summary,
+      result.statementId,
+    );
+    res.json({ ...result, invoiceId: invoice.invoiceId, invoiceSkipped: invoice.skipped });
   } catch (err) {
     next(err instanceof Error && 'code' in err ? billingError(err as never) : err);
   }

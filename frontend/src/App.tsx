@@ -82,7 +82,7 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
 /** Org creators must finish Stripe before the dashboard; joiners skip when not required. */
 function RequireBillingSetup({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [gate, setGate] = useState<'loading' | 'ready' | 'blocked'>('loading');
+  const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +92,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setGate(status.required && !status.complete ? 'blocked' : 'ready');
       } catch {
-        if (!cancelled) setGate('ready');
+        if (!cancelled) setGate('error');
       }
     })();
     return () => {
@@ -101,6 +101,26 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   }, []);
 
   if (gate === 'loading') return <FullScreenSpinner />;
+  if (gate === 'error') {
+    return (
+      <div className="grid min-h-screen place-items-center bg-paper-100 px-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-lg font-semibold text-ink-900">Could not confirm billing</h1>
+          <p className="mt-2 text-sm text-ink-600">
+            We could not reach billing for this workspace. Refresh to try again — unpaid
+            workspaces stay on the billing step.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-ink-900"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
@@ -111,6 +131,14 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     );
   }
   return <>{children}</>;
+}
+
+function BillingSettingsRedirect() {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams({ section: 'billing' });
+  const checkout = params.get('checkout');
+  if (checkout) next.set('checkout', checkout);
+  return <Navigate to={`/settings?${next.toString()}`} replace />;
 }
 
 /** For the onboarding route: if already onboarded, skip straight to the dashboard. */
@@ -292,6 +320,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/billing" element={<BillingSettingsRedirect />} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

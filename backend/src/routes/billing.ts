@@ -5,11 +5,9 @@ import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
-import { ensureCustomer, stripeClient } from '../lib/stripe.js';
-import {
-  billingOnboardingGate,
-  signupCheckoutReturnUrl,
-} from '../lib/signupOnboarding.js';
+import { ensureCustomer, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
+import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
+import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import {
   billingError,
   serializeBalance,
@@ -91,6 +89,13 @@ billingRouter.get('/overview', async (req: Request, res: Response, next: NextFun
  */
 billingRouter.post('/plan', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (config.billing.paymentProvider === 'stripe') {
+      throw badRequest(
+        'Plan changes go through Stripe Checkout or the billing portal, not this endpoint.',
+        'use_stripe_checkout',
+      );
+    }
+
     const { planCode, billingInterval, seats } = setPlanSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
 
@@ -117,8 +122,10 @@ billingRouter.post('/plan', async (req: Request, res: Response, next: NextFuncti
 
 /**
  * PATCH /api/billing/settings
- * Auto-reload and the monthly spend cap. Sending `monthlySpendLimitNanos: null`
- * removes the cap; omitting the field leaves it untouched.
+ * Auto-reload thresholds and the monthly spend cap. Auto-reload is stored for
+ * the credit catalog; it is not charged automatically. Sending
+ * `monthlySpendLimitNanos: null` removes the cap; omitting the field leaves
+ * it untouched.
  */
 billingRouter.patch('/settings', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -256,35 +263,38 @@ billingRouter.post('/purchases', async (req: Request, res: Response, next: NextF
         orgName: await orgName(supabase, req.orgId!),
       });
 
-      const session = await stripeClient().checkout.sessions.create({
-        mode: 'payment',
-        customer: customerId,
-        success_url: config.stripe.successUrl,
-        cancel_url: config.stripe.cancelUrl,
-        client_reference_id: req.orgId,
-        // Read back on the webhook to attribute the payment and find the
-        // purchase it settles.
-        metadata: { org_id: req.orgId!, purchase_id: row.id },
-        payment_intent_data: {
+      const session = await stripeClient().checkout.sessions.create(
+        {
+          mode: 'payment',
+          customer: customerId,
+          success_url: config.stripe.successUrl,
+          cancel_url: config.stripe.cancelUrl,
+          client_reference_id: req.orgId,
+          // Read back on the webhook to attribute the payment and find the
+          // purchase it settles.
           metadata: { org_id: req.orgId!, purchase_id: row.id },
-          // Makes Stripe email a receipt for this charge.
-          receipt_email: req.user!.email ?? undefined,
-          description: 'Atmosphere usage credits',
-        },
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: 'usd',
-              unit_amount: row.amount_cents,
-              product_data: {
-                name: 'Atmosphere usage credits',
-                description: `${formatCreditLabel(row)} of usage credits`,
+          payment_intent_data: {
+            metadata: { org_id: req.orgId!, purchase_id: row.id },
+            // Makes Stripe email a receipt for this charge.
+            receipt_email: req.user!.email ?? undefined,
+            description: 'Atmosphere usage credits',
+          },
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: 'usd',
+                unit_amount: row.amount_cents,
+                product_data: {
+                  name: 'Atmosphere usage credits',
+                  description: `${formatCreditLabel(row)} of usage credits`,
+                },
               },
             },
-          },
-        ],
-      });
+          ],
+        },
+        { idempotencyKey: stripeIdempotencyKey('credit-purchase', row.id) },
+      );
       checkoutUrl = session.url;
     }
 
@@ -344,16 +354,28 @@ billingRouter.post('/checkout/subscription', async (req: Request, res: Response,
       orgName: await orgName(supabase, req.orgId!),
     });
 
-    const session = await stripeClient().checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      success_url: config.stripe.successUrl,
-      cancel_url: config.stripe.cancelUrl,
-      client_reference_id: req.orgId,
-      metadata: { org_id: req.orgId! },
-      subscription_data: { metadata: { org_id: req.orgId! } },
-      line_items: [{ price: priceId, quantity: Math.max(seats, plan.min_seats ?? 1) }],
-    });
+    const quantity = Math.max(seats, plan.min_seats ?? 1);
+    const session = await stripeClient().checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: customerId,
+        success_url: config.stripe.successUrl,
+        cancel_url: config.stripe.cancelUrl,
+        client_reference_id: req.orgId,
+        metadata: { org_id: req.orgId! },
+        subscription_data: { metadata: { org_id: req.orgId! } },
+        line_items: [{ price: priceId, quantity }],
+      },
+      {
+        idempotencyKey: stripeIdempotencyKey(
+          'subscription',
+          req.orgId,
+          priceId,
+          billingInterval,
+          quantity,
+        ),
+      },
+    );
 
     res.status(201).json({ checkoutUrl: session.url });
   } catch (err) {
@@ -436,6 +458,20 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
 });
 
 /**
+ * GET /api/billing/workspace
+ * The customer-facing bill: Work Verification subscription + this period's usage.
+ * Seat/credit `billing_overview` is not this product.
+ */
+billingRouter.get('/workspace', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    res.json(await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/billing/onboarding
  * Whether the caller must finish Stripe setup before using the product.
  * Required only for the org creator when Stripe is configured; joiners inherit
@@ -444,8 +480,20 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
 billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
-    const status = await loadBillingOnboardingStatus(supabase, req.orgId!, req.user!.id);
-    res.json(status);
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
+    res.json({
+      paymentProvider: workspace.paymentProvider,
+      required: workspace.required,
+      complete: workspace.complete,
+      isCreator: workspace.isCreator,
+      hasSubscription: workspace.subscription.hasStripeSubscription,
+      plan: {
+        name: workspace.subscription.name,
+        baseMonthlyFeeCents: workspace.subscription.baseMonthlyFeeCents,
+        includedJobs: workspace.subscription.includedJobs,
+        additionalJobPriceCents: workspace.subscription.additionalJobPriceCents,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -464,7 +512,7 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
 
     const { returnPath } = onboardingCheckoutSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
-    const status = await loadBillingOnboardingStatus(supabase, req.orgId!, req.user!.id);
+    const status = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
 
     if (!status.required) {
       throw badRequest('Billing setup is not required for this account.', 'billing_not_required');
@@ -486,106 +534,25 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       orgName: await orgName(supabase, req.orgId!),
     });
 
-    const session = await stripeClient().checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      success_url: onboardingReturnUrl('success', returnPath),
-      cancel_url: onboardingReturnUrl('cancelled', returnPath),
-      client_reference_id: req.orgId,
-      metadata: { org_id: req.orgId!, onboarding: 'true' },
-      subscription_data: { metadata: { org_id: req.orgId!, onboarding: 'true' } },
-      line_items: [{ price: priceId, quantity: 1 }],
-    });
+    const session = await stripeClient().checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: customerId,
+        success_url: onboardingReturnUrl('success', returnPath),
+        cancel_url: onboardingReturnUrl('cancelled', returnPath),
+        client_reference_id: req.orgId,
+        metadata: { org_id: req.orgId!, onboarding: 'true' },
+        subscription_data: { metadata: { org_id: req.orgId!, onboarding: 'true' } },
+        line_items: [{ price: priceId, quantity: 1 }],
+      },
+      { idempotencyKey: stripeIdempotencyKey('onboarding', req.orgId, priceId) },
+    );
 
     res.status(201).json({ checkoutUrl: session.url });
   } catch (err) {
     next(err);
   }
 });
-
-async function loadBillingOnboardingStatus(
-  supabase: ReturnType<typeof createUserClient>,
-  orgId: string,
-  userId: string,
-) {
-  const paymentProvider = config.billing.paymentProvider;
-
-  const [{ data: org }, { data: billing }] = await Promise.all([
-    supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle(),
-    supabase
-      .from('org_billing')
-      .select('stripe_subscription_id, status')
-      .eq('org_id', orgId)
-      .maybeSingle(),
-  ]);
-
-  const isCreator = org?.created_by === userId;
-  const { required, complete, hasSubscription } = billingOnboardingGate({
-    paymentProvider,
-    isCreator,
-    subscriptionId: billing?.stripe_subscription_id,
-    subscriptionStatus: billing?.status,
-  });
-
-  let planName = 'Work Verification';
-  let baseMonthlyFeeCents = 59900;
-  let includedJobs = 50;
-  let additionalJobPriceCents = 3000;
-
-  const { data: meteringRow } = await supabase
-    .from('org_metering')
-    .select(
-      'plan_version_id, metering_plan_versions(base_monthly_fee_cents, included_jobs, additional_job_price_cents, metering_plans(name))',
-    )
-    .eq('org_id', orgId)
-    .maybeSingle();
-
-  const version = Array.isArray((meteringRow as any)?.metering_plan_versions)
-    ? (meteringRow as any).metering_plan_versions[0]
-    : (meteringRow as any)?.metering_plan_versions;
-
-  if (version) {
-    baseMonthlyFeeCents = version.base_monthly_fee_cents ?? baseMonthlyFeeCents;
-    includedJobs = version.included_jobs ?? includedJobs;
-    additionalJobPriceCents = version.additional_job_price_cents ?? additionalJobPriceCents;
-    const plan = Array.isArray(version.metering_plans)
-      ? version.metering_plans[0]
-      : version.metering_plans;
-    if (plan?.name) planName = plan.name;
-  }
-
-  return {
-    paymentProvider,
-    required,
-    complete,
-    isCreator,
-    hasSubscription,
-    plan: {
-      name: planName,
-      baseMonthlyFeeCents,
-      includedJobs,
-      additionalJobPriceCents,
-    },
-  };
-}
-
-async function resolveOnboardingPriceId(
-  supabase: ReturnType<typeof createUserClient>,
-  orgId: string,
-): Promise<string | null> {
-  const { data: meteringRow } = await supabase
-    .from('org_metering')
-    .select('metering_plan_versions(stripe_price_id)')
-    .eq('org_id', orgId)
-    .maybeSingle();
-
-  const version = Array.isArray((meteringRow as any)?.metering_plan_versions)
-    ? (meteringRow as any).metering_plan_versions[0]
-    : (meteringRow as any)?.metering_plan_versions;
-  const fromPlan = (version?.stripe_price_id as string | undefined) ?? null;
-  if (fromPlan) return fromPlan;
-  return config.stripe.onboardingPriceId || null;
-}
 
 function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
   return signupCheckoutReturnUrl({

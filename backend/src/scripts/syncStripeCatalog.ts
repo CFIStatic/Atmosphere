@@ -136,7 +136,7 @@ async function main() {
     console.warn('Warning: using a LIVE Stripe key. Prefer sk_test_… until go-live.\n');
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL ?? 'https://ccxatzfsvzetciiwsjlj.supabase.co';
+  const supabaseUrl = process.env.SUPABASE_URL ?? '';
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
 
@@ -182,9 +182,9 @@ async function main() {
   }
 
   // --- Seat / credit billing_plans ---------------------------------------
-  if (!supabaseKey) {
+  if (!supabaseUrl || !supabaseKey) {
     console.warn(
-      '\nSkipping billing_plans sync — set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY to read the catalog.\n',
+      '\nSkipping billing_plans sync — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) to read the catalog.\n',
     );
   } else {
     const supabase = createClient(supabaseUrl, supabaseKey);
