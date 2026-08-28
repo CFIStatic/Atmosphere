@@ -59,16 +59,20 @@ const jobs: JobSummary[] = [
   },
 ];
 
-vi.mock('../lib/api', () => ({
-  api: {
-    getJobs: () => Promise.resolve({ jobs }),
-  },
-}));
+vi.mock('../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
+  return {
+    ...actual,
+    api: {
+      getJobs: () => Promise.resolve({ jobs }),
+    },
+  };
+});
 
 import { PlatformHomePage } from './PlatformHomePage';
 
 describe('PlatformHomePage', () => {
-  it('lists every open job and does not say scheduled or unscheduled', async () => {
+  it('is a company overview of the business, not a field dispatch board', async () => {
     render(
       <MemoryRouter>
         <PlatformHomePage platform="field" />
@@ -76,17 +80,23 @@ describe('PlatformHomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Open jobs')).toBeInTheDocument();
+      expect(screen.getByText('Company overview')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Worked today')).toBeInTheDocument();
+    expect(screen.getByText('What is happening across the business', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Active jobs')).toBeInTheDocument();
     expect(screen.getByText('Crew assigned')).toBeInTheDocument();
+    expect(screen.getByText('Worked today')).toBeInTheDocument();
+    expect(screen.getByText('Contracted')).toBeInTheDocument();
+    expect(screen.getByText('Outstanding')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
     expect(screen.queryByText('Unscheduled')).not.toBeInTheDocument();
+    expect(screen.queryByText(/ready to film/i)).not.toBeInTheDocument();
 
     expect(screen.getByText('Meridian Ave — water loss')).toBeInTheDocument();
     expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();
-    expect(screen.getByText(/2 jobs ready to film/)).toBeInTheDocument();
+
+    const meridian = screen.getByText('Meridian Ave — water loss').closest('a');
+    expect(meridian).toHaveAttribute('href', expect.stringContaining('/jobs?job=job-dated'));
   });
 });

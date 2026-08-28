@@ -189,7 +189,7 @@ function SharedJobsRedirect() {
   const job = params.get('job');
   return (
     <Navigate
-      to={job ? `/job-progress?${q}` : '/verifier-library'}
+      to={job ? `/jobs?${q}` : '/verifier-library'}
       replace
       state={location.state}
     />
@@ -265,10 +265,7 @@ export default function App() {
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
-            {/* Job record (opened from a Dashboard job name). /shared stays as
-                a redirect so old bookmarks keep working without colliding with
-                public share pages at /shared/:token. Bare /job-progress sends
-                people to the Dashboard. */}
+            {/* Operational record (scope, legal hold). My jobs is the askable file. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>

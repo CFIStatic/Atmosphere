@@ -6,8 +6,9 @@ const RAIL_W = 248;
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; Overview, Start a job, Dashboard, My jobs, and the job record
- * render beside the same anchored rail so the office sidebar never swaps.
+ * the screen; Overview, Start a job, Dashboard, and My jobs render beside
+ * the same anchored rail. My jobs is full-bleed so it reads as a job file
+ * you can ask, not a padded dashboard.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();
@@ -26,9 +27,13 @@ export function OperationsShell() {
       />
       {!isLibrary && (
         <main className="min-h-screen" style={{ paddingLeft: RAIL_W }}>
-          <div className="px-4 py-6 sm:px-6">
+          {pathname === '/jobs' ? (
             <Outlet />
-          </div>
+          ) : (
+            <div className="px-4 py-6 sm:px-6">
+              <Outlet />
+            </div>
+          )}
         </main>
       )}
     </div>
