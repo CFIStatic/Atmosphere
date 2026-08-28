@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { DashboardSearchBar } from '../components/DashboardSearchBar';
+import { PRODUCT_SWITCH_PAD, ProductSwitchBar } from '../components/ProductSwitchBar';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -37,9 +38,10 @@ export function OperationsShell() {
         railOnly={!isLibrary}
         className={
           isLibrary
-            ? 'fixed inset-0 z-0 h-full w-full'
+            ? 'fixed inset-x-0 top-0 z-0 w-full'
             : 'fixed inset-y-0 left-0 z-20 h-full w-[248px] overflow-hidden border-r border-line bg-panel'
         }
+        style={isLibrary ? { bottom: PRODUCT_SWITCH_PAD } : undefined}
       />
       {!isLibrary && (
         <JobFilesSearchContext.Provider value={{ query: jobSearch, setQuery: setJobSearch }}>
@@ -49,7 +51,7 @@ export function OperationsShell() {
                 ? 'flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
                 : 'min-h-screen'
             }
-            style={{ paddingLeft: RAIL_W }}
+            style={{ paddingLeft: RAIL_W, paddingBottom: PRODUCT_SWITCH_PAD }}
           >
             <header
               className={
@@ -80,6 +82,7 @@ export function OperationsShell() {
           </main>
         </JobFilesSearchContext.Provider>
       )}
+      <ProductSwitchBar besideRail />
     </div>
   );
 }

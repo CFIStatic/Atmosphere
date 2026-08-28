@@ -92,7 +92,6 @@ describe('WorkerDashboardPage', () => {
       'href',
       '/shared/tok-1',
     );
-    expect(screen.getByRole('link', { name: 'Company' })).toHaveAttribute('href', '/field');
-    expect(screen.getByRole('navigation', { name: 'Worker app' })).toBeInTheDocument();
+    expect(screen.getByText('Field Capture')).toBeInTheDocument();
   });
 });

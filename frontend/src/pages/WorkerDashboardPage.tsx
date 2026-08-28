@@ -13,7 +13,7 @@ import {
   workerListIsUnassigned,
   type WorkerJobCard,
 } from '../lib/workerBoard';
-import { CameraIcon, ChevronRightIcon, GaugeIcon, UsersIcon, VideoIcon } from '../components/icons';
+import { ChevronRightIcon, VideoIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
@@ -60,15 +60,15 @@ export function WorkerDashboardPage() {
       <div className="overflow-hidden rounded-2xl border border-line bg-paper-0 shadow-xl shadow-ink-900/5 sm:rounded-[2rem]">
         <header className="border-b border-line px-5 pb-4 pt-5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-brand-600">
-            My work
+            Field Capture
           </p>
           <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
-            {loaded ? `Hi, ${first}` : 'My work'}
+            {loaded ? `Hi, ${first}` : 'Field Capture'}
           </h1>
           <p className="mt-1 text-sm text-ink-600">
             {fieldTech
               ? 'Jobs you are on. Film the day — the office reads it against the scope.'
-              : 'Your assigned jobs. Company-wide proof lives on Overview.'}
+              : 'Your assigned jobs. The Platform tab is the company picture.'}
           </p>
           {membership?.org?.name && (
             <p className="mt-1 text-xs text-ink-500">{membership.org.name}</p>
@@ -107,7 +107,7 @@ export function WorkerDashboardPage() {
                   to="/field"
                   className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-600"
                 >
-                  See what the company is doing
+                  Open the platform
                   <ChevronRightIcon width={14} height={14} />
                 </Link>
               </div>
@@ -121,15 +121,6 @@ export function WorkerDashboardPage() {
           </section>
         </div>
 
-        <nav
-          aria-label="Worker app"
-          className="flex border-t border-line bg-paper-50"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-        >
-          <Tab to="/my-work" label="Today" Icon={UsersIcon} current />
-          <Tab to="/technician" label="Film" Icon={CameraIcon} />
-          <Tab to="/field" label="Company" Icon={GaugeIcon} />
-        </nav>
       </div>
     </div>
   );
@@ -190,27 +181,3 @@ function JobTile({ card }: { card: WorkerJobCard }) {
   );
 }
 
-function Tab({
-  to,
-  label,
-  Icon,
-  current,
-}: {
-  to: string;
-  label: string;
-  Icon: typeof UsersIcon;
-  current?: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      aria-current={current ? 'page' : undefined}
-      className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
-        current ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'
-      }`}
-    >
-      <Icon width={18} height={18} />
-      {label}
-    </Link>
-  );
-}

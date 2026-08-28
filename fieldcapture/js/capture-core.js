@@ -417,6 +417,20 @@
     return '';
   }
 
+  /** Office Overview — same host on /fieldcapture/, live office on the standalone app. */
+  function resolveOfficePlatformHref(pathname) {
+    var path = pathname || '/field';
+    if (path.charAt(0) !== '/') path = '/' + path;
+    var hostname = '';
+    try {
+      hostname = typeof location !== 'undefined' ? location.hostname || '' : '';
+    } catch (e) {
+      hostname = '';
+    }
+    if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN + path;
+    return path;
+  }
+
   /** Name + office invite code. No email or password. */
   function joinCrew(fullName, joinCode, apiBase) {
     return apiJson(origin(apiBase) + '/api/field-app/join', {
@@ -568,6 +582,7 @@
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
     resolveApiBase: resolveApiBase,
+    resolveOfficePlatformHref: resolveOfficePlatformHref,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,

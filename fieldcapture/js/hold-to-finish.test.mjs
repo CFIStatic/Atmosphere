@@ -75,6 +75,11 @@ assert.match(html, /id="daybtn"/, 'Today must keep the Start the day record butt
 assert.match(html, /Start the day/);
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
+assert.match(html, /id="product-switch"/, 'home keeps the Field Capture / Platform bar');
+assert.match(html, /Field Capture<small>/);
+assert.match(html, /Platform<small>/);
+assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
+assert.match(appSrc, /resolveOfficePlatformHref/, 'Platform tab must point at the office Overview');
 assert.match(html, /Connect Field Capture/);
 assert.match(html, /Office invite code/);
 assert.match(html, /id="login-name"/);

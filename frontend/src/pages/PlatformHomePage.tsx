@@ -76,16 +76,16 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
           <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-600">
             Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
-            file when you are ready to move it. Workers open My work for the jobs they are on.
+            file when you are ready to move it. Field Capture is the jobs a worker is on.
           </p>
         </div>
         <Link
           to="/my-work"
-          aria-label="Open My work"
+          aria-label="Open Field Capture"
           className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-500"
         >
           <UsersIcon width={16} height={16} />
-          My work
+          Field Capture
         </Link>
       </div>
 
@@ -396,7 +396,7 @@ function OnJobsCard({ crew, loaded }: { crew: CrewBoardRow[]; loaded: boolean })
           </p>
         </div>
         <Link to="/my-work" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-          My work
+          Field Capture
         </Link>
       </header>
       {!loaded ? (
@@ -406,7 +406,7 @@ function OnJobsCard({ crew, loaded }: { crew: CrewBoardRow[]; loaded: boolean })
         </div>
       ) : crew.length === 0 ? (
         <p className="px-5 py-6 text-sm text-ink-500">
-          Put people on a job from the file. They will see it on My work.
+          Put people on a job from the file. They will see it in Field Capture.
         </p>
       ) : (
         <ul>

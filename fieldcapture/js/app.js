@@ -42,6 +42,8 @@
       var el = document.getElementById(s);
       if (el) el.setAttribute('data-on', s === id ? '1' : '0');
     });
+    var app = document.getElementById('app');
+    if (app) app.setAttribute('data-switch', id === 's-rec' || id === 's-door' ? 'off' : 'on');
     window.scrollTo(0, 0);
   }
 
@@ -643,6 +645,21 @@
   }
 
   bindHold();
+  (function bindProductSwitch() {
+    var link = document.getElementById('platform-link');
+    if (link && Core.resolveOfficePlatformHref) {
+      link.href = Core.resolveOfficePlatformHref('/field');
+    }
+    var today = document.querySelector('#product-switch a[href="#today"]');
+    if (today) {
+      today.addEventListener('click', function (event) {
+        event.preventDefault();
+        var blocked = document.getElementById('s-blocked');
+        if (blocked && blocked.getAttribute('data-on') === '1') return;
+        show('s-home');
+      });
+    }
+  })();
   $('#donebtn').addEventListener('click', function () {
     state.finishing = false;
     state.recorder = null;
