@@ -401,8 +401,8 @@
 
   /**
    * Same-origin on the office console. On the standalone Field Capture
-   * Railway host, talk to the live office /api so name + join code can
-   * attach this phone to the office account.
+   * Railway host, talk to the live office /api so the same email +
+   * password as the Platform can attach this phone to the office account.
    */
   function resolveApiBase(explicit) {
     var given = (explicit || '').trim().replace(/\/$/, '');

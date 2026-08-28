@@ -421,7 +421,19 @@
     background: var(--panel); color: var(--ink); font: inherit;
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .auth-form .field-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  }
+  .auth-form .field-head a { font-size: 12px; font-weight: 650; color: var(--accent); text-decoration: none; }
+  .auth-pass { position: relative; }
+  .auth-pass input { padding-right: 48px; }
+  .auth-pass button {
+    position: absolute; right: 0; top: 6px; bottom: 0; width: 44px;
+    border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 650;
+  }
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
+  .auth-foot { text-align: center; font-size: 13.5px; color: var(--ink-2); }
+  .auth-foot a { font-weight: 700; color: var(--accent); text-decoration: none; }
 
   /* Elevate: bars slam up from the orange ground, then sit on paper or
      night — whichever the phone is already using — and ease into Today. */
@@ -616,24 +628,35 @@
     </div>
   </div>
 
-  <!-- ================= SIGN IN: name + office invite code ================= -->
+  <!-- ================= SIGN IN: same email + password as the office Platform ================= -->
   <div class="screen" id="s-blocked" data-on="1">
     <div class="pad" style="padding-top:36px">
-      <h1 class="h1">Connect Field Capture</h1>
+      <h1 class="h1">Welcome back</h1>
       <p class="lede" id="blocked-msg">
-        Type your name and the office invite code from Atmosphere Settings. Job share links still work without signing in.
+        Sign in with the same email and password as the office Platform.
       </p>
       <form class="auth-form" id="login-form" novalidate>
-        <label for="login-name">First and last name
-          <input id="login-name" name="fullName" type="text" autocomplete="name" autocapitalize="words" required />
+        <label for="login-email">Email
+          <input id="login-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="you@company.com" />
         </label>
-        <label for="login-code">Office invite code
-          <input id="login-code" name="joinCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" maxlength="12" />
-        </label>
+        <div>
+          <div class="field-head">
+            <label for="login-password">Password</label>
+            <a id="forgot-link" href="/forgot-password">Forgot password?</a>
+          </div>
+          <div class="auth-pass">
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
+            <button type="button" id="password-toggle" aria-label="Show password">Show</button>
+          </div>
+        </div>
         <p class="auth-err" id="login-err" hidden></p>
         <button class="daybtn" type="submit" id="login-btn">
-          <span class="lbl">Connect this phone</span>
+          <span class="lbl">Sign in</span>
         </button>
+        <p class="auth-foot">
+          Don&apos;t have an account?
+          <a id="signup-link" href="/signup">Create an account</a>
+        </p>
       </form>
     </div>
   </div>
@@ -714,7 +737,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=jobs-always"></script>
-<script src="js/app.js?v=jobs-always"></script>
+<script src="js/capture-core.js?v=email-login"></script>
+<script src="js/app.js?v=email-login"></script>
 </body>
 </html>

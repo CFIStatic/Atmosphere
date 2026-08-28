@@ -40,7 +40,7 @@ open apps/field-ios/AtmosphereFieldCapture.xcodeproj
 
 **Simulator:** no Apple Team needed. Signing is off for `iphonesimulator`.
 Pick any iPhone simulator and press Run (⌘R). The simulator uses the hosted
-Atmosphere API by default, so account and invite-code flows work without
+Atmosphere API by default, so email/password and invite-code flows work without
 starting the backend on your Mac. To test a local backend instead, edit the
 shared scheme and set the `ATMOSPHERE_API_BASE` environment variable to
 `http://127.0.0.1:4000` for the Run action.

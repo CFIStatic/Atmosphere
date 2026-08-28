@@ -3,7 +3,7 @@
  *
  * Modes:
  *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
- *   signed in           → name + office invite code, jobs from that office
+ *   signed in           → same email + password as the office Platform, jobs from that office
  *   ?demo=1             → scripted demo only (explicit)
  */
 (function () {
@@ -251,7 +251,7 @@
       who.innerHTML = '';
     }
     $('#blocked-msg').textContent =
-      'Type your name and the office invite code from Atmosphere Settings.';
+      'Sign in with the same email and password as the office Platform.';
   }
 
   function showLoginError(message) {
@@ -311,27 +311,45 @@
     document.body.setAttribute('data-mode', 'account');
     readStoredSession();
     when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
+    when('#password-toggle', function (toggle) {
+      toggle.addEventListener('click', function () {
+        var input = $('#login-password');
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide' : 'Show';
+        toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
+    });
     var form = $('#login-form');
     if (form) {
       form.addEventListener('submit', function (event) {
         event.preventDefault();
-        var fullName = ($('#login-name') && $('#login-name').value || '').trim();
-        var joinCode = ($('#login-code') && $('#login-code').value || '').trim().toUpperCase();
+        var email = ($('#login-email') && $('#login-email').value || '').trim();
+        var password = ($('#login-password') && $('#login-password').value || '');
         var btn = $('#login-btn');
         showLoginError('');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showLoginError('Enter a valid email address.');
+          return;
+        }
+        if (password.length < 8) {
+          showLoginError('Password must be at least 8 characters.');
+          return;
+        }
         btn.disabled = true;
-        Core.joinCrew(fullName, joinCode, API_BASE)
+        Core.loginWithPassword(email, password, API_BASE)
           .then(function (res) {
             var session = res.session || {};
             if (!session.accessToken) {
-              throw new Error('Connected, but no session came back. Try again in a moment.');
+              throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
             return Promise.all([bootAccountSession(), playElevate()]);
           })
           .catch(function (err) {
             writeStoredSession(null, null);
-            showLoginError(err.message || 'Could not connect. Check your name and the office invite code.');
+            showLoginError(err.message || 'Could not sign in. Use the same email and password as the office Platform.');
           })
           .then(function () {
             btn.disabled = false;
@@ -670,6 +688,14 @@
     var link = document.getElementById('platform-link');
     if (link && Core.resolveOfficePlatformHref) {
       link.href = Core.resolveOfficePlatformHref('/field');
+    }
+    var forgot = document.getElementById('forgot-link');
+    if (forgot && Core.resolveOfficePlatformHref) {
+      forgot.href = Core.resolveOfficePlatformHref('/forgot-password');
+    }
+    var signup = document.getElementById('signup-link');
+    if (signup && Core.resolveOfficePlatformHref) {
+      signup.href = Core.resolveOfficePlatformHref('/signup');
     }
     var today = document.querySelector('#product-switch a[href="#today"]');
     if (today) {

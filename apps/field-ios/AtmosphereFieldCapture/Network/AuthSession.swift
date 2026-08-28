@@ -5,7 +5,7 @@ import Foundation
  *
  * Connect when the app is first installed; tokens live in Keychain and the
  * phone stays signed in across launches. Crew connect with name + office
- * invite code — only again if they explicitly disconnect.
+ * email and password — only again if they explicitly disconnect.
  */
 @MainActor
 final class AuthSession: ObservableObject {
@@ -83,7 +83,7 @@ final class AuthSession: ObservableObject {
                     } else if isUnauthorized(error) {
                         // Session truly dead — only then ask to connect again.
                         clearLink()
-        lastError = "This phone was disconnected. Connect with your name and the office invite code to continue."
+        lastError = "This phone was disconnected. Sign in with the same email and password as the office Platform to continue."
                     } else {
                         restoreWarning = "Couldn’t refresh jobs right now. You’re still connected — try again when you have signal."
                     }

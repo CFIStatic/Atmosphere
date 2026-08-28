@@ -1,14 +1,15 @@
 import SwiftUI
 
 /**
- * Dashboard email + password connect.
+ * Same email + password as the office Platform.
  *
- * Secondary path for people who already have an Atmosphere website login.
- * Crew connect with name + invite code on JoinCrewView.
+ * This is the Field Capture login. Crew who only have an office invite
+ * code can still switch to JoinCrewView.
  */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     var onCreateAccount: () -> Void = {}
+    var onJoinWithCode: () -> Void = {}
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
@@ -29,19 +30,19 @@ struct SignInView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
 
-                Text("Sign in with a dashboard account")
+                Text("Welcome back")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(FieldTheme.ink)
                     .padding(.top, 10)
 
                 Text(
-                    "Use this only if you already have an Atmosphere website login. Crew usually connect with their name and the office invite code."
+                    "Sign in with the same email and password as the office Platform."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
 
                 VStack(spacing: 10) {
-                    TextField("Work email", text: $email)
+                    TextField("Email", text: $email)
                         .textContentType(.username)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -86,7 +87,7 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Sign in & connect phone")
+                            Text("Sign in")
                                 .font(.system(size: 16, weight: .bold))
                         }
                     }
@@ -100,7 +101,7 @@ struct SignInView: View {
                 .padding(.top, 6)
 
                 Button(action: onCreateAccount) {
-                    Text("Connect with name and office code")
+                    Text("Create an account")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(FieldTheme.accent)
                         .frame(maxWidth: .infinity)
@@ -108,6 +109,15 @@ struct SignInView: View {
                 }
                 .disabled(busy)
                 .padding(.top, 4)
+
+                Button(action: onJoinWithCode) {
+                    Text("Join with an office invite code")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(FieldTheme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
+                .disabled(busy)
 
                 Text("After this, you won’t be asked again on this phone.")
                     .font(.system(size: 12))

@@ -3,7 +3,8 @@ import Foundation
 /**
  * REST client for Atmosphere Field Capture.
  *
- * Crew connect with name + office invite code (`/api/field-app/join`).
+ * Crew sign in with the same email + password as the office Platform
+ * (`/api/auth/login`). Invite-code join remains available as a fallback.
  * A dashboard email/password login still works. Today’s jobs are loaded
  * from that office. A local Express BFF is used when one is actually
  * reachable (Xcode simulator + `npm run dev`).

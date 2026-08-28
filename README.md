@@ -200,8 +200,9 @@ With the API on `:4000` and the Vite app on `:5174`:
 bash scripts/host-phone.sh
 ```
 
-That prints two HTTPS URLs. Open **Field Capture** to film the day; open
-**Office** to sign in to the same account as the desktop app.
+That prints two HTTPS URLs. Open **Field Capture** to film the day — sign in
+with the same email and password as the office Platform. Open **Office** for
+the desktop workspace.
 
 The native iPhone app is `apps/field-ios/` — Xcode → your Personal Team → Run
 on the device. It talks to the Atmosphere project directly (not localhost).

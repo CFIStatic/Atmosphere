@@ -3,8 +3,8 @@ import SwiftUI
 /**
  * First-install crew connect.
  *
- * Name + the office join code from Atmosphere Settings. No email, no
- * password — the office assigns jobs to that name.
+ * Fallback connect: name + the office join code from Atmosphere Settings.
+ * The primary login is email + password on SignInView.
  */
 struct JoinCrewView: View {
     @EnvironmentObject private var auth: AuthSession
@@ -126,7 +126,7 @@ struct JoinCrewView: View {
                 .padding(.top, 6)
 
                 Button(action: onDashboardLogin) {
-                    Text("I already have a dashboard login")
+                    Text("Sign in with email and password")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(FieldTheme.accent)
                         .frame(maxWidth: .infinity)

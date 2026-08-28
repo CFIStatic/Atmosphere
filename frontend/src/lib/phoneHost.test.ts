@@ -82,5 +82,7 @@ describe('phone home-screen manifests', () => {
     expect(app.indexOf('Core.resolveApiBase')).toBeGreaterThan(
       app.indexOf('var Core = window.FieldCaptureCore'),
     );
+    expect(app).toContain('Core.loginWithPassword');
+    expect(app).not.toContain('Core.joinCrew');
   });
 });

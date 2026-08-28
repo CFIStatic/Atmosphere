@@ -832,8 +832,8 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
 ];
 
 /**
- * How a Field Capture iPhone login attaches to this office account.
- * The join code is the same one teammates type on the website.
+ * How Field Capture attaches to this office. Crew sign in with the same
+ * email and password as the Platform; the join code is for new teammates.
  */
 function FieldCaptureAppSection() {
   const { membership } = useAuth();
@@ -854,7 +854,7 @@ function FieldCaptureAppSection() {
   return (
     <Card
       title="Field Capture app"
-      description="Crew open the app, type their name and this office code, and they show up on the team — ready to be put on jobs."
+      description="Crew sign in with the same Atmosphere email and password as the office Platform. The join code is for new teammates linking their account."
     >
       <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Office join code</p>
@@ -892,15 +892,16 @@ function FieldCaptureAppSection() {
           office site.
         </li>
         <li>
-          They type their <strong className="font-semibold text-ink-900">first and last name</strong>{' '}
-          (so the office can assign work to them) and this code
+          They sign in with their <strong className="font-semibold text-ink-900">office email and password</strong>
+          — the same login as this Platform.
           {joinCode ? (
             <>
               {' '}
-              (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>)
+              New teammates can still link a new account with this code (or open{' '}
+              <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>
+              ).
             </>
           ) : null}
-          .
         </li>
         <li>
           They appear under Team as a field technician. Put them on a job from the job’s Crew tab —
