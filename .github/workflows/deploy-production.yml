@@ -18,7 +18,7 @@
 # Optional:
 #   RAILWAY_PROJECT_ID     (Project settings → General)
 #   RAILWAY_SERVICE        (backend service name, default: Atmosphere APIs)
-#   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web / Login & Dashboard)
+#   RAILWAY_APP_SERVICE    (office app service name, default: Platform)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
 #   RAILWAY_INTERNAL_SERVICE (staff site, default: Internal Growth Metrics)
 #
@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
-          service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Login & Dashboard}}"
+          service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Platform}}"
           echo "Deploying office app to Railway service '$service' in project $project."
           echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
           railway link --project "$project" --environment production --service "$service" \
@@ -222,8 +222,9 @@ jobs:
             || railway link --project "$project" \
             || true
           railway status --project "$project" --environment production || railway status || true
-          # Live name is Login & Dashboard; Atmosphere-web is the old alias.
-          # railway variable set rejects names that are not on the canvas.
+          # Live name is Platform. Login & Dashboard and Atmosphere-web are old aliases.
+          # resolveRailwayService maps all three. railway variable set rejects names
+          # that are not on the canvas.
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"

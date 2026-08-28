@@ -78,7 +78,7 @@ function resolveRailwayService(name) {
   const aliases = {
     Atmosphere: 'Atmosphere APIs',
     'Atmosphere-internal': 'Internal Growth Metrics',
-    'Atmosphere-web': 'Login & Dashboard',
+    'Atmosphere-web': 'Platform',
     website: 'Corporate Website',
   };
   const wanted = aliases[name] ?? name;

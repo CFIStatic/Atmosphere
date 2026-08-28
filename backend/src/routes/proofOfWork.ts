@@ -47,6 +47,7 @@ import {
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
+import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
 
 /**
  * Proof of work: the endpoints.
@@ -144,8 +145,8 @@ export async function createUploadUrl(
     .parse(body ?? {});
 
   // Path carries the job and party so a leaked signed URL cannot be aimed at
-  // another job's folder.
-  const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}.${input.extension}`;
+  // another job's folder. recordProof refuses any other storagePath.
+  const path = proofObjectPath(party, input);
 
   const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
@@ -193,6 +194,7 @@ const recordSchema = z.object({
  */
 export async function recordProof(party: any, admin: any, body: unknown) {
   const input = recordSchema.parse(body);
+  const storagePath = assertOwnedProofStoragePath(party, input);
 
   // Everything already filed on this job, for the re-upload check. Hashes only.
   const { data: priorRows } = await admin
@@ -230,7 +232,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     party_id: party.id,
     work_date: input.workDate,
     phase: input.phase,
-    storage_path: input.storagePath,
+    storage_path: storagePath,
     byte_size: input.byteSize ?? null,
     duration_seconds: input.durationSeconds ?? null,
     content_hash: input.contentHash ?? null,

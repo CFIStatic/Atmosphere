@@ -9,7 +9,7 @@ import {
   type IntakeProposal,
   type ResolvedPlaceAddress,
 } from '../lib/api';
-import { handoffFromApprove } from '../lib/intakeHandoff';
+import { jobFilePath } from '../lib/jobFileAsk';
 import {
   INTAKE_SAMPLE,
   cityPostalFromAddress,
@@ -196,17 +196,10 @@ export function JobIntakePage() {
         inviteCount: invitees.length,
         scopeLines: scope.length,
       });
-      const handoff = handoffFromApprove(res, proposal, scope);
       setResult(res);
-      navigate(`/jobs/${encodeURIComponent(res.job.id)}`, {
-        replace: true,
-        state: {
-          freshJob: handoff.summary,
-          freshRecord: handoff.record,
-          freshInvites: handoff.invites,
-          justApproved: true,
-        },
-      });
+      // Stay on this page so the invite copy buttons actually render. The
+      // previous navigate() to /jobs/:id dropped that handoff — JobDetailPage
+      // never reads location.state.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not approve that package.');
     } finally {
@@ -321,7 +314,7 @@ export function JobIntakePage() {
               type="button"
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
               onClick={() =>
-                navigate(`/jobs/${encodeURIComponent(result.job.id)}`)
+                navigate(jobFilePath(result.job.id, { title: result.job.title, number: result.job.jobNumber }))
               }
             >
               Open this job file

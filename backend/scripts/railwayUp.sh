@@ -20,7 +20,7 @@ wait_secs="${RAILWAY_UP_TIMEOUT:-900}"
 case "$service" in
   Atmosphere) service="Atmosphere APIs" ;;
   Atmosphere-internal) service="Internal Growth Metrics" ;;
-  Atmosphere-web) service="Login & Dashboard" ;;
+  Atmosphere-web) service="Platform" ;;
   website) service="Corporate Website" ;;
   fieldcapture|field-capture|Atmosphere-fieldcapture) service="Field Capture" ;;
 esac

@@ -203,9 +203,11 @@ describe('PlatformHomePage', () => {
     expect(screen.getByText('No brief published')).toBeInTheDocument();
 
     const cedar = screen.getByText('Cedar Ridge — storm damage').closest('a');
-    expect(cedar).toHaveAttribute('href', '/jobs/job-failed');
+    expect(cedar).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-failed'));
     const east = screen.getByText('East 6th — kitchen, water').closest('a');
-    expect(east).toHaveAttribute('href', '/job-progress?job=job-open');
+    expect(east).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-open'));
+    const meridian = screen.getByText('Meridian Ave — water loss').closest('a');
+    expect(meridian).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-dated'));
 
     expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
