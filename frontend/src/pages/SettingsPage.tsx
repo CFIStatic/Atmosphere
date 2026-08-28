@@ -18,7 +18,6 @@ import {
   type OrgMember,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
-import { PRODUCT_SWITCH_PAD, ProductSwitchBar } from '../components/ProductSwitchBar';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
 import { InvitePanel } from '../components/team/InvitePanel';
@@ -86,7 +85,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-paper-100" style={{ paddingBottom: PRODUCT_SWITCH_PAD }}>
+    <div className="min-h-screen bg-paper-100">
       <header className="border-b border-line bg-paper-0/80">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Logo />
@@ -140,7 +139,6 @@ export function SettingsPage() {
           {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
-      <ProductSwitchBar />
     </div>
   );
 }

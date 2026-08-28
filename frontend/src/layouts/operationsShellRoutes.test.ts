@@ -18,13 +18,12 @@ describe('office rail routes', () => {
     expect(shell).toContain('path="/jobs"');
   });
 
-  it('mounts the Field Capture / Platform bottom bar on every office page', () => {
+  it('does not put a Field Capture / Platform bar on the office console', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
-    expect(shell).toContain('ProductSwitchBar');
-    expect(shell).toContain('besideRail');
+    expect(shell).not.toContain('ProductSwitchBar');
   });
 });
 

@@ -13,7 +13,6 @@ import { AudioRecorderPanel } from '../components/technician/AudioRecorderPanel'
 import { VoiceAssistantPanel } from '../components/technician/VoiceAssistantPanel';
 import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
 import { RecordingsPanel } from '../components/technician/RecordingsPanel';
-import { PRODUCT_SWITCH_PAD, ProductSwitchBar } from '../components/ProductSwitchBar';
 import { GaugeIcon, ScanIcon, SparkIcon, UsersIcon, VideoIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { CaptureGuidePanel } from '../components/field/CaptureGuidePanel';
@@ -145,12 +144,8 @@ export function TechnicianPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-paper-100">
-      <ProductSwitchBar />
       {/* ---- Left rail ---- */}
-      <aside
-        className="hidden w-60 shrink-0 flex-col border-r border-line bg-paper-200/70 lg:flex"
-        style={{ paddingBottom: PRODUCT_SWITCH_PAD }}
-      >
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-paper-200/70 lg:flex">
         <div className="px-5 py-4">
           <Logo />
         </div>
@@ -195,7 +190,7 @@ export function TechnicianPage() {
             className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-600 transition hover:bg-paper-300/60 hover:text-ink-900"
           >
             <GaugeIcon width={17} height={17} />
-            Company
+            Overview
           </Link>
         </nav>
 
@@ -221,7 +216,7 @@ export function TechnicianPage() {
       </aside>
 
       {/* ---- Main column ---- */}
-      <div className="flex min-w-0 flex-1 flex-col" style={{ paddingBottom: PRODUCT_SWITCH_PAD }}>
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line bg-paper-50 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <span className="lg:hidden">

@@ -68,7 +68,7 @@ export function WorkerDashboardPage() {
           <p className="mt-1 text-sm text-ink-600">
             {fieldTech
               ? 'Jobs you are on. Film the day — the office reads it against the scope.'
-              : 'Your assigned jobs. The Platform tab is the company picture.'}
+              : 'Your assigned jobs. Overview is the company picture.'}
           </p>
           {membership?.org?.name && (
             <p className="mt-1 text-xs text-ink-500">{membership.org.name}</p>

@@ -53,8 +53,7 @@ are prompted to create one with that exact address.
 
 - **Home:** Verifier library — one job, one file of clips and readings
 - **Overview** (`/field`) — company proof chain: what is stuck, what filmed today
-- **My work** (`/my-work`) — Field Capture home: jobs this person is on
-- **Bottom bar** — Field Capture (your jobs) · Platform (the office)
+- **My work** (`/my-work`) — jobs this person is on (office rail, same chrome as Overview)
 - **Start a job** (`/intake`) — paste → review → approve → invite
 - **Job files** (`/jobs`) — briefs, parties, proof days, readiness, evidence
 - **Verifier** (`/verifier/`) — standalone evidence portal (also embeddable)
@@ -62,6 +61,7 @@ are prompted to create one with that exact address.
 ### Field Capture (crew)
 
 - **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
+- **Bottom bar (app only):** Field Capture (your jobs) · Platform (opens the office)
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
 - **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
 
