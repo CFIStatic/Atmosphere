@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobSummary } from '../lib/api';
+import { DashboardSearchBar } from '../components/DashboardSearchBar';
+import { JobFilesSearchContext } from '../layouts/jobFilesSearch';
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -72,11 +75,21 @@ const jobs: JobSummary[] = [
   },
 ];
 
+function JobFilesHarness() {
+  const [query, setQuery] = useState('');
+  return (
+    <JobFilesSearchContext.Provider value={{ query, setQuery }}>
+      <DashboardSearchBar value={query} onChange={setQuery} aria-label="Search job files" />
+      <JobsPage />
+    </JobFilesSearchContext.Provider>
+  );
+}
+
 function renderJobs() {
   return render(
     <MemoryRouter initialEntries={['/jobs']}>
       <Routes>
-        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/jobs" element={<JobFilesHarness />} />
         <Route path="/jobs/:id" element={<h1>Job profile</h1>} />
       </Routes>
     </MemoryRouter>,
@@ -89,23 +102,34 @@ describe('JobsPage', () => {
     getJobs.mockResolvedValue({ jobs });
   });
 
-  it('lists jobs as cards that open the job profile', async () => {
+  it('lists job cards without a title, create button, or status filters', async () => {
     renderJobs();
 
-    expect(await screen.findByRole('heading', { name: 'Job Files' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toHaveAttribute(
+      'href',
+      '/jobs/job-1038',
+    );
+    expect(screen.getByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search by job, company, date, address, ID, or hash')).toBeInTheDocument();
+
+    expect(screen.queryByRole('heading', { name: 'Jobs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Job Files' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Every job the organization has opened. Each one carries its own complete history.'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open a job/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('I forgot something — let me ask')).not.toBeInTheDocument();
-    const card = await screen.findByRole('link', { name: /Cedar Ridge/ });
-    expect(card).toHaveAttribute('href', '/jobs/job-1038');
-    expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
-    expect(await screen.findByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'In progress' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scheduled' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'On hold' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Completed' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
     expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
   });
 
-  it('searches job files from the list', async () => {
+  it('searches job files from the dashboard search bar', async () => {
     const user = userEvent.setup();
     renderJobs();
-    await screen.findByRole('heading', { name: 'Job Files' });
     expect(await screen.findByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Search job files'), 'Cedar');
@@ -113,6 +137,6 @@ describe('JobsPage', () => {
       expect(screen.getByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Harbor Point/ })).not.toBeInTheDocument();
     });
-    expect(getJobs).toHaveBeenCalledWith({ status: 'open' });
+    expect(getJobs).toHaveBeenCalledWith({ status: 'all' });
   });
 });

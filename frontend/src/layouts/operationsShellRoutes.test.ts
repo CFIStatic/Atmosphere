@@ -36,3 +36,15 @@ describe('job-file viewport lock', () => {
     expect(shell).toContain('lg:overflow-hidden');
   });
 });
+
+describe('Job Files search chrome', () => {
+  it('puts the Dashboard search field in the 72px office top bar', () => {
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('DashboardSearchBar');
+    expect(shell).toContain('h-[72px]');
+    expect(shell).toContain("pathname === '/jobs'");
+  });
+});

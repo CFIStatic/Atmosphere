@@ -13,20 +13,9 @@ import {
   type JobSummary,
 } from '../lib/api';
 import { jobFileMatchesQuery } from '../lib/jobFileSearch';
-import { PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
-import { SearchIcon } from '../components/icons';
+import { useJobFilesSearch } from '../layouts/jobFilesSearch';
+import { PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
-
-const FILTERS: { value: string; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'on_hold', label: 'On hold' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'all', label: 'All' },
-];
-
-const inputClass =
-  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
 function JobCard({ job }: { job: JobSummary }) {
   const progress = job.taskCount ? Math.round((job.tasksDone / job.taskCount) * 100) : 0;
@@ -89,73 +78,32 @@ function JobCard({ job }: { job: JobSummary }) {
 
 export function JobsPage() {
   useFeatureTimer('jobs');
+  const { query } = useJobFilesSearch();
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
-  const [status, setStatus] = useState('open');
-  const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { jobs } = await api.getJobs({ status });
+      const { jobs } = await api.getJobs({ status: 'all' });
       setJobs(jobs);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
       setJobs([]);
     }
-  }, [status]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const visible = useMemo(
-    () => (jobs ?? []).filter((job) => jobFileMatchesQuery(job, search)),
-    [jobs, search],
+    () => (jobs ?? []).filter((job) => jobFileMatchesQuery(job, query)),
+    [jobs, query],
   );
 
   return (
     <>
-      <PageHeader
-        title="Job Files"
-        description="Every job file the organization has opened. Each one carries its own complete history."
-      />
-
-      <div className="mb-5 space-y-3">
-        <div className="relative max-w-[520px]">
-          <SearchIcon
-            width={14}
-            height={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-500"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by job, company, date, address, ID, or hash"
-            aria-label="Search job files"
-            className={`${inputClass} h-[34px] py-0 pl-[30px]`}
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => {
-                setStatus(f.value);
-                setJobs(null);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                status === f.value
-                  ? 'bg-brand-600 text-ink-900'
-                  : 'border border-line text-ink-600 hover:bg-paper-200 hover:text-ink-800'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {error && (
         <div className="mb-4">
           <ErrorNote message={error} />
@@ -166,8 +114,8 @@ export function JobsPage() {
         <PanelSpinner label="Loading jobs" />
       ) : visible.length === 0 ? (
         <EmptyState
-          title={search ? 'No job files match that search.' : 'No job files yet.'}
-          hint={search ? undefined : 'Start a job from the rail and it will show up here.'}
+          title={query ? 'No job files match that search.' : 'No job files yet.'}
+          hint={query ? undefined : 'Start a job from the rail and it will show up here.'}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
