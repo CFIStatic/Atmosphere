@@ -385,6 +385,17 @@ export function SearchIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ShareIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Glyph {...props}>
+      <circle cx="18" cy="5" r="2.4" {...auditStroke} />
+      <circle cx="6" cy="12" r="2.4" {...auditStroke} />
+      <circle cx="18" cy="19" r="2.4" {...auditStroke} />
+      <path d="M8.2 10.8 15.8 6.2M8.2 13.2 15.8 17.8" {...auditStroke} />
+    </Glyph>
+  );
+}
+
 export function RefreshIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Glyph {...props}>

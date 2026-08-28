@@ -644,7 +644,7 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Office rail: Videos filters stay on Overview, Start a job, My jobs, and
+  /* Office rail: Videos filters stay on Overview, Start a job, Job Files, and
      the job record — not only on Dashboard. */
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
@@ -1172,7 +1172,7 @@
       </button>
       <button type="button" class="navitem nav-icon" id="nav-jobs" data-route="/jobs">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="7.25" width="18.5" height="12" rx="2.25"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M2.75 12h18.5"/></svg>
-        <span class="label">My jobs</span>
+        <span class="label">Job Files</span>
       </button>
     </div>
 
@@ -2481,7 +2481,7 @@
   }
 
   /**
-   * Any Dashboard folder can open the job file on My jobs. Demo keys
+   * Any Dashboard folder can open the job file on Job Files. Demo keys
    * (cedar / …) map onto fixtures; org folders use the real job id.
    */
   function recordJobId(key) {

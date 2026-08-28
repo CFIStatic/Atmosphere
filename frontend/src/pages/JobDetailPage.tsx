@@ -3,18 +3,16 @@ import { Link, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
-  JOB_STATUS_LABELS,
-  JOB_STATUS_STYLES,
   WORK_TYPE_LABELS,
   type Job,
   type JobParty,
-  type JobStatus,
   type ProofResponse,
   type SharedJobRecord,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { JobAskPanel } from '../components/JobAskPanel';
-import { ChevronLeftIcon } from '../components/icons';
+import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
+import { ChevronLeftIcon, ShareIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import {
   buildJobFileDossier,
@@ -40,6 +38,7 @@ export function JobDetailPage() {
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -80,17 +79,6 @@ export function JobDetailPage() {
   );
   const address = siteLine(record);
 
-  async function changeStatus(status: JobStatus) {
-    if (!job) return;
-    setError(null);
-    try {
-      await api.updateJob(job.id, { status });
-      setJob((current) => (current ? { ...current, status } : current));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update that status.');
-    }
-  }
-
   if (!loaded && !job) {
     return <PanelSpinner label="Loading job file" />;
   }
@@ -100,7 +88,7 @@ export function JobDetailPage() {
       <div className="mx-auto max-w-lg pt-10">
         <ErrorNote message={error} />
         <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-600 hover:text-brand-700">
-          ← Back to My jobs
+          ← Back to Job Files
         </Link>
       </div>
     );
@@ -123,7 +111,7 @@ export function JobDetailPage() {
           className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
         >
           <ChevronLeftIcon width={16} height={16} />
-          My jobs
+          Job Files
         </Link>
 
         <header className="flex flex-wrap items-start justify-between gap-4">
@@ -142,25 +130,15 @@ export function JobDetailPage() {
               )}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <span
-              className={`rounded-full border px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
-            >
-              {JOB_STATUS_LABELS[job.status]}
-            </span>
-            <select
-              value={job.status}
-              onChange={(e) => void changeStatus(e.target.value as JobStatus)}
-              aria-label="Change job status"
-              className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
-            >
-              {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {JOB_STATUS_LABELS[status]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            aria-label="Share this job file"
+            title="Share with a homeowner or anyone who needs this file"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-line text-ink-700 transition hover:border-brand-400 hover:bg-paper-200 hover:text-brand-700"
+          >
+            <ShareIcon width={18} height={18} />
+          </button>
         </header>
 
         <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -248,6 +226,16 @@ export function JobDetailPage() {
       >
         <JobAskPanel jobId={job.id} file={file} fill />
       </aside>
+
+      {shareOpen && (
+        <ShareJobProgressPanel
+          jobId={job.id}
+          creating
+          modal
+          onClose={() => setShareOpen(false)}
+          onCreatingChange={setShareOpen}
+        />
+      )}
     </div>
   );
 }

@@ -63,7 +63,7 @@ describe('ConsoleShell', () => {
     expect(screen.getByRole('heading', { name: 'Jobs' })).toBeInTheDocument();
     const rail = screen.getByRole('navigation', { name: 'Primary' });
     expect(rail).toHaveTextContent('Overview');
-    expect(rail).toHaveTextContent('My jobs');
+    expect(rail).toHaveTextContent('Job Files');
 
     await user.click(screen.getByRole('link', { name: 'Overview' }));
 
@@ -74,7 +74,7 @@ describe('ConsoleShell', () => {
     expect(rail).toHaveTextContent('Overview');
     expect(rail).toHaveTextContent('Start a job');
     expect(rail).toHaveTextContent('Dashboard');
-    expect(rail).toHaveTextContent('My jobs');
+    expect(rail).toHaveTextContent('Job Files');
     expect(rail).toHaveTextContent('Settings');
     expect(rail).not.toHaveTextContent('Capture');
   });

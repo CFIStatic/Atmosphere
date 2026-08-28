@@ -24,7 +24,7 @@ import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '
  * The office opens this tab to answer one question: what is stuck in the
  * proof chain, and what should I do next? Inventory (crew, contracted,
  * invoiced) belongs nowhere here — Atmosphere does not run the money loop.
- * A second job list belongs on My jobs. Clip counts without a job name are
+ * A second job list belongs on Job Files. Clip counts without a job name are
  * vanity. This page names the file and the break.
  */
 

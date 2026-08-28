@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Job, ProofResponse, SharedJobRecord } from '../lib/api';
@@ -11,6 +12,7 @@ const getJob = vi.fn();
 const sharedJob = vi.fn();
 const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
+const evidenceShares = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -22,6 +24,7 @@ vi.mock('../lib/api', async (importOriginal) => {
       sharedJob: (...args: unknown[]) => sharedJob(...args),
       jobProofs: (...args: unknown[]) => jobProofs(...args),
       proofQuestions: (...args: unknown[]) => proofQuestions(...args),
+      evidenceShares: (...args: unknown[]) => evidenceShares(...args),
     },
   };
 });
@@ -153,7 +156,7 @@ function renderJob() {
     <MemoryRouter initialEntries={['/jobs/job-1038']}>
       <Routes>
         <Route path="/jobs/:id" element={<JobDetailPage />} />
-        <Route path="/jobs" element={<h1>My jobs</h1>} />
+        <Route path="/jobs" element={<h1>Job Files</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -165,10 +168,12 @@ describe('JobDetailPage', () => {
     sharedJob.mockReset();
     jobProofs.mockReset();
     proofQuestions.mockReset();
+    evidenceShares.mockReset();
     getJob.mockResolvedValue({ job, tasks: [], crew: [], workLogs: [], memory: [] });
     sharedJob.mockResolvedValue(record);
     jobProofs.mockResolvedValue(proofs);
     proofQuestions.mockResolvedValue({ questions: [] });
+    evidenceShares.mockResolvedValue({ shares: [] });
   });
 
   it('is one file: film, do-not, blockers, and ask — not Work / Crew / History', async () => {
@@ -203,5 +208,27 @@ describe('JobDetailPage', () => {
     await waitFor(() => {
       expect(getJob).toHaveBeenCalledWith('job-1038');
     });
+  });
+
+  it('shares the job file instead of showing a Scheduled status', async () => {
+    getJob.mockResolvedValue({
+      job: { ...job, status: 'scheduled' },
+      tasks: [],
+      crew: [],
+      workLogs: [],
+      memory: [],
+    });
+    const user = userEvent.setup();
+    renderJob();
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Change job status')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Share this job file' }));
+    expect(await screen.findByRole('heading', { name: 'Share this job' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Homeowners, attorneys, banks and insurers/i),
+    ).toBeInTheDocument();
   });
 });

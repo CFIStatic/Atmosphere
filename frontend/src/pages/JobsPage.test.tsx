@@ -49,6 +49,29 @@ const jobs: JobSummary[] = [
     createdAt: '2026-08-01T00:00:00Z',
     updatedAt: '2026-08-05T18:00:00Z',
   },
+  {
+    jobId: 'job-1042',
+    jobNumber: 1042,
+    title: 'Harbor Point Condos — mold remediation',
+    status: 'scheduled',
+    priority: 3,
+    workType: 'mitigation',
+    ownerId: 'u1',
+    claimNumber: null,
+    taskCount: 2,
+    tasksDone: 0,
+    crewSize: 1,
+    minutesLogged: 0,
+    eventCount: 1,
+    lastEvent: 'Containment plan drafted',
+    lastEventAt: '2026-07-31T16:44:00Z',
+    contractAmount: 9200,
+    invoicedAmount: 0,
+    paidAmount: 0,
+    scheduledStart: '2026-08-02T14:00:00Z',
+    createdAt: '2026-07-30T11:15:00Z',
+    updatedAt: '2026-07-31T16:44:00Z',
+  },
 ];
 
 function renderJobs() {
@@ -72,21 +95,26 @@ describe('JobsPage', () => {
   it('lists jobs as cards that open the job profile', async () => {
     renderJobs();
 
-    expect(await screen.findByRole('heading', { name: 'Jobs' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Job Files' })).toBeInTheDocument();
     expect(screen.queryByText('I forgot something — let me ask')).not.toBeInTheDocument();
     const card = await screen.findByRole('link', { name: /Cedar Ridge/ });
     expect(card).toHaveAttribute('href', '/jobs/job-1038');
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
+    expect(await screen.findByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
+    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
   });
 
-  it('searches jobs from the list', async () => {
+  it('searches job files from the list', async () => {
     const user = userEvent.setup();
     renderJobs();
-    await screen.findByRole('heading', { name: 'Jobs' });
+    await screen.findByRole('heading', { name: 'Job Files' });
+    expect(await screen.findByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Search jobs'), 'Cedar');
+    await user.type(screen.getByLabelText('Search job files'), 'Cedar');
     await waitFor(() => {
-      expect(getJobs).toHaveBeenCalledWith(expect.objectContaining({ q: 'Cedar' }));
+      expect(screen.getByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Harbor Point/ })).not.toBeInTheDocument();
     });
+    expect(getJobs).toHaveBeenCalledWith({ status: 'open' });
   });
 });

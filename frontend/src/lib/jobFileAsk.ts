@@ -18,7 +18,7 @@ export function jobFilePath(
   return `/job-progress?${params.toString()}`;
 }
 
-/** Legacy `/shared?job=` bookmarks open the same job file, not the My jobs list. */
+/** Legacy `/shared?job=` bookmarks open the same job file, not the Job Files list. */
 export function sharedJobsRedirectTo(query: string): string {
   const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
   return params.get('job') ? `/job-progress?${params.toString()}` : '/verifier-library';

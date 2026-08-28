@@ -55,7 +55,7 @@ const WORK: NavGroup = {
     { to: '/field', label: 'Overview', Icon: GaugeIcon },
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-    { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
+    { to: '/jobs', label: 'Job Files', Icon: BriefcaseIcon },
   ],
 };
 

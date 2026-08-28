@@ -7,7 +7,7 @@ import { isJobFilePath } from './jobFilePath';
 const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../App.tsx'), 'utf8');
 
 describe('office rail routes', () => {
-  it('keeps Overview, Start a job, Dashboard, and My jobs inside the permanent office shell', () => {
+  it('keeps Overview, Start a job, Dashboard, and Job Files inside the permanent office shell', () => {
     const start = appSrc.indexOf('<OperationsShell');
     const end = appSrc.indexOf('path="/technician"');
     const shell = appSrc.slice(start, end);
@@ -19,7 +19,7 @@ describe('office rail routes', () => {
 });
 
 describe('isJobFilePath', () => {
-  it('treats a job profile as a full-height file, not the My jobs list', () => {
+  it('treats a job profile as a full-height file, not the Job Files list', () => {
     expect(isJobFilePath('/jobs/job-1038')).toBe(true);
     expect(isJobFilePath('/jobs')).toBe(false);
     expect(isJobFilePath('/field')).toBe(false);

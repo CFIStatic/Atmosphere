@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   api,
@@ -16,14 +16,14 @@ import {
   type JobPriority,
   type LossType,
 } from '../lib/api';
+import { jobFileMatchesQuery } from '../lib/jobFileSearch';
 import { PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
-import { SpinnerIcon, PlusIcon } from '../components/icons';
+import { SearchIcon, SpinnerIcon, PlusIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 const FILTERS: { value: string; label: string }[] = [
   { value: 'open', label: 'Open' },
   { value: 'in_progress', label: 'In progress' },
-  { value: 'scheduled', label: 'Scheduled' },
   { value: 'on_hold', label: 'On hold' },
   { value: 'completed', label: 'Completed' },
   { value: 'all', label: 'All' },
@@ -153,6 +153,7 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
 
 function JobCard({ job }: { job: JobSummary }) {
   const progress = job.taskCount ? Math.round((job.tasksDone / job.taskCount) * 100) : 0;
+  const showStatus = job.status !== 'scheduled';
 
   return (
     <Link
@@ -164,11 +165,13 @@ function JobCard({ job }: { job: JobSummary }) {
           <p className="font-mono text-xs tracking-wider text-brand-300">#{job.jobNumber}</p>
           <h3 className="mt-0.5 truncate text-base font-semibold text-ink-900">{job.title}</h3>
         </div>
-        <span
-          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
-        >
-          {JOB_STATUS_LABELS[job.status]}
-        </span>
+        {showStatus && (
+          <span
+            className={`rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
+          >
+            {JOB_STATUS_LABELS[job.status]}
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
@@ -218,25 +221,28 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { jobs } = await api.getJobs({ status, q: search || undefined });
+      const { jobs } = await api.getJobs({ status });
       setJobs(jobs);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
       setJobs([]);
     }
-  }, [status, search]);
+  }, [status]);
 
   useEffect(() => {
-    // Debounced so typing in the search box does not fire a request per keystroke.
-    const timer = setTimeout(load, search ? 250 : 0);
-    return () => clearTimeout(timer);
-  }, [load, search]);
+    void load();
+  }, [load]);
+
+  const visible = useMemo(
+    () => (jobs ?? []).filter((job) => jobFileMatchesQuery(job, search)),
+    [jobs, search],
+  );
 
   return (
     <>
       <PageHeader
-        title="Jobs"
-        description="Every job the organization has opened. Each one carries its own complete history."
+        title="Job Files"
+        description="Every job file the organization has opened. Each one carries its own complete history."
         action={
           !creating && (
             <button
@@ -261,7 +267,21 @@ export function JobsPage() {
         />
       )}
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-5 space-y-3">
+        <div className="relative max-w-[520px]">
+          <SearchIcon
+            width={14}
+            height={14}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-500"
+          />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by job, company, date, address, ID, or hash"
+            aria-label="Search job files"
+            className={`${inputClass} h-[34px] py-0 pl-[30px]`}
+          />
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {FILTERS.map((f) => (
             <button
@@ -280,13 +300,6 @@ export function JobsPage() {
             </button>
           ))}
         </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search jobs…"
-          aria-label="Search jobs"
-          className={`ml-auto sm:max-w-xs ${inputClass}`}
-        />
       </div>
 
       {error && (
@@ -297,14 +310,14 @@ export function JobsPage() {
 
       {jobs === null ? (
         <PanelSpinner label="Loading jobs" />
-      ) : jobs.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyState
-          title={search ? 'No jobs match that search.' : 'No jobs yet.'}
+          title={search ? 'No job files match that search.' : 'No job files yet.'}
           hint={search ? undefined : 'Open one and the record starts from the first keystroke.'}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((job) => (
+          {visible.map((job) => (
             <JobCard key={job.jobId} job={job} />
           ))}
         </div>
