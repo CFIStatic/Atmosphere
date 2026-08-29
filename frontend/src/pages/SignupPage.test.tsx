@@ -205,10 +205,10 @@ describe('SignupPage', () => {
     await waitFor(() => {
       expect(api.createOrg).toHaveBeenCalledWith(
         'Acme Restoration',
-        'field_technician',
+        'global_admin',
         'mitigation',
         'restoration',
-        ['field_work', 'exploring'],
+        ['field_work', 'exploring', 'billing'],
       );
     });
   });
