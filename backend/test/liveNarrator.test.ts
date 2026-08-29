@@ -100,6 +100,22 @@ test('entries pointing at frames that do not exist are dropped, and an ungrounde
   assert.equal(none, null);
 });
 
+test('a dense note is kept well past the old one-sentence cap', () => {
+  const note = `${'Visible wet drywall, brown paper facing, and a utility knife in the right hand. '.repeat(8)}PPE is a dust mask.`;
+  assert.ok(note.length > 300);
+  const parsed = parseNarration(
+    JSON.stringify({
+      entries: [{ frame: 0, stage: 1, note }],
+      report: 'Opens on a cut in the south wall.',
+    }),
+    FRAMES,
+    STEPS,
+  );
+  assert.ok(parsed);
+  assert.ok((parsed.entries[0]?.note.length ?? 0) > 300);
+  assert.ok((parsed.entries[0]?.note.length ?? 0) <= 1200);
+});
+
 test('an invented stage inside an entry degrades to unclear, not to a new stage', () => {
   const parsed = parseNarration(
     JSON.stringify({

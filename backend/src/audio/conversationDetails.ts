@@ -99,3 +99,33 @@ export function extractConversationDetails(transcript: string | null | undefined
     roomsMentioned,
   };
 }
+
+/** Shape stored on `ai_findings.conversation` so Ask can quote without re-parsing. */
+export function conversationForFindings(details: ConversationDetails): {
+  summary: string | null;
+  details: string[];
+  agreements: string[];
+  concerns: string[];
+  rooms: string[];
+} {
+  return {
+    summary: details.summary,
+    details: details.details,
+    agreements: details.agreements,
+    concerns: details.concerns,
+    rooms: details.roomsMentioned,
+  };
+}
+
+/** Merge speech facts into existing vision findings. Never replace the rest. */
+export function mergeConversationFindings(
+  existing: unknown,
+  details: ConversationDetails,
+): Record<string, unknown> {
+  const base =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  base.conversation = conversationForFindings(details);
+  return base;
+}

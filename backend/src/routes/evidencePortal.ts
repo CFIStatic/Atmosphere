@@ -19,6 +19,8 @@ import {
 } from '../shared/clipAsk.js';
 import {
   clipHasReading,
+  clipNeedsDenseReading,
+  clipNeedsTranscript,
   downloadDecision,
   matchesLibraryQuery,
   pickPosterFrame,
@@ -204,13 +206,27 @@ async function propertyAddresses(
 
 /** One kick per clip per process so open + 4s polls do not restart the model. */
 const kickedThisProcess = new Set<string>();
+const kickedTranscriptThisProcess = new Set<string>();
+
+function startTranscriptIfNeeded(admin: any, item: any): boolean {
+  if (!admin || !item?.id || !clipNeedsTranscript(item)) return false;
+  if (kickedTranscriptThisProcess.has(item.id)) return false;
+  kickedTranscriptThisProcess.add(item.id);
+  void queueProofTranscript(admin, item.id).catch(() => undefined);
+  return true;
+}
 
 function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
-  if (clipHasReading(item) || !admin || !item?.id) return false;
-  if (kickedThisProcess.has(item.id)) return false;
+  if (!admin || !item?.id) return false;
+  const unread = !clipHasReading(item);
+  const thin = clipNeedsDenseReading(item);
+  const unheard = clipNeedsTranscript(item);
+  if (!unread && !thin && !unheard) return false;
+  const heardKick = startTranscriptIfNeeded(admin, item);
+  if (!unread && !thin) return heardKick || kickedTranscriptThisProcess.has(item.id);
+  if (kickedThisProcess.has(item.id)) return heardKick || true;
   kickedThisProcess.add(item.id);
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
-  void queueProofTranscript(admin, item.id).catch(() => undefined);
   void ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch((err) => {
     console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
   });
@@ -224,9 +240,14 @@ function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
  * rows as queued so the office never saw the real error.
  */
 async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
-  if (clipHasReading(item) || !admin || !item?.id) return item;
+  if (!admin || !item?.id) return item;
+  if (clipHasReading(item) && !clipNeedsDenseReading(item)) {
+    startTranscriptIfNeeded(admin, item);
+    return item;
+  }
   const alreadyKicked = kickedThisProcess.has(item.id);
   const started = startUnreadClipRead(admin, orgId, item);
+  if (clipHasReading(item)) return item;
   if (!alreadyKicked && started) {
     return { ...item, analysisState: 'queued' };
   }
@@ -241,7 +262,13 @@ const ASK_READ_BUDGET_MS = 90_000;
  * describe what is on screen instead of saying the file was never looked at.
  */
 async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<ClipKick> {
-  if (clipHasReading(item) || !admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
+  if (!admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
+  startTranscriptIfNeeded(admin, item);
+  if (clipHasReading(item) && clipNeedsDenseReading(item)) {
+    startUnreadClipRead(admin, orgId, item);
+    return 'done';
+  }
+  if (clipHasReading(item)) return 'done';
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   kickedThisProcess.add(item.id);
   try {

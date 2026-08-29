@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   analysisStateOf,
   clipHasReading,
+  clipNeedsDenseReading,
+  clipNeedsTranscript,
   dateSearchPhrases,
   presentUnreadClip,
   downloadDecision,
@@ -277,7 +279,7 @@ test('serialization: office dictation prefers narration_text over the day summar
       narration_status: 'done',
       narration_text:
         'The crew strips the north slope through the morning, then lays underlayment after lunch.',
-      narration: { entries: [{ atSeconds: 0, text: 'Tear-off begins.' }], model: 'claude' },
+      narration: { entries: [{ atSeconds: 0, text: 'Tear-off begins.' }], model: 'claude', detailLevel: 'dense' },
       legal_hold: false,
       retention_until: null,
     },
@@ -296,6 +298,7 @@ test('serialization: office dictation prefers narration_text over the day summar
   );
   assert.equal(item.analysis?.dictationStatus, 'done');
   assert.equal(item.analysis?.summary, 'Short headline.');
+  assert.equal(item.analysis?.detailLevel, 'dense');
 });
 
 test('serialization: leftover dictation is still Askable even if status never flipped to done', () => {
@@ -376,7 +379,8 @@ test('serialization: a talk clip with only a transcript is Askable', () => {
   });
 
   assert.equal(item.analysisState, 'done');
-  assert.match(String(item.analysis?.transcript), /vanity/);
+  assert.match(String(item.analysis?.transcript), /\[0:00\].*vanity/s);
+  assert.match(String(item.analysis?.transcript), /^\[(?:\d+:)+\d+\]\s+/m);
   assert.ok((item.analysis as { conversationDetails?: string[] } | null)?.conversationDetails?.some((line) => /insurance/i.test(line)));
   const rooms = (item.analysis as { conversationRooms?: string[] } | null)?.conversationRooms ?? [];
   assert.ok(rooms.includes('bathroom'));
@@ -496,6 +500,43 @@ test('presentUnreadClip never hides a skip or fail behind queued', () => {
   assert.equal(presentUnreadClip(done, 'queued').analysisState, 'done');
   assert.equal(clipHasReading(done), true);
   assert.equal(clipHasReading(skipped), false);
+  assert.equal(clipNeedsDenseReading(done), true);
+  assert.equal(
+    clipNeedsDenseReading({
+      analysis: { dictation: 'A desk and a monitor.', detailLevel: 'dense' },
+    }),
+    false,
+  );
+  assert.equal(clipNeedsDenseReading(skipped), false);
+});
+
+test('a dense visual reading with no mic still needs a transcript kick', () => {
+  const seen = {
+    transcriptStatus: 'idle',
+    analysis: {
+      dictation: 'Hallway talk. No tools come out.',
+      detailLevel: 'dense',
+      transcript: null,
+    },
+  };
+  const heard = {
+    transcriptStatus: 'done',
+    analysis: {
+      dictation: 'Hallway talk.',
+      detailLevel: 'dense',
+      transcript: '[0:18] Homeowner: Leave the cabinets.',
+    },
+  };
+  const silentDone = {
+    transcriptStatus: 'done',
+    analysis: { dictation: 'Empty driveway.', detailLevel: 'dense', transcript: '' },
+  };
+  assert.equal(clipHasReading(seen), true);
+  assert.equal(clipNeedsDenseReading(seen), false);
+  assert.equal(clipNeedsTranscript(seen), true);
+  assert.equal(clipNeedsTranscript(heard), false);
+  assert.equal(clipNeedsTranscript(silentDone), false);
+  assert.equal(clipNeedsTranscript({ transcriptStatus: 'skipped', analysis: { dictation: 'Desk.' } }), true);
 });
 
 

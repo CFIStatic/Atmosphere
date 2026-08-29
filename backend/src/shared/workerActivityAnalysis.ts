@@ -16,9 +16,9 @@ export function scopeContextNote(scopeTitles: string[]): string {
   if (!lines.length) {
     return [
       'No job scope is attached.',
-      'Describe only what is visible in the frames — people, setting, screens, news or YouTube if that is what is on camera,',
-      'rooms or areas, materials and tools, and how the scene changes over time.',
-      'Do not invent scope lines or claim work is complete off-camera.',
+      'Write a dense timestamped reading of what is visible — people, clothing, PPE, setting, screens, news or YouTube if that is what is on camera,',
+      'rooms or areas, tools, materials, brands when readable, condition, counts, and how the scene changes between stills.',
+      'List what the stills do not show. Do not invent scope lines or claim work is complete off-camera.',
     ].join(' ');
   }
   return [
@@ -67,30 +67,33 @@ export async function describeRecordingWithoutScope(input: {
     ]
       .filter(Boolean)
       .join('\n'),
-    maxModelFrames: input.longForm ? 36 : 18,
+    maxModelFrames: input.longForm ? 48 : 36,
   });
 }
 
 export function descriptionFindings(dictation: VideoDictationResult): Record<string, unknown> {
+  const entries = dictation.entries ?? [];
+  const timeline = (entries.length ? entries : dictation.actions).map((row) => ({
+    atSeconds: row.atSeconds,
+    action: 'action' in row ? row.action : undefined,
+    summary: 'text' in row ? row.text : row.description,
+  }));
   return {
     kind: 'day_film',
     longForm: true,
     scopeCrossRef: false,
     summary: dictation.narrationText,
-    workPerformed: dictation.actions.map((action) => action.description),
+    workPerformed: (entries.length ? entries.map((e) => e.text) : dictation.actions.map((action) => action.description)).slice(0, 24),
     materialChange: null,
     materialBecause: null,
     changes: [],
-    cannotTell: [],
+    cannotTell: dictation.cannotTell ?? [],
     scopeVerdicts: [],
     concerns: [],
-    timeline: dictation.actions.map((action) => ({
-      atSeconds: action.atSeconds,
-      action: action.action,
-      summary: action.description,
-    })),
+    timeline,
     windowsTotal: 0,
     windowsRead: 0,
     actions: dictation.actions,
+    detailLevel: 'dense',
   };
 }

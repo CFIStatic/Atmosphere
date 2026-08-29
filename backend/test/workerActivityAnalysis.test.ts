@@ -17,7 +17,7 @@ test('scopeContextNote asks for cross-reference when scope lines exist', () => {
 test('scopeContextNote asks for a description when scope is empty', () => {
   const note = scopeContextNote([]);
   assert.match(note, /No job scope/i);
-  assert.match(note, /Describe only what is visible/i);
+  assert.match(note, /dense timestamped reading/i);
 });
 
 test('preparedFromProofFrames wraps base64 stills for dictation', () => {
@@ -41,9 +41,13 @@ test('descriptionFindings marks analysis as description-only (no scope cross-ref
     model: 'test-model',
     frameCount: 8,
     actions: [],
+    entries: [{ atSeconds: 12, text: 'South wall opened; wet paper facing, brown at the cut.' }],
+    cannotTell: ['Whether the cavity is dry behind the studs.'],
   });
   assert.equal(findings.scopeCrossRef, false);
   assert.equal(findings.kind, 'day_film');
   assert.deepEqual(findings.scopeVerdicts, []);
   assert.equal(findings.summary, 'Worker removed wet drywall along the south wall.');
+  assert.deepEqual(findings.cannotTell, ['Whether the cavity is dry behind the studs.']);
+  assert.equal((findings.timeline as Array<{ summary: string }>)[0]?.summary, 'South wall opened; wet paper facing, brown at the cut.');
 });

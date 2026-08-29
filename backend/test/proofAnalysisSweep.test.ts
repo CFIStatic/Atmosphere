@@ -11,8 +11,10 @@ test('needsNarration and needsTranscript treat idle and missing as unread', () =
   assert.equal(needsNarration('failed', 'The model reply was not usable.'), true);
   assert.equal(needsNarration('queued'), true);
   assert.equal(needsNarration('running'), true);
-  assert.equal(needsTranscript('queued'), false);
+  assert.equal(needsTranscript('queued'), true);
+  assert.equal(needsTranscript('running'), true);
   assert.equal(needsTranscript('failed'), true);
+  assert.equal(needsTranscript('done'), false);
   assert.equal(needsTranscript(undefined), true);
 });
 
@@ -40,6 +42,17 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
       transcript_status: 'done',
       storage_path: 'org/job/b.mp4',
     },
+    {
+      id: 'seen-unheard',
+      org_id: 'org',
+      job_id: 'job',
+      party_id: 'party',
+      phase: 'after',
+      work_date: '2026-08-03',
+      narration_status: 'done',
+      transcript_status: 'idle',
+      storage_path: 'org/job/c.mp4',
+    },
   ];
 
   const admin = {
@@ -60,7 +73,12 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
         order() {
           return this;
         },
-        limit: async () => ({ data: rows.filter((r) => r.narration_status === 'idle'), error: null }),
+        limit: async () => ({
+          data: rows.filter(
+            (r) => needsNarration(r.narration_status) || needsTranscript(r.transcript_status),
+          ),
+          error: null,
+        }),
         update() {
           return { eq: async () => ({ error: null }) };
         },
@@ -79,7 +97,7 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
     },
   });
   assert.equal(result.narration, 1);
-  assert.equal(result.transcript, 1);
+  assert.equal(result.transcript, 2);
   assert.deepEqual(queued.narration, ['old-1']);
-  assert.deepEqual(queued.transcript, ['old-1']);
+  assert.deepEqual(queued.transcript, ['old-1', 'seen-unheard']);
 });

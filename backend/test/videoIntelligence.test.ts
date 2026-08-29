@@ -12,7 +12,11 @@ import {
   isLongFormVideo,
   parseDictationPayload,
   pickEvenlySpaced,
+  shortClipFrameIntervalSeconds,
+  snapToFrameSeconds,
   prepareVideoFrames,
+  entriesFromDictation,
+  verifierDictationEntries,
 } from '../src/shared/videoIntelligence.js';
 import { HttpError } from '../src/lib/errors.js';
 
@@ -88,6 +92,12 @@ test('prepareVideoFrames is source-agnostic (field_capture and media_upload shar
   await rm(join(tmpdir(), 'atm-sparse-unused'), { recursive: true, force: true }).catch(() => undefined);
 });
 
+test('short clips sample every few seconds, not the day-film cadence', () => {
+  assert.equal(shortClipFrameIntervalSeconds(64, 180), 3);
+  assert.ok(shortClipFrameIntervalSeconds(300, 180) <= 12);
+  assert.ok(snapToFrameSeconds(13, [0, 12, 40]) === 12);
+});
+
 test('parseDictationPayload extracts narration and a grounded action log', () => {
   const parsed = parseDictationPayload(
     JSON.stringify({
@@ -111,6 +121,67 @@ test('parseDictationPayload extracts narration and a grounded action log', () =>
   assert.equal(parsed.actions[0]!.action, 'remove');
   assert.equal(parsed.actions[0]!.atSeconds, 12);
   assert.equal(parsed.actions[0]!.model, 'claude-test');
+  assert.deepEqual(parsed.entries, []);
+  assert.deepEqual(parsed.cannotTell, []);
+});
+
+test('parseDictationPayload keeps timestamped dense entries snapped to stills', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'A person at a desk watches a news clip.',
+      summary: 'Desk and a broadcast.',
+      entries: [
+        { atSeconds: 9, text: 'Office desk, black monitor, MSNBC chyron naming a senate race.' },
+        { atSeconds: 40, text: 'Same desk; the person points at the screen with a right hand.' },
+      ],
+      cannotTell: ['Who the person is.'],
+      actions: [],
+    }),
+    [8, 24, 40],
+    'gemini-test',
+  );
+  assert.equal(parsed.entries.length, 2);
+  assert.equal(parsed.entries[0]!.atSeconds, 8);
+  assert.match(parsed.entries[0]!.text, /MSNBC/);
+  assert.equal(parsed.entries[1]!.atSeconds, 40);
+  assert.deepEqual(parsed.cannotTell, ['Who the person is.']);
+});
+
+test('empty entries are synthesized from actions so side timestamps still exist', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'The crew pulls wet drywall.',
+      summary: 'Demo.',
+      entries: [],
+      actions: [
+        {
+          atSeconds: 14,
+          action: 'remove',
+          description: 'Pulling wet drywall from the south wall.',
+          object: 'drywall',
+          confidence: 0.9,
+        },
+      ],
+    }),
+    [0, 12, 40],
+    'claude-test',
+  );
+  const entries = entriesFromDictation(parsed);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]!.atSeconds, 12);
+  assert.match(entries[0]!.text, /wet drywall/);
+});
+
+test('verifierDictationEntries maps note onto text for the side log', () => {
+  const mapped = verifierDictationEntries([
+    { atSeconds: 8, note: 'Desk, monitor, MSNBC chyron.' },
+    { atSeconds: 24, text: 'Same desk; a hand points at the screen.' },
+    { atSeconds: 40, note: '   ' },
+  ]);
+  assert.deepEqual(mapped, [
+    { atSeconds: 8, text: 'Desk, monitor, MSNBC chyron.' },
+    { atSeconds: 24, text: 'Same desk; a hand points at the screen.' },
+  ]);
 });
 
 test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
@@ -132,6 +203,8 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
                   text: JSON.stringify({
                     narration: 'A person sits at a desk watching a news clip on the monitor.',
                     summary: 'Desk and a news broadcast.',
+                    entries: [{ atSeconds: 8, text: 'Desk, black monitor, news chyron on screen.' }],
+                    cannotTell: ['Who the person is.'],
                     actions: [],
                   }),
                 },
@@ -152,6 +225,9 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
     });
     assert.match(result.narrationText, /desk/i);
     assert.match(result.model, /gemini/i);
+    assert.equal(result.entries.length, 1);
+    assert.equal(result.entries[0]!.atSeconds, 8);
+    assert.deepEqual(result.cannotTell, ['Who the person is.']);
   } finally {
     globalThis.fetch = originalFetch;
     if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;

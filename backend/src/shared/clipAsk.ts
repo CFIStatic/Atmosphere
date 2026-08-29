@@ -140,9 +140,11 @@ Rules:
 4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
 6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-7. Speech on the recording is evidence. Quote what was said when that is what was asked.
-8. Two or three sentences. This is read next to the player.
-9. Never estimate cost, hours, or whether work was worth paying for.`;
+7. Speech on the recording is evidence of what was said. Quote it when that is what was asked.
+8. Do not claim work happened because someone said they would do it, or that they did it, unless the frames also show it. An agreement on the mic is not a completed remount.
+9. Never invent dialogue the transcript does not contain.
+10. Two or three sentences. This is read next to the player.
+11. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -303,8 +305,25 @@ function isWhatHappened(question: string): boolean {
 }
 
 function isWhatWasSaid(question: string): boolean {
-  return /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/.test(
+  return /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker|people).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they|anyone).*(say|mention|agree|ask)|what was said|anything said|heard on the mic|conversation|what did they (agree|ask|say)|what did (he|she) (say|ask)|what was agreed/.test(
     question.toLowerCase(),
+  );
+}
+
+function isSpeechIntent(question: string): boolean {
+  return (
+    isWhatWasSaid(question) ||
+    /\b(say|said|ask|asked|tell|told|mention|mentioned|agree|agreed|talk|talked|conversation|heard)\b/i.test(
+      question,
+    )
+  );
+}
+
+function isPhysicalWorkIntent(question: string): boolean {
+  return (
+    /\b(replace|remount|cut|install|remove|paint|fix|repair|did they (do|work)|work in|pull|demo|mount)\b/i.test(
+      question,
+    ) && !isSpeechIntent(question)
   );
 }
 
@@ -417,6 +436,19 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   if (yesNo) {
+    if (isPhysicalWorkIntent(q)) {
+      const visible = scored.find((entry) => entry.row.kind !== 'heard');
+      if (!visible) {
+        const spoken = scored[0]!.row;
+        const when = formatClipTimeSpoken(spoken.at);
+        return (
+          `They talked about that on the recording: ${spoken.text.replace(/\.$/, '')}.` +
+          (when ? ` That was ${when}.` : '') +
+          ' The frames on file do not show it was done.'
+        );
+      }
+      return yesFromRow(visible.row);
+    }
     const timed = scored.find((entry) => entry.row.at != null) ?? scored[0];
     return yesFromRow(timed.row);
   }

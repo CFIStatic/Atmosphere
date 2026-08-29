@@ -63,12 +63,21 @@ export type PreparedVideoFrames = {
   longForm: boolean;
 };
 
+export const DENSE_READING_LEVEL = 'dense';
+
+export type DictationEntry = {
+  atSeconds: number;
+  text: string;
+};
+
 export type VideoDictationResult = {
   narrationText: string;
   narrationSummary: string | null;
   model: string;
   frameCount: number;
   actions: VisionAction[];
+  entries: DictationEntry[];
+  cannotTell: string[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -78,7 +87,30 @@ export function isLongFormVideo(durationSeconds: number): boolean {
 /** Gemini hanging used to leave narration_status=running forever. */
 export function geminiDictationTimeoutMs(): number {
   const n = Number(process.env.GEMINI_DICTATION_TIMEOUT_MS);
-  return Number.isFinite(n) && n > 0 ? n : 60_000;
+  return Number.isFinite(n) && n > 0 ? n : 90_000;
+}
+
+/** Short clips need stills every few seconds, not the 2-minute day-film cadence. */
+export function shortClipFrameIntervalSeconds(durationSeconds: number, maxFrames: number): number {
+  const duration = Math.max(1, Number(durationSeconds) || 1);
+  const keep = Math.max(4, Math.min(Math.floor(maxFrames) || 24, 24));
+  return Math.max(3, Math.floor(duration / keep));
+}
+
+export function snapToFrameSeconds(raw: unknown, frames?: number[]): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  const seconds = Number.isFinite(n) && n >= 0 ? n : 0;
+  if (!frames?.length) return Math.round(seconds * 100) / 100;
+  let best = frames[0]!;
+  let bestDelta = Math.abs(best - seconds);
+  for (const at of frames) {
+    const delta = Math.abs(at - seconds);
+    if (delta < bestDelta) {
+      best = at;
+      bestDelta = delta;
+    }
+  }
+  return best;
 }
 
 export function assertProcessableDuration(durationSeconds: number): void {
@@ -124,11 +156,14 @@ export async function prepareVideoFrames(
     url: ref.url,
     durationSeconds: ref.durationSeconds,
     maxFrames,
-    candidateIntervalSeconds:
-      config.verification.sparseCandidateIntervalSeconds ||
-      config.verification.sparseFrameIntervalSeconds,
+    candidateIntervalSeconds: longForm
+      ? config.verification.sparseCandidateIntervalSeconds ||
+        config.verification.sparseFrameIntervalSeconds
+      : shortClipFrameIntervalSeconds(ref.durationSeconds, maxFrames),
     hammingThreshold: config.verification.sparseDiversityHamming,
-    coverageIntervalSeconds: config.verification.sparseCoverageIntervalSeconds,
+    coverageIntervalSeconds: longForm
+      ? config.verification.sparseCoverageIntervalSeconds
+      : Math.max(8, shortClipFrameIntervalSeconds(ref.durationSeconds, maxFrames) * 2),
     ffmpegPath: config.verification.ffmpegPath,
     runner: opts?.runner,
   });
@@ -160,26 +195,34 @@ export async function dictatePreparedFrames(
     throw new HttpError(422, 'No frames available for dictation', 'no_frames');
   }
 
-  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 36, 48));
+  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 48, 48));
   const frames = pickEvenlySpaced(prepared.frames, maxModel);
   const hours = (prepared.durationSeconds / 3600).toFixed(2);
   const context = (opts?.contextText ?? '').trim().slice(0, 4000);
+  const frameClock = frames.map((frame, i) => `${i}=${Math.round(frame.atSeconds)}s`).join(', ');
 
   const system = [
-    'You are watching a filed video. It may be job-site work, a walkthrough, a conversation, or someone filming a room, a desk, or a screen.',
-    'Watch the provided stills (sampled across the recording, including long day-long clips) and dictate what is on camera.',
-    'Write as spoken field notes an office person can read beside the video player.',
-    'Describe only what is visible. Never infer off-camera work or invent rooms.',
-    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
-    'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
-    'Name the room or area when you can see it. If you cannot tell, omit it.',
-    'Be concrete and chronological. Do not invent invoice amounts or people identities.',
-    'If the clip is long, summarize with time cues when timestamps are given.',
-    'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count.',
+    'You are watching stills from a filed video. Write a field-note reading an office person can read beside the player without watching the clip.',
+    'Keep the timestamps. For every still you are given, write a dense note at that still\'s timestamp.',
+    'Visible-only. Never invent off-camera work, people identities, invoice amounts, or rooms you cannot see. If text is unreadable, say so. Unknown is allowed. Unknown is not a pass.',
+    'Extract every relevant visible fact:',
+    'setting (room or area, indoor/outdoor, light, weather clues);',
+    'people (count, clothing, PPE, pose, what each person is doing with their hands);',
+    'work (tools, materials, brands or labels when readable, condition such as wet/torn/new/damaged, quantities you can count);',
+    'surfaces (walls, floors, ceilings, openings, water lines, debris);',
+    'screens (TV, laptop, phone, app, network or show, chyron, on-screen text, what the story is);',
+    'vehicles, signage, house numbers, safety setup;',
+    'what changed between stills;',
+    'what a PM would want that these stills do not show (cannotTell).',
+    'Name the room when you can see it. If you cannot tell, omit it rather than guess.',
+    'Sitting, watching, talking, and pointing at a screen count as actions.',
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
-    'atSeconds MUST match a provided frame timestamp. Never invent off-camera work.',
-    'Reply with JSON only: {"narration":"...","summary":"...","actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'summary is 2–4 sentences that would answer "what is happening in this video". actions may be an empty array.',
+    'atSeconds MUST be one of the provided still timestamps. Never invent a time.',
+    'narration is chronological prose, several paragraphs if needed, still concrete.',
+    'summary is 2–4 sentences answering "what is happening in this video".',
+    'entries: one object per still. text is 2–6 sentences of everything relevant in that still.',
+    'cannotTell lists facts the stills do not show. actions may be an empty array.',
+    'Reply with JSON only: {"narration":"...","summary":"...","entries":[{"atSeconds":number,"text":"..."}],"cannotTell":["..."],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
   ].join(' ');
 
   const userText = [
@@ -187,8 +230,9 @@ export async function dictatePreparedFrames(
     `Video id: ${prepared.id}`,
     `Duration: ${prepared.durationSeconds}s (~${hours}h)`,
     `Stills: ${frames.length} of ${prepared.frames.length} prepared (diverse sample)`,
+    `Still timestamps: ${frameClock}`,
     context ? `Context:\n${context}` : 'Context: (none)',
-    'Dictate what the video shows for the office verifier. JSON only.',
+    'Write a dense timestamped reading. One entry per still. JSON only.',
   ].join('\n');
 
   const googleKeys = googleVisionApiKeys();
@@ -217,7 +261,7 @@ export async function dictatePreparedFrames(
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 2500,
+    max_tokens: 8192,
     system,
     messages: [
       {
@@ -256,13 +300,7 @@ export async function dictatePreparedFrames(
     throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
   }
 
-  return {
-    narrationText: parsed.narration,
-    narrationSummary: parsed.summary,
-    model: response.model,
-    frameCount: frames.length,
-    actions: parsed.actions,
-  };
+  return toDictationResult(parsed, frames.length, response.model);
 }
 
 async function dictateWithGemini(input: {
@@ -301,7 +339,7 @@ async function dictateWithGemini(input: {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0,
-        maxOutputTokens: 2500,
+        maxOutputTokens: 8192,
       },
     }),
     });
@@ -337,13 +375,7 @@ async function dictateWithGemini(input: {
   if (!parsed.narration) {
     throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
   }
-  return {
-    narrationText: parsed.narration,
-    narrationSummary: parsed.summary,
-    model,
-    frameCount: input.frames.length,
-    actions: parsed.actions,
-  };
+  return toDictationResult(parsed, input.frames.length, model);
 }
 
 /**
@@ -377,30 +409,136 @@ export function pickEvenlySpaced<T>(items: T[], max: number): T[] {
   return out;
 }
 
+const MAX_ENTRY_CHARS = 1600;
+const MAX_ENTRIES = 48;
+const MAX_CANNOT_TELL = 12;
+
+export function parseDictationEntries(raw: unknown, frames?: number[]): DictationEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DictationEntry[] = [];
+  const seen = new Set<number>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as { atSeconds?: unknown; at_seconds?: unknown; text?: unknown; note?: unknown; summary?: unknown };
+    const text = String(row.text ?? row.note ?? row.summary ?? '').trim().slice(0, MAX_ENTRY_CHARS);
+    if (!text) continue;
+    const atSeconds = snapToFrameSeconds(row.atSeconds ?? row.at_seconds, frames);
+    if (seen.has(atSeconds)) {
+      const existing = out.find((e) => e.atSeconds === atSeconds);
+      if (existing && existing.text.length < text.length) existing.text = text;
+      continue;
+    }
+    seen.add(atSeconds);
+    out.push({ atSeconds, text });
+    if (out.length >= MAX_ENTRIES) break;
+  }
+  return out.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+
+export function parseCannotTell(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const next = item.trim().slice(0, 240);
+    if (!next || seen.has(next.toLowerCase())) continue;
+    seen.add(next.toLowerCase());
+    out.push(next);
+    if (out.length >= MAX_CANNOT_TELL) break;
+  }
+  return out;
+}
+
+export function entriesFromActions(actions: VisionAction[]): DictationEntry[] {
+  return actions
+    .filter((action) => action.description.trim())
+    .slice(0, MAX_ENTRIES)
+    .map((action) => ({ atSeconds: action.atSeconds, text: action.description.trim().slice(0, MAX_ENTRY_CHARS) }));
+}
+
+export function entriesFromDictation(dictation: {
+  entries?: Array<{ atSeconds: number; text?: string; note?: string }>;
+  actions?: VisionAction[];
+}): DictationEntry[] {
+  if (dictation.entries?.length) return verifierDictationEntries(dictation.entries);
+  return entriesFromActions(dictation.actions ?? []);
+}
+
+/** Side timestamps in verifier/index.html read `e.text || e.note`. Always persist `text`. */
+export function verifierDictationEntries(
+  entries: Array<{ atSeconds: number; text?: string | null; note?: string | null }>,
+): DictationEntry[] {
+  return entries
+    .map((entry) => ({
+      atSeconds: entry.atSeconds,
+      text: String(entry.text || entry.note || '').trim(),
+    }))
+    .filter((entry) => entry.text)
+    .slice(0, MAX_ENTRIES);
+}
+
+function toDictationResult(
+  parsed: ParsedDictation,
+  frameCount: number,
+  model: string,
+): VideoDictationResult {
+  const entries = parsed.entries.length ? parsed.entries : entriesFromActions(parsed.actions);
+  return {
+    narrationText: parsed.narration,
+    narrationSummary: parsed.summary,
+    model,
+    frameCount,
+    actions: parsed.actions,
+    entries,
+    cannotTell: parsed.cannotTell,
+  };
+}
+
+type ParsedDictation = {
+  narration: string;
+  summary: string | null;
+  actions: VisionAction[];
+  entries: DictationEntry[];
+  cannotTell: string[];
+};
+
 /** Exported for tests — dictation JSON must stay parseable without a live model. */
 export function parseDictationPayload(
   text: string,
   frames?: number[],
   model?: string | null,
-): { narration: string; summary: string | null; actions: VisionAction[] } {
+): ParsedDictation {
+  const empty = (narration: string): ParsedDictation => ({
+    narration,
+    summary: null,
+    actions: [],
+    entries: [],
+    cannotTell: [],
+  });
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) {
-    const trimmed = text.trim();
-    return { narration: trimmed, summary: null, actions: [] };
+    return empty(text.trim());
   }
   try {
     const data = JSON.parse(text.slice(start, end + 1)) as {
       narration?: unknown;
       summary?: unknown;
       actions?: unknown;
+      entries?: unknown;
+      cannotTell?: unknown;
+      cannot_tell?: unknown;
     };
+    const actions = parseVisionActions(data.actions, { frames, model: model ?? null });
     return {
       narration: String(data.narration ?? '').trim(),
       summary: String(data.summary ?? '').trim() || null,
-      actions: parseVisionActions(data.actions, { frames, model: model ?? null }),
+      actions,
+      entries: parseDictationEntries(data.entries, frames),
+      cannotTell: parseCannotTell(data.cannotTell ?? data.cannot_tell),
     };
   } catch {
-    return { narration: text.trim(), summary: null, actions: [] };
+    return empty(text.trim());
   }
 }

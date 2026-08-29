@@ -14,6 +14,7 @@
  */
 
 import { extractConversationDetails } from '../audio/conversationDetails.js';
+import { formatTimestampedTranscript } from '../audio/transcriptFormat.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
@@ -120,6 +121,36 @@ export function clipHasReading(item: {
     Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
     (Array.isArray(analysis?.actions) && analysis.actions.length > 0)
   );
+}
+
+export const DENSE_READING_LEVEL = 'dense';
+
+/** True when Scope/Ask should start STT without touching the visual reading. */
+export function clipNeedsTranscript(item: {
+  transcriptStatus?: string | null;
+  analysis?: { transcript?: unknown } | null;
+} | null | undefined): boolean {
+  const heard = String(item?.analysis?.transcript || '').trim();
+  if (heard) return false;
+  const status = String(item?.transcriptStatus || '').toLowerCase();
+  if (status === 'done') return false;
+  return true;
+}
+
+/** Older readings were a short summary. Those get one rewrite with dense notes. */
+export function clipNeedsDenseReading(item: {
+  analysis?: {
+    detailLevel?: string | null;
+    dictation?: unknown;
+    summary?: unknown;
+    transcript?: unknown;
+    actions?: unknown;
+    dictationEntries?: unknown;
+  } | null;
+} | null | undefined): boolean {
+  const analysis = item?.analysis;
+  if (!analysis || !clipHasReading(item)) return false;
+  return analysis.detailLevel !== DENSE_READING_LEVEL;
 }
 
 /**
@@ -292,14 +323,20 @@ export function serializeEvidence(input: {
     legalHold: Boolean(proof.legal_hold),
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
+    transcriptStatus: proof.transcript_status ?? null,
     analysis:
-      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0
+      analysis === 'done' ||
+      Boolean(dictation) ||
+      Boolean(proof.ai_summary) ||
+      actions.length > 0 ||
+      Boolean(typeof proof.transcript_text === 'string' && proof.transcript_text.trim())
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
             /** Spoken-style description for the office player — primary reading. */
             dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
             dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
             dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            detailLevel: typeof proof.narration?.detailLevel === 'string' ? proof.narration.detailLevel : null,
             actions,
             materialChange,
             materialBecause: findings.materialBecause ?? null,
@@ -323,7 +360,11 @@ export function serializeEvidence(input: {
             windowsTotal: findings.windowsTotal ?? null,
             windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? proof.narration?.model ?? null,
-            transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+            transcript:
+              typeof proof.transcript_text === 'string' && proof.transcript_text.trim()
+                ? formatTimestampedTranscript(proof.transcript_text)
+                : null,
+            transcriptStatus: proof.transcript_status ?? null,
             ...conversationFields(proof.transcript_text, findings.conversation),
           }
         : null,
