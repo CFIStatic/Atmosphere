@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError, type AuthUser, type Membership, type Profile } from '../lib/api';
+import { isFieldEmbedMarked, waitForParentFieldSession } from '../lib/fieldEmbed';
 
 interface SignupResult {
   needsEmailConfirmation: boolean;
@@ -74,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // On mount, try to restore an existing session from the httpOnly cookie.
+  // Inside Field Capture, wait for the phone's tokens before showing login —
+  // one sign-in covers both Field Capture and the in-app Platform.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -84,6 +87,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await loadMembership();
         }
       } catch (err) {
+        if (!cancelled && !explicitAuthRef.current && isFieldEmbedMarked()) {
+          const adopted = await waitForParentFieldSession();
+          if (adopted && !cancelled && !explicitAuthRef.current) {
+            try {
+              const { user } = await api.me();
+              if (!cancelled && !explicitAuthRef.current) {
+                setUser(user);
+                await loadMembership();
+                return;
+              }
+            } catch {
+              /* parent posted tokens that the office could not adopt */
+            }
+          }
+        }
         if (!cancelled && !explicitAuthRef.current) setUser(null);
         if (err instanceof ApiError && err.status !== 401 && err.status !== 0) {
           console.warn('Session restore failed:', err.message);

@@ -88,6 +88,9 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain("Core.resolveOfficeHref('/forgot-password')");
     expect(app).toContain("Core.resolveOfficeHref('/signup')");
     expect(app).toContain('openPlatformInFrame');
+    expect(app).toContain('request-field-session');
+    expect(app).toContain('field-session-missing');
+    expect(app).toContain('warmPlatformFrame');
     expect(core).toContain('function resolveOfficePlatformHref');
     expect(core).toContain('function resolveOfficeHref');
     expect(core).toContain('embed=field');

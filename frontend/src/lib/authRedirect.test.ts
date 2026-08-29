@@ -38,6 +38,12 @@ describe('loginHref', () => {
   it('returns bare login without a path', () => {
     expect(loginHref()).toBe('/login');
   });
+
+  it('keeps the Field Capture embed on the login URL and the return path', () => {
+    expect(loginHref('/verifier-library?embed=field')).toBe(
+      '/login?embed=field&next=%2Fverifier-library%3Fembed%3Dfield',
+    );
+  });
 });
 
 describe('signupHref', () => {

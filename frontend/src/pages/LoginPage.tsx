@@ -11,6 +11,7 @@ import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
+import { isFieldEmbedMarked, isFieldEmbedQuery } from '../lib/fieldEmbed';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,6 +29,8 @@ export function LoginPage() {
     PLATFORM_HOME[getPlatform()],
   );
 
+  const fieldEmbed = isFieldEmbedMarked() || isFieldEmbedQuery(location.search);
+
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -44,6 +47,7 @@ export function LoginPage() {
   const shakeTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    if (fieldEmbed) return;
     let cancelled = false;
     api
       .pinStatus()
@@ -62,7 +66,7 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fieldEmbed]);
 
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 

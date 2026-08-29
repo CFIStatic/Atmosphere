@@ -6,6 +6,8 @@
  * `VITE_API_BASE_URL` if the backend is served from a different origin.
  */
 
+import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export interface AuthUser {
@@ -2539,7 +2541,8 @@ export function apiFailureMessage(
   return { message: `${fallbackPrefix} (${status})`, code };
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
+  const embedToken = fieldEmbedAccessToken();
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -2547,11 +2550,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       credentials: 'include', // send/receive the httpOnly session cookies
       headers: {
         'Content-Type': 'application/json',
+        ...(embedToken ? { Authorization: `Bearer ${embedToken}` } : {}),
         ...(options.headers ?? {}),
       },
     });
   } catch {
     throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
+  }
+
+  if (!res.ok && res.status === 401 && !retried && path !== '/api/auth/refresh') {
+    const refreshed = await refreshFieldEmbedSession();
+    if (refreshed) return request<T>(path, options, true);
   }
 
   const text = await res.text();

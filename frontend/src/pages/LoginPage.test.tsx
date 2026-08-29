@@ -3,6 +3,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const pinStatus = vi.hoisted(() =>
+  vi.fn(async () => ({ enrolled: false as boolean, lockedUntil: null as string | null })),
+);
+
 const authState = vi.hoisted(() => ({
   user: null as {
     id: string;
@@ -28,7 +32,7 @@ vi.mock('../context/AuthContext', () => ({
 
 vi.mock('../lib/api', () => ({
   api: {
-    pinStatus: () => Promise.resolve({ enrolled: false }),
+    pinStatus: () => pinStatus(),
   },
   ApiError: class ApiError extends Error {
     status = 401;
@@ -74,6 +78,8 @@ describe('LoginPage', () => {
     authState.unlockWithPin.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
+    pinStatus.mockReset().mockResolvedValue({ enrolled: false, lockedUntil: null });
+    delete document.documentElement.dataset.fieldEmbed;
   });
 
   it('places a large Atmosphere lockup in the top-left corner', () => {
@@ -159,6 +165,18 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
 
     expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+  });
+
+  it('skips the device PIN inside the Field Capture frame — one login is enough', async () => {
+    pinStatus.mockResolvedValue({ enrolled: true, lockedUntil: null });
+    document.documentElement.dataset.fieldEmbed = '1';
+
+    renderLogin('/login?embed=field&next=%2Fverifier-library%3Fembed%3Dfield');
+
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Enter your PIN' })).toBeNull();
+    await Promise.resolve();
+    expect(pinStatus).not.toHaveBeenCalled();
   });
 
   it('signs the current session out before signing in as a different account', async () => {

@@ -1,3 +1,5 @@
+import { hasFieldEmbedInPath, isFieldEmbedMarked, withFieldEmbed } from './fieldEmbed';
+
 /** Allowed post-auth destinations — relative in-app paths only. */
 export function safeAuthRedirect(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -22,8 +24,13 @@ export function resolveAuthRedirect(
 /** Build /login?next=… for marketing-site and email deep links. */
 export function loginHref(next?: string): string {
   const safe = next ? safeAuthRedirect(next) : null;
-  if (!safe) return '/login';
-  return `/login?next=${encodeURIComponent(safe)}`;
+  const embed = isFieldEmbedMarked() || (safe != null && hasFieldEmbedInPath(safe));
+  const dest = safe && embed ? withFieldEmbed(safe) : safe;
+  const params = new URLSearchParams();
+  if (embed) params.set('embed', 'field');
+  if (dest) params.set('next', dest);
+  const qs = params.toString();
+  return qs ? `/login?${qs}` : '/login';
 }
 
 export type SignupIntent = 'create' | 'join';

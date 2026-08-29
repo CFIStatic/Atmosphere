@@ -1,17 +1,27 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  adoptDestinationFrom,
+  clearFieldEmbedSession,
+  fieldEmbedAccessToken,
+  fieldSessionTokens,
+  hasFieldEmbedInPath,
   isFieldCaptureHost,
   isFieldCaptureOrigin,
   isFieldEmbedQuery,
   isPhoneShellViewport,
+  listenForFieldSession,
   markFieldEmbed,
   PHONE_SHELL_MAX_PX,
+  rememberFieldEmbedSession,
+  waitForParentFieldSession,
   withFieldEmbed,
 } from './fieldEmbed';
 
 describe('field embed helpers', () => {
   afterEach(() => {
     delete document.documentElement.dataset.fieldEmbed;
+    clearFieldEmbedSession();
+    vi.restoreAllMocks();
   });
 
   it('recognises standalone Field Capture hosts and local phones', () => {
@@ -42,5 +52,68 @@ describe('field embed helpers', () => {
     expect(isPhoneShellViewport(480)).toBe(true);
     expect(isPhoneShellViewport(PHONE_SHELL_MAX_PX)).toBe(true);
     expect(isPhoneShellViewport(1024)).toBe(false);
+  });
+
+  it('detects embed=field on a return path', () => {
+    expect(hasFieldEmbedInPath('/verifier-library?embed=field')).toBe(true);
+    expect(hasFieldEmbedInPath('/verifier-library')).toBe(false);
+  });
+
+  it('sends login and signup landings to the phone Platform', () => {
+    expect(adoptDestinationFrom('/login', '?next=%2Fverifier-library%3Fembed%3Dfield')).toBe(
+      '/verifier-library?embed=field',
+    );
+    expect(adoptDestinationFrom('/login', '')).toBe('/verifier-library?embed=field');
+    expect(adoptDestinationFrom('/jobs', '?tab=open')).toBe('/jobs?tab=open&embed=field');
+  });
+
+  it('accepts Field Capture session tokens and ignores empties', () => {
+    expect(fieldSessionTokens({ refreshToken: 'refresh-token-1', accessToken: 'access-token-1' })).toEqual({
+      refreshToken: 'refresh-token-1',
+      accessToken: 'access-token-1',
+    });
+    expect(fieldSessionTokens({ refreshToken: null, accessToken: '' })).toEqual({
+      refreshToken: null,
+      accessToken: null,
+    });
+  });
+
+  it('remembers the adopted Field Capture session for Bearer API calls', () => {
+    rememberFieldEmbedSession('access-from-phone', 'refresh-from-phone');
+    expect(fieldEmbedAccessToken()).toBe('access-from-phone');
+  });
+
+  it('adopts a parent Field Capture session without a second password', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/api/auth/refresh')) {
+        return new Response(
+          JSON.stringify({
+            user: { id: 'u1' },
+            session: { accessToken: 'office-access', refreshToken: 'office-refresh' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('', { status: 404 });
+    });
+
+    const stop = listenForFieldSession();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://field-capture-production.up.railway.app',
+        data: {
+          atmosphere: 'field-session',
+          refreshToken: 'phone-refresh-token',
+          accessToken: 'phone-access-token',
+        },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(fieldEmbedAccessToken()).toBe('office-access');
+    });
+    await expect(waitForParentFieldSession(50)).resolves.toBe(true);
+    stop();
   });
 });

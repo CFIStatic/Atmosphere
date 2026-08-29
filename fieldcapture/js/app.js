@@ -347,6 +347,7 @@
         : 'No jobs yet. Ask the office to start a job.',
     );
     show('s-home');
+    warmPlatformFrame();
   }
 
   function bootAccountSession() {
@@ -797,6 +798,8 @@
     show('s-home');
   }
 
+  var warmPlatformFrame = function () {};
+
   /* ---------- wire ---------- */
 
   var now = new Date();
@@ -837,6 +840,10 @@
       if (!href || href === 'about:blank') return;
       var target = officeFrameOrigin(href);
       if (!target) return;
+      if (!state.refreshToken && !state.accessToken) {
+        frame.contentWindow.postMessage({ atmosphere: 'field-session-missing' }, target);
+        return;
+      }
       frame.contentWindow.postMessage(
         {
           atmosphere: 'field-session',
@@ -847,7 +854,7 @@
       );
     }
 
-    function openPlatformInFrame() {
+    warmPlatformFrame = function () {
       var href = (link && link.getAttribute('href')) || '';
       if (Core.resolveOfficePlatformHref) {
         href = Core.resolveOfficePlatformHref('/verifier-library');
@@ -856,6 +863,10 @@
       if (frame && href && frame.getAttribute('src') !== href) {
         frame.setAttribute('src', href);
       }
+    };
+
+    function openPlatformInFrame() {
+      warmPlatformFrame();
       show('s-platform');
       postFieldSession();
     }
@@ -863,6 +874,12 @@
     if (frame) {
       frame.addEventListener('load', postFieldSession);
     }
+    window.addEventListener('message', function (event) {
+      if (!frame || event.source !== frame.contentWindow) return;
+      var data = event.data;
+      if (!data || data.atmosphere !== 'request-field-session') return;
+      postFieldSession();
+    });
     if (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
