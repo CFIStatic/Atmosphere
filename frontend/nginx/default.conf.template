@@ -14,8 +14,9 @@ server {
 
   add_header X-Content-Type-Options nosniff always;
   add_header Referrer-Policy strict-origin-when-cross-origin always;
-  # Verifier is iframed by the office shell on the same origin.
-  add_header X-Frame-Options SAMEORIGIN always;
+  # Office HTML is iframed by Field Capture's 480px web frame. CSP
+  # frame-ancestors allows that host while still blocking strangers.
+  add_header Content-Security-Policy "frame-ancestors 'self' https://*.up.railway.app" always;
 
   # Liveness for this replica only — never proxied. A cold or misconfigured
   # BFF must not fail Railway's probe: the console, /login included, is static
@@ -85,6 +86,7 @@ server {
 
   location /verifier/ {
     add_header Cache-Control "no-store";
+    add_header Content-Security-Policy "frame-ancestors 'self' https://*.up.railway.app" always;
     try_files $uri $uri/ /verifier/index.html;
   }
 
@@ -94,6 +96,7 @@ server {
 
   location / {
     add_header Cache-Control "no-store";
+    add_header Content-Security-Policy "frame-ancestors 'self' https://*.up.railway.app" always;
     try_files $uri $uri/ /index.html;
   }
 }

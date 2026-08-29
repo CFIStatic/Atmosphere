@@ -46,6 +46,20 @@ describe('job-file viewport lock', () => {
   });
 });
 
+describe('phone and Field Capture frame', () => {
+  it('collapses the 248px rail into a hamburger drawer on a phone-width frame', () => {
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('usePhoneShell');
+    expect(shell).toContain('Open navigation');
+    expect(shell).toContain('paddingLeft: phone ? 0 : RAIL_W');
+    expect(shell).toContain('h-[100dvh]');
+    expect(shell).toContain('w-[min(280px,86vw)]');
+  });
+});
+
 describe('Job Files search chrome', () => {
   it('puts the Dashboard search field in the 72px office top bar', () => {
     const shell = readFileSync(

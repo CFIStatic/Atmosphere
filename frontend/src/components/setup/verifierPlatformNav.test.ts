@@ -37,6 +37,14 @@ describe('verifier office rail', () => {
     expect(verifierHtml).not.toContain("var to = '/jobs?job=' + encodeURIComponent(id);");
   });
 
+  it('collapses the office rail into a phone drawer inside the Field Capture frame', () => {
+    expect(verifierHtml).toContain('id="rail-menu"');
+    expect(verifierHtml).toContain('@media (max-width: 640px)');
+    expect(verifierHtml).toContain('html[data-rail-open]');
+    expect(verifierHtml).toContain('function setRailOpen');
+    expect(verifierHtml).toContain('min(280px, 86vw)');
+  });
+
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
     expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);

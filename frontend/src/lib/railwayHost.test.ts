@@ -30,6 +30,8 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
     expect(nginx).toMatch(/location \/verifier\/ \{\s*add_header Cache-Control "no-store";/);
+    expect(nginx).toContain("frame-ancestors 'self' https://*.up.railway.app");
+    expect(nginx).not.toMatch(/add_header X-Frame-Options/);
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
   });

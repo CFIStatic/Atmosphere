@@ -60,7 +60,7 @@ are prompted to create one with that exact address.
 ### Field Capture (crew)
 
 - **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
-- **Bottom bar (app only):** Field Capture (your jobs) · Platform (opens the office)
+- **Bottom bar (app only):** Field Capture (your jobs) · Platform (office, still in the phone web frame)
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
 - **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
 

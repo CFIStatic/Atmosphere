@@ -91,17 +91,22 @@ assert.match(html, /Field Capture<small>/);
 assert.match(html, /Platform<small>/);
 assert.match(
   appSrc,
-  /id === 's-home' \|\| id === 's-office'/,
-  'the Field Capture / Platform bar returns after sign-in',
+  /id === 's-home' \|\| id === 's-office' \|\| id === 's-platform'/,
+  'the Field Capture / Platform bar returns after sign-in and on the office pane',
 );
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
 assert.match(appSrc, /resolveOfficePlatformHref\('\/verifier-library'\)/, 'Platform tab opens the office web console');
+assert.match(appSrc, /openPlatformInFrame/, 'Platform stays inside the Field Capture web frame');
+assert.match(html, /id="s-platform"/, 'Platform is an in-app screen, not a new page');
+assert.match(html, /id="platform-frame"/);
+assert.match(html, /max-width: 480px/, 'the web frame stays phone-width');
 assert.match(
   html,
-  /id="platform-link"[^>]*href="https:\/\/atmosphere-web-production\.up\.railway\.app\/verifier-library"/,
+  /id="platform-link"[^>]*href="https:\/\/atmosphere-web-production\.up\.railway\.app\/verifier-library\?embed=field"/,
   'standalone Field Capture must not use /field — that path is this same app',
 );
-assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library');
+assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library?embed=field');
+assert.equal(Core.withFieldEmbed('/verifier-library'), '/verifier-library?embed=field');
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
 assert.match(html, /Welcome back/);
 assert.match(html, /same email and password as the office Platform/);
@@ -114,8 +119,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=platform-web/);
-assert.match(html, /js\/app\.js\?v=platform-web/);
+assert.match(html, /js\/capture-core\.js\?v=platform-frame/);
+assert.match(html, /js\/app\.js\?v=platform-frame/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
 assert.match(appSrc, /resolveOfficePlatformHref\('\/forgot-password'\)/);

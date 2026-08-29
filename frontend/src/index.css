@@ -348,6 +348,14 @@ body::before {
   background: transparent;
 }
 
+/* Field Capture iframe: lock the office to the phone web frame. */
+html[data-field-embed],
+html[data-field-embed] body,
+html[data-field-embed] #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Native media controls follow the active theme via color-scheme on :root. */
 
 /* Set from Settings › Appearance, and honoured for anyone whose system already

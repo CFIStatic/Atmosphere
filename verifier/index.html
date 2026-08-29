@@ -659,6 +659,65 @@
     .app-frame.has-sidebar { --rail-w: 228px; }
   }
 
+  /* Phone / Field Capture 480px frame: rail becomes a drawer so the
+     dashboard and search stay full width and easy to tap. */
+  .rail-menu {
+    display: none;
+    place-items: center;
+    width: 44px; height: 44px; flex: none;
+    margin: 0 0 0 -6px; padding: 0;
+    border: 0; border-radius: 10px;
+    background: none; color: var(--ink);
+    cursor: pointer;
+  }
+  .rail-backdrop { display: none; }
+  @media (max-width: 640px) {
+    .app-frame.has-sidebar { --rail-w: 0px; }
+    .app-frame.has-sidebar .app-body {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        'topbar'
+        'main';
+    }
+    .app-frame.has-sidebar .rail {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: min(280px, 86vw);
+      z-index: 40;
+      transform: translateX(-105%);
+      transition: transform 0.2s ease;
+      border-right: 1px solid var(--line);
+      background: var(--bg);
+    }
+    html[data-rail-open] .app-frame.has-sidebar .rail {
+      transform: none;
+      box-shadow: 8px 0 28px rgba(28, 25, 23, 0.18);
+    }
+    .rail-menu { display: grid; }
+    html[data-rail-open] .rail-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 35;
+      background: rgba(0, 0, 0, 0.45);
+      border: 0;
+      padding: 0;
+    }
+    .topbar { height: 56px; gap: 8px; padding: 0 10px; }
+    .brand-fallback span { display: none; }
+    .brand-fallback svg { width: 28px; height: 28px; }
+    .search { max-width: none; }
+    .navitem {
+      min-height: 44px;
+      padding: 11px 12px;
+      font-size: 14px;
+    }
+    .who .role { display: none; }
+    .who-name, #who-name { font-size: 12px; }
+  }
+  body[data-atm-rail-only] .rail-menu { display: none !important; }
+  body[data-atm-rail-only] .rail-backdrop { display: none !important; }
+
   .rail h3 {
     margin: 4px 12px 8px;
     font-size: 11px;
@@ -1198,6 +1257,10 @@
   </aside>
 
 <header class="topbar">
+  <button type="button" class="rail-menu" id="rail-menu" aria-label="Open navigation" aria-controls="main-rail" aria-expanded="false">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <button type="button" class="rail-backdrop" id="rail-backdrop" aria-label="Close navigation"></button>
   <button type="button" class="brand brand-fallback" id="brand-home-fallback" aria-label="Atmosphere home">
     <svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true">
       <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
@@ -4463,6 +4526,36 @@
   var RAIL_ONLY = document.body.hasAttribute('data-atm-rail-only') ||
     new URLSearchParams(location.search).get('rail') === '1';
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
+
+  function setRailOpen(on) {
+    var root = document.documentElement;
+    var btn = document.getElementById('rail-menu');
+    if (on) root.setAttribute('data-rail-open', '1');
+    else root.removeAttribute('data-rail-open');
+    if (btn) {
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on ? 'Close navigation' : 'Open navigation');
+    }
+  }
+  (function bindPhoneRail() {
+    var btn = document.getElementById('rail-menu');
+    var backdrop = document.getElementById('rail-backdrop');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        setRailOpen(!document.documentElement.hasAttribute('data-rail-open'));
+      });
+    }
+    if (backdrop) {
+      backdrop.addEventListener('click', function () { setRailOpen(false); });
+    }
+    var rail = document.getElementById('main-rail');
+    if (rail) {
+      rail.addEventListener('click', function (event) {
+        var t = event.target;
+        if (t && t.closest && t.closest('.navitem')) setRailOpen(false);
+      });
+    }
+  })();
 
   /* Light ↔ dark. Same keys as the React console and the marketing site so a
      tap here is visible everywhere on this origin. */

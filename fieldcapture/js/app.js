@@ -36,7 +36,7 @@
     if (node) fn(node);
   }
 
-  var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office'];
+  var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -44,7 +44,22 @@
     });
     document.body.setAttribute('data-screen', id);
     var app = document.getElementById('app');
-    if (app) app.setAttribute('data-switch', id === 's-home' || id === 's-office' ? 'on' : 'off');
+    if (app) {
+      app.setAttribute(
+        'data-switch',
+        id === 's-home' || id === 's-office' || id === 's-platform' ? 'on' : 'off',
+      );
+    }
+    var todayTab = document.querySelector('#product-switch a[href="#today"]');
+    var platformTab = document.getElementById('platform-link');
+    if (todayTab) {
+      if (id === 's-home') todayTab.setAttribute('aria-current', 'page');
+      else todayTab.removeAttribute('aria-current');
+    }
+    if (platformTab) {
+      if (id === 's-platform') platformTab.setAttribute('aria-current', 'page');
+      else platformTab.removeAttribute('aria-current');
+    }
     window.scrollTo(0, 0);
   }
 
@@ -795,6 +810,7 @@
   bindHold();
   (function bindProductSwitch() {
     var link = document.getElementById('platform-link');
+    var frame = document.getElementById('platform-frame');
     if (link && Core.resolveOfficePlatformHref) {
       link.href = Core.resolveOfficePlatformHref('/verifier-library');
     }
@@ -805,6 +821,55 @@
     var signup = document.getElementById('signup-link');
     if (signup && Core.resolveOfficePlatformHref) {
       signup.href = Core.resolveOfficePlatformHref('/signup');
+    }
+
+    function officeFrameOrigin(href) {
+      try {
+        return new URL(href, location.href).origin;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function postFieldSession() {
+      if (!frame || !frame.contentWindow) return;
+      var href = frame.getAttribute('src') || '';
+      if (!href || href === 'about:blank') return;
+      var target = officeFrameOrigin(href);
+      if (!target) return;
+      frame.contentWindow.postMessage(
+        {
+          atmosphere: 'field-session',
+          refreshToken: state.refreshToken,
+          accessToken: state.accessToken,
+        },
+        target,
+      );
+    }
+
+    function openPlatformInFrame() {
+      var href = (link && link.getAttribute('href')) || '';
+      if (Core.resolveOfficePlatformHref) {
+        href = Core.resolveOfficePlatformHref('/verifier-library');
+        if (link) link.href = href;
+      }
+      if (frame && href && frame.getAttribute('src') !== href) {
+        frame.setAttribute('src', href);
+      }
+      show('s-platform');
+      postFieldSession();
+    }
+
+    if (frame) {
+      frame.addEventListener('load', postFieldSession);
+    }
+    if (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        var blocked = document.getElementById('s-blocked');
+        if (blocked && blocked.getAttribute('data-on') === '1') return;
+        openPlatformInFrame();
+      });
     }
     var today = document.querySelector('#product-switch a[href="#today"]');
     if (today) {

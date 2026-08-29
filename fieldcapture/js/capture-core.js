@@ -422,16 +422,21 @@
     return '';
   }
 
+  function withFieldEmbed(path) {
+    if (/[?&]embed=field(?:&|$)/.test(path)) return path;
+    return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'embed=field';
+  }
+
   /**
    * Office web console (Work Verification Platform).
    *
    * Same-origin when Field Capture is served under /fieldcapture/ on the
    * office host. On the standalone Field Capture Railway app, /field is
-   * this same static app (nginx try_files → index.html) — so the Platform
-   * tab must leave for the live office origin.
+   * this same static app — so the Platform tab iframes the live office
+   * origin and stays inside the 480px web frame.
    */
   function resolveOfficePlatformHref(pathname) {
-    var path = pathname || '/verifier-library';
+    var path = withFieldEmbed(pathname || '/verifier-library');
     if (path.charAt(0) !== '/') path = '/' + path;
     var hostname = '';
     try {
@@ -610,6 +615,7 @@
     linkOffice: linkOffice,
     resolveApiBase: resolveApiBase,
     resolveOfficePlatformHref: resolveOfficePlatformHref,
+    withFieldEmbed: withFieldEmbed,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,
