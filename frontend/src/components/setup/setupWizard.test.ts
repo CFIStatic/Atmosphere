@@ -2,31 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { initialSetupStep, setupWizardCopy, workspaceNameFrom } from './setupWizard';
 
 describe('setupWizardCopy', () => {
-  it('uses ordinary create-an-account copy', () => {
+  it('uses Global Admin create-company copy', () => {
     const copy = setupWizardCopy('create');
-    expect(copy.heading).toBe('Create an account');
+    expect(copy.heading).toBe('Create your company');
     expect(copy.steps.map((s) => s.title)).toEqual([
       'Create your account',
       'Your workspace',
       'Set up billing',
     ]);
-    expect(copy.lede).toMatch(/account, workspace, then billing/i);
+    expect(copy.lede).toMatch(/Global Admin/i);
     expect(copy.steps[0]?.detail).toMatch(/name, email, and a password/i);
     expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
     expect(copy.steps[1]?.detail).toMatch(/company type/i);
-    expect(copy.steps[1]?.detail).toMatch(/join code/i);
+    expect(copy.steps[1]?.detail).toMatch(/Global Admin/i);
   });
 
-  it('keeps a join-code path without the two-card office wording', () => {
+  it('keeps an invite-only join path', () => {
     const copy = setupWizardCopy('join');
-    expect(copy.heading).toBe('Create an account');
+    expect(copy.heading).toBe('Join your team');
     expect(copy.steps.map((s) => s.title)).toEqual([
       'Create your account',
       'Enter your join code',
       'Set up billing',
     ]);
     expect(copy.steps[1]?.detail).toMatch(/invite/i);
-    expect(copy.heading).not.toMatch(/office account/i);
+    expect(copy.lede).toMatch(/Global Admin invited/i);
   });
 });
 

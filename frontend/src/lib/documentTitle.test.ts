@@ -18,8 +18,6 @@ describe('documentTitleFor', () => {
 
   it('distinguishes create vs join signup', () => {
     expect(documentTitleFor('/signup')).toBe('Create your organization · Atmosphere');
-    expect(documentTitleFor('/signup', '?intent=join')).toBe(
-      'Link to the office account · Atmosphere',
-    );
+    expect(documentTitleFor('/signup', '?intent=join')).toBe('Join your team · Atmosphere');
   });
 });

@@ -43,7 +43,7 @@ export function documentTitleFor(pathname: string, search = ''): string {
   if (pathname === '/signup' || pathname.startsWith('/signup/')) {
     const page =
       parseSignupIntent(params.get('intent')) === 'join'
-        ? 'Link to the office account'
+        ? 'Join your team'
         : 'Create your organization';
     return `${page} · ${APP_NAME}`;
   }

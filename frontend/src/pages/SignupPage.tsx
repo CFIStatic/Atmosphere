@@ -62,7 +62,7 @@ export function SignupPage() {
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [contractorType, setContractorType] = useState<ContractorType | null>(null);
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -89,6 +89,11 @@ export function SignupPage() {
   useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
+
+  useEffect(() => {
+    const fromLink = (searchParams.get('code') ?? '').toUpperCase();
+    if (fromLink && JOIN_CODE_RE.test(fromLink)) setJoinCode(fromLink);
+  }, [searchParams]);
 
   useEffect(() => {
     if (accountSubmitting) return;
@@ -386,8 +391,8 @@ export function SignupPage() {
           title={mode === 'join' ? 'Enter your join code' : 'Your workspace'}
           subtitle={
             mode === 'join'
-              ? 'The code from your invite links this login to the team workspace.'
-              : 'Name the company and pick the company type, or enter a join code if you were invited.'
+              ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
+              : 'You are creating this company as Global Admin. Invite Employees afterward from Settings.'
           }
         >
           {error && <Alert>{error}</Alert>}
@@ -423,14 +428,8 @@ export function SignupPage() {
                   ))}
                 </select>
                 <p className="mt-2 text-xs text-ink-500">
-                  Were you invited?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMode('join')}
-                    className="font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    Enter a join code
-                  </button>
+                  Were you invited by your office? Open the link in that email — only invited
+                  people can join an existing workspace.
                 </p>
               </Field>
             </>
@@ -446,7 +445,7 @@ export function SignupPage() {
                 className={`${inputClass} font-mono tracking-widest`}
               />
               <p className="mt-2 text-xs text-ink-500">
-                Starting a new company?{' '}
+                Starting a new company as Global Admin?{' '}
                 <button
                   type="button"
                   onClick={() => setMode('create')}

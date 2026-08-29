@@ -29,7 +29,8 @@ const ago = (iso: string) => {
 export function InvitePanel() {
   const { membership } = useAuth();
   const joinCode = membership?.org?.joinCode ?? null;
-  const roles: OrgProductRole[] = isGlobalAdmin(membership?.role) ? ROLES : ['employee'];
+  const admin = isGlobalAdmin(membership?.role);
+  const roles: OrgProductRole[] = ROLES;
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
@@ -51,8 +52,21 @@ export function InvitePanel() {
   }
 
   useEffect(() => {
+    if (!admin) return;
     void load();
-  }, []);
+  }, [admin]);
+
+  if (!admin) {
+    return (
+      <section className="mb-6 rounded-xl glass-card p-5">
+        <h2 className="text-base font-semibold text-ink-900">Team invites</h2>
+        <p className="mt-1 text-xs text-ink-500">
+          Only the Global Admin can invite people onto this workspace. Ask them to send an invite
+          for your teammates.
+        </p>
+      </section>
+    );
+  }
 
   async function invite(event: FormEvent) {
     event.preventDefault();
@@ -100,7 +114,7 @@ export function InvitePanel() {
   return (
     <section className="mb-6 rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Add a team member</h2>
+        <h2 className="text-base font-semibold text-ink-900">Invite teammates</h2>
         {joinCode && (
           <button
             onClick={() => void copyCode()}
@@ -111,8 +125,9 @@ export function InvitePanel() {
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        Employees join the whole workspace. For a subcontractor on one job, invite them from that
-        job file — they only see that job&apos;s brief and capture.
+        Only you (Global Admin) can create workspace accounts for others. They open the invite
+        email, create a login with that address, and enter the join code. For a subcontractor on
+        one job, invite them from the job file instead.
       </p>
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">

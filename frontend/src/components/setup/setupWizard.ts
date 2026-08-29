@@ -24,7 +24,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 2 as const,
     title: 'Your workspace',
-    detail: 'Name the company, pick the company type, or enter a join code if you were invited.',
+    detail: 'Name the company and pick the company type — you become Global Admin.',
   },
   {
     step: 3 as const,
@@ -37,7 +37,7 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Name, email, and a password. We never store your password in plain text.',
+    detail: 'Use the email your Global Admin invited. We never store your password in plain text.',
   },
   {
     step: 2 as const,
@@ -47,21 +47,21 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 3 as const,
     title: 'Set up billing',
-    detail: 'Joiners usually skip this — the office already has a plan.',
+    detail: 'Joiners skip this — only the Global Admin pays the bill.',
   },
 ] as const;
 
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
-      heading: 'Create an account',
-      lede: 'Three steps — your login, the office join code, then you are on the team.',
+      heading: 'Join your team',
+      lede: 'Your Global Admin invited you — create a login, then enter the join code.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
-    heading: 'Create an account',
-    lede: 'Three steps — account, workspace, then billing.',
+    heading: 'Create your company',
+    lede: 'You are the Global Admin. Create the workspace, set up billing, then invite everyone else.',
     steps: SETUP_WIZARD_STEPS,
   };
 }

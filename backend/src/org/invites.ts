@@ -46,6 +46,8 @@ export function inviteEmail(input: {
   orgName: string;
   inviterName: string | null;
   joinCode: string;
+  /** Address the invite was sent to — baked into the signup link. */
+  inviteEmailAddress?: string | null;
   /** The app's public origin, when configured. Without it the steps still work. */
   origin?: string | null;
   /** Field Capture web host — same join code, phone-sized app. */
@@ -54,6 +56,10 @@ export function inviteEmail(input: {
 }): { subject: string; text: string; html: string } {
   const inviter = input.inviterName?.trim() || null;
   const org = input.orgName.trim() || 'a team';
+  const inviteEmailAddress = input.inviteEmailAddress?.trim().toLowerCase() || null;
+  const signupParams = new URLSearchParams({ intent: 'join', code: input.joinCode });
+  if (inviteEmailAddress) signupParams.set('email', inviteEmailAddress);
+  const signupPath = `/signup?${signupParams.toString()}`;
   const lines: string[] = [
     `Atmosphere invited you to join ${org}.`,
     '',
@@ -68,30 +74,32 @@ export function inviteEmail(input: {
   lines.push('To join this office:', '');
   if (input.origin) {
     lines.push(
-      `  1. Open ${input.origin}/signup?intent=join and create an account with this email address.`,
+      `  1. Open ${input.origin.replace(/\/$/, '')}${signupPath}`,
+      '     and create an account with the invited email address.',
     );
   } else {
-    lines.push('  1. Open Atmosphere and create an account with this email address.');
+    lines.push('  1. Open Atmosphere and create an account with the invited email address.');
   }
   if (input.fieldCaptureOrigin) {
     lines.push(
       `     Or open Field Capture on the web: ${input.fieldCaptureOrigin}`,
     );
   }
-  lines.push('  2. Enter this join code:', '');
+  lines.push('  2. Enter this join code when asked:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
+    'Only people your Global Admin invited can join — the code alone is not enough.',
+    '',
     'On the Field Capture iPhone app, sign in (or create the account there),',
     'then enter the same join code when asked to connect to the office.',
     '',
   );
   lines.push(
-    'The code is the same for everyone joining this company, so there is nothing',
-    'personal in this link to lose. If you were not expecting this, you can ignore it.',
+    'If you were not expecting this, you can ignore it.',
   );
 
   const signup = input.origin
-    ? `${input.origin.replace(/\/$/, '')}/signup?intent=join`
+    ? `${input.origin.replace(/\/$/, '')}${signupPath}`
     : null;
   const fieldCapture = input.fieldCaptureOrigin?.replace(/\/$/, '') || null;
   const html = `<!DOCTYPE html>
@@ -105,7 +113,7 @@ export function inviteEmail(input: {
             Join ${escapeHtml(org)} on Atmosphere
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
-            Atmosphere invited you to this office.${inviter ? ` Requested by ${escapeHtml(inviter)}.` : ''}
+            Your Global Admin invited you to this office.${inviter ? ` Requested by ${escapeHtml(inviter)}.` : ''}
           </p>
           ${
             input.note?.trim()
@@ -139,7 +147,7 @@ export function inviteEmail(input: {
               : ''
           }
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
-            The same join code works on the web office, Field Capture on the web, and the iPhone app.
+            Use the invited email address. Only invited people can join this workspace.
           </p>
         </td></tr>
       </table>

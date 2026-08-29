@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 import { createAdminClient, createUserClient } from '../lib/supabase.js';
 import { FIELD_APP_CREATE_ONBOARDING, FIELD_APP_ONBOARDING } from '../lib/validation.js';
+import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { HttpError } from '../lib/errors.js';
 
 export function serializeFieldOrg(org: {
@@ -144,9 +145,13 @@ export async function linkFieldOffice(
       }
     }
 
+    const invite = await requirePendingOrgInvite({
+      joinCode: input.joinCode,
+      email: user.email,
+    });
     const { data, error } = await supabase.rpc('join_org', {
       p_code: input.joinCode,
-      p_role: FIELD_APP_ONBOARDING.role,
+      p_role: invite.role,
       p_work_type: FIELD_APP_ONBOARDING.workType,
     });
     if (error) {
