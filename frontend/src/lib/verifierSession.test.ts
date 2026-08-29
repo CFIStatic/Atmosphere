@@ -31,7 +31,7 @@ describe('verifierSessionUser', () => {
     });
     expect(user.name).toBe('Jack Cyganiak');
     expect(user.initials).toBe('JC');
-    expect(user.avatarUrl).toBeNull();
+    expect(user.avatarUrl).toBeUndefined();
   });
 
   it('rejects a non-image URL so the rail keeps initials', () => {

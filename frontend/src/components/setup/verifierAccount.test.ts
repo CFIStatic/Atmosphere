@@ -77,6 +77,68 @@ describe('verifier account chip', () => {
     );
     expect(avatar?.querySelector('img')).toBeNull();
     expect(avatar?.textContent).toBe('JC');
+
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/jack.jpg',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'api',
+    );
+    expect(avatar?.querySelector('img')).toBeNull();
+    expect(avatar?.textContent).toBe('JC');
+  });
+
+  it('lets the profile API paint a photo when the parent has not posted one yet', () => {
+    const win = mountChip();
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
+    );
+
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/jack.jpg',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'api',
+    );
+
+    expect(
+      win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src'),
+    ).toBe('https://img.example/jack.jpg');
+
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
+    );
+    expect(
+      win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src'),
+    ).toBe('https://img.example/jack.jpg');
   });
 
   it('keeps a parent-session photo when the profile API fallback has no avatar', () => {
@@ -107,9 +169,9 @@ describe('verifier account chip', () => {
       'api',
     );
 
-    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
-      'https://img.example/jack.jpg',
-    );
+    expect(
+      win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src'),
+    ).toBe('https://img.example/jack.jpg');
   });
 
   it('replaces the chip photo when Settings posts a newer URL', () => {
@@ -139,9 +201,9 @@ describe('verifier account chip', () => {
       'parent',
     );
 
-    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
-      'https://img.example/avatar.jpg?v=200',
-    );
+    expect(
+      win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src'),
+    ).toBe('https://img.example/avatar.jpg?v=200');
 
     win.applySession(
       {
@@ -155,8 +217,8 @@ describe('verifier account chip', () => {
       },
       'api',
     );
-    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
-      'https://img.example/avatar.jpg?v=200',
-    );
+    expect(
+      win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src'),
+    ).toBe('https://img.example/avatar.jpg?v=200');
   });
 });

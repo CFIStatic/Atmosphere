@@ -4918,7 +4918,7 @@
     var init = u.initials || initialsFrom(name, email);
     var sub = u.orgName || email || 'Atmosphere';
     var nextAvatar = u.avatarUrl;
-    if (source === 'parent') {
+    if (source === 'parent' && nextAvatar !== undefined) {
       lastParentAvatar = isDisplayableAvatarUrl(nextAvatar) ? String(nextAvatar).trim() : '';
     } else if (lastParentAvatar === '') {
       // Settings removed the photo — a slower GET must not put the old one back.
