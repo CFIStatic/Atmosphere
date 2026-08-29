@@ -10,14 +10,7 @@ import { themeLabel } from '../lib/theme';
 import { useTheme } from './ThemeContext';
 import { useViewer } from './ViewerContext';
 
-const ROLES: Role[] = [
-  'field_technician',
-  'sales',
-  'accountant',
-  'project_manager',
-  'office_manager',
-  'executive',
-];
+const ROLES: Role[] = ['global_admin', 'employee'];
 
 export function UserMenu() {
   const { user, profile, logout } = useAuth();

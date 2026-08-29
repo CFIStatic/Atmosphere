@@ -1,7 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import { config } from '../config.js';
 import {
@@ -30,7 +29,7 @@ import { pushToCrm } from '../lib/integrations/push.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { requireOrgRole } from '../lib/orgContext.js';
+import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { listGrants, loadGrant, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
 import { authorizeUrl, exchangeCode, revoke } from '../lib/integrations/salesforce.js';
 import { KNOWN_CRMS } from '../lib/integrations/browserCrm.js';
@@ -652,7 +651,7 @@ integrationsRouter.post(
   '/crm/salesforce/connect',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId, userId } = await requireGlobalAdmin(req);
 
       if (!config.integrations.salesforce.clientId) {
         throw new HttpError(
@@ -682,7 +681,7 @@ integrationsRouter.post(
   '/crm/salesforce/callback',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await requireOrgRole(req, ['owner', 'admin']);
+      await requireGlobalAdmin(req);
       const { code, state } = z
         .object({ code: z.string().min(1), state: z.string().min(1) })
         .parse(req.body ?? {});
@@ -728,7 +727,7 @@ integrationsRouter.delete(
   '/crm/salesforce',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId } = await requireGlobalAdmin(req);
 
       // Revoke at Salesforce first. Deleting our copy stops us using it; only
       // revocation stops it working, and a disconnect that skipped this would

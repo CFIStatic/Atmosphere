@@ -1,11 +1,16 @@
 import type { Role } from './types';
+import { toOrgProductRole, type OrgProductRole } from './productRoles';
 
 /**
  * Role-based capability table.
  *
- * One declarative map rather than scattered `role === 'x'` checks, so answering
- * "what can a field tech actually do?" means reading one object. Navigation
- * visibility, default landing route, and action gating all derive from here.
+ * Work Verification seats:
+ *   - global_admin — full console including billing
+ *   - employee     — same console without billing
+ *
+ * Invited workers are not org members; they use job-share tokens and never
+ * hit this table. Legacy Role values still appear in fixtures — they normalize
+ * through `toOrgProductRole` before a lookup.
  */
 
 export type NavKey =
@@ -31,7 +36,8 @@ export type Capability =
   | 'view_financials'
   | 'manage_workflows'
   | 'manage_connections'
-  | 'manage_team';
+  | 'manage_team'
+  | 'manage_billing';
 
 interface RoleProfile {
   /** Where this role lands after sign-in. */
@@ -58,96 +64,66 @@ const EVERYTHING: NavKey[] = [
   'settings',
 ];
 
-export const ROLE_PROFILES: Record<Role, RoleProfile> = {
-  // Works a list of assigned tasks on a phone. Deliberately not shown company
-  // financials or the approvals queue — noise they cannot act on.
-  field_technician: {
-    home: '/my-work',
-    nav: ['my-work', 'jobs', 'schedule', 'settings'],
-    capabilities: ['edit_job'],
-    fieldFirst: true,
-  },
-  sales: {
-    home: '/customers',
-    nav: ['overview', 'my-work', 'customers', 'estimates', 'jobs', 'schedule', 'settings'],
-    capabilities: ['view_all_jobs', 'edit_job'],
-    fieldFirst: false,
-  },
-  accountant: {
-    home: '/financials',
-    nav: ['overview', 'approvals', 'financials', 'estimates', 'customers', 'jobs', 'settings'],
-    capabilities: ['approve_financial', 'view_all_jobs', 'view_financials'],
-    fieldFirst: false,
-  },
-  project_manager: {
-    home: '/overview',
-    nav: EVERYTHING.filter((k) => k !== 'connections'),
-    capabilities: [
-      'approve_schedule',
-      'approve_scope',
-      'edit_job',
-      'view_all_jobs',
-      'view_financials',
-    ],
-    fieldFirst: false,
-  },
-  office_manager: {
+const EMPLOYEE_CAPABILITIES: Capability[] = [
+  'approve_financial',
+  'approve_schedule',
+  'approve_scope',
+  'edit_job',
+  'view_all_jobs',
+  'view_financials',
+  'manage_workflows',
+  'manage_connections',
+  'manage_team',
+];
+
+export const PRODUCT_ROLE_PROFILES: Record<OrgProductRole, RoleProfile> = {
+  global_admin: {
     home: '/overview',
     nav: EVERYTHING,
-    capabilities: [
-      'approve_financial',
-      'approve_schedule',
-      'approve_scope',
-      'edit_job',
-      'view_all_jobs',
-      'view_financials',
-      'manage_workflows',
-      'manage_connections',
-      'manage_team',
-    ],
+    capabilities: [...EMPLOYEE_CAPABILITIES, 'manage_billing'],
     fieldFirst: false,
   },
-  // Roll-up consumer: sees everything, works none of it.
-  executive: {
+  employee: {
     home: '/overview',
-    nav: ['overview', 'approvals', 'jobs', 'financials', 'customers', 'agents', 'settings'],
-    capabilities: [
-      'approve_financial',
-      'approve_schedule',
-      'approve_scope',
-      'view_all_jobs',
-      'view_financials',
-      'manage_team',
-    ],
+    nav: EVERYTHING,
+    capabilities: EMPLOYEE_CAPABILITIES,
     fieldFirst: false,
   },
 };
 
+/** @deprecated Prefer PRODUCT_ROLE_PROFILES — kept so legacy Role keys still resolve. */
+export const ROLE_PROFILES: Record<Role, RoleProfile> = {
+  global_admin: PRODUCT_ROLE_PROFILES.global_admin,
+  employee: PRODUCT_ROLE_PROFILES.employee,
+  office_manager: PRODUCT_ROLE_PROFILES.global_admin,
+  executive: PRODUCT_ROLE_PROFILES.global_admin,
+  project_manager: PRODUCT_ROLE_PROFILES.employee,
+  field_technician: PRODUCT_ROLE_PROFILES.employee,
+  accountant: PRODUCT_ROLE_PROFILES.employee,
+  sales: PRODUCT_ROLE_PROFILES.employee,
+};
+
 export function profileFor(role: Role): RoleProfile {
-  return ROLE_PROFILES[role];
+  return PRODUCT_ROLE_PROFILES[toOrgProductRole(role)];
 }
 
 export function can(role: Role, capability: Capability): boolean {
-  return ROLE_PROFILES[role].capabilities.includes(capability);
+  return profileFor(role).capabilities.includes(capability);
 }
 
 export function canSee(role: Role, nav: NavKey): boolean {
-  return ROLE_PROFILES[role].nav.includes(nav);
+  return profileFor(role).nav.includes(nav);
 }
 
 export function homeFor(role: Role): string {
-  return ROLE_PROFILES[role].home;
+  return profileFor(role).home;
 }
 
 export function isFieldFirst(role: Role): boolean {
-  return ROLE_PROFILES[role].fieldFirst;
+  return profileFor(role).fieldFirst;
 }
 
-/**
- * Executives see aggregate numbers rather than work queues. Kept as a named
- * predicate because `executive` is not yet a database role — when the migration
- * lands, this is the only place that needs revisiting.
- */
+/** Global Admin (bill payer) — including remapped legacy office_manager / executive. */
 export function isExecutive(role: Role): boolean {
-  return role === 'executive';
+  return toOrgProductRole(role) === 'global_admin';
 }

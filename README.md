@@ -43,8 +43,9 @@ are prompted to create one with that exact address.
 
 | Audience | What they get |
 | --- | --- |
-| **General contractors** | Job files, briefs, invites, Verifier library, custody |
-| **Field crews / subcontractors** | Token link → film the day; optional My jobs list across GCs |
+| **Global Admin** | Pays the bill. Full workspace — jobs, Verifier, invites, custody, **billing** |
+| **Employees** | Same workspace as admin (record jobs, see other jobs, invite workers) — **no billing** |
+| **Invited workers** | Job-share link only — brief, film, upload for that job (e.g. a subcontractor) |
 | **Adjusters / examiners / counsel** | Shared Verifier links pinned to their Atmosphere account |
 
 ## Surfaces

@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const field = await api.fieldAppMe();
           if (field.org?.id) {
-            const role = (field.org.role as MemberRole | undefined) ?? 'field_technician';
+            const role = (field.org.role as MemberRole | undefined) ?? 'employee';
             resolved = {
               role,
               workType: 'mitigation',

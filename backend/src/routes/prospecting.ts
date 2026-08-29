@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext, requireOrgRole } from '../lib/orgContext.js';
+import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import { billingError } from '../lib/billing.js';
 import { config } from '../config.js';
@@ -303,7 +303,7 @@ prospectingRouter.get(
     try {
       // Live credential checks reach out to vendors, so they are an
       // owner/admin action rather than something any member can trigger.
-      await requireOrgRole(req, ['owner', 'admin']);
+      await requireGlobalAdmin(req);
       const items = await integrationStatus(req.query.test === '1');
       res.json({
         items,
@@ -938,7 +938,7 @@ prospectingRouter.post(
     try {
       // It spends vendor calls and reveals how the machinery behaves, so it is
       // an operator's tool rather than something any member can run in a loop.
-      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId, supabase } = await requireGlobalAdmin(req);
       const { fullName, companyDomain } = diagnoseSchema.parse(req.body ?? {});
 
       const known = await loadKnownAddresses(supabase, orgId);
@@ -1054,7 +1054,7 @@ prospectingRouter.get('/network', async (req: Request, res: Response, next: Next
  */
 prospectingRouter.put('/network', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId, userId, supabase } = await requireGlobalAdmin(req);
     const { contributing } = contributionSchema.parse(req.body ?? {});
 
     const { error } = await supabase.from('network_contribution_settings').upsert(
@@ -1108,7 +1108,7 @@ prospectingRouter.post(
   '/network/contribute',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId, supabase } = await requireGlobalAdmin(req);
 
       const admin = createAdminClient();
       if (!admin) throw new HttpError(503, 'The shared network is unavailable.', 'network_unavailable');

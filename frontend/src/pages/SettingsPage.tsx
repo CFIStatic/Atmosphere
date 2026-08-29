@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { canManageBilling } from '../domain/productRoles';
 import {
   api,
   ApiError,
@@ -49,7 +50,7 @@ interface SettingsSection {
   icon: typeof UserIcon;
 }
 
-const SECTIONS: SettingsSection[] = [
+const ALL_SECTIONS: SettingsSection[] = [
   { id: 'profile', label: 'Profile', blurb: 'Your name and account details', icon: UserIcon },
   { id: 'security', label: 'Security', blurb: 'Password and sign-out', icon: ShieldIcon },
   {
@@ -68,17 +69,25 @@ const SECTIONS: SettingsSection[] = [
 ];
 
 function isSectionId(value: string | null): value is SectionId {
-  return SECTIONS.some((section) => section.id === value);
+  return ALL_SECTIONS.some((section) => section.id === value);
 }
 
 export function SettingsPage() {
   useFeatureTimer('settings');
+  const { membership } = useAuth();
+  const showBilling = canManageBilling(membership?.role);
+  const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'billing' || showBilling);
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
   const [params, setParams] = useSearchParams();
   const raw = params.get('section');
   const requested: SectionId = isSectionId(raw) ? raw : 'profile';
-  const active: SectionId = SECTIONS.some((s) => s.id === requested) ? requested : 'profile';
+  const active: SectionId =
+    requested === 'billing' && !showBilling
+      ? 'profile'
+      : SECTIONS.some((s) => s.id === requested)
+        ? requested
+        : 'profile';
   const outlet = useOutletContext<{ chrome?: string } | null>();
   const inShell = outlet?.chrome === 'operations';
 
@@ -139,7 +148,7 @@ export function SettingsPage() {
               <LinkedAccountsCard />
             </>
           )}
-          {active === 'billing' && <BillingSection />}
+          {active === 'billing' && showBilling && <BillingSection />}
           {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>

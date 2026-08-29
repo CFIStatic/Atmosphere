@@ -175,17 +175,17 @@ export function SignupPage() {
       }
 
       const { role: finalRole, usageIntents } = resolveVerifierSetup(
-        SETUP_DEFAULTS.role,
+        mode === 'join' ? 'employee' : SETUP_DEFAULTS.role,
         SETUP_DEFAULTS.trade,
-        true,
+        mode !== 'join',
       );
 
       if (mode === 'join') {
         await api.joinOrg(
           joinCode.trim().toUpperCase(),
-          finalRole,
+          'employee',
           SETUP_DEFAULTS.workType,
-          usageIntents,
+          usageIntents.length ? usageIntents : ['field_work', 'exploring'],
         );
       } else {
         if (!contractorType) {

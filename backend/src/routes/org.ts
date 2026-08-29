@@ -482,7 +482,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       .insert({
         org_id: orgId,
         email,
-        role: input.role ?? 'field_technician',
+        role: input.role ?? 'employee',
         note: input.note ?? null,
         invited_by: req.user!.id,
       })

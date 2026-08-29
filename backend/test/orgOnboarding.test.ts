@@ -8,7 +8,7 @@ import { createOrgSchema, joinOrgSchema } from '../src/lib/validation.js';
 // required onboarding answers change, one of these fails before a customer does.
 
 const answers = {
-  role: 'project_manager',
+  role: 'global_admin',
   workType: 'mitigation',
   usageIntents: ['project_management', 'crm'],
 } as const;
@@ -73,6 +73,19 @@ test('join: rejects a missing code with a clear message', () => {
   }
 });
 
+test('create: defaults the org creator to Global Admin', () => {
+  const parsed = createOrgSchema.parse({
+    name: 'Acme Restoration',
+    contractorType: 'restoration',
+  });
+  assert.equal(parsed.role, 'global_admin');
+});
+
+test('join: defaults joiners to Employee', () => {
+  const parsed = joinOrgSchema.parse({ joinCode: '8F3A9C2B' });
+  assert.equal(parsed.role, 'employee');
+});
+
 test('both: reject an account type the app does not offer', () => {
   assert.throws(() =>
     joinOrgSchema.parse({ joinCode: '8F3A9C2B', ...answers, role: 'ceo' }),
@@ -86,7 +99,7 @@ test('both: reject duplicate usage intents', () => {
   assert.throws(() =>
     joinOrgSchema.parse({
       joinCode: '8F3A9C2B',
-      role: 'sales',
+      role: 'employee',
       workType: 'mitigation',
       usageIntents: ['crm', 'crm'],
     }),

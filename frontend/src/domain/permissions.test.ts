@@ -19,59 +19,49 @@ describe('role profiles', () => {
   });
 });
 
-describe('field technician restrictions', () => {
-  it('is field-first', () => {
-    expect(isFieldFirst('field_technician')).toBe(true);
-    expect(isFieldFirst('project_manager')).toBe(false);
+describe('product seats', () => {
+  it('gives Global Admin billing and Employees everything else', () => {
+    expect(can('global_admin', 'manage_billing')).toBe(true);
+    expect(can('employee', 'manage_billing')).toBe(false);
+    expect(can('employee', 'view_all_jobs')).toBe(true);
+    expect(can('employee', 'edit_job')).toBe(true);
+    expect(can('employee', 'manage_team')).toBe(true);
   });
 
-  it('cannot reach company money or the approvals queue', () => {
-    expect(canSee('field_technician', 'financials')).toBe(false);
-    expect(canSee('field_technician', 'approvals')).toBe(false);
-    expect(can('field_technician', 'view_financials')).toBe(false);
+  it('maps legacy office_manager to Global Admin capabilities', () => {
+    expect(can('office_manager', 'manage_billing')).toBe(true);
+    expect(isExecutive('office_manager')).toBe(true);
   });
 
-  it('holds no approval capability of any kind', () => {
-    expect(can('field_technician', 'approve_financial')).toBe(false);
-    expect(can('field_technician', 'approve_schedule')).toBe(false);
-    expect(can('field_technician', 'approve_scope')).toBe(false);
-  });
-
-  it('can still edit the jobs it works on', () => {
-    expect(can('field_technician', 'edit_job')).toBe(true);
+  it('maps legacy crew roles to Employee capabilities', () => {
+    expect(can('field_technician', 'manage_billing')).toBe(false);
+    expect(can('project_manager', 'view_all_jobs')).toBe(true);
+    expect(isFieldFirst('field_technician')).toBe(false);
   });
 });
 
 describe('capability boundaries', () => {
-  it('restricts connection management to office managers', () => {
-    const allowed = ALL_ROLES.filter((r) => can(r, 'manage_connections'));
-    expect(allowed).toEqual(['office_manager']);
+  it('restricts billing to Global Admin seats', () => {
+    const allowed = ALL_ROLES.filter((r) => can(r, 'manage_billing'));
+    expect(allowed.sort()).toEqual(['executive', 'global_admin', 'office_manager'].sort());
   });
 
-  it('keeps workflow authoring away from sales and field roles', () => {
-    expect(can('sales', 'manage_workflows')).toBe(false);
-    expect(can('field_technician', 'manage_workflows')).toBe(false);
-  });
-
-  it('lets accountants approve money but not scope', () => {
-    expect(can('accountant', 'approve_financial')).toBe(true);
-    expect(can('accountant', 'approve_scope')).toBe(false);
-  });
-
-  it('lets project managers approve scope but not money', () => {
-    expect(can('project_manager', 'approve_scope')).toBe(true);
-    expect(can('project_manager', 'approve_financial')).toBe(false);
+  it('lets employees manage connections and workflows', () => {
+    expect(can('employee', 'manage_connections')).toBe(true);
+    expect(can('employee', 'manage_workflows')).toBe(true);
   });
 });
 
-describe('executive', () => {
-  it('is identified for roll-up views', () => {
+describe('executive / global admin', () => {
+  it('is identified for roll-up and billing views', () => {
     expect(isExecutive('executive')).toBe(true);
-    expect(isExecutive('office_manager')).toBe(false);
+    expect(isExecutive('global_admin')).toBe(true);
+    expect(isExecutive('employee')).toBe(false);
   });
 
-  it('sees the business but is not handed task-level work', () => {
-    expect(canSee('executive', 'financials')).toBe(true);
-    expect(canSee('executive', 'my-work')).toBe(false);
+  it('sees the full console including financials', () => {
+    expect(canSee('global_admin', 'financials')).toBe(true);
+    expect(canSee('employee', 'financials')).toBe(true);
+    expect(homeFor('global_admin')).toBe('/overview');
   });
 });

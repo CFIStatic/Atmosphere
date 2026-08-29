@@ -67,11 +67,11 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
 }
 
 export const SETUP_DEFAULTS = {
-  role: 'field_technician' as MemberRole,
+  role: 'global_admin' as MemberRole,
   workType: 'construction' as WorkType,
   contractorType: 'other' as ContractorType,
   trade: 'other' as ServiceTrade,
-  usageIntents: ['field_work', 'exploring'] as UsageIntent[],
+  usageIntents: ['field_work', 'exploring', 'billing'] as UsageIntent[],
 };
 
 export function initialSetupStep(options: {

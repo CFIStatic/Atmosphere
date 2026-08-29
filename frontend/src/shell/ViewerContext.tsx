@@ -51,7 +51,7 @@ export function ViewerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const actualRole: Role = (membership?.role as Role | undefined) ?? 'project_manager';
+  const actualRole: Role = (membership?.role as Role | undefined) ?? 'employee';
 
   const value = useMemo<ViewerValue>(
     () => ({

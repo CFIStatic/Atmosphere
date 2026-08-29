@@ -11,11 +11,13 @@ type MemberRole = (typeof MEMBER_ROLES)[number];
 type WorkType = (typeof WORK_TYPES)[number];
 
 export const ROLE_LABELS: Record<MemberRole, string> = {
-  project_manager: 'project manager',
-  field_technician: 'field technician',
-  accountant: 'accountant',
-  office_manager: 'office manager',
-  sales: 'salesperson',
+  global_admin: 'global admin',
+  employee: 'employee',
+  project_manager: 'employee',
+  field_technician: 'employee',
+  accountant: 'employee',
+  office_manager: 'global admin',
+  sales: 'employee',
 };
 
 export const WORK_TYPE_LABELS: Record<WorkType, string> = {

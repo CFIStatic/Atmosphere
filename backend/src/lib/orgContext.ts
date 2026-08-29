@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createUserClient } from './supabase.js';
 import { HttpError } from './errors.js';
+import { isGlobalAdmin, toOrgProductRole } from './productRoles.js';
 
 /**
  * Resolves the organization the caller is acting for.
@@ -19,6 +20,8 @@ export interface OrgContext {
   orgId: string;
   userId: string;
   role: string;
+  /** Normalized Work Verification seat: global_admin | employee. */
+  productRole: 'global_admin' | 'employee';
   supabase: SupabaseClient;
 }
 
@@ -57,8 +60,14 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
     throw new HttpError(403, 'Join or create an organization first.', 'no_organization');
   }
 
-  const role = String(data?.[0]?.role ?? 'member');
-  const ctx: OrgContext = { orgId, userId, role, supabase };
+  const role = String(data?.[0]?.role ?? 'employee');
+  const ctx: OrgContext = {
+    orgId,
+    userId,
+    role,
+    productRole: toOrgProductRole(role),
+    supabase,
+  };
   (req as CachedRequest)[CACHE_KEY] = ctx;
   return ctx;
 }
@@ -66,17 +75,32 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
 /**
  * The same context, refused unless the caller holds one of these roles.
  *
- * Kept separate from requireOrgContext so the common path stays a single
- * lookup and callers opt into the stricter check explicitly. Used for actions
- * that reach outside the tenant — spending against a vendor credential,
- * testing one — where "any member of the org" is the wrong bar.
+ * Roles are compared after normalizing legacy member_role values onto the
+ * product seats (global_admin / employee). Pass product role names, or legacy
+ * aliases — both work. Historical `owner` / `admin` strings map to Global Admin.
  */
 export async function requireOrgRole(req: Request, roles: string[]): Promise<OrgContext> {
   const ctx = await requireOrgContext(req);
-  if (!roles.includes(ctx.role)) {
+  const allowed = new Set(
+    roles.map((r) => toOrgProductRole(r === 'owner' || r === 'admin' ? 'global_admin' : r)),
+  );
+  if (!allowed.has(ctx.productRole)) {
     throw new HttpError(
       403,
-      'That needs an owner or admin on this organization.',
+      'That needs a Global Admin on this organization.',
+      'insufficient_role',
+    );
+  }
+  return ctx;
+}
+
+/** Org actions that only the bill payer may take. */
+export async function requireGlobalAdmin(req: Request): Promise<OrgContext> {
+  const ctx = await requireOrgContext(req);
+  if (!isGlobalAdmin(ctx.role)) {
+    throw new HttpError(
+      403,
+      'That needs a Global Admin on this organization.',
       'insufficient_role',
     );
   }

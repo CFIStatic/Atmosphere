@@ -74,16 +74,17 @@ describe('state machine', () => {
 });
 
 describe('role gating', () => {
-  it('lets senior roles satisfy junior requirements', () => {
+  it('lets Global Admin satisfy Employee requirements', () => {
+    expect(roleMeets('global_admin', 'employee')).toBe(true);
     expect(roleMeets('office_manager', 'project_manager')).toBe(true);
     expect(roleMeets('executive', 'accountant')).toBe(true);
-    expect(roleMeets('project_manager', 'project_manager')).toBe(true);
+    expect(roleMeets('employee', 'employee')).toBe(true);
   });
 
-  it('never lets a field technician authorise other people’s work', () => {
-    const roles: Role[] = ['project_manager', 'accountant', 'office_manager', 'executive'];
-    for (const required of roles) {
-      expect(roleMeets('field_technician', required)).toBe(false);
+  it('never lets an Employee authorise Global Admin–only gates', () => {
+    for (const actual of ['employee', 'field_technician', 'project_manager', 'accountant'] as Role[]) {
+      expect(roleMeets(actual, 'global_admin')).toBe(false);
+      expect(roleMeets(actual, 'office_manager')).toBe(false);
     }
   });
 });
@@ -94,9 +95,9 @@ describe('canApprove', () => {
   });
 
   it('refuses an under-qualified role and explains why', () => {
-    const gate = canApprove(request({ requiredRole: 'accountant' }), 'field_technician');
+    const gate = canApprove(request({ requiredRole: 'global_admin' }), 'employee');
     expect(gate.allowed).toBe(false);
-    expect(gate.reason).toContain('Accountant');
+    expect(gate.reason).toContain('Global Admin');
   });
 
   it('refuses anything already resolved', () => {

@@ -20,7 +20,13 @@ export interface AuthUser {
 }
 
 export type MemberRole =
-  'project_manager' | 'field_technician' | 'accountant' | 'office_manager' | 'sales';
+  | 'global_admin'
+  | 'employee'
+  | 'project_manager'
+  | 'field_technician'
+  | 'accountant'
+  | 'office_manager'
+  | 'sales';
 
 export type WorkType = 'mitigation' | 'construction';
 
@@ -6668,11 +6674,13 @@ export const PROVIDER_LABELS: Record<EstimatorProvider, string> = {
 
 /** Human-readable labels for roles and work types (shared UI copy). */
 export const ROLE_LABELS: Record<MemberRole, string> = {
-  project_manager: 'Project Manager',
-  field_technician: 'Field Technician',
-  accountant: 'Accountant',
-  office_manager: 'Office Manager',
-  sales: 'Sales',
+  global_admin: 'Global Admin',
+  employee: 'Employee',
+  project_manager: 'Employee',
+  field_technician: 'Employee',
+  accountant: 'Employee',
+  office_manager: 'Global Admin',
+  sales: 'Employee',
 };
 
 export const WORK_TYPE_LABELS: Record<WorkType, string> = {

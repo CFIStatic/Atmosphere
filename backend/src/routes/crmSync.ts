@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext, requireOrgRole } from '../lib/orgContext.js';
+import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -97,7 +97,7 @@ crmSyncRouter.post(
         .parse(req.body);
       // Handing over the org's CRM credential is an owner/admin act, exactly
       // like the Salesforce grant it sits next to in Settings.
-      const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId, userId } = await requireGlobalAdmin(req);
 
       const driver = createCrmSyncDriver();
       const { accountLabel } = await driver.validate(body.system, body.apiKey);
@@ -125,7 +125,7 @@ crmSyncRouter.post(
 crmSyncRouter.post('/disconnect', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = z.object({ system: systemSchema }).parse(req.body);
-    const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId } = await requireGlobalAdmin(req);
     await deleteCrmConnection(orgId, body.system);
     res.json({ ok: true });
   } catch (err) {
@@ -221,7 +221,7 @@ crmSyncRouter.post('/sync', async (req: Request, res: Response, next: NextFuncti
     const body = z.object({ system: systemSchema }).parse(req.body);
     // Sync writes job files; running it is an owner/admin act like the
     // connect that enables it.
-    const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId, userId } = await requireGlobalAdmin(req);
     const admin = adminOrThrow();
 
     const connection = await loadCrmConnection(orgId, body.system);
@@ -328,7 +328,7 @@ crmSyncRouter.post(
         .parse(req.body);
       // Moving a geofence — or refusing to — is the same class of act as
       // running the sync that parked the question.
-      const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId } = await requireGlobalAdmin(req);
       const admin = adminOrThrow();
 
       const { data: link } = await admin

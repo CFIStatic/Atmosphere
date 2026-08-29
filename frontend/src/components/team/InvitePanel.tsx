@@ -1,27 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, humanize, type MemberRole, type OrgInvite } from '../../lib/api';
+import { api, ROLE_LABELS, type MemberRole, type OrgInvite } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
 
 /**
  * Adding somebody to the team.
  *
- * Joining has always worked by code, and that stays — it works on a job site.
- * What this adds is the record around it: who was asked, whether they have
- * turned up, and a way to withdraw an ask that went to the wrong address.
- *
- * The email is best-effort and the panel is built to make that unremarkable.
- * If Atmosphere mail is not configured on the server, "we could not email it"
- * is the common case — the code appears right there for sending over text.
+ * Org invites create Employee (or Global Admin) seats. Invited workers on one
+ * job are invited from the job file via a job-share token — not here.
  */
 
-const ROLES: MemberRole[] = [
-  'project_manager',
-  'field_technician',
-  'accountant',
-  'office_manager',
-  'sales',
-];
+const ROLES: OrgProductRole[] = ['employee', 'global_admin'];
 
 const STATUS_STYLE: Record<OrgInvite['status'], string> = {
   pending: 'bg-caution-50 text-caution-600',
@@ -42,7 +32,7 @@ export function InvitePanel() {
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<MemberRole>('field_technician');
+  const [role, setRole] = useState<MemberRole>('employee');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -120,8 +110,8 @@ export function InvitePanel() {
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        They create an account and link it to this office with the join code. The invitation keeps
-        the record of who was asked — and shows you who has not turned up.
+        Employees join the whole workspace. For a subcontractor on one job, invite them from that
+        job file — they only see that job&apos;s brief and capture.
       </p>
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
@@ -137,10 +127,11 @@ export function InvitePanel() {
           value={role}
           onChange={(e) => setRole(e.target.value as MemberRole)}
           className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          title={PRODUCT_ROLE_BLURBS[role as OrgProductRole] ?? ''}
         >
           {ROLES.map((r) => (
             <option key={r} value={r}>
-              {humanize(r)}
+              {ROLE_LABELS[r]}
             </option>
           ))}
         </select>
@@ -153,10 +144,8 @@ export function InvitePanel() {
           Invite
         </button>
       </form>
-      {/* The role is a suggestion, and saying so heads off the argument when
-          the joiner picks differently at onboarding. */}
       <p className="mt-1.5 text-[11px] text-ink-400">
-        The role is what you have in mind — they confirm their own when they join.
+        Global Admin can manage billing. Employees can do everything else.
       </p>
 
       {outcome && <p className="mt-2 text-xs text-success-600">{outcome}</p>}
@@ -173,7 +162,7 @@ export function InvitePanel() {
               <span className="min-w-0">
                 <span className="block truncate text-xs font-medium text-ink-800">{inv.email}</span>
                 <span className="block text-[11px] text-ink-500">
-                  {humanize(inv.role)} · asked {ago(inv.createdAt)}
+                  {ROLE_LABELS[inv.role as MemberRole] ?? inv.role} · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">

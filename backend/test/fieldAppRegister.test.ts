@@ -99,7 +99,7 @@ test('already-linked copy names the office the phone is on', () => {
 });
 
 test('field onboarding defaults match a crew login, not an office admin', () => {
-  assert.equal(FIELD_APP_ONBOARDING.role, 'field_technician');
+  assert.equal(FIELD_APP_ONBOARDING.role, 'employee');
   assert.equal(FIELD_APP_ONBOARDING.workType, 'construction');
   assert.deepEqual([...FIELD_APP_ONBOARDING.usageIntents], ['field_work']);
 });

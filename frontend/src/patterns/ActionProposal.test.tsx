@@ -112,12 +112,16 @@ describe('approval controls', () => {
     const onApprove = vi.fn();
     render(
       <TooltipProvider>
-        <ActionProposal request={BASE} role="field_technician" onApprove={onApprove} />
+        <ActionProposal
+          request={{ ...BASE, requiredRole: 'global_admin' }}
+          role="employee"
+          onApprove={onApprove}
+        />
       </TooltipProvider>,
     );
 
     expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled();
-    expect(screen.getByText(/Requires Project Manager or above/i)).toBeInTheDocument();
+    expect(screen.getByText(/Requires Global Admin or above/i)).toBeInTheDocument();
   });
 
   it('offers no controls once the request is resolved', () => {

@@ -433,8 +433,8 @@ export function JobIntakePage() {
 
           {captureTeam.length === 0 ? (
             <p className="mt-4 text-sm text-ink-600">
-              No field technicians in this org yet. Invite a subcontractor by email below, or add
-              Field Capture teammates under Team.
+              No employees in this org yet. Invite an outside worker (subcontractor) by email
+              below — they only see this job — or add Employees under Team.
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-line/50">
@@ -467,7 +467,10 @@ export function JobIntakePage() {
           </p>
 
           <div className="mt-5 border-t border-line/50 pt-4">
-            <p className="text-xs font-medium text-ink-600">Invite a subcontractor</p>
+            <p className="text-xs font-medium text-ink-600">Invite an outside worker</p>
+            <p className="mt-1 text-[11px] text-ink-500">
+              Job-specific access only — they film this job; they do not join the org or see billing.
+            </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <label className="block text-xs font-medium text-ink-600">
                 Contact name

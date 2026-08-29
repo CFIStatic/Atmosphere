@@ -38,19 +38,18 @@ export function isInFlight(status: ApprovalStatus): boolean {
 }
 
 /**
- * Role seniority for approval gating. A request names the *minimum* role that
- * may approve it, and anyone at or above that rank qualifies.
- *
- * Field technicians sit at 0 deliberately: they can act on their own work but
- * never authorise money or schedule changes that affect others.
+ * Role seniority for approval gating. Product seats collapse to Global Admin
+ * (bill payer) and Employee; legacy ranks still resolve for older fixtures.
  */
 const RANK: Record<Role, number> = {
-  field_technician: 0,
+  field_technician: 1,
   sales: 1,
-  accountant: 2,
-  project_manager: 2,
-  office_manager: 3,
-  executive: 4,
+  accountant: 1,
+  project_manager: 1,
+  employee: 1,
+  office_manager: 2,
+  global_admin: 2,
+  executive: 2,
 };
 
 export function roleMeets(actual: Role, required: Role): boolean {
@@ -89,12 +88,14 @@ export function canApprove(
 
 export function labelForRole(role: Role): string {
   const LABELS: Record<Role, string> = {
-    field_technician: 'Field Technician',
-    project_manager: 'Project Manager',
-    office_manager: 'Office Manager',
-    accountant: 'Accountant',
-    sales: 'Sales',
-    executive: 'Executive',
+    global_admin: 'Global Admin',
+    employee: 'Employee',
+    field_technician: 'Employee',
+    project_manager: 'Employee',
+    office_manager: 'Global Admin',
+    accountant: 'Employee',
+    sales: 'Employee',
+    executive: 'Global Admin',
   };
   return LABELS[role];
 }

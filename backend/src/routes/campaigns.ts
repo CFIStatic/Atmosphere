@@ -1,12 +1,11 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import rateLimit from 'express-rate-limit';
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
-import { requireOrgRole } from '../lib/orgContext.js';
+import { requireOrgContext, requireGlobalAdmin } from '../lib/orgContext.js';
 import { listGrants, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
 import {
   buildMailSender,
@@ -965,7 +964,7 @@ campaignsRouter.get('/mail', async (req: Request, res: Response, next: NextFunct
 /** POST /api/sales/mail/:system/connect */
 campaignsRouter.post('/mail/:system/connect', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId, userId } = await requireGlobalAdmin(req);
     const system = req.params.system as MailSystem;
     if (system !== 'google_mail' && system !== 'microsoft_mail') {
       throw new HttpError(400, 'Unknown mail provider.', 'unknown_provider');
@@ -992,7 +991,7 @@ campaignsRouter.post('/mail/:system/connect', async (req: Request, res: Response
 /** POST /api/sales/mail/:system/callback */
 campaignsRouter.post('/mail/:system/callback', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await requireOrgRole(req, ['owner', 'admin']);
+    await requireGlobalAdmin(req);
     const system = req.params.system as MailSystem;
     const { code, state } = z
       .object({ code: z.string().min(1), state: z.string().min(1) })
@@ -1028,7 +1027,7 @@ campaignsRouter.post('/mail/:system/callback', async (req: Request, res: Respons
 /** DELETE /api/sales/mail/:system */
 campaignsRouter.delete('/mail/:system', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId } = await requireGlobalAdmin(req);
     await deleteGrant(orgId, req.params.system);
     res.json({ disconnected: true });
   } catch (err) {
@@ -1039,7 +1038,7 @@ campaignsRouter.delete('/mail/:system', async (req: Request, res: Response, next
 /** PUT /api/sales/send-policy — the address and caps every send needs. */
 campaignsRouter.put('/send-policy', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+    const { orgId, userId, supabase } = await requireGlobalAdmin(req);
     const input = z
       .object({
         postalAddress: z.string().trim().max(300).nullable().optional(),
@@ -1087,7 +1086,7 @@ campaignsRouter.post(
   sendLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+      const { orgId, supabase } = await requireGlobalAdmin(req);
       const { confirm, event, area } = z
         .object({
           confirm: z.boolean().optional(),

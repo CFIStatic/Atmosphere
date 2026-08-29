@@ -53,7 +53,7 @@ create table if not exists public.orgs (
 
 do $$ begin
   create type public.member_role as enum
-    ('project_manager','field_technician','accountant','office_manager','sales');
+    ('global_admin','employee','project_manager','field_technician','accountant','office_manager','sales');
 exception when duplicate_object then null; end $$;
 
 do $$ begin

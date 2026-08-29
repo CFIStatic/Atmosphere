@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { createAdminClient, createUserClient } from '../lib/supabase.js';
-import { FIELD_APP_ONBOARDING } from '../lib/validation.js';
+import { FIELD_APP_CREATE_ONBOARDING, FIELD_APP_ONBOARDING } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
 
 export function serializeFieldOrg(org: {
@@ -88,12 +88,13 @@ async function saveFieldProfile(accessToken: string, user: User, fullName?: stri
 async function saveFieldUsageIntents(
   supabase: ReturnType<typeof createUserClient>,
   userId: string,
+  usageIntents: readonly string[] = FIELD_APP_ONBOARDING.usageIntents,
 ) {
   const admin = createAdminClient();
   const writer = admin ?? supabase;
   const { error } = await writer
     .from('org_members')
-    .update({ usage_intents: [...FIELD_APP_ONBOARDING.usageIntents] })
+    .update({ usage_intents: [...usageIntents] })
     .eq('user_id', userId);
   if (
     error &&
@@ -166,13 +167,13 @@ export async function linkFieldOffice(
 
   const { data, error } = await supabase.rpc('create_org', {
     p_name: input.orgName,
-    p_role: FIELD_APP_ONBOARDING.role,
-    p_work_type: FIELD_APP_ONBOARDING.workType,
+    p_role: FIELD_APP_CREATE_ONBOARDING.role,
+    p_work_type: FIELD_APP_CREATE_ONBOARDING.workType,
   });
   if (error) throw new HttpError(400, error.message, 'create_org_failed');
 
   const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
-    p_contractor_type: FIELD_APP_ONBOARDING.contractorType,
+    p_contractor_type: FIELD_APP_CREATE_ONBOARDING.contractorType,
   });
   if (
     typeError &&
@@ -181,6 +182,6 @@ export async function linkFieldOffice(
     throw new HttpError(400, typeError.message, 'contractor_type_failed');
   }
 
-  await saveFieldUsageIntents(supabase, user.id);
+  await saveFieldUsageIntents(supabase, user.id, [...FIELD_APP_CREATE_ONBOARDING.usageIntents]);
   return serializeFieldOrg(orgWithType ?? data);
 }

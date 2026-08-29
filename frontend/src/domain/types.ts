@@ -10,15 +10,22 @@
 // ── Identity ────────────────────────────────────────────────────────────────
 
 /**
- * Mirrors the `member_role` enum in Postgres, plus `executive`.
+ * Mirrors the `member_role` enum in Postgres for Work Verification.
  *
- * NOTE: `executive` does not yet exist in the database enum. It is modelled here
- * because executive roll-up views were specified; adding it to `member_role` is
- * a pending migration, and `isExecutive()` is the single place that assumption
- * is encoded.
+ * Product seats are `global_admin` and `employee`. Legacy values remain so
+ * older fixtures and sessions still type-check; normalize with
+ * `toOrgProductRole` before capability checks. Invited workers are not org
+ * members — they use job-share tokens.
  */
 export type Role =
-  'field_technician' | 'project_manager' | 'office_manager' | 'accountant' | 'sales' | 'executive';
+  | 'global_admin'
+  | 'employee'
+  | 'field_technician'
+  | 'project_manager'
+  | 'office_manager'
+  | 'accountant'
+  | 'sales'
+  | 'executive';
 
 export type WorkType = 'mitigation' | 'construction';
 

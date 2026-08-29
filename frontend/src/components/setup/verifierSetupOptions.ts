@@ -1,6 +1,7 @@
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
+import { PRODUCT_ROLE_BLURBS } from '../../domain/productRoles';
 
-/** User-facing Work Verification roles — mapped to existing member_role enum values. */
+/** User-facing Work Verification org seats — mapped to member_role values. */
 export const VERIFIER_ROLE_OPTIONS: {
   value: MemberRole;
   label: string;
@@ -9,32 +10,18 @@ export const VERIFIER_ROLE_OPTIONS: {
   usageIntents: UsageIntent[];
 }[] = [
   {
-    value: 'project_manager',
-    label: 'Crew Lead',
-    tag: 'Field Capture',
-    blurb: 'Runs the job on site — films daily clips, checks the shot list, and signs off before leaving.',
+    value: 'global_admin',
+    label: 'Global Admin',
+    tag: 'Bill payer',
+    blurb: PRODUCT_ROLE_BLURBS.global_admin,
+    usageIntents: ['project_management', 'field_work', 'billing'],
+  },
+  {
+    value: 'employee',
+    label: 'Employee',
+    tag: 'Crew',
+    blurb: PRODUCT_ROLE_BLURBS.employee,
     usageIntents: ['field_work', 'project_management'],
-  },
-  {
-    value: 'field_technician',
-    label: 'Field Technician',
-    tag: 'Field Capture',
-    blurb: 'Films before-and-after work on site. The day you worked is provable forever.',
-    usageIntents: ['field_work'],
-  },
-  {
-    value: 'office_manager',
-    label: 'Project Manager',
-    tag: 'Service contractor',
-    blurb: 'Coordinates jobs from the office — releases draws when the verification record supports it.',
-    usageIntents: ['project_management', 'crm'],
-  },
-  {
-    value: 'accountant',
-    label: 'Reviewer',
-    tag: 'Customer & reviewer',
-    blurb: 'Settles from the record — every clip, integrity verdict, and chain-of-custody entry on one screen.',
-    usageIntents: ['billing', 'financial'],
   },
 ];
 
@@ -104,10 +91,10 @@ export function resolveVerifierSetup(
 ) {
   if (useDefaults) {
     return {
-      role: 'field_technician' as MemberRole,
+      role: 'global_admin' as MemberRole,
       workType: 'construction' as WorkType,
       contractorType: 'other' as ContractorType,
-      usageIntents: ['field_work', 'exploring'] as UsageIntent[],
+      usageIntents: ['field_work', 'exploring', 'billing'] as UsageIntent[],
     };
   }
 

@@ -167,8 +167,16 @@ export const uploadAvatarSchema = z.object({
   contentBase64: z.string().min(8, 'That image is empty'),
 });
 
-/** Account types a member can hold within an organization. */
+/**
+ * Account types on org_members.
+ *
+ * Product seats are `global_admin` (bill payer) and `employee` (full access
+ * except billing). Legacy enum values remain accepted so older rows and
+ * in-flight clients still validate until remapped.
+ */
 export const MEMBER_ROLES = [
+  'global_admin',
+  'employee',
   'project_manager',
   'field_technician',
   'accountant',
@@ -219,22 +227,32 @@ const usageIntentsSchema = z
 
 /**
  * Website signup asks for a company name (or a join code) and, when creating,
- * a company type. Role / work type / usage intents still default so create_org
- * / join_org succeed without the old questionnaire.
+ * a company type. Creating an org makes the caller Global Admin (bill payer);
+ * joining with a code makes them an Employee.
  */
-export const WEBSITE_SIGNUP_ONBOARDING = {
-  role: 'field_technician',
+export const WEBSITE_SIGNUP_CREATE_ONBOARDING = {
+  role: 'global_admin',
+  workType: 'construction',
+  contractorType: 'other',
+  usageIntents: ['field_work', 'exploring', 'billing'],
+} as const;
+
+export const WEBSITE_SIGNUP_JOIN_ONBOARDING = {
+  role: 'employee',
   workType: 'construction',
   contractorType: 'other',
   usageIntents: ['field_work', 'exploring'],
 } as const;
 
+/** @deprecated Prefer WEBSITE_SIGNUP_CREATE_ONBOARDING / JOIN — kept for older imports. */
+export const WEBSITE_SIGNUP_ONBOARDING = WEBSITE_SIGNUP_CREATE_ONBOARDING;
+
 export const createOrgSchema = z.object({
   name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name is too short').max(80, 'Organization name is too long'),
-  role: roleSchema.default(WEBSITE_SIGNUP_ONBOARDING.role),
-  workType: workTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.workType),
-  contractorType: contractorTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.contractorType),
-  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_ONBOARDING.usageIntents]),
+  role: roleSchema.default(WEBSITE_SIGNUP_CREATE_ONBOARDING.role),
+  workType: workTypeSchema.default(WEBSITE_SIGNUP_CREATE_ONBOARDING.workType),
+  contractorType: contractorTypeSchema.default(WEBSITE_SIGNUP_CREATE_ONBOARDING.contractorType),
+  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_CREATE_ONBOARDING.usageIntents]),
 });
 
 /** Body of a membership update — a member editing their own role / work type / usage. */
@@ -255,9 +273,9 @@ export const joinOrgSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
-  role: roleSchema.default(WEBSITE_SIGNUP_ONBOARDING.role),
-  workType: workTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.workType),
-  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_ONBOARDING.usageIntents]),
+  role: roleSchema.default(WEBSITE_SIGNUP_JOIN_ONBOARDING.role),
+  workType: workTypeSchema.default(WEBSITE_SIGNUP_JOIN_ONBOARDING.workType),
+  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_JOIN_ONBOARDING.usageIntents]),
 });
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
@@ -289,11 +307,20 @@ const officeJoinCodeField = z
  * signup, plus either an office join code or a new office name so the phone
  * can file day films into an organization on the first launch.
  */
+/** Field Capture joining an existing office — Employee seat, not bill payer. */
 export const FIELD_APP_ONBOARDING = {
-  role: 'field_technician',
+  role: 'employee',
   workType: 'construction',
   contractorType: 'other',
   usageIntents: ['field_work'],
+} as const;
+
+/** Field Capture creating a new office — that person is the Global Admin. */
+export const FIELD_APP_CREATE_ONBOARDING = {
+  role: 'global_admin',
+  workType: 'construction',
+  contractorType: 'other',
+  usageIntents: ['field_work', 'billing'],
 } as const;
 
 export const fieldRegisterSchema = z
