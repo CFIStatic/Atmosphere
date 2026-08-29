@@ -118,13 +118,20 @@ profileRouter.patch('/', async (req: Request, res: Response, next: NextFunction)
   try {
     const { fullName } = updateProfileSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await upsertOwnProfile(supabase, {
+    const current = await readOwnProfile(supabase, req.user!.id);
+    const currentRow = current.data as { avatar_url?: string | null } | null;
+    const values: Record<string, unknown> = {
       id: req.user!.id,
       email: req.user!.email,
       full_name: fullName,
       updated_at: new Date().toISOString(),
-    });
+    };
+    // Re-send the stored photo so a name-only upsert cannot blank it.
+    if (currentRow && 'avatar_url' in currentRow) {
+      values.avatar_url = currentRow.avatar_url ?? null;
+    }
+
+    const { data, error } = await upsertOwnProfile(supabase, values);
     if (error) throw new HttpError(500, error.message, 'profile_update_failed');
 
     res.json({ profile: serializeProfile(data, req.user!.email ?? null) });

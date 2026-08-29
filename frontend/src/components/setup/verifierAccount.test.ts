@@ -111,4 +111,52 @@ describe('verifier account chip', () => {
       'https://img.example/jack.jpg',
     );
   });
+
+  it('replaces the chip photo when Settings posts a newer URL', () => {
+    const win = mountChip();
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/avatar.jpg?v=100',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
+    );
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/avatar.jpg?v=200',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
+    );
+
+    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.example/avatar.jpg?v=200',
+    );
+
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/avatar.jpg?v=100',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'api',
+    );
+    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.example/avatar.jpg?v=200',
+    );
+  });
 });

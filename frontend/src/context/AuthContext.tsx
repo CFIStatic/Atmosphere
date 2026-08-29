@@ -22,6 +22,7 @@ import {
   waitForParentFieldSession,
   clearFieldEmbedSession,
 } from '../lib/fieldEmbed';
+import { preferFresherProfile } from '../lib/preferFresherProfile';
 
 function rememberSession(session?: { accessToken?: string; refreshToken?: string } | null): void {
   if (!session?.accessToken && !session?.refreshToken) return;
@@ -101,13 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMembershipLoading(false);
     }
 
-    // The profile is decorative (a display name for the shell), so it is fetched
-    // after membership has already settled routing and never blocks on it.
+    // Decorative for the shell — never wipe a photo the user just saved in
+    // Settings if this GET is still catching up or fails.
     try {
-      const { profile } = await api.getProfile();
-      setProfile(profile);
+      const { profile: incoming } = await api.getProfile();
+      setProfile((current) => preferFresherProfile(current, incoming));
     } catch {
-      setProfile(null);
+      /* keep the in-memory profile, including a just-uploaded avatar */
     }
 
     return resolved;

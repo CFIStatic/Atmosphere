@@ -4900,6 +4900,16 @@
     return img ? img.getAttribute('src') : null;
   }
 
+  function avatarCacheVersion(url) {
+    if (typeof url !== 'string' || !url) return 0;
+    if (url.indexOf('data:image/') === 0) return Number.MAX_SAFE_INTEGER;
+    var match = /[?&]v=(\d+)/.exec(url);
+    return match ? Number(match[1]) : 0;
+  }
+
+  // '' = parent cleared the photo; undefined = parent has not posted one yet.
+  var lastParentAvatar;
+
   function applySession(payload, source) {
     if (!payload || !payload.user) return;
     var u = payload.user;
@@ -4908,9 +4918,19 @@
     var init = u.initials || initialsFrom(name, email);
     var sub = u.orgName || email || 'Atmosphere';
     var nextAvatar = u.avatarUrl;
-    // The API fallback must not replace a parent-posted photo with initials
-    // when /api/profile is missing or still catching up.
-    if (!isDisplayableAvatarUrl(nextAvatar) && source !== 'parent') {
+    if (source === 'parent') {
+      lastParentAvatar = isDisplayableAvatarUrl(nextAvatar) ? String(nextAvatar).trim() : '';
+    } else if (lastParentAvatar === '') {
+      // Settings removed the photo — a slower GET must not put the old one back.
+      nextAvatar = '';
+    } else if (typeof lastParentAvatar === 'string' && lastParentAvatar) {
+      if (
+        !isDisplayableAvatarUrl(nextAvatar) ||
+        avatarCacheVersion(lastParentAvatar) >= avatarCacheVersion(nextAvatar)
+      ) {
+        nextAvatar = lastParentAvatar;
+      }
+    } else if (!isDisplayableAvatarUrl(nextAvatar)) {
       nextAvatar = currentAvatarSrc() || nextAvatar;
     }
 

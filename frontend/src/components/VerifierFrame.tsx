@@ -73,6 +73,12 @@ export function VerifierFrame({
     if (frameReady) syncFrame();
   }, [frameReady, syncFrame]);
 
+  // Settings calls setProfile as soon as the upload lands — post that photo
+  // even if layout/theme did not change.
+  useEffect(() => {
+    if (frameReady) postSession();
+  }, [frameReady, postSession, profile?.avatarUrl]);
+
   useEffect(() => {
     if (frameReady) postToFrame({ atmosphere: 'theme', preference: theme });
   }, [frameReady, postToFrame, theme]);
@@ -107,7 +113,7 @@ export function VerifierFrame({
   }, [logout, navigate, postSession]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=profile-2';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=profile-3';
 
   return (
     <div className={className} style={style}>

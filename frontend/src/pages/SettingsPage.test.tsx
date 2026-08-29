@@ -131,6 +131,11 @@ describe('Settings profile photo', () => {
     await user.upload(screen.getByLabelText('Upload a profile photo or icon'), file);
 
     expect(apiMocks.uploadAvatar).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(authState.setProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ avatarUrl: 'data:image/png;base64,aaa' }),
+      );
+    });
   });
 });
 

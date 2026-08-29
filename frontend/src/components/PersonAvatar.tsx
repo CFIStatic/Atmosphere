@@ -34,6 +34,7 @@ export function PersonAvatar({
     >
       {showPhoto ? (
         <img
+          key={avatarUrl}
           src={avatarUrl!}
           alt=""
           className="h-full w-full object-cover"
