@@ -346,6 +346,10 @@ function ProfileSection() {
         contentBase64: prepared.contentBase64,
       });
       setProfile(updated);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err) {

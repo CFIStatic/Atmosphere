@@ -4,7 +4,7 @@ export interface VerifierSessionUser {
   name: string;
   email: string;
   initials: string;
-  avatarUrl: string | null;
+  avatarUrl?: string | null;
   orgName: string | null;
   roleLabel: string | null;
   role: string | null;
@@ -23,9 +23,12 @@ export function verifierSessionUser(input: {
   const fullName = input.fullName || nameFromMetadata(input.metadata);
   const email = input.email ?? '';
   const avatarUrl =
-    typeof input.avatarUrl === 'string' && /^(https?:|data:image\/)/.test(input.avatarUrl.trim())
-      ? input.avatarUrl.trim()
-      : null;
+    input.avatarUrl === undefined
+      ? undefined
+      : typeof input.avatarUrl === 'string' &&
+          /^(https?:|data:image\/)/.test(input.avatarUrl.trim())
+        ? input.avatarUrl.trim()
+        : null;
   return {
     name: displayName(fullName, email),
     email,

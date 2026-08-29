@@ -9,7 +9,7 @@ describe('PersonAvatar', () => {
   });
 
   it('shows the uploaded picture when a URL is present', () => {
-    render(
+    const { rerender } = render(
       <PersonAvatar
         fullName="Jack Cyganiak"
         email="jack@jettx.ai"
@@ -18,5 +18,17 @@ describe('PersonAvatar', () => {
     );
     expect(screen.queryByText('JC')).toBeNull();
     expect(document.querySelector('img')).toHaveAttribute('src', 'https://img.example/jack.jpg');
+
+    rerender(
+      <PersonAvatar
+        fullName="Jack Cyganiak"
+        email="jack@jettx.ai"
+        avatarUrl="https://img.example/avatar.jpg?v=200"
+      />,
+    );
+    expect(document.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://img.example/avatar.jpg?v=200',
+    );
   });
 });
