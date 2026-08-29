@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { DashboardSearchBar } from '../components/DashboardSearchBar';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { isJobFilePath } from './jobFilePath';
 import { JobFilesSearchContext } from './jobFilesSearch';
@@ -70,12 +71,23 @@ export function OperationsShell() {
             </header>
             <div
               className={
-                isJobFile
-                  ? 'flex min-h-0 flex-1 flex-col lg:overflow-hidden'
-                  : 'px-4 py-6 sm:px-6'
+                isJobFile ? 'flex min-h-0 flex-1 flex-col lg:overflow-hidden' : 'px-4 py-6 sm:px-6'
               }
             >
-              <Outlet context={{ chrome: 'operations' as const }} />
+              <Suspense
+                fallback={
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="grid min-h-[40vh] place-items-center text-brand-600"
+                  >
+                    <SpinnerIcon className="animate-spin" width={28} height={28} />
+                    <span className="sr-only">Loading…</span>
+                  </div>
+                }
+              >
+                <Outlet context={{ chrome: 'operations' as const }} />
+              </Suspense>
             </div>
           </main>
         </JobFilesSearchContext.Provider>
