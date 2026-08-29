@@ -86,6 +86,11 @@ test('join: defaults joiners to Employee', () => {
   assert.equal(parsed.role, 'employee');
 });
 
+test('join: ignores a client-requested Global Admin seat', () => {
+  const parsed = joinOrgSchema.parse({ joinCode: '8F3A9C2B', ...answers });
+  assert.equal(parsed.role, 'employee');
+});
+
 test('both: reject an account type the app does not offer', () => {
   assert.throws(() =>
     joinOrgSchema.parse({ joinCode: '8F3A9C2B', ...answers, role: 'ceo' }),

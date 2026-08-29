@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
+import { toOrgProductRole } from '../lib/productRoles.js';
 import { openSecret, sealSecret, type ProviderSecret } from './credentials.js';
 import type { SecretsByProvider } from './connectors/index.js';
 import type { EstimatorRun, Provider, RunEvent, RunStage, RunStatus } from './types.js';
@@ -26,8 +27,11 @@ export interface Membership {
   role: string;
 }
 
-/** Roles allowed to store third-party credentials for the whole organization. */
-const CREDENTIAL_ROLES = new Set(['project_manager', 'office_manager']);
+/** Both product seats can store org-wide vendor credentials (billing is separate). */
+function canManageCredentials(role: string): boolean {
+  const seat = toOrgProductRole(role);
+  return seat === 'global_admin' || seat === 'employee';
+}
 
 export async function requireMembership(
   supabase: SupabaseClient,
@@ -49,10 +53,10 @@ export async function requireMembership(
 }
 
 export function assertCanManageCredentials(membership: Membership): void {
-  if (!CREDENTIAL_ROLES.has(membership.role)) {
+  if (!canManageCredentials(membership.role)) {
     throw new HttpError(
       403,
-      'Only a project manager or office manager can connect the estimator to DocuSketch, Dash, or Xactimate.',
+      'Only a Global Admin or Employee can connect the estimator to DocuSketch, Dash, or Xactimate.',
       'insufficient_role',
     );
   }

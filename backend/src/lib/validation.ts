@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isGlobalAdmin } from './productRoles.js';
 
 /**
  * Input validation schemas. Password rules mirror a sensible baseline; Supabase
@@ -273,7 +274,11 @@ export const joinOrgSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
-  role: roleSchema.default(WEBSITE_SIGNUP_JOIN_ONBOARDING.role),
+  // Joiners cannot mint the bill-payer seat from the request body. A pending
+  // Global Admin invite is applied in the join route (and by the remap trigger).
+  role: roleSchema
+    .default(WEBSITE_SIGNUP_JOIN_ONBOARDING.role)
+    .transform((role) => (isGlobalAdmin(role) ? WEBSITE_SIGNUP_JOIN_ONBOARDING.role : role)),
   workType: workTypeSchema.default(WEBSITE_SIGNUP_JOIN_ONBOARDING.workType),
   usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_JOIN_ONBOARDING.usageIntents]),
 });

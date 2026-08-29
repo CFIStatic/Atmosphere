@@ -14,6 +14,7 @@ import {
   updateOrgProfileSchema,
 } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
+import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 
 export const orgRouter = Router();
 
@@ -219,6 +220,20 @@ orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) =
     const { role, workType, usageIntents } = updateMembershipSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
 
+    const { data: currentRows, error: currentError } = await supabase
+      .from('org_members')
+      .select('role')
+      .eq('user_id', req.user!.id)
+      .limit(1);
+    if (currentError) throw new HttpError(500, currentError.message, 'membership_update_failed');
+    const currentRole = currentRows?.[0]?.role as string | undefined;
+    if (!currentRole) {
+      throw new HttpError(404, 'You are not linked to an organization yet.', 'not_onboarded');
+    }
+    if (isGlobalAdmin(role) && !isGlobalAdmin(currentRole)) {
+      throw new HttpError(403, 'Only a Global Admin can assign that seat.', 'insufficient_role');
+    }
+
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
       .update({ role, work_type: workType, usage_intents: usageIntents })
@@ -313,11 +328,12 @@ orgRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
  */
 orgRouter.post('/join', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { joinCode, role, workType, usageIntents } = joinOrgSchema.parse(req.body);
+    const { joinCode, workType, usageIntents } = joinOrgSchema.parse(req.body);
     const supabase = await ensureProfile(req);
+    const seat = await productSeatForJoin(joinCode, req.user?.email);
     const { data, error } = await supabase.rpc('join_org', {
       p_code: joinCode,
-      p_role: role,
+      p_role: seat,
       p_work_type: workType,
     });
     if (error) {
@@ -384,13 +400,41 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 async function orgForInvites(supabase: any, userId: string) {
   const { data } = await supabase
     .from('org_members')
-    .select('org_id, orgs(id, name, join_code)')
+    .select('org_id, role, orgs(id, name, join_code)')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1);
   const row = (data ?? [])[0] as any;
   if (!row?.org_id) throw new HttpError(404, 'You are not in an organization yet.', 'no_org');
-  return { orgId: row.org_id as string, name: row.orgs?.name as string, joinCode: row.orgs?.join_code as string };
+  return {
+    orgId: row.org_id as string,
+    name: row.orgs?.name as string,
+    joinCode: row.orgs?.join_code as string,
+    role: row.role as string,
+  };
+}
+
+/** Pending Global Admin invite for this email wins; otherwise Employee. */
+async function productSeatForJoin(
+  joinCode: string,
+  email: string | undefined,
+): Promise<'global_admin' | 'employee'> {
+  const admin = createAdminClient();
+  if (!admin || !email) return 'employee';
+  const { data: org } = await admin
+    .from('orgs')
+    .select('id')
+    .eq('join_code', joinCode)
+    .maybeSingle();
+  if (!org?.id) return 'employee';
+  const { data: invite } = await admin
+    .from('org_invites')
+    .select('role')
+    .eq('org_id', org.id)
+    .eq('status', 'pending')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle();
+  return toOrgProductRole(invite?.role);
 }
 
 /**
@@ -461,9 +505,8 @@ const createInviteSchema = z.object({
  * POST /api/org/invites
  * Ask somebody to join, and email them the code if a mailbox is connected.
  *
- * Any member may invite, deliberately: the join code is already visible to
- * every member in settings, so an invite grants nothing the inviter could not
- * hand over by reading their own screen. Gating it would be theatre.
+ * Any member may invite an Employee. Only a Global Admin may assign that seat
+ * — the join path honors the stored invite role as the bill-payer grant.
  *
  * The email is best-effort. No connected mailbox is the common case on day
  * one, and the response says so plainly so the UI can hand over the code to
@@ -474,15 +517,19 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
   try {
     const input = createInviteSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
-    const { orgId, name, joinCode } = await orgForInvites(supabase, req.user!.id);
+    const { orgId, name, joinCode, role: callerRole } = await orgForInvites(supabase, req.user!.id);
     const email = input.email.trim().toLowerCase();
+    const seat = toOrgProductRole(input.role);
+    if (seat === 'global_admin' && !isGlobalAdmin(callerRole)) {
+      throw new HttpError(403, 'Only a Global Admin can invite someone as Global Admin.', 'insufficient_role');
+    }
 
     const { data: invite, error } = await supabase
       .from('org_invites')
       .insert({
         org_id: orgId,
         email,
-        role: input.role ?? 'employee',
+        role: seat,
         note: input.note ?? null,
         invited_by: req.user!.id,
       })

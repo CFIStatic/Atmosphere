@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   crewNameKey,
   fieldCaptureEmail,
+  isCrewLoginMember,
   isFieldCaptureEmail,
   normalizeCrewName,
 } from '../src/field/crewJoin.js';
@@ -11,6 +12,13 @@ import { fieldJoinSchema, fieldOfficePreviewSchema } from '../src/lib/validation
 test('crew name: collapse spaces and compare case-insensitively', () => {
   assert.equal(normalizeCrewName('  Nick   Smith '), 'Nick Smith');
   assert.equal(crewNameKey('NICK smith'), crewNameKey('Nick Smith'));
+});
+
+test('crew login matches remapped employees and Field Capture inboxes', () => {
+  assert.equal(isCrewLoginMember('employee', 'nick@office.example'), true);
+  assert.equal(isCrewLoginMember('field_technician', 'nick@office.example'), true);
+  assert.equal(isCrewLoginMember('global_admin', 'nick@office.example'), false);
+  assert.equal(isCrewLoginMember('global_admin', 'nick.smith.aaaa@field.atmosphere.app'), true);
 });
 
 test('field capture email is stable for a name inside one office', () => {

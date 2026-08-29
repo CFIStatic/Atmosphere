@@ -4,6 +4,7 @@ import { webAccessEnabled } from '../config.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError } from '../lib/errors.js';
+import { toOrgProductRole } from '../lib/productRoles.js';
 import {
   connectAppConnectorSchema,
   startConnectorRunSchema,
@@ -118,7 +119,8 @@ function serializeConnection(row: any, def?: ConnectorDefinition) {
 }
 
 function canManageApiCredentials(role: string): boolean {
-  return ['project_manager', 'office_manager'].includes(role);
+  const seat = toOrgProductRole(role);
+  return seat === 'global_admin' || seat === 'employee';
 }
 
 /**
@@ -323,7 +325,7 @@ connectorsRouter.post('/connections', async (req: Request, res: Response, next: 
       if (!canManageApiCredentials(role)) {
         throw new HttpError(
           403,
-          'Only a project manager or office manager can connect API credentials.',
+          'Only a Global Admin or Employee can connect API credentials.',
           'connectors_forbidden',
         );
       }

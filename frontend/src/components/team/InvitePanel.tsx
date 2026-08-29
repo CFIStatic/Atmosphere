@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ROLE_LABELS, type MemberRole, type OrgInvite } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
-import { PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
+import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
 
 /**
@@ -29,6 +29,7 @@ const ago = (iso: string) => {
 export function InvitePanel() {
   const { membership } = useAuth();
   const joinCode = membership?.org?.joinCode ?? null;
+  const roles: OrgProductRole[] = isGlobalAdmin(membership?.role) ? ROLES : ['employee'];
 
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
@@ -129,7 +130,7 @@ export function InvitePanel() {
           className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
           title={PRODUCT_ROLE_BLURBS[role as OrgProductRole] ?? ''}
         >
-          {ROLES.map((r) => (
+          {roles.map((r) => (
             <option key={r} value={r}>
               {ROLE_LABELS[r]}
             </option>
@@ -187,8 +188,8 @@ export function InvitePanel() {
 
       {pending.length > 0 && (
         <p className="mt-2 text-[11px] text-ink-400">
-          Withdrawing an invitation is bookkeeping — the join code itself keeps working for
-          everyone else.
+          Withdrawing an invitation is bookkeeping — the join code itself keeps working for everyone
+          else.
         </p>
       )}
     </section>

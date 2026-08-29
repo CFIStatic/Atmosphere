@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
+import { toOrgProductRole } from '../lib/productRoles.js';
 import {
   DEFAULT_COST_CODES,
   type AutomationSettings,
@@ -230,7 +231,10 @@ export interface OrgContext {
   canManage: boolean;
 }
 
-const MANAGER_ROLES = new Set(['accountant', 'office_manager']);
+function canManageFinance(role: string): boolean {
+  const seat = toOrgProductRole(role);
+  return seat === 'global_admin' || seat === 'employee';
+}
 
 /**
  * The caller's organization and whether they may change the books plan.
@@ -259,7 +263,7 @@ export async function resolveOrgContext(
     );
   }
   const createdBy = row.orgs?.created_by ?? null;
-  const canManage = MANAGER_ROLES.has(row.role) || createdBy === userId;
+  const canManage = canManageFinance(row.role) || createdBy === userId;
   return { orgId: row.org_id, role: row.role, canManage };
 }
 
@@ -267,7 +271,7 @@ export function assertCanManage(org: OrgContext): void {
   if (!org.canManage) {
     throw new HttpError(
       403,
-      'Your role cannot manage the Financial Agent. Ask an accountant, office manager, or the organization owner.',
+      'Your role cannot manage the Financial Agent. Ask a Global Admin or Employee, or the organization owner.',
       'finance_forbidden',
     );
   }

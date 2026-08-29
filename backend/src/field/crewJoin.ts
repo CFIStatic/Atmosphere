@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Session, User } from '@supabase/supabase-js';
 import { createAdminClient, createAnonClient } from '../lib/supabase.js';
 import { HttpError, serviceUnavailable } from '../lib/errors.js';
+import { toOrgProductRole } from '../lib/productRoles.js';
 import { linkFieldOffice, serializeFieldOrg } from './officeLink.js';
 
 /** Synthetic inbox for Field Capture crew logins — never mailed. */
@@ -17,6 +18,11 @@ export function crewNameKey(name: string): string {
 
 export function isFieldCaptureEmail(email: string | null | undefined): boolean {
   return Boolean(email?.toLowerCase().endsWith(`@${FIELD_CAPTURE_EMAIL_DOMAIN}`));
+}
+
+/** Name+code crew login matches Employees (including remapped field techs). */
+export function isCrewLoginMember(role: string | undefined, email: string | null | undefined): boolean {
+  return toOrgProductRole(role) === 'employee' || isFieldCaptureEmail(email);
 }
 
 /**
@@ -115,7 +121,7 @@ async function findCrewMember(
   const matches = ((profiles ?? []) as ProfileRow[]).filter((p) => {
     if (crewNameKey(p.full_name ?? '') !== key) return false;
     const member = byId.get(p.id);
-    return member?.role === 'field_technician' || isFieldCaptureEmail(p.email);
+    return isCrewLoginMember(member?.role, p.email);
   });
   if (!matches.length) return null;
   const hit = matches[0];
