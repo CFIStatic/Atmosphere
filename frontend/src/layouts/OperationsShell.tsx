@@ -75,7 +75,7 @@ export function OperationsShell() {
                   : 'px-4 py-6 sm:px-6'
               }
             >
-              <Outlet />
+              <Outlet context={{ chrome: 'operations' as const }} />
             </div>
           </main>
         </JobFilesSearchContext.Provider>

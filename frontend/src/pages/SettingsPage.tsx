@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
@@ -79,20 +79,24 @@ export function SettingsPage() {
   const raw = params.get('section');
   const requested: SectionId = isSectionId(raw) ? raw : 'profile';
   const active: SectionId = SECTIONS.some((s) => s.id === requested) ? requested : 'profile';
+  const outlet = useOutletContext<{ chrome?: string } | null>();
+  const inShell = outlet?.chrome === 'operations';
 
   function select(section: SectionId) {
     setParams(section === 'profile' ? {} : { section }, { replace: false });
   }
 
   return (
-    <div className="min-h-screen bg-paper-100">
-      <header className="border-b border-line bg-paper-0/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Logo />
-          <ThemeToggle />
-        </div>
-      </header>
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
+    <div className={inShell ? '' : 'min-h-screen bg-paper-100'}>
+      {!inShell && (
+        <header className="border-b border-line bg-paper-0/80">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+            <Logo />
+            <ThemeToggle />
+          </div>
+        </header>
+      )}
+      <div className={inShell ? 'mx-auto max-w-5xl' : 'mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10'}>
         <header>
           <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
           <p className="mt-1.5 text-sm text-ink-600">

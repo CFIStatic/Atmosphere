@@ -23,6 +23,7 @@ describe('verifier office rail', () => {
 
   it('hands Overview and Job Files to the office shell', () => {
     expect(verifierHtml).toContain("goShell('/field')");
+    expect(verifierHtml).toContain("to: '/settings'");
     expect(verifierHtml).not.toContain("goShell('/my-work')");
     expect(verifierHtml).toContain("goShell('/jobs')");
     expect(verifierHtml).toContain("goShell('/intake')");

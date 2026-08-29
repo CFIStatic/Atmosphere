@@ -16,55 +16,99 @@ function extract(start: string, end: string): string {
   return verifierHtml.slice(from, to);
 }
 
+function mountChip() {
+  const who = verifierHtml.match(
+    /<div class="who-wrap" id="who-wrap">[\s\S]*?<\/div>\s*<\/header>/,
+  );
+  const sessionJs = extract(
+    'function initialsFrom(fullName, email) {',
+    'function loadAccountFromApi() {',
+  );
+  const dom = new JSDOM(
+    `<!doctype html><html><body>${who![0]}<script>
+      ${sessionJs}
+    </script></body></html>`,
+    { runScripts: 'dangerously', url: 'https://atmosphere.test/verifier/' },
+  );
+  return dom.window as unknown as {
+    document: Document;
+    applySession: (payload: { user: Record<string, unknown> }, source?: string) => void;
+    loadAccountFromApi: () => void;
+    fetch: typeof fetch;
+  };
+}
+
 describe('verifier account chip', () => {
   it('paints the saved photo instead of initials when a session includes avatarUrl', () => {
-    const who = verifierHtml.match(/<div class="who-wrap" id="who-wrap">[\s\S]*?<\/div>\s*<\/header>/);
-    const sessionJs = extract(
-      'function initialsFrom(fullName, email) {',
-      'function loadAccountFromApi() {',
-    );
-    expect(who).not.toBeNull();
     expect(verifierHtml).toContain('.who .avatar img');
-    expect(verifierHtml).toContain('avatarUrl: (profile && profile.avatarUrl) || null');
+    expect(verifierHtml).toContain("applySession(d, 'parent')");
+    expect(verifierHtml).not.toContain('loadAccountFromApi();\n    var railHead');
 
-    const dom = new JSDOM(
-      `<!doctype html><html><body>${who![0]}<script>
-        ${sessionJs}
-      </script></body></html>`,
-      { runScripts: 'dangerously', url: 'https://atmosphere.test/verifier/' },
+    const win = mountChip();
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/jack.jpg',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
     );
 
-    const { document, applySession } = dom.window as unknown as {
-      document: Document;
-      applySession: (payload: { user: Record<string, unknown> }) => void;
-    };
-
-    applySession({
-      user: {
-        name: 'Jack Cyganiak',
-        email: 'jack@jettx.ai',
-        initials: 'JC',
-        avatarUrl: 'https://img.example/jack.jpg',
-        orgName: 'Jettx LLC',
-      },
-    });
-
-    expect(document.getElementById('who-name')?.textContent).toBe('Jack Cyganiak');
-    expect(document.getElementById('who-sub')?.textContent).toBe('Jettx LLC');
-    const avatar = document.getElementById('who-avatar');
-    expect(avatar?.textContent).toBe('');
+    expect(win.document.getElementById('who-name')?.textContent).toBe('Jack Cyganiak');
+    expect(win.document.getElementById('who-sub')?.textContent).toBe('Jettx LLC');
+    const avatar = win.document.getElementById('who-avatar');
     expect(avatar?.querySelector('img')?.getAttribute('src')).toBe('https://img.example/jack.jpg');
 
-    applySession({
-      user: {
-        name: 'Jack Cyganiak',
-        email: 'jack@jettx.ai',
-        initials: 'JC',
-        avatarUrl: null,
-        orgName: 'Jettx LLC',
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: null,
+          orgName: 'Jettx LLC',
+        },
       },
-    });
+      'parent',
+    );
     expect(avatar?.querySelector('img')).toBeNull();
     expect(avatar?.textContent).toBe('JC');
+  });
+
+  it('keeps a parent-session photo when the profile API fallback has no avatar', () => {
+    const win = mountChip();
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: 'https://img.example/jack.jpg',
+          orgName: 'Jettx LLC',
+        },
+      },
+      'parent',
+    );
+
+    win.applySession(
+      {
+        user: {
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          initials: 'JC',
+          avatarUrl: null,
+          orgName: 'Jettx LLC',
+        },
+      },
+      'api',
+    );
+
+    expect(win.document.getElementById('who-avatar')?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.example/jack.jpg',
+    );
   });
 });

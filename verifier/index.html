@@ -4706,13 +4706,25 @@
     el.appendChild(img);
   }
 
-  function applySession(payload) {
+  function currentAvatarSrc() {
+    var el = document.getElementById('who-avatar');
+    var img = el && el.querySelector('img');
+    return img ? img.getAttribute('src') : null;
+  }
+
+  function applySession(payload, source) {
     if (!payload || !payload.user) return;
     var u = payload.user;
     var name = u.name || 'Teammate';
     var email = u.email || '';
     var init = u.initials || initialsFrom(name, email);
     var sub = u.orgName || email || 'Atmosphere';
+    var nextAvatar = u.avatarUrl;
+    // The API fallback must not replace a parent-posted photo with initials
+    // when /api/profile is missing or still catching up.
+    if (!isDisplayableAvatarUrl(nextAvatar) && source !== 'parent') {
+      nextAvatar = currentAvatarSrc() || nextAvatar;
+    }
 
     var whoName = document.getElementById('who-name');
     var whoSub = document.getElementById('who-sub');
@@ -4722,7 +4734,7 @@
     var menuMeta = document.getElementById('menu-meta');
     if (whoName) whoName.textContent = name;
     if (whoSub) whoSub.textContent = sub;
-    paintAvatar(whoAvatar, init, u.avatarUrl);
+    paintAvatar(whoAvatar, init, nextAvatar);
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
@@ -4743,15 +4755,17 @@
       var fullName = (profile && profile.fullName) || meta.full_name || meta.fullName || meta.name || null;
       var email = (profile && profile.email) || (me && me.email) || '';
       var orgName = membership && membership.org && membership.org.name;
+      var avatarUrl = (profile && profile.avatarUrl) || null;
+      if (!isDisplayableAvatarUrl(avatarUrl)) avatarUrl = currentAvatarSrc();
       applySession({
         user: {
           name: (fullName && String(fullName).trim()) || (email ? String(email).split('@')[0] : '') || 'Teammate',
           email: email,
           initials: initialsFrom(fullName, email),
-          avatarUrl: (profile && profile.avatarUrl) || null,
+          avatarUrl: avatarUrl,
           orgName: orgName || null
         }
-      });
+      }, 'api');
     });
   }
 
@@ -4823,7 +4837,7 @@
 
   window.addEventListener('message', function (e) {
     var d = e.data;
-    if (d && d.atmosphere === 'session') applySession(d);
+    if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
     if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
     if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
@@ -4834,7 +4848,6 @@
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
-    loadAccountFromApi();
     var railHead = document.getElementById('rail-head');
     var platformNav = document.getElementById('platform-nav');
     var railFooter = document.getElementById('rail-footer');
