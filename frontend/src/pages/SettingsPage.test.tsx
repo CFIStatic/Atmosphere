@@ -134,17 +134,14 @@ describe('Settings profile photo', () => {
   });
 });
 
-describe('Settings Field Capture', () => {
-  it('tells the office the web Field Capture URL and the join code', async () => {
+describe('Settings organization', () => {
+  it('does not show the Field Capture app card', async () => {
     renderSettings('/settings?section=organization');
 
-    expect(screen.getByText('Field Capture app')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'field-capture-production.up.railway.app' })).toHaveAttribute(
-      'href',
-      'https://field-capture-production.up.railway.app/',
-    );
-    expect(screen.getAllByText('ABC123').length).toBeGreaterThan(0);
-    expect(screen.getByText(/same Atmosphere email and password as the office Platform/i)).toBeInTheDocument();
+    expect(screen.queryByText('Field Capture app')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'field-capture-production.up.railway.app' })).toBeNull();
+    expect(screen.queryByText(/same Atmosphere email and password as the office Platform/i)).toBeNull();
+    expect(screen.getByText('ABC123')).toBeInTheDocument();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 });
