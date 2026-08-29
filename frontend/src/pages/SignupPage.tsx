@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
@@ -25,6 +25,7 @@ import {
   workTypeForContractorType,
 } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
+import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const JOIN_CODE_RE = /^[A-Za-z0-9]{6,12}$/;
@@ -131,6 +132,10 @@ export function SignupPage() {
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
+  }
+
+  if (isFieldEmbedMarked()) {
+    return <Navigate to={withFieldEmbed(redirectTo === '/signup' || redirectTo.startsWith('/signup') ? '/verifier-library' : redirectTo)} replace />;
   }
 
   const signInHref = loginHref(redirectTo);

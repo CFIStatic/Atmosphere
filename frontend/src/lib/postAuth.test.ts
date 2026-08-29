@@ -20,4 +20,9 @@ describe('postAuthDestination', () => {
       '/verifier-library?embed=field',
     );
   });
+
+  it('does not send a Field Capture session to workspace setup', () => {
+    document.documentElement.dataset.fieldEmbed = '1';
+    expect(postAuthDestination(null, '/verifier-library')).toBe('/verifier-library?embed=field');
+  });
 });

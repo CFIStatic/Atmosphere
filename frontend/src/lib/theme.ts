@@ -138,12 +138,23 @@ export function syncThemeRuntime(preference: ThemePreference): void {
   ensureStorageWatcher();
 }
 
+/** Tell Field Capture (the iframe parent) so the phone switchbar follows. */
+function postThemeToFieldCapture(preference: ThemePreference): void {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  try {
+    window.parent.postMessage({ atmosphere: 'theme', preference }, '*');
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Apply + persist + notify listeners. */
 export function setThemePreference(preference: ThemePreference): void {
   const stored = coerceThemePreference(preference);
   syncThemeRuntime(stored);
   persistThemePreference(stored);
   themeListeners.forEach((listener) => listener());
+  postThemeToFieldCapture(stored);
 }
 
 /** Boot path: resolve from storage before React paints. */

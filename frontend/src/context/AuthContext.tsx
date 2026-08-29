@@ -8,8 +8,18 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError, type AuthUser, type Membership, type Profile } from '../lib/api';
-import { isFieldEmbedMarked, waitForParentFieldSession } from '../lib/fieldEmbed';
+import { api, ApiError, type AuthUser, type Membership, type MemberRole, type Profile } from '../lib/api';
+import {
+  isFieldEmbedMarked,
+  rememberFieldEmbedSession,
+  waitForParentFieldSession,
+  clearFieldEmbedSession,
+} from '../lib/fieldEmbed';
+
+function rememberSession(session?: { accessToken?: string; refreshToken?: string } | null): void {
+  if (!session?.accessToken && !session?.refreshToken) return;
+  rememberFieldEmbedSession(session.accessToken, session.refreshToken);
+}
 
 interface SignupResult {
   needsEmailConfirmation: boolean;
@@ -56,8 +66,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resolved = membership;
       setMembership(membership);
     } catch {
-      // Treat any failure as "not onboarded"; the onboarding flow will re-check.
-      setMembership(null);
+      if (isFieldEmbedMarked()) {
+        try {
+          const field = await api.fieldAppMe();
+          if (field.org?.id) {
+            const role = (field.org.role as MemberRole | undefined) ?? 'field_technician';
+            resolved = {
+              role,
+              workType: 'mitigation',
+              usageIntents: ['field_work'],
+              status: 'active',
+              org: { id: field.org.id, name: field.org.name, joinCode: '' },
+            };
+            setMembership(resolved);
+          } else {
+            setMembership(null);
+          }
+        } catch {
+          setMembership(null);
+        }
+      } else {
+        setMembership(null);
+      }
     } finally {
       setMembershipLoading(false);
     }
@@ -117,7 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const { user } = await api.login(email, password);
+      const { user, session } = await api.login(email, password);
+      rememberSession(session);
       explicitAuthRef.current = true;
       setUser(user);
       return loadMembership();
@@ -131,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If the project auto-confirms, a session is set and the user is logged in.
       let membership: Membership | null = null;
       if (!res.needsEmailConfirmation && res.user) {
+        rememberSession(res.session);
         explicitAuthRef.current = true;
         setUser(res.user);
         membership = await loadMembership();
@@ -169,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.logout();
     } finally {
+      clearFieldEmbedSession();
       setUser(null);
       setMembership(null);
       setProfile(null);

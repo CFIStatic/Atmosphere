@@ -834,6 +834,29 @@
       }
     }
 
+    function applyOfficeTheme(preference) {
+      if (preference !== 'light' && preference !== 'dark') return;
+      document.documentElement.setAttribute('data-theme', preference);
+      document.documentElement.setAttribute('data-theme-preference', preference);
+      try {
+        localStorage.setItem('atmosphere.theme', preference);
+        localStorage.setItem('atm-theme', preference);
+      } catch (e) {
+        /* private mode */
+      }
+    }
+
+    function postFieldTheme() {
+      if (!frame || !frame.contentWindow) return;
+      var href = frame.getAttribute('src') || '';
+      if (!href || href === 'about:blank') return;
+      var target = officeFrameOrigin(href);
+      if (!target) return;
+      var preference = document.documentElement.getAttribute('data-theme');
+      if (preference !== 'light' && preference !== 'dark') return;
+      frame.contentWindow.postMessage({ atmosphere: 'theme', preference: preference }, target);
+    }
+
     function postFieldSession() {
       if (!frame || !frame.contentWindow) return;
       var href = frame.getAttribute('src') || '';
@@ -872,13 +895,22 @@
     }
 
     if (frame) {
-      frame.addEventListener('load', postFieldSession);
+      frame.addEventListener('load', function () {
+        postFieldSession();
+        postFieldTheme();
+      });
     }
     window.addEventListener('message', function (event) {
       if (!frame || event.source !== frame.contentWindow) return;
       var data = event.data;
-      if (!data || data.atmosphere !== 'request-field-session') return;
-      postFieldSession();
+      if (!data) return;
+      if (data.atmosphere === 'request-field-session') {
+        postFieldSession();
+        return;
+      }
+      if (data.atmosphere === 'theme') {
+        applyOfficeTheme(data.preference);
+      }
     });
     if (link) {
       link.addEventListener('click', function (event) {

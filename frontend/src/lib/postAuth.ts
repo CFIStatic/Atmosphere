@@ -9,6 +9,13 @@ export function postAuthDestination(
   membership: Membership | null,
   fallback = PLATFORM_HOME[getPlatform()],
 ): string {
+  if (isFieldEmbedMarked()) {
+    const next = safeAuthRedirect(fallback) ?? '/verifier-library';
+    if (next.startsWith('/signup') || next === '/onboarding') {
+      return withFieldEmbed('/verifier-library');
+    }
+    return withFieldEmbed(next);
+  }
   const dest = membership
     ? fallback
     : (() => {
@@ -18,5 +25,5 @@ export function postAuthDestination(
         }
         return '/signup?step=2';
       })();
-  return isFieldEmbedMarked() ? withFieldEmbed(dest) : dest;
+  return dest;
 }

@@ -64,9 +64,17 @@ function FullScreenSpinner() {
 
 /** Requires the user to have completed onboarding; otherwise send to /onboarding. */
 function RequireOnboarded({ children }: { children: ReactNode }) {
-  const { membership, membershipLoading } = useAuth();
+  const { membership, membershipLoading, refreshMembership } = useAuth();
   const location = useLocation();
-  if (membershipLoading) return <FullScreenSpinner />;
+  const fieldEmbed =
+    typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
+
+  useEffect(() => {
+    if (!fieldEmbed || membership || membershipLoading) return;
+    void refreshMembership();
+  }, [fieldEmbed, membership, membershipLoading, refreshMembership]);
+
+  if (membershipLoading || (fieldEmbed && !membership)) return <FullScreenSpinner />;
   if (!membership) {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
@@ -83,6 +91,8 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
 function RequireBillingSetup({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
+  const fieldEmbed =
+    typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
 
   useEffect(() => {
     let cancelled = false;
@@ -90,15 +100,19 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
       try {
         const status = await api.getBillingOnboarding();
         if (cancelled) return;
+        if (fieldEmbed) {
+          setGate('ready');
+          return;
+        }
         setGate(status.required && !status.complete ? 'blocked' : 'ready');
       } catch {
-        if (!cancelled) setGate('error');
+        if (!cancelled) setGate(fieldEmbed ? 'ready' : 'error');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fieldEmbed]);
 
   if (gate === 'loading') return <FullScreenSpinner />;
   if (gate === 'error') {

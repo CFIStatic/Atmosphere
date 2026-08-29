@@ -93,6 +93,8 @@
   * { box-sizing: border-box; margin: 0; }
   [hidden] { display: none !important; }
   html { color-scheme: light dark; }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
   html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--ink);
@@ -792,7 +794,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=phone-office"></script>
-<script src="js/app.js?v=phone-office"></script>
+<script src="js/capture-core.js?v=theme-bar"></script>
+<script src="js/app.js?v=theme-bar"></script>
 </body>
 </html>

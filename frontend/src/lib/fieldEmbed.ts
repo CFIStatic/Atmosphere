@@ -1,3 +1,5 @@
+import { isThemePreference, setThemePreference } from './theme';
+
 /**
  * Field Capture embeds the office console in a phone-width iframe.
  *
@@ -150,7 +152,12 @@ export function adoptDestinationFrom(pathname: string, search = ''): string {
   if (isAuthPath(pathname)) {
     const next = params.get('next');
     const dest =
-      next && next.startsWith('/') && !next.startsWith('//') && !next.includes('://')
+      next &&
+      next.startsWith('/') &&
+      !next.startsWith('//') &&
+      !next.includes('://') &&
+      !next.startsWith('/login') &&
+      !next.startsWith('/signup')
         ? next
         : '/verifier-library';
     return withFieldEmbed(dest);
@@ -255,7 +262,7 @@ export function listenForFieldSession(): () => void {
 }
 
 /** Hold Auth restore until Field Capture posts its session (or says it has none). */
-export function waitForParentFieldSession(timeoutMs = 2800): Promise<boolean> {
+export function waitForParentFieldSession(timeoutMs = 8000): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
   if (fieldEmbedAccessToken()) return Promise.resolve(true);
   if (window.parent === window) return Promise.resolve(false);
@@ -267,12 +274,31 @@ export function waitForParentFieldSession(timeoutMs = 2800): Promise<boolean> {
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
+      window.clearInterval(poll);
       const idx = sessionWaiters.indexOf(finish);
       if (idx >= 0) sessionWaiters.splice(idx, 1);
       resolve(ok);
     };
     sessionWaiters.push(finish);
+    const poll = window.setInterval(() => {
+      if (fieldEmbedAccessToken()) {
+        finish(true);
+        return;
+      }
+      requestParentFieldSession();
+    }, 400);
     window.setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+function listenForParentTheme(): void {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  window.addEventListener('message', (event: MessageEvent) => {
+    const data = event.data as { atmosphere?: string; preference?: unknown } | null;
+    if (!data || data.atmosphere !== 'theme') return;
+    if (!isFieldCaptureOrigin(event.origin) && event.origin !== window.location.origin) return;
+    if (!isThemePreference(data.preference)) return;
+    setThemePreference(data.preference);
   });
 }
 
@@ -280,4 +306,5 @@ export function waitForParentFieldSession(timeoutMs = 2800): Promise<boolean> {
 export function initFieldEmbed(): void {
   markFieldEmbed();
   listenForFieldSession();
+  listenForParentTheme();
 }

@@ -64,6 +64,9 @@ describe('field embed helpers', () => {
       '/verifier-library?embed=field',
     );
     expect(adoptDestinationFrom('/login', '')).toBe('/verifier-library?embed=field');
+    expect(adoptDestinationFrom('/signup', '?step=2&next=%2Fverifier-library')).toBe(
+      '/verifier-library?embed=field',
+    );
     expect(adoptDestinationFrom('/jobs', '?tab=open')).toBe('/jobs?tab=open&embed=field');
   });
 

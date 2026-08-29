@@ -11,7 +11,12 @@ import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
-import { isFieldEmbedMarked, isFieldEmbedQuery } from '../lib/fieldEmbed';
+import {
+  adoptDestination,
+  isFieldEmbedMarked,
+  isFieldEmbedQuery,
+  waitForParentFieldSession,
+} from '../lib/fieldEmbed';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,6 +35,7 @@ export function LoginPage() {
   );
 
   const fieldEmbed = isFieldEmbedMarked() || isFieldEmbedQuery(location.search);
+  const switchAccount = searchParams.get('switch') === '1';
 
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
@@ -70,6 +76,18 @@ export function LoginPage() {
 
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 
+  useEffect(() => {
+    if (!fieldEmbed || user || switchAccount) return;
+    let cancelled = false;
+    void waitForParentFieldSession(8000).then((ok) => {
+      if (cancelled || !ok) return;
+      window.location.replace(adoptDestination());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fieldEmbed, user, switchAccount]);
+
   if (isLegacySignup) {
     const params = new URLSearchParams();
     const next = searchParams.get('next');
@@ -79,8 +97,6 @@ export function LoginPage() {
     const qs = params.toString();
     return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
   }
-
-  const switchAccount = searchParams.get('switch') === '1';
 
   if (loading || (user && membershipLoading && !switchAccount)) {
     return (
@@ -96,6 +112,17 @@ export function LoginPage() {
   // already completed. ?switch=1 keeps the form for an explicit account change.
   if (user && !switchAccount) {
     return <Navigate to={postAuthDestination(membership, redirectTo)} replace />;
+  }
+
+  if (fieldEmbed && !switchAccount) {
+    return (
+      <div className="grid min-h-[100dvh] place-items-center bg-paper-100 text-brand-600">
+        <div className="flex flex-col items-center gap-3 px-6 text-center">
+          <SpinnerIcon className="animate-spin" width={28} height={28} />
+          <p className="text-sm font-medium text-ink-700">Opening your workspace…</p>
+        </div>
+      </div>
+    );
   }
 
   const emailValid = EMAIL_RE.test(email.trim());

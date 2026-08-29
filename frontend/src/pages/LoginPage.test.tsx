@@ -167,13 +167,21 @@ describe('LoginPage', () => {
     expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
   });
 
+  it('does not show a second password form inside the Field Capture frame', () => {
+    document.documentElement.dataset.fieldEmbed = '1';
+    renderLogin('/login?embed=field&next=%2Fverifier-library%3Fembed%3Dfield');
+    expect(screen.getByText('Opening your workspace…')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
+    expect(screen.queryByLabelText('Email')).toBeNull();
+  });
+
   it('skips the device PIN inside the Field Capture frame — one login is enough', async () => {
     pinStatus.mockResolvedValue({ enrolled: true, lockedUntil: null });
     document.documentElement.dataset.fieldEmbed = '1';
 
     renderLogin('/login?embed=field&next=%2Fverifier-library%3Fembed%3Dfield');
 
-    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    expect(screen.getByText('Opening your workspace…')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Enter your PIN' })).toBeNull();
     await Promise.resolve();
     expect(pinStatus).not.toHaveBeenCalled();

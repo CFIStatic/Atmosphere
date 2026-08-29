@@ -5,6 +5,7 @@ import {
   isThemePreference,
   readThemePreference,
   resolveTheme,
+  setThemePreference,
   themeLabel,
 } from './theme';
 
@@ -66,5 +67,18 @@ describe('theme preference', () => {
   it('labels preferences for the UI', () => {
     expect(themeLabel('light')).toBe('Light');
     expect(themeLabel('dark')).toBe('Dark');
+  });
+
+  it('tells a Field Capture parent so the phone switchbar can follow', () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage },
+    });
+    setThemePreference('dark');
+    expect(postMessage).toHaveBeenCalledWith(
+      { atmosphere: 'theme', preference: 'dark' },
+      '*',
+    );
   });
 });

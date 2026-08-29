@@ -91,6 +91,8 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain('request-field-session');
     expect(app).toContain('field-session-missing');
     expect(app).toContain('warmPlatformFrame');
+    expect(app).toContain('applyOfficeTheme');
+    expect(app).toContain("atmosphere: 'theme'");
     expect(core).toContain('function resolveOfficePlatformHref');
     expect(core).toContain('function resolveOfficeHref');
     expect(core).toContain('function localOfficeOrigin');

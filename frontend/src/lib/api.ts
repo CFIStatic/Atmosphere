@@ -2634,6 +2634,13 @@ export const api = {
   /** Jobs this person can film today — assigned crew first, else open jobs. */
   fieldToday: () => request<FieldToday>('/api/field-app/today', { method: 'GET' }),
 
+  /** Same session as Field Capture — org that already receives day film. */
+  fieldAppMe: () =>
+    request<{
+      user: { id: string; email: string | null; fullName: string | null };
+      org: { id: string; name: string; role?: string };
+    }>('/api/field-app/me', { method: 'GET' }),
+
   login: (email: string, password: string) =>
     request<AuthResponse>('/api/auth/login', {
       method: 'POST',
