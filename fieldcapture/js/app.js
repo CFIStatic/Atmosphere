@@ -36,6 +36,11 @@
     if (node) fn(node);
   }
 
+  function showFieldThemeToggle(on) {
+    var toggle = document.getElementById('fc-theme-toggle');
+    if (toggle) toggle.hidden = !on;
+  }
+
   var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
@@ -238,6 +243,7 @@
           who.hidden = false;
           who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
         }
+        showFieldThemeToggle(true);
         renderExpect([
           {
             name: (num ? num + ' · ' : '') + title,
@@ -265,6 +271,7 @@
       who.hidden = true;
       who.innerHTML = '';
     }
+    showFieldThemeToggle(false);
     $('#blocked-msg').textContent =
       'Sign in once — Field Capture and the in-app Platform use the same account.';
   }
@@ -339,6 +346,7 @@
       who.hidden = false;
       who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
     }
+    showFieldThemeToggle(true);
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
@@ -844,6 +852,27 @@
       } catch (e) {
         /* private mode */
       }
+      labelFieldThemeToggle(preference);
+    }
+
+    function labelFieldThemeToggle(preference) {
+      var toggle = document.getElementById('fc-theme-toggle');
+      if (!toggle) return;
+      var next = preference === 'dark' ? 'light' : 'dark';
+      toggle.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+      toggle.setAttribute('title', (preference === 'dark' ? 'Dark' : 'Light') + ' mode. Click for ' + next + '.');
+      var text = toggle.querySelector('.theme-toggle-label');
+      if (text) text.textContent = 'Appearance: ' + (preference === 'dark' ? 'Dark' : 'Light');
+    }
+
+    var fieldThemeBtn = document.getElementById('fc-theme-toggle');
+    if (fieldThemeBtn) {
+      labelFieldThemeToggle(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+      fieldThemeBtn.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        applyOfficeTheme(current === 'dark' ? 'light' : 'dark');
+        postFieldTheme();
+      });
     }
 
     function postFieldTheme() {

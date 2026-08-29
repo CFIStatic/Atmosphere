@@ -14,16 +14,22 @@ describe('verifier dashboard theme toggle', () => {
     localStorage.clear();
   });
 
-  it('puts a light/dark button in the dashboard top bar', () => {
+  it('puts light/dark under the account profile, not beside the chip', () => {
     const topbar = verifierHtml.match(/<header class="topbar">[\s\S]*?<\/header>/);
     expect(topbar).not.toBeNull();
-    expect(topbar![0]).toContain('id="theme-toggle"');
-    expect(topbar![0]).toContain('class="icon-moon"');
-    expect(topbar![0]).toContain('class="icon-sun"');
-    expect(topbar![0]).toMatch(/aria-label="Switch to (dark|light) mode"/);
+    const chip = topbar![0].indexOf('id="who-btn"');
+    const menu = topbar![0].indexOf('id="who-menu"');
+    const toggle = topbar![0].indexOf('id="theme-toggle"');
+    const settings = topbar![0].indexOf('id="menu-settings"');
+    expect(chip).toBeGreaterThan(-1);
+    expect(menu).toBeGreaterThan(chip);
+    expect(toggle).toBeGreaterThan(menu);
+    expect(settings).toBeGreaterThan(toggle);
+    expect(topbar![0]).toContain('class="theme-toggle-label"');
+    expect(topbar![0]).toContain('Appearance: Light');
   });
 
-  it('keeps the only light/dark button in the top bar, not above Settings in the rail', () => {
+  it('keeps the only light/dark button in the account menu, not above Settings in the rail', () => {
     const railFooter = verifierHtml.match(/<div class="rail-footer" id="rail-footer"[^>]*>[\s\S]*?<\/div>/);
     expect(railFooter).not.toBeNull();
     expect(railFooter![0]).toContain('id="nav-settings"');
@@ -41,6 +47,7 @@ describe('verifier dashboard theme toggle', () => {
     expect(verifierHtml).toContain("localStorage.setItem(THEME_KEY, pref)");
     expect(verifierHtml).toContain("atmosphere: 'theme'");
     expect(verifierHtml).toContain("id=\"theme-toggle\"");
+    expect(verifierHtml).toContain('Appearance: ');
   });
 
   it('toggles data-theme and atmosphere.theme on click', () => {
@@ -72,8 +79,9 @@ describe('verifier dashboard theme toggle', () => {
     expect(next).toBe(initial === 'dark' ? 'light' : 'dark');
     expect(store.getItem('atmosphere.theme')).toBe(next);
     expect(JSON.parse(store.getItem('atmosphere.preferences') || '{}').theme).toBe(next);
-    expect(toggle!.getAttribute('aria-label')).toBe(
-      `Switch to ${initial} mode`,
+    expect(toggle!.getAttribute('aria-label')).toBe(`Switch to ${initial} mode`);
+    expect(toggle!.querySelector('.theme-toggle-label')?.textContent).toBe(
+      `Appearance: ${next === 'dark' ? 'Dark' : 'Light'}`,
     );
   });
 });
