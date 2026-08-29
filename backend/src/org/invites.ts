@@ -107,6 +107,13 @@ export function inviteEmail(input: {
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             Atmosphere invited you to this office.${inviter ? ` Requested by ${escapeHtml(inviter)}.` : ''}
           </p>
+          ${
+            input.note?.trim()
+              ? `<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
+            "${escapeHtml(input.note.trim())}"
+          </p>`
+              : ''
+          }
           <p style="margin:20px 0 0;font-size:13px;color:#78716c;">Join code</p>
           <p style="margin:4px 0 0;font-size:22px;font-weight:700;letter-spacing:0.04em;color:#1c1917;">
             ${escapeHtml(input.joinCode)}

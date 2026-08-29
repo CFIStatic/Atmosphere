@@ -92,4 +92,5 @@ test('a note from the inviter is quoted, not paraphrased', () => {
     note: 'Starting Monday on the Cedar Ridge job',
   });
   assert.match(mail.text, /"Starting Monday on the Cedar Ridge job"/);
+  assert.match(mail.html, /"Starting Monday on the Cedar Ridge job"/);
 });
