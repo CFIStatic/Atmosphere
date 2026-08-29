@@ -427,10 +427,19 @@
     return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'embed=field';
   }
 
+  function isOfficeFieldCapturePath() {
+    try {
+      return /\/fieldcapture(\/|$)/.test(typeof location !== 'undefined' ? location.pathname || '' : '');
+    } catch (e) {
+      return false;
+    }
+  }
+
   /**
-   * Office web console origin + path. Same-origin when Field Capture is
-   * served under /fieldcapture/ on the office host. On the standalone
-   * Field Capture Railway app, point at the live office origin.
+   * Office web console origin + path. Same-origin only when Field Capture
+   * is served under /fieldcapture/ on the office host. The standalone
+   * Railway app and a local phone preview are not that SPA — they point
+   * at the live office origin and stay in the phone web frame.
    */
   function resolveOfficeHref(pathname) {
     var path = pathname || '/';
@@ -441,7 +450,9 @@
     } catch (e) {
       hostname = '';
     }
-    if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN + path;
+    if (isStandaloneFieldCaptureHost(hostname) || (hostname && !isOfficeFieldCapturePath())) {
+      return LIVE_OFFICE_ORIGIN + path;
+    }
     return path;
   }
 

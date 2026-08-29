@@ -108,6 +108,7 @@ assert.match(
 assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library?embed=field');
 assert.equal(Core.withFieldEmbed('/verifier-library'), '/verifier-library?embed=field');
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
+assert.match(coreSrc, /isOfficeFieldCapturePath/, 'local Field Capture must iframe the office, not /verifier-library on itself');
 assert.match(html, /Welcome back/);
 assert.match(html, /same email and password as the office Platform/);
 assert.match(html, /id="login-email"/);
@@ -123,8 +124,8 @@ assert.match(html, /js\/capture-core\.js\?v=platform-frame/);
 assert.match(html, /js\/app\.js\?v=platform-frame/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
-assert.match(appSrc, /resolveOfficePlatformHref\('\/forgot-password'\)/);
-assert.match(appSrc, /resolveOfficePlatformHref\('\/signup'\)/);
+assert.match(appSrc, /resolveOfficeHref\('\/forgot-password'\)/);
+assert.match(appSrc, /resolveOfficeHref\('\/signup'\)/);
 assert.doesNotMatch(html, /This week/);
 assert.doesNotMatch(html, /week-wrap/);
 assert.doesNotMatch(appSrc, /week-wrap/);
