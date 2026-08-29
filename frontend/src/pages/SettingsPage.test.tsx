@@ -20,7 +20,7 @@ const authState = vi.hoisted(() => ({
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-08-22T00:00:00Z',
   },
-  membership: { org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' } },
+  membership: { role: 'global_admin', org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' } },
   setProfile: vi.fn(),
   logout: vi.fn(),
   refreshMembership: vi.fn(),

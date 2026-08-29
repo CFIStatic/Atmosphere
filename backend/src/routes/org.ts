@@ -420,15 +420,6 @@ async function orgForInvites(supabase: any, userId: string) {
   };
 }
 
-/** @deprecated Prefer requirePendingOrgInvite — seat comes from the invite row. */
-async function productSeatForJoin(
-  joinCode: string,
-  email: string | undefined,
-): Promise<'global_admin' | 'employee'> {
-  const invite = await requirePendingOrgInvite({ joinCode, email });
-  return invite.role;
-}
-
 /**
  * GET /api/org/invites
  * Who has been asked, and where each invitation stands.
