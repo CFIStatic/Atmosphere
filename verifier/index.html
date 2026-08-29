@@ -511,6 +511,98 @@
     .screen-preview .sheethead { border-radius: 12px; }
     .screen-preview .preview-pane { border-radius: 16px; }
     .screen-preview .side { margin: 10px 10px 10px 10px; }
+    .screen-preview .sheetbody {
+      grid-template-columns: 1fr;
+      overflow-y: auto;
+    }
+  }
+  /* Phone / Field Capture: full-screen clip, video above the notes. */
+  @media (max-width: 640px) {
+    .screen-preview { padding: 0; }
+    .screen-preview .sheet,
+    .screen-preview .preview-pane {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      border-radius: 0;
+    }
+    .screen-preview .preview-pane { border-width: 0; box-shadow: none; }
+    .screen-preview .sheethead {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    .screen-preview .sheethead > div { min-width: 0; }
+    .screen-preview .sheethead h2 {
+      font-size: 16px;
+      line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .screen-preview .sheethead .id { display: none; }
+    .screen-preview .sheethead .meta {
+      margin-top: 2px;
+      font-size: 11.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .screen-preview .backbtn,
+    .screen-preview .closebtn {
+      width: 44px;
+      height: 44px;
+      margin: 0;
+      padding: 0;
+      place-items: center;
+    }
+    .screen-preview .backbtn { display: grid; }
+    .screen-preview .back-label { display: none; }
+    .screen-preview .sheetbody {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+    .screen-preview .stage { padding: 0; flex: none; }
+    .screen-preview .player { border-radius: 0; box-shadow: none; }
+    .screen-preview .player .frame,
+    .screen-preview .preview-stage {
+      min-height: 0;
+      width: 100%;
+      height: auto;
+      max-height: min(58vh, 520px);
+      aspect-ratio: 9 / 16;
+    }
+    .screen-preview .player .frame video,
+    .screen-preview .player .frame img,
+    .screen-preview .preview-stage video,
+    .screen-preview .preview-stage img {
+      object-fit: contain;
+    }
+    .screen-preview .controls { padding: 8px 10px; }
+    .screen-preview .controls button { width: 44px; height: 44px; }
+    .screen-preview .side {
+      margin: 0;
+      padding: 10px 12px 24px;
+      border-radius: 0;
+      border: 0;
+      border-top: 1px solid var(--line);
+      min-height: 0;
+    }
+    .screen-preview .tabs {
+      overflow-x: auto;
+      flex-wrap: nowrap;
+    }
+    .screen-preview .tabs button {
+      flex: 0 0 auto;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .screen-preview .alog li { font-size: 14px; padding: 12px 8px; }
   }
   .preview-stage {
     position: relative;
@@ -735,32 +827,9 @@
     .tablewrap { overflow-x: hidden; padding: 0 10px 48px; }
     table { table-layout: fixed; width: 100%; max-width: 100%; }
     thead { display: none; }
-    tbody, tbody tr, tr.jobrow {
-      display: block;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    tbody tr, tr.jobrow {
-      margin: 0 0 10px;
-      padding: 12px 10px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: var(--panel);
-    }
-    tbody td, tr.jobrow td {
-      display: block;
-      width: auto;
-      min-width: 0;
-      max-width: 100%;
-      padding: 2px 0;
-      border: 0;
-      box-sizing: border-box;
-    }
-    .thumb { width: 100%; max-width: 160px; height: auto; aspect-ratio: 16 / 9; }
+    tbody { display: block; width: 100%; max-width: 100%; }
     .titlecell { min-width: 0; }
     .titlecell .t { white-space: normal; overflow: visible; text-overflow: unset; }
-    .job-acts { flex-wrap: wrap; }
     .when, .id { white-space: normal; }
   }
   body[data-atm-rail-only] .rail-menu { display: none !important; }
@@ -971,6 +1040,143 @@
   }
   .job-act:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
   .job-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .job-card-meta { display: none; }
+  .job-card-meta .job-card-sep::before {
+    content: "·";
+    margin-right: 6px;
+    color: var(--faint);
+  }
+
+  /* Phone All videos: one compact card per job, not a stacked desktop table. */
+  @media (max-width: 640px) {
+    .toolbar { padding: 10px 14px 8px; gap: 6px 10px; }
+    .toolbar h1 { font-size: 18px; }
+    .tablewrap { padding: 10px 12px 36px; }
+    tbody tr.jobrow,
+    tbody tr.cliprow {
+      display: grid;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      position: relative;
+      margin: 0 0 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+    tbody tr.jobrow > td,
+    tbody tr.cliprow > td {
+      display: block;
+      width: auto;
+      min-width: 0;
+      max-width: 100%;
+      padding: 0 !important;
+      border: 0 !important;
+      border-top: none !important;
+      border-bottom: none !important;
+      box-sizing: border-box;
+    }
+    tbody tr.jobrow {
+      grid-template-columns: 28px minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      column-gap: 10px;
+      row-gap: 5px;
+      align-items: start;
+      padding: 12px 116px 12px 12px;
+      border-radius: 14px;
+    }
+    tbody tr.jobrow td.jobpreview {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      padding-top: 2px !important;
+    }
+    tbody tr.jobrow .jobfile { gap: 0; }
+    tbody tr.jobrow .caret2 { display: none; }
+    tbody tr.jobrow .folder { width: 22px; height: 22px; }
+    tbody tr.jobrow td.titlecell { grid-column: 2; grid-row: 1 / span 2; }
+    tbody tr.jobrow td.titlecell .t {
+      font-size: 14.5px;
+      font-weight: 650;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    tbody tr.jobrow .job-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 8px;
+      margin-top: 6px;
+    }
+    tbody tr.jobrow .job-card-meta .chip { padding: 2px 7px; font-size: 11px; }
+    tbody tr.jobrow .job-card-sep { color: var(--muted); font-size: 12px; line-height: 1.3; }
+    tbody tr.jobrow td.job-status,
+    tbody tr.jobrow td.job-when { display: none !important; }
+    tbody tr.jobrow td.job-who {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: auto;
+    }
+    tbody tr.jobrow td.job-who .cellrow { display: block; width: auto; }
+    tbody tr.jobrow td.job-who .cellrow > span:first-child { display: none; }
+    tbody tr.jobrow .job-acts { gap: 0; }
+    tbody tr.jobrow .job-act,
+    tbody tr.jobrow .kebab {
+      width: 36px;
+      height: 36px;
+    }
+
+    tbody tr.cliprow {
+      grid-template-columns: 72px minmax(0, 1fr);
+      column-gap: 10px;
+      align-items: center;
+      margin-left: 10px;
+      width: calc(100% - 10px);
+      padding: 8px 44px 8px 8px;
+      border-radius: 12px;
+      background: var(--bg);
+      border-color: var(--line-soft);
+    }
+    tbody tr.cliprow td:first-child { grid-column: 1; grid-row: 1 / span 2; }
+    tbody tr.cliprow .thumb {
+      width: 72px;
+      height: 42px;
+      max-width: 72px;
+      aspect-ratio: 16 / 9;
+    }
+    tbody tr.cliprow td.titlecell { grid-column: 2; grid-row: 1 / span 2; }
+    tbody tr.cliprow-nested td.titlecell .t { display: none; }
+    tbody tr.cliprow td.titlecell .s {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+    tbody tr.cliprow .job-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 8px;
+      margin-top: 4px;
+    }
+    tbody tr.cliprow .job-card-sep { color: var(--muted); font-size: 11.5px; }
+    tbody tr.cliprow td.job-status,
+    tbody tr.cliprow td.job-when { display: none !important; }
+    tbody tr.cliprow td.job-who {
+      position: absolute;
+      top: 50%;
+      right: 4px;
+      transform: translateY(-50%);
+      width: auto;
+    }
+    tbody tr.cliprow td.job-who .cellrow { display: block; width: auto; }
+    tbody tr.cliprow td.job-who .cellrow > span:first-child { display: none; }
+    tbody tr.cliprow .kebab { width: 36px; height: 36px; }
+  }
 
   .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
   .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -1078,6 +1284,7 @@
   }
   .sheethead h2 { margin: 0; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
   .sheethead .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .sheethead .id + .meta-line::before { content: " · "; }
   .closebtn {
     margin-left: auto; border: 1px solid var(--line); background: var(--panel);
     width: 30px; height: 30px; border-radius: 7px; cursor: pointer; color: var(--muted);
@@ -1403,7 +1610,7 @@
       <div class="sheethead">
         <button type="button" class="backbtn" id="d-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-          Dashboard
+          <span class="back-label">Dashboard</span>
         </button>
         <div>
           <h2 id="d-title">—</h2>
@@ -2539,22 +2746,28 @@
     return raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
-  function clipRow(e) {
+  function clipRow(e, underJob) {
     var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var status = clipStatus(e);
     var phase = clipKind(e.phase);
+    var clipDay = dayLabel(e.workDate);
     return '' +
-      '<tr tabindex="0" data-id="' + e.id + '">' +
+      '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
             (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
           '</div>' +
+          '<div class="job-card-meta">' +
+            '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
+            (clipDay && clipDay !== '—' ? '<span class="job-card-sep">' + clipDay + '</span>' : '') +
+            (e.person ? '<span class="job-card-sep">' + esc(e.person) + '</span>' : '') +
+          '</div>' +
         '</td>' +
-        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
-        '<td class="when">' + dayLabel(e.workDate) + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
-        '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person || '—') + '<small>' + esc(e.company || '') + '</small></span>' +
+        '<td class="job-status"><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
+        '<td class="when job-when">' + clipDay + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
+        '<td class="when uploader job-who"><span class="cellrow"><span>' + esc(e.person || '—') + '<small>' + esc(e.company || '') + '</small></span>' +
           '<button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(e.id) + '">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
           '</button></span></td>' +
@@ -2882,16 +3095,24 @@
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
         '</button>' +
       '</span>';
+    var metaBits = [];
+    if (recordedDay && recordedDay !== '—') metaBits.push('<span class="job-card-sep">' + recordedDay + '</span>');
+    if (latestUpload && latestUpload.person) metaBits.push('<span class="job-card-sep">' + esc(latestUpload.person) + '</span>');
+    var phoneMeta =
+      '<div class="job-card-meta">' +
+        '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
+        metaBits.join('') +
+      '</div>';
     return '' +
       '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
         '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
         '</span></td>' +
-        '<td class="titlecell">' + nameCell + '</td>' +
-        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
-        '<td class="when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
-        '<td class="when uploader"><span class="cellrow"><span>' + uploader + '</span>' + acts + '</span></td>' +
+        '<td class="titlecell">' + nameCell + phoneMeta + '</td>' +
+        '<td class="job-status"><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
+        '<td class="when job-when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
+        '<td class="when uploader job-who"><span class="cellrow"><span>' + uploader + '</span>' + acts + '</span></td>' +
       '</tr>';
   }
 
@@ -2963,7 +3184,7 @@
         order.length + ' job file' + (order.length === 1 ? '' : 's');
       rowsEl.innerHTML = order.map(function (k) {
         var collapsed = !!state.collapsed[k];
-        var clips = collapsed ? '' : (groups[k] || []).map(clipRow).join('');
+        var clips = collapsed ? '' : (groups[k] || []).map(function (e) { return clipRow(e, true); }).join('');
         return jobRow(k, groups[k] || [], collapsed) + clips;
       }).join('');
     } else {
@@ -3630,8 +3851,9 @@
   function fillPreviewChrome(item) {
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(clipKind(item.phase)) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+      '<span class="id">' + esc(item.id) + '</span>' +
+      '<span class="meta-line">' + esc(clipKind(item.phase)) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes) + '</span>';
   }
 
   function showPreviewScreen() {
