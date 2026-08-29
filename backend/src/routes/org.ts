@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { z } from 'zod';
 import { createAdminClient } from '../lib/supabase.js';
 import { sendSystemMail } from '../lib/systemMail.js';
-import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import {
@@ -519,6 +519,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
         joinCode,
         origin: publicAppOrigin(),
+        fieldCaptureOrigin: LIVE_FIELD_CAPTURE_ORIGIN,
         note: input.note ?? null,
       });
       // Atmosphere sends — not the org's connected Gmail/Microsoft.
@@ -526,6 +527,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         to: email,
         subject: mail.subject,
         text: mail.text,
+        html: mail.html,
       });
       emailed = result.ok;
     }

@@ -70,4 +70,13 @@ describe('Job Files search chrome', () => {
     expect(shell).toContain('h-[72px]');
     expect(shell).toContain("pathname === '/jobs'");
   });
+
+  it('lets the phone search field use the leftover top-bar width', () => {
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('{isJobsList && !phone && <div className="flex-1" />}');
+    expect(shell).toContain('overflow-x-hidden');
+  });
 });

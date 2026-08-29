@@ -16,6 +16,10 @@ import {
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { jobShareActionPattern, jobSharePagePath, readJobShareToken } from '../lib/jobSharePath.js';
 import {
+  deliverPartyInvite,
+  fieldCaptureInvitePath,
+} from '../verifier/deliverPartyInvite.js';
+import {
   createUploadUrl,
   recordProof,
   listPartyProofs,
@@ -568,7 +572,39 @@ sharedJobsRouter.post(
         .select(`${PARTY_SELECT}, access_token`)
         .single();
       if (error) throw new HttpError(400, error.message, 'party_create_failed');
-      res.status(201).json({ party: data });
+
+      const party = data as any;
+      const token = typeof party?.access_token === 'string' ? party.access_token : '';
+      const email = typeof party?.email === 'string' ? party.email : input.email ?? null;
+      let emailed = false;
+      if (email && token) {
+        const { data: job } = await supabase
+          .from('crm_jobs')
+          .select('title')
+          .eq('org_id', orgId)
+          .eq('id', req.params.jobId)
+          .maybeSingle();
+        const delivery = await deliverPartyInvite({
+          supabase,
+          orgId,
+          jobId: req.params.jobId,
+          jobTitle: (job as any)?.title || input.company,
+          userId,
+          partyId: party.id,
+          company: input.company,
+          contactName: input.contactName || input.company,
+          email,
+          token,
+        });
+        emailed = delivery.emailed;
+      }
+
+      res.status(201).json({
+        party,
+        emailed,
+        sharePath: token ? jobSharePagePath(token, email) : null,
+        fieldCapturePath: token ? fieldCaptureInvitePath(token) : null,
+      });
     } catch (err) {
       next(err);
     }

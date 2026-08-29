@@ -703,17 +703,51 @@
       border: 0;
       padding: 0;
     }
-    .topbar { height: 56px; gap: 8px; padding: 0 10px; }
+    .topbar { height: 56px; gap: 8px; padding: 0 10px; min-width: 0; }
+    .topbar .spacer { display: none; }
     .brand-fallback span { display: none; }
     .brand-fallback svg { width: 28px; height: 28px; }
-    .search { max-width: none; }
+    .search { flex: 1 1 auto; min-width: 0; max-width: none; }
+    .search input { min-width: 0; }
     .navitem {
       min-height: 44px;
       padding: 11px 12px;
       font-size: 14px;
     }
-    .who .role { display: none; }
-    .who-name, #who-name { font-size: 12px; }
+    .who-wrap { flex: none; }
+    .who { gap: 9px; padding: 4px 6px; }
+    .who .role { display: block; color: var(--faint); font-size: 11.5px; }
+    .who-name, #who-name { font-size: 12.5px; }
+    .tablewrap { overflow-x: hidden; padding: 0 10px 48px; }
+    table { table-layout: fixed; width: 100%; max-width: 100%; }
+    thead { display: none; }
+    tbody, tbody tr, tr.jobrow {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    tbody tr, tr.jobrow {
+      margin: 0 0 10px;
+      padding: 12px 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+    }
+    tbody td, tr.jobrow td {
+      display: block;
+      width: auto;
+      min-width: 0;
+      max-width: 100%;
+      padding: 2px 0;
+      border: 0;
+      box-sizing: border-box;
+    }
+    .thumb { width: 100%; max-width: 160px; height: auto; aspect-ratio: 16 / 9; }
+    .titlecell { min-width: 0; }
+    .titlecell .t { white-space: normal; overflow: visible; text-overflow: unset; }
+    .job-acts { flex-wrap: wrap; }
+    .when, .id { white-space: normal; }
   }
   body[data-atm-rail-only] .rail-menu { display: none !important; }
   body[data-atm-rail-only] .rail-backdrop { display: none !important; }
@@ -2746,6 +2780,31 @@
     };
   }
 
+  var FIELD_EMBED_ACCESS_KEY = 'atmosphere.fieldEmbed.accessToken';
+
+  function officeAccessToken() {
+    try {
+      return sessionStorage.getItem(FIELD_EMBED_ACCESS_KEY);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function apiHeaders(extra) {
+    var headers = extra ? Object.assign({}, extra) : {};
+    var token = officeAccessToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+    return headers;
+  }
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    return fetch(url, Object.assign({}, opts, {
+      credentials: 'include',
+      headers: apiHeaders(opts.headers || {})
+    }));
+  }
+
   function hydrateJobBoard(key) {
     var items = EVIDENCE.filter(function (e) { return e.job === key; });
     if (!canOpenJobRecord(key)) {
@@ -2756,9 +2815,9 @@
     if (cur && (cur.status === 'loading' || cur.status === 'ready')) return;
     JOB_BOARD[key] = { status: 'loading' };
     Promise.all([
-      fetch('/api/operations/shared/' + encodeURIComponent(key), { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
-      fetch('/api/operations/shared/' + encodeURIComponent(key) + '/proof', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
-      fetch('/api/evidence-portal/shares?jobId=' + encodeURIComponent(key) + '&kind=progress', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; })
+      apiFetch('/api/operations/shared/' + encodeURIComponent(key)).then(jsonOrNull).catch(function () { return null; }),
+      apiFetch('/api/operations/shared/' + encodeURIComponent(key) + '/proof').then(jsonOrNull).catch(function () { return null; }),
+      apiFetch('/api/evidence-portal/shares?jobId=' + encodeURIComponent(key) + '&kind=progress').then(jsonOrNull).catch(function () { return null; })
     ]).then(function (parts) {
       var record = parts[0];
       var proof = parts[1];
@@ -3245,8 +3304,10 @@
     }
     if (jobSheet.tab === 'invite') {
       body.innerHTML =
-        '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Trades get a capture link; homeowners and other parties can be sent a read-only progress link from Send a link.</p>' +
+        '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Atmosphere emails the same capture link for the web office and Field Capture.</p>' +
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
+        (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
+          (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
         '<form id="jf-invite-form">' +
           '<div class="row2">' +
             '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
@@ -3254,8 +3315,8 @@
               inviteKindOptionsHtml() +
             '</select></label>' +
           '</div>' +
-          '<label><span>Email (optional)</span><input name="email" type="email" placeholder="crew@example.com" /></label>' +
-          '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Add to this job</button>' +
+          '<label><span>Email</span><input name="email" type="email" required placeholder="crew@example.com" /></label>' +
+          '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Email invite</button>' +
         '</form>' +
         peopleListHtml(b);
       var form = document.getElementById('jf-invite-form');
@@ -3363,9 +3424,8 @@
     }
     var renaming = jobSheet.tab === 'rename';
     var url = '/api/operations/shared/' + encodeURIComponent(key) + (renaming ? '' : '/duplicate');
-    fetch(url, {
+    apiFetch(url, {
       method: renaming ? 'PATCH' : 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: title })
     }).then(function (r) {
@@ -3415,9 +3475,8 @@
       render();
       return;
     }
-    fetch('/api/evidence-portal/shares', {
+    apiFetch('/api/evidence-portal/shares', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jobId: key,
@@ -3460,6 +3519,11 @@
     var trade = parsed.trade;
     var email = (form.email.value || '').trim();
     if (!company || !kind) return;
+    if (!email) {
+      jobSheet.error = 'Enter an email so Atmosphere can send the invite on web and on Field Capture.';
+      paintJobFileSheet();
+      return;
+    }
     jobSheet.busy = true;
     jobSheet.error = null;
     paintJobFileSheet();
@@ -3474,15 +3538,14 @@
       toast(company + ' added to the job.');
       return;
     }
-    fetch('/api/operations/shared/' + encodeURIComponent(key) + '/parties', {
+    apiFetch('/api/operations/shared/' + encodeURIComponent(key) + '/parties', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         company: company,
         role: role,
         trade: trade || null,
-        email: email || null
+        email: email
       })
     }).then(function (r) {
       return r.json().then(function (body) { return { ok: r.ok, body: body }; });
@@ -3496,9 +3559,17 @@
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
       jobSheet.error = null;
+      jobSheet.made = {
+        note: res.body.emailed
+          ? 'Invite emailed to ' + email + '. The same link opens on the web office and Field Capture.'
+          : 'Added to the job, but Atmosphere could not send the email. Copy the Field Capture link below.',
+        path: res.body.fieldCapturePath
+          ? (res.body.fieldCapturePath.indexOf('http') === 0 ? res.body.fieldCapturePath : location.origin + res.body.fieldCapturePath)
+          : (res.body.sharePath ? location.origin + res.body.sharePath : '')
+      };
       paintJobFileSheet();
       render();
-      toast(company + ' added to the job.');
+      toast(res.body.emailed ? 'Invite emailed to ' + email + '.' : company + ' added — email did not send.');
     }).catch(function (err) {
       jobSheet.busy = false;
       jobSheet.error = err && err.message ? err.message : 'Could not add that person.';
@@ -4314,9 +4385,8 @@
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/ask'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/ask';
-    fetch(url, {
+    apiFetch(url, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: question, history: history || [] })
     }).then(function (r) {
@@ -4488,7 +4558,7 @@
     var btn = document.getElementById('dl-btn');
     if (ORG_MODE) {
       // The org's own copy of its own evidence: no fee, same ledger.
-      fetch('/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/download', { credentials: 'include' })
+      apiFetch('/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/download')
         .then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); })
         .then(function (res) {
           if (res.status >= 400) {
@@ -4502,7 +4572,7 @@
       return;
     }
     var base = '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN);
-    fetch(base + '/evidence/' + encodeURIComponent(item.id) + '/download', { method: 'POST', credentials: 'include' })
+    apiFetch(base + '/evidence/' + encodeURIComponent(item.id) + '/download', { method: 'POST' })
       .then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); })
       .then(function (res) {
         if (res.status === 402) {
@@ -4510,7 +4580,7 @@
           if (btn) {
             btn.textContent = 'Pay $' + (res.body.feeCents / 100).toFixed(2) + ' and download';
             btn.onclick = function () {
-              fetch(base + '/downloads/' + encodeURIComponent(res.body.downloadId) + '/pay', { method: 'POST', credentials: 'include' })
+              apiFetch(base + '/downloads/' + encodeURIComponent(res.body.downloadId) + '/pay', { method: 'POST' })
                 .then(function (r2) { return r2.json(); })
                 .then(function () { requestDownload(item, res.body.downloadId); })
                 .catch(function () { if (msg) msg.textContent = 'Payment did not go through. Try again.'; });
@@ -4842,14 +4912,22 @@
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
+    if (typeof officeAccessToken === 'function' && typeof loadOrgLibrary === 'function') {
+      var token = officeAccessToken();
+      if (!SHARE_TOKEN && !libraryLoaded && token && token !== lastLibraryToken) {
+        lastLibraryToken = token;
+        libraryAttempts = 0;
+        loadOrgLibrary();
+      }
+    }
   }
 
   function loadAccountFromApi() {
     function jsonOrNull(r) { return r.ok ? r.json() : Promise.resolve(null); }
     Promise.all([
-      fetch('/api/auth/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
-      fetch('/api/profile', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
-      fetch('/api/org/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; })
+      apiFetch('/api/auth/me').then(jsonOrNull).catch(function () { return null; }),
+      apiFetch('/api/profile').then(jsonOrNull).catch(function () { return null; }),
+      apiFetch('/api/org/me').then(jsonOrNull).catch(function () { return null; })
     ]).then(function (parts) {
       var me = parts[0] && parts[0].user;
       var profile = parts[1] && parts[1].profile;
@@ -5170,7 +5248,7 @@
       var detailUrl = ORG_MODE
         ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
         : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
-      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+      apiFetch(detailUrl).then(function (r) {
         return r.ok ? r.json() : null;
       }).then(function (payload) {
         if (!payload || !payload.item) return;
@@ -5187,11 +5265,11 @@
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
     return Promise.all([
-      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+      apiFetch(detailUrl).then(function (r) {
         if (!r.ok) throw new Error('detail');
         return r.json();
       }),
-      fetch(videoUrl, { credentials: 'include' })
+      apiFetch(videoUrl)
         .then(function (r) { return r.ok ? r.json() : null; })
         .catch(function () { return null; })
     ])
@@ -5295,14 +5373,23 @@
     EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
   }
 
+  var libraryLoaded = false;
+  var libraryAttempts = 0;
+  var lastLibraryToken = null;
+
   function loadOrgLibrary() {
     var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
-    return fetch('/api/evidence-portal/library', { credentials: 'include' })
+    return apiFetch('/api/evidence-portal/library')
       .then(function (r) {
         if (r.status === 401 || r.status === 403) {
           if (wantDemo) { boot(); return null; }
-          // Signed-out library: same empty chrome as an org with no uploads —
-          // no sign-in banner shoved above the table, no twin shortcut here.
+          // Field Capture iframe cookies often fail (SameSite). Retry while
+          // the parent handshake writes the Bearer token into sessionStorage.
+          if (libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
+            libraryAttempts += 1;
+            setTimeout(loadOrgLibrary, 400);
+            return null;
+          }
           ORG_MODE = false;
           EVIDENCE = [];
           JOBS = {};
@@ -5314,12 +5401,16 @@
       })
       .then(function (payload) {
         if (!payload) return;
+        libraryLoaded = true;
         applyOrgLibrary(payload);
         boot();
       })
       .catch(function () {
         if (wantDemo) boot();
-        else {
+        else if (libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
+          libraryAttempts += 1;
+          setTimeout(loadOrgLibrary, 400);
+        } else {
           EVIDENCE = [];
           boot();
         }
@@ -5327,7 +5418,7 @@
   }
 
   if (SHARE_TOKEN) {
-    fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN), { credentials: 'include' })
+    apiFetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN))
       .then(function (r) {
         return r.json().then(function (body) {
           if (!r.ok) { deadLink(r.status, body); return null; }

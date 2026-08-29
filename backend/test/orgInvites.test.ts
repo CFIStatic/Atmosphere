@@ -60,8 +60,21 @@ test('the email is from Atmosphere, names the org, and the code stands alone', (
   assert.match(mail.text, /app\.atmosphere\.example\/signup\?intent=join/);
   assert.match(mail.text, /Enter this join code/);
   assert.match(mail.text, /Field Capture iPhone app/);
-  // A workplace invitation, not marketing: no unsubscribe furniture.
+  assert.match(mail.html, /Create your account/);
   assert.ok(!/unsubscribe/i.test(mail.text));
+});
+
+test('the join email also points at Field Capture on the web', () => {
+  const mail = inviteEmail({
+    orgName: 'Jettx LLC',
+    inviterName: 'Jack Cyganiak',
+    joinCode: 'JETTX-1',
+    origin: 'https://atmosphere-web-production.up.railway.app',
+    fieldCaptureOrigin: 'https://field-capture-production.up.railway.app',
+  });
+  assert.match(mail.text, /field-capture-production\.up\.railway\.app/);
+  assert.match(mail.html, /Open Field Capture/);
+  assert.match(mail.html, /field-capture-production\.up\.railway\.app/);
 });
 
 test('no configured origin still yields usable steps', () => {

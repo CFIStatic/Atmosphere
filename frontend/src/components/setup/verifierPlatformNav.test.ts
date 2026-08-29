@@ -51,6 +51,22 @@ describe('verifier office rail', () => {
     );
   });
 
+  it('keeps the phone account chip identical to the desktop chip', () => {
+    expect(verifierHtml).toContain('.topbar .spacer { display: none; }');
+    expect(verifierHtml).toContain('.search { flex: 1 1 auto; min-width: 0; max-width: none; }');
+    expect(verifierHtml).toContain('.who .role { display: block; color: var(--faint); font-size: 11.5px; }');
+    expect(verifierHtml).not.toMatch(/\.who \.role \{ display: none/);
+    expect(verifierHtml).toContain('thead { display: none; }');
+    expect(verifierHtml).toContain('table { table-layout: fixed; width: 100%; max-width: 100%; }');
+  });
+
+  it('loads the org library with the Field Capture Bearer token', () => {
+    expect(verifierHtml).toContain("atmosphere.fieldEmbed.accessToken");
+    expect(verifierHtml).toContain('function apiFetch');
+    expect(verifierHtml).toContain("apiFetch('/api/evidence-portal/library'");
+    expect(verifierHtml).toContain('Email invite');
+  });
+
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
     expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);

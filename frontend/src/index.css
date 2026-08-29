@@ -353,7 +353,11 @@ html[data-field-embed],
 html[data-field-embed] body,
 html[data-field-embed] #root {
   height: 100%;
+  max-width: 100%;
   overflow: hidden;
+}
+html[data-field-embed] #root {
+  overflow-x: hidden;
 }
 
 /* Native media controls follow the active theme via color-scheme on :root. */

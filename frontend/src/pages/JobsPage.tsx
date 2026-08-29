@@ -24,7 +24,7 @@ function JobCard({ job }: { job: JobSummary }) {
   return (
     <Link
       to={`/jobs/${job.jobId}`}
-      className="block rounded-xl glass-card p-5 transition hover:border-brand-400/40 hover:bg-paper-200"
+      className="block min-w-0 max-w-full overflow-hidden rounded-xl glass-card p-4 transition hover:border-brand-400/40 hover:bg-paper-200 sm:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -118,7 +118,7 @@ export function JobsPage() {
           hint={query ? undefined : 'Start a job from the rail and it will show up here.'}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
           {visible.map((job) => (
             <JobCard key={job.jobId} job={job} />
           ))}

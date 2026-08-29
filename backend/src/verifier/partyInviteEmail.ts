@@ -27,6 +27,8 @@ export function partyInviteEmail(input: {
   path: string;
   /** Signup URL when the recipient has no account yet. */
   signupPath?: string | null;
+  /** Field Capture web / phone app link for the same job token. */
+  fieldCaptureUrl?: string | null;
 }): { subject: string; text: string; html: string } {
   const org = input.orgName.trim() || 'a contractor';
   const inviter = input.inviterName?.trim() || null;
@@ -35,6 +37,7 @@ export function partyInviteEmail(input: {
   const who = input.recipientName?.trim() || null;
   const link = absoluteUrl(input.origin, input.path);
   const signup = input.signupPath ? absoluteUrl(input.origin, input.signupPath) : null;
+  const fieldCapture = input.fieldCaptureUrl?.trim() || null;
 
   const subject = job
     ? `${org} invited you to capture: ${job}`
@@ -55,6 +58,9 @@ export function partyInviteEmail(input: {
     `  ${link}`,
     '',
   );
+  if (fieldCapture) {
+    textLines.push('Or open it in Field Capture (web or the iPhone app):', '', `  ${fieldCapture}`, '');
+  }
 
   if (!input.recipientHasAccount) {
     textLines.push(
@@ -126,6 +132,16 @@ export function partyInviteEmail(input: {
               Open job on phone
             </a>
           </p>
+          ${
+            fieldCapture
+              ? `<p style="margin:12px 0 0;">
+            <a href="${escapeAttr(fieldCapture)}"
+               style="color:#b45309;font-weight:600;text-decoration:underline;">
+              Open in Field Capture
+            </a>
+          </p>`
+              : ''
+          }
           ${accountBlock ? `\n          ${accountBlock}` : ''}
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             If you were not expecting this, ignore it — nothing happens until the link is opened.

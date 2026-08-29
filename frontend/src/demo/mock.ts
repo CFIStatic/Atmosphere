@@ -3288,7 +3288,12 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/parties$/, (_m, b) => ({
     status: 201,
-    body: { party: { id: `pty-${Date.now()}`, company: String(b.company ?? ''), accessToken: 'k3Jv9QxR2mT8pLwZaN4hC7yD' } },
+    body: {
+      party: { id: `pty-${Date.now()}`, company: String(b.company ?? ''), accessToken: 'k3Jv9QxR2mT8pLwZaN4hC7yD' },
+      emailed: Boolean(b.email),
+      sharePath: '/shared/demo-token',
+      fieldCapturePath: '/fieldcapture/index.html?token=demo-token',
+    },
   })],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/brief$/, (m) => {
     const record = SHARED_RECORDS[m[1]];

@@ -5,11 +5,12 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
-import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
-import { sendSystemMail } from '../lib/systemMail.js';
-import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { createAdminClient } from '../lib/supabase.js';
+import {
+  deliverPartyInvite,
+  fieldCaptureInvitePath,
+} from '../verifier/deliverPartyInvite.js';
 import { recordAccess } from './proofOfWork.js';
 import {
   intakeWriteError,
@@ -405,108 +406,6 @@ const approveSchema = z.object({
   invitees: z.array(inviteeSchema).max(20).default([]),
 });
 
-async function actorLabelFor(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('full_name, email')
-    .eq('id', userId)
-    .maybeSingle();
-  return (data as any)?.full_name ?? (data as any)?.email ?? 'Office';
-}
-
-/**
- * Best-effort: email the capture invite, and if this inbox already owns a
- * field identity, attach the job so it shows under My jobs without a second trip.
- */
-
-async function deliverPartyInvite(input: {
-  supabase: any;
-  orgId: string;
-  jobId: string;
-  jobTitle: string;
-  siteAddress?: string | null;
-  userId: string;
-  partyId: string;
-  company: string;
-  contactName: string;
-  email: string | null;
-  token: string;
-}): Promise<{ emailed: boolean; recipientHasAccount: boolean; attachedToAccount: boolean }> {
-  const email = input.email?.trim().toLowerCase() || null;
-  if (!email) {
-    return { emailed: false, recipientHasAccount: false, attachedToAccount: false };
-  }
-
-  const admin = createAdminClient();
-  let recipientHasAccount = false;
-  let erased = false;
-  let attachedToAccount = false;
-
-  if (admin) {
-    const [{ data: existing }, { data: erasure }, { data: identity }] = await Promise.all([
-      admin.from('profiles').select('id').ilike('email', email).limit(1).maybeSingle(),
-      admin.from('network_erasures').select('email').eq('email', email).maybeSingle(),
-      admin
-        .from('field_identities')
-        .select('id')
-        .eq('channel', 'email')
-        .eq('address', email)
-        .maybeSingle(),
-    ]);
-    recipientHasAccount = Boolean(existing);
-    erased = Boolean(erasure);
-
-    // Already proved this inbox — the job lands in their list immediately.
-    if (identity) {
-      const { error } = await admin.from('job_party_claims').upsert(
-        {
-          org_id: input.orgId,
-          party_id: input.partyId,
-          identity_id: (identity as any).id,
-        },
-        { onConflict: 'party_id' },
-      );
-      attachedToAccount = !error;
-    }
-  }
-
-  let emailed = false;
-  if (!erased) {
-    const [{ data: org }, inviterName] = await Promise.all([
-      input.supabase.from('orgs').select('name').eq('id', input.orgId).maybeSingle(),
-      actorLabelFor(input.supabase, input.userId),
-    ]);
-    const emailParam = encodeURIComponent(email);
-    const sharePath = jobSharePagePath(input.token, email);
-    const origin = publicAppOrigin();
-    const mail = partyInviteEmail({
-      orgName: (org as any)?.name ?? 'a contractor',
-      inviterName,
-      jobTitle: input.jobTitle,
-      siteAddress: input.siteAddress ?? null,
-      recipientName: input.contactName || input.company,
-      recipientEmail: email,
-      recipientHasAccount,
-      origin,
-      path: sharePath,
-      signupPath: `/signup?email=${emailParam}`,
-    });
-    // Atmosphere sends — not the org's connected Gmail/Microsoft.
-    const result = await sendSystemMail({
-      to: email,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-    });
-    if (!result.ok) {
-      console.warn(`[intake] invite email to ${email} failed: ${result.why}`);
-    }
-    emailed = result.ok;
-  }
-
-  return { emailed, recipientHasAccount, attachedToAccount };
-}
-
 type CreatedParty = {
   id: string;
   name: string;
@@ -848,7 +747,7 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
         email: party.email,
         token: party.token,
         sharePath: jobSharePagePath(party.token, party.email),
-        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(party.token)}`,
+        fieldCapturePath: fieldCaptureInvitePath(party.token),
         external: party.external,
         emailed: delivery.emailed,
         recipientHasAccount: delivery.recipientHasAccount,

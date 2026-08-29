@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adoptDestinationFrom,
@@ -81,6 +84,16 @@ describe('field embed helpers', () => {
       refreshToken: null,
       accessToken: null,
     });
+  });
+
+  it('uses the same sessionStorage key the verifier library fetch reads', () => {
+    const verifier = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../../verifier/index.html'),
+      'utf8',
+    );
+    expect(verifier).toContain("atmosphere.fieldEmbed.accessToken");
+    rememberFieldEmbedSession('office-access-token-1', 'office-refresh-token-1');
+    expect(fieldEmbedAccessToken()).toBe('office-access-token-1');
   });
 
   it('remembers the adopted Field Capture session for Bearer API calls', () => {

@@ -67,6 +67,17 @@ test('an existing account gets no account copy; a missing one gets create-with-t
   assert.ok(!not.text.includes('You already have an Atmosphere account'));
 });
 
+test('Field Capture web and phone get the same job token as the office link', () => {
+  const { text, html } = partyInviteEmail({
+    ...base,
+    fieldCaptureUrl: 'https://field-capture-production.up.railway.app/?token=tok123',
+  });
+  assert.match(text, /open it in Field Capture/);
+  assert.match(text, /field-capture-production\.up\.railway\.app\/\?token=tok123/);
+  assert.match(html, /Open in Field Capture/);
+  assert.match(html, /field-capture-production\.up\.railway\.app\/\?token=tok123/);
+});
+
 test('no unsubscribe footer — and the ignore path is stated', () => {
   const { text } = partyInviteEmail(base);
   assert.ok(!/unsubscribe/i.test(text));
