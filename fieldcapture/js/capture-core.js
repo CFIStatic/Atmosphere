@@ -436,6 +436,28 @@
   }
 
   /**
+   * Local previews can iframe a local office with ?office=http://127.0.0.1:5174.
+   * Production Field Capture ignores this — only loopback origins are accepted.
+   */
+  function localOfficeOrigin(search) {
+    try {
+      var raw = '';
+      if (typeof search === 'string') {
+        raw = new URLSearchParams(search.charAt(0) === '?' ? search.slice(1) : search).get('office') || '';
+      } else if (typeof location !== 'undefined' && location.search) {
+        raw = new URLSearchParams(location.search).get('office') || '';
+      }
+      if (!raw) return '';
+      var url = new URL(raw, 'http://127.0.0.1/');
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+      if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') return '';
+      return url.origin;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
    * Office web console origin + path. Same-origin only when Field Capture
    * is served under /fieldcapture/ on the office host. The standalone
    * Railway app and a local phone preview are not that SPA — they point
@@ -444,6 +466,8 @@
   function resolveOfficeHref(pathname) {
     var path = pathname || '/';
     if (path.charAt(0) !== '/') path = '/' + path;
+    var local = localOfficeOrigin();
+    if (local) return local + path;
     var hostname = '';
     try {
       hostname = typeof location !== 'undefined' ? location.hostname || '' : '';
@@ -633,6 +657,7 @@
     resolveApiBase: resolveApiBase,
     resolveOfficeHref: resolveOfficeHref,
     resolveOfficePlatformHref: resolveOfficePlatformHref,
+    localOfficeOrigin: localOfficeOrigin,
     withFieldEmbed: withFieldEmbed,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,

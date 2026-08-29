@@ -93,6 +93,7 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain('warmPlatformFrame');
     expect(core).toContain('function resolveOfficePlatformHref');
     expect(core).toContain('function resolveOfficeHref');
+    expect(core).toContain('function localOfficeOrigin');
     expect(core).toContain('embed=field');
   });
 });

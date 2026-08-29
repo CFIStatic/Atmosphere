@@ -9,7 +9,7 @@ const coreSrc = readFileSync(join(here, 'capture-core.js'), 'utf8');
 const appSrc = readFileSync(join(here, 'app.js'), 'utf8');
 const html = readFileSync(join(here, '..', 'index.html'), 'utf8');
 
-const sandbox = { navigator: {}, console, setTimeout, clearTimeout };
+const sandbox = { navigator: {}, console, setTimeout, clearTimeout, URL, URLSearchParams };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 vm.runInNewContext(coreSrc, sandbox);
@@ -107,6 +107,12 @@ assert.match(
 );
 assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library?embed=field');
 assert.equal(Core.withFieldEmbed('/verifier-library'), '/verifier-library?embed=field');
+assert.equal(
+  Core.localOfficeOrigin('?office=http://127.0.0.1:5174'),
+  'http://127.0.0.1:5174',
+);
+assert.equal(Core.localOfficeOrigin('?office=https://evil.example'), '');
+assert.equal(typeof Core.localOfficeOrigin, 'function');
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
 assert.match(coreSrc, /isOfficeFieldCapturePath/, 'local Field Capture must iframe the office, not /verifier-library on itself');
 assert.match(html, /Welcome back/);
@@ -121,8 +127,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=single-login/);
-assert.match(html, /js\/app\.js\?v=single-login/);
+assert.match(html, /js\/capture-core\.js\?v=phone-office/);
+assert.match(html, /js\/app\.js\?v=phone-office/);
 assert.match(appSrc, /request-field-session/, 'Platform iframe can ask Field Capture for the shared session');
 assert.match(appSrc, /field-session-missing/, 'unsigned Field Capture must not fake an office session');
 assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the in-app Platform');
