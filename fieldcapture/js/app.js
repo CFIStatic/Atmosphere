@@ -36,9 +36,58 @@
     if (node) fn(node);
   }
 
-  function showFieldThemeToggle(on) {
-    var toggle = document.getElementById('fc-theme-toggle');
-    if (toggle) toggle.hidden = !on;
+  function initialsFrom(name, email) {
+    var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+    if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
+    if (email) return String(email).replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '•';
+    return '—';
+  }
+
+  function closeFieldAccountMenu() {
+    var btn = document.getElementById('who-btn');
+    var menu = document.getElementById('who-menu');
+    if (menu) menu.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function showFieldAccount(on, opts) {
+    var wrap = document.getElementById('who-wrap');
+    var settings = document.getElementById('fc-menu-settings');
+    var signout = document.getElementById('fc-menu-signout');
+    if (wrap) wrap.hidden = !on;
+    if (!on) closeFieldAccountMenu();
+    var accountActions = Boolean(opts && opts.account);
+    if (settings) settings.hidden = !accountActions;
+    if (signout) signout.hidden = !accountActions;
+  }
+
+  function paintFieldAccount(opts) {
+    opts = opts || {};
+    var name = opts.name || 'Your account';
+    var org = opts.org || '';
+    var email = opts.email || '';
+    var whoName = document.getElementById('who-name');
+    var whoSub = document.getElementById('who-sub');
+    var avatar = document.getElementById('who-avatar');
+    var menuName = document.getElementById('menu-name');
+    var menuEmail = document.getElementById('menu-email');
+    var menuMeta = document.getElementById('menu-meta');
+    if (whoName) whoName.textContent = name;
+    if (whoSub) whoSub.textContent = org;
+    if (avatar) avatar.textContent = initialsFrom(name, email);
+    if (menuName) menuName.textContent = name;
+    if (menuEmail) {
+      menuEmail.textContent = email;
+      menuEmail.hidden = !email;
+    }
+    if (menuMeta) {
+      menuMeta.textContent = org;
+      menuMeta.hidden = !org;
+    }
+    showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
   var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
@@ -238,12 +287,11 @@
         var title = (payload.job && payload.job.title) || 'Job';
         var num = (payload.job && payload.job.jobNumber) || '';
         var company = (payload.you && payload.you.company) || 'Crew';
-        var who = document.querySelector('.who');
-        if (who) {
-          who.hidden = false;
-          who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
-        }
-        showFieldThemeToggle(true);
+        paintFieldAccount({
+          name: company,
+          org: 'Field Capture',
+          account: false,
+        });
         renderExpect([
           {
             name: (num ? num + ' · ' : '') + title,
@@ -266,12 +314,7 @@
 
   function bootBlocked() {
     show('s-blocked');
-    var who = document.querySelector('.who');
-    if (who) {
-      who.hidden = true;
-      who.innerHTML = '';
-    }
-    showFieldThemeToggle(false);
+    showFieldAccount(false);
     $('#blocked-msg').textContent =
       'Sign in once — Field Capture and the in-app Platform use the same account.';
   }
@@ -339,14 +382,12 @@
     if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
       state.activeJobId = state.jobs[0] ? state.jobs[0].id : null;
     }
-    var who = document.querySelector('.who');
-    if (who) {
-      var name = (me.user && (me.user.fullName || me.user.email)) || 'You';
-      var org = (me.org && me.org.name) || 'Office';
-      who.hidden = false;
-      who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
-    }
-    showFieldThemeToggle(true);
+    paintFieldAccount({
+      name: (me.user && (me.user.fullName || me.user.email)) || 'You',
+      email: (me.user && me.user.email) || '',
+      org: (me.org && me.org.name) || 'Office',
+      account: true,
+    });
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
@@ -764,6 +805,12 @@
     ];
     state.jobs = JOBS;
     state.activeJobId = JOBS[0].id;
+    paintFieldAccount({
+      name: 'Field tech',
+      email: 'you@office.test',
+      org: 'Your office',
+      account: true,
+    });
     renderExpect(JOBS);
 
     var seconds = 0;
@@ -906,21 +953,70 @@
       );
     }
 
-    warmPlatformFrame = function () {
+    function setPlatformFrame(pathname) {
+      var path = pathname || '/verifier-library';
       var href = (link && link.getAttribute('href')) || '';
       if (Core.resolveOfficePlatformHref) {
-        href = Core.resolveOfficePlatformHref('/verifier-library');
-        if (link) link.href = href;
+        href = Core.resolveOfficePlatformHref(path);
+        if (link && path === '/verifier-library') link.href = href;
       }
       if (frame && href && frame.getAttribute('src') !== href) {
         frame.setAttribute('src', href);
       }
+    }
+
+    warmPlatformFrame = function () {
+      setPlatformFrame('/verifier-library');
     };
 
-    function openPlatformInFrame() {
-      warmPlatformFrame();
+    function openPlatformInFrame(pathname) {
+      setPlatformFrame(pathname || '/verifier-library');
       show('s-platform');
       postFieldSession();
+    }
+
+    function signOutFieldAccount() {
+      closeFieldAccountMenu();
+      writeStoredSession(null, null);
+      state.account = false;
+      state.jobs = [];
+      state.activeJobId = null;
+      if (frame) frame.setAttribute('src', 'about:blank');
+      showLoginError('');
+      bootBlocked();
+    }
+
+    var whoBtn = document.getElementById('who-btn');
+    var whoMenu = document.getElementById('who-menu');
+    if (whoBtn && whoMenu) {
+      whoBtn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (!whoMenu.hidden) {
+          closeFieldAccountMenu();
+          return;
+        }
+        whoMenu.hidden = false;
+        whoBtn.setAttribute('aria-expanded', 'true');
+      });
+      document.addEventListener('click', function (event) {
+        if (whoMenu.hidden) return;
+        if (whoMenu.contains(event.target) || whoBtn.contains(event.target)) return;
+        closeFieldAccountMenu();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeFieldAccountMenu();
+      });
+    }
+    var menuSettings = document.getElementById('fc-menu-settings');
+    if (menuSettings) {
+      menuSettings.addEventListener('click', function () {
+        closeFieldAccountMenu();
+        openPlatformInFrame('/settings');
+      });
+    }
+    var menuSignout = document.getElementById('fc-menu-signout');
+    if (menuSignout) {
+      menuSignout.addEventListener('click', signOutFieldAccount);
     }
 
     if (frame) {
@@ -939,6 +1035,10 @@
       }
       if (data.atmosphere === 'theme') {
         applyOfficeTheme(data.preference);
+        return;
+      }
+      if (data.atmosphere === 'sign-out') {
+        signOutFieldAccount();
       }
     });
     if (link) {

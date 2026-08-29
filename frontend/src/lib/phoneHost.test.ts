@@ -74,6 +74,7 @@ describe('phone home-screen manifests', () => {
   it('points the standalone Field Capture web host at the live office API', () => {
     const core = readFileSync(resolve(repoRoot, 'fieldcapture/js/capture-core.js'), 'utf8');
     const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    const htmlFromField = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
     expect(core).toContain('https://atmosphere-web-production.up.railway.app');
     expect(core).toContain('field-capture(?:-[a-z0-9]+)*\\.up\\.railway\\.app');
     expect(core).toContain('function resolveApiBase');
@@ -93,6 +94,13 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain('warmPlatformFrame');
     expect(app).toContain('applyOfficeTheme');
     expect(app).toContain("atmosphere: 'theme'");
+    expect(app).toContain('paintFieldAccount');
+    expect(app).toContain("openPlatformInFrame('/settings')");
+    expect(htmlFromField).toContain('id="who-menu"');
+    expect(htmlFromField).toContain('id="fc-theme-toggle"');
+    expect(htmlFromField.indexOf('id="fc-theme-toggle"')).toBeGreaterThan(
+      htmlFromField.indexOf('id="who-menu"'),
+    );
     expect(core).toContain('function resolveOfficePlatformHref');
     expect(core).toContain('function resolveOfficeHref');
     expect(core).toContain('function localOfficeOrigin');
