@@ -111,6 +111,7 @@ assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.rail
 assert.match(coreSrc, /isOfficeFieldCapturePath/, 'local Field Capture must iframe the office, not /verifier-library on itself');
 assert.match(html, /Welcome back/);
 assert.match(html, /Field Capture and the in-app Platform use the same account/);
+assert.match(appSrc, /Field Capture and the in-app Platform use the same account/);
 assert.match(html, /id="login-email"/);
 assert.match(html, /id="login-password"/);
 assert.match(html, /id="forgot-link"/);

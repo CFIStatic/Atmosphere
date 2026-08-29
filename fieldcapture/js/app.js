@@ -266,7 +266,7 @@
       who.innerHTML = '';
     }
     $('#blocked-msg').textContent =
-      'Sign in with the same email and password as the office Platform.';
+      'Sign in once — Field Capture and the in-app Platform use the same account.';
   }
 
   function showLoginError(message) {
