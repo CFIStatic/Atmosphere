@@ -62,6 +62,18 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('table { table-layout: fixed; width: 100%; max-width: 100%; }');
   });
 
+  it('packs All videos job files into compact phone cards', () => {
+    expect(verifierHtml).toContain('class="job-card-meta"');
+    expect(verifierHtml).toContain("'<tr class=\"cliprow'");
+    expect(verifierHtml).toContain('cliprow-nested');
+    expect(verifierHtml).toContain('td class="job-status"');
+    expect(verifierHtml).toContain('Phone All videos: one compact card per job');
+    expect(verifierHtml).toContain('tbody tr.jobrow td.job-status');
+    expect(verifierHtml).toContain('display: none !important');
+    expect(verifierHtml).toContain('-webkit-line-clamp: 2');
+    expect(verifierHtml).not.toContain('tbody tr, tr.jobrow {\n      margin: 0 0 10px');
+  });
+
   it('loads the org library with the Field Capture Bearer token', () => {
     expect(verifierHtml).toContain("atmosphere.fieldEmbed.accessToken");
     expect(verifierHtml).toContain('function apiFetch');
