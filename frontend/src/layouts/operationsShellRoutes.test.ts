@@ -80,4 +80,13 @@ describe('Job Files search chrome', () => {
     expect(shell).toContain("className={phone ? 'order-last basis-full' : undefined}");
     expect(shell).toContain('overflow-x-hidden');
   });
+
+  it('keeps the phone light/dark control in the account menu, not the header', () => {
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('{!phone && (');
+    expect(shell).toContain('<ThemeToggle />');
+  });
 });

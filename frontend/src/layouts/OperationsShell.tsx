@@ -110,9 +110,11 @@ export function OperationsShell() {
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}
-              <div className={phone && !isJobsList ? 'ml-auto shrink-0' : 'shrink-0'}>
-                <ThemeToggle />
-              </div>
+              {!phone && (
+                <div className="shrink-0">
+                  <ThemeToggle />
+                </div>
+              )}
             </header>
             <div
               className={
