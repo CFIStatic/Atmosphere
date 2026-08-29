@@ -64,18 +64,16 @@ function FullScreenSpinner() {
 
 /** Requires the user to have completed onboarding; otherwise send to /onboarding. */
 function RequireOnboarded({ children }: { children: ReactNode }) {
-  const { membership, membershipLoading, refreshMembership } = useAuth();
+  const { membership, membershipLoading } = useAuth();
   const location = useLocation();
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
 
-  useEffect(() => {
-    if (!fieldEmbed || membership || membershipLoading) return;
-    void refreshMembership();
-  }, [fieldEmbed, membership, membershipLoading, refreshMembership]);
-
-  if (membershipLoading || (fieldEmbed && !membership)) return <FullScreenSpinner />;
+  if (membershipLoading) return <FullScreenSpinner />;
   if (!membership) {
+    // Embed sessions skip the workspace wizard so Field Capture can open
+    // Platform. A null office membership is a finished read, not a hang.
+    if (fieldEmbed) return <RequireBillingSetup>{children}</RequireBillingSetup>;
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate

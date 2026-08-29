@@ -47,7 +47,10 @@ export function isFieldCaptureOrigin(origin: string): boolean {
 
 export function isFieldEmbedQuery(search: string): boolean {
   try {
-    return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('embed') === 'field';
+    return (
+      new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('embed') ===
+      'field'
+    );
   } catch {
     return false;
   }
@@ -72,7 +75,9 @@ export function withFieldEmbed(path: string): string {
   return `${pathname}?${params.toString()}${hash}`;
 }
 
-export function markFieldEmbed(search = typeof window !== 'undefined' ? window.location.search : ''): boolean {
+export function markFieldEmbed(
+  search = typeof window !== 'undefined' ? window.location.search : '',
+): boolean {
   if (typeof document === 'undefined') return false;
   if (!isFieldEmbedQuery(search) && document.documentElement.dataset.fieldEmbed !== '1') {
     return false;
@@ -86,7 +91,9 @@ export function isFieldEmbedMarked(): boolean {
   return document.documentElement.dataset.fieldEmbed === '1';
 }
 
-export function isPhoneShellViewport(width = typeof window !== 'undefined' ? window.innerWidth : 1024): boolean {
+export function isPhoneShellViewport(
+  width = typeof window !== 'undefined' ? window.innerWidth : 1024,
+): boolean {
   return width <= PHONE_SHELL_MAX_PX;
 }
 
@@ -99,13 +106,18 @@ export function fieldSessionTokens(data: { refreshToken?: unknown; accessToken?:
   accessToken: string | null;
 } {
   const refresh =
-    typeof data.refreshToken === 'string' && data.refreshToken.length >= 8 ? data.refreshToken : null;
+    typeof data.refreshToken === 'string' && data.refreshToken.length >= 8
+      ? data.refreshToken
+      : null;
   const access =
     typeof data.accessToken === 'string' && data.accessToken.length >= 8 ? data.accessToken : null;
   return { refreshToken: refresh, accessToken: access };
 }
 
-export function rememberFieldEmbedSession(accessToken?: string | null, refreshToken?: string | null): void {
+export function rememberFieldEmbedSession(
+  accessToken?: string | null,
+  refreshToken?: string | null,
+): void {
   if (typeof sessionStorage === 'undefined') return;
   try {
     if (accessToken) sessionStorage.setItem(ACCESS_KEY, accessToken);
@@ -204,7 +216,10 @@ async function adoptRefreshToken(refreshToken: string): Promise<boolean> {
     const body = (await res.json().catch(() => null)) as {
       session?: { accessToken?: string; refreshToken?: string };
     } | null;
-    rememberFieldEmbedSession(body?.session?.accessToken, body?.session?.refreshToken || refreshToken);
+    rememberFieldEmbedSession(
+      body?.session?.accessToken,
+      body?.session?.refreshToken || refreshToken,
+    );
     return true;
   } catch {
     return false;
@@ -217,7 +232,28 @@ export async function refreshFieldEmbedSession(): Promise<boolean> {
   return adoptRefreshToken(refreshToken);
 }
 
-async function adoptFromMessage(data: { refreshToken?: unknown; accessToken?: unknown }): Promise<boolean> {
+async function fieldEmbedSessionIsUsable(): Promise<boolean> {
+  const access = fieldEmbedAccessToken();
+  if (access) {
+    try {
+      const res = await fetch('/api/auth/me', {
+        credentials: 'include',
+        headers: { Accept: 'application/json', Authorization: `Bearer ${access}` },
+      });
+      if (res.ok) return true;
+    } catch {
+      /* network — try refresh below */
+    }
+  }
+  if (await refreshFieldEmbedSession()) return true;
+  if (access || fieldEmbedRefreshToken()) clearFieldEmbedSession();
+  return false;
+}
+
+async function adoptFromMessage(data: {
+  refreshToken?: unknown;
+  accessToken?: unknown;
+}): Promise<boolean> {
   const { refreshToken, accessToken } = fieldSessionTokens(data);
   if (!refreshToken && !accessToken) return false;
   rememberFieldEmbedSession(accessToken, refreshToken);
@@ -225,7 +261,7 @@ async function adoptFromMessage(data: { refreshToken?: unknown; accessToken?: un
     const ok = await adoptRefreshToken(refreshToken);
     if (ok) return true;
   }
-  return Boolean(accessToken);
+  return fieldEmbedSessionIsUsable();
 }
 
 function goToAdoptedWorkspace(): void {
@@ -242,7 +278,11 @@ export function listenForFieldSession(): () => void {
   if (typeof window === 'undefined') return () => undefined;
 
   async function onMessage(event: MessageEvent) {
-    const data = event.data as { atmosphere?: string; refreshToken?: unknown; accessToken?: unknown } | null;
+    const data = event.data as {
+      atmosphere?: string;
+      refreshToken?: unknown;
+      accessToken?: unknown;
+    } | null;
     if (!data || typeof data.atmosphere !== 'string') return;
     if (!isFieldCaptureOrigin(event.origin) && event.origin !== window.location.origin) return;
 
@@ -262,10 +302,11 @@ export function listenForFieldSession(): () => void {
 }
 
 /** Hold Auth restore until Field Capture posts its session (or says it has none). */
-export function waitForParentFieldSession(timeoutMs = 8000): Promise<boolean> {
-  if (typeof window === 'undefined') return Promise.resolve(false);
-  if (fieldEmbedAccessToken()) return Promise.resolve(true);
-  if (window.parent === window) return Promise.resolve(false);
+export async function waitForParentFieldSession(timeoutMs = 8000): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  // A leftover Bearer is not a session — expiry/revoke must not look like success.
+  if (await fieldEmbedSessionIsUsable()) return true;
+  if (window.parent === window) return false;
 
   requestParentFieldSession();
 
@@ -281,10 +322,6 @@ export function waitForParentFieldSession(timeoutMs = 8000): Promise<boolean> {
     };
     sessionWaiters.push(finish);
     const poll = window.setInterval(() => {
-      if (fieldEmbedAccessToken()) {
-        finish(true);
-        return;
-      }
       requestParentFieldSession();
     }, 400);
     window.setTimeout(() => finish(false), timeoutMs);

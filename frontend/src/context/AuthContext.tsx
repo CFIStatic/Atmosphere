@@ -8,7 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError, type AuthUser, type Membership, type MemberRole, type Profile } from '../lib/api';
+import {
+  api,
+  ApiError,
+  type AuthUser,
+  type Membership,
+  type MemberRole,
+  type Profile,
+} from '../lib/api';
 import {
   isFieldEmbedMarked,
   rememberFieldEmbedSession,
@@ -62,11 +69,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMembershipLoading(true);
     let resolved: Membership | null = null;
     try {
-      const { membership } = await api.getMembership();
-      resolved = membership;
-      setMembership(membership);
-    } catch {
-      if (isFieldEmbedMarked()) {
+      try {
+        const { membership } = await api.getMembership();
+        resolved = membership;
+      } catch {
+        /* office membership unavailable — Field Capture may still have an org */
+      }
+
+      // 200 + null is not an error, so the Field Capture org fallback must
+      // run here — not only in catch.
+      if (!resolved && isFieldEmbedMarked()) {
         try {
           const field = await api.fieldAppMe();
           if (field.org?.id) {
@@ -78,16 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               status: 'active',
               org: { id: field.org.id, name: field.org.name, joinCode: '' },
             };
-            setMembership(resolved);
-          } else {
-            setMembership(null);
           }
         } catch {
-          setMembership(null);
+          resolved = null;
         }
-      } else {
-        setMembership(null);
       }
+
+      setMembership(resolved);
     } finally {
       setMembershipLoading(false);
     }

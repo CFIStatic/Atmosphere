@@ -71,7 +71,9 @@ describe('field embed helpers', () => {
   });
 
   it('accepts Field Capture session tokens and ignores empties', () => {
-    expect(fieldSessionTokens({ refreshToken: 'refresh-token-1', accessToken: 'access-token-1' })).toEqual({
+    expect(
+      fieldSessionTokens({ refreshToken: 'refresh-token-1', accessToken: 'access-token-1' }),
+    ).toEqual({
       refreshToken: 'refresh-token-1',
       accessToken: 'access-token-1',
     });
@@ -118,5 +120,13 @@ describe('field embed helpers', () => {
     });
     await expect(waitForParentFieldSession(50)).resolves.toBe(true);
     stop();
+  });
+
+  it('does not treat a leftover embed token as a live session', async () => {
+    rememberFieldEmbedSession('expired-access-token', 'expired-refresh-token');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('', { status: 401 }));
+
+    await expect(waitForParentFieldSession(50)).resolves.toBe(false);
+    expect(fieldEmbedAccessToken()).toBeNull();
   });
 });
