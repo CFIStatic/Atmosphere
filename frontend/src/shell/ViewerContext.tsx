@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
 import type { Role } from '../domain/types';
+import { displayName as resolveDisplayName, nameFromMetadata } from '../lib/display';
 
 /**
  * Who is looking at the product, and in what capacity.
@@ -37,7 +38,7 @@ function readStoredOverride(): Role | null {
 }
 
 export function ViewerProvider({ children }: { children: ReactNode }) {
-  const { user, membership } = useAuth();
+  const { user, membership, profile } = useAuth();
   const [override, setOverride] = useState<Role | null>(readStoredOverride);
 
   const viewAs = useCallback((role: Role | null) => {
@@ -58,9 +59,12 @@ export function ViewerProvider({ children }: { children: ReactNode }) {
       actualRole,
       isOverridden: override !== null && override !== actualRole,
       viewAs,
-      displayName: user?.email?.split('@')[0] ?? 'there',
+      displayName: resolveDisplayName(
+        profile?.fullName || nameFromMetadata(user?.metadata),
+        user?.email,
+      ),
     }),
-    [override, actualRole, viewAs, user?.email],
+    [override, actualRole, viewAs, profile?.fullName, user?.email, user?.metadata],
   );
 
   return <ViewerContext.Provider value={value}>{children}</ViewerContext.Provider>;

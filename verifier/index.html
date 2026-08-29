@@ -267,8 +267,11 @@
   .who:hover, .who[aria-expanded="true"] { background: var(--line-soft); }
   .who .avatar {
     width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
-    display: grid; place-items: center;
+    display: grid; place-items: center; overflow: hidden;
     font-size: 11px; font-weight: 700; color: #FFFFFF; flex: none;
+  }
+  .who .avatar img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
   }
   .who .role { color: var(--faint); font-size: 11.5px; }
   .who-menu {
@@ -4681,6 +4684,28 @@
     return name.slice(0, 2).toUpperCase() || '—';
   }
 
+  function isDisplayableAvatarUrl(url) {
+    return typeof url === 'string' && /^(https?:|data:image\/)/.test(url.trim());
+  }
+
+  function paintAvatar(el, initials, avatarUrl) {
+    if (!el) return;
+    el.replaceChildren();
+    var photo = isDisplayableAvatarUrl(avatarUrl) ? String(avatarUrl).trim() : '';
+    if (!photo) {
+      el.textContent = initials;
+      return;
+    }
+    var img = document.createElement('img');
+    img.src = photo;
+    img.alt = '';
+    img.addEventListener('error', function () {
+      el.replaceChildren();
+      el.textContent = initials;
+    });
+    el.appendChild(img);
+  }
+
   function applySession(payload) {
     if (!payload || !payload.user) return;
     var u = payload.user;
@@ -4697,7 +4722,7 @@
     var menuMeta = document.getElementById('menu-meta');
     if (whoName) whoName.textContent = name;
     if (whoSub) whoSub.textContent = sub;
-    if (whoAvatar) whoAvatar.textContent = init;
+    paintAvatar(whoAvatar, init, u.avatarUrl);
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
@@ -4723,6 +4748,7 @@
           name: (fullName && String(fullName).trim()) || (email ? String(email).split('@')[0] : '') || 'Teammate',
           email: email,
           initials: initialsFrom(fullName, email),
+          avatarUrl: (profile && profile.avatarUrl) || null,
           orgName: orgName || null
         }
       });
