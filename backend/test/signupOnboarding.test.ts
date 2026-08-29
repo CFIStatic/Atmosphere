@@ -6,6 +6,8 @@ import {
   signupCheckoutReturnUrl,
 } from '../src/lib/signupOnboarding.js';
 import {
+  WEBSITE_SIGNUP_CREATE_ONBOARDING,
+  WEBSITE_SIGNUP_JOIN_ONBOARDING,
   WEBSITE_SIGNUP_ONBOARDING,
   createOrgSchema,
   joinOrgSchema,
@@ -126,12 +128,12 @@ test('checkout returnPath must be a same-origin relative path', () => {
 test('the website signup defaults are a valid create-org payload', () => {
   const parsed = createOrgSchema.parse({
     name: 'Meridian Services',
-    ...WEBSITE_SIGNUP_ONBOARDING,
-    usageIntents: [...WEBSITE_SIGNUP_ONBOARDING.usageIntents],
+    ...WEBSITE_SIGNUP_CREATE_ONBOARDING,
+    usageIntents: [...WEBSITE_SIGNUP_CREATE_ONBOARDING.usageIntents],
   });
   assert.equal(parsed.name, 'Meridian Services');
-  assert.equal(parsed.role, 'field_technician');
-  assert.deepEqual(parsed.usageIntents, ['field_work', 'exploring']);
+  assert.equal(parsed.role, 'global_admin');
+  assert.deepEqual(parsed.usageIntents, ['field_work', 'exploring', 'billing']);
 });
 
 test('create org accepts a company name alone — the wizard no longer asks the questionnaire', () => {
@@ -145,8 +147,8 @@ test('create org accepts a company name alone — the wizard no longer asks the 
 test('join org accepts a join code alone', () => {
   const parsed = joinOrgSchema.parse({ joinCode: '8f3a9c2b' });
   assert.equal(parsed.joinCode, '8F3A9C2B');
-  assert.equal(parsed.role, WEBSITE_SIGNUP_ONBOARDING.role);
-  assert.deepEqual(parsed.usageIntents, [...WEBSITE_SIGNUP_ONBOARDING.usageIntents]);
+  assert.equal(parsed.role, WEBSITE_SIGNUP_JOIN_ONBOARDING.role);
+  assert.deepEqual(parsed.usageIntents, [...WEBSITE_SIGNUP_JOIN_ONBOARDING.usageIntents]);
 });
 
 async function withTestServer(
