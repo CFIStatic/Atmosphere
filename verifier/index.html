@@ -703,12 +703,26 @@
       border: 0;
       padding: 0;
     }
-    .topbar { height: 56px; gap: 8px; padding: 0 10px; min-width: 0; }
+    .topbar {
+      height: auto;
+      min-height: 56px;
+      gap: 8px;
+      padding: 6px 10px 8px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
     .topbar .spacer { display: none; }
-    .brand-fallback span { display: none; }
-    .brand-fallback svg { width: 28px; height: 28px; }
-    .search { flex: 1 1 auto; min-width: 0; max-width: none; }
-    .search input { min-width: 0; }
+    .brand-fallback { display: none; }
+    .search {
+      flex: 1 1 100%;
+      order: 5;
+      min-width: 0;
+      max-width: none;
+    }
+    .search input { min-width: 0; width: 100%; }
+    .rail-menu { order: 1; }
+    .theme-toggle { order: 2; margin-left: auto; }
+    .who-wrap { order: 3; }
     .navitem {
       min-height: 44px;
       padding: 11px 12px;

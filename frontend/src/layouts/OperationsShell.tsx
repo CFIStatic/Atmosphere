@@ -84,7 +84,7 @@ export function OperationsShell() {
               className={
                 isJobsList
                   ? phone
-                    ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 items-center gap-2 border-b border-line bg-paper-0 px-3'
+                    ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-paper-0 px-3 py-2'
                     : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
                   : phone
                     ? 'flex min-h-14 min-w-0 shrink-0 items-center gap-2 border-b border-line px-3 py-2'
@@ -106,6 +106,7 @@ export function OperationsShell() {
                   value={jobSearch}
                   onChange={setJobSearch}
                   aria-label="Search job files"
+                  className={phone ? 'order-last basis-full' : undefined}
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}

@@ -6,14 +6,16 @@
 export function DashboardSearchBar({
   value,
   onChange,
+  className,
   'aria-label': ariaLabel = 'Search videos',
 }: {
   value: string;
   onChange: (value: string) => void;
+  className?: string;
   'aria-label'?: string;
 }) {
   return (
-    <div className="relative min-w-0 flex-1 md:max-w-[520px]">
+    <div className={`relative min-w-0 flex-1 md:max-w-[520px] ${className ?? ''}`}>
       <svg
         width="14"
         height="14"

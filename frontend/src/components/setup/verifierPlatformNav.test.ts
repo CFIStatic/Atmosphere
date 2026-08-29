@@ -53,7 +53,9 @@ describe('verifier office rail', () => {
 
   it('keeps the phone account chip identical to the desktop chip', () => {
     expect(verifierHtml).toContain('.topbar .spacer { display: none; }');
-    expect(verifierHtml).toContain('.search { flex: 1 1 auto; min-width: 0; max-width: none; }');
+    expect(verifierHtml).toContain('.search {');
+    expect(verifierHtml).toContain('flex: 1 1 100%');
+    expect(verifierHtml).toContain('order: 5');
     expect(verifierHtml).toContain('.who .role { display: block; color: var(--faint); font-size: 11.5px; }');
     expect(verifierHtml).not.toMatch(/\.who \.role \{ display: none/);
     expect(verifierHtml).toContain('thead { display: none; }');

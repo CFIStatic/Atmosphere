@@ -77,6 +77,7 @@ describe('Job Files search chrome', () => {
       'utf8',
     );
     expect(shell).toContain('{isJobsList && !phone && <div className="flex-1" />}');
+    expect(shell).toContain("className={phone ? 'order-last basis-full' : undefined}");
     expect(shell).toContain('overflow-x-hidden');
   });
 });
