@@ -137,10 +137,11 @@
   .who {
     display: flex; align-items: center; gap: 9px;
     max-width: min(210px, 56vw);
-    padding: 4px 6px; border: 0; border-radius: 10px;
-    background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+    padding: 5px 7px 5px 9px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--bg); color: inherit; font: inherit; text-align: left; cursor: pointer;
   }
-  .who:hover, .who[aria-expanded="true"] { background: var(--line-soft); }
+  .who:hover, .who[aria-expanded="true"] { background: var(--line-soft); border-color: var(--muted); }
   .who .who-copy { min-width: 0; }
   .who #who-name {
     display: block; color: var(--ink); font-size: 12.5px; font-weight: 650;
@@ -160,7 +161,7 @@
     position: absolute; right: 0; top: calc(100% + 6px); z-index: 80;
     min-width: 228px; padding: 5px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: 0 14px 36px -14px rgba(0,0,0,.4);
+    box-shadow: 0 18px 40px -16px rgba(0,0,0,.45);
   }
   .who-menu-head {
     padding: 8px 9px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
