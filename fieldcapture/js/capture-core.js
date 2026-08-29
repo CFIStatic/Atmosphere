@@ -428,15 +428,12 @@
   }
 
   /**
-   * Office web console (Work Verification Platform).
-   *
-   * Same-origin when Field Capture is served under /fieldcapture/ on the
-   * office host. On the standalone Field Capture Railway app, /field is
-   * this same static app — so the Platform tab iframes the live office
-   * origin and stays inside the 480px web frame.
+   * Office web console origin + path. Same-origin when Field Capture is
+   * served under /fieldcapture/ on the office host. On the standalone
+   * Field Capture Railway app, point at the live office origin.
    */
-  function resolveOfficePlatformHref(pathname) {
-    var path = withFieldEmbed(pathname || '/verifier-library');
+  function resolveOfficeHref(pathname) {
+    var path = pathname || '/';
     if (path.charAt(0) !== '/') path = '/' + path;
     var hostname = '';
     try {
@@ -446,6 +443,15 @@
     }
     if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN + path;
     return path;
+  }
+
+  /**
+   * Platform tab inside the 480px web frame. embed=field keeps the office
+   * console in iframe chrome. Do not use this for top-level office pages
+   * (signup, forgot password) — those leave Field Capture.
+   */
+  function resolveOfficePlatformHref(pathname) {
+    return resolveOfficeHref(withFieldEmbed(pathname || '/verifier-library'));
   }
 
   /** Name + office invite code. No email or password. */
@@ -614,6 +620,7 @@
     loginWithPassword: loginWithPassword,
     linkOffice: linkOffice,
     resolveApiBase: resolveApiBase,
+    resolveOfficeHref: resolveOfficeHref,
     resolveOfficePlatformHref: resolveOfficePlatformHref,
     withFieldEmbed: withFieldEmbed,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,

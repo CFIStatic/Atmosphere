@@ -815,12 +815,12 @@
       link.href = Core.resolveOfficePlatformHref('/verifier-library');
     }
     var forgot = document.getElementById('forgot-link');
-    if (forgot && Core.resolveOfficePlatformHref) {
-      forgot.href = Core.resolveOfficePlatformHref('/forgot-password');
+    if (forgot && Core.resolveOfficeHref) {
+      forgot.href = Core.resolveOfficeHref('/forgot-password');
     }
     var signup = document.getElementById('signup-link');
-    if (signup && Core.resolveOfficePlatformHref) {
-      signup.href = Core.resolveOfficePlatformHref('/signup');
+    if (signup && Core.resolveOfficeHref) {
+      signup.href = Core.resolveOfficeHref('/signup');
     }
 
     function officeFrameOrigin(href) {

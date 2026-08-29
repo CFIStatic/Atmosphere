@@ -30,7 +30,10 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
     expect(nginx).toMatch(/location \/verifier\/ \{\s*add_header Cache-Control "no-store";/);
-    expect(nginx).toContain("frame-ancestors 'self' https://*.up.railway.app");
+    expect(nginx).toContain(
+      "frame-ancestors 'self' https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app",
+    );
+    expect(nginx).not.toContain('https://*.up.railway.app');
     expect(nginx).not.toMatch(/add_header X-Frame-Options/);
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
@@ -203,7 +206,7 @@ describe('every front door proxies /api over the private mesh', () => {
   });
 
   it('deploys the staff site from this repo to the public BFF', () => {
-    expect(office).toContain("service=\"${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}\"");
+    expect(office).toContain('service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"');
     expect(office).toContain('upstream="https://atmosphere-production.up.railway.app"');
     expect(office).toContain('cp internal/railway.toml railway.toml');
   });

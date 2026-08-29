@@ -10,7 +10,9 @@ const verifierHtml = readFileSync(
 
 describe('verifier office rail', () => {
   it('lists Overview, Start a job, Dashboard, and Job Files', () => {
-    const nav = verifierHtml.match(/<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/);
+    const nav = verifierHtml.match(
+      /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
+    );
     expect(nav).not.toBeNull();
     const labels = [...nav![0].matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(labels).toEqual(['Overview', 'Start a job', 'Dashboard', 'Job Files']);
@@ -43,12 +45,18 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('html[data-rail-open]');
     expect(verifierHtml).toContain('function setRailOpen');
     expect(verifierHtml).toContain('min(280px, 86vw)');
+    expect(verifierHtml).toContain('body[data-atm-rail-only] .app-frame.has-sidebar .rail');
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]\s+\.app-frame\.has-sidebar\s+\.rail\s*\{[^}]*transform:\s*none/,
+    );
   });
 
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
     expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);
-    expect(verifierHtml).not.toMatch(/body\[data-atm-rail-only\]\s+#evidence-nav\s*\{[^}]*display:\s*none/);
+    expect(verifierHtml).not.toMatch(
+      /body\[data-atm-rail-only\]\s+#evidence-nav\s*\{[^}]*display:\s*none/,
+    );
     expect(verifierHtml).toContain(
       "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
     );

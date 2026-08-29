@@ -717,6 +717,17 @@
   }
   body[data-atm-rail-only] .rail-menu { display: none !important; }
   body[data-atm-rail-only] .rail-backdrop { display: none !important; }
+  /* Office shell already slides this iframe as the phone drawer. The
+     ≤640px rules above would hide .rail (higher specificity + no
+     html[data-rail-open] in this document), so keep the rail on-screen. */
+  body[data-atm-rail-only] .app-frame.has-sidebar .rail {
+    position: relative;
+    inset: auto;
+    width: auto;
+    transform: none;
+    box-shadow: none;
+    z-index: auto;
+  }
 
   .rail h3 {
     margin: 4px 12px 8px;
