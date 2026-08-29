@@ -4743,12 +4743,19 @@
       var fullName = (profile && profile.fullName) || meta.full_name || meta.fullName || meta.name || null;
       var email = (profile && profile.email) || (me && me.email) || '';
       var orgName = membership && membership.org && membership.org.name;
+      var avatarUrl = (profile && profile.avatarUrl) || null;
+      if (!profile) {
+        var painted = document.getElementById('who-avatar');
+        var paintedImg = painted && painted.querySelector('img');
+        var paintedSrc = paintedImg && paintedImg.getAttribute('src');
+        if (paintedSrc) avatarUrl = paintedSrc;
+      }
       applySession({
         user: {
           name: (fullName && String(fullName).trim()) || (email ? String(email).split('@')[0] : '') || 'Teammate',
           email: email,
           initials: initialsFrom(fullName, email),
-          avatarUrl: (profile && profile.avatarUrl) || null,
+          avatarUrl: avatarUrl,
           orgName: orgName || null
         }
       });

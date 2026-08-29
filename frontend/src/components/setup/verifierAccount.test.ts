@@ -18,14 +18,17 @@ function extract(start: string, end: string): string {
 
 describe('verifier account chip', () => {
   it('paints the saved photo instead of initials when a session includes avatarUrl', () => {
-    const who = verifierHtml.match(/<div class="who-wrap" id="who-wrap">[\s\S]*?<\/div>\s*<\/header>/);
+    const who = verifierHtml.match(
+      /<div class="who-wrap" id="who-wrap">[\s\S]*?<\/div>\s*<\/header>/,
+    );
     const sessionJs = extract(
       'function initialsFrom(fullName, email) {',
       'function loadAccountFromApi() {',
     );
     expect(who).not.toBeNull();
     expect(verifierHtml).toContain('.who .avatar img');
-    expect(verifierHtml).toContain('avatarUrl: (profile && profile.avatarUrl) || null');
+    expect(verifierHtml).toContain('var avatarUrl = (profile && profile.avatarUrl) || null');
+    expect(verifierHtml).toContain('if (!profile)');
 
     const dom = new JSDOM(
       `<!doctype html><html><body>${who![0]}<script>
@@ -66,5 +69,58 @@ describe('verifier account chip', () => {
     });
     expect(avatar?.querySelector('img')).toBeNull();
     expect(avatar?.textContent).toBe('JC');
+  });
+
+  it('keeps a parent-session photo when /api/profile is unavailable', async () => {
+    const who = verifierHtml.match(
+      /<div class="who-wrap" id="who-wrap">[\s\S]*?<\/div>\s*<\/header>/,
+    );
+    const sessionJs = extract(
+      'function initialsFrom(fullName, email) {',
+      'function initAccountMenu() {',
+    );
+
+    const dom = new JSDOM(
+      `<!doctype html><html><body>${who![0]}<script>
+        ${sessionJs}
+      </script></body></html>`,
+      { runScripts: 'dangerously', url: 'https://atmosphere.test/verifier/' },
+    );
+
+    const win = dom.window as unknown as {
+      document: Document;
+      applySession: (payload: { user: Record<string, unknown> }) => void;
+      loadAccountFromApi: () => void;
+      fetch: typeof fetch;
+    };
+
+    win.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/auth/me')) {
+        return {
+          ok: true,
+          json: async () => ({
+            user: { email: 'jack@jettx.ai', metadata: { full_name: 'Jack Cyganiak' } },
+          }),
+        } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    win.applySession({
+      user: {
+        name: 'Jack Cyganiak',
+        email: 'jack@jettx.ai',
+        initials: 'JC',
+        avatarUrl: 'https://img.example/jack.jpg',
+        orgName: 'Jettx LLC',
+      },
+    });
+
+    win.loadAccountFromApi();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const avatar = win.document.getElementById('who-avatar');
+    expect(avatar?.querySelector('img')?.getAttribute('src')).toBe('https://img.example/jack.jpg');
   });
 });
