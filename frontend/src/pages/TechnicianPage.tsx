@@ -9,6 +9,8 @@ import {
   type StoredRecording,
 } from '../lib/recordings';
 import { Logo } from '../components/Logo';
+import { PersonAvatar } from '../components/PersonAvatar';
+import { displayName, nameFromMetadata } from '../lib/display';
 import { AudioRecorderPanel } from '../components/technician/AudioRecorderPanel';
 import { VoiceAssistantPanel } from '../components/technician/VoiceAssistantPanel';
 import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
@@ -40,7 +42,7 @@ const DETECTION_FRESHNESS_MS = 2 * 60 * 1000;
  */
 export function TechnicianPage() {
   useFeatureTimer('technician');
-  const { user, membership, logout } = useAuth();
+  const { user, profile, membership, logout } = useAuth();
   const [view, setView] = useState<View>('capture');
   const [guideContext, setGuideContext] = useState<{ jobId: string; phase: 'before' | 'after' } | null>(null);
   const [capabilities, setCapabilities] = useState<TechnicianCapabilities | null>(null);
@@ -131,7 +133,8 @@ export function TechnicianPage() {
     { id: 'recordings', label: 'Recordings', Icon: ScanIcon, badge: recordingCount },
   ];
 
-  const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
+  const personName = profile?.fullName || nameFromMetadata(user?.metadata);
+  const personLabel = displayName(personName, user?.email);
 
   const assistant = (
     <VoiceAssistantPanel
@@ -189,11 +192,14 @@ export function TechnicianPage() {
 
         <div className="border-t border-line p-3">
           <div className="flex items-center gap-2.5 px-1.5 py-1">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-              {initials}
-            </span>
+            <PersonAvatar
+              fullName={personName}
+              email={user?.email}
+              avatarUrl={profile?.avatarUrl}
+              size="md"
+            />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-ink-800">{user?.email}</p>
+              <p className="truncate text-xs font-medium text-ink-800">{personLabel}</p>
               <p className="truncate text-[11px] text-ink-500">
                 {membership ? ROLE_LABELS[membership.role] : 'Field'}
               </p>
@@ -239,8 +245,13 @@ export function TechnicianPage() {
                   ? 'Assistant ready'
                   : 'On-device only'}
             </span>
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 lg:hidden">
-              {initials}
+            <span className="lg:hidden">
+              <PersonAvatar
+                fullName={personName}
+                email={user?.email}
+                avatarUrl={profile?.avatarUrl}
+                size="md"
+              />
             </span>
           </div>
         </header>
