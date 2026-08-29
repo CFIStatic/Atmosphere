@@ -51,7 +51,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('class="preview-pane"');
     expect(verifierHtml).toContain('class="preview-pane-fill"');
     expect(verifierHtml).toContain('border: 2px solid var(--line)');
-    expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
+    expect(verifierHtml).toMatch(/id="d-back"[\s\S]*back-label[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).toContain('class="side"');
     expect(verifierHtml).toContain('backdrop-filter: blur(6px) saturate(120%)');
     expect(verifierHtml).toContain('animation: liquid-sheen');
@@ -154,5 +154,14 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.getElementById('screen-dashboard')?.hidden).toBe(false);
     expect(document.body.getAttribute('data-preview-open')).toBeNull();
     dom.window.close();
+  });
+
+  it('stacks the phone clip viewer: video above notes, no two-column squeeze', () => {
+    expect(verifierHtml).toContain('Phone / Field Capture: full-screen clip, video above the notes.');
+    expect(verifierHtml).toContain('.screen-preview .sheethead .id { display: none; }');
+    expect(verifierHtml).toContain('grid-template-rows: auto minmax(0, 1fr)');
+    expect(verifierHtml).toContain('aspect-ratio: 9 / 16');
+    expect(verifierHtml).toContain('.screen-preview .back-label { display: none; }');
+    expect(verifierHtml).toContain('class="meta-line"');
   });
 });
