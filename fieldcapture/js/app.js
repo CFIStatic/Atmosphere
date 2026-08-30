@@ -64,6 +64,28 @@
     if (signout) signout.hidden = !accountActions;
   }
 
+  function isDisplayableAvatarUrl(url) {
+    return typeof url === 'string' && /^(https?:|data:image\/)/.test(url.trim());
+  }
+
+  function paintAvatar(el, initials, avatarUrl) {
+    if (!el) return;
+    el.replaceChildren();
+    var photo = isDisplayableAvatarUrl(avatarUrl) ? String(avatarUrl).trim() : '';
+    if (!photo) {
+      el.textContent = initials;
+      return;
+    }
+    var img = document.createElement('img');
+    img.src = photo;
+    img.alt = '';
+    img.addEventListener('error', function () {
+      el.replaceChildren();
+      el.textContent = initials;
+    });
+    el.appendChild(img);
+  }
+
   function paintFieldAccount(opts) {
     opts = opts || {};
     var name = opts.name || 'Your account';
@@ -77,7 +99,7 @@
     var menuMeta = document.getElementById('menu-meta');
     if (whoName) whoName.textContent = name;
     if (whoSub) whoSub.textContent = org;
-    if (avatar) avatar.textContent = initialsFrom(name, email);
+    paintAvatar(avatar, initialsFrom(name, email), opts.avatarUrl);
     if (menuName) menuName.textContent = name;
     if (menuEmail) {
       menuEmail.textContent = email;
@@ -386,6 +408,7 @@
       name: (me.user && (me.user.fullName || me.user.email)) || 'You',
       email: (me.user && me.user.email) || '',
       org: (me.org && me.org.name) || 'Office',
+      avatarUrl: (me.user && me.user.avatarUrl) || null,
       account: true,
     });
     renderExpect(state.jobs);

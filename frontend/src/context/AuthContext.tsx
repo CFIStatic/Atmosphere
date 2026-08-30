@@ -21,6 +21,7 @@ import {
   rememberFieldEmbedSession,
   waitForParentFieldSession,
   clearFieldEmbedSession,
+  postSignOutToFieldCapture,
 } from '../lib/fieldEmbed';
 import { preferFresherProfile } from '../lib/preferFresherProfile';
 
@@ -212,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout();
     } finally {
       clearFieldEmbedSession();
+      postSignOutToFieldCapture();
       setUser(null);
       setMembership(null);
       setProfile(null);

@@ -81,12 +81,16 @@ describe('Job Files search chrome', () => {
     expect(shell).toContain('overflow-x-hidden');
   });
 
-  it('keeps the phone light/dark control in the account menu, not the header', () => {
+  it('puts the account profile in the top-right on phone and desktop rail-only tabs', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
-    expect(shell).toContain('{!phone && (');
-    expect(shell).toContain('<ThemeToggle />');
+    expect(shell).toContain('HeaderAccountChip');
+    expect(shell).toContain('ml-auto shrink-0');
+    expect(shell).toContain('justify-between');
+    expect(shell).toContain('Open navigation');
+    expect(shell).not.toContain('ThemeToggle');
+    expect(shell).not.toContain('{!phone && (');
   });
 });

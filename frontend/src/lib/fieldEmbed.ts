@@ -204,6 +204,16 @@ export function requestParentFieldSession(): void {
   window.parent.postMessage({ atmosphere: REQUEST_FIELD_SESSION }, parentOrigin());
 }
 
+/** Tell Field Capture to drop its tokens — the phone top bar is hidden on Platform. */
+export function postSignOutToFieldCapture(): void {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  try {
+    window.parent.postMessage({ atmosphere: 'sign-out' }, parentOrigin());
+  } catch {
+    /* ignore */
+  }
+}
+
 async function adoptRefreshToken(refreshToken: string): Promise<boolean> {
   try {
     const res = await fetch('/api/auth/refresh', {

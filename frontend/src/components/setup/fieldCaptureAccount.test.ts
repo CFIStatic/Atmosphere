@@ -57,6 +57,7 @@ describe('Field Capture account menu', () => {
             name: string;
             email?: string;
             org?: string;
+            avatarUrl?: string | null;
             account?: boolean;
           }) => void;
           closeFieldAccountMenu: () => void;
@@ -75,6 +76,7 @@ describe('Field Capture account menu', () => {
     expect(document.getElementById('who-name')?.textContent).toBe('Jack Cyganiak');
     expect(document.getElementById('who-sub')?.textContent).toBe('Jettx LLC');
     expect(document.getElementById('who-avatar')?.textContent).toBe('JC');
+    expect(document.getElementById('who-avatar')?.querySelector('img')).toBeNull();
     expect(document.getElementById('menu-name')?.textContent).toBe('Jack Cyganiak');
     expect(document.getElementById('menu-email')?.textContent).toBe('jack@jettx.ai');
     expect(document.getElementById('menu-meta')?.textContent).toBe('Jettx LLC');
@@ -89,6 +91,49 @@ describe('Field Capture account menu', () => {
     expect(document.getElementById('fc-theme-toggle')?.textContent).toContain('Appearance:');
     api.closeFieldAccountMenu();
     expect(menu?.hidden).toBe(true);
+  });
+
+  it('paints the saved profile photo instead of initials', () => {
+    const paintJs = fieldApp.match(
+      /function initialsFrom\(name, email\) \{[\s\S]*?showFieldAccount\(true, \{ account: Boolean\(opts.account\) \}\);\n  \}/,
+    );
+    expect(paintJs).not.toBeNull();
+    expect(fieldApp).toContain('opts.avatarUrl');
+    expect(fieldApp).toContain('me.user.avatarUrl');
+
+    const dom = new JSDOM(
+      `<!doctype html><html><body>${headerHtml()}<script>
+        ${paintJs![0]}
+        window.__fcAccount = { paintFieldAccount: paintFieldAccount };
+      </script></body></html>`,
+      { runScripts: 'dangerously', url: 'https://field-capture.test/' },
+    );
+    const { document } = dom.window;
+    const api = (
+      dom.window as unknown as {
+        __fcAccount: {
+          paintFieldAccount: (opts: {
+            name: string;
+            email?: string;
+            org?: string;
+            avatarUrl?: string | null;
+            account?: boolean;
+          }) => void;
+        };
+      }
+    ).__fcAccount;
+
+    api.paintFieldAccount({
+      name: 'Jack Cyganiak',
+      email: 'jack@jettx.ai',
+      org: 'Jettx LLC',
+      avatarUrl: 'https://img.example/jack-icon.png',
+      account: true,
+    });
+
+    const avatar = document.getElementById('who-avatar');
+    expect(avatar?.textContent).toBe('');
+    expect(avatar?.querySelector('img')?.getAttribute('src')).toBe('https://img.example/jack-icon.png');
   });
 
   it('opens Settings in the in-app Platform and signs out from the same menu', () => {

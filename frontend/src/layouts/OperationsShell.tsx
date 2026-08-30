@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { DashboardSearchBar } from '../components/DashboardSearchBar';
+import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { usePhoneShell } from '../lib/usePhoneShell';
@@ -14,16 +14,18 @@ const RAIL_W = 248;
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
  * the screen; Overview, Start a job, Dashboard, Job Files, and Settings
- * render beside the same anchored rail. The one light/dark control lives in
- * the top-right of these React pages because the verifier top bar is hidden
- * in rail-only mode. The rail itself only has Settings — no second moon/sun
- * button.
+ * render beside the same anchored rail. The account chip (name, org, avatar)
+ * lives in the top-right of these React pages because the verifier top bar is
+ * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
+ * menu — same as Dashboard. The rail itself only has Settings.
  *
  * Job Files reuses the Dashboard search chrome: same 72px bar, same field,
  * same placeholder. The list itself has no second title or filter row.
  *
  * On a phone — including the Field Capture 480px web frame — the 248px rail
- * becomes a hamburger drawer so the work stays full-width and tappable.
+ * becomes a hamburger drawer. The account chip stays in the top-right of
+ * that header so Platform is not missing a profile while Field Capture's own
+ * top bar is hidden.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();
@@ -84,10 +86,10 @@ export function OperationsShell() {
               className={
                 isJobsList
                   ? phone
-                    ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-paper-0 px-3 py-2'
+                    ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
                     : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
                   : phone
-                    ? 'flex min-h-14 min-w-0 shrink-0 items-center gap-2 border-b border-line px-3 py-2'
+                    ? 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2'
                     : 'flex shrink-0 items-center justify-end border-b border-line px-4 py-2.5 sm:px-6'
               }
             >
@@ -110,11 +112,9 @@ export function OperationsShell() {
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}
-              {!phone && (
-                <div className="shrink-0">
-                  <ThemeToggle />
-                </div>
-              )}
+              <div className="ml-auto shrink-0">
+                <HeaderAccountChip />
+              </div>
             </header>
             <div
               className={

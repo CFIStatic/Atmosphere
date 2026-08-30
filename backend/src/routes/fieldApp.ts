@@ -27,6 +27,7 @@ import {
   type TodayJobInput,
 } from '../field/todayJobs.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
+import { isDisplayableAvatarUrl } from '../lib/avatar.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -194,15 +195,17 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
       .maybeSingle();
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name')
+      .select('full_name, avatar_url')
       .eq('id', userId)
       .maybeSingle();
+    const row = profile as { full_name?: string; avatar_url?: string | null } | null;
 
     res.json({
       user: {
         id: userId,
         email: req.user?.email ?? null,
-        fullName: (profile as { full_name?: string } | null)?.full_name ?? null,
+        fullName: row?.full_name ?? null,
+        avatarUrl: isDisplayableAvatarUrl(row?.avatar_url) ? (row?.avatar_url ?? null) : null,
       },
       org: {
         id: orgId,
