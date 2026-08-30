@@ -4,6 +4,18 @@ struct TodayView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
+    @State private var jobQuery = ""
+
+    private var visibleJobs: [ExpectedJob] {
+        let q = jobQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q.isEmpty { return session.jobs }
+        return session.jobs.filter { job in
+            [job.name, job.address, job.number, job.id]
+                .joined(separator: " ")
+                .lowercased()
+                .contains(q)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,11 +31,20 @@ struct TodayView: View {
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(FieldTheme.ink)
 
-                    Text(
-                        "One button. Tap when you get to a job and hold for 5 seconds when you are done. You can add more video any time. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(FieldTheme.faint)
+                        TextField("Search jobs", text: $jobQuery)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(FieldTheme.panel)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(FieldTheme.line)
                     )
-                    .font(.system(size: 15))
-                    .foregroundStyle(FieldTheme.muted)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Jobs")
@@ -38,8 +59,12 @@ struct TodayView: View {
                             Text("Nothing assigned to you yet. Ask the office to put you on a job, then pull to refresh.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
+                        } else if visibleJobs.isEmpty {
+                            Text("No matching jobs. Try a different name or address.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(FieldTheme.muted)
                         }
-                        ForEach(session.jobs) { job in
+                        ForEach(visibleJobs) { job in
                             Button {
                                 session.activeJobId = job.id
                             } label: {
