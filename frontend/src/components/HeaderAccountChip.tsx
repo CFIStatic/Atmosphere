@@ -62,7 +62,7 @@ export function HeaderAccountChip() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="flex items-center gap-[9px] rounded-lg px-1.5 py-1 text-left transition hover:bg-paper-200"
+        className="flex min-h-11 items-center gap-[9px] rounded-xl px-1.5 py-1 text-left transition hover:bg-paper-200"
       >
         <span className="min-w-0 max-w-[9.5rem] sm:max-w-[12rem]">
           <span className="block truncate text-[12.5px] leading-tight text-ink-700">{name}</span>
