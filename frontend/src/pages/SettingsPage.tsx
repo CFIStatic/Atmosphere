@@ -666,7 +666,7 @@ function LinkedAccountsCard() {
         </div>
       ) : members.length === 0 ? (
         <p className="text-sm text-ink-500">
-          No linked accounts yet. Share the join code so teammates can link theirs.
+          No linked accounts yet. Invite teammates so they can link theirs.
         </p>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">

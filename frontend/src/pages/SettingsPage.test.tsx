@@ -143,6 +143,8 @@ describe('Settings organization', () => {
 
     expect(screen.getByText('Invite teammates')).toBeInTheDocument();
     expect(screen.getByText('Linked accounts')).toBeInTheDocument();
+    expect(screen.queryByText(/join code/i)).toBeNull();
+    expect(screen.queryByText('ABC123')).toBeNull();
     expect(screen.queryByText('Field Capture app')).toBeNull();
     expect(screen.queryByText('The office account your login is linked to.')).toBeNull();
     expect(screen.queryByText('Company type')).toBeNull();

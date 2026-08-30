@@ -32,16 +32,6 @@ export function SettingsPage() {
               />
             )}
             <Row label="Organization" value={membership?.org?.name ?? '—'} />
-            {membership?.org?.joinCode && (
-              <Row
-                label="Invite code"
-                value={
-                  <code className="rounded bg-raised px-2 py-0.5 font-mono text-xs tracking-widest text-brand-300">
-                    {membership.org.joinCode}
-                  </code>
-                }
-              />
-            )}
           </CardBody>
         </Card>
 
