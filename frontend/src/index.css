@@ -645,6 +645,29 @@ html[data-field-embed] #root {
   }
 }
 
+/* Office rail width — same breakpoints as verifier/index.html --rail-w so
+   Dashboard (full iframe) and the other tabs (rail-only iframe) share one
+   inset. The rail keeps its own right border; do not also border the host. */
+.operations-chrome {
+  --office-rail-w: 248px;
+}
+@media (max-width: 1100px) {
+  .operations-chrome {
+    --office-rail-w: 236px;
+  }
+}
+@media (max-width: 900px) {
+  .operations-chrome {
+    --office-rail-w: 228px;
+  }
+}
+.operations-rail {
+  width: var(--office-rail-w);
+}
+.operations-main {
+  padding-left: var(--office-rail-w);
+}
+
 /* Legacy class kept so older references do not break */
 .hor-shell {
   background: #f4f1eb;

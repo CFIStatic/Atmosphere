@@ -9,8 +9,6 @@ import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
 import { JobFilesSearchContext } from './jobFilesSearch';
 
-const RAIL_W = 248;
-
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
  * the screen; Overview, Start a job, Dashboard, Job Files, and Settings
@@ -22,7 +20,7 @@ const RAIL_W = 248;
  * Job Files reuses the Dashboard search chrome: same 72px bar, same field,
  * same placeholder. The list itself has no second title or filter row.
  *
- * On a phone — including the Field Capture 480px web frame — the 248px rail
+ * On a phone — including the Field Capture 480px web frame — the office rail
  * becomes a hamburger drawer. The account chip stays in the top-right of
  * that header so Platform is not missing a profile while Field Capture's own
  * top bar is hidden.
@@ -48,15 +46,17 @@ export function OperationsShell() {
   const railClass = isLibrary
     ? 'fixed inset-0 z-0 h-full w-full'
     : phone
-      ? `fixed inset-y-0 left-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden border-r border-line bg-panel shadow-xl transition-transform duration-200 ${
+      ? `fixed inset-y-0 left-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
           railOpen ? 'translate-x-0' : '-translate-x-full'
         }`
-      : 'fixed inset-y-0 left-0 z-20 h-full w-[248px] overflow-hidden border-r border-line bg-panel';
+      : 'operations-rail fixed inset-y-0 left-0 z-20 h-full overflow-hidden bg-panel';
 
   return (
     <div
       className={
-        phone ? 'relative h-[100dvh] overflow-hidden bg-paper-100' : 'relative min-h-screen bg-paper-100'
+        phone
+          ? 'operations-chrome relative h-[100dvh] overflow-hidden bg-paper-100'
+          : 'operations-chrome relative min-h-screen bg-paper-100'
       }
     >
       <VerifierFrame railOnly={!isLibrary} className={railClass} />
@@ -75,12 +75,11 @@ export function OperationsShell() {
               isJobFile
                 ? phone
                   ? 'flex h-full flex-col overflow-hidden'
-                  : 'flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
+                  : 'operations-main flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
                 : phone
                   ? 'flex h-full flex-col overflow-hidden'
-                  : 'min-h-screen'
+                  : 'operations-main min-h-screen'
             }
-            style={{ paddingLeft: phone ? 0 : RAIL_W }}
           >
             <header
               className={
