@@ -49,6 +49,13 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toMatch(
       /body\[data-atm-rail-only\]\s+\.app-frame\.has-sidebar\s+\.rail\s*\{[^}]*transform:\s*none/,
     );
+    expect(verifierHtml).toContain('body[data-atm-rail-only] .navitem');
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]\s+\.navitem\s*\{[^}]*min-height:\s*0/,
+    );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]\s+\.navitem\s*\{[^}]*padding:\s*8px 10px/,
+    );
   });
 
   it('keeps the phone account chip identical to the desktop chip', () => {

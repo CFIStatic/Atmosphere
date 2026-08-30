@@ -754,7 +754,6 @@
   body[data-atm-rail-only] .rail {
     grid-area: rail;
     height: 100%;
-    border-right: 0;
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
@@ -862,6 +861,14 @@
     transform: none;
     box-shadow: none;
     z-index: auto;
+  }
+  /* The office shell hosts this iframe at ~248px, which matches the phone
+     breakpoint above. Keep Dashboard's desktop nav metrics so Overview,
+     Start a job, and Job Files do not indent or fatten the rows. */
+  body[data-atm-rail-only] .navitem {
+    min-height: 0;
+    padding: 8px 10px;
+    font-size: 13px;
   }
 
   .rail h3 {
