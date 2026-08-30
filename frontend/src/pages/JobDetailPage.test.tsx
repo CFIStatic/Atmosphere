@@ -164,6 +164,7 @@ function renderJob() {
 
 describe('JobDetailPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     getJob.mockReset();
     sharedJob.mockReset();
     jobProofs.mockReset();
@@ -208,6 +209,9 @@ describe('JobDetailPage', () => {
     await waitFor(() => {
       expect(getJob).toHaveBeenCalledWith('job-1038');
     });
+    expect(JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038']).toEqual(
+      expect.any(Number),
+    );
   });
 
   it('shares the job file instead of showing a Scheduled status', async () => {
