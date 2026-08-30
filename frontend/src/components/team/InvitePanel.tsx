@@ -28,7 +28,6 @@ const ago = (iso: string) => {
 
 export function InvitePanel() {
   const { membership } = useAuth();
-  const joinCode = membership?.org?.joinCode ?? null;
   const admin = isGlobalAdmin(membership?.role);
   const roles: OrgProductRole[] = ROLES;
 
@@ -37,7 +36,6 @@ export function InvitePanel() {
   const [role, setRole] = useState<MemberRole>('employee');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -78,7 +76,7 @@ export function InvitePanel() {
       setOutcome(
         res.emailed
           ? `Invited — Atmosphere emailed ${email}.`
-          : `Invited. Atmosphere could not email them, so send the code yourself — it is below.`,
+          : `Invited. Atmosphere could not email them, so let them know to check with you.`,
       );
       setEmail('');
       await load();
@@ -98,36 +96,15 @@ export function InvitePanel() {
     }
   }
 
-  async function copyCode() {
-    if (!joinCode) return;
-    try {
-      await navigator.clipboard.writeText(joinCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('Join code', joinCode);
-    }
-  }
-
   const pending = (invites ?? []).filter((i) => i.status === 'pending');
 
   return (
     <section className="mb-6 rounded-xl glass-card p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Invite teammates</h2>
-        {joinCode && (
-          <button
-            onClick={() => void copyCode()}
-            className="rounded-full glass-card px-3 py-1 text-xs font-medium text-ink-600 hover:text-ink-900"
-          >
-            {copied ? 'Copied' : `Join code: ${joinCode}`}
-          </button>
-        )}
-      </div>
+      <h2 className="text-base font-semibold text-ink-900">Invite teammates</h2>
       <p className="mt-1 text-xs text-ink-500">
         Only you (Global Admin) can create workspace accounts for others. They open the invite
-        email, create a login with that address, and enter the join code. For a subcontractor on
-        one job, invite them from the job file instead.
+        email and create a login with that address. For a subcontractor on one job, invite them
+        from the job file instead.
       </p>
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
@@ -203,8 +180,7 @@ export function InvitePanel() {
 
       {pending.length > 0 && (
         <p className="mt-2 text-[11px] text-ink-400">
-          Withdrawing an invitation is bookkeeping — the join code itself keeps working for everyone
-          else.
+          Withdrawing an invitation is bookkeeping — it does not remove someone who already joined.
         </p>
       )}
     </section>
