@@ -643,8 +643,23 @@
     });
   }
 
+  function filterJobs(jobs, query) {
+    var list = Array.isArray(jobs) ? jobs : [];
+    var q = String(query || '').trim().toLowerCase();
+    if (!q) return list.slice();
+    return list.filter(function (j) {
+      if (!j) return false;
+      var hay = [j.name, j.addr, j.address, j.id, j.number]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
+    filterJobs: filterJobs,
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
     todayISO: todayISO,
