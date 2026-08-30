@@ -73,13 +73,7 @@ export function BillingSection() {
   if (!workspace) return <p className="text-sm text-ink-600">Loading…</p>;
 
   const sub = workspace.subscription;
-  const usage = workspace.usage;
-  const jobsUsed = usage?.processedJobs ?? 0;
-  const jobsIncluded = usage?.includedJobs ?? sub.includedJobs;
-  const jobPct = jobsIncluded > 0 ? Math.min(100, (jobsUsed / jobsIncluded) * 100) : 0;
-  const upcoming =
-    usage?.estimatedUpcomingBillCents ??
-    sub.baseMonthlyFeeCents + (usage?.jobOverageChargeCents ?? 0) + (usage?.videoProcessingChargeCents ?? 0);
+  const jobsIncluded = sub.includedJobs;
   const statusLabel = sub.hasStripeSubscription ? sub.status.replace(/_/g, ' ') : 'unpaid';
 
   return (
@@ -159,35 +153,6 @@ export function BillingSection() {
             Only an owner or billing manager can change the plan or the card on file.
           </p>
         )}
-      </section>
-
-      <section className="rounded-xl glass-card p-5">
-        <h3 className="text-base font-semibold text-ink-900">This period</h3>
-        <p className="mt-0.5 text-xs text-ink-500">Jobs processed against the included allowance.</p>
-
-        <div className="mt-4 flex items-end gap-4">
-          <div>
-            <p className="text-2xl font-semibold tabular-nums text-ink-900">{jobsUsed}</p>
-            <p className="text-xs text-ink-500">jobs processed</p>
-          </div>
-          <div className="pb-1 text-ink-400">of</div>
-          <div>
-            <p className="text-2xl font-semibold tabular-nums text-ink-900">{jobsIncluded}</p>
-            <p className="text-xs text-ink-500">included</p>
-          </div>
-        </div>
-
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-paper-200/60">
-          <div
-            className={`h-full rounded-full ${jobsUsed > jobsIncluded ? 'bg-caution-600' : 'bg-brand-600'}`}
-            style={{ width: `${jobPct}%` }}
-          />
-        </div>
-
-        <dl className="mt-4 grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
-          <Row label="Job overage">{formatCents(usage?.jobOverageChargeCents ?? 0)}</Row>
-          <Row label="Estimated total">{formatCents(upcoming)}</Row>
-        </dl>
       </section>
 
       <section className="rounded-xl glass-card p-5">

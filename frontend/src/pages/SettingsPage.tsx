@@ -8,16 +8,7 @@ import {
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canManageBilling } from '../domain/productRoles';
-import {
-  api,
-  ApiError,
-  CONTRACTOR_TYPE_LABELS,
-  CONTRACTOR_TYPE_ORDER,
-  ROLE_LABELS,
-  WORK_TYPE_LABELS,
-  type ContractorType,
-  type OrgMember,
-} from '../lib/api';
+import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
@@ -56,13 +47,13 @@ const ALL_SECTIONS: SettingsSection[] = [
   {
     id: 'organization',
     label: 'Organization',
-    blurb: 'Your org and invite code',
+    blurb: 'Team invites and linked accounts',
     icon: BuildingIcon,
   },
   {
     id: 'billing',
     label: 'Billing',
-    blurb: 'Plan, usage, and receipts',
+    blurb: 'Plan and receipts',
     icon: CreditCardIcon,
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },
@@ -142,8 +133,6 @@ export function SettingsPage() {
           {active === 'security' && <SecuritySection />}
           {active === 'organization' && (
             <>
-              <OrganizationSection />
-              <FieldCaptureAppSection />
               <InvitePanel />
               <LinkedAccountsCard />
             </>
@@ -647,113 +636,6 @@ function SignOutCard() {
  * Organization
  * -------------------------------------------------------------------------- */
 
-function OrganizationSection() {
-  const { membership, refreshMembership } = useAuth();
-  const [contractorType, setContractorType] = useState<ContractorType | null>(
-    membership?.org?.contractorType ?? null,
-  );
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setContractorType(membership?.org?.contractorType ?? null);
-  }, [membership?.org?.contractorType]);
-
-  const org = membership?.org;
-  const dirty = contractorType !== (membership?.org?.contractorType ?? null);
-
-  async function copyCode() {
-    if (!org?.joinCode) return;
-    try {
-      await navigator.clipboard.writeText(org.joinCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard may be unavailable; ignore */
-    }
-  }
-
-  async function save() {
-    if (!contractorType || !dirty) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await api.updateOrgProfile(contractorType);
-      await refreshMembership();
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save those changes. Try again.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card title="Organization" description="The office account your login is linked to.">
-      <ReadOnlyRow label="Name" value={org?.name ?? '—'} />
-      <ReadOnlyRow
-        label="Invite code"
-        value={
-          <span className="flex items-center gap-3">
-            <code className="rounded-md border border-line bg-paper-100 px-2.5 py-1 font-mono tracking-widest text-brand-700">
-              {org?.joinCode ?? '—'}
-            </code>
-            {org?.joinCode && (
-              <button
-                onClick={copyCode}
-                className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
-              >
-                {copied ? (
-                  <>
-                    <CheckIcon width={15} height={15} /> Copied
-                  </>
-                ) : (
-                  'Copy'
-                )}
-              </button>
-            )}
-          </span>
-        }
-      />
-      <div className="mt-5">
-        <Field label="Company type">
-          <select
-            value={contractorType ?? ''}
-            onChange={(event) =>
-              setContractorType((event.target.value || null) as ContractorType | null)
-            }
-            className={`mt-2 ${INPUT_CLASS}`}
-          >
-            <option value="" className="bg-paper-200/50">
-              Select a company type
-            </option>
-            {CONTRACTOR_TYPE_ORDER.map((value) => (
-              <option key={value} value={value} className="bg-paper-200/50">
-                {CONTRACTOR_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <PrimaryButton onClick={save} busy={saving} disabled={!dirty || !contractorType}>
-          Save changes
-        </PrimaryButton>
-        <Saved show={saved} />
-        <ErrorText message={error} />
-      </div>
-      <p className="mt-4 text-xs text-ink-500">
-        Share the invite code so teammates can link their account to {org?.name ?? 'this office'}.
-        Renaming an organization isn't available yet. Only the org creator can change the company
-        type once it is set.
-      </p>
-    </Card>
-  );
-}
-
 function LinkedAccountsCard() {
   const { user } = useAuth();
   const [members, setMembers] = useState<OrgMember[] | null>(null);
@@ -847,92 +729,6 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
     description: 'Ask first — useful on a shared tablet in the field.',
   },
 ];
-
-/**
- * How Field Capture attaches to this office. Crew sign in with the same
- * email and password as the Platform; the join code is for new teammates.
- */
-function FieldCaptureAppSection() {
-  const { membership } = useAuth();
-  const joinCode = membership?.org?.joinCode ?? null;
-  const [copied, setCopied] = useState(false);
-
-  async function copyCode() {
-    if (!joinCode) return;
-    try {
-      await navigator.clipboard.writeText(joinCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      window.prompt('Office join code for Field Capture', joinCode);
-    }
-  }
-
-  return (
-    <Card
-      title="Field Capture app"
-      description="Crew sign in with the same Atmosphere email and password as the office Platform. The join code is for new teammates linking their account."
-    >
-      <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Office join code</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <code className="rounded-md border border-line bg-paper-0 px-2.5 py-1 font-mono tracking-widest text-brand-700">
-            {joinCode ?? '—'}
-          </code>
-          {joinCode && (
-            <button
-              type="button"
-              onClick={() => void copyCode()}
-              className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
-            >
-              {copied ? (
-                <>
-                  <CheckIcon width={15} height={15} /> Copied
-                </>
-              ) : (
-                'Copy code'
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-      <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
-        <li>
-          Open Field Capture on the phone — the web app at{' '}
-          <a
-            href="https://field-capture-production.up.railway.app/"
-            className="font-medium text-ink-900 underline decoration-line underline-offset-2"
-          >
-            field-capture-production.up.railway.app
-          </a>
-          , or <code className="font-mono text-xs">/fieldcapture/</code> on this
-          office site.
-        </li>
-        <li>
-          They sign in with their <strong className="font-semibold text-ink-900">office email and password</strong>
-          — the same login as this Platform.
-          {joinCode ? (
-            <>
-              {' '}
-              New teammates can still link a new account with this code (or open{' '}
-              <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>
-              ).
-            </>
-          ) : null}
-        </li>
-        <li>
-          They appear under Team as a field technician. Put them on a job from the job’s Crew tab —
-          that job then shows in the app.
-        </li>
-      </ol>
-      <p className="mt-4 text-sm text-ink-600">
-        After that, day films from the phone land in Verifier / evidence for{' '}
-        {membership?.org?.name ?? 'this office'}. Disconnect only from the app’s Account menu if you
-        hand the phone to someone else.
-      </p>
-    </Card>
-  );
-}
 
 function PreferencesSection() {
   const preferences = usePreferences();

@@ -48,8 +48,6 @@ vi.mock('../lib/api', () => ({
   },
   ROLE_LABELS: {},
   WORK_TYPE_LABELS: {},
-  CONTRACTOR_TYPE_LABELS: {},
-  CONTRACTOR_TYPE_ORDER: [],
   humanize: (value: string) => value,
 }));
 
@@ -139,17 +137,16 @@ describe('Settings profile photo', () => {
   });
 });
 
-describe('Settings Field Capture', () => {
-  it('tells the office the web Field Capture URL and the join code', async () => {
+describe('Settings organization', () => {
+  it('keeps team invites and linked accounts, without the org profile or Field Capture cards', async () => {
     renderSettings('/settings?section=organization');
 
-    expect(screen.getByText('Field Capture app')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'field-capture-production.up.railway.app' })).toHaveAttribute(
-      'href',
-      'https://field-capture-production.up.railway.app/',
-    );
-    expect(screen.getAllByText('ABC123').length).toBeGreaterThan(0);
-    expect(screen.getByText(/same Atmosphere email and password as the office Platform/i)).toBeInTheDocument();
+    expect(screen.getByText('Invite teammates')).toBeInTheDocument();
+    expect(screen.getByText('Linked accounts')).toBeInTheDocument();
+    expect(screen.queryByText('Field Capture app')).toBeNull();
+    expect(screen.queryByText('The office account your login is linked to.')).toBeNull();
+    expect(screen.queryByText('Company type')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'field-capture-production.up.railway.app' })).toBeNull();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 });
