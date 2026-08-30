@@ -3,10 +3,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const verifierHtml = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../../../../verifier/index.html'),
-  'utf8',
-);
+const here = dirname(fileURLToPath(import.meta.url));
+const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
+const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 
 describe('verifier office rail', () => {
   it('lists Overview, Start a job, Dashboard, and Job Files', () => {
@@ -49,6 +48,31 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toMatch(
       /body\[data-atm-rail-only\]\s+\.app-frame\.has-sidebar\s+\.rail\s*\{[^}]*transform:\s*none/,
     );
+  });
+
+  it('keeps Dashboard desktop nav metrics on every office tab', () => {
+    expect(verifierHtml).toContain(
+      'body:not([data-atm-rail-only]) .navitem,\n    body[data-atm-phone-drawer] .navitem',
+    );
+    expect(verifierHtml).toContain(
+      'body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem',
+    );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\s*\{[^}]*min-height:\s*0/,
+    );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\s*\{[^}]*padding:\s*8px 10px/,
+    );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\s*\{[^}]*font-size:\s*13px/,
+    );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\.nav-icon\s+svg\s*\{[^}]*width:\s*16px/,
+    );
+    expect(verifierHtml).toContain('function setPhoneDrawer');
+    expect(verifierHtml).toContain('d.phoneDrawer');
+    expect(verifierFrame).toContain('phoneDrawer: phone && railOnly');
+    expect(verifierFrame).toContain('usePhoneShell');
   });
 
   it('keeps the phone account chip identical to the desktop chip', () => {

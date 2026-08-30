@@ -754,7 +754,6 @@
   body[data-atm-rail-only] .rail {
     grid-area: rail;
     height: 100%;
-    border-right: 0;
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
@@ -833,7 +832,12 @@
     .search input { min-width: 0; width: 100%; }
     .rail-menu { order: 1; }
     .who-wrap { order: 2; margin-left: auto; }
-    .navitem {
+    /* Fat tap targets on a real phone Dashboard. The office rail iframe is
+       ~248px even on a desktop tab, so this query matches there too — keep
+       those rows on Dashboard’s desktop metrics unless the shell is the
+       phone / Field Capture hamburger drawer. */
+    body:not([data-atm-rail-only]) .navitem,
+    body[data-atm-phone-drawer] .navitem {
       min-height: 44px;
       padding: 11px 12px;
       font-size: 14px;
@@ -908,6 +912,24 @@
   .navitem[aria-current="true"] .count {
     color: var(--accent);
     background: var(--accent-soft);
+  }
+  /* Desktop office rail iframe is ~248px, which matches the phone
+     breakpoint. Pin Overview / Start a job / Job Files (and Videos) to
+     Dashboard’s desktop row metrics so selected-pill height, padding,
+     type, and icons do not change when switching tabs. */
+  body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem {
+    min-height: 0;
+    height: auto;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: normal;
+  }
+  body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem.nav-icon {
+    gap: 10px;
+  }
+  body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem.nav-icon svg {
+    width: 16px;
+    height: 16px;
   }
 
   .facet { padding: 2px 14px 8px; }
@@ -5072,6 +5094,11 @@
     else document.body.removeAttribute('data-atm-rail-only');
   }
 
+  function setPhoneDrawer(on) {
+    if (on) document.body.setAttribute('data-atm-phone-drawer', '1');
+    else document.body.removeAttribute('data-atm-phone-drawer');
+  }
+
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
       closePreview();
@@ -5298,7 +5325,10 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
-    if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
+    if (d && d.atmosphere === 'layout') {
+      setRailOnly(!!d.railOnly);
+      setPhoneDrawer(!!d.phoneDrawer);
+    }
     if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
   });
 

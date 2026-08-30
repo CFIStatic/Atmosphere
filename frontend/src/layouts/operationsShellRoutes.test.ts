@@ -47,16 +47,35 @@ describe('job-file viewport lock', () => {
 });
 
 describe('phone and Field Capture frame', () => {
-  it('collapses the 248px rail into a hamburger drawer on a phone-width frame', () => {
+  it('collapses the office rail into a hamburger drawer on a phone-width frame', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
     expect(shell).toContain('usePhoneShell');
     expect(shell).toContain('Open navigation');
-    expect(shell).toContain('paddingLeft: phone ? 0 : RAIL_W');
+    expect(shell).toContain('operations-main');
+    expect(shell).toContain('operations-rail');
     expect(shell).toContain('h-[100dvh]');
     expect(shell).toContain('w-[min(280px,86vw)]');
+  });
+});
+
+describe('office rail width', () => {
+  it('uses the same rail width on Dashboard and the other office tabs', () => {
+    const css = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../index.css'),
+      'utf8',
+    );
+    expect(css).toContain('--office-rail-w: 248px');
+    expect(css).toContain('--office-rail-w: 236px');
+    expect(css).toContain('--office-rail-w: 228px');
+    const shell = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
+      'utf8',
+    );
+    expect(shell).toContain('operations-chrome');
+    expect(shell).not.toContain('w-[248px]');
   });
 });
 
