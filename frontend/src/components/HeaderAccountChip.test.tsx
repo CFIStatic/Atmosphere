@@ -43,6 +43,7 @@ describe('HeaderAccountChip', () => {
   beforeEach(() => {
     authState.logout.mockReset();
     authState.profile.fullName = 'Jack Cyganiak';
+    authState.profile.avatarUrl = null;
     authState.membership.org.name = 'Jettx LLC';
     setPreference('theme', 'dark');
     applyResolvedTheme('dark');
@@ -53,6 +54,13 @@ describe('HeaderAccountChip', () => {
     expect(screen.getByRole('button', { name: 'Account menu' })).toHaveTextContent('Jack Cyganiak');
     expect(screen.getByRole('button', { name: 'Account menu' })).toHaveTextContent('Jettx LLC');
     expect(screen.getByText('JC')).toBeInTheDocument();
+  });
+
+  it('shows the saved photo on the chip instead of initials', () => {
+    authState.profile.avatarUrl = 'https://img.example/jack-icon.png';
+    renderChip();
+    expect(screen.queryByText('JC')).toBeNull();
+    expect(document.querySelector('img')).toHaveAttribute('src', 'https://img.example/jack-icon.png');
   });
 
   it('puts appearance, Settings, and sign-out in the account menu', async () => {

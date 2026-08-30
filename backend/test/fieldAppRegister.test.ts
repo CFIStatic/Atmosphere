@@ -154,3 +154,10 @@ test('POST /api/field-app/register rejects a short password before hitting Auth'
     );
   }
 });
+
+test('field-app/me returns the saved profile photo so Field Capture matches the office chip', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/routes/fieldApp.ts', import.meta.url), 'utf8');
+  assert.match(src, /select\('full_name, avatar_url'\)/);
+  assert.match(src, /avatarUrl: isDisplayableAvatarUrl/);
+});
