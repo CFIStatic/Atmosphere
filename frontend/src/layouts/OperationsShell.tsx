@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { DashboardSearchBar } from '../components/DashboardSearchBar';
+import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
-import { ThemeToggle } from '../components/ThemeToggle';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { usePhoneShell } from '../lib/usePhoneShell';
@@ -14,10 +14,10 @@ const RAIL_W = 248;
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
  * the screen; Overview, Start a job, Dashboard, Job Files, and Settings
- * render beside the same anchored rail. The one light/dark control lives in
- * the top-right of these React pages because the verifier top bar is hidden
- * in rail-only mode. The rail itself only has Settings — no second moon/sun
- * button.
+ * render beside the same anchored rail. The account chip (name, org, avatar)
+ * lives in the top-right of these React pages because the verifier top bar is
+ * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
+ * menu — same as Dashboard. The rail itself only has Settings.
  *
  * Job Files reuses the Dashboard search chrome: same 72px bar, same field,
  * same placeholder. The list itself has no second title or filter row.
@@ -110,11 +110,9 @@ export function OperationsShell() {
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}
-              {!phone && (
-                <div className="shrink-0">
-                  <ThemeToggle />
-                </div>
-              )}
+              <div className="ml-auto shrink-0">
+                <HeaderAccountChip />
+              </div>
             </header>
             <div
               className={
