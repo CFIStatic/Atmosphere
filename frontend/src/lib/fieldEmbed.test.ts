@@ -14,6 +14,7 @@ import {
   isPhoneShellViewport,
   listenForFieldSession,
   markFieldEmbed,
+  postSignOutToFieldCapture,
   PHONE_SHELL_MAX_PX,
   rememberFieldEmbedSession,
   waitForParentFieldSession,
@@ -91,7 +92,7 @@ describe('field embed helpers', () => {
       resolve(dirname(fileURLToPath(import.meta.url)), '../../../verifier/index.html'),
       'utf8',
     );
-    expect(verifier).toContain("atmosphere.fieldEmbed.accessToken");
+    expect(verifier).toContain('atmosphere.fieldEmbed.accessToken');
     rememberFieldEmbedSession('office-access-token-1', 'office-refresh-token-1');
     expect(fieldEmbedAccessToken()).toBe('office-access-token-1');
   });
@@ -133,6 +134,21 @@ describe('field embed helpers', () => {
     });
     await expect(waitForParentFieldSession(50)).resolves.toBe(true);
     stop();
+  });
+
+  it('tells a Field Capture parent to drop its session on sign-out', () => {
+    const postMessage = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(window, 'parent');
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage },
+    });
+    try {
+      postSignOutToFieldCapture();
+      expect(postMessage).toHaveBeenCalledWith({ atmosphere: 'sign-out' }, '*');
+    } finally {
+      if (original) Object.defineProperty(window, 'parent', original);
+    }
   });
 
   it('does not treat a leftover embed token as a live session', async () => {
