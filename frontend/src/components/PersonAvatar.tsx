@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { initials } from '../lib/display';
 
-type AvatarSize = 'sm' | 'md' | 'lg';
+type AvatarSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const SIZE: Record<AvatarSize, string> = {
+  xs: 'h-7 w-7 text-[11px]',
   sm: 'h-9 w-9 text-sm',
   md: 'h-8 w-8 text-xs',
   lg: 'h-14 w-14 text-lg',
