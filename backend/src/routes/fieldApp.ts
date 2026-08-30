@@ -205,7 +205,7 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
         id: userId,
         email: req.user?.email ?? null,
         fullName: row?.full_name ?? null,
-        avatarUrl: isDisplayableAvatarUrl(row?.avatar_url) ? (row.avatar_url ?? null) : null,
+        avatarUrl: isDisplayableAvatarUrl(row?.avatar_url) ? (row?.avatar_url ?? null) : null,
       },
       org: {
         id: orgId,
