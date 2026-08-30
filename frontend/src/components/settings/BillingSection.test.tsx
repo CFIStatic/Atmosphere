@@ -87,8 +87,10 @@ describe('BillingSection', () => {
 
     expect(await screen.findByRole('heading', { name: 'Work Verification' })).toBeInTheDocument();
     expect(screen.getByText(/50 jobs included/)).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
+    expect(screen.queryByText('This period')).toBeNull();
+    expect(screen.queryByText('jobs processed')).toBeNull();
+    expect(screen.queryByText('Job overage')).toBeNull();
     expect(screen.queryByText(/seat/i)).toBeNull();
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Manage plan and payment method' })).toBeInTheDocument();
