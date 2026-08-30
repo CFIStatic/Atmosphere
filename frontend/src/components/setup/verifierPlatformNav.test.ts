@@ -3,10 +3,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const verifierHtml = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../../../../verifier/index.html'),
-  'utf8',
-);
+const here = dirname(fileURLToPath(import.meta.url));
+const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
+const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 
 describe('verifier office rail', () => {
   it('lists Overview, Start a job, Dashboard, and Job Files', () => {
@@ -49,13 +48,19 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toMatch(
       /body\[data-atm-rail-only\]\s+\.app-frame\.has-sidebar\s+\.rail\s*\{[^}]*transform:\s*none/,
     );
-    expect(verifierHtml).toContain('body[data-atm-rail-only] .navitem');
-    expect(verifierHtml).toMatch(
-      /body\[data-atm-rail-only\]\s+\.navitem\s*\{[^}]*min-height:\s*0/,
+    expect(verifierHtml).toContain(
+      'body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem',
     );
     expect(verifierHtml).toMatch(
-      /body\[data-atm-rail-only\]\s+\.navitem\s*\{[^}]*padding:\s*8px 10px/,
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\s*\{[^}]*min-height:\s*0/,
     );
+    expect(verifierHtml).toMatch(
+      /body\[data-atm-rail-only\]:not\(\[data-atm-phone-drawer\]\)\s+\.navitem\s*\{[^}]*padding:\s*8px 10px/,
+    );
+    expect(verifierHtml).toContain('function setPhoneDrawer');
+    expect(verifierHtml).toContain('d.phoneDrawer');
+    expect(verifierFrame).toContain('phoneDrawer: phone && railOnly');
+    expect(verifierFrame).toContain('usePhoneShell');
   });
 
   it('keeps the phone account chip identical to the desktop chip', () => {
@@ -63,7 +68,9 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('.search {');
     expect(verifierHtml).toContain('flex: 1 1 100%');
     expect(verifierHtml).toContain('order: 5');
-    expect(verifierHtml).toContain('.who .role { display: block; color: var(--faint); font-size: 11.5px; }');
+    expect(verifierHtml).toContain(
+      '.who .role { display: block; color: var(--faint); font-size: 11.5px; }',
+    );
     expect(verifierHtml).not.toMatch(/\.who \.role \{ display: none/);
     expect(verifierHtml).toContain('thead { display: none; }');
     expect(verifierHtml).toContain('table { table-layout: fixed; width: 100%; max-width: 100%; }');
@@ -82,7 +89,7 @@ describe('verifier office rail', () => {
   });
 
   it('loads the org library with the Field Capture Bearer token', () => {
-    expect(verifierHtml).toContain("atmosphere.fieldEmbed.accessToken");
+    expect(verifierHtml).toContain('atmosphere.fieldEmbed.accessToken');
     expect(verifierHtml).toContain('function apiFetch');
     expect(verifierHtml).toContain("apiFetch('/api/evidence-portal/library'");
     expect(verifierHtml).toContain('Email invite');

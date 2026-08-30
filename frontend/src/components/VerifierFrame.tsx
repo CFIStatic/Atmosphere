@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from './icons';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/api';
 import { usePreferences } from '../lib/preferences';
 import { isThemePreference, setThemePreference } from '../lib/theme';
+import { usePhoneShell } from '../lib/usePhoneShell';
 import { verifierSessionUser } from '../lib/verifierSession';
 
 /**
@@ -25,6 +33,7 @@ export function VerifierFrame({
   const location = useLocation();
   const { theme } = usePreferences();
   const { user, profile, membership, logout } = useAuth();
+  const phone = usePhoneShell();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
@@ -63,11 +72,11 @@ export function VerifierFrame({
   }, [membership, postToFrame, profile, user]);
 
   const syncFrame = useCallback(() => {
-    postToFrame({ atmosphere: 'layout', railOnly });
+    postToFrame({ atmosphere: 'layout', railOnly, phoneDrawer: phone && railOnly });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
     postToFrame({ atmosphere: 'theme', preference: theme });
     postSession();
-  }, [location.pathname, postSession, postToFrame, railOnly, theme]);
+  }, [location.pathname, phone, postSession, postToFrame, railOnly, theme]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();

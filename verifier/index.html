@@ -864,8 +864,10 @@
   }
   /* The office shell hosts this iframe at ~248px, which matches the phone
      breakpoint above. Keep Dashboard's desktop nav metrics so Overview,
-     Start a job, and Job Files do not indent or fatten the rows. */
-  body[data-atm-rail-only] .navitem {
+     Start a job, and Job Files do not indent or fatten the rows. The same
+     iframe is the phone / Field Capture hamburger drawer — leave those
+     rows at the 44px tap targets from the ≤640px rule. */
+  body[data-atm-rail-only]:not([data-atm-phone-drawer]) .navitem {
     min-height: 0;
     padding: 8px 10px;
     font-size: 13px;
@@ -5079,6 +5081,11 @@
     else document.body.removeAttribute('data-atm-rail-only');
   }
 
+  function setPhoneDrawer(on) {
+    if (on) document.body.setAttribute('data-atm-phone-drawer', '1');
+    else document.body.removeAttribute('data-atm-phone-drawer');
+  }
+
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
       closePreview();
@@ -5305,7 +5312,10 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d, 'parent');
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
-    if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
+    if (d && d.atmosphere === 'layout') {
+      setRailOnly(!!d.railOnly);
+      setPhoneDrawer(!!d.phoneDrawer);
+    }
     if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
   });
 
