@@ -203,6 +203,28 @@
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
   .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
   .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
+  .job-search {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 14px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--faint);
+  }
+  .job-search:focus-within { border-color: var(--accent); }
+  .job-search svg { flex: none; }
+  .job-search input {
+    flex: 1; min-width: 0;
+    border: 0; background: transparent; outline: none;
+    color: var(--ink); font: inherit; font-size: 15px;
+    padding: 11px 0;
+    -webkit-appearance: none;
+  }
+  .job-search input::placeholder { color: var(--faint); }
+  .job-search input::-webkit-search-decoration,
+  .job-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
   #live-status { margin-top: 14px; font-size: 13px; color: var(--muted); }
 
   /* ---------- the one button ----------
@@ -689,11 +711,10 @@
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
       <h1 class="h1">Start it and go to work</h1>
-      <p class="lede">
-        Tap a job, then the button, and hold it for 5 seconds when you are done. You can add more
-        video any time — the footage carries where it was and when, and the office works it out
-        from that.
-      </p>
+      <label class="job-search" for="job-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="job-search" type="search" placeholder="Search jobs" autocomplete="off" enterkeyhint="search" aria-label="Search jobs" />
+      </label>
 
       <div class="expect">
         <h3>Jobs</h3>
@@ -870,7 +891,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=avatar-chip"></script>
-<script src="js/app.js?v=avatar-chip"></script>
+<script src="js/capture-core.js?v=job-search"></script>
+<script src="js/app.js?v=job-search"></script>
 </body>
 </html>

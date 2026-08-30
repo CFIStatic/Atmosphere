@@ -127,8 +127,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=avatar-chip/);
-assert.match(html, /js\/app\.js\?v=avatar-chip/);
+assert.match(html, /js\/capture-core\.js\?v=job-search/);
+assert.match(html, /js\/app\.js\?v=job-search/);
 assert.match(appSrc, /atmosphere: 'theme'/, 'Field Capture switchbar follows the office dark/light toggle');
 assert.match(appSrc, /function applyOfficeTheme/);
 assert.match(html, /html\[data-theme="dark"\] \{ color-scheme: dark; \}/);
@@ -146,6 +146,24 @@ assert.match(html, /\.daybtn:disabled/);
 assert.match(html, /class="home-scroll"/, 'Today must scroll independently of Start the day');
 assert.match(html, /class="joblist"/, 'jobs must live in a scrollable list');
 assert.match(html, /id="job-hint"/);
+assert.match(html, /id="job-search"/);
+assert.match(html, /placeholder="Search jobs"/);
+assert.doesNotMatch(html, /footage carries where it was/);
+assert.doesNotMatch(html, /hold it for 5 seconds when you are done/);
+assert.match(appSrc, /bindJobSearch/);
+assert.match(appSrc, /Core\.filterJobs/);
+assert.deepEqual(
+  Core.filterJobs(
+    [
+      { id: 'j1', name: 'Camden Court', addr: 'Austin' },
+      { id: 'j2', name: 'Meridian Ave', addr: 'Houston' },
+    ],
+    'camden',
+  ).map((j) => j.id),
+  ['j1'],
+);
+assert.equal(Core.filterJobs([{ id: 'j1', name: 'Camden Court' }], 'zzz').length, 0);
+assert.equal(Core.filterJobs([{ id: 'j1', name: 'Camden Court' }], '').length, 1);
 assert.doesNotMatch(html, /sharelink/, 'job cards must not show raw share URLs');
 assert.doesNotMatch(appSrc, /sharelink/);
 assert.doesNotMatch(appSrc, /hrefAttr/);

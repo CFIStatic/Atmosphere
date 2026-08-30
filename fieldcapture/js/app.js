@@ -198,6 +198,8 @@
     accessToken: null,
     refreshToken: null,
     jobs: [],
+    listedJobs: [],
+    jobQuery: '',
     activeJobId: null,
     account: false,
     demoStream: null,
@@ -236,11 +238,24 @@
     return bits.join(' · ') || 'Open job';
   }
 
+  function bindJobSearch() {
+    var input = $('#job-search');
+    if (!input || input.getAttribute('data-bound') === '1') return;
+    input.setAttribute('data-bound', '1');
+    input.addEventListener('input', function () {
+      state.jobQuery = input.value;
+      renderExpect();
+    });
+  }
+
   function renderExpect(jobs) {
     var root = $('#expect');
     if (!root) return;
+    if (jobs) state.listedJobs = jobs;
+    var all = state.listedJobs || [];
+    var visible = Core.filterJobs(all, state.jobQuery);
     var hint = $('#job-hint');
-    if (!jobs.length) {
+    if (!all.length) {
       if (hint) hint.hidden = true;
       root.innerHTML =
         '<div class="erow erow-empty" role="status">' +
@@ -248,8 +263,16 @@
         '</div>';
       return;
     }
+    if (!visible.length) {
+      if (hint) hint.hidden = true;
+      root.innerHTML =
+        '<div class="erow erow-empty" role="status">' +
+        '<span class="t"><b>No matching jobs</b><span>Try a different name or address.</span></span>' +
+        '</div>';
+      return;
+    }
     if (hint) hint.hidden = false;
-    root.innerHTML = jobs
+    root.innerHTML = visible
       .map(function (j) {
         var selected = Boolean(j.id && j.id === state.activeJobId);
         var selectable = Boolean(j.id);
@@ -278,7 +301,7 @@
     root.querySelectorAll('[data-job-id]').forEach(function (row) {
       row.addEventListener('click', function () {
         state.activeJobId = row.getAttribute('data-job-id');
-        renderExpect(jobs);
+        renderExpect();
         when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
       });
     });
@@ -1090,6 +1113,8 @@
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');
   });
+
+  bindJobSearch();
 
   if (LIVE) {
     document.body.setAttribute('data-mode', 'live');
