@@ -21,6 +21,7 @@ import {
   siteLine,
   type JobFileBeat,
 } from '../lib/jobFileAsk';
+import { touchJobFile } from '../lib/jobFileRecents';
 
 /**
  * The job file.
@@ -62,6 +63,10 @@ export function JobDetailPage() {
     setLoaded(false);
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (id) touchJobFile(id);
+  }, [id]);
 
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
   const pulse = useMemo(() => filePulse(proofs), [proofs]);

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobSummary } from '../lib/api';
 import { DashboardSearchBar } from '../components/DashboardSearchBar';
 import { JobFilesSearchContext } from '../layouts/jobFilesSearch';
+import { touchJobFile } from '../lib/jobFileRecents';
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -98,11 +99,12 @@ function renderJobs() {
 
 describe('JobsPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     getJobs.mockReset();
     getJobs.mockResolvedValue({ jobs });
   });
 
-  it('lists job cards without a title, create button, or status filters', async () => {
+  it('lists job cards without a job number, title, create button, or status filters', async () => {
     renderJobs();
 
     expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toHaveAttribute(
@@ -110,6 +112,8 @@ describe('JobsPage', () => {
       '/jobs/job-1038',
     );
     expect(screen.getByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
+    expect(screen.queryByText('#1038')).not.toBeInTheDocument();
+    expect(screen.queryByText('#1042')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search by job, company, date, address, ID, or hash')).toBeInTheDocument();
 
     expect(screen.queryByRole('heading', { name: 'Jobs' })).not.toBeInTheDocument();
@@ -138,5 +142,22 @@ describe('JobsPage', () => {
       expect(screen.queryByRole('link', { name: /Harbor Point/ })).not.toBeInTheDocument();
     });
     expect(getJobs).toHaveBeenCalledWith({ status: 'all' });
+  });
+
+  it('ranks job files by last recorded event, then last clicked', async () => {
+    getJobs.mockResolvedValue({ jobs: [jobs[1], jobs[0]] });
+    const firstView = renderJobs();
+
+    const first = await screen.findAllByRole('link');
+    expect(first[0]).toHaveTextContent('Cedar Ridge');
+    expect(first[1]).toHaveTextContent('Harbor Point');
+    firstView.unmount();
+
+    touchJobFile('job-1042', Date.parse('2026-08-22T12:00:00Z'));
+    renderJobs();
+
+    const ranked = await screen.findAllByRole('link');
+    expect(ranked[0]).toHaveTextContent('Harbor Point');
+    expect(ranked[1]).toHaveTextContent('Cedar Ridge');
   });
 });

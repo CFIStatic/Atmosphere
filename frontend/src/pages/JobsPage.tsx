@@ -13,6 +13,7 @@ import {
   type JobSummary,
 } from '../lib/api';
 import { jobFileMatchesQuery } from '../lib/jobFileSearch';
+import { sortJobFilesByLastOpened } from '../lib/jobFileRecents';
 import { useJobFilesSearch } from '../layouts/jobFilesSearch';
 import { PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -28,8 +29,7 @@ function JobCard({ job }: { job: JobSummary }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-xs tracking-wider text-brand-300">#{job.jobNumber}</p>
-          <h3 className="mt-0.5 truncate text-base font-semibold text-ink-900">{job.title}</h3>
+          <h3 className="truncate text-base font-semibold text-ink-900">{job.title}</h3>
         </div>
         {showStatus && (
           <span
@@ -60,7 +60,7 @@ function JobCard({ job }: { job: JobSummary }) {
           aria-valuenow={progress}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${job.jobNumber} task progress`}
+          aria-label={`${job.title} task progress`}
         >
           <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
         </div>
@@ -98,7 +98,8 @@ export function JobsPage() {
   }, [load]);
 
   const visible = useMemo(
-    () => (jobs ?? []).filter((job) => jobFileMatchesQuery(job, query)),
+    () =>
+      sortJobFilesByLastOpened((jobs ?? []).filter((job) => jobFileMatchesQuery(job, query))),
     [jobs, query],
   );
 
