@@ -2795,9 +2795,7 @@
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
-          '<div class="s">' + esc(phase) +
-            (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
-          '</div>' +
+          '<div class="s">' + esc(phase) + '</div>' +
           '<div class="job-card-meta">' +
             '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
             (clipDay && clipDay !== '—' ? '<span class="job-card-sep">' + clipDay + '</span>' : '') +

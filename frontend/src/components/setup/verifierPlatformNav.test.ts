@@ -120,5 +120,7 @@ describe('verifier office rail', () => {
     expect(verifierHtml).not.toContain('data-view="hold"');
     expect(verifierHtml).not.toContain('id="n-hold"');
     expect(verifierHtml).not.toMatch(/data-label="Legal hold"/);
+    expect(verifierHtml).not.toContain('chip hold');
+    expect(verifierHtml).not.toContain('>Legal hold</span>');
   });
 });
