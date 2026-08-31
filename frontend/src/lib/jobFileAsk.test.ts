@@ -8,6 +8,7 @@ import {
   jobFilePath,
   jobFileSuggestions,
   sharedJobsRedirectTo,
+  siteLine,
   turnsFromQuestions,
 } from './jobFileAsk';
 import type { JobSummary, ProofResponse, SharedJobRecord } from './api';
@@ -98,6 +99,21 @@ describe('buildJobFileDossier', () => {
     });
     expect(beats.some((beat) => beat.title === 'Gate / access' && /4412/.test(beat.detail))).toBe(true);
     expect(beats.some((beat) => beat.title === 'Do not' && /skylights/.test(beat.detail))).toBe(true);
+  });
+});
+
+describe('siteLine', () => {
+  it('prefers Site address and still reads a Site-only brief', () => {
+    expect(
+      siteLine({
+        brief: { facts: { 'Site address': '1842 Meridian Ave, Austin TX', Site: 'older Site key' } },
+      } as unknown as SharedJobRecord),
+    ).toBe('1842 Meridian Ave, Austin TX');
+    expect(
+      siteLine({
+        brief: { facts: { Site: '902 Cedar Ridge Dr' } },
+      } as unknown as SharedJobRecord),
+    ).toBe('902 Cedar Ridge Dr');
   });
 });
 

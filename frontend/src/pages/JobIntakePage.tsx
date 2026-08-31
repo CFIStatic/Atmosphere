@@ -60,6 +60,11 @@ export function JobIntakePage() {
   const [siteAddress, setSiteAddress] = useState('');
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
+  const [placeId, setPlaceId] = useState('');
+  const [region, setRegion] = useState('');
+  const [country, setCountry] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [situation, setSituation] = useState('');
   const [captureTeam, setCaptureTeam] = useState<CaptureTeamMember[]>([]);
   const [externals, setExternals] = useState<ExternalInvite[]>([]);
@@ -93,8 +98,21 @@ export function JobIntakePage() {
 
   function applyResolvedPlace(addr: ResolvedPlaceAddress) {
     setSiteAddress(addr.formatted || addr.addressLine1);
-    setCity((prev) => addr.city || prev);
-    setPostalCode((prev) => addr.postalCode || prev);
+    setCity(addr.city || '');
+    setPostalCode(addr.postalCode || '');
+    setPlaceId(addr.placeId || '');
+    setRegion(addr.state || '');
+    setCountry(addr.country || '');
+    setLatitude(addr.lat ?? null);
+    setLongitude(addr.lng ?? null);
+  }
+
+  function clearResolvedPlace() {
+    setPlaceId('');
+    setRegion('');
+    setCountry('');
+    setLatitude(null);
+    setLongitude(null);
   }
 
   function addExternal() {
@@ -140,6 +158,7 @@ export function JobIntakePage() {
       briefNote: note || DEFAULT_BRIEF,
       facts: {
         Site: address,
+        'Site address': [address, siteCity, sitePostal].filter(Boolean).join(', '),
         ...(note ? { Work: note.slice(0, 500) } : {}),
         Source: note ? 'Address and work description' : 'Address only — work description optional',
       },
@@ -163,8 +182,35 @@ export function JobIntakePage() {
       return;
     }
     if (!siteAddress.trim() || PLACEHOLDER_ADDRESS.test(siteAddress)) {
-      setError('Enter the site address.');
+      setError('Search for the site address and pick it from the list.');
       return;
+    }
+    setBusy(true);
+    setError(null);
+    let resolvedPlaceId = placeId;
+    let resolvedCity = city;
+    let resolvedPostal = postalCode;
+    let resolvedRegion = region;
+    let resolvedCountry = country;
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    let resolvedLine = siteAddress.trim();
+    if (!resolvedPlaceId) {
+      try {
+        const lookedUp = await api.placesResolve({ input: siteAddress.trim() });
+        applyResolvedPlace(lookedUp.address);
+        resolvedPlaceId = lookedUp.address.placeId;
+        resolvedCity = lookedUp.address.city;
+        resolvedPostal = lookedUp.address.postalCode;
+        resolvedRegion = lookedUp.address.state;
+        resolvedCountry = lookedUp.address.country;
+        resolvedLat = lookedUp.address.lat;
+        resolvedLng = lookedUp.address.lng;
+        resolvedLine = lookedUp.address.formatted || lookedUp.address.addressLine1 || resolvedLine;
+      } catch {
+        // OSM / no-key still accepts the typed line. Google rejects on the server
+        // if lookup cannot complete.
+      }
     }
     const proposal = buildProposal();
     const invitees = [
@@ -185,16 +231,19 @@ export function JobIntakePage() {
         external: true,
       })),
     ];
-    setBusy(true);
-    setError(null);
     try {
       const scope = proposal.scope.filter((line) => line.title.trim().length > 0);
       const res = await api.approveIntake({
         title: proposal.title,
         workType: proposal.workType,
-        address: proposal.address,
-        city: proposal.city || undefined,
-        postalCode: proposal.postalCode || undefined,
+        address: resolvedLine || proposal.address,
+        city: resolvedCity || proposal.city || undefined,
+        postalCode: resolvedPostal || proposal.postalCode || undefined,
+        region: resolvedRegion || undefined,
+        country: resolvedCountry || undefined,
+        placeId: resolvedPlaceId || undefined,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         briefNote: proposal.briefNote,
         facts: proposal.facts,
         scope,
@@ -394,6 +443,7 @@ export function JobIntakePage() {
                 setSiteAddress('');
                 setCity('');
                 setPostalCode('');
+                clearResolvedPlace();
                 setSituation('');
                 setExternals([]);
               }}
@@ -469,10 +519,13 @@ export function JobIntakePage() {
               <span className="sr-only">Address</span>
               <AddressAutocomplete
                 value={siteAddress}
-                onChange={setSiteAddress}
+                onChange={(next) => {
+                  setSiteAddress(next);
+                  clearResolvedPlace();
+                }}
                 onResolved={applyResolvedPlace}
                 required
-                placeholder="1842 Meridian Ave, Austin, TX 78702"
+                placeholder="Search Google for the site address"
               />
             </label>
 
@@ -527,10 +580,13 @@ export function JobIntakePage() {
                   Address
                   <AddressAutocomplete
                     value={siteAddress}
-                    onChange={setSiteAddress}
+                    onChange={(next) => {
+                      setSiteAddress(next);
+                      clearResolvedPlace();
+                    }}
                     onResolved={applyResolvedPlace}
                     required
-                    placeholder="1842 Meridian Ave, Austin, TX 78702"
+                    placeholder="Search Google for the site address"
                   />
                 </label>
               </div>

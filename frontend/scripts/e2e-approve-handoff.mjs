@@ -45,7 +45,7 @@ try {
   await page.screenshot({ path: `${OUT}/01-intake.png` });
 
   await page.getByLabel('Name').fill(uniqueTitle);
-  const address = page.getByPlaceholder(/Start typing a street address|Meridian Ave/i).first();
+  const address = page.getByPlaceholder(/Search Google|Start typing a street address|Meridian Ave/i).first();
   await address.fill('1842 Meridian Ave, Austin, TX 78702');
   await page.getByRole('button', { name: /Use a sample note/i }).click();
   await page.screenshot({ path: `${OUT}/02-intake-filled.png` });

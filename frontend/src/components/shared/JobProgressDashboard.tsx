@@ -7,6 +7,7 @@ import {
   type StoryItem,
   type StoryTone,
 } from './jobProgressStory';
+import { siteLine } from '../../lib/jobFileAsk';
 
 /**
  * The job record as a timeline: what is happening now, what has already
@@ -226,7 +227,7 @@ export function JobProgressDashboard({
     attention: attentionCount,
     donePct,
   });
-  const siteAddress = record.brief?.facts?.['Site address'] ?? record.brief?.facts?.['Site Address'];
+  const siteAddress = siteLine(record);
 
   const nextItems =
     story.next.length > 0

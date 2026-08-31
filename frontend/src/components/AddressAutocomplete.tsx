@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { api, type ResolvedPlaceAddress } from '../lib/api';
 
 type Suggestion = {
@@ -17,7 +18,8 @@ function newSessionToken(): string {
 
 /**
  * Site address field backed by the BFF (Google Places when configured,
- * otherwise OpenStreetMap). Falls back to a plain text input if lookup fails.
+ * otherwise OpenStreetMap). The suggestion list is portaled to document.body
+ * so a transformed card or the phone iframe scroller cannot clip or offset it.
  */
 export function AddressAutocomplete({
   value,
@@ -42,25 +44,37 @@ export function AddressAutocomplete({
   const autoId = useId();
   const inputId = idProp ?? autoId;
   const listId = `${inputId}-list`;
+  const inputRef = useRef<HTMLInputElement>(null);
   const sessionRef = useRef(newSessionToken());
   const blurTimer = useRef<number | null>(null);
   const pickGen = useRef(0);
   /** Lookups only after the user types — a filled value must not reopen the list. */
   const typedRef = useRef(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [provider, setProvider] = useState<'google' | 'osm' | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(-1);
   const [hint, setHint] = useState<string | null>(null);
+  const [listPos, setListPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  function syncListPos() {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setListPos({ top: r.bottom + 4, left: r.left, width: r.width });
+  }
 
   useEffect(() => {
     let cancelled = false;
     void api
       .placesStatus()
       .then((res) => {
-        if (!cancelled) setConfigured(res.configured);
+        if (cancelled) return;
+        setConfigured(res.configured);
+        setProvider(res.provider === 'google' || res.google ? 'google' : res.provider ?? null);
       })
       .catch(() => {
         if (!cancelled) setConfigured(false);
@@ -92,10 +106,12 @@ export function AddressAutocomplete({
         .then((res) => {
           if (cancelled || gen !== pickGen.current) return;
           setConfigured(res.configured);
+          if (res.provider) setProvider(res.provider);
           setSuggestions(res.suggestions);
           setOpen(res.suggestions.length > 0);
           setActive(-1);
-          setHint(null);
+          setHint(res.suggestions.length ? null : 'No matching streets — keep typing or try the town.');
+          if (res.suggestions.length) syncListPos();
         })
         .catch((err) => {
           if (cancelled || gen !== pickGen.current) return;
@@ -104,7 +120,7 @@ export function AddressAutocomplete({
             setConfigured(false);
             setHint(null);
           } else {
-            setHint('Address lookup unavailable — type the full address.');
+            setHint('Address search is unavailable. Try again in a moment.');
           }
           setSuggestions([]);
           setOpen(false);
@@ -118,6 +134,17 @@ export function AddressAutocomplete({
       window.clearTimeout(t);
     };
   }, [value, configured, chosen]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => syncListPos();
+    window.addEventListener('resize', onMove);
+    window.addEventListener('scroll', onMove, true);
+    return () => {
+      window.removeEventListener('resize', onMove);
+      window.removeEventListener('scroll', onMove, true);
+    };
+  }, [open]);
 
   async function pick(s: Suggestion) {
     pickGen.current += 1;
@@ -141,7 +168,7 @@ export function AddressAutocomplete({
     } catch {
       setOpen(false);
       setSuggestions([]);
-      setHint('Could not confirm that place — check city and postal below.');
+      setHint('Could not confirm that place — pick another result.');
     } finally {
       setBusy(false);
     }
@@ -163,28 +190,35 @@ export function AddressAutocomplete({
     }
   }
 
+  const showList = open && !chosen && suggestions.length > 0;
+
   return (
-    <div className={open && !chosen && suggestions.length > 0 ? 'relative z-50' : 'relative'}>
+    <div className="relative">
       <input
+        ref={inputRef}
         id={inputId}
         role="combobox"
-        aria-expanded={open && !chosen}
+        aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
+        aria-label="Address"
         className={className}
         value={value}
         disabled={disabled}
         required={required}
-        autoComplete="street-address"
-        placeholder={placeholder ?? 'Start typing a street address…'}
+        autoComplete="off"
+        placeholder={placeholder ?? 'Search for a street address…'}
         onChange={(e) => {
           typedRef.current = true;
           setChosen(false);
           onChange(e.target.value);
         }}
         onFocus={() => {
-          if (!chosen && typedRef.current && suggestions.length) setOpen(true);
+          if (!chosen && typedRef.current && suggestions.length) {
+            syncListPos();
+            setOpen(true);
+          }
         }}
         onBlur={() => {
           blurTimer.current = window.setTimeout(() => setOpen(false), 160);
@@ -196,37 +230,48 @@ export function AddressAutocomplete({
           Looking up…
         </span>
       )}
-      {open && !chosen && suggestions.length > 0 && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
-        >
-          {suggestions.map((s, i) => (
-            <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
-              <button
-                type="button"
-                className={`flex w-full flex-col px-3 py-2 text-left text-sm ${
-                  i === active ? 'bg-brand-50 text-ink-900' : 'text-ink-800 hover:bg-paper-100'
-                }`}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  if (blurTimer.current) window.clearTimeout(blurTimer.current);
-                  void pick(s);
-                }}
-              >
-                <span className="font-medium">{s.mainText}</span>
-                {s.secondaryText ? (
-                  <span className="text-xs text-ink-500">{s.secondaryText}</span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {showList &&
+        listPos &&
+        createPortal(
+          <ul
+            id={listId}
+            role="listbox"
+            style={{ top: listPos.top, left: listPos.left, width: listPos.width }}
+            className="fixed z-[80] max-h-60 overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
+          >
+            {suggestions.map((s, i) => (
+              <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
+                <button
+                  type="button"
+                  className={`flex w-full flex-col px-3 py-2 text-left text-sm ${
+                    i === active ? 'bg-brand-50 text-ink-900' : 'text-ink-800 hover:bg-paper-100'
+                  }`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (blurTimer.current) window.clearTimeout(blurTimer.current);
+                    void pick(s);
+                  }}
+                >
+                  <span className="font-medium">{s.mainText}</span>
+                  {s.secondaryText ? (
+                    <span className="text-xs text-ink-500">{s.secondaryText}</span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
+      {configured !== false && !chosen && !hint && !value.trim() && (
+        <p className="mt-1 text-[11px] text-ink-500">
+          {provider === 'osm'
+            ? 'Start typing, then pick a result from the list.'
+            : 'Search Google for the site, then pick a result.'}
+        </p>
       )}
       {configured === false && (
         <p className="mt-1 text-[11px] text-ink-500">
-          Type the full street address — lookup is unavailable right now.
+          Address search is unavailable — type the full street, town, and postal code.
         </p>
       )}
       {hint && <p className="mt-1 text-[11px] text-caution-600">{hint}</p>}

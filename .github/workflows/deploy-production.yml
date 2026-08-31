@@ -52,6 +52,7 @@ on:
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
+      - cursor/google-address-lookup-377e
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'

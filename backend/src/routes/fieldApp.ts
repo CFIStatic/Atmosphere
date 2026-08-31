@@ -31,6 +31,12 @@ import { isDisplayableAvatarUrl } from '../lib/avatar.js';
 import { fieldStartJobSchema } from '../lib/validation.js';
 import { intakeFromFieldStart } from '../field/startJob.js';
 import { createJobFile } from './jobIntake.js';
+import {
+  autocompletePlaces,
+  detailsForPlace,
+  placesProvider,
+  resolvePlace,
+} from '../lib/googlePlaces.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -374,6 +380,62 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
   }
 });
 
+/** GET /api/field-app/places/status */
+fieldAppRouter.get('/places/status', (_req: Request, res: Response) => {
+  const provider = placesProvider();
+  res.json({ configured: true, provider, google: provider === 'google' });
+});
+
+/** POST /api/field-app/places/autocomplete */
+fieldAppRouter.post('/places/autocomplete', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = String((req.body as { input?: string } | null)?.input ?? '').trim();
+    if (input.length < 2 || input.length > 200) {
+      throw badRequest('Enter a street to search.', 'address_required');
+    }
+    const sessionToken = String((req.body as { sessionToken?: string } | null)?.sessionToken ?? '').trim();
+    const { suggestions, provider } = await autocompletePlaces(
+      input,
+      sessionToken.length >= 8 ? sessionToken : undefined,
+    );
+    res.json({ suggestions, configured: true, provider });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/field-app/places/details */
+fieldAppRouter.post('/places/details', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const placeId = String((req.body as { placeId?: string } | null)?.placeId ?? '').trim();
+    if (placeId.length < 3) throw badRequest('Pick an address from the list.', 'place_required');
+    const sessionToken = String((req.body as { sessionToken?: string } | null)?.sessionToken ?? '').trim();
+    const { address, provider } = await detailsForPlace(
+      placeId,
+      sessionToken.length >= 8 ? sessionToken : undefined,
+    );
+    res.json({ address, configured: true, provider });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/field-app/places/resolve */
+fieldAppRouter.post('/places/resolve', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = String((req.body as { input?: string } | null)?.input ?? '').trim();
+    const placeId = String((req.body as { placeId?: string } | null)?.placeId ?? '').trim();
+    if (!query && !placeId) throw badRequest('Enter an address to look up.', 'address_required');
+    const resolved = await resolvePlace({ query: query || undefined, placeId: placeId || undefined });
+    if (!resolved || !(resolved.address.addressLine1 || resolved.address.formatted)) {
+      throw badRequest('Search for the site address and pick it from the list.', 'address_unresolved');
+    }
+    res.json({ address: resolved.address, configured: true, provider: resolved.provider });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * POST /api/field-app/jobs
  * Crew starts a job from Field Capture: name + site, optional note, then film.
@@ -383,7 +445,9 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = fieldStartJobSchema.parse(req.body ?? {});
-    const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input));
+    const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input), {
+      allowTypedFallback: true,
+    });
     const jobId = created.job.id;
     const address = [input.address, input.city, input.postalCode]
       .map((part) => (part ?? '').trim())

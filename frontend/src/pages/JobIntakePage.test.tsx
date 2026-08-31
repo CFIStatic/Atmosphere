@@ -37,7 +37,29 @@ vi.mock('../lib/api', () => ({
           },
         ],
       }),
-    placesStatus: () => Promise.resolve({ configured: false }),
+    placesStatus: vi.fn(() =>
+      Promise.resolve({ configured: true, provider: 'google', google: true }),
+    ),
+    placesAutocomplete: () =>
+      Promise.resolve({ configured: true, provider: 'google', suggestions: [] }),
+    placesDetails: vi.fn(),
+    placesResolve: vi.fn(() =>
+      Promise.resolve({
+        configured: true,
+        provider: 'google',
+        address: {
+          placeId: 'p-meridian',
+          formatted: '1842 Meridian Ave, Austin, TX 78702, USA',
+          addressLine1: '1842 Meridian Ave',
+          city: 'Austin',
+          postalCode: '78702',
+          state: 'TX',
+          country: 'US',
+          lat: 30.27,
+          lng: -97.74,
+        },
+      }),
+    ),
     approveIntake: vi.fn(),
   },
 }));
@@ -49,6 +71,26 @@ describe('JobIntakePage', () => {
   beforeEach(() => {
     document.title = 'Atmosphere';
     usePhoneShell.mockReturnValue(false);
+    vi.mocked(api.placesStatus).mockResolvedValue({
+      configured: true,
+      provider: 'google',
+      google: true,
+    });
+    vi.mocked(api.placesResolve).mockResolvedValue({
+      configured: true,
+      provider: 'google',
+      address: {
+        placeId: 'p-meridian',
+        formatted: '1842 Meridian Ave, Austin, TX 78702, USA',
+        addressLine1: '1842 Meridian Ave',
+        city: 'Austin',
+        postalCode: '78702',
+        state: 'TX',
+        country: 'US',
+        lat: 30.27,
+        lng: -97.74,
+      },
+    });
   });
 
   it('puts name, address, situation, and invite list on one page', async () => {
@@ -121,18 +163,67 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.type(
-      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      screen.getByPlaceholderText('Search Google for the site address'),
       '1842 Meridian Ave',
     );
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(await screen.findByRole('heading', { name: 'Job created — capture invited' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Job created — capture invited' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('/shared/tok-1', { exact: false })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
     expect(screen.queryByText('Left intake')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Open this job file' }));
     expect(await screen.findByText('Job file')).toBeInTheDocument();
+  });
+
+  it('approves a typed address when OSM resolve fails', async () => {
+    vi.mocked(api.placesStatus).mockResolvedValue({
+      configured: true,
+      provider: 'osm',
+      google: false,
+    });
+    vi.mocked(api.placesResolve).mockRejectedValue(new Error('Address lookup is unavailable.'));
+    vi.mocked(api.approveIntake).mockResolvedValue({
+      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+      briefRevision: 1,
+      scopeSaved: 0,
+      invites: [],
+      party: { id: 'pty-1', company: 'Field Capture' },
+      sharePath: '/shared/tok-1',
+      fieldCapturePath: '/fieldcapture/?token=tok-1',
+      readiness: {
+        level: 'limited',
+        ceiling: 'work_only',
+        headline: 'Invite sent',
+        gaps: [],
+        strengths: [],
+        source: null,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText('Search Google for the site address'),
+      '1842 Meridian Ave, Austin, TX 78702',
+    );
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Job created — capture invited' }),
+    ).toBeInTheDocument();
+    expect(api.approveIntake).toHaveBeenCalled();
+    expect(screen.queryByText(/Google results/i)).toBeNull();
   });
 
   it('fits Start a job to the phone frame instead of four desktop cards', async () => {
@@ -216,12 +307,14 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.type(
-      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      screen.getByPlaceholderText('Search Google for the site address'),
       '1842 Meridian Ave',
     );
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(await screen.findByRole('heading', { name: 'Job created — capture invited' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Job created — capture invited' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
     expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);

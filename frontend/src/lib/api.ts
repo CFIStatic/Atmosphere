@@ -1141,6 +1141,11 @@ export type IntakeApproveInput = {
   address: string;
   city?: string;
   postalCode?: string;
+  region?: string;
+  country?: string;
+  placeId?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   claimNumber?: string;
   briefNote?: string | null;
   facts?: Record<string, string>;
@@ -3451,11 +3456,15 @@ export const api = {
     }),
 
   placesStatus: () =>
-    request<{ configured: boolean }>('/api/operations/places/status', { method: 'GET' }),
+    request<{ configured: boolean; provider?: 'google' | 'osm'; google?: boolean }>(
+      '/api/operations/places/status',
+      { method: 'GET' },
+    ),
 
   placesAutocomplete: (input: { input: string; sessionToken?: string }) =>
     request<{
       configured: boolean;
+      provider?: 'google' | 'osm';
       suggestions: Array<{
         placeId: string;
         description: string;
@@ -3468,8 +3477,17 @@ export const api = {
     }),
 
   placesDetails: (input: { placeId: string; sessionToken?: string }) =>
-    request<{ configured: boolean; address: ResolvedPlaceAddress }>(
+    request<{ configured: boolean; provider?: 'google' | 'osm'; address: ResolvedPlaceAddress }>(
       '/api/operations/places/details',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+
+  placesResolve: (input: { input?: string; placeId?: string; sessionToken?: string }) =>
+    request<{ configured: boolean; provider?: 'google' | 'osm'; address: ResolvedPlaceAddress }>(
+      '/api/operations/places/resolve',
       {
         method: 'POST',
         body: JSON.stringify(input),

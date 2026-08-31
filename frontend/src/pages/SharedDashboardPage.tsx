@@ -19,7 +19,7 @@ import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
-import { jobFilePath } from '../lib/jobFileAsk';
+import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -410,7 +410,7 @@ export function SharedDashboardPage() {
                       days: [],
                       videos: [],
                       counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-                      siteKnown: Boolean(record.brief?.facts?.['Site address']),
+                      siteKnown: Boolean(siteLine(record)),
                     }
                   : undefined
               }

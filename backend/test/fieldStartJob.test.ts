@@ -42,6 +42,13 @@ test('cityPostalFromAddress reads city and ZIP from a Places-formatted line', ()
   });
 });
 
+test('cityPostalFromAddress reads a UK postcode', () => {
+  assert.deepEqual(cityPostalFromAddress('School Street, Llanbradach, Wales, CF83 3NB, GB'), {
+    city: 'Llanbradach',
+    postalCode: 'CF83 3NB',
+  });
+});
+
 test('intakeFromFieldStart maps the phone form onto the office job file', () => {
   const withNote = intakeFromFieldStart({
     title: 'East Racine Avenue',
@@ -57,7 +64,19 @@ test('intakeFromFieldStart maps the phone form onto the office job file', () => 
     { title: 'Extract standing water in the living room.', state: 'included' },
   ]);
   assert.equal(withNote.facts.Source, 'Field Capture — address and work description');
+  assert.equal(withNote.facts.Site, '1842 Meridian Ave, Austin, TX 78702');
+  assert.equal(withNote.facts['Site address'], '1842 Meridian Ave, Austin, TX 78702, Austin, 78702');
   assert.deepEqual(withNote.invitees, []);
+
+  const withPlace = intakeFromFieldStart({
+    title: 'East Racine Avenue',
+    address: '1842 Meridian Ave',
+    city: 'Austin',
+    postalCode: '78702',
+    placeId: 'ChIJ-meridian',
+  });
+  assert.equal(withPlace.placeId, 'ChIJ-meridian');
+  assert.equal(withPlace.facts['Site address'], '1842 Meridian Ave, Austin, 78702');
 
   const addressOnly = intakeFromFieldStart({
     title: 'Cedar Ridge',
@@ -67,6 +86,15 @@ test('intakeFromFieldStart maps the phone form onto the office job file', () => 
   assert.equal(addressOnly.briefNote, FIELD_DEFAULT_BRIEF);
   assert.deepEqual(addressOnly.scope, []);
   assert.equal(addressOnly.facts.Source, 'Field Capture — address only');
+});
+
+test('intake RPC writes resolved country and coordinates', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/routes/jobIntake.ts', import.meta.url), 'utf8');
+  assert.match(src, /p_region:/);
+  assert.match(src, /p_country:/);
+  assert.match(src, /p_latitude:/);
+  assert.match(src, /p_longitude:/);
 });
 
 test('situation helpers match office intake', () => {
