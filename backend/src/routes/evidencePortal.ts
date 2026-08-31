@@ -969,7 +969,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
               text: mail.text,
             });
             emailed = result.ok;
-            if (!result.ok) mailWhy = result.why;
+            if (!result.ok) mailWhy = result.error ?? 'The email could not be sent.';
           } else {
             mailWhy = 'No mailbox is connected for this organization.';
           }
