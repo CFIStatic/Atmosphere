@@ -331,6 +331,9 @@ export function SharedDashboardPage() {
                   state: { freshJob: summary },
                 });
               }}
+              onDeleted={() => {
+                navigate('/verifier-library', { replace: true });
+              }}
             />
           ) : undefined
         }

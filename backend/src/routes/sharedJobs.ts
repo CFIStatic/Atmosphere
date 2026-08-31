@@ -38,9 +38,11 @@ import {
   recordAccess,
 } from './proofOfWork.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
+import { jobHasOpenHold, markSourceDeleted, recordUserAction } from '../legal/index.js';
 import {
   JOB_FILE_TITLE_MAX,
   JOB_FILE_TITLE_MIN,
+  jobFileDeleteNameMatches,
   normalizeJobFileTitle,
   scopeLinesForDuplicate,
   suggestedDuplicateTitle,
@@ -100,7 +102,7 @@ async function loadRecord(supabase: any, orgId: string, jobId: string) {
   const [job, parties, scope, briefs, acks, messages] = await Promise.all([
     supabase
       .from('crm_jobs')
-      .select('id, job_number, title, status, claim_number, scheduled_start, scheduled_end')
+      .select('id, job_number, title, status, claim_number, scheduled_start, scheduled_end, deleted_at')
       .eq('org_id', orgId)
       .eq('id', jobId)
       .maybeSingle(),
@@ -150,6 +152,7 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
       .from('crm_jobs')
       .select('id, job_number, title, status, created_at')
       .eq('org_id', orgId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(200);
     if (jobsError) throw new HttpError(500, jobsError.message, 'shared_failed');
@@ -238,7 +241,7 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
   try {
     const { orgId, supabase } = await requireOrgContext(req);
     const record = await loadRecord(supabase, orgId, req.params.jobId);
-    if (!record.job) throw new HttpError(404, 'No such job.', 'job_not_found');
+    if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
 
     const currentRevision = record.briefs[0]?.revision ?? null;
     const ackByParty = new Map<string, number>();
@@ -315,6 +318,7 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
       .update({ title: nextTitle })
       .eq('org_id', orgId)
       .eq('id', req.params.jobId)
+      .is('deleted_at', null)
       .select('id, job_number, title, status, claim_number')
       .maybeSingle();
     if (error) throw new HttpError(400, error.message, 'rename_failed');
@@ -338,6 +342,100 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
         claimNumber: data.claim_number ?? null,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const deleteJobFileSchema = z.object({
+  title: z
+    .string({ required_error: 'Type the file name to delete it.' })
+    .trim()
+    .min(1, 'Type the file name to delete it.')
+    .max(JOB_FILE_TITLE_MAX, 'Job name is too long'),
+});
+
+/**
+ * DELETE /api/operations/shared/:jobId
+ * Hide a job file from the dashboard. The vault keeps the record. The
+ * office must type the file name — a click is not enough, and a hold
+ * outranks the click.
+ */
+sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const { title } = deleteJobFileSchema.parse(req.body ?? {});
+
+    const { data: job, error: readError } = await supabase
+      .from('crm_jobs')
+      .select('id, title')
+      .eq('org_id', orgId)
+      .eq('id', req.params.jobId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (readError) throw new HttpError(500, readError.message, 'job_read_failed');
+    if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
+
+    if (!jobFileDeleteNameMatches(String(job.title ?? ''), title)) {
+      throw new HttpError(
+        400,
+        'Type the file name exactly as it appears on the dashboard.',
+        'title_mismatch',
+      );
+    }
+
+    const hold = await jobHasOpenHold(job.id, orgId);
+    if (hold) {
+      throw new HttpError(
+        409,
+        'On legal hold — this job file cannot be deleted while the hold stands.',
+        'job_on_legal_hold',
+      );
+    }
+
+    const now = new Date().toISOString();
+    const { data: deleted, error: deleteError } = await supabase
+      .from('crm_jobs')
+      .update({ deleted_at: now, deleted_by: userId })
+      .eq('org_id', orgId)
+      .eq('id', job.id)
+      .is('deleted_at', null)
+      .select('id, title')
+      .maybeSingle();
+    if (deleteError) throw new HttpError(400, deleteError.message, 'delete_failed');
+    if (!deleted) throw new HttpError(404, 'No such job.', 'job_not_found');
+
+    const { data: proofs } = await supabase
+      .from('job_proofs')
+      .update({ deleted_at: now, deleted_by: userId })
+      .eq('org_id', orgId)
+      .eq('job_id', job.id)
+      .is('deleted_at', null)
+      .select('id');
+    for (const proof of (proofs ?? []) as Array<{ id: string }>) {
+      await markSourceDeleted('job_proof', proof.id).catch(() => undefined);
+    }
+
+    await recordAccess(supabase, {
+      orgId,
+      jobId: job.id,
+      action: 'deleted',
+      actorId: userId,
+      actorLabel: 'Office',
+      detail: `Job file “${deleted.title}” deleted from the library. The vault still holds it.`,
+    }).catch(() => undefined);
+
+    await recordUserAction({
+      actorUserId: userId,
+      actorLabel: 'Office',
+      orgId,
+      action: 'job.deleted',
+      resourceType: 'job',
+      resourceId: job.id,
+      detail: { title: deleted.title },
+    });
+
+    res.json({ ok: true, deletedAt: now, jobId: job.id });
   } catch (err) {
     next(err);
   }
@@ -386,6 +484,7 @@ sharedJobsRouter.post(
         )
         .eq('org_id', orgId)
         .eq('id', req.params.jobId)
+        .is('deleted_at', null)
         .maybeSingle();
       if (sourceError) throw new HttpError(500, sourceError.message, 'job_read_failed');
       if (!source) throw new HttpError(404, 'No such job.', 'job_not_found');

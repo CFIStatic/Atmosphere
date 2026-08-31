@@ -1238,7 +1238,14 @@
     margin-top: 14px; width: 100%; border: 0; border-radius: 8px; padding: 10px 14px;
     background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer;
   }
+  .jf-submit.danger { background: var(--fail); }
   .jf-submit:disabled { opacity: .55; cursor: default; }
+  .jf-warn {
+    margin: 0 0 10px; padding: 10px 12px; border-radius: 8px;
+    background: var(--fail-soft); border: 1px solid color-mix(in srgb, var(--fail) 28%, var(--line));
+    color: var(--fail); font-size: 12.5px; line-height: 1.45; font-weight: 550;
+  }
+  .jf-name-exact { font-weight: 700; color: var(--ink); }
   .jf-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .jf-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
   .jf-list .who { font-size: 13px; font-weight: 600; color: var(--ink); }
@@ -1732,6 +1739,10 @@
   <button role="menuitem" data-job-act="record">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
     Open full record
+  </button>
+  <button role="menuitem" data-job-act="delete" class="danger">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
+    Delete
   </button>
 </div>
 <div class="detail" id="jobfile-sheet" role="dialog" aria-modal="true" aria-labelledby="jf-title">
@@ -3502,7 +3513,13 @@
     if (tab === 'invite') return 'Add people to this job';
     if (tab === 'rename') return 'Rename this job file';
     if (tab === 'duplicate') return 'Duplicate this job file';
+    if (tab === 'delete') return 'Delete this job file';
     return 'Share this job';
+  }
+
+  function jobFileDeleteNameMatches(fileName, typed) {
+    var expected = String(fileName || '').trim();
+    return expected.length > 0 && expected === String(typed || '').trim();
   }
 
   function suggestedDuplicateTitle(name) {
@@ -3515,7 +3532,7 @@
     closeJobMenu();
     hydrateJobBoard(jobKey);
     jobSheet.key = jobKey;
-    jobSheet.tab = tab === 'invite' || tab === 'rename' || tab === 'duplicate' ? tab : 'share';
+    jobSheet.tab = tab === 'invite' || tab === 'rename' || tab === 'duplicate' || tab === 'delete' ? tab : 'share';
     jobSheet.made = null;
     jobSheet.error = null;
     jobSheet.busy = false;
@@ -3525,7 +3542,7 @@
     if (title) title.textContent = jobFileSheetTitle(jobSheet.tab);
     if (meta) meta.textContent = job.name + (job.number ? ' · #' + job.number : '');
     var tabs = document.querySelector('#jobfile-sheet .jf-tabs');
-    if (tabs) tabs.hidden = jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate';
+    if (tabs) tabs.hidden = jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate' || jobSheet.tab === 'delete';
     document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
       btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
     });
@@ -3547,6 +3564,37 @@
     var job = JOBS[key] || { name: 'Job' };
     var b = JOB_BOARD[key];
     var live = canOpenJobRecord(key);
+    if (jobSheet.tab === 'delete') {
+      body.innerHTML =
+        '<p class="jf-warn">This cannot be undone. The file leaves the dashboard. Footage and the record stay in the vault, but you cannot open them from here again.</p>' +
+        '<p class="jf-note">Type <span class="jf-name-exact">' + esc(job.name) + '</span> to confirm you want to delete this job file.</p>' +
+        (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
+        '<form id="jf-delete-form">' +
+          '<label><span>File name</span><input name="title" required autocomplete="off" spellcheck="false" placeholder="' + esc(job.name) + '" /></label>' +
+          '<button type="submit" class="jf-submit danger" disabled>' +
+            (jobSheet.busy ? 'Deleting…' : 'Delete permanently') +
+          '</button>' +
+        '</form>';
+      var deleteForm = document.getElementById('jf-delete-form');
+      if (deleteForm) {
+        var confirmInput = deleteForm.querySelector('input[name="title"]');
+        var deleteBtn = deleteForm.querySelector('button[type="submit"]');
+        function syncDeleteBtn() {
+          if (!deleteBtn) return;
+          deleteBtn.disabled = jobSheet.busy || !jobFileDeleteNameMatches(job.name, confirmInput && confirmInput.value);
+        }
+        if (confirmInput) {
+          confirmInput.addEventListener('input', syncDeleteBtn);
+          confirmInput.focus();
+        }
+        deleteForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          submitJobFileDelete(deleteForm);
+        });
+        syncDeleteBtn();
+      }
+      return;
+    }
     if (jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate') {
       var suggested = jobSheet.tab === 'duplicate' ? suggestedDuplicateTitle(job.name) : job.name;
       body.innerHTML =
@@ -3650,6 +3698,13 @@
     render();
   }
 
+  function applyDeletedJob(key) {
+    delete JOBS[key];
+    EVIDENCE = EVIDENCE.filter(function (e) { return e.job !== key; });
+    render();
+    counts();
+  }
+
   function applyDuplicatedJob(payload) {
     var created = payload && (payload.jobFile || payload.job);
     if (!created) return;
@@ -3664,6 +3719,50 @@
     };
     render();
     return id;
+  }
+
+  function submitJobFileDelete(form) {
+    var key = jobSheet.key;
+    var job = JOBS[key] || { name: 'Job' };
+    var typed = (form.title.value || '').trim();
+    if (!jobFileDeleteNameMatches(job.name, typed)) {
+      jobSheet.error = 'Type the file name exactly as it appears on the dashboard.';
+      paintJobFileSheet();
+      return;
+    }
+    jobSheet.busy = true;
+    jobSheet.error = null;
+    paintJobFileSheet();
+    if (!canOpenJobRecord(key)) {
+      applyDeletedJob(key);
+      jobSheet.busy = false;
+      closeJobFileSheet();
+      toast('Deleted ' + job.name + '. This cannot be undone.');
+      return;
+    }
+    apiFetch('/api/operations/shared/' + encodeURIComponent(key), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: job.name })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; }).catch(function () {
+        return { ok: r.ok, body: {} };
+      });
+    }).then(function (res) {
+      jobSheet.busy = false;
+      if (!res.ok) {
+        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not delete that job file.';
+        paintJobFileSheet();
+        return;
+      }
+      applyDeletedJob(key);
+      closeJobFileSheet();
+      toast('Deleted ' + job.name + '. This cannot be undone.');
+    }).catch(function (err) {
+      jobSheet.busy = false;
+      jobSheet.error = err && err.message ? err.message : 'Could not delete that job file.';
+      paintJobFileSheet();
+    });
   }
 
   function submitJobFileName(form) {

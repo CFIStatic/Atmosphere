@@ -3436,6 +3436,23 @@ const routes: Array<[string, RegExp, Handler]> = [
     SHARED_RECORDS[id] = record;
     return { body: record };
   }],
+  ['DELETE', /^\/api\/operations\/shared\/([\w-]+)$/, (m, b) => {
+    const id = m[1];
+    const title = String(b.title ?? '').trim();
+    const listed = SHARED_JOBS.find((j) => j.jobId === id);
+    const record = SHARED_RECORDS[id];
+    const current = listed?.title ?? record?.job?.title ?? '';
+    if (!title || title !== current.trim()) {
+      return {
+        status: 400,
+        body: { error: 'Type the file name exactly as it appears on the dashboard.', code: 'title_mismatch' },
+      };
+    }
+    const idx = SHARED_JOBS.findIndex((j) => j.jobId === id);
+    if (idx >= 0) SHARED_JOBS.splice(idx, 1);
+    delete SHARED_RECORDS[id];
+    return { body: { ok: true, deletedAt: new Date().toISOString(), jobId: id } };
+  }],
   ['PATCH', /^\/api\/operations\/shared\/([\w-]+)$/, (m, b) => {
     const id = m[1];
     const title = String(b.title ?? '').trim();

@@ -29,6 +29,15 @@ export function displayJobFileName(
   return titleFromSiteAddress(address);
 }
 
+/**
+ * Type-to-confirm for a permanent job-file delete. The name on the
+ * dashboard is what they must type — trim only, so a typo still blocks.
+ */
+export function jobFileDeleteNameMatches(fileName: string, typed: string): boolean {
+  const expected = fileName.trim();
+  return expected.length > 0 && expected === typed.trim();
+}
+
 /** Default name for a duplicated job file. */
 export function suggestedDuplicateTitle(title: string): string {
   const base = title.trim() || 'Job';

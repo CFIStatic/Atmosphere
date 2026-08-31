@@ -60,6 +60,13 @@ const RULES: Rule[] = [
   },
   {
     method: 'DELETE',
+    pattern: new RegExp(`^/api/operations/shared/(${UUID})/?$`),
+    action: 'job.deleted',
+    resourceType: 'job',
+    resourceParam: 1,
+  },
+  {
+    method: 'DELETE',
     pattern: new RegExp(`^/api/operations/shared/(${UUID})/evidence/(${UUID})/?$`),
     action: 'video.deleted',
     resourceType: 'proof',

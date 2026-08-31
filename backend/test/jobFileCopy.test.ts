@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   displayJobFileName,
+  jobFileDeleteNameMatches,
   normalizeJobFileTitle,
   scopeLinesForDuplicate,
   suggestedDuplicateTitle,
@@ -27,6 +28,15 @@ test('displayJobFileName keeps a stored title, even if it looks like scope', () 
 test('displayJobFileName falls back to the street when the title is blank', () => {
   assert.equal(displayJobFileName('', '1842 Meridian Ave, Austin, TX'), '1842 Meridian Ave');
   assert.equal(displayJobFileName(null, ''), 'New job');
+});
+
+test('jobFileDeleteNameMatches requires the exact dashboard name', () => {
+  assert.equal(jobFileDeleteNameMatches('Cedar Ridge — storm damage', 'Cedar Ridge — storm damage'), true);
+  assert.equal(jobFileDeleteNameMatches('  Cedar Ridge  ', 'Cedar Ridge'), true);
+  assert.equal(jobFileDeleteNameMatches('Cedar Ridge', 'cedar ridge'), false);
+  assert.equal(jobFileDeleteNameMatches('Cedar Ridge', 'Cedar'), false);
+  assert.equal(jobFileDeleteNameMatches('Cedar Ridge', ''), false);
+  assert.equal(jobFileDeleteNameMatches('', 'Job'), false);
 });
 
 test('suggestedDuplicateTitle prefixes once and stays within length', () => {

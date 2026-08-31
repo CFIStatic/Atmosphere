@@ -569,6 +569,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .from('crm_jobs')
       .select('id, title, job_number, created_at, property_id, claim_number')
       .eq('org_id', orgId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(200);
     if (jobsError) {
