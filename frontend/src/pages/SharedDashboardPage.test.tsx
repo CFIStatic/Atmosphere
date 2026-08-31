@@ -26,10 +26,6 @@ vi.mock('../components/shared/JobProgressDashboard', () => ({
   JobProgressDashboard: () => <div>Job progress</div>,
 }));
 
-vi.mock('../components/shared/JobLegalHoldPortal', () => ({
-  JobLegalHoldPortal: () => null,
-}));
-
 vi.mock('../components/shared/EvidenceLocker', () => ({
   EvidenceLocker: () => <div>Evidence locker</div>,
 }));
@@ -131,6 +127,8 @@ describe('SharedDashboardPage job file identity', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Videos and analysis')).toBeInTheDocument();
     expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
