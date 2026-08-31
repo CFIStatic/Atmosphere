@@ -443,10 +443,10 @@ const zeroTokens = () => ({
 
 const TOKEN_USAGE = (): TokenUsageReport => {
   const days = USAGE_DAYS.map((row) => {
-    const video = Math.round(row.inputTokens * 0.62);
-    const chat = Math.round(row.inputTokens * 0.24);
-    const ask = Math.max(0, row.inputTokens + row.outputTokens + row.cacheTokens - video - chat);
-    const total = video + chat + ask;
+    const total = row.inputTokens + row.outputTokens + row.cacheTokens;
+    const video = Math.round(total * 0.56);
+    const chat = Math.round(total * 0.28);
+    const ask = Math.max(0, total - video - chat);
     return {
       day: row.day,
       events: row.events,
@@ -498,65 +498,48 @@ const TOKEN_USAGE = (): TokenUsageReport => {
       { feature: 'other', ...zeroTokens() },
     ],
     byDay: days,
-    byEmployee: [
-      {
-        userId: 'demo-user-1',
-        name: 'Elena Ortiz',
-        email: 'elena@ortizrestoration.com',
-        role: 'global_admin',
-        roleLabel: 'Global Admin',
-        events: 186,
-        inputTokens: Math.round(totals.inputTokens * 0.58),
-        outputTokens: Math.round(totals.outputTokens * 0.55),
-        cacheTokens: Math.round(totals.cacheTokens * 0.5),
-        totalTokens: Math.round(totals.totalTokens * 0.56),
-        priceNanos: Math.round(totals.priceNanos * 0.56),
-        byFeature: {
-          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.38) },
-          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.1) },
-          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.08) },
-          other: zeroTokens(),
-        },
-      },
-      {
-        userId: 'demo-user-2',
-        name: 'Marcus Chen',
-        email: 'marcus@ortizrestoration.com',
-        role: 'employee',
-        roleLabel: 'Employee',
-        events: 94,
-        inputTokens: Math.round(totals.inputTokens * 0.27),
-        outputTokens: Math.round(totals.outputTokens * 0.3),
-        cacheTokens: Math.round(totals.cacheTokens * 0.3),
-        totalTokens: Math.round(totals.totalTokens * 0.28),
-        priceNanos: Math.round(totals.priceNanos * 0.28),
-        byFeature: {
-          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.12) },
-          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.1) },
-          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.06) },
-          other: zeroTokens(),
-        },
-      },
-      {
-        userId: 'demo-user-3',
-        name: 'Priya Shah',
-        email: 'priya@ortizrestoration.com',
-        role: 'employee',
-        roleLabel: 'Employee',
-        events: 42,
-        inputTokens: Math.round(totals.inputTokens * 0.15),
-        outputTokens: Math.round(totals.outputTokens * 0.15),
-        cacheTokens: Math.round(totals.cacheTokens * 0.2),
-        totalTokens: Math.round(totals.totalTokens * 0.16),
-        priceNanos: Math.round(totals.priceNanos * 0.16),
-        byFeature: {
-          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.08) },
-          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.05) },
-          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.03) },
-          other: zeroTokens(),
-        },
-      },
-    ],
+    byEmployee: (() => {
+      const video = feature('video_analysis');
+      const chat = feature('chat');
+      const ask = feature('ask');
+      const share = (
+        name: string,
+        email: string,
+        userId: string,
+        role: 'global_admin' | 'employee',
+        roleLabel: string,
+        pct: number,
+        events: number,
+      ) => {
+        const videoTokens = Math.round(video.totalTokens * pct);
+        const chatTokens = Math.round(chat.totalTokens * pct);
+        const askTokens = Math.round(ask.totalTokens * pct);
+        return {
+          userId,
+          name,
+          email,
+          role,
+          roleLabel,
+          events,
+          inputTokens: Math.round(totals.inputTokens * pct),
+          outputTokens: Math.round(totals.outputTokens * pct),
+          cacheTokens: Math.round(totals.cacheTokens * pct),
+          totalTokens: videoTokens + chatTokens + askTokens,
+          priceNanos: Math.round(totals.priceNanos * pct),
+          byFeature: {
+            video_analysis: { ...zeroTokens(), totalTokens: videoTokens },
+            chat: { ...zeroTokens(), totalTokens: chatTokens },
+            ask: { ...zeroTokens(), totalTokens: askTokens },
+            other: zeroTokens(),
+          },
+        };
+      };
+      return [
+        share('Elena Ortiz', 'elena@ortizrestoration.com', 'demo-user-1', 'global_admin', 'Global Admin', 0.56, 186),
+        share('Marcus Chen', 'marcus@ortizrestoration.com', 'demo-user-2', 'employee', 'Employee', 0.28, 94),
+        share('Priya Shah', 'priya@ortizrestoration.com', 'demo-user-3', 'employee', 'Employee', 0.16, 42),
+      ];
+    })(),
     recent: [
       { id: 'tu-1', createdAt: '2026-08-01T16:12:00Z', feature: 'video_analysis', source: 'video_analysis', modelId: 'gemini-2.5-pro', userId: 'demo-user-1', userName: 'Elena Ortiz', inputTokens: 18400, outputTokens: 2100, cacheTokens: 0, totalTokens: 20500, priceNanos: 620_000_000 },
       { id: 'tu-2', createdAt: '2026-08-01T15:40:00Z', feature: 'ask', source: 'proof_ask', modelId: 'claude-sonnet', userId: 'demo-user-2', userName: 'Marcus Chen', inputTokens: 2400, outputTokens: 480, cacheTokens: 800, totalTokens: 3680, priceNanos: 94_000_000 },
