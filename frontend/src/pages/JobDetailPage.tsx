@@ -13,7 +13,9 @@ import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { JobAskPanel } from '../components/JobAskPanel';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ChevronLeftIcon, ShareIcon } from '../components/icons';
+import { TabPanel, Tabs } from '../design/Tabs';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { usePhoneShell } from '../lib/usePhoneShell';
 import {
   buildJobFileDossier,
   filePulse,
@@ -26,20 +28,24 @@ import { touchJobFile } from '../lib/jobFileRecents';
 /**
  * The job file.
  *
- * One page, no tabs. What you need first is already on the file — film, what
- * not to do, who is behind — then Ask. Work / crew / history were a later
- * product sitting in front of that.
+ * One page on desktop — film, do-not, who is behind, Ask pinned on the right.
+ * On a phone (Field Capture or narrow viewport) File and Ask are tabs so chat
+ * is first-class instead of buried under the dossier.
  */
+
+type JobFilePane = 'file' | 'ask';
 
 export function JobDetailPage() {
   useFeatureTimer('job_detail');
   const { id = '' } = useParams();
+  const phone = usePhoneShell();
   const [job, setJob] = useState<Job | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [pane, setPane] = useState<JobFilePane>('file');
 
   const load = useCallback(async () => {
     setError(null);
@@ -66,6 +72,10 @@ export function JobDetailPage() {
 
   useEffect(() => {
     if (id) touchJobFile(id);
+  }, [id]);
+
+  useEffect(() => {
+    setPane('file');
   }, [id]);
 
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
@@ -105,21 +115,9 @@ export function JobDetailPage() {
 
   const lastFilmed = filmedDateLabel(pulse.lastDate);
 
-  return (
-    <div
-      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
-      data-testid="job-file"
-    >
-      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <Link
-          to="/jobs"
-          className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
-        >
-          <ChevronLeftIcon width={16} height={16} />
-          Job Files
-        </Link>
-
-        <header className="flex flex-wrap items-start justify-between gap-4">
+  const fileBody = (
+    <>
+      <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="font-mono text-sm tracking-wider text-brand-600">Job #{job.jobNumber}</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
@@ -222,15 +220,69 @@ export function JobDetailPage() {
             </ul>
           </section>
         )}
-      </div>
+    </>
+  );
 
-      <aside
-        className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
-        aria-label="Ask this job"
-        data-testid="job-file-ask"
-      >
-        <JobAskPanel jobId={job.id} file={file} fill />
-      </aside>
+  return (
+    <div
+      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
+      data-testid="job-file"
+    >
+      {phone ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 border-b border-line bg-paper-0 px-3 pt-2">
+            <Link
+              to="/jobs"
+              className="mb-2 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
+            >
+              <ChevronLeftIcon width={16} height={16} />
+              Job Files
+            </Link>
+          </div>
+          <Tabs
+            value={pane}
+            onValueChange={(value) => setPane(value as JobFilePane)}
+            items={[
+              { value: 'file', label: 'File' },
+              { value: 'ask', label: 'Ask' },
+            ]}
+            className="flex min-h-0 flex-1 flex-col px-3"
+          >
+            <TabPanel value="file" className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none">
+              {fileBody}
+            </TabPanel>
+            <TabPanel
+              value="ask"
+              className="flex min-h-0 flex-1 flex-col outline-none"
+              aria-label="Ask this job"
+              data-testid="job-file-ask"
+            >
+              <JobAskPanel jobId={job.id} file={file} fill />
+            </TabPanel>
+          </Tabs>
+        </div>
+      ) : (
+        <>
+          <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+            <Link
+              to="/jobs"
+              className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
+            >
+              <ChevronLeftIcon width={16} height={16} />
+              Job Files
+            </Link>
+            {fileBody}
+          </div>
+
+          <aside
+            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
+            aria-label="Ask this job"
+            data-testid="job-file-ask"
+          >
+            <JobAskPanel jobId={job.id} file={file} fill />
+          </aside>
+        </>
+      )}
 
       {shareOpen && (
         <ShareJobProgressPanel

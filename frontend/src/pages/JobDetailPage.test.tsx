@@ -8,6 +8,12 @@ vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
 }));
 
+const usePhoneShell = vi.fn(() => false);
+
+vi.mock('../lib/usePhoneShell', () => ({
+  usePhoneShell: () => usePhoneShell(),
+}));
+
 const getJob = vi.fn();
 const sharedJob = vi.fn();
 const jobProofs = vi.fn();
@@ -165,6 +171,7 @@ function renderJob() {
 describe('JobDetailPage', () => {
   beforeEach(() => {
     localStorage.clear();
+    usePhoneShell.mockReturnValue(false);
     getJob.mockReset();
     sharedJob.mockReset();
     jobProofs.mockReset();
@@ -212,6 +219,21 @@ describe('JobDetailPage', () => {
     expect(JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038']).toEqual(
       expect.any(Number),
     );
+  });
+
+  it('uses File and Ask tabs on a phone so chat is not buried under the dossier', async () => {
+    usePhoneShell.mockReturnValue(true);
+    const user = userEvent.setup();
+    renderJob();
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Ask' }));
+    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
   });
 
   it('shares the job file instead of showing a Scheduled status', async () => {
