@@ -286,15 +286,9 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Two readings queue here, not one. The narration is per-video. The scene
-  // reading describes what this file shows — every upload is analysed on its
-  // own, however the crew labelled it.
-  //
-  // Day-length recordings and the iOS app often arrive with zero device
-  // frames. Those still queue: the worker sparsely extracts stills from
-  // storage with FFmpeg before reading.
-  await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
-  const analysis = await queueDayAnalysis(admin, party, input.workDate, (proof as any).id);
+  // Step 2 — the file is on disk, so the model reads it now. Nobody has to
+  // open Scope of Work. That tab only displays what this already wrote.
+  const analysis = await analyseUploadedProof(admin, party, proof as any, input.workDate);
 
   // The clip's own length and stills, settled off the critical path. Neither
   // needs a model, and a crew standing in a doorway must not wait on FFmpeg
@@ -315,7 +309,6 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     proofPhase: input.phase,
     performerLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
   });
-  await queueProofTranscript(admin, (proof as any).id);
 
   await recordAccess(admin, {
     orgId: party.org_id,
@@ -1209,11 +1202,40 @@ export async function queueNarration(admin: any, party: any, proofId: string, ph
 }
 
 /**
+ * Step 2 after a video is filed.
+ *
+ * 1. Video uploaded
+ * 2. AI analysis is performed automatically
+ *
+ * Vision, day reading, and the mic all start here. The upload request
+ * returns; the model runs in the background. Opening the clip is display,
+ * not the trigger.
+ */
+export async function analyseUploadedProof(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string; trade?: string | null },
+  proof: { id: string; phase: string },
+  workDate: string,
+  hooks?: {
+    queueNarrationFn?: typeof queueNarration;
+    queueDayAnalysisFn?: typeof queueDayAnalysis;
+    queueTranscriptFn?: typeof queueProofTranscript;
+  },
+): Promise<'queued'> {
+  const narrate = hooks?.queueNarrationFn ?? queueNarration;
+  const analyseDay = hooks?.queueDayAnalysisFn ?? queueDayAnalysis;
+  const transcribe = hooks?.queueTranscriptFn ?? queueProofTranscript;
+  await narrate(admin, party, proof.id, proof.phase, workDate);
+  await analyseDay(admin, party, workDate, proof.id);
+  await transcribe(admin, proof.id);
+  return 'queued';
+}
+
+/**
  * Read this file now so Ask can answer from a dictation.
  *
- * Uploads enqueue and return. Existing clips that never got a reading sit
- * unread until somebody Asks — that question is the moment to look at the
- * frames, not to say the clip has not been read.
+ * Uploads already started this read. This path is for Ask and for a clip
+ * that lost its in-memory queue — not the trigger for a new file.
  */
 const CLIP_READ_HARD_MS = Number(process.env.CLIP_READ_TIMEOUT_MS || 180_000);
 
