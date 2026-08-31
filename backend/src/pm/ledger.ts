@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { recordTokenUsageAsync } from '../metering/tokenUsage.js';
 
 /**
  * Tracing and metering for the Project Manager Agent.
@@ -225,6 +226,19 @@ export async function recordUsage(
     if (error && !isAbsent(error)) {
       console.warn('[pm] could not record usage:', error.message);
     }
+    recordTokenUsageAsync(supabase, {
+      orgId: usage.orgId,
+      requestId: `pm:${usage.requestId}`,
+      feature: usage.feature,
+      source: usage.feature,
+      modelId: usage.modelId,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheTokens:
+        (usage.cacheReadTokens ?? 0) +
+        (usage.cacheWrite5mTokens ?? 0) +
+        (usage.cacheWrite1hTokens ?? 0),
+    });
   } catch (err) {
     console.warn('[pm] could not record usage:', (err as Error).message);
   }

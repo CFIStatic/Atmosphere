@@ -11,7 +11,12 @@
  * lookup still answers from the same record so the Ask tab works in demo and
  * in environments without a provider.
  */
-import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
+import {
+  anthropicClient,
+  isModelProviderConfigured,
+  tryExtractUsage,
+  type MeasuredUsage,
+} from '../lib/anthropic.js';
 import { config } from '../config.js';
 
 export type ClipAskAnalysisState =
@@ -495,12 +500,12 @@ export async function answerFromClip(input: {
   question: string;
   record: ClipAskRecord;
   history?: ClipAskTurn[];
-}): Promise<{ answer: string; model: string | null }> {
+}): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  if (!isModelProviderConfigured()) return { answer: grounded, model: null };
+  if (!isModelProviderConfigured()) return { answer: grounded, model: null, usage: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
-  if (!reading) return { answer: grounded, model: null };
+  if (!reading) return { answer: grounded, model: null, usage: null };
 
   const history = (input.history ?? [])
     .filter((turn) => turn.text.trim())
@@ -528,8 +533,11 @@ export async function answerFromClip(input: {
       .map((block: { type: string; text?: string }) => block.text ?? '')
       .join('\n')
       .trim();
-    return answer ? { answer, model: response.model } : { answer: grounded, model: null };
+    const usage = tryExtractUsage(response.usage);
+    return answer
+      ? { answer, model: response.model, usage }
+      : { answer: grounded, model: null, usage };
   } catch {
-    return { answer: grounded, model: null };
+    return { answer: grounded, model: null, usage: null };
   }
 }

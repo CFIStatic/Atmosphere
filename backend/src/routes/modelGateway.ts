@@ -10,6 +10,7 @@ import { toNanos } from '../lib/money.js';
 import { billingError, serializeBalance } from '../lib/billing.js';
 import { anthropicClient, describeIterations, extractUsage } from '../lib/anthropic.js';
 import { recordAiUsageEventAsync } from '../metering/usageEvents.js';
+import { recordTokenUsageAsync } from '../metering/tokenUsage.js';
 
 export const modelGatewayRouter = Router();
 
@@ -181,6 +182,7 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       p_feature: input.feature ?? null,
     });
     if (chargeError) throw billingError(chargeError);
+    const charged = charge as any;
 
     recordAiUsageEventAsync(supabase, {
       orgId: req.orgId!,
@@ -197,7 +199,20 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       metadata: { feature: input.feature ?? null },
     });
 
-    const charged = charge as any;
+    recordTokenUsageAsync(supabase, {
+      orgId: req.orgId!,
+      requestId: `model:${requestId}`,
+      feature: input.feature ?? 'chat',
+      source: 'model_gateway',
+      userId: req.user?.id ?? null,
+      modelId: message.model ?? params.model,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheTokens: usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens,
+      priceNanos: toNanos(charged.price_nanos),
+      metadata: { feature: input.feature ?? null },
+    });
+
     res.json({
       id: message.id,
       model: message.model,

@@ -3810,6 +3810,9 @@ export const api = {
   getBillingWorkspace: () =>
     request<WorkspaceBilling>('/api/billing/workspace', { method: 'GET' }),
 
+  getTokenUsage: (range: TokenUsageRange = 'period') =>
+    request<TokenUsageReport>(`/api/billing/token-usage?range=${range}`, { method: 'GET' }),
+
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
 
@@ -5332,6 +5335,71 @@ export interface BillingOnboardingStatus {
     includedJobs: number;
     additionalJobPriceCents: number;
   };
+}
+
+export const TOKEN_FEATURES = ['video_analysis', 'chat', 'ask', 'other'] as const;
+export type TokenFeature = (typeof TOKEN_FEATURES)[number];
+
+export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
+  video_analysis: 'Video analysis',
+  chat: 'Chat',
+  ask: 'Ask',
+  other: 'Other',
+};
+
+export type TokenUsageRange = 'period' | '30d' | '90d';
+
+export interface TokenTotals {
+  events: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  totalTokens: number;
+  priceNanos: number;
+}
+
+export interface TokenFeatureBreakdown extends TokenTotals {
+  feature: TokenFeature;
+}
+
+export interface TokenUsageDay extends TokenTotals {
+  day: string;
+  byFeature: Record<TokenFeature, TokenTotals>;
+}
+
+export interface TokenEmployeeBreakdown extends TokenTotals {
+  userId: string | null;
+  name: string;
+  email: string | null;
+  role: string;
+  roleLabel: string;
+  byFeature: Record<TokenFeature, TokenTotals>;
+}
+
+export interface TokenUsageRecent {
+  id: string;
+  createdAt: string;
+  feature: TokenFeature;
+  source: string | null;
+  modelId: string | null;
+  userId: string | null;
+  userName: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  totalTokens: number;
+  priceNanos: number;
+}
+
+export interface TokenUsageReport {
+  periodStart: string;
+  periodEnd: string;
+  range: TokenUsageRange;
+  totals: TokenTotals;
+  byFeature: TokenFeatureBreakdown[];
+  byDay: TokenUsageDay[];
+  byEmployee: TokenEmployeeBreakdown[];
+  recent: TokenUsageRecent[];
 }
 
 /** Customer-facing Work Verification bill — not the leftover seat/credit catalog. */

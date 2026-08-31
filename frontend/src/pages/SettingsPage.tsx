@@ -53,7 +53,7 @@ const ALL_SECTIONS: SettingsSection[] = [
   {
     id: 'billing',
     label: 'Billing',
-    blurb: 'Plan and receipts',
+    blurb: 'Plan, tokens, and receipts',
     icon: CreditCardIcon,
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },

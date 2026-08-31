@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
+import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import {
@@ -1638,6 +1640,17 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     if (!result) {
       throw new HttpError(503, 'The assistant is not available right now.', 'model_unavailable');
     }
+
+    recordMeasuredTokenUsage(supabase, {
+      orgId,
+      requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+      feature: 'ask',
+      source: 'proof_ask',
+      userId,
+      jobId: req.params.jobId,
+      modelId: result.model,
+      usage: result.usage,
+    });
 
     const groundedOn = clips.map((clip) => `${clip.workDate}:${clip.phase ?? 'clip'}`);
     const { data: stored } = await supabase

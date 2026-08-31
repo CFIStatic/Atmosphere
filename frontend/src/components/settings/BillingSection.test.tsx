@@ -6,14 +6,21 @@ import type { WorkspaceBilling } from '../../lib/api';
 const getBillingWorkspace = vi.fn();
 const getPayments = vi.fn();
 const openBillingPortal = vi.fn();
+const getTokenUsage = vi.fn();
 
-vi.mock('../../lib/api', () => ({
-  api: {
-    getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
-    getPayments: (...args: unknown[]) => getPayments(...args),
-    openBillingPortal: (...args: unknown[]) => openBillingPortal(...args),
-  },
-}));
+vi.mock('../../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/api')>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
+      getPayments: (...args: unknown[]) => getPayments(...args),
+      openBillingPortal: (...args: unknown[]) => openBillingPortal(...args),
+      getTokenUsage: (...args: unknown[]) => getTokenUsage(...args),
+    },
+  };
+});
 
 import { BillingSection } from './BillingSection';
 
@@ -76,6 +83,23 @@ describe('BillingSection', () => {
       ],
     });
     openBillingPortal.mockReset();
+    getTokenUsage.mockReset().mockResolvedValue({
+      periodStart: '2026-08-01T00:00:00Z',
+      periodEnd: '2026-09-01T00:00:00Z',
+      range: 'period',
+      totals: {
+        events: 12,
+        inputTokens: 80_000,
+        outputTokens: 12_000,
+        cacheTokens: 4_000,
+        totalTokens: 96_000,
+        priceNanos: 2_400_000_000,
+      },
+      byFeature: [],
+      byDay: [],
+      byEmployee: [],
+      recent: [],
+    });
   });
 
   it('shows the Work Verification plan, not leftover seat billing', async () => {
@@ -94,5 +118,6 @@ describe('BillingSection', () => {
     expect(screen.queryByText(/seat/i)).toBeNull();
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Manage plan and payment method' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
   });
 });
