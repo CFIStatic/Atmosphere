@@ -160,6 +160,8 @@ assert.match(html, />Start recording</);
 assert.match(html, /<\/label>\s*<button type="button" class="job-add" id="job-add"/);
 assert.doesNotMatch(html, /footage carries where it was/);
 assert.doesNotMatch(html, /hold it for 5 seconds when you are done/);
+assert.doesNotMatch(html, /proof instead of silent video/);
+assert.doesNotMatch(html, /id="btnhint"/, 'Start the day no longer carries the proof explainer');
 assert.match(appSrc, /bindJobSearch/);
 assert.match(appSrc, /bindNewJob/);
 assert.match(appSrc, /Core\.filterJobs/);
