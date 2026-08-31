@@ -3385,6 +3385,12 @@ export const api = {
       { method: 'GET' },
     ),
 
+  progressShareAsk: (token: string, question: string) =>
+    request<{ answer: string; groundedOn: number; question: ProofQuestion | null }>(
+      `/api/progress-share/${encodeURIComponent(token)}/ask`,
+      { method: 'POST', body: JSON.stringify({ question }) },
+    ),
+
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
 

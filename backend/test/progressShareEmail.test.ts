@@ -15,11 +15,16 @@ test('progressShareEmail — job file and recordings, no account required', () =
   assert.match(subject, /job file/i);
   assert.match(subject, /Cedar Ridge/);
   assert.ok(text.includes('\n  https://app.atmosphere.example/progress/tok123\n'));
+  assert.ok(text.includes('\n  https://app.atmosphere.example/progress/tok123?ask=1\n'));
+  assert.match(text, /View the job file/i);
+  assert.match(text, /Ask a question/i);
   assert.match(text, /No account is required/i);
   assert.match(text, /every recording/i);
-  assert.match(text, /expires on 2026-10-01/i);
-  assert.match(html, /Open job file/);
-  assert.match(html, /https:\/\/app\.atmosphere\.example\/progress\/tok123/);
+  assert.match(text, /expire on 2026-10-01/i);
+  assert.match(html, /View job file/);
+  assert.match(html, /Ask this job/);
+  assert.match(html, /https:\/\/app\.atmosphere\.example\/progress\/tok123"/);
+  assert.match(html, /https:\/\/app\.atmosphere\.example\/progress\/tok123\?ask=1/);
   assert.match(html, /Atmosphere/);
 });
 
@@ -29,4 +34,5 @@ test('progressShareEmail — path-only when no origin', () => {
     path: '/progress/tok123',
   });
   assert.ok(text.includes('\n  /progress/tok123\n'));
+  assert.ok(text.includes('\n  /progress/tok123?ask=1\n'));
 });

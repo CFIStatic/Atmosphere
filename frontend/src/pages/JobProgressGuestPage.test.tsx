@@ -5,6 +5,7 @@ import type { ProgressShareGuestView } from '../lib/api';
 
 const progressShareGuest = vi.fn();
 const progressShareVideo = vi.fn();
+const progressShareAsk = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -14,6 +15,7 @@ vi.mock('../lib/api', async (importOriginal) => {
       ...actual.api,
       progressShareGuest: (...args: unknown[]) => progressShareGuest(...args),
       progressShareVideo: (...args: unknown[]) => progressShareVideo(...args),
+      progressShareAsk: (...args: unknown[]) => progressShareAsk(...args),
     },
   };
 });
@@ -119,9 +121,9 @@ const view: ProgressShareGuestView = {
   },
 };
 
-function renderGuest() {
+function renderGuest(path = '/progress/demo-homeowner') {
   return render(
-    <MemoryRouter initialEntries={['/progress/demo-homeowner']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/progress/:token" element={<JobProgressGuestPage />} />
       </Routes>
@@ -133,6 +135,7 @@ describe('JobProgressGuestPage', () => {
   beforeEach(() => {
     progressShareGuest.mockReset();
     progressShareVideo.mockReset();
+    progressShareAsk.mockReset();
     progressShareGuest.mockResolvedValue(view);
   });
 
@@ -150,5 +153,13 @@ describe('JobProgressGuestPage', () => {
     expect(screen.getByText('The north slope is stripped to decking.')).toBeInTheDocument();
     expect(screen.queryByText(/sign in/i)).toBeNull();
     expect(screen.queryByText(/create.*account/i)).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+  });
+
+  it('opens Ask when the emailed Ask link is used', async () => {
+    renderGuest('/progress/demo-homeowner?ask=1');
+
+    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
   });
 });

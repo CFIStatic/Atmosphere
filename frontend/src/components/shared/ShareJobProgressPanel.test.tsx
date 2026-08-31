@@ -58,6 +58,7 @@ describe('ShareJobProgressPanel', () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
     expect(await screen.findByRole('heading', { name: 'Invite by email' })).toBeInTheDocument();
+    expect(screen.getByText(/View and Ask links/i)).toBeInTheDocument();
     expect(screen.getByText('jack@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy link/i })).toBeNull();
     expect(screen.queryByLabelText(/who is this for/i)).toBeNull();
@@ -92,5 +93,22 @@ describe('ShareJobProgressPanel', () => {
         recipientEmail: 'jordan@example.com',
       });
     });
+  });
+
+  it('shows the server error when the invite email does not send', async () => {
+    createProgressShare.mockRejectedValueOnce(
+      new Error('Atmosphere mail is not configured, so the invite was not sent.'),
+    );
+    const user = userEvent.setup();
+    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
+
+    await screen.findByText('jack@example.com');
+    await user.type(screen.getByLabelText(/^email$/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send invite/i }));
+
+    expect(
+      await screen.findByText('Atmosphere mail is not configured, so the invite was not sent.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/invite sent/i)).toBeNull();
   });
 });

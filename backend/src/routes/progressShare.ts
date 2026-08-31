@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
-import { buildJobProofPayload, PROOF_BUCKET, recordAccess } from './proofOfWork.js';
+import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 
 /**
  * Guest access to a read-only job file.
@@ -26,6 +28,14 @@ const shareLimiter = rateLimit({
   message: { error: 'Too many requests.', code: 'rate_limited' },
 });
 progressShareRouter.use(shareLimiter);
+
+const askLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many questions. Wait a minute and try again.', code: 'rate_limited' },
+});
 
 async function progressShareForToken(token: string) {
   const admin = createAdminClient();
@@ -135,6 +145,43 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
     next(err);
   }
 });
+
+/**
+ * POST /api/progress-share/:token/ask
+ * Homeowner (or counsel / bank / adjuster) asks the same job file the office Ask
+ * reads — token is the credential, no Atmosphere account.
+ */
+progressShareRouter.post(
+  '/:token/ask',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(req.params.token);
+      const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+      const result = await runProofAsk({
+        supabase: admin,
+        orgId: share.org_id,
+        jobId: share.job_id,
+        question: input.question,
+        userId: null,
+        requestId: `ask:progress:${share.id}:${randomUUID()}`,
+      });
+
+      await recordAccess(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        action: 'viewed',
+        actorLabel: `${share.label} — asked via job-file link`,
+        actorRole: 'external_reviewer',
+        detail: input.question.slice(0, 160),
+      });
+
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /api/progress-share/:token/proof/:proofId/video — watch a clip through the share. */
 progressShareRouter.get(

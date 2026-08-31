@@ -42,21 +42,30 @@ function TypingDots() {
   );
 }
 
+export type JobAskFn = (
+  question: string,
+) => Promise<{ answer: string; groundedOn: number; question?: ProofQuestion | null }>;
+
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
  *
  * The parent can pass the file it already loaded so the page and this panel
- * do not fetch the record twice.
+ * do not fetch the record twice. A guest share passes `ask` so the token
+ * door is used instead of the office session.
  */
 export function JobAskPanel({
   jobId,
   file,
   fill = false,
+  ask: askFn,
+  loadQuestions,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
   /** Fill a docked column instead of sitting as a card with a capped thread. */
   fill?: boolean;
+  ask?: JobAskFn;
+  loadQuestions?: () => Promise<{ questions: ProofQuestion[] }>;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
@@ -79,7 +88,9 @@ export function JobAskPanel({
     Promise.all([
       preloaded ? Promise.resolve(record) : api.sharedJob(jobId).catch(() => null),
       preloaded ? Promise.resolve(proofs) : api.jobProofs(jobId).catch(() => null),
-      api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
+      (loadQuestions ?? (() => api.proofQuestions(jobId)))().catch(() => ({
+        questions: [] as ProofQuestion[],
+      })),
     ])
       .then(([nextRecord, nextProofs, nextQuestions]) => {
         if (n !== seq.current) return;
@@ -135,7 +146,7 @@ export function JobAskPanel({
     const pendingId = `local-${now}`;
     setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
     try {
-      const res = await api.askAboutProofs(jobId, text);
+      const res = askFn ? await askFn(text) : await api.askAboutProofs(jobId, text);
       setTurns((prev) => [
         ...prev.filter((turn) => turn.id !== pendingId),
         {

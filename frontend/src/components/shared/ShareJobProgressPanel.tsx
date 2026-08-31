@@ -116,7 +116,7 @@ export function ShareJobProgressPanel({
             Invite by email
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            We email them a link to this job file and every recording. No account needed.
+            We email View and Ask links for this job file and every recording. No account needed.
           </p>
         </div>
         {modal ? (

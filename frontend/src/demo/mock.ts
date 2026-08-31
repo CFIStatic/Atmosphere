@@ -3164,6 +3164,26 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/progress-share\/([\w-]+)\/proof\/([\w-]+)\/video$/, () => ({
     body: { url: DEMO_CLIP, expiresInSeconds: 600 },
   })],
+  ['POST', /^\/api\/progress-share\/([\w-]+)\/ask$/, (_m, b) => {
+    const question = String(b?.question ?? '').trim();
+    const answer = /skylight/i.test(question)
+      ? 'The file says the skylights were removed from scope — do not touch them.'
+      : 'That is on this job file. Open View to see the brief, do-nots, and every recording.';
+    return {
+      status: 201,
+      body: {
+        answer,
+        groundedOn: 1,
+        question: {
+          id: `q-${Date.now()}`,
+          question,
+          answer,
+          grounded_on: ['brief'],
+          created_at: new Date().toISOString(),
+        },
+      },
+    };
+  }],
 
   /* ------------------------------------------- invitations */
   ['GET', /^\/api\/org\/invites$/, () => ({ body: { invites: ORG_INVITES } })],

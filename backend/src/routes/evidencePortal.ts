@@ -33,7 +33,7 @@ import {
 import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
-import { sendSystemMail } from '../lib/systemMail.js';
+import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
@@ -911,7 +911,19 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     }
 
     let emailed = false;
+    let mailWhy: string | null = null;
     if (!erased && recipientEmail) {
+      if (body.kind === 'progress' && !systemMailConfigured()) {
+        await supabase
+          .from('verifier_shares')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('id', (share as any).id);
+        throw new HttpError(
+          503,
+          'Atmosphere mail is not configured, so the invite was not sent. Set SMTP or Resend on the server and try again.',
+          'mail_not_configured',
+        );
+      }
       try {
         const [{ data: org }, sharerName] = await Promise.all([
           supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
@@ -937,6 +949,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
             html: mail.html,
           });
           emailed = result.ok;
+          if (!result.ok) mailWhy = result.why;
         } else {
           const sender = await buildMailSender(orgId);
           if (sender) {
@@ -956,12 +969,29 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
               text: mail.text,
             });
             emailed = result.ok;
+            if (!result.ok) mailWhy = result.why;
+          } else {
+            mailWhy = 'No mailbox is connected for this organization.';
           }
         }
-      } catch {
-        // The share stands; only the delivery failed, and the response's
-        // emailed:false is the honest report of that.
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        mailWhy = err instanceof Error ? err.message : 'The email could not be sent.';
       }
+    }
+
+    // Invite-by-email is the product. A live share with no mail is a failed
+    // invite — revoke it so "Send invite" either delivers or says so.
+    if (body.kind === 'progress' && !erased && !emailed) {
+      await supabase
+        .from('verifier_shares')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', (share as any).id);
+      throw new HttpError(
+        502,
+        mailWhy || 'The invite email could not be sent. Try again.',
+        'email_not_sent',
+      );
     }
 
     // Sharing evidence is an act on the evidence, and it goes on the record

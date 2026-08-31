@@ -20,7 +20,8 @@ export function progressShareEmail(input: {
   const sharer = input.sharerName?.trim() || null;
   const from = sharer ? `${sharer} at ${input.orgName}` : input.orgName;
   const job = input.jobTitle?.trim() || null;
-  const link = absoluteUrl(input.origin, input.path);
+  const viewLink = absoluteUrl(input.origin, input.path);
+  const askLink = withAsk(viewLink);
 
   const lines: string[] = [
     `${from} shared a job file with you on Atmosphere.`,
@@ -28,23 +29,25 @@ export function progressShareEmail(input: {
   ];
   if (job) lines.push(`Job: ${job}`, '');
 
-  lines.push('Open the job file here:', '', `  ${link}`, '');
+  lines.push('View the job file:', '', `  ${viewLink}`, '');
+  lines.push('Ask a question about this job:', '', `  ${askLink}`, '');
 
   lines.push(
-    'No account is required — the link opens the job file and every recording',
-    'on it: the brief, do-not lines, scope, and the day-by-day films.',
+    'No account is required — View opens the job file and every recording',
+    '(brief, do-not lines, scope, and the day-by-day films). Ask answers from',
+    'that same file.',
   );
   lines.push('');
 
   if (input.expiresAt) {
-    lines.push(`The link expires on ${input.expiresAt.slice(0, 10)}.`);
+    lines.push(`The links expire on ${input.expiresAt.slice(0, 10)}.`);
   } else {
-    lines.push(`The link stays live until ${input.orgName} revokes it.`);
+    lines.push(`The links stay live until ${input.orgName} revokes them.`);
   }
 
   lines.push(
     '',
-    'If you were not expecting this, you can ignore it — nothing happens until the link is opened.',
+    'If you were not expecting this, you can ignore it — nothing happens until a link is opened.',
   );
 
   const html = `<!DOCTYPE html>
@@ -60,19 +63,23 @@ export function progressShareEmail(input: {
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             ${job ? `Job: <strong>${escapeHtml(job)}</strong>. ` : ''}
-            No account is required — open the link to see the job file and every recording.
+            No account is required — View the job file and every recording, or Ask a question from the file.
           </p>
           <p style="margin:24px 0 0;">
-            <a href="${escapeAttr(link)}"
+            <a href="${escapeAttr(viewLink)}"
                style="display:inline-block;background:#ea580c;color:#1c1917;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
-              Open job file
+              View job file
+            </a>
+            <a href="${escapeAttr(askLink)}"
+               style="display:inline-block;margin-left:10px;background:#1c1917;color:#fffdf8;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
+              Ask this job
             </a>
           </p>
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             ${
               input.expiresAt
-                ? `The link expires on ${escapeHtml(input.expiresAt.slice(0, 10))}.`
-                : `The link stays live until ${escapeHtml(input.orgName)} revokes it.`
+                ? `The links expire on ${escapeHtml(input.expiresAt.slice(0, 10))}.`
+                : `The links stay live until ${escapeHtml(input.orgName)} revokes them.`
             }
             If you were not expecting this, ignore it.
           </p>
@@ -88,6 +95,11 @@ export function progressShareEmail(input: {
     text: lines.join('\n'),
     html,
   };
+}
+
+function withAsk(viewLink: string): string {
+  if (/[?&]ask=/.test(viewLink)) return viewLink;
+  return viewLink.includes('?') ? `${viewLink}&ask=1` : `${viewLink}?ask=1`;
 }
 
 function absoluteUrl(origin: string | null | undefined, path: string): string {

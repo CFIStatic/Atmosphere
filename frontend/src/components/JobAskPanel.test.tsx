@@ -116,4 +116,37 @@ describe('JobAskPanel', () => {
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
   });
+
+  it('asks through a guest share instead of the office session', async () => {
+    const ask = vi.fn().mockResolvedValue({
+      answer: 'From the guest file.',
+      groundedOn: 1,
+      question: {
+        id: 'q-guest',
+        question: 'What did the homeowner say about the skylights?',
+        answer: 'From the guest file.',
+        grounded_on: ['brief'],
+        created_at: '2026-08-06T12:00:00Z',
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <JobAskPanel
+        jobId="job-1038"
+        file={{ record, proofs }}
+        ask={ask}
+        loadQuestions={async () => ({ questions: [] })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole('button', { name: 'What did the homeowner say about the skylights?' }),
+    );
+
+    await waitFor(() => {
+      expect(ask).toHaveBeenCalledWith('What did the homeowner say about the skylights?');
+    });
+    expect(askAboutProofs).not.toHaveBeenCalled();
+    expect(await screen.findByText('From the guest file.')).toBeInTheDocument();
+  });
 });
