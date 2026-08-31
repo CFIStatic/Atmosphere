@@ -249,48 +249,48 @@
 
     return {
       start: function () {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          return Promise.reject(new Error('This browser cannot record video + audio.'));
-        }
         if (!window.MediaRecorder) {
           return Promise.reject(new Error('MediaRecorder is not available.'));
         }
-        return navigator.mediaDevices
-          .getUserMedia({
-            video: { facingMode: { ideal: 'environment' } },
-            audio: true,
-          })
-          .then(function (stream) {
-            if (!stream.getAudioTracks().length) {
-              stream.getTracks().forEach(function (t) {
-                t.stop();
+        var acquire = opts.stream
+          ? Promise.resolve(opts.stream)
+          : !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia
+            ? Promise.reject(new Error('This browser cannot record video + audio.'))
+            : navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: true,
               });
-              throw new Error('Microphone is required. Enable mic permission and try again.');
-            }
-            if (!stream.getVideoTracks().length) {
-              stream.getTracks().forEach(function (t) {
-                t.stop();
-              });
-              throw new Error('Camera is required.');
-            }
-            state.stream = stream;
-            bindLivePreview(videoEl, stream);
-            var mime = pickMime();
-            state.mimeType = mime || '';
-            var recorder = mime
-              ? new MediaRecorder(stream, { mimeType: mime })
-              : new MediaRecorder(stream);
-            state.recorder = recorder;
-            state.chunks = [];
-            state.startedAt = Date.now();
-            recorder.ondataavailable = function (ev) {
-              if (ev.data && ev.data.size > 0) state.chunks.push(ev.data);
-            };
-            recorder.start(1000);
-            state.timer = setInterval(function () {
-              onTick(Math.floor((Date.now() - state.startedAt) / 1000));
-            }, 500);
-          });
+        return acquire.then(function (stream) {
+          if (!stream.getAudioTracks().length) {
+            stream.getTracks().forEach(function (t) {
+              t.stop();
+            });
+            throw new Error('Microphone is required. Enable mic permission and try again.');
+          }
+          if (!stream.getVideoTracks().length) {
+            stream.getTracks().forEach(function (t) {
+              t.stop();
+            });
+            throw new Error('Camera is required.');
+          }
+          state.stream = stream;
+          bindLivePreview(videoEl, stream);
+          var mime = pickMime();
+          state.mimeType = mime || '';
+          var recorder = mime
+            ? new MediaRecorder(stream, { mimeType: mime })
+            : new MediaRecorder(stream);
+          state.recorder = recorder;
+          state.chunks = [];
+          state.startedAt = Date.now();
+          recorder.ondataavailable = function (ev) {
+            if (ev.data && ev.data.size > 0) state.chunks.push(ev.data);
+          };
+          recorder.start(1000);
+          state.timer = setInterval(function () {
+            onTick(Math.floor((Date.now() - state.startedAt) / 1000));
+          }, 500);
+        });
       },
       stop: function () {
         return new Promise(function (resolve, reject) {

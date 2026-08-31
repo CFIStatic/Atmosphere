@@ -306,12 +306,12 @@
     setStatus('Ready — start the day.');
   }
 
-  function startRecordingForNewJob() {
+  function startRecordingForNewJob(stream) {
     if (DEMO && typeof window.__startDemoDay === 'function') {
       window.__startDemoDay();
       return;
     }
-    startLiveDay();
+    startLiveDay(stream);
   }
 
   function bindNewJob() {
@@ -345,12 +345,12 @@
         showNewJobError('Enter the site address.');
         return;
       }
+      if (btn && btn.disabled) return;
       if (btn) btn.disabled = true;
 
-      function finishLocal(job) {
+      function finishLocal(job, stream) {
         selectCreatedJob(job);
-        if (btn) btn.disabled = false;
-        startRecordingForNewJob();
+        startRecordingForNewJob(stream);
       }
 
       if (DEMO || (!state.account && !state.accessToken)) {
@@ -364,15 +364,39 @@
         return;
       }
 
-      Core.createTodayJob({
-        apiBase: API_BASE,
-        accessToken: state.accessToken,
-        title: title,
-        address: address,
-        situation: situation,
-      })
-        .then(function (job) {
-          finishLocal(job);
+      /* Ask for camera/mic in this tap. A POST-then-getUserMedia gap is
+         why iPhone Safari refuses the prompt and a second tap files
+         another job. Keep the stream and only create the job after. */
+      var media =
+        navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+          ? navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: 'environment' } },
+              audio: true,
+            })
+          : Promise.reject(new Error('This browser cannot record video + audio.'));
+
+      media
+        .then(function (stream) {
+          return Core.createTodayJob({
+            apiBase: API_BASE,
+            accessToken: state.accessToken,
+            title: title,
+            address: address,
+            situation: situation,
+          }).then(
+            function (job) {
+              return { job: job, stream: stream };
+            },
+            function (err) {
+              stream.getTracks().forEach(function (t) {
+                t.stop();
+              });
+              throw err;
+            },
+          );
+        })
+        .then(function (result) {
+          finishLocal(result.job, result.stream);
         })
         .catch(function (err) {
           if (btn) btn.disabled = false;
@@ -728,7 +752,8 @@
       : m + ':' + String(s).padStart(2, '0');
   }
 
-  function startLiveDay() {
+  function startLiveDay(stream) {
+    if (stream && typeof stream.getTracks !== 'function') stream = undefined;
     if (state.account && !state.activeJobId) {
       setStatus('No open job to file this day against.', true);
       return;
@@ -737,6 +762,7 @@
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
+      stream: stream,
       onTick: function (sec) {
         state.seconds = sec;
         $('#clock').textContent = fmt(sec);
@@ -754,8 +780,14 @@
         });
       })
       .catch(function (err) {
+        if (stream) {
+          stream.getTracks().forEach(function (t) {
+            t.stop();
+          });
+        }
         setStatus(err.message || 'Could not start camera/mic.', true);
         alert(err.message || 'Could not start camera/mic.');
+        show('s-home');
       });
   }
 

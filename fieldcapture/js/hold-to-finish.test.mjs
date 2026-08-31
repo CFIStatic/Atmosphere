@@ -164,6 +164,16 @@ assert.match(appSrc, /bindJobSearch/);
 assert.match(appSrc, /bindNewJob/);
 assert.match(appSrc, /Core\.filterJobs/);
 assert.match(appSrc, /Core\.createTodayJob/);
+assert.ok(
+  appSrc.indexOf('navigator.mediaDevices.getUserMedia') < appSrc.indexOf('Core.createTodayJob({'),
+  'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
+);
+assert.match(
+  appSrc,
+  /function finishLocal\(job, stream\) \{\s*selectCreatedJob\(job\);\s*startRecordingForNewJob\(stream\);/,
+  'after the job exists, leave Start recording disabled and start the camera',
+);
+assert.match(coreSrc, /opts\.stream/, 'recordDayFilm must reuse the stream from the original tap');
 assert.match(coreSrc, /function createTodayJob/);
 assert.match(coreSrc, /\/api\/field-app\/jobs/);
 assert.equal(typeof Core.createTodayJob, 'function');
