@@ -63,11 +63,35 @@ describe('AddressAutocomplete', () => {
     }
     render(<Harness />);
 
+    expect(await screen.findByText(/Search Google for the site/i)).toBeInTheDocument();
     await user.type(screen.getByRole('combobox'), 'East Rac');
 
     await waitFor(() => {
       expect(placesAutocomplete).toHaveBeenCalled();
     });
     expect(await screen.findByRole('listbox')).toBeInTheDocument();
+    expect(screen.getByText('East Racine Avenue')).toBeInTheDocument();
+  });
+
+  it('confirms a picked Google suggestion', async () => {
+    const user = userEvent.setup();
+    const onResolved = vi.fn();
+    function Harness() {
+      const [value, setValue] = useState('');
+      return <AddressAutocomplete value={value} onChange={setValue} onResolved={onResolved} />;
+    }
+    render(<Harness />);
+    await user.type(screen.getByRole('combobox'), 'East Rac');
+    await user.click(await screen.findByRole('button', { name: /East Racine Avenue/i }));
+    await waitFor(() => {
+      expect(placesDetails).toHaveBeenCalled();
+    });
+    expect(onResolved).toHaveBeenCalledWith(
+      expect.objectContaining({
+        addressLine1: 'East Racine Avenue',
+        city: 'Waukesha',
+        postalCode: '53186',
+      }),
+    );
   });
 });

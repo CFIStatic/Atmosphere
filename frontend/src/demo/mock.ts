@@ -3198,7 +3198,7 @@ const routes: Array<[string, RegExp, Handler]> = [
 
   /* ------------------------------------------- Address lookup (intake) */
   ['GET', /^\/api\/operations\/places\/status$/, () => ({
-    body: { configured: true, provider: 'osm' },
+    body: { configured: true, provider: 'osm', google: false },
   })],
   ['POST', /^\/api\/operations\/places\/autocomplete$/, async (_m, b) => {
     const q = String(b.input ?? '').trim();
@@ -3270,6 +3270,85 @@ const routes: Array<[string, RegExp, Handler]> = [
           address: {
             placeId,
             formatted,
+            addressLine1: line1,
+            city,
+            postalCode: String(p.postcode || ''),
+            state: String(p.state || ''),
+            country: String(p.countrycode || p.country || ''),
+            lat: typeof lat === 'number' ? lat : null,
+            lng: typeof lng === 'number' ? lng : null,
+          },
+        },
+      };
+    } catch {
+      return { status: 503, body: { error: 'Address lookup is unavailable.', code: 'places_unavailable' } };
+    }
+  }],
+  ['POST', /^\/api\/operations\/places\/resolve$/, async (_m, b) => {
+    const placeId = String(b.placeId ?? '');
+    const q = String(b.input ?? '').trim();
+    try {
+      if (placeId.startsWith('osm:')) {
+        const m = /^osm:[NWR]:(\d+):(-?[\d.]+),(-?[\d.]+)$/i.exec(placeId);
+        if (!m) return { status: 400, body: { error: 'Unknown place.', code: 'osm_place_invalid' } };
+        const url = new URL('https://photon.komoot.io/reverse');
+        url.searchParams.set('lon', m[2]!);
+        url.searchParams.set('lat', m[3]!);
+        url.searchParams.set('lang', 'en');
+        const res = await realFetch(url.toString(), { headers: { Accept: 'application/json' } });
+        const data = (await res.json()) as {
+          features?: Array<{
+            geometry?: { coordinates?: [number, number] };
+            properties?: Record<string, string | number | undefined>;
+          }>;
+        };
+        const f = data.features?.[0];
+        const p = f?.properties ?? {};
+        const [lng, lat] = f?.geometry?.coordinates ?? [Number(m[2]), Number(m[3])];
+        const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? q);
+        const city = String(p.city || p.locality || p.district || '');
+        return {
+          body: {
+            configured: true,
+            provider: 'osm',
+            address: {
+              placeId,
+              formatted: [line1, [city, p.state, p.postcode].filter(Boolean).join(', ')].filter(Boolean).join(', '),
+              addressLine1: line1,
+              city,
+              postalCode: String(p.postcode || ''),
+              state: String(p.state || ''),
+              country: String(p.countrycode || p.country || ''),
+              lat: typeof lat === 'number' ? lat : null,
+              lng: typeof lng === 'number' ? lng : null,
+            },
+          },
+        };
+      }
+      if (q.length < 3) return { status: 400, body: { error: 'Enter an address to look up.', code: 'address_required' } };
+      const url = new URL('https://photon.komoot.io/api/');
+      url.searchParams.set('q', q);
+      url.searchParams.set('limit', '1');
+      url.searchParams.set('lang', 'en');
+      const res = await realFetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const data = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: [number, number] };
+          properties?: Record<string, string | number | undefined>;
+        }>;
+      };
+      const f = data.features?.[0];
+      const p = f?.properties ?? {};
+      const [lng, lat] = f?.geometry?.coordinates ?? [null, null];
+      const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? q);
+      const city = String(p.city || p.locality || p.district || '');
+      return {
+        body: {
+          configured: true,
+          provider: 'osm',
+          address: {
+            placeId: `osm:N:${p.osm_id ?? 0}:${lng},${lat}`,
+            formatted: [line1, [city, p.state, p.postcode].filter(Boolean).join(', ')].filter(Boolean).join(', '),
             addressLine1: line1,
             city,
             postalCode: String(p.postcode || ''),

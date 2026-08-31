@@ -42,6 +42,13 @@ test('cityPostalFromAddress reads city and ZIP from a Places-formatted line', ()
   });
 });
 
+test('cityPostalFromAddress reads a UK postcode', () => {
+  assert.deepEqual(cityPostalFromAddress('School Street, Llanbradach, Wales, CF83 3NB, GB'), {
+    city: 'Llanbradach',
+    postalCode: 'CF83 3NB',
+  });
+});
+
 test('intakeFromFieldStart maps the phone form onto the office job file', () => {
   const withNote = intakeFromFieldStart({
     title: 'East Racine Avenue',

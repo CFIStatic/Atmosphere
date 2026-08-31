@@ -3,15 +3,12 @@
  * approves. Crew name the job and the site; a situation note is optional.
  */
 
+import { cityPostalFromAddress } from '../lib/propertyAddress.js';
+
 export const FIELD_DEFAULT_BRIEF =
   'No work description yet. Field Capture can still film — AI will describe what happened from the video.';
 
-export function cityPostalFromAddress(formatted: string): { city: string; postalCode: string } {
-  const postal = formatted.match(/\b(\d{5})(?:-\d{4})?\b/);
-  const bits = formatted.split(',').map((s) => s.trim()).filter(Boolean);
-  const city = bits.length >= 2 ? bits[1]!.replace(/\s+[A-Z]{2}$/, '').trim() : '';
-  return { city, postalCode: postal?.[1] ?? '' };
-}
+export { cityPostalFromAddress };
 
 export function workTypeFromSituation(text: string): 'mitigation' | 'construction' {
   return /mitigat|water|flood|mold|dry|extract/i.test(text) ? 'mitigation' : 'construction';

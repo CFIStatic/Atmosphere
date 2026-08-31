@@ -17,6 +17,12 @@ import {
   isMemoryLedgerError,
   repairMemoryJobFk,
 } from '../lib/memoryLedger.js';
+import { placesProvider, resolvePlace } from '../lib/googlePlaces.js';
+import {
+  cityPostalFromAddress,
+  propertyRowFromResolved,
+  propertyRowFromTyped,
+} from '../lib/propertyAddress.js';
 
 /**
  * How a job gets here, and what that costs.
@@ -165,16 +171,12 @@ jobIntakeRouter.post('/jobs/quick-start', async (req: Request, res: Response, ne
   try {
     const { orgId, supabase, userId } = await requireOrgContext(req);
     const input = quickStartSchema.parse(req.body);
-    const jobTitle = jobTitleForIntake(input.title, input.address);
+    const site = await resolveIntakeAddress(orgId, input);
+    const jobTitle = jobTitleForIntake(input.title, site.line);
 
     const { data: property, error: propertyError } = await supabase
       .from('crm_properties')
-      .insert({
-        org_id: orgId,
-        address_line1: input.address,
-        city: input.city ?? null,
-        postal_code: input.postalCode ?? null,
-      })
+      .insert(site.row)
       .select('id')
       .single();
     if (propertyError || !property) {
@@ -387,6 +389,11 @@ const approveSchema = z.object({
     }),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
+  region: z.string().trim().max(120).optional(),
+  country: z.string().trim().max(8).optional(),
+  placeId: z.string().trim().max(300).optional(),
+  latitude: z.number().min(-90).max(90).nullish(),
+  longitude: z.number().min(-180).max(180).nullish(),
   claimNumber: z.string().trim().max(80).optional(),
   briefNote: z.string().trim().max(2000).nullable().optional(),
   facts: z.record(z.string().max(80), z.string().max(2000)).optional(),
@@ -442,6 +449,53 @@ function scopeLinesForDb(input: z.infer<typeof approveSchema>) {
     .filter((line) => line.title.length >= 2);
 }
 
+type IntakeAddress = {
+  line: string;
+  city?: string;
+  postalCode?: string;
+  row: Record<string, unknown>;
+};
+
+async function resolveIntakeAddress(
+  orgId: string,
+  input: {
+    address: string;
+    city?: string;
+    postalCode?: string;
+    placeId?: string;
+  },
+): Promise<IntakeAddress> {
+  const parsed = cityPostalFromAddress(input.address);
+  const resolved = await resolvePlace({
+    query: input.address,
+    placeId: input.placeId,
+  });
+  if (resolved?.address) {
+    const row = propertyRowFromResolved(orgId, resolved.address, input.address);
+    const line = String(row.address_line1 ?? input.address).slice(0, 200);
+    return {
+      line,
+      city: (row.city as string | null) || input.city || parsed.city || undefined,
+      postalCode: (row.postal_code as string | null) || input.postalCode || parsed.postalCode || undefined,
+      row,
+    };
+  }
+  if (placesProvider() === 'google') {
+    throw new HttpError(
+      400,
+      'Search for the site address and pick it from the Google results.',
+      'address_unresolved',
+    );
+  }
+  const row = propertyRowFromTyped(orgId, input.address, input.city, input.postalCode);
+  return {
+    line: String(row.address_line1 ?? input.address).slice(0, 200),
+    city: (row.city as string | null) || undefined,
+    postalCode: (row.postal_code as string | null) || undefined,
+    row,
+  };
+}
+
 /**
  * Preferred path: one SECURITY DEFINER transaction that creates the full job
  * file. Falls back to stepwise inserts when the migration is not applied yet.
@@ -452,8 +506,9 @@ export async function createJobFile(
   userId: string,
   input: z.infer<typeof approveSchema>,
 ): Promise<CreatedJobFile> {
+  const site = await resolveIntakeAddress(orgId, input);
   const scopeLines = scopeLinesForDb(input);
-  const jobTitle = jobTitleForIntake(input.title, input.address);
+  const jobTitle = jobTitleForIntake(input.title, site.line);
   const invitees = input.invitees.map((person) => ({
     userId: person.userId ?? null,
     fullName: person.fullName,
@@ -467,9 +522,9 @@ export async function createJobFile(
     p_org_id: orgId,
     p_title: jobTitle,
     p_work_type: input.workType,
-    p_address: input.address,
-    p_city: input.city ?? null,
-    p_postal_code: input.postalCode ?? null,
+    p_address: site.line,
+    p_city: site.city ?? null,
+    p_postal_code: site.postalCode ?? null,
     p_claim_number: input.claimNumber ?? null,
     p_brief_note: input.briefNote ?? null,
     p_facts: input.facts ?? {},
@@ -540,7 +595,7 @@ export async function createJobFile(
       console.warn('[intake] intake_create_job_file failed, falling back:', msg);
     }
   }
-  return createJobFileStepwise(supabase, orgId, userId, input, scopeLines, invitees);
+  return createJobFileStepwise(supabase, orgId, userId, input, scopeLines, invitees, site);
 }
 
 async function createJobFileStepwise(
@@ -557,31 +612,37 @@ async function createJobFileStepwise(
     trade: string | null;
     external: boolean;
   }>,
+  site: IntakeAddress,
 ): Promise<CreatedJobFile> {
   // Prefer the service-role client for the write path when available so a
   // missing GRANT on job_* tables cannot strand a half-created job file.
   const writer = createAdminClient() ?? supabase;
-  const jobTitle = jobTitleForIntake(input.title, input.address);
+  const jobTitle = jobTitleForIntake(input.title, site.line);
 
-  const { data: property, error: propertyError } = await writer
-    .from('crm_properties')
-    .insert({
-      org_id: orgId,
-      address_line1: input.address,
-      city: input.city ?? null,
-      postal_code: input.postalCode ?? null,
-    })
-    .select('id')
-    .single();
-  if (propertyError || !property) {
-    throw intakeWriteError(propertyError, 'Could not save the address.', 'property_failed');
+  let property = (
+    await writer.from('crm_properties').insert(site.row).select('id').single()
+  ) as { data: { id: string } | null; error: { message?: string } | null };
+  if (property.error || !property.data) {
+    property = await writer
+      .from('crm_properties')
+      .insert({
+        org_id: orgId,
+        address_line1: site.line,
+        city: site.city ?? null,
+        postal_code: site.postalCode ?? null,
+      })
+      .select('id')
+      .single();
+  }
+  if (property.error || !property.data) {
+    throw intakeWriteError(property.error, 'Could not save the address.', 'property_failed');
   }
 
   const job = await insertCrmJob(writer, {
     org_id: orgId,
     title: jobTitle,
     work_type: input.workType,
-    property_id: (property as any).id,
+    property_id: property.data.id,
     claim_number: input.claimNumber || null,
     status: 'scheduled',
     created_by: userId,

@@ -37,7 +37,25 @@ vi.mock('../lib/api', () => ({
           },
         ],
       }),
-    placesStatus: () => Promise.resolve({ configured: false }),
+    placesStatus: () => Promise.resolve({ configured: true, provider: 'google', google: true }),
+    placesAutocomplete: () => Promise.resolve({ configured: true, provider: 'google', suggestions: [] }),
+    placesDetails: vi.fn(),
+    placesResolve: () =>
+      Promise.resolve({
+        configured: true,
+        provider: 'google',
+        address: {
+          placeId: 'p-meridian',
+          formatted: '1842 Meridian Ave, Austin, TX 78702, USA',
+          addressLine1: '1842 Meridian Ave',
+          city: 'Austin',
+          postalCode: '78702',
+          state: 'TX',
+          country: 'US',
+          lat: 30.27,
+          lng: -97.74,
+        },
+      }),
     approveIntake: vi.fn(),
   },
 }));
@@ -121,7 +139,7 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.type(
-      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      screen.getByPlaceholderText('Search Google for the site address'),
       '1842 Meridian Ave',
     );
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
@@ -216,7 +234,7 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.type(
-      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      screen.getByPlaceholderText('Search Google for the site address'),
       '1842 Meridian Ave',
     );
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));

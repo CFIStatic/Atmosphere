@@ -63,6 +63,12 @@ describe('cityPostalFromAddress', () => {
       cityPostalFromAddress('East Racine Avenue, Waukesha, Wisconsin, 53186, US'),
     ).toEqual({ city: 'Waukesha', postalCode: '53186' });
   });
+
+  it('reads city and postcode from a UK Places line', () => {
+    expect(
+      cityPostalFromAddress('School Street, Llanbradach, Wales, CF83 3NB, GB'),
+    ).toEqual({ city: 'Llanbradach', postalCode: 'CF83 3NB' });
+  });
 });
 
 describe('isInviteEmail', () => {

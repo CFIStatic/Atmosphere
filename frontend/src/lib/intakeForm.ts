@@ -45,10 +45,16 @@ export function scopeFromSituation(text: string): Array<{ title: string; state: 
   return [{ title: note.slice(0, 200), state: 'included' }];
 }
 
-/** City + ZIP from a Places-style formatted address when the picker was skipped. */
+/** City + postal from a Places-style formatted address when the picker was skipped. */
 export function cityPostalFromAddress(formatted: string): { city: string; postalCode: string } {
-  const postal = formatted.match(/\b(\d{5})(?:-\d{4})?\b/);
+  const uk = formatted.match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i);
+  const postal = uk
+    ? `${uk[1]!.toUpperCase()} ${uk[2]!.toUpperCase()}`
+    : (formatted.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] ?? '');
   const bits = formatted.split(',').map((s) => s.trim()).filter(Boolean);
-  const city = bits.length >= 2 ? bits[1]!.replace(/\s+[A-Z]{2}$/, '').trim() : '';
-  return { city, postalCode: postal?.[1] ?? '' };
+  const city =
+    bits.length >= 2
+      ? bits[1]!.replace(/\s+[A-Z]{2}$/, '').replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i, '').trim()
+      : '';
+  return { city, postalCode: postal };
 }
