@@ -99,6 +99,9 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('tbody tr.jobrow td.titlecell .t-lead');
     expect(verifierHtml).toContain('tbody tr.jobrow td.titlecell .t-rest');
     expect(verifierHtml).toContain('padding-right: 104px');
+    expect(verifierHtml).toMatch(
+      /tbody tr\.jobrow td\.titlecell \.t-lead \{[^}]*height:\s*36px/,
+    );
     expect(verifierHtml).not.toContain('padding: 12px 116px 12px 12px');
     expect(verifierHtml).not.toContain('tbody tr, tr.jobrow {\n      margin: 0 0 10px');
   });
