@@ -660,6 +660,7 @@ export function createAnalyzeFramesHandler(opts: {
           videoId: ctx.videoId,
           jobId: ctx.jobId,
           analysisRunId: runId,
+          idempotencyKey: `video_analysis:${runId}:${frame.id}`,
           provider: result.provider,
           modelName: result.modelName,
           inputTokens: result.usage.inputTokens,

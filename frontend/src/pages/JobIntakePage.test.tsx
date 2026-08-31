@@ -15,6 +15,12 @@ vi.mock('../hooks/useExperiment', () => ({
   }),
 }));
 
+const usePhoneShell = vi.fn(() => false);
+
+vi.mock('../lib/usePhoneShell', () => ({
+  usePhoneShell: () => usePhoneShell(),
+}));
+
 vi.mock('../lib/api', () => ({
   api: {
     getMembers: () =>
@@ -42,6 +48,7 @@ import { JobIntakePage } from './JobIntakePage';
 describe('JobIntakePage', () => {
   beforeEach(() => {
     document.title = 'Atmosphere';
+    usePhoneShell.mockReturnValue(false);
   });
 
   it('puts name, address, situation, and invite list on one page', async () => {
@@ -126,5 +133,97 @@ describe('JobIntakePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open this job file' }));
     expect(await screen.findByText('Job file')).toBeInTheDocument();
+  });
+
+  it('fits Start a job to the phone frame instead of four desktop cards', async () => {
+    usePhoneShell.mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    const page = screen.getByTestId('start-job');
+    expect(page.className).toMatch(/flex-1/);
+    expect(screen.getByRole('heading', { name: 'Start a job' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Name it and the site. A note and invites are optional.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Name the job, then the site. A short note and invites are optional.'),
+    ).toBeNull();
+    expect(screen.queryByText('What this job is called on the dashboard.')).toBeNull();
+    expect(screen.queryByText('Where the crew will work.')).toBeNull();
+
+    expect(screen.getByRole('heading', { name: 'Name' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Address' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Situation' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Invite list' })).toBeInTheDocument();
+
+    expect(screen.getByRole('textbox', { name: /^Name$/i })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /^Address$/i })).toBeInTheDocument();
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    expect(screen.queryByText('Capture')).toBeNull();
+    expect(
+      screen.getByText('Selected people get a capture link. Add someone outside by email.'),
+    ).toBeInTheDocument();
+
+    const approve = screen.getByRole('button', { name: /Approve & invite/i });
+    expect(approve.className).toMatch(/w-full/);
+    expect(approve.className).toMatch(/rounded-xl/);
+  });
+
+  it('keeps Open this job file and Start another on the phone after approve', async () => {
+    usePhoneShell.mockReturnValue(true);
+    vi.mocked(api.approveIntake).mockResolvedValue({
+      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+      briefRevision: 1,
+      scopeSaved: 0,
+      invites: [
+        {
+          id: 'inv-1',
+          name: 'Marcus Webb',
+          email: 'marcus@example.com',
+          sharePath: '/shared/tok-1',
+          fieldCapturePath: '/fieldcapture/?token=tok-1',
+          token: 'tok-1',
+          emailed: true,
+          recipientHasAccount: true,
+        },
+      ],
+      party: { id: 'pty-1', company: 'Field Capture' },
+      sharePath: '/shared/tok-1',
+      fieldCapturePath: '/fieldcapture/?token=tok-1',
+      readiness: {
+        level: 'limited',
+        ceiling: 'work_only',
+        headline: 'Invite sent',
+        gaps: [],
+        strengths: [],
+        source: null,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      '1842 Meridian Ave',
+    );
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Job created — capture invited' })).toBeInTheDocument();
+    expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
+    expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
   });
 });

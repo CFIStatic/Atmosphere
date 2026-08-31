@@ -2,7 +2,9 @@
  * AI cost estimation and monthly budget enforcement.
  */
 
+import { randomUUID } from 'node:crypto';
 import { verificationConfig } from '../config.js';
+import { estimatedUsdToNanos, recordTokenUsageAsync } from '../../metering/tokenUsage.js';
 
 export function estimateCostUsd(
   provider: string,
@@ -33,6 +35,8 @@ export async function recordAiCost(
     videoId?: string | null;
     jobId?: string | null;
     analysisRunId?: string | null;
+    userId?: string | null;
+    idempotencyKey?: string;
     provider: string;
     modelName: string;
     inputTokens: number;
@@ -45,12 +49,31 @@ export async function recordAiCost(
     video_id: opts.videoId ?? null,
     job_id: opts.jobId ?? null,
     analysis_run_id: opts.analysisRunId ?? null,
+    user_id: opts.userId ?? null,
     provider: opts.provider,
     model_name: opts.modelName,
     input_tokens: opts.inputTokens,
     output_tokens: opts.outputTokens,
     estimated_cost_usd: opts.estimatedCostUsd,
     period_month: monthStart(),
+  });
+
+  recordTokenUsageAsync(supabase, {
+    orgId: opts.orgId,
+    requestId: opts.idempotencyKey ?? `video_analysis:${opts.analysisRunId ?? randomUUID()}`,
+    feature: 'video_analysis',
+    source: 'video_analysis',
+    userId: opts.userId ?? null,
+    jobId: opts.jobId ?? null,
+    modelId: opts.modelName,
+    inputTokens: opts.inputTokens,
+    outputTokens: opts.outputTokens,
+    priceNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
+    metadata: {
+      provider: opts.provider,
+      videoId: opts.videoId ?? null,
+      analysisRunId: opts.analysisRunId ?? null,
+    },
   });
 }
 

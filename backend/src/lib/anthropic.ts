@@ -106,6 +106,31 @@ export function extractUsage(usage: any): MeasuredUsage {
   };
 }
 
+const EMPTY_USAGE: MeasuredUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheWrite5mTokens: 0,
+  cacheWrite1hTokens: 0,
+  cacheReadTokens: 0,
+  totalTokens: 0,
+};
+
+/**
+ * Best-effort parse for paths that must still answer even when the provider
+ * omitted usage. Returns zeros rather than failing the conversation.
+ */
+export function tryExtractUsage(usage: unknown): MeasuredUsage {
+  try {
+    return extractUsage(usage);
+  } catch {
+    return EMPTY_USAGE;
+  }
+}
+
+export function cacheTokensOf(usage: MeasuredUsage): number {
+  return usage.cacheWrite5mTokens + usage.cacheWrite1hTokens + usage.cacheReadTokens;
+}
+
 /**
  * A response can bill for more than one attempt when server-side refusal
  * fallbacks are in play: `usage.iterations` lists each one. Attempts that were

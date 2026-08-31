@@ -35,6 +35,7 @@ import type {
   PmSettingsResponse,
   Profile,
   TechnicianCapabilities,
+  TokenUsageReport,
   UsageDay,
   UsageEvent,
   Verification,
@@ -87,7 +88,7 @@ const profile = (): Profile => ({
 });
 
 const membership = (): Membership => ({
-  role: 'project_manager',
+  role: 'global_admin',
   workType: 'mitigation',
   usageIntents: ['project_management', 'mitigation_estimating', 'billing'],
   status: 'active',
@@ -103,7 +104,7 @@ const membership = (): Membership => ({
 /* ---------------------------------------------------------------- members */
 
 const MEMBERS: OrgMember[] = [
-  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
+  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'global_admin', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
@@ -435,6 +436,117 @@ const USAGE_DAYS: UsageDay[] = Array.from({ length: 14 }, (_, i) => {
     priceNanos: events * 235_000_000,
   };
 });
+
+const zeroTokens = () => ({
+  events: 0, inputTokens: 0, outputTokens: 0, cacheTokens: 0, totalTokens: 0, priceNanos: 0,
+});
+
+const TOKEN_USAGE = (): TokenUsageReport => {
+  const days = USAGE_DAYS.map((row) => {
+    const total = row.inputTokens + row.outputTokens + row.cacheTokens;
+    const video = Math.round(total * 0.56);
+    const chat = Math.round(total * 0.28);
+    const ask = Math.max(0, total - video - chat);
+    return {
+      day: row.day,
+      events: row.events,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheTokens: row.cacheTokens,
+      totalTokens: total,
+      priceNanos: row.priceNanos,
+      byFeature: {
+        video_analysis: { ...zeroTokens(), events: Math.round(row.events * 0.45), totalTokens: video, priceNanos: Math.round(row.priceNanos * 0.58) },
+        chat: { ...zeroTokens(), events: Math.round(row.events * 0.35), totalTokens: chat, priceNanos: Math.round(row.priceNanos * 0.27) },
+        ask: { ...zeroTokens(), events: Math.max(0, row.events - Math.round(row.events * 0.8)), totalTokens: ask, priceNanos: Math.round(row.priceNanos * 0.15) },
+        other: zeroTokens(),
+      },
+    };
+  });
+  const totals = days.reduce(
+    (acc, day) => ({
+      events: acc.events + day.events,
+      inputTokens: acc.inputTokens + day.inputTokens,
+      outputTokens: acc.outputTokens + day.outputTokens,
+      cacheTokens: acc.cacheTokens + day.cacheTokens,
+      totalTokens: acc.totalTokens + day.totalTokens,
+      priceNanos: acc.priceNanos + day.priceNanos,
+    }),
+    zeroTokens(),
+  );
+  const feature = (key: 'video_analysis' | 'chat' | 'ask') =>
+    days.reduce(
+      (acc, day) => ({
+        events: acc.events + day.byFeature[key].events,
+        inputTokens: acc.inputTokens,
+        outputTokens: acc.outputTokens,
+        cacheTokens: acc.cacheTokens,
+        totalTokens: acc.totalTokens + day.byFeature[key].totalTokens,
+        priceNanos: acc.priceNanos + day.byFeature[key].priceNanos,
+      }),
+      zeroTokens(),
+    );
+  return {
+    periodStart: '2026-08-01T00:00:00Z',
+    periodEnd: '2026-09-01T00:00:00Z',
+    range: 'period',
+    totals,
+    byFeature: [
+      { feature: 'video_analysis', ...feature('video_analysis') },
+      { feature: 'chat', ...feature('chat') },
+      { feature: 'ask', ...feature('ask') },
+      { feature: 'other', ...zeroTokens() },
+    ],
+    byDay: days,
+    byEmployee: (() => {
+      const video = feature('video_analysis');
+      const chat = feature('chat');
+      const ask = feature('ask');
+      const share = (
+        name: string,
+        email: string,
+        userId: string,
+        role: 'global_admin' | 'employee',
+        roleLabel: string,
+        pct: number,
+        events: number,
+      ) => {
+        const videoTokens = Math.round(video.totalTokens * pct);
+        const chatTokens = Math.round(chat.totalTokens * pct);
+        const askTokens = Math.round(ask.totalTokens * pct);
+        return {
+          userId,
+          name,
+          email,
+          role,
+          roleLabel,
+          events,
+          inputTokens: Math.round(totals.inputTokens * pct),
+          outputTokens: Math.round(totals.outputTokens * pct),
+          cacheTokens: Math.round(totals.cacheTokens * pct),
+          totalTokens: videoTokens + chatTokens + askTokens,
+          priceNanos: Math.round(totals.priceNanos * pct),
+          byFeature: {
+            video_analysis: { ...zeroTokens(), totalTokens: videoTokens },
+            chat: { ...zeroTokens(), totalTokens: chatTokens },
+            ask: { ...zeroTokens(), totalTokens: askTokens },
+            other: zeroTokens(),
+          },
+        };
+      };
+      return [
+        share('Elena Ortiz', 'elena@ortizrestoration.com', 'demo-user-1', 'global_admin', 'Global Admin', 0.56, 186),
+        share('Marcus Chen', 'marcus@ortizrestoration.com', 'demo-user-2', 'employee', 'Employee', 0.28, 94),
+        share('Priya Shah', 'priya@ortizrestoration.com', 'demo-user-3', 'employee', 'Employee', 0.16, 42),
+      ];
+    })(),
+    recent: [
+      { id: 'tu-1', createdAt: '2026-08-01T16:12:00Z', feature: 'video_analysis', source: 'video_analysis', modelId: 'gemini-2.5-pro', userId: 'demo-user-1', userName: 'Elena Ortiz', inputTokens: 18400, outputTokens: 2100, cacheTokens: 0, totalTokens: 20500, priceNanos: 620_000_000 },
+      { id: 'tu-2', createdAt: '2026-08-01T15:40:00Z', feature: 'ask', source: 'proof_ask', modelId: 'claude-sonnet', userId: 'demo-user-2', userName: 'Marcus Chen', inputTokens: 2400, outputTokens: 480, cacheTokens: 800, totalTokens: 3680, priceNanos: 94_000_000 },
+      { id: 'tu-3', createdAt: '2026-08-01T14:05:00Z', feature: 'chat', source: 'technician_assist', modelId: 'claude-sonnet', userId: 'demo-user-3', userName: 'Priya Shah', inputTokens: 860, outputTokens: 140, cacheTokens: 0, totalTokens: 1000, priceNanos: 28_000_000 },
+    ],
+  };
+};
 
 /* --------------------------------------------------------------------- pm */
 
@@ -2098,6 +2210,7 @@ const routes: Array<[string, RegExp, Handler]> = [
 
   ['GET', /^\/api\/usage\/events$/, () => ({ body: { events: USAGE_EVENTS } })],
   ['GET', /^\/api\/usage\/daily$/, () => ({ body: { days: USAGE_DAYS } })],
+  ['GET', /^\/api\/billing\/token-usage$/, () => ({ body: TOKEN_USAGE() })],
 
   ['GET', /^\/api\/pm\/overview$/, () => ({ body: PM_OVERVIEW })],
   ['GET', /^\/api\/pm\/settings$/, () => ({ body: PM_SETTINGS_RESPONSE })],

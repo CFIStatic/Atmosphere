@@ -134,11 +134,6 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
           <span className="text-ink-600">
             <span className="font-semibold text-ink-900">{counts.items}</span> files
           </span>
-          {counts.onHold > 0 && (
-            <span className="text-caution-600">
-              <span className="font-semibold">{counts.onHold}</span> on hold
-            </span>
-          )}
           {/* The number worth watching. A file nobody has opened is one the
               other side has never been shown. */}
           {counts.neverViewed > 0 && (
@@ -205,11 +200,6 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                         <span className={`font-medium ${on ? 'text-brand-600' : 'text-ink-900'}`}>
                           {item.title}
                         </span>
-                        {item.legalHold && (
-                          <span className="ml-2 rounded-full bg-caution-50 px-1.5 py-0.5 text-[10px] font-semibold text-caution-600">
-                            hold
-                          </span>
-                        )}
                       </td>
                       <td className="px-3 py-2.5 text-ink-600">
                         {item.company ?? '—'}
@@ -292,7 +282,6 @@ function EvidenceDetail({
   const [url, setUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [custody, setCustody] = useState<CustodyEntry[] | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setUrl(null);
@@ -315,22 +304,6 @@ function EvidenceDetail({
       onChanged();
     } finally {
       setLoadingVideo(false);
-    }
-  }
-
-  async function toggleHold() {
-    const reason = item.legalHold
-      ? undefined
-      : window.prompt('Why is this going on hold?', 'Disputed day — mediation pending') ?? undefined;
-    if (!item.legalHold && !reason) return;
-    setBusy(true);
-    try {
-      await api.setEvidenceHold(jobId, item.id, { hold: !item.legalHold, reason });
-      const fresh = await api.evidenceCustody(jobId, item.id).catch(() => null);
-      if (fresh) setCustody(fresh.entries);
-      onChanged();
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -390,9 +363,7 @@ function EvidenceDetail({
           <Row label="Size">{size(item.byteSize)}</Row>
           <Row label="Filed by">{item.company ?? '—'}</Row>
           <Row label="Retention">
-            {item.legalHold ? (
-              <span className="text-caution-600">on hold — indefinite</span>
-            ) : item.retentionUntil ? (
+            {item.retentionUntil ? (
               new Date(item.retentionUntil).toLocaleDateString()
             ) : (
               <span className="text-ink-400">not set</span>
@@ -414,17 +385,6 @@ function EvidenceDetail({
             </div>
           )}
 
-          <button
-            onClick={() => void toggleHold()}
-            disabled={busy}
-            className={`!mt-3 w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50 ${
-              item.legalHold
-                ? 'glass-card text-ink-700'
-                : 'border border-caution-200 bg-caution-50 text-caution-600'
-            }`}
-          >
-            {item.legalHold ? 'Lift the hold' : 'Place on legal hold'}
-          </button>
         </dl>
       </div>
 

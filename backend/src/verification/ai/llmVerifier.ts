@@ -597,6 +597,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           videoId: ctx.videoId,
           jobId: ctx.jobId,
           analysisRunId: primaryRunId,
+          idempotencyKey: `video_analysis:${primaryRunId}:verify`,
           provider: verification.provider,
           modelName: verification.modelName,
           inputTokens: verification.usage.inputTokens,

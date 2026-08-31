@@ -1550,7 +1550,6 @@
     <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
     <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
     <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
-    <button class="navitem nav-icon" data-view="hold" data-label="Legal hold" title="Legal hold"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
     </div>
     </div>
 
@@ -2567,7 +2566,6 @@
       if (state.view === 'flagged' && !needsAttention(e)) return false;
       if (state.view === 'classified' && (e.analysis || {}).state !== 'done') return false;
       if (state.view === 'unanalysed' && (e.analysis || {}).state === 'done') return false;
-      if (state.view === 'hold' && !(e.hold && e.hold.on)) return false;
       if (Object.keys(state.jobs).length && !state.jobs[e.job]) return false;
       if (Object.keys(state.companies).length && !state.companies[e.company]) return false;
       if (Object.keys(state.phases).length && !state.phases[e.phase]) return false;
@@ -2797,9 +2795,7 @@
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
-          '<div class="s">' + esc(phase) +
-            (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
-          '</div>' +
+          '<div class="s">' + esc(phase) + '</div>' +
           '<div class="job-card-meta">' +
             '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
             (clipDay && clipDay !== '—' ? '<span class="job-card-sep">' + clipDay + '</span>' : '') +
@@ -3289,7 +3285,6 @@
     $('#n-classified').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state === 'done'; }).length;
     $('#n-flag').textContent = EVIDENCE.filter(needsAttention).length;
     $('#n-unan').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state !== 'done'; }).length;
-    $('#n-hold').textContent = EVIDENCE.filter(function (e) { return e.hold && e.hold.on; }).length;
   }
 
   /* ------------------------------------------------------------------ *

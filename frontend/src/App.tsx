@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -28,7 +29,7 @@ import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
 import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
-import { sharedJobsRedirectTo } from './lib/jobFileAsk';
+import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
@@ -36,9 +37,6 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 const JobsPage = lazy(() => import('./pages/JobsPage').then((m) => ({ default: m.JobsPage })));
-const JobDetailPage = lazy(() =>
-  import('./pages/JobDetailPage').then((m) => ({ default: m.JobDetailPage })),
-);
 const TechnicianPage = lazy(() =>
   import('./pages/TechnicianPage').then((m) => ({ default: m.TechnicianPage })),
 );
@@ -222,6 +220,12 @@ function DemoRouteBridge() {
   return null;
 }
 
+/** Job Files used to open /jobs/:id — that is the same file as Overview now. */
+function JobFileFromProfileRedirect() {
+  const { id = '' } = useParams();
+  return <Navigate to={jobFilePath(id)} replace />;
+}
+
 /** Preserve ?job= (and intake handoff state) when moving /shared → the job file. */
 function SharedJobsRedirect() {
   const location = useLocation();
@@ -304,8 +308,8 @@ export default function App() {
             <Route path="/my-work" element={<Navigate to="/field" replace />} />
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
-            <Route path="/jobs/:id" element={<JobDetailPage />} />
-            {/* Job profile (tasks, crew, and ask). Scope & proofs is /job-progress. */}
+            {/* Same job file as Overview — /jobs/:id bookmarks join /job-progress. */}
+            <Route path="/jobs/:id" element={<JobFileFromProfileRedirect />} />
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
             <Route path="/settings" element={<SettingsPage />} />

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { ROLE_LABELS, WORK_TYPE_LABELS } from './labels.js';
 import type { AssistantTurn, AssistantContext } from './validation.js';
+import { tryExtractUsage, type MeasuredUsage } from './anthropic.js';
 
 /**
  * The voice assistant behind the technician app.
@@ -55,6 +56,7 @@ export interface AssistantReply {
   reply: string;
   /** False when the rule-based fallback answered, so the UI can say so. */
   model: string | null;
+  usage: MeasuredUsage | null;
 }
 
 let client: Anthropic | null = null;
@@ -77,7 +79,7 @@ export async function generateReply(
 ): Promise<AssistantReply> {
   const anthropic = getClient();
   if (!anthropic) {
-    return { reply: fallbackReply(message, context), model: null };
+    return { reply: fallbackReply(message, context), model: null, usage: null };
   }
 
   const contextLine = describeContext(context);
@@ -104,6 +106,7 @@ export async function generateReply(
     return {
       reply: "I can't help with that one. Ask me something else about the job and I'll pick it back up.",
       model: response.model,
+      usage: tryExtractUsage(response.usage),
     };
   }
 
@@ -116,6 +119,7 @@ export async function generateReply(
   return {
     reply: reply || "Sorry — I didn't catch that. Say it again?",
     model: response.model,
+    usage: tryExtractUsage(response.usage),
   };
 }
 

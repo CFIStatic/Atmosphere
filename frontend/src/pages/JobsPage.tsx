@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { jobFileMatchesQuery } from '../lib/jobFileSearch';
 import { sortJobFilesByLastOpened } from '../lib/jobFileRecents';
+import { jobFilePath } from '../lib/jobFileAsk';
 import { useJobFilesSearch } from '../layouts/jobFilesSearch';
 import { PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -24,7 +25,7 @@ function JobCard({ job }: { job: JobSummary }) {
 
   return (
     <Link
-      to={`/jobs/${job.jobId}`}
+      to={jobFilePath(job.jobId, { title: job.title, number: job.jobNumber })}
       className="block min-w-0 max-w-full overflow-hidden rounded-xl glass-card p-4 transition hover:border-brand-400/40 hover:bg-paper-200 sm:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

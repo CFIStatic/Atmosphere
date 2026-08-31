@@ -139,13 +139,6 @@ export interface AttentionRow {
   stale: number | null;
 }
 
-function jobHref(kind: OverviewActionKind, jobId: string, title: string, number: number | null): string {
-  if (kind === 'awaiting_answer' || kind === 'brief_behind' || kind === 'no_brief') {
-    return `/job-progress?job=${encodeURIComponent(jobId)}`;
-  }
-  return jobFilePath(jobId, { title, number });
-}
-
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -267,7 +260,7 @@ function toAction(
     headline: primary.headline,
     detail: primary.detail,
     notes: extras.map((c) => c.headline),
-    href: jobHref(primary.kind, jobId, title, jobNumber),
+    href: jobFilePath(jobId, { title, number: jobNumber }),
     score: ACTION_META[primary.kind].score,
     stage,
   };

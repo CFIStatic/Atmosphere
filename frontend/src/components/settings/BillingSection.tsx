@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, type Payment, type WorkspaceBilling } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { SpinnerIcon } from '../icons';
+import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-success-50 text-success-700',
@@ -214,6 +215,8 @@ export function BillingSection() {
           </div>
         )}
       </section>
+
+      <TokenUsageSection />
     </div>
   );
 }

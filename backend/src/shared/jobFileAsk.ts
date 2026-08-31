@@ -9,7 +9,7 @@
  * connected key) it writes the prose; otherwise a grounded lookup still
  * answers from the same text.
  */
-import { anthropicClientForKey } from '../lib/anthropic.js';
+import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import { config } from '../config.js';
 import {
   formatCollectionRecord,
@@ -426,21 +426,21 @@ export async function answerFromJobFile(input: {
   file: JobFileAskContext;
   history?: JobFileAskTurn[];
   apiKey?: string | null;
-}): Promise<{ answer: string; model: string | null; groundedOn: number }> {
+}): Promise<{ answer: string; model: string | null; groundedOn: number; usage: MeasuredUsage | null }> {
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
   const apiKey = (input.apiKey === undefined ? config.anthropic.apiKey : input.apiKey ?? '').trim();
   const canCallModel = Boolean(apiKey);
 
   if (!jobFileHasContent(input.file)) {
-    return { answer: grounded, model: null, groundedOn: 0 };
+    return { answer: grounded, model: null, groundedOn: 0, usage: null };
   }
   if (!canCallModel) {
-    return { answer: grounded, model: null, groundedOn };
+    return { answer: grounded, model: null, groundedOn, usage: null };
   }
 
   const record = formatJobFileRecord(input.file).trim();
-  if (!record) return { answer: grounded, model: null, groundedOn };
+  if (!record) return { answer: grounded, model: null, groundedOn, usage: null };
 
   const history = (input.history ?? [])
     .filter((turn) => trim(turn.text))
@@ -470,9 +470,9 @@ export async function answerFromJobFile(input: {
       .join('\n')
       .trim();
     return answer
-      ? { answer, model: response.model, groundedOn }
-      : { answer: grounded, model: null, groundedOn };
+      ? { answer, model: response.model, groundedOn, usage: tryExtractUsage(response.usage) }
+      : { answer: grounded, model: null, groundedOn, usage: null };
   } catch {
-    return { answer: grounded, model: null, groundedOn };
+    return { answer: grounded, model: null, groundedOn, usage: null };
   }
 }
