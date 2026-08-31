@@ -3366,7 +3366,7 @@ export const api = {
   createProgressShare: (input: {
     jobId: string;
     label: string;
-    recipientEmail?: string;
+    recipientEmail: string;
     expiresInDays?: number;
   }) =>
     request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {

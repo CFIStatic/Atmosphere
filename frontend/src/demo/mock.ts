@@ -3036,7 +3036,7 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
   ['POST', /^\/api\/evidence-portal\/shares$/, (_m, b) => {
     const email = b.recipientEmail ? String(b.recipientEmail).toLowerCase() : null;
-    const days = Number(b.expiresInDays ?? 30);
+    const days = Number(b.expiresInDays ?? 0);
     const kind = b.kind === 'progress' ? 'progress' : 'evidence';
     const token = `demo-${Date.now().toString(36)}`;
     const share = {

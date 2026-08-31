@@ -67,7 +67,6 @@ export function JobIntakePage() {
   const [extName, setExtName] = useState('');
   const [extCompany, setExtCompany] = useState('');
   const [extEmail, setExtEmail] = useState('');
-  const [homeownerName, setHomeownerName] = useState('');
   const [homeownerEmail, setHomeownerEmail] = useState('');
   const [result, setResult] = useState<IntakeApproveResult | null>(null);
   const [homeownerShare, setHomeownerShare] = useState<CreateEvidenceShareResult | null>(null);
@@ -213,9 +212,8 @@ export function JobIntakePage() {
         try {
           const share = await api.createProgressShare({
             jobId: res.job.id,
-            label: homeownerName.trim() || 'Homeowner',
+            label: ownerEmail,
             recipientEmail: ownerEmail,
-            expiresInDays: 0,
           });
           setHomeownerShare(share);
         } catch {
@@ -757,30 +755,18 @@ export function JobIntakePage() {
             <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
               <p className="text-xs font-medium text-ink-600">Homeowner (optional)</p>
               <p className="mt-1 text-[11px] leading-snug text-ink-500">
-                They get the job file and every recording. No account needed — the link is the
-                credential.
+                We email them a link to the job file and every recording. No account needed.
               </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <label className="block text-xs font-medium text-ink-600">
-                  Homeowner name
-                  <input
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                    value={homeownerName}
-                    onChange={(e) => setHomeownerName(e.target.value)}
-                    placeholder="Jordan Lee"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-ink-600">
-                  Homeowner email
-                  <input
-                    type="email"
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                    value={homeownerEmail}
-                    onChange={(e) => setHomeownerEmail(e.target.value)}
-                    placeholder="jordan@example.com"
-                  />
-                </label>
-              </div>
+              <label className="mt-3 block text-xs font-medium text-ink-600">
+                Homeowner email
+                <input
+                  type="email"
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                  value={homeownerEmail}
+                  onChange={(e) => setHomeownerEmail(e.target.value)}
+                  placeholder="jordan@example.com"
+                />
+              </label>
             </div>
           </div>
         </div>

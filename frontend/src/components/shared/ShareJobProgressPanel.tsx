@@ -3,9 +3,10 @@ import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../l
 import { SpinnerIcon } from '../icons';
 
 /**
- * Share the job file with third parties — homeowners, attorneys, banks,
- * insurance adjusters — via a read-only link that opens without login.
- * They see the brief, do-nots, and every recording on the file.
+ * Invite someone to the job file by email.
+ *
+ * One field: their address. Atmosphere emails the link. They see the job file
+ * and every recording — no account, no copy-paste, no expiry picker.
  */
 
 const STATE_STYLE: Record<EvidenceShare['state'], string> = {
@@ -40,9 +41,7 @@ export function ShareJobProgressPanel({
     if (onCreatingChange) onCreatingChange(open);
     else setCreatingInternal(open);
   }
-  const [label, setLabel] = useState('');
   const [email, setEmail] = useState('');
-  const [days, setDays] = useState(30);
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<CreateEvidenceShareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export function ShareJobProgressPanel({
       const res = await api.evidenceShares(jobId, 'progress');
       setShares(res.shares);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the outstanding links.');
+      setError(err instanceof Error ? err.message : 'Could not load invites.');
       setShares([]);
     }
   }
@@ -71,29 +70,35 @@ export function ShareJobProgressPanel({
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    const to = email.trim().toLowerCase();
+    if (!to) {
+      setError('Enter an email to send the invite.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const res = await api.createProgressShare({
         jobId,
-        label,
-        recipientEmail: email.trim() || undefined,
-        expiresInDays: days,
+        label: to,
+        recipientEmail: to,
       });
       setMade(res);
-      setLabel('');
       setEmail('');
       if (!modal) setCreating(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the share.');
+      setError(err instanceof Error ? err.message : 'Could not send the invite.');
     } finally {
       setBusy(false);
     }
   }
 
   async function revoke(share: EvidenceShare) {
-    if (!window.confirm(`Revoke ${share.label}'s link? It stops opening immediately.`)) return;
+    const who = share.recipientEmail ?? share.label;
+    if (!window.confirm(`Revoke the invite to ${who}? Their link stops working immediately.`)) {
+      return;
+    }
     await api.revokeEvidenceShare(share.id);
     await load();
   }
@@ -108,11 +113,10 @@ export function ShareJobProgressPanel({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 id="share-job-title" className="text-base font-semibold text-ink-900">
-            Share this job
+            Invite by email
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            Email a read-only link — no account needed. Homeowners see the job file
-            and every recording on it.
+            We email them a link to this job file and every recording. No account needed.
           </p>
         </div>
         {modal ? (
@@ -132,7 +136,7 @@ export function ShareJobProgressPanel({
             }}
             className="text-xs font-medium text-ink-600 hover:text-ink-900"
           >
-            {creating ? 'Cancel' : 'Share'}
+            {creating ? 'Cancel' : 'Invite'}
           </button>
         )}
       </div>
@@ -146,18 +150,9 @@ export function ShareJobProgressPanel({
       {creating && (
         <form onSubmit={create} className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-xs font-medium text-ink-700">Who is this for?</span>
+            <span className="text-xs font-medium text-ink-700">Email</span>
             <input
               required
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Homeowner — Cedar Ridge"
-              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-ink-700">Email them (optional)</span>
-            <input
               type="email"
               autoComplete="email"
               value={email}
@@ -166,26 +161,13 @@ export function ShareJobProgressPanel({
               className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
-          <label className="block">
-            <span className="text-xs font-medium text-ink-700">Link expires</span>
-            <select
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            >
-              <option value={7}>In 7 days</option>
-              <option value={30}>In 30 days</option>
-              <option value={90}>In 90 days</option>
-              <option value={0}>Never — until you revoke it</option>
-            </select>
-          </label>
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !email.trim()}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-            {email.trim() ? 'Email the job file' : 'Create share'}
+            Send invite
           </button>
         </form>
       )}
@@ -193,17 +175,15 @@ export function ShareJobProgressPanel({
       {made && (
         <p className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-700">
           {made.emailed
-            ? 'Emailed. They can open the job file and every recording — no account needed.'
-            : 'Share created. It is listed below.'}
+            ? `Invite sent to ${made.share.label}.`
+            : `Invite created for ${made.share.label}, but the email did not send. Try again.`}
         </p>
       )}
 
       {shares === null ? (
         <p className="mt-3 text-xs text-ink-500">Loading…</p>
       ) : shares.length === 0 ? (
-        <p className="mt-3 text-xs text-ink-500">
-          Nobody outside has a job-file link yet.
-        </p>
+        <p className="mt-3 text-xs text-ink-500">Nobody has been invited yet.</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {shares.map((share) => (
@@ -212,14 +192,13 @@ export function ShareJobProgressPanel({
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-800">{share.label}</p>
+                <p className="text-sm font-medium text-ink-800">
+                  {share.recipientEmail ?? share.label}
+                </p>
                 <p className="text-[11px] text-ink-500">
-                  {share.recipientEmail ?? 'link only'}
                   {share.openCount > 0
-                    ? ` · opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
-                    : ' · never opened'}
-                  {share.state === 'live' &&
-                    (share.expiresAt ? ` · expires ${when(share.expiresAt)}` : ' · no expiry')}
+                    ? `Opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
+                    : 'Not opened yet'}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -244,7 +223,7 @@ export function ShareJobProgressPanel({
 
       {live.length > 0 && !creating && (
         <p className="mt-2 text-[10.5px] text-ink-400">
-          {live.length} active link{live.length === 1 ? '' : 's'} out right now.
+          {live.length} invite{live.length === 1 ? '' : 's'} out right now.
         </p>
       )}
     </section>

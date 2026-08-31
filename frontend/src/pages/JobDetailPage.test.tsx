@@ -260,9 +260,8 @@ describe('JobDetailPage', () => {
     expect(screen.queryByLabelText('Change job status')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Share this job file' }));
-    expect(await screen.findByRole('heading', { name: 'Share this job' })).toBeInTheDocument();
-    expect(
-      screen.getByText(/Homeowners see the job file and every recording/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Invite by email' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send invite/i })).toBeInTheDocument();
   });
 });

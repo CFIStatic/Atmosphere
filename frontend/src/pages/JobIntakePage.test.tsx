@@ -91,7 +91,7 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     expect(screen.getByText('Homeowner (optional)')).toBeInTheDocument();
     expect(
-      screen.getByText(/They get the job file and every recording/i),
+      screen.getByText(/We email them a link to the job file and every recording/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeInTheDocument();
   });
@@ -276,16 +276,14 @@ describe('JobIntakePage', () => {
       screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
       '1842 Meridian Ave',
     );
-    await user.type(screen.getByLabelText(/homeowner name/i), 'Jordan Lee');
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
     expect(await screen.findByText(/homeowner emailed the job file/i)).toBeInTheDocument();
     expect(api.createProgressShare).toHaveBeenCalledWith({
       jobId: 'job-new',
-      label: 'Jordan Lee',
+      label: 'jordan@example.com',
       recipientEmail: 'jordan@example.com',
-      expiresInDays: 0,
     });
   });
 });

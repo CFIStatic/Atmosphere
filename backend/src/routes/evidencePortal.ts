@@ -835,19 +835,13 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     const body = z
       .object({
         jobId: z.string().uuid(),
-        label: z.string().trim().min(2).max(200),
+        label: z.string().trim().min(2).max(200).optional(),
         kind: z.enum(['evidence', 'progress']).default('evidence'),
-        // Evidence shares require an account pin; progress shares may omit
-        // email for link-only handoff to homeowners and counsel.
-        recipientEmail: z.string().email().optional(),
-        expiresInDays: z.number().int().min(0).max(365).default(30),
+        recipientEmail: z.string().email(),
+        expiresInDays: z.number().int().min(0).max(365).default(0),
       })
       .parse(req.body);
     const { supabase, orgId, userId } = await requireOrgContext(req);
-
-    if (body.kind === 'evidence' && !body.recipientEmail) {
-      throw new HttpError(400, 'Evidence shares require a recipient email.', 'recipient_required');
-    }
 
     const { data: job } = await supabase
       .from('crm_jobs')
@@ -862,14 +856,15 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         ? null
         : new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
 
-    const recipientEmail = body.recipientEmail?.toLowerCase() ?? null;
+    const recipientEmail = body.recipientEmail.toLowerCase();
+    const label = body.label?.trim() || recipientEmail;
 
     const { data: share, error } = await supabase
       .from('verifier_shares')
       .insert({
         org_id: orgId,
         job_id: body.jobId,
-        label: body.label,
+        label,
         recipient_email: recipientEmail,
         share_kind: body.kind,
         created_by: userId,
