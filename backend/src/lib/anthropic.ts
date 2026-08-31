@@ -135,3 +135,39 @@ export function anthropicClient(): Anthropic {
 }
 
 export const isModelProviderConfigured = (): boolean => Boolean(config.anthropic.apiKey);
+
+/**
+ * The key Ask should call with.
+ *
+ * An organisation key entered in Computer Use wins (their spend, their account).
+ * Otherwise the server-wide `ANTHROPIC_API_KEY` is the platform key. Either
+ * one is enough for the job-file chat to use a model instead of the keyword
+ * fallback.
+ */
+export async function resolveAskApiKey(orgId?: string | null): Promise<string | null> {
+  if (orgId) {
+    try {
+      const { getApiKey } = await import('../computer/credentials.js');
+      const orgKey = await getApiKey(orgId);
+      if (orgKey?.trim()) return orgKey.trim();
+    } catch {
+      // Vault missing or unreadable — fall through to the server key.
+    }
+  }
+  const server = config.anthropic.apiKey.trim();
+  return server || null;
+}
+
+/** A client for a resolved key — org vault or the process-wide singleton. */
+export function anthropicClientForKey(apiKey: string): Anthropic {
+  const key = apiKey.trim();
+  if (!key) {
+    throw new HttpError(
+      503,
+      'Model access is not configured on this server.',
+      'model_provider_unconfigured',
+    );
+  }
+  if (key === config.anthropic.apiKey.trim()) return anthropicClient();
+  return new Anthropic({ apiKey: key });
+}

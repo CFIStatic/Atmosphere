@@ -589,23 +589,29 @@ export async function answerFromProofs(input: {
   }
 
   const record = formatCollectionRecord(clips);
-  const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
-    max_tokens: 500,
-    system: QA_SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: `Video collection for this job:\n\n${record}\n\nQuestion: ${input.question}`,
-      },
-    ],
-  });
+  try {
+    const response = await anthropicClient().messages.create({
+      model: config.technician.assistant.model,
+      max_tokens: 500,
+      system: QA_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `Video collection for this job:\n\n${record}\n\nQuestion: ${input.question}`,
+        },
+      ],
+    });
 
-  const answer = response.content
-    .filter((block: any) => block.type === 'text')
-    .map((block: any) => block.text)
-    .join('\n')
-    .trim();
+    const answer = response.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n')
+      .trim();
 
-  return answer ? { answer, model: response.model } : null;
+    return answer
+      ? { answer, model: response.model }
+      : { answer: groundedCollectionAnswer(input.question, clips), model: null };
+  } catch {
+    return { answer: groundedCollectionAnswer(input.question, clips), model: null };
+  }
 }

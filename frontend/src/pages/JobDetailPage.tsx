@@ -81,7 +81,12 @@ export function JobDetailPage() {
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
   const pulse = useMemo(() => filePulse(proofs), [proofs]);
   const beats = useMemo(
-    () => buildJobFileDossier({ proofs, messages: record?.messages ?? [] }),
+    () =>
+      buildJobFileDossier({
+        proofs,
+        messages: record?.messages ?? [],
+        facts: record?.brief?.facts ?? null,
+      }),
     [proofs, record],
   );
   const exclusions = useMemo(

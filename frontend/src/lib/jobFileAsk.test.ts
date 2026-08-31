@@ -88,6 +88,17 @@ describe('buildJobFileDossier', () => {
     expect(beats.some((beat) => /underlayment/.test(beat.detail))).toBe(true);
     expect(beats.every((beat) => !/payable|crew size|kpi/i.test(beat.title))).toBe(true);
   });
+
+  it('puts brief facts and do-nots on the file so Ask can point at them', () => {
+    const beats = buildJobFileDossier({
+      proofs: null,
+      messages: [],
+      facts: { 'Gate / access': 'Lockbox on the side gate — 4412' },
+      scope: [{ state: 'excluded', title: 'Do not remove the skylights', reason: 'Carrier declined.' }],
+    });
+    expect(beats.some((beat) => beat.title === 'Gate / access' && /4412/.test(beat.detail))).toBe(true);
+    expect(beats.some((beat) => beat.title === 'Do not' && /skylights/.test(beat.detail))).toBe(true);
+  });
 });
 
 describe('filePulse', () => {

@@ -32,6 +32,12 @@ export interface JobFileBeat {
   detail: string;
 }
 
+export interface JobFileDossierScope {
+  state?: string | null;
+  title?: string | null;
+  reason?: string | null;
+}
+
 export interface JobFileTurn {
   id: string;
   role: 'user' | 'assistant';
@@ -56,8 +62,35 @@ function looksLikeHomeowner(label: string): boolean {
 export function buildJobFileDossier(input: {
   proofs: ProofResponse | null;
   messages: SharedJobRecord['messages'];
+  facts?: Record<string, string> | null;
+  scope?: JobFileDossierScope[] | null;
 }): JobFileBeat[] {
   const beats: JobFileBeat[] = [];
+
+  for (const [label, value] of Object.entries(input.facts ?? {})) {
+    const detail = String(value ?? '').trim();
+    if (!label.trim() || !detail) continue;
+    // Address already sits in the file header — keep lockbox, permit, hours, etc.
+    if (/^(site address|address|property)$/i.test(label.trim())) continue;
+    beats.push({
+      id: `fact-${label}`,
+      when: '',
+      kind: 'note',
+      title: label,
+      detail,
+    });
+  }
+
+  for (const item of input.scope ?? []) {
+    if (item.state !== 'excluded' || !item.title?.trim()) continue;
+    beats.push({
+      id: `scope-${item.title}`,
+      when: '',
+      kind: 'note',
+      title: 'Do not',
+      detail: item.reason?.trim() ? `${item.title.trim()} — ${item.reason.trim()}` : item.title.trim(),
+    });
+  }
 
   for (const message of input.messages) {
     if (!message.body.trim()) continue;
@@ -116,7 +149,7 @@ export function buildJobFileDossier(input: {
     });
   }
 
-  return beats.slice(0, 8);
+  return beats.slice(0, 12);
 }
 
 const FILE_TOPICS =

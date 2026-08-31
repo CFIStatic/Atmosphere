@@ -104,7 +104,13 @@ export function JobAskPanel({
   }, [turns, asking]);
 
   const dossier = useMemo(
-    () => buildJobFileDossier({ proofs, messages: record?.messages ?? [] }),
+    () =>
+      buildJobFileDossier({
+        proofs,
+        messages: record?.messages ?? [],
+        facts: record?.brief?.facts ?? null,
+        scope: record?.scope ?? null,
+      }),
     [proofs, record],
   );
   const suggestions = jobFileSuggestions({
@@ -227,10 +233,8 @@ export function JobAskPanel({
                   }
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
-                  {turn.role === 'assistant' && turn.groundedOn != null && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">
-                      From {turn.groundedOn} clip{turn.groundedOn === 1 ? '' : 's'} on this file
-                    </p>
+                  {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
+                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                 </div>
               </li>

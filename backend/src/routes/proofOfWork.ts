@@ -11,15 +11,20 @@ import {
 } from '../shared/proofVerifier.js';
 import {
   analyseDayFilm,
-  answerFromProofs,
   collectionClipsFromRows,
   type MaterialChange,
   type ProofFrame,
 } from '../shared/proofAnalyst.js';
+import {
+  answerFromJobFile,
+  type JobFileAskContext,
+  type JobFileAskTurn,
+} from '../shared/jobFileAsk.js';
+import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
+import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
-import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
@@ -1601,50 +1606,257 @@ export async function decideProofDay(req: Request, res: Response, next: NextFunc
   }
 }
 
+function extractedDocumentText(extracted: unknown): string | null {
+  if (!extracted) return null;
+  if (typeof extracted === 'string') return extracted.trim() || null;
+  if (typeof extracted !== 'object') return null;
+  const record = extracted as { lines?: unknown; couldNotRead?: unknown; text?: unknown };
+  const parts: string[] = [];
+  if (typeof record.text === 'string' && record.text.trim()) parts.push(record.text.trim());
+  if (Array.isArray(record.lines)) {
+    for (const line of record.lines) {
+      if (!line || typeof line !== 'object') continue;
+      const row = line as { title?: unknown; state?: unknown; reason?: unknown; note?: unknown };
+      const title = String(row.title ?? '').trim();
+      if (!title) continue;
+      const extra = [row.state, row.reason, row.note].map((v) => String(v ?? '').trim()).filter(Boolean);
+      parts.push(extra.length ? `${title} (${extra.join(' — ')})` : title);
+    }
+  }
+  if (Array.isArray(record.couldNotRead)) {
+    for (const gap of record.couldNotRead) {
+      if (typeof gap === 'string' && gap.trim()) parts.push(`Could not read: ${gap.trim()}`);
+    }
+  }
+  return parts.length ? parts.join('\n') : null;
+}
+
 /**
  * POST /api/operations/shared/:jobId/proof/ask
- * Ask a question of the record.
+ * Ask a question of the job file.
  *
- * The answer is stored with the question and the days it was drawn from, so
- * "you told me the subfloor was done" is answerable six weeks later rather
- * than a matter of recollection.
+ * The answer is stored with the question and the sources it was drawn from, so
+ * "you told me the lockbox code" is answerable six weeks later rather than a
+ * matter of recollection. Any kind of data on the file is in play — brief
+ * facts, scope, notes, tasks, crew, logs, documents, and clip readings.
  */
 export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+    const jobId = req.params.jobId;
 
-    const [{ data }, { data: partyRows }] = await Promise.all([
+    const [
+      proofsRes,
+      partyRes,
+      jobRes,
+      briefRes,
+      scopeRes,
+      messageRes,
+      taskRes,
+      crewRes,
+      logRes,
+      memoryRes,
+      docRes,
+      recentRes,
+    ] = await Promise.all([
       supabase
         .from('job_proofs')
         .select('party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
         .eq('org_id', orgId)
-        .eq('job_id', req.params.jobId)
+        .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('work_date', { ascending: false })
         .limit(80),
-      supabase.from('job_parties').select('id, company').eq('job_id', req.params.jobId),
+      supabase
+        .from('job_parties')
+        .select('id, company, trade, contact_name')
+        .eq('job_id', jobId),
+      supabase
+        .from('crm_jobs')
+        .select(
+          'id, job_number, title, status, claim_number, policy_number, work_type, loss_type, description, scheduled_start, scheduled_end',
+        )
+        .eq('org_id', orgId)
+        .eq('id', jobId)
+        .maybeSingle(),
+      supabase
+        .from('job_briefs')
+        .select('facts, note')
+        .eq('job_id', jobId)
+        .order('revision', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('job_scope_items')
+        .select('state, title, detail, reason')
+        .eq('job_id', jobId)
+        .order('created_at'),
+      supabase
+        .from('job_messages')
+        .select('author_label, body')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(80),
+      supabase
+        .from('job_tasks')
+        .select('title, status, details, assigned_to')
+        .eq('job_id', jobId)
+        .order('position')
+        .limit(80),
+      supabase
+        .from('job_assignments')
+        .select('user_id, role_on_job, released_at')
+        .eq('job_id', jobId)
+        .limit(40),
+      supabase
+        .from('work_logs')
+        .select('kind, body, author_id')
+        .eq('job_id', jobId)
+        .order('occurred_at', { ascending: false })
+        .limit(40),
+      supabase
+        .from('memory_events')
+        .select('summary')
+        .eq('job_id', jobId)
+        .order('seq', { ascending: false })
+        .limit(40),
+      supabase
+        .from('scope_documents')
+        .select('filename, extracted, status')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('job_proof_questions')
+        .select('question, answer')
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(8),
     ]);
 
-    const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
+    const partyRows = (partyRes.data ?? []) as any[];
+    const company = new Map(partyRows.map((p) => [p.id, p.company]));
     const clips = collectionClipsFromRows(
-      ((data ?? []) as any[]).map((row) => ({
+      ((proofsRes.data ?? []) as any[]).map((row) => ({
         ...row,
         company: company.get(row.party_id) ?? null,
       })),
     );
 
-    const result = await answerFromProofs({ question: input.question, clips });
-    if (!result) {
-      throw new HttpError(503, 'The assistant is not available right now.', 'model_unavailable');
-    }
+    const taskRows = (taskRes.data ?? []) as any[];
+    const crewRows = ((crewRes.data ?? []) as any[]).filter((row) => !row.released_at);
+    const logRows = (logRes.data ?? []) as any[];
+    const people = await loadPeople(supabase, [
+      ...taskRows.map((row) => row.assigned_to),
+      ...crewRows.map((row) => row.user_id),
+      ...logRows.map((row) => row.author_id),
+    ]);
+    const personName = (id: string | null | undefined) => {
+      if (!id) return null;
+      const person = people.get(id);
+      return person?.fullName || person?.email || null;
+    };
 
-    const groundedOn = clips.map((clip) => `${clip.workDate}:${clip.phase ?? 'clip'}`);
+    const jobRow = (jobRes.data ?? null) as any;
+    const briefRow = (briefRes.data ?? null) as any;
+    const facts =
+      briefRow?.facts && typeof briefRow.facts === 'object' && !Array.isArray(briefRow.facts)
+        ? Object.fromEntries(
+            Object.entries(briefRow.facts as Record<string, unknown>)
+              .map(([key, value]) => [key, String(value ?? '').trim()])
+              .filter(([key, value]) => key && value),
+          )
+        : {};
+
+    const file: JobFileAskContext = {
+      job: jobRow
+        ? {
+            title: jobRow.title ?? null,
+            jobNumber: jobRow.job_number ?? null,
+            status: jobRow.status ?? null,
+            claimNumber: jobRow.claim_number ?? null,
+            policyNumber: jobRow.policy_number ?? null,
+            workType: jobRow.work_type ?? null,
+            lossType: jobRow.loss_type ?? null,
+            description: jobRow.description ?? null,
+            scheduledStart: jobRow.scheduled_start ?? null,
+            scheduledEnd: jobRow.scheduled_end ?? null,
+          }
+        : null,
+      facts,
+      briefNote: briefRow?.note ?? null,
+      scope: ((scopeRes.data ?? []) as any[]).map((row) => ({
+        state: row.state ?? null,
+        title: row.title ?? null,
+        detail: row.detail ?? null,
+        reason: row.reason ?? null,
+      })),
+      messages: ((messageRes.data ?? []) as any[]).map((row) => ({
+        author: row.author_label ?? null,
+        body: row.body ?? null,
+      })),
+      parties: partyRows.map((row) => ({
+        company: row.company ?? null,
+        trade: row.trade ?? null,
+        contact: row.contact_name ?? null,
+      })),
+      tasks: taskRows.map((row) => ({
+        title: row.title ?? null,
+        status: row.status ?? null,
+        details: row.details ?? null,
+        assignee: personName(row.assigned_to),
+      })),
+      crew: crewRows.map((row) => ({
+        name: personName(row.user_id),
+        role: row.role_on_job ?? null,
+      })),
+      workLogs: logRows.map((row) => ({
+        kind: row.kind ?? null,
+        body: row.body ?? null,
+        author: personName(row.author_id),
+      })),
+      memory: ((memoryRes.data ?? []) as any[]).map((row) => ({ summary: row.summary ?? null })),
+      documents: ((docRes.data ?? []) as any[])
+        .map((row) => ({
+          filename: row.filename ?? null,
+          extractedText: extractedDocumentText(row.extracted),
+        }))
+        .filter((doc) => doc.extractedText),
+      clips,
+    };
+
+    const history: JobFileAskTurn[] = ((recentRes.data ?? []) as any[])
+      .reverse()
+      .flatMap((row) => {
+        const turns: JobFileAskTurn[] = [];
+        if (row.question) turns.push({ role: 'user', text: String(row.question) });
+        if (row.answer) turns.push({ role: 'assistant', text: String(row.answer) });
+        return turns;
+      });
+
+    const apiKey = await resolveAskApiKey(orgId);
+    const result = await answerFromJobFile({
+      question: input.question,
+      file,
+      history,
+      apiKey,
+    });
+
+    const groundedOn = [
+      ...clips.map((clip) => `${clip.workDate}:${clip.phase ?? 'clip'}`),
+      ...(Object.keys(facts).length ? ['brief'] : []),
+      ...((file.scope ?? []).length ? ['scope'] : []),
+      ...((file.messages ?? []).length ? ['notes'] : []),
+      ...((file.tasks ?? []).length ? ['tasks'] : []),
+      ...((file.documents ?? []).length ? ['documents'] : []),
+    ];
     const { data: stored } = await supabase
       .from('job_proof_questions')
       .insert({
         org_id: orgId,
-        job_id: req.params.jobId,
+        job_id: jobId,
         question: input.question,
         answer: result.answer,
         model: result.model,
@@ -1654,7 +1866,11 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       .select('id, question, answer, grounded_on, created_at')
       .single();
 
-    res.status(201).json({ answer: result.answer, question: stored, groundedOn: groundedOn.length });
+    res.status(201).json({
+      answer: result.answer,
+      question: stored,
+      groundedOn: result.groundedOn || groundedOn.length,
+    });
   } catch (err) {
     next(err);
   }

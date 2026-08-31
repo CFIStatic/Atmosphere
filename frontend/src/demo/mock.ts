@@ -3380,16 +3380,33 @@ const routes: Array<[string, RegExp, Handler]> = [
   })],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => {
     const asked = String(b.question ?? '');
+    const record = SHARED_RECORDS[m[1]];
+    const facts = record?.brief?.facts ?? {};
     const aboutHomeowner = /homeowner|said|skylight|owner/i.test(asked);
     const aboutWork = /happen|tarp|slope|crew|unfinished|deck/i.test(asked);
-    const answer = aboutHomeowner
-      ? 'Yes. On the August 5 after clip, the mic picks up the homeowner asking the crew not to touch the skylights. That matches what they wrote on the file: “Please do not touch the skylights — we have a separate guy for those.”'
-      : aboutWork
-        ? 'On August 5 Delgado Roofing stripped the north slope to decking and laid underlayment and new shingles across about two thirds of it. Six new decking sheets are visible in the valley. The south slope is not in the footage.'
-        : 'The videos on file do not show that. The record covers 2026-08-01, 08-04 and 08-05 for Delgado Roofing and one part-day for Brightline Electric.';
-    const entry = { id: `q-${Date.now()}`, question: asked, answer, grounded_on: ['2026-08-05:after', '2026-08-04:after'], created_at: new Date().toISOString() };
+    const aboutAddress = /address|where|located|site/i.test(asked);
+    const aboutLockbox = /lockbox|gate|access|code/i.test(asked);
+    const aboutClaim = /claim|policy/i.test(asked);
+    const aboutDoNot = /do not|don'?t|exclu|out of scope|solar/i.test(asked);
+    const aboutInvite = /invited|who is on|sub|delgado|brightline/i.test(asked);
+    const answer = aboutLockbox && facts['Gate / access']
+      ? `On the brief: Gate / access is “${facts['Gate / access']}”.`
+      : aboutAddress && facts['Site address']
+        ? `The site address on this file is ${facts['Site address']}.`
+        : aboutClaim && record?.job?.claimNumber
+          ? `Claim ${record.job.claimNumber} is on this job file.`
+          : aboutDoNot
+            ? 'Do not touch the solar array or its conduit, and do not remove the skylights — both are marked out of scope on this file. The homeowner also wrote: “Please do not touch the skylights — we have a separate guy for those.”'
+            : aboutInvite
+              ? 'Ortiz Restoration, Delgado Roofing (behind on the brief), and Brightline Electric (has not accepted) are invited on this file.'
+              : aboutHomeowner
+                ? 'Yes. On the August 5 after clip, the mic picks up the homeowner asking the crew not to touch the skylights. That matches what they wrote on the file: “Please do not touch the skylights — we have a separate guy for those.”'
+                : aboutWork
+                  ? 'On August 5 Delgado Roofing stripped the north slope to decking and laid underlayment and new shingles across about two thirds of it. Six new decking sheets are visible in the valley. The south slope is not in the footage.'
+                  : 'This job file does not have that. The record covers the brief, scope, notes, and clips from 2026-08-01, 08-04 and 08-05.';
+    const entry = { id: `q-${Date.now()}`, question: asked, answer, grounded_on: ['brief', 'scope', '2026-08-05:after', '2026-08-04:after'], created_at: new Date().toISOString() };
     (PROOF_QUESTIONS[m[1]] ??= []).unshift(entry);
-    return { status: 201, body: { answer, question: entry, groundedOn: 2 } };
+    return { status: 201, body: { answer, question: entry, groundedOn: 4 } };
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/decide$/, (m, b) => {
     const record = PROOF_DAYS[m[1]];
