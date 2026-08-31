@@ -1154,7 +1154,10 @@
     $('#doneline').classList.remove('on');
     var copy = $('#doneline-copy');
     if (copy) copy.textContent = DONELINE_OK;
+    /* Home stays available while reading/uploading — crews must never be
+       stuck on the door if the phone stalls mid-step. Retry waits for fail. */
     hideDoorActions();
+    showHomeAction();
   }
 
   function hideDoorActions() {
@@ -1624,6 +1627,7 @@
     }
   })();
   $('#donebtn').addEventListener('click', function () {
+    /* Leave even if reading/uploading is still running — do not trap the crew. */
     state.finishing = false;
     state.recorder = null;
     state.lastClip = null;

@@ -483,7 +483,10 @@
   }
 
   /* ---------- the door ---------- */
-  .door { padding: 18px; }
+  .door {
+    flex: 1 1 auto; min-height: 0; overflow: auto;
+    padding: 18px 18px 8px;
+  }
   .door h2 { font-size: 18px; font-weight: 750; letter-spacing: -0.015em; }
   .door .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
   .ledger {
@@ -507,7 +510,11 @@
   .doneline.on { display: block; }
   .doneline small { display: block; font-weight: 500; font-size: 12px; margin-top: 3px; opacity: .85; }
   .door-actions {
-    display: flex; flex-direction: column; gap: 10px; margin-top: 16px;
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 12px 18px max(18px, env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--line-soft);
   }
   .donebtn, .retrybtn {
     display: none; width: 100%; padding: 15px;
@@ -936,10 +943,10 @@
         Your part is done.
         <small id="doneline-copy">You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
-      <div class="door-actions" id="door-actions">
-        <button type="button" class="retrybtn" id="retrybtn">Retry upload</button>
-        <button type="button" class="donebtn" id="donebtn">Back to Home Screen</button>
-      </div>
+    </div>
+    <div class="door-actions" id="door-actions">
+      <button type="button" class="retrybtn" id="retrybtn">Retry upload</button>
+      <button type="button" class="donebtn" id="donebtn">Back to Home Screen</button>
     </div>
   </div>
 
@@ -979,7 +986,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=home-door"></script>
-<script src="js/app.js?v=home-door"></script>
+<script src="js/capture-core.js?v=home-during-upload"></script>
+<script src="js/app.js?v=home-during-upload"></script>
 </body>
 </html>
