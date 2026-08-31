@@ -362,6 +362,21 @@ function looksLikeOverview(question: string): boolean {
   );
 }
 
+function looksLikeDoNot(question: string): boolean {
+  return /do not|don'?t|exclu|out of scope|should we not|what (should we |must we )?not|must not|cannot touch|not (to )?do/i.test(
+    question,
+  );
+}
+
+function doNotsFromFile(file: JobFileAskContext): string {
+  const excluded = (file.scope ?? []).filter(
+    (line) => /exclud/i.test(trim(line.state)) && trim(line.title),
+  );
+  if (!excluded.length) return 'Nothing is marked out of scope on this file.';
+  const titles = excluded.map((line) => trim(line.title)).slice(0, 4);
+  return `Do not: ${titles.join('; ')}`.slice(0, 600);
+}
+
 function overviewFromFile(file: JobFileAskContext): string {
   const parts: string[] = [];
   if (file.job?.title) parts.push(file.job.title);
@@ -392,6 +407,7 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
   }
 
   if (looksLikeOverview(question)) return overviewFromFile(file);
+  if (looksLikeDoNot(question)) return doNotsFromFile(file);
 
   const words = tokens(question);
   if (!words.length) return overviewFromFile(file);

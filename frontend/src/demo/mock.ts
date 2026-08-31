@@ -3387,7 +3387,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     const aboutAddress = /address|where|located|site/i.test(asked);
     const aboutLockbox = /lockbox|gate|access/i.test(asked);
     const aboutClaim = /claim|policy/i.test(asked);
-    const aboutDoNot = /do not|don'?t|exclu|out of scope|solar/i.test(asked);
+    const aboutDoNot = /do not|don'?t|exclu|out of scope|solar|should we not|what (should we |must we )?not|must not|not (to )?do/i.test(asked);
     const aboutInvite = /invited|who is on|delgado|brightline|kestrel/i.test(asked);
     const joinAnd = (items: string[]) =>
       items.length <= 1 ? (items[0] ?? '') : items.length === 2
