@@ -8,6 +8,12 @@ const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
 const askAboutProofs = vi.fn();
 
+const usePhoneShell = vi.fn(() => false);
+
+vi.mock('../lib/usePhoneShell', () => ({
+  usePhoneShell: () => usePhoneShell(),
+}));
+
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
   api: {
@@ -77,6 +83,7 @@ const proofs: ProofResponse = {
 
 describe('JobAskPanel', () => {
   beforeEach(() => {
+    usePhoneShell.mockReturnValue(false);
     sharedJob.mockReset();
     jobProofs.mockReset();
     proofQuestions.mockReset();
@@ -115,5 +122,16 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Ask what you forgot…')).toHaveClass('text-sm');
+  });
+
+  it('uses a 16px composer on a phone so iOS does not zoom the field', async () => {
+    usePhoneShell.mockReturnValue(true);
+    render(<JobAskPanel jobId="job-1038" />);
+
+    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    const composer = screen.getByPlaceholderText('Ask what you forgot…');
+    expect(composer).toHaveClass('text-base');
+    expect(composer).toHaveAttribute('enterKeyHint', 'send');
   });
 });

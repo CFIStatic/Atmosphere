@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
+import { JobAskPanel } from '../components/JobAskPanel';
 import {
   api,
   type SharedJobSummary,
@@ -19,8 +20,12 @@ import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
+import { TabPanel, Tabs } from '../design/Tabs';
 import { jobFilePath } from '../lib/jobFileAsk';
+import { usePhoneShell } from '../lib/usePhoneShell';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+
+type JobFilePane = 'file' | 'ask';
 
 type HandoffState = {
   freshJob?: SharedJobSummary;
@@ -104,6 +109,8 @@ function placeholderRecord(jobId: string, title: string, jobNumber: number | nul
 export function SharedDashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const phone = usePhoneShell();
+  const [pane, setPane] = useState<JobFilePane>('file');
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
   const requestedTitle = searchParams.get('title');
@@ -141,6 +148,10 @@ export function SharedDashboardPage() {
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
   }, [record]);
+
+  useEffect(() => {
+    setPane('file');
+  }, [openId]);
 
   useEffect(() => {
     if (!stayOnRecord) navigate('/verifier-library', { replace: true });
@@ -274,51 +285,44 @@ export function SharedDashboardPage() {
 
   if (!stayOnRecord) return null;
 
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => navigate('/verifier-library')}
-        className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
-      >
-        ← Dashboard
-      </button>
-      <PageHeader
-        title={record?.job.title ?? 'Job'}
-        description="What is happening on site, what has already been done, and what is still ahead."
-        action={
-          record ? (
-            <JobFileActions
-              jobId={record.job.id}
-              title={record.job.title}
-              onShare={openShare}
-              onRenamed={(nextTitle) => {
-                setRecord((prev) =>
-                  prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
-                );
-                setList((prev) =>
-                  (prev ?? []).map((job) =>
-                    job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
-                  ),
-                );
-                if (requestedJob === record.job.id) {
-                  const next: Record<string, string> = { job: record.job.id, title: nextTitle };
-                  if (requestedNumber) next.number = requestedNumber;
-                  setSearchParams(next, { replace: true, state: location.state });
-                }
-              }}
-              onDuplicated={({ jobId, title: nextTitle, summary }) => {
-                ensureListed(summary);
-                navigate(jobFilePath(jobId, { title: nextTitle }), {
-                  state: { freshJob: summary },
-                });
-              }}
-            />
-          ) : undefined
-        }
-      />
+  const header = (
+    <PageHeader
+      title={record?.job.title ?? 'Job'}
+      description="What is happening on site, what has already been done, and what is still ahead."
+      action={
+        record ? (
+          <JobFileActions
+            jobId={record.job.id}
+            title={record.job.title}
+            onShare={openShare}
+            onRenamed={(nextTitle) => {
+              setRecord((prev) =>
+                prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
+              );
+              setList((prev) =>
+                (prev ?? []).map((job) =>
+                  job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
+                ),
+              );
+              if (requestedJob === record.job.id) {
+                const next: Record<string, string> = { job: record.job.id, title: nextTitle };
+                if (requestedNumber) next.number = requestedNumber;
+                setSearchParams(next, { replace: true, state: location.state });
+              }
+            }}
+            onDuplicated={({ jobId, title: nextTitle, summary }) => {
+              ensureListed(summary);
+              navigate(jobFilePath(jobId, { title: nextTitle }), {
+                state: { freshJob: summary },
+              });
+            }}
+          />
+        ) : undefined
+      }
+    />
+  );
 
-      {justApproved && record && (
+  const createdBanner = justApproved && record && (
         <div
           role="status"
           className="mt-4 space-y-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
@@ -371,8 +375,11 @@ export function SharedDashboardPage() {
             </ul>
           )}
         </div>
-      )}
+      );
 
+  const fileBody = (
+    <>
+      {createdBanner}
       {error && (
         <p role="alert" className="mt-4 text-sm text-danger-600">
           {error}
@@ -380,8 +387,7 @@ export function SharedDashboardPage() {
       )}
 
       {record ? (
-        <>
-          <div className="mt-4">
+        <div className={phone ? undefined : 'mt-4'}>
             <JobProgressDashboard
               jobId={record.job.id}
               record={record}
@@ -399,7 +405,11 @@ export function SharedDashboardPage() {
             />
 
             <div className="mt-4 space-y-4">
-              <ProofOfWork jobId={record.job.id} heading="Videos and analysis" />
+              <ProofOfWork
+                jobId={record.job.id}
+                heading="Videos and analysis"
+                showAsk={!phone}
+              />
               <JobLegalHoldPortal jobId={record.job.id} jobTitle={record.job.title} />
               <EvidenceLocker jobId={record.job.id} />
             </div>
@@ -433,21 +443,79 @@ export function SharedDashboardPage() {
                     <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                   </div>
                 </details>
-          </div>
-
-          {shareFormOpen && (
-            <ShareJobProgressPanel
-              jobId={record.job.id}
-              creating
-              modal
-              onClose={() => setShareFormOpen(false)}
-              onCreatingChange={setShareFormOpen}
-            />
-          )}
-        </>
+        </div>
       ) : (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
       )}
+    </>
+  );
+
+  const shareModal =
+    shareFormOpen && record ? (
+      <ShareJobProgressPanel
+        jobId={record.job.id}
+        creating
+        modal
+        onClose={() => setShareFormOpen(false)}
+        onCreatingChange={setShareFormOpen}
+      />
+    ) : null;
+
+  if (phone) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="job-progress-file">
+        <div className="shrink-0 border-b border-line bg-paper-0 px-3 pt-2">
+          <button
+            type="button"
+            onClick={() => navigate('/verifier-library')}
+            className="mb-2 text-sm font-medium text-ink-500 hover:text-ink-800"
+          >
+            ← Dashboard
+          </button>
+        </div>
+        <Tabs
+          value={pane}
+          onValueChange={(value) => setPane(value as JobFilePane)}
+          items={[
+            { value: 'file', label: 'File' },
+            { value: 'ask', label: 'Ask' },
+          ]}
+          className="flex min-h-0 flex-1 flex-col px-3"
+        >
+          <TabPanel value="file" className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none">
+            {header}
+            {fileBody}
+          </TabPanel>
+          <TabPanel
+            value="ask"
+            className="flex min-h-0 flex-1 flex-col outline-none"
+            aria-label="Ask this job"
+            data-testid="job-file-ask"
+          >
+            {record ? (
+              <JobAskPanel jobId={record.job.id} fill />
+            ) : (
+              <p className="px-3 py-6 text-sm text-ink-600">Loading…</p>
+            )}
+          </TabPanel>
+        </Tabs>
+        {shareModal}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => navigate('/verifier-library')}
+        className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        ← Dashboard
+      </button>
+      {header}
+      {fileBody}
+      {shareModal}
     </>
   );
 }

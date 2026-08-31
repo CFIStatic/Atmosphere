@@ -6,7 +6,7 @@ import { VerifierFrame } from '../components/VerifierFrame';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { usePhoneShell } from '../lib/usePhoneShell';
-import { isJobFilePath } from './jobFilePath';
+import { isFullHeightJobFile } from './jobFilePath';
 import { JobFilesSearchContext } from './jobFilesSearch';
 
 /**
@@ -26,11 +26,11 @@ import { JobFilesSearchContext } from './jobFilesSearch';
  * top bar is hidden.
  */
 export function OperationsShell() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const isLibrary = pathname === '/verifier-library';
   const isJobsList = pathname === '/jobs';
-  const isJobFile = isJobFilePath(pathname);
   const phone = usePhoneShell();
+  const isJobFile = isFullHeightJobFile(pathname, search, phone);
   const [jobSearch, setJobSearch] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   useFeatureTimer('verifier_library', isLibrary);

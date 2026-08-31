@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { isJobFilePath } from './jobFilePath';
+import { isFullHeightJobFile, isJobFilePath, isJobProgressFile } from './jobFilePath';
 
 const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../App.tsx'), 'utf8');
 
@@ -35,6 +35,24 @@ describe('isJobFilePath', () => {
   });
 });
 
+describe('isJobProgressFile', () => {
+  it('treats a Dashboard job deep-link as a file, not the empty progress route', () => {
+    expect(isJobProgressFile('/job-progress', '?job=job-1038')).toBe(true);
+    expect(isJobProgressFile('/job-progress', 'job=job-1038&title=Cedar')).toBe(true);
+    expect(isJobProgressFile('/job-progress', '')).toBe(false);
+    expect(isJobProgressFile('/jobs/job-1038', '?job=job-1038')).toBe(false);
+  });
+});
+
+describe('isFullHeightJobFile', () => {
+  it('locks the Dashboard job on a phone so File and Ask can fill the frame', () => {
+    expect(isFullHeightJobFile('/jobs/job-1038')).toBe(true);
+    expect(isFullHeightJobFile('/job-progress', '?job=job-1038', true)).toBe(true);
+    expect(isFullHeightJobFile('/job-progress', '?job=job-1038', false)).toBe(false);
+    expect(isFullHeightJobFile('/job-progress', '', true)).toBe(false);
+  });
+});
+
 describe('job-file viewport lock', () => {
   it('locks the job file to the viewport so Ask can stay pinned on the right', () => {
     const shell = readFileSync(
@@ -54,6 +72,7 @@ describe('phone and Field Capture frame', () => {
       'utf8',
     );
     expect(shell).toContain('usePhoneShell');
+    expect(shell).toContain('isFullHeightJobFile');
     expect(shell).toContain('Open navigation');
     expect(shell).toContain('operations-main');
     expect(shell).toContain('operations-rail');

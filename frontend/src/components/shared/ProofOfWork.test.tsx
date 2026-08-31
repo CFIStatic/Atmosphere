@@ -117,4 +117,18 @@ describe('ProofOfWork video collection', () => {
       'https://signed.test/morning.mp4',
     );
   });
+
+  it('hides the buried collection form when Ask is a first-class tab', () => {
+    render(
+      <ProofOfWork
+        jobId="job-1"
+        heading="Videos and analysis"
+        initialData={catalog}
+        showAsk={false}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Ask the video collection/i)).not.toBeInTheDocument();
+  });
 });

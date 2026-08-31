@@ -17,6 +17,7 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
+import { resolveAskApiKey } from '../lib/anthropic.js';
 import {
   clipHasReading,
   downloadDecision,
@@ -457,10 +458,12 @@ async function settleClipQuestion(opts: {
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
   const record = clipRecordFromEvidenceItem(opts.item);
+  const apiKey = await resolveAskApiKey(opts.orgId);
   const result = await answerFromClip({
     question: opts.question,
     record,
     history: opts.history,
+    apiKey,
   });
 
   try {
