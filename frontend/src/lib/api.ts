@@ -3093,6 +3093,12 @@ export const api = {
       body: JSON.stringify(title ? { title } : {}),
     }),
 
+  deleteJobFile: (jobId: string, title: string) =>
+    request<{ ok: boolean; deletedAt: string; jobId: string }>(`/api/operations/shared/${jobId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ title }),
+    }),
+
   addJobParty: (
     jobId: string,
     input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
