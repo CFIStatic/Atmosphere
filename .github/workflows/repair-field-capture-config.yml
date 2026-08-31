@@ -18,6 +18,7 @@ on:
   push:
     branches:
       - main
+      - cursor/google-address-lookup-377e
     paths:
       - 'fieldcapture/**'
       - '.github/workflows/repair-field-capture-config.yml'
