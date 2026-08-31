@@ -90,7 +90,7 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         }
         session.addOutput(movieOutput)
 
-        if let audioConnection = movieOutput.connection(with: .audio), audioConnection.isActive {
+        if let audioConnection = movieOutput.connection(with: .audio) {
             audioConnection.isEnabled = true
             movieOutput.setOutputSettings(
                 [
