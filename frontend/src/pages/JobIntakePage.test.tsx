@@ -174,4 +174,56 @@ describe('JobIntakePage', () => {
     expect(approve.className).toMatch(/w-full/);
     expect(approve.className).toMatch(/rounded-xl/);
   });
+
+  it('keeps Open this job file and Start another on the phone after approve', async () => {
+    usePhoneShell.mockReturnValue(true);
+    vi.mocked(api.approveIntake).mockResolvedValue({
+      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+      briefRevision: 1,
+      scopeSaved: 0,
+      invites: [
+        {
+          id: 'inv-1',
+          name: 'Marcus Webb',
+          email: 'marcus@example.com',
+          sharePath: '/shared/tok-1',
+          fieldCapturePath: '/fieldcapture/?token=tok-1',
+          token: 'tok-1',
+          emailed: true,
+          recipientHasAccount: true,
+        },
+      ],
+      party: { id: 'pty-1', company: 'Field Capture' },
+      sharePath: '/shared/tok-1',
+      fieldCapturePath: '/fieldcapture/?token=tok-1',
+      readiness: {
+        level: 'limited',
+        ceiling: 'work_only',
+        headline: 'Invite sent',
+        gaps: [],
+        strengths: [],
+        source: null,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText('1842 Meridian Ave, Austin, TX 78702'),
+      '1842 Meridian Ave',
+    );
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Job created — capture invited' })).toBeInTheDocument();
+    expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
+    expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
+  });
 });

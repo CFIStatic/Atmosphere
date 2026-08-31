@@ -268,9 +268,18 @@ export function JobIntakePage() {
         <div
           className={cn(
             'animate-fade-in-up',
-            phone ? 'mt-3 min-w-0 space-y-3' : 'mx-auto max-w-3xl space-y-4',
+            phone
+              ? 'mt-3 flex min-h-0 min-w-0 flex-1 flex-col'
+              : 'mx-auto max-w-3xl space-y-4',
           )}
         >
+          <div
+            className={
+              phone
+                ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+                : 'contents'
+            }
+          >
           <div
             className={cn(
               'rounded-xl border border-success-200/80 bg-success-50/40 glass-card',
@@ -288,7 +297,7 @@ export function JobIntakePage() {
               {invites.some((i) => i.emailed)
                 ? ` · ${invites.filter((i) => i.emailed).length} emailed`
                 : ''}
-              . It is on your job progress dashboard now.
+              {phone ? '.' : '. It is on your job progress dashboard now.'}
             </p>
           </div>
 
@@ -305,8 +314,13 @@ export function JobIntakePage() {
                   key={inv.id}
                   className="rounded-lg border border-line/60 bg-paper-50/40 px-3 py-3"
                 >
-                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-                    <p className="min-w-0 text-sm font-medium text-ink-900">{inv.name}</p>
+                  <div
+                    className={cn(
+                      'min-w-0',
+                      phone ? 'space-y-0.5' : 'flex flex-wrap items-baseline justify-between gap-2',
+                    )}
+                  >
+                    <p className="min-w-0 truncate text-sm font-medium text-ink-900">{inv.name}</p>
                     {inv.email && (
                       <p className="min-w-0 truncate text-xs text-ink-500">{inv.email}</p>
                     )}
@@ -314,10 +328,16 @@ export function JobIntakePage() {
                   <p className="mt-1 text-xs leading-snug text-ink-500">
                     {inv.emailed
                       ? inv.recipientHasAccount
-                        ? 'Atmosphere emailed them — they already have an account; the job will show when they sign in.'
-                        : 'Atmosphere emailed them — no account yet; the email walks them through creating one with this address.'
+                        ? phone
+                          ? 'Emailed — they already have an account.'
+                          : 'Atmosphere emailed them — they already have an account; the job will show when they sign in.'
+                        : phone
+                          ? 'Emailed — the note walks them through creating an account.'
+                          : 'Atmosphere emailed them — no account yet; the email walks them through creating one with this address.'
                       : inv.email
-                        ? 'Invite created, but Atmosphere mail did not send — copy the link below.'
+                        ? phone
+                          ? 'Invite created — copy the link; mail did not send.'
+                          : 'Invite created, but Atmosphere mail did not send — copy the link below.'
                         : 'Copy their capture link below.'}
                     {inv.attachedToAccount ? ' Already on their My jobs list.' : ''}
                   </p>
@@ -341,11 +361,12 @@ export function JobIntakePage() {
               ))}
             </ul>
           </div>
+          </div>
 
           <div
             className={cn(
               phone
-                ? 'grid gap-2 pb-1'
+                ? 'sticky bottom-0 z-10 -mx-3 mt-2 grid shrink-0 gap-1.5 border-t border-line bg-paper-100/95 px-3 pt-2 pb-[max(6px,env(safe-area-inset-bottom))] backdrop-blur-sm'
                 : 'flex flex-wrap gap-3 pb-8',
             )}
           >
