@@ -191,6 +191,7 @@
     recorder: null,
     stopWatch: null,
     uploadResult: null,
+    lastClip: null,
     job: null,
     site: null,
     seconds: 0,
@@ -204,6 +205,11 @@
     account: false,
     demoStream: null,
   };
+
+  var DONELINE_OK =
+    'You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.';
+  var DONELINE_FAIL =
+    'The recording is still on this phone. Fix signal and tap Retry upload — or go back to Home Screen and ask the office for help.';
 
   function readStoredSession() {
     try {
@@ -1088,29 +1094,54 @@
     state.recorder
       .stop()
       .then(function (clip) {
-        openDoorUploading();
-        return Core.uploadDayFilm({
-          token: TOKEN || undefined,
-          jobId: state.account ? state.activeJobId : undefined,
-          accessToken: state.account ? state.accessToken : undefined,
-          apiBase: API_BASE,
-          storageBase: STORAGE_BASE,
-          blob: clip.blob,
-          mimeType: clip.mimeType,
-          onStep: function (step) {
-            $('#upload-step').textContent = step;
-          },
-        });
-      })
-      .then(function (result) {
-        state.uploadResult = result;
-        renderDoorLive(result);
+        state.lastClip = clip;
+        return uploadLastClip();
       })
       .catch(function (err) {
+        openDoorUploading();
         $('#upload-step').textContent = err.message || 'Upload failed.';
         $('#upload-step').style.color = 'var(--fail)';
         renderDoorFailed(err);
       });
+  }
+
+  function uploadLastClip() {
+    var clip = state.lastClip;
+    if (!clip || !clip.blob) {
+      return Promise.reject(new Error('Nothing to upload. Record the day again.'));
+    }
+    openDoorUploading();
+    return Core.uploadDayFilm({
+      token: TOKEN || undefined,
+      jobId: state.account ? state.activeJobId : undefined,
+      accessToken: state.account ? state.accessToken : undefined,
+      apiBase: API_BASE,
+      storageBase: STORAGE_BASE,
+      blob: clip.blob,
+      mimeType: clip.mimeType,
+      onStep: function (step) {
+        var stepEl = $('#upload-step');
+        if (stepEl) {
+          stepEl.textContent = step;
+          stepEl.style.color = '';
+        }
+      },
+    }).then(
+      function (result) {
+        state.uploadResult = result;
+        state.lastClip = null;
+        renderDoorLive(result);
+        return result;
+      },
+      function (err) {
+        var stepEl = $('#upload-step');
+        if (stepEl) {
+          stepEl.textContent = err.message || 'Upload failed.';
+          stepEl.style.color = 'var(--fail)';
+        }
+        renderDoorFailed(err);
+      },
+    );
   }
 
   function openDoorUploading() {
@@ -1119,7 +1150,26 @@
       '<div class="lrow on"><span>Uploading</span><em id="upload-step">Starting…</em><span class="ok">…</span></div>';
     $('#daytl').innerHTML = '';
     $('#doneline').classList.remove('on');
-    $('#donebtn').classList.remove('on');
+    var copy = $('#doneline-copy');
+    if (copy) copy.textContent = DONELINE_OK;
+    hideDoorActions();
+  }
+
+  function hideDoorActions() {
+    var done = $('#donebtn');
+    var retry = $('#retrybtn');
+    if (done) done.classList.remove('on');
+    if (retry) retry.classList.remove('on');
+  }
+
+  function showHomeAction() {
+    var done = $('#donebtn');
+    if (done) done.classList.add('on');
+  }
+
+  function showRetryAction() {
+    var retry = $('#retrybtn');
+    if (retry) retry.classList.add('on');
   }
 
   function renderDoorLive(result) {
@@ -1175,8 +1225,12 @@
       '<span class="mono">proof ' +
       escapeHtml((result.proof && result.proof.id) || 'filed') +
       '</span></div>';
+    var copy = $('#doneline-copy');
+    if (copy) copy.textContent = DONELINE_OK;
     $('#doneline').classList.add('on');
-    $('#donebtn').classList.add('on');
+    hideDoorActions();
+    showHomeAction();
+    state.finishing = false;
   }
 
   function renderDoorFailed(err) {
@@ -1184,12 +1238,17 @@
       '<div class="lrow on"><span>Upload failed</span><em>' +
       escapeHtml(err.message || 'Try again') +
       '</em><span class="ok">!</span></div>' +
-      '<div class="lrow on"><span>Recording</span><em>kept on this phone until you retry</em><span class="ok">→</span></div>';
+      '<div class="lrow on"><span>Recording</span><em>' +
+      (state.lastClip ? 'kept on this phone — tap Retry upload' : 'not saved — record again') +
+      '</em><span class="ok">→</span></div>';
     $('#daytl').innerHTML = '';
+    var copy = $('#doneline-copy');
+    if (copy) copy.textContent = DONELINE_FAIL;
     $('#doneline').classList.add('on');
-    $('#doneline').querySelector('small').textContent =
-      'Do not delete the app data. Fix signal and start the day again — or ask the office for help.';
-    $('#donebtn').classList.add('on');
+    hideDoorActions();
+    if (state.lastClip) showRetryAction();
+    showHomeAction();
+    state.finishing = false;
   }
 
   /* ---------- hold to finish ----------
@@ -1347,7 +1406,8 @@
       $('#daytl').innerHTML =
         '<div class="tlrow"><b>Demo day</b><span>Open with ?token= to file a real day film.</span></div>';
       $('#doneline').classList.add('on');
-      $('#donebtn').classList.add('on');
+      hideDoorActions();
+      showHomeAction();
     };
     show('s-home');
   }
@@ -1564,8 +1624,19 @@
   $('#donebtn').addEventListener('click', function () {
     state.finishing = false;
     state.recorder = null;
+    state.lastClip = null;
+    hideDoorActions();
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+  });
+  when('#retrybtn', function (btn) {
+    btn.addEventListener('click', function () {
+      if (!state.lastClip || state.finishing) return;
+      state.finishing = true;
+      uploadLastClip().catch(function () {
+        /* renderDoorFailed already painted the door */
+      });
+    });
   });
 
   bindJobSearch();

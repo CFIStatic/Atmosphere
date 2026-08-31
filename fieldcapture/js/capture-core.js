@@ -299,6 +299,9 @@
             reject(new Error('Not recording.'));
             return;
           }
+          // Snapshot A/V presence before tracks are stopped in onstop.
+          var hadAudio = !!(state.stream && state.stream.getAudioTracks().length);
+          var hadVideo = !!(state.stream && state.stream.getVideoTracks().length);
           recorder.onstop = function () {
             if (state.timer) clearInterval(state.timer);
             var type = recorder.mimeType || state.mimeType || 'video/webm';
@@ -313,11 +316,20 @@
               reject(new Error('Recording was empty.'));
               return;
             }
+            if (!hadAudio) {
+              reject(new Error('Microphone is required. Enable mic permission and record again.'));
+              return;
+            }
+            if (!hadVideo) {
+              reject(new Error('Camera is required. Enable camera permission and record again.'));
+              return;
+            }
             resolve({
               blob: blob,
               mimeType: type,
               durationSeconds: Math.max(1, Math.floor((Date.now() - state.startedAt) / 1000)),
               hasAudio: true,
+              hasVideo: true,
             });
           };
           recorder.stop();
@@ -637,12 +649,7 @@
             slot.path +
             '?token=' +
             encodeURIComponent(slot.token);
-        return fetch(putUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': mimeType },
-        }).then(function (put) {
-          if (!put.ok) throw new Error('The upload did not go through. Try again on better signal.');
+        return putBytesWithRetry(putUrl, file, mimeType, onStep, 3).then(function () {
           onStep('Filing it with the office…');
           return apiJson(filePath, {
             method: 'POST',
@@ -672,6 +679,34 @@
         });
       });
     });
+  }
+
+  /**
+   * PUT the day film to signed storage. Truck signal drops mid-upload, so
+   * retry a few times before asking the crew to try again from the door.
+   */
+  function putBytesWithRetry(putUrl, file, mimeType, onStep, attemptsLeft) {
+    return fetch(putUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': mimeType },
+    }).then(
+      function (put) {
+        if (put.ok) return put;
+        if (attemptsLeft <= 1) {
+          throw new Error('The upload did not go through. Try again on better signal.');
+        }
+        onStep('Upload interrupted — retrying…');
+        return putBytesWithRetry(putUrl, file, mimeType, onStep, attemptsLeft - 1);
+      },
+      function () {
+        if (attemptsLeft <= 1) {
+          throw new Error('The upload did not go through. Try again on better signal.');
+        }
+        onStep('Upload interrupted — retrying…');
+        return putBytesWithRetry(putUrl, file, mimeType, onStep, attemptsLeft - 1);
+      },
+    );
   }
 
   function loadShareJob(token, apiBase) {
