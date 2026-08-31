@@ -542,10 +542,47 @@
       body: {
         title: opts.title,
         address: opts.address,
+        city: opts.city || undefined,
+        postalCode: opts.postalCode || undefined,
+        placeId: opts.placeId || undefined,
         situation: opts.situation || undefined,
       },
     }).then(function (body) {
       return body.job;
+    });
+  }
+
+  function placesStatus(opts) {
+    opts = opts || {};
+    return apiJson(origin(opts.apiBase) + '/api/field-app/places/status', {
+      accessToken: opts.accessToken,
+    });
+  }
+
+  function placesAutocomplete(opts) {
+    opts = opts || {};
+    return apiJson(origin(opts.apiBase) + '/api/field-app/places/autocomplete', {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: { input: opts.input, sessionToken: opts.sessionToken },
+    });
+  }
+
+  function placesDetails(opts) {
+    opts = opts || {};
+    return apiJson(origin(opts.apiBase) + '/api/field-app/places/details', {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: { placeId: opts.placeId, sessionToken: opts.sessionToken },
+    });
+  }
+
+  function placesResolve(opts) {
+    opts = opts || {};
+    return apiJson(origin(opts.apiBase) + '/api/field-app/places/resolve', {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: { input: opts.input, placeId: opts.placeId, sessionToken: opts.sessionToken },
     });
   }
 
@@ -697,6 +734,10 @@
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
     createTodayJob: createTodayJob,
+    placesStatus: placesStatus,
+    placesAutocomplete: placesAutocomplete,
+    placesDetails: placesDetails,
+    placesResolve: placesResolve,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
     currentPosition: currentPosition,

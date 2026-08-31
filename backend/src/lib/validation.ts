@@ -409,6 +409,7 @@ export const fieldStartJobSchema = z.object({
     }),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
+  placeId: z.string().trim().max(300).optional(),
   situation: z.string().trim().max(2000).optional(),
 });
 

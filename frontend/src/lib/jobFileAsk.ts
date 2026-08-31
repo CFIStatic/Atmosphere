@@ -71,7 +71,7 @@ export function buildJobFileDossier(input: {
     const detail = String(value ?? '').trim();
     if (!label.trim() || !detail) continue;
     // Address already sits in the file header — keep lockbox, permit, hours, etc.
-    if (/^(site address|address|property)$/i.test(label.trim())) continue;
+    if (/^(site address|site|address|property)$/i.test(label.trim())) continue;
     beats.push({
       id: `fact-${label}`,
       when: '',
@@ -428,5 +428,12 @@ export function jobFileMatches(
 
 export function siteLine(record: SharedJobRecord | null): string | null {
   const facts = record?.brief?.facts ?? {};
-  return facts['Site address'] || facts['Address'] || facts['Property'] || null;
+  return (
+    facts['Site address'] ||
+    facts['Site Address'] ||
+    facts.Site ||
+    facts.Address ||
+    facts.Property ||
+    null
+  );
 }

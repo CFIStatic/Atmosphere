@@ -170,6 +170,9 @@ test('POST /api/field-app/jobs starts a job from Field Capture then assigns the 
   assert.match(src, /intakeFromFieldStart/);
   assert.match(src, /createJobFile/);
   assert.match(src, /allowTypedFallback: true/);
+  assert.match(src, /fieldAppRouter\.get\('\/places\/status'/);
+  assert.match(src, /fieldAppRouter\.post\('\/places\/autocomplete'/);
+  assert.match(src, /fieldAppRouter\.post\('\/places\/resolve'/);
   assert.match(src, /role_on_job: 'crew'/);
   assert.match(src, /j\.created_by === userId/);
 });

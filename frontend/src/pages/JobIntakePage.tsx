@@ -158,6 +158,7 @@ export function JobIntakePage() {
       briefNote: note || DEFAULT_BRIEF,
       facts: {
         Site: address,
+        'Site address': [address, siteCity, sitePostal].filter(Boolean).join(', '),
         ...(note ? { Work: note.slice(0, 500) } : {}),
         Source: note ? 'Address and work description' : 'Address only — work description optional',
       },

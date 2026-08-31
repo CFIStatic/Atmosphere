@@ -5,6 +5,7 @@ import {
   normalizeCountry,
   propertyRowFromResolved,
   propertyRowFromTyped,
+  siteAddressFacts,
 } from '../src/lib/propertyAddress.js';
 import { resolvedFromComponents } from '../src/lib/googlePlaces.js';
 
@@ -56,6 +57,17 @@ test('propertyRowFromResolved truncates and stores Google street + coords', () =
   assert.equal(row.country, 'GB');
   assert.equal(row.latitude, 51.6061);
   assert.equal(row.longitude, -3.2294);
+});
+
+test('siteAddressFacts writes Site and Site address for the dashboard', () => {
+  assert.deepEqual(
+    siteAddressFacts({ line: 'School Street', city: 'Llanbradach', postalCode: 'CF83 3NB' }, { Work: 'Extract' }),
+    {
+      Work: 'Extract',
+      Site: 'School Street',
+      'Site address': 'School Street, Llanbradach, CF83 3NB',
+    },
+  );
 });
 
 test('propertyRowFromTyped keeps a typed line under the column limit', () => {

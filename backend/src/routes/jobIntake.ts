@@ -22,6 +22,7 @@ import {
   cityPostalFromAddress,
   propertyRowFromResolved,
   propertyRowFromTyped,
+  siteAddressFacts,
 } from '../lib/propertyAddress.js';
 
 /**
@@ -457,7 +458,7 @@ type IntakeAddress = {
 };
 
 type ResolveIntakeOptions = {
-  /** Field Capture has no Places picker — keep the typed line if lookup misses. */
+  /** Field Capture still saves a typed line if lookup misses (poor signal). */
   allowTypedFallback?: boolean;
 };
 
@@ -538,7 +539,7 @@ export async function createJobFile(
     p_longitude: (site.row.longitude as number | null | undefined) ?? input.longitude ?? null,
     p_claim_number: input.claimNumber ?? null,
     p_brief_note: input.briefNote ?? null,
-    p_facts: input.facts ?? {},
+    p_facts: siteAddressFacts(site, input.facts),
     p_scope: scopeLines,
     p_invitees: invitees,
   };
@@ -681,7 +682,7 @@ async function createJobFileStepwise(
       org_id: orgId,
       job_id: jobId,
       revision: 0,
-      facts: input.facts ?? {},
+      facts: siteAddressFacts(site, input.facts),
       note: input.briefNote ?? null,
       created_by: userId,
     })

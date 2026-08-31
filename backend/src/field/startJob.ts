@@ -3,7 +3,7 @@
  * approves. Crew name the job and the site; a situation note is optional.
  */
 
-import { cityPostalFromAddress } from '../lib/propertyAddress.js';
+import { cityPostalFromAddress, siteAddressFacts } from '../lib/propertyAddress.js';
 
 export const FIELD_DEFAULT_BRIEF =
   'No work description yet. Field Capture can still film — AI will describe what happened from the video.';
@@ -25,6 +25,7 @@ export type FieldStartJobBody = {
   address: string;
   city?: string;
   postalCode?: string;
+  placeId?: string;
   situation?: string;
 };
 
@@ -32,21 +33,26 @@ export type FieldStartJobBody = {
 export function intakeFromFieldStart(input: FieldStartJobBody) {
   const address = input.address.trim();
   const parsed = cityPostalFromAddress(address);
+  const city = (input.city ?? '').trim() || parsed.city || undefined;
+  const postalCode = (input.postalCode ?? '').trim() || parsed.postalCode || undefined;
   const note = (input.situation ?? '').trim();
   return {
     title: input.title.trim(),
     workType: workTypeFromSituation(note),
     address,
-    city: (input.city ?? '').trim() || parsed.city || undefined,
-    postalCode: (input.postalCode ?? '').trim() || parsed.postalCode || undefined,
+    city,
+    postalCode,
+    placeId: input.placeId?.trim() || undefined,
     briefNote: note || FIELD_DEFAULT_BRIEF,
-    facts: {
-      Site: address,
-      ...(note ? { Work: note.slice(0, 500) } : {}),
-      Source: note
-        ? 'Field Capture — address and work description'
-        : 'Field Capture — address only',
-    },
+    facts: siteAddressFacts(
+      { line: address, city, postalCode },
+      {
+        ...(note ? { Work: note.slice(0, 500) } : {}),
+        Source: note
+          ? 'Field Capture — address and work description'
+          : 'Field Capture — address only',
+      },
+    ),
     scope: scopeFromSituation(note),
     invitees: [],
   };
