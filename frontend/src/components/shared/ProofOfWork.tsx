@@ -75,15 +75,12 @@ export function ProofOfWork({
   jobId,
   heading = 'Proof of work',
   readOnly = false,
-  showAsk = true,
   initialData,
   videoFetcher,
 }: {
   jobId?: string;
   heading?: string;
   readOnly?: boolean;
-  /** Hide the buried collection form when Ask is a first-class tab. */
-  showAsk?: boolean;
   initialData?: ProofResponse;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
 }) {
@@ -582,10 +579,7 @@ export function ProofOfWork({
 
       {/* Asking the record. Forty jobs and eighty videos a day is nobody's
           afternoon; a question against the summaries is. */}
-      {!readOnly &&
-        showAsk &&
-        data &&
-        (data.days.length > 0 || (data.videos?.length ?? 0) > 0) && (
+      {!readOnly && data && (data.days.length > 0 || (data.videos?.length ?? 0) > 0) && (
         <div className="mt-4 border-t border-line pt-3">
           <form onSubmit={ask} className="flex gap-2">
             <input

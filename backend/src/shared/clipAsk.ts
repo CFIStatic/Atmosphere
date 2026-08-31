@@ -7,11 +7,11 @@
  * "describe only what is visible", so an answer built from them inherits that
  * discipline.
  *
- * When a model key is wired (org Computer Use vault or ANTHROPIC_API_KEY) it
- * writes the prose; when it is not, a grounded lookup still answers from the
- * same record so the Ask tab works in demo and without a provider.
+ * When a model is configured it writes the prose; when it is not, a grounded
+ * lookup still answers from the same record so the Ask tab works in demo and
+ * in environments without a provider.
  */
-import { anthropicClientForKey } from '../lib/anthropic.js';
+import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
 
 export type ClipAskAnalysisState =
@@ -495,11 +495,9 @@ export async function answerFromClip(input: {
   question: string;
   record: ClipAskRecord;
   history?: ClipAskTurn[];
-  apiKey?: string | null;
 }): Promise<{ answer: string; model: string | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  const apiKey = (input.apiKey === undefined ? config.anthropic.apiKey : input.apiKey ?? '').trim();
-  if (!apiKey) return { answer: grounded, model: null };
+  if (!isModelProviderConfigured()) return { answer: grounded, model: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
   if (!reading) return { answer: grounded, model: null };
@@ -511,7 +509,7 @@ export async function answerFromClip(input: {
     .join('\n');
 
   try {
-    const response = await anthropicClientForKey(apiKey).messages.create({
+    const response = await anthropicClient().messages.create({
       model: config.technician.assistant.model,
       max_tokens: 500,
       system: CLIP_QA_SYSTEM,

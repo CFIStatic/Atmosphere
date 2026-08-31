@@ -224,16 +224,6 @@ test('answerFromClip falls back to the grounded reading when no model is configu
   assert.match(result.answer, /Tarp removed/);
 });
 
-test('answerFromClip skips the model when apiKey is null even if a server key exists', async () => {
-  const result = await answerFromClip({
-    question: 'Did anything happen?',
-    record: cedarAfter,
-    apiKey: null,
-  });
-  assert.equal(result.model, null);
-  assert.match(result.answer, /Tarp removed/);
-});
-
 test('Ask describes the scene after a late reading lands on an existing clip', () => {
   const unreadProof = {
     id: 'existing-1',

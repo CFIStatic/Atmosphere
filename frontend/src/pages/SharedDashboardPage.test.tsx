@@ -7,18 +7,9 @@ const sharedJobs = vi.fn();
 const sharedJob = vi.fn();
 const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
-const jobProofs = vi.fn();
-const proofQuestions = vi.fn();
-const askAboutProofs = vi.fn();
-
-const usePhoneShell = vi.fn(() => false);
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
-}));
-
-vi.mock('../lib/usePhoneShell', () => ({
-  usePhoneShell: () => usePhoneShell(),
 }));
 
 vi.mock('../components/shared/JobProgressDashboard', () => ({
@@ -51,9 +42,6 @@ vi.mock('../lib/api', () => ({
     sharedJob: (...args: unknown[]) => sharedJob(...args),
     renameJobFile: (...args: unknown[]) => renameJobFile(...args),
     duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
-    jobProofs: (...args: unknown[]) => jobProofs(...args),
-    proofQuestions: (...args: unknown[]) => proofQuestions(...args),
-    askAboutProofs: (...args: unknown[]) => askAboutProofs(...args),
   },
 }));
 
@@ -91,34 +79,12 @@ const record = {
 
 describe('SharedDashboardPage job file identity', () => {
   beforeEach(() => {
-    usePhoneShell.mockReturnValue(false);
     sharedJobs.mockReset();
     sharedJob.mockReset();
     renameJobFile.mockReset();
     duplicateJobFile.mockReset();
-    jobProofs.mockReset();
-    proofQuestions.mockReset();
-    askAboutProofs.mockReset();
     sharedJobs.mockResolvedValue({ jobs: [summary], counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 } });
     sharedJob.mockResolvedValue(record);
-    jobProofs.mockResolvedValue({
-      days: [],
-      videos: [],
-      counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-      siteKnown: true,
-    });
-    proofQuestions.mockResolvedValue({ questions: [] });
-    askAboutProofs.mockResolvedValue({
-      answer: 'Lockbox 4412 is on the brief.',
-      groundedOn: 1,
-      question: {
-        id: 'q1',
-        question: "What's the lockbox?",
-        answer: 'Lockbox 4412 is on the brief.',
-        grounded_on: ['brief'],
-        created_at: '2026-08-06T12:00:00Z',
-      },
-    });
     renameJobFile.mockResolvedValue({
       job: { ...record.job, title: 'Cedar Ridge kitchen rebuild' },
     });
@@ -160,26 +126,5 @@ describe('SharedDashboardPage job file identity', () => {
       expect(renameJobFile).toHaveBeenCalledWith('job-1038', 'Cedar Ridge kitchen rebuild');
     });
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge kitchen rebuild' })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
-  });
-
-  it('uses File and Ask tabs on a phone so chat is first-class on the Dashboard job', async () => {
-    usePhoneShell.mockReturnValue(true);
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
-        <SharedDashboardPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('tab', { name: 'Ask' }));
-    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
-    expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
-    expect(screen.getByPlaceholderText('Ask what you forgot…')).toHaveClass('text-base');
   });
 });

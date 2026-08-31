@@ -16,29 +16,7 @@ import {
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
-import { usePhoneShell } from '../lib/usePhoneShell';
 import { SpinnerIcon } from './icons';
-
-/** Keep the composer above the iOS keyboard and the home indicator. */
-function useComposerInset(enabled: boolean): number {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    if (!enabled || typeof window === 'undefined' || !window.visualViewport) return;
-    const viewport = window.visualViewport;
-    function sync() {
-      const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      setInset(overlap);
-    }
-    sync();
-    viewport.addEventListener('resize', sync);
-    viewport.addEventListener('scroll', sync);
-    return () => {
-      viewport.removeEventListener('resize', sync);
-      viewport.removeEventListener('scroll', sync);
-    };
-  }, [enabled]);
-  return inset;
-}
 
 function SendIcon() {
   return (
@@ -87,8 +65,6 @@ export function JobAskPanel({
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const phone = usePhoneShell();
-  const keyboardInset = useComposerInset(phone);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
@@ -272,19 +248,7 @@ export function JobAskPanel({
         )}
       </div>
 
-      <div
-        className="shrink-0 border-t border-line px-5 py-3"
-        style={
-          phone
-            ? {
-                paddingBottom:
-                  keyboardInset > 0
-                    ? keyboardInset
-                    : 'max(0.75rem, env(safe-area-inset-bottom))',
-              }
-            : undefined
-        }
-      >
+      <div className="shrink-0 border-t border-line px-5 py-3">
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
         <form onSubmit={onSubmit} className="flex items-end gap-2">
           <textarea
@@ -300,13 +264,7 @@ export function JobAskPanel({
             rows={1}
             placeholder="Ask what you forgot…"
             disabled={asking}
-            enterKeyHint="send"
-            autoComplete="off"
-            className={
-              phone
-                ? 'min-h-[2.75rem] flex-1 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-base text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200'
-                : 'min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200'
-            }
+            className="min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
           <button
             type="submit"
