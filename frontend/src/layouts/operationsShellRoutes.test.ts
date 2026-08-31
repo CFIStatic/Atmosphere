@@ -42,7 +42,8 @@ describe('job-file viewport lock', () => {
       'utf8',
     );
     expect(shell).toContain('lg:h-screen lg:overflow-hidden');
-    expect(shell).toContain('lg:overflow-hidden');
+    expect(shell).toContain('overflow-hidden');
+    expect(shell).toMatch(/isJobFile[\s\S]*phone[\s\S]*overflow-hidden/);
   });
 });
 
