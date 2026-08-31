@@ -33,6 +33,7 @@ import {
 import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
+import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
@@ -834,19 +835,13 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     const body = z
       .object({
         jobId: z.string().uuid(),
-        label: z.string().trim().min(2).max(200),
+        label: z.string().trim().min(2).max(200).optional(),
         kind: z.enum(['evidence', 'progress']).default('evidence'),
-        // Evidence shares require an account pin; progress shares may omit
-        // email for link-only handoff to homeowners and counsel.
-        recipientEmail: z.string().email().optional(),
-        expiresInDays: z.number().int().min(0).max(365).default(30),
+        recipientEmail: z.string().email(),
+        expiresInDays: z.number().int().min(0).max(365).default(0),
       })
       .parse(req.body);
     const { supabase, orgId, userId } = await requireOrgContext(req);
-
-    if (body.kind === 'evidence' && !body.recipientEmail) {
-      throw new HttpError(400, 'Evidence shares require a recipient email.', 'recipient_required');
-    }
 
     const { data: job } = await supabase
       .from('crm_jobs')
@@ -861,14 +856,15 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         ? null
         : new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
 
-    const recipientEmail = body.recipientEmail?.toLowerCase() ?? null;
+    const recipientEmail = body.recipientEmail.toLowerCase();
+    const label = body.label?.trim() || recipientEmail;
 
     const { data: share, error } = await supabase
       .from('verifier_shares')
       .insert({
         org_id: orgId,
         job_id: body.jobId,
-        label: body.label,
+        label,
         recipient_email: recipientEmail,
         share_kind: body.kind,
         created_by: userId,
@@ -915,46 +911,87 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     }
 
     let emailed = false;
+    let mailWhy: string | null = null;
     if (!erased && recipientEmail) {
+      if (body.kind === 'progress' && !systemMailConfigured()) {
+        await supabase
+          .from('verifier_shares')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('id', (share as any).id);
+        throw new HttpError(
+          503,
+          'Atmosphere mail is not configured, so the invite was not sent. Set SMTP or Resend on the server and try again.',
+          'mail_not_configured',
+        );
+      }
       try {
-        const sender = await buildMailSender(orgId);
-        if (sender) {
-          const [{ data: org }, sharerName] = await Promise.all([
-            supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
-            actorLabelFor(supabase, userId),
-          ]);
-          const mail =
-            body.kind === 'progress'
-              ? progressShareEmail({
-                  orgName: (org as any)?.name ?? 'An Atmosphere member',
-                  sharerName,
-                  jobTitle: (job as any)?.title ?? null,
-                  recipientEmail,
-                  origin: publicAppOrigin(),
-                  path: sharePath,
-                  expiresAt,
-                })
-              : shareEmail({
-                  orgName: (org as any)?.name ?? 'An Atmosphere member',
-                  sharerName,
-                  jobTitle: (job as any)?.title ?? null,
-                  recipientEmail,
-                  recipientHasAccount,
-                  origin: publicAppOrigin(),
-                  path: sharePath,
-                  expiresAt,
-                });
-          const result = await sender.send({
+        const [{ data: org }, sharerName] = await Promise.all([
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+          actorLabelFor(supabase, userId),
+        ]);
+        const orgName = (org as any)?.name ?? 'An Atmosphere member';
+        if (body.kind === 'progress') {
+          // Atmosphere sends homeowner job-file mail the same way it sends
+          // capture invites — no connected customer mailbox required.
+          const mail = progressShareEmail({
+            orgName,
+            sharerName,
+            jobTitle: (job as any)?.title ?? null,
+            recipientEmail,
+            origin: publicAppOrigin(),
+            path: sharePath,
+            expiresAt,
+          });
+          const result = await sendSystemMail({
             to: recipientEmail,
             subject: mail.subject,
             text: mail.text,
+            html: mail.html,
           });
           emailed = result.ok;
+          if (!result.ok) mailWhy = result.why;
+        } else {
+          const sender = await buildMailSender(orgId);
+          if (sender) {
+            const mail = shareEmail({
+              orgName,
+              sharerName,
+              jobTitle: (job as any)?.title ?? null,
+              recipientEmail,
+              recipientHasAccount,
+              origin: publicAppOrigin(),
+              path: sharePath,
+              expiresAt,
+            });
+            const result = await sender.send({
+              to: recipientEmail,
+              subject: mail.subject,
+              text: mail.text,
+            });
+            emailed = result.ok;
+            if (!result.ok) mailWhy = result.error ?? 'The email could not be sent.';
+          } else {
+            mailWhy = 'No mailbox is connected for this organization.';
+          }
         }
-      } catch {
-        // The share stands; only the delivery failed, and the response's
-        // emailed:false is the honest report of that.
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        mailWhy = err instanceof Error ? err.message : 'The email could not be sent.';
       }
+    }
+
+    // Invite-by-email is the product. A live share with no mail is a failed
+    // invite — revoke it so "Send invite" either delivers or says so.
+    if (body.kind === 'progress' && !erased && !emailed) {
+      await supabase
+        .from('verifier_shares')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', (share as any).id);
+      throw new HttpError(
+        502,
+        mailWhy || 'The invite email could not be sent. Try again.',
+        'email_not_sent',
+      );
     }
 
     // Sharing evidence is an act on the evidence, and it goes on the record

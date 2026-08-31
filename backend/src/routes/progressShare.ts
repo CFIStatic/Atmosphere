@@ -1,16 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { shareState } from '../verifier/library.js';
-import { buildJobProofPayload, PROOF_BUCKET, recordAccess } from './proofOfWork.js';
+import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
+import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 
 /**
- * Guest access to a read-only job progress dashboard.
+ * Guest access to a read-only job file.
  *
  * The token in the URL is the whole credential — no login required, because
  * homeowners, attorneys, banks and insurance adjusters should not need an
- * Atmosphere account to see how work is advancing.
+ * Atmosphere account to see the job file and every recording on it.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -25,6 +28,14 @@ const shareLimiter = rateLimit({
   message: { error: 'Too many requests.', code: 'rate_limited' },
 });
 progressShareRouter.use(shareLimiter);
+
+const askLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many questions. Wait a minute and try again.', code: 'rate_limited' },
+});
 
 async function progressShareForToken(token: string) {
   const admin = createAdminClient();
@@ -73,20 +84,27 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
   try {
     const { share, admin } = await progressShareForToken(req.params.token);
 
-    const [{ data: job }, { data: org }, { data: scopeRows }, proof] = await Promise.all([
-      admin
-        .from('crm_jobs')
-        .select('id, title, job_number, claim_number, status')
-        .eq('id', share.job_id)
-        .maybeSingle(),
-      admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
-      admin
-        .from('job_scope_items')
-        .select('id, state, title')
-        .eq('job_id', share.job_id)
-        .order('created_at'),
-      buildJobProofPayload(admin, share.org_id, share.job_id),
-    ]);
+    const [{ data: job }, { data: org }, { data: scopeRows }, { data: briefRows }, proof] =
+      await Promise.all([
+        admin
+          .from('crm_jobs')
+          .select('id, title, job_number, claim_number, status')
+          .eq('id', share.job_id)
+          .maybeSingle(),
+        admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
+        admin
+          .from('job_scope_items')
+          .select('id, party_id, state, title, detail, reason, revision, decided_at, created_at')
+          .eq('job_id', share.job_id)
+          .order('created_at'),
+        admin
+          .from('job_briefs')
+          .select('id, revision, facts, note')
+          .eq('job_id', share.job_id)
+          .order('revision', { ascending: false })
+          .limit(1),
+        buildJobProofPayload(admin, share.org_id, share.job_id),
+      ]);
 
     await admin
       .from('verifier_shares')
@@ -97,6 +115,10 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
       .eq('id', share.id);
 
     const scope = (scopeRows ?? []) as any[];
+    const jobFile = homeownerJobFileFromRows({
+      brief: (briefRows ?? [])[0] ?? null,
+      scope,
+    });
 
     res.json({
       share: {
@@ -114,6 +136,8 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
             status: (job as any).status,
           }
         : null,
+      brief: jobFile.brief,
+      scope: jobFile.scope,
       progress: progressFromRecord(scope, proof),
       proof,
     });
@@ -121,6 +145,43 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
     next(err);
   }
 });
+
+/**
+ * POST /api/progress-share/:token/ask
+ * Homeowner (or counsel / bank / adjuster) asks the same job file the office Ask
+ * reads — token is the credential, no Atmosphere account.
+ */
+progressShareRouter.post(
+  '/:token/ask',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(req.params.token);
+      const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+      const result = await runProofAsk({
+        supabase: admin,
+        orgId: share.org_id,
+        jobId: share.job_id,
+        question: input.question,
+        userId: null,
+        requestId: `ask:progress:${share.id}:${randomUUID()}`,
+      });
+
+      await recordAccess(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        action: 'viewed',
+        actorLabel: `${share.label} — asked via job-file link`,
+        actorRole: 'external_reviewer',
+        detail: input.question.slice(0, 160),
+      });
+
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /api/progress-share/:token/proof/:proofId/video — watch a clip through the share. */
 progressShareRouter.get(

@@ -61,6 +61,7 @@ vi.mock('../lib/api', () => ({
       }),
     ),
     approveIntake: vi.fn(),
+    createProgressShare: vi.fn(),
   },
 }));
 
@@ -91,6 +92,19 @@ describe('JobIntakePage', () => {
         lng: -97.74,
       },
     });
+    vi.mocked(api.createProgressShare).mockReset();
+    vi.mocked(api.createProgressShare).mockResolvedValue({
+      share: {
+        id: 'hs-1',
+        label: 'Homeowner',
+        kind: 'progress',
+        expiresAt: null,
+        createdAt: '2026-08-31T00:00:00.000Z',
+        path: '/progress/home-tok',
+      },
+      emailed: true,
+      recipientHasAccount: false,
+    });
   });
 
   it('puts name, address, situation, and invite list on one page', async () => {
@@ -117,6 +131,10 @@ describe('JobIntakePage', () => {
     expect(nameField.compareDocumentPosition(addressField)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    expect(screen.getByText('Homeowner (optional)')).toBeInTheDocument();
+    expect(
+      screen.getByText(/We email them a link to the job file and every recording/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeInTheDocument();
   });
 
@@ -318,5 +336,47 @@ describe('JobIntakePage', () => {
     expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
     expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
+  });
+
+  it('emails the homeowner the job file after approve, account or not', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue({
+      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+      briefRevision: 1,
+      scopeSaved: 0,
+      invites: [],
+      party: { id: 'pty-1', company: 'Field Capture' },
+      sharePath: '/shared/tok-1',
+      fieldCapturePath: '/fieldcapture/?token=tok-1',
+      readiness: {
+        level: 'limited',
+        ceiling: 'work_only',
+        headline: 'Invite sent',
+        gaps: [],
+        strengths: [],
+        source: null,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText('Search Google for the site address'),
+      '1842 Meridian Ave',
+    );
+    await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(await screen.findByText(/homeowner emailed the job file/i)).toBeInTheDocument();
+    expect(api.createProgressShare).toHaveBeenCalledWith({
+      jobId: 'job-new',
+      label: 'jordan@example.com',
+      recipientEmail: 'jordan@example.com',
+    });
   });
 });

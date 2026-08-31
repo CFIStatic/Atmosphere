@@ -53,6 +53,21 @@ describe('JobFileAskChrome phone tabs', () => {
   });
 });
 
+describe('JobFileAskChrome initial pane', () => {
+  it('opens Ask when the emailed Ask link requested it', () => {
+    render(
+      <JobFileAskChrome jobId="job-1" initialPane="ask">
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+
+    const ask = screen.getByTestId('job-file-ask');
+    expect(ask).toHaveAttribute('data-state', 'active');
+    expect(ask).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+  });
+});
+
 describe('JobFileAskChrome source', () => {
   it('does not put a bare flex utility on the Ask TabPanel', () => {
     expect(chromeSrc).toContain(

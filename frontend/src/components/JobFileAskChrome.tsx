@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { TabPanel, Tabs } from '../design/Tabs';
-import { JobAskPanel } from './JobAskPanel';
+import { JobAskPanel, type JobAskFn } from './JobAskPanel';
+import type { ProofQuestion } from '../lib/api';
 
 type JobFilePane = 'file' | 'ask';
 
@@ -17,19 +18,26 @@ export function JobFileAskChrome({
   back,
   children,
   extra,
+  initialPane = 'file',
+  ask,
+  loadQuestions,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
   back?: ReactNode;
   children: ReactNode;
   extra?: ReactNode;
+  /** Open Ask first — used by the emailed Ask link (?ask=1). */
+  initialPane?: JobFilePane;
+  ask?: JobAskFn;
+  loadQuestions?: () => Promise<{ questions: ProofQuestion[] }>;
 }) {
   const phone = usePhoneShell();
-  const [pane, setPane] = useState<JobFilePane>('file');
+  const [pane, setPane] = useState<JobFilePane>(initialPane);
 
   useEffect(() => {
-    setPane('file');
-  }, [jobId]);
+    setPane(initialPane);
+  }, [jobId, initialPane]);
 
   return (
     <div
@@ -67,7 +75,7 @@ export function JobFileAskChrome({
               aria-label="Ask this job"
               data-testid="job-file-ask"
             >
-              <JobAskPanel jobId={jobId} file={file} fill />
+              <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} />
             </TabPanel>
           </Tabs>
         </div>
@@ -83,7 +91,7 @@ export function JobFileAskChrome({
             aria-label="Ask this job"
             data-testid="job-file-ask"
           >
-            <JobAskPanel jobId={jobId} file={file} fill />
+            <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} />
           </aside>
         </>
       )}

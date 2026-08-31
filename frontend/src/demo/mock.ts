@@ -3036,7 +3036,7 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
   ['POST', /^\/api\/evidence-portal\/shares$/, (_m, b) => {
     const email = b.recipientEmail ? String(b.recipientEmail).toLowerCase() : null;
-    const days = Number(b.expiresInDays ?? 30);
+    const days = Number(b.expiresInDays ?? 0);
     const kind = b.kind === 'progress' ? 'progress' : 'evidence';
     const token = `demo-${Date.now().toString(36)}`;
     const share = {
@@ -3126,6 +3126,18 @@ const routes: Array<[string, RegExp, Handler]> = [
         },
         org: { name: 'Ortiz Restoration' },
         job: record?.job ?? null,
+        brief: record?.brief
+          ? {
+              id: record.brief.id,
+              revision: record.brief.revision,
+              facts: record.brief.facts ?? {},
+              note: record.brief.note ?? null,
+            }
+          : null,
+        scope: (scope as any[]).map((item) => ({
+          ...item,
+          amount: null,
+        })),
         progress: {
           scopePct,
           scopeApproved,
@@ -3136,8 +3148,10 @@ const routes: Array<[string, RegExp, Handler]> = [
         },
         proof: {
           days,
+          videos: proofRecord.videos ?? [],
           counts: {
             days: days.length,
+            videos: (proofRecord.videos ?? []).length,
             payable: days.filter((d: any) => d.payable && !d.accepted).length,
             contradicted: days.filter((d: any) => d.contradicted).length,
             awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
@@ -3150,6 +3164,26 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/progress-share\/([\w-]+)\/proof\/([\w-]+)\/video$/, () => ({
     body: { url: DEMO_CLIP, expiresInSeconds: 600 },
   })],
+  ['POST', /^\/api\/progress-share\/([\w-]+)\/ask$/, (_m, b) => {
+    const question = String(b?.question ?? '').trim();
+    const answer = /skylight/i.test(question)
+      ? 'The file says the skylights were removed from scope — do not touch them.'
+      : 'That is on this job file. Open View to see the brief, do-nots, and every recording.';
+    return {
+      status: 201,
+      body: {
+        answer,
+        groundedOn: 1,
+        question: {
+          id: `q-${Date.now()}`,
+          question,
+          answer,
+          grounded_on: ['brief'],
+          created_at: new Date().toISOString(),
+        },
+      },
+    };
+  }],
 
   /* ------------------------------------------- invitations */
   ['GET', /^\/api\/org\/invites$/, () => ({ body: { invites: ORG_INVITES } })],

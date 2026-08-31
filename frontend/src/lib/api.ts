@@ -1029,6 +1029,10 @@ export interface ProgressShareGuestView {
     claimNumber: string | null;
     status: string | null;
   } | null;
+  /** Current brief — facts and note the office published on this file. */
+  brief?: SharedJobRecord['brief'];
+  /** Scope lines including do-nots. Amounts are stripped. */
+  scope?: JobScopeItem[];
   progress: {
     scopePct: number;
     scopeApproved: number;
@@ -3367,7 +3371,7 @@ export const api = {
   createProgressShare: (input: {
     jobId: string;
     label: string;
-    recipientEmail?: string;
+    recipientEmail: string;
     expiresInDays?: number;
   }) =>
     request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {
@@ -3384,6 +3388,12 @@ export const api = {
     request<{ url: string; expiresInSeconds: number }>(
       `/api/progress-share/${encodeURIComponent(token)}/proof/${encodeURIComponent(proofId)}/video`,
       { method: 'GET' },
+    ),
+
+  progressShareAsk: (token: string, question: string) =>
+    request<{ answer: string; groundedOn: number; question: ProofQuestion | null }>(
+      `/api/progress-share/${encodeURIComponent(token)}/ask`,
+      { method: 'POST', body: JSON.stringify({ question }) },
     ),
 
   revokeEvidenceShare: (id: string) =>

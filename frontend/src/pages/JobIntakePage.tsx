@@ -5,6 +5,7 @@ import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
   api,
   type CaptureTeamMember,
+  type CreateEvidenceShareResult,
   type IntakeApproveResult,
   type IntakeProposal,
   type ResolvedPlaceAddress,
@@ -71,7 +72,9 @@ export function JobIntakePage() {
   const [extName, setExtName] = useState('');
   const [extCompany, setExtCompany] = useState('');
   const [extEmail, setExtEmail] = useState('');
+  const [homeownerEmail, setHomeownerEmail] = useState('');
   const [result, setResult] = useState<IntakeApproveResult | null>(null);
+  const [homeownerShare, setHomeownerShare] = useState<CreateEvidenceShareResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -253,6 +256,21 @@ export function JobIntakePage() {
         inviteCount: invitees.length,
         scopeLines: scope.length,
       });
+      const ownerEmail = homeownerEmail.trim().toLowerCase();
+      if (ownerEmail && isInviteEmail(ownerEmail)) {
+        try {
+          const share = await api.createProgressShare({
+            jobId: res.job.id,
+            label: ownerEmail,
+            recipientEmail: ownerEmail,
+          });
+          setHomeownerShare(share);
+        } catch {
+          setHomeownerShare(null);
+        }
+      } else {
+        setHomeownerShare(null);
+      }
       setResult(res);
       // Stay on this page so the invite copy buttons actually render. The
       // previous navigate() to /jobs/:id dropped that handoff — JobDetailPage
@@ -346,6 +364,11 @@ export function JobIntakePage() {
               {invites.some((i) => i.emailed)
                 ? ` · ${invites.filter((i) => i.emailed).length} emailed`
                 : ''}
+              {homeownerShare?.emailed
+                ? ' · homeowner emailed the job file'
+                : homeownerShare
+                  ? ' · homeowner job-file link created'
+                  : ''}
               {phone ? '.' : '. It is on your job progress dashboard now.'}
             </p>
           </div>
@@ -783,6 +806,23 @@ export function JobIntakePage() {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
+              <p className="text-xs font-medium text-ink-600">Homeowner (optional)</p>
+              <p className="mt-1 text-[11px] leading-snug text-ink-500">
+                We email them a link to the job file and every recording. No account needed.
+              </p>
+              <label className="mt-3 block text-xs font-medium text-ink-600">
+                Homeowner email
+                <input
+                  type="email"
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                  value={homeownerEmail}
+                  onChange={(e) => setHomeownerEmail(e.target.value)}
+                  placeholder="jordan@example.com"
+                />
+              </label>
             </div>
           </div>
         </div>

@@ -1634,19 +1634,24 @@ function extractedDocumentText(extracted: unknown): string | null {
 }
 
 /**
- * POST /api/operations/shared/:jobId/proof/ask
- * Ask a question of the job file.
+ * Answer a question from the job file and store the turn.
  *
- * The answer is stored with the question and the sources it was drawn from, so
- * "you told me the lockbox code" is answerable six weeks later rather than a
- * matter of recollection. Any kind of data on the file is in play — brief
- * facts, scope, notes, tasks, crew, logs, documents, and clip readings.
+ * Used by the office (session) and by a homeowner progress-share token so
+ * both doors read the same file.
  */
-export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
-    const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
-    const jobId = req.params.jobId;
+export async function runProofAsk(input: {
+  supabase: any;
+  orgId: string;
+  jobId: string;
+  question: string;
+  userId?: string | null;
+  requestId: string;
+}): Promise<{
+  answer: string;
+  groundedOn: number;
+  question: { id: string; question: string; answer: string; grounded_on: unknown; created_at: string } | null;
+}> {
+    const { supabase, orgId, jobId, userId } = input;
 
     const [
       proofsRes,
@@ -1848,11 +1853,11 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 
     recordMeasuredTokenUsage(supabase, {
       orgId,
-      requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+      requestId: input.requestId,
       feature: 'ask',
       source: 'proof_ask',
-      userId,
-      jobId: req.params.jobId,
+      userId: userId ?? undefined,
+      jobId,
       modelId: result.model,
       usage: result.usage,
     });
@@ -1874,16 +1879,40 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         answer: result.answer,
         model: result.model,
         grounded_on: groundedOn,
-        asked_by: userId,
+        asked_by: userId ?? null,
       })
       .select('id, question, answer, grounded_on, created_at')
       .single();
 
-    res.status(201).json({
+    return {
       answer: result.answer,
-      question: stored,
+      question: stored ?? null,
       groundedOn: result.groundedOn || groundedOn.length,
+    };
+}
+
+/**
+ * POST /api/operations/shared/:jobId/proof/ask
+ * Ask a question of the job file.
+ *
+ * The answer is stored with the question and the sources it was drawn from, so
+ * "you told me the lockbox code" is answerable six weeks later rather than a
+ * matter of recollection. Any kind of data on the file is in play — brief
+ * facts, scope, notes, tasks, crew, logs, documents, and clip readings.
+ */
+export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+    const result = await runProofAsk({
+      supabase,
+      orgId,
+      jobId: req.params.jobId,
+      question: input.question,
+      userId,
+      requestId: `ask:${req.params.jobId}:${randomUUID()}`,
     });
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

@@ -20,12 +20,12 @@ import { ShareJobProgressPanel } from './ShareJobProgressPanel';
 const liveShare: EvidenceShare = {
   id: 'share-1',
   jobId: 'job-1',
-  label: 'Homeowner',
+  label: 'jack@example.com',
   kind: 'progress',
   recipientEmail: 'jack@example.com',
   path: '/progress/abc',
   createdAt: '2026-08-22T00:00:00.000Z',
-  expiresAt: '2026-09-21T00:00:00.000Z',
+  expiresAt: null,
   revokedAt: null,
   lastOpenedAt: null,
   openCount: 0,
@@ -35,13 +35,13 @@ const liveShare: EvidenceShare = {
 const created: CreateEvidenceShareResult = {
   share: {
     id: 'share-2',
-    label: 'Attorney',
+    label: 'jordan@example.com',
     kind: 'progress',
-    expiresAt: '2026-09-21T00:00:00.000Z',
+    expiresAt: null,
     createdAt: '2026-08-22T00:00:00.000Z',
     path: '/progress/new-token',
   },
-  emailed: false,
+  emailed: true,
   recipientHasAccount: false,
 };
 
@@ -54,43 +54,61 @@ describe('ShareJobProgressPanel', () => {
     createProgressShare.mockResolvedValue(created);
   });
 
-  it('invites without a copy-link action and keeps fields on the same surface', async () => {
+  it('is just an email field and a send button — no label, expiry, or copy link', async () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
-    expect(await screen.findByText('Homeowner')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Invite by email' })).toBeInTheDocument();
+    expect(screen.getByText(/View and Ask links/i)).toBeInTheDocument();
+    expect(screen.getByText('jack@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy link/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /revoke/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/who is this for/i)).toBeNull();
+    expect(screen.queryByLabelText(/link expires/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /create share/i })).toBeNull();
 
-    const email = screen.getByLabelText(/email them/i);
-    expect(email).toHaveAttribute('placeholder', "We'll email them the link");
+    const email = screen.getByLabelText(/^email$/i);
+    expect(email).toHaveAttribute('type', 'email');
+    expect(email).toHaveAttribute('required');
     expect(email).toHaveClass('glass-field');
-    expect(screen.getByLabelText(/who is this for/i)).toHaveClass('glass-field');
-    expect(screen.getByLabelText(/link expires/i)).toHaveClass('glass-field');
 
-    const submit = screen.getByRole('button', { name: /create share/i });
+    const submit = screen.getByRole('button', { name: /send invite/i });
+    expect(submit).toBeDisabled();
     expect(submit.className).toContain('bg-ink-900');
-    expect(submit.className).not.toContain('bg-brand-');
   });
 
-  it('confirms a new share without exposing a copyable invite URL', async () => {
+  it('emails the invite and does not show the link', async () => {
     const user = userEvent.setup();
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
-    await screen.findByText('Homeowner');
-    await user.type(screen.getByLabelText(/who is this for/i), 'Attorney');
-    await user.click(screen.getByRole('button', { name: /create share/i }));
+    await screen.findByText('jack@example.com');
+    await user.type(screen.getByLabelText(/^email$/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send invite/i }));
 
-    expect(await screen.findByText('Share created. It is listed below.')).toBeInTheDocument();
+    expect(await screen.findByText('Invite sent to jordan@example.com.')).toBeInTheDocument();
     expect(screen.queryByText('/progress/new-token')).toBeNull();
     expect(screen.queryByRole('button', { name: /copy link/i })).toBeNull();
-    expect(screen.queryByText(/copy it and send it yourself/i)).toBeNull();
     await waitFor(() => {
       expect(createProgressShare).toHaveBeenCalledWith({
         jobId: 'job-1',
-        label: 'Attorney',
-        recipientEmail: undefined,
-        expiresInDays: 30,
+        label: 'jordan@example.com',
+        recipientEmail: 'jordan@example.com',
       });
     });
+  });
+
+  it('shows the server error when the invite email does not send', async () => {
+    createProgressShare.mockRejectedValueOnce(
+      new Error('Atmosphere mail is not configured, so the invite was not sent.'),
+    );
+    const user = userEvent.setup();
+    render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
+
+    await screen.findByText('jack@example.com');
+    await user.type(screen.getByLabelText(/^email$/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send invite/i }));
+
+    expect(
+      await screen.findByText('Atmosphere mail is not configured, so the invite was not sent.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/invite sent/i)).toBeNull();
   });
 });
