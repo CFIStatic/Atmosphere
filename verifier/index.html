@@ -1240,6 +1240,12 @@
   }
   .jf-submit.danger { background: var(--fail); }
   .jf-submit:disabled { opacity: .55; cursor: default; }
+  .jf-submit.danger:disabled {
+    background: color-mix(in srgb, var(--fail) 22%, var(--panel));
+    color: color-mix(in srgb, var(--fail) 45%, var(--muted));
+    opacity: 1;
+    cursor: not-allowed;
+  }
   .jf-warn {
     margin: 0 0 10px; padding: 10px 12px; border-radius: 8px;
     background: var(--fail-soft); border: 1px solid color-mix(in srgb, var(--fail) 28%, var(--line));
