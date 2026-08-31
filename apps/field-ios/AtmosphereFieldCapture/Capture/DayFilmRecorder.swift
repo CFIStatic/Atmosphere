@@ -114,9 +114,11 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
         session.commitConfiguration()
 
+        // AVCaptureSession.startRunning() blocks; run it off the main actor.
+        let captureSession = session
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                self.session.startRunning()
+                captureSession.startRunning()
                 cont.resume()
             }
         }
@@ -198,18 +200,19 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         try audioSession.setCategory(
             .playAndRecord,
             mode: .videoRecording,
-            options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+            options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers]
         )
         try audioSession.setActive(true)
     }
 
+    /// AVFoundation sometimes finishes a good take with a "success" error.
+    /// Use the stable numeric code (-11812) so this compiles across Xcode SDKs.
     private static func isBenignRecordingStop(_ error: Error) -> Bool {
         let nsError = error as NSError
-        if nsError.domain == AVFoundationErrorDomain,
-           nsError.code == AVError.recordingSuccessfullyFinished.rawValue {
+        if nsError.domain == AVFoundationErrorDomain, nsError.code == -11812 {
             return true
         }
-        if nsError.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true {
+        if (nsError.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool) == true {
             return true
         }
         return false
