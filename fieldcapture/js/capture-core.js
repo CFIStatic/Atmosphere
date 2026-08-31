@@ -532,6 +532,24 @@
   }
 
   /**
+   * Signed-in Field Capture: create a job from the phone form, then film it.
+   */
+  function createTodayJob(opts) {
+    opts = opts || {};
+    return apiJson(origin(opts.apiBase) + '/api/field-app/jobs', {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: {
+        title: opts.title,
+        address: opts.address,
+        situation: opts.situation || undefined,
+      },
+    }).then(function (body) {
+      return body.job;
+    });
+  }
+
+  /**
    * Upload day film.
    *
    * Job-share link: `{ token }` (no office login).
@@ -678,6 +696,7 @@
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
+    createTodayJob: createTodayJob,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
     currentPosition: currentPosition,

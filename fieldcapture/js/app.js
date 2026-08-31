@@ -112,7 +112,7 @@
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
-  var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
+  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -123,13 +123,13 @@
     if (app) {
       app.setAttribute(
         'data-switch',
-        id === 's-home' || id === 's-office' || id === 's-platform' ? 'on' : 'off',
+        id === 's-home' || id === 's-new-job' || id === 's-office' || id === 's-platform' ? 'on' : 'off',
       );
     }
     var todayTab = document.querySelector('#product-switch a[href="#today"]');
     var platformTab = document.getElementById('platform-link');
     if (todayTab) {
-      if (id === 's-home') todayTab.setAttribute('aria-current', 'page');
+      if (id === 's-home' || id === 's-new-job') todayTab.setAttribute('aria-current', 'page');
       else todayTab.removeAttribute('aria-current');
     }
     if (platformTab) {
@@ -238,6 +238,24 @@
     return bits.join(' · ') || 'Open job';
   }
 
+  function toListedJob(j) {
+    return {
+      id: j.id,
+      name: (j.number ? j.number + ' · ' : '') + (j.name || 'Job'),
+      addr: j.address || j.addr || '',
+      at: j.at || 'Today',
+      placed: j.placed !== false,
+      filmed: Boolean(j.filmed),
+      sharePath: j.sharePath || '',
+    };
+  }
+
+  function showJobAdd(on) {
+    when('#job-add', function (btn) {
+      btn.hidden = !on;
+    });
+  }
+
   function bindJobSearch() {
     var input = $('#job-search');
     if (!input || input.getAttribute('data-bound') === '1') return;
@@ -245,6 +263,121 @@
     input.addEventListener('input', function () {
       state.jobQuery = input.value;
       renderExpect();
+    });
+  }
+
+  function showNewJobError(message) {
+    var el = $('#new-job-err');
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function openNewJobForm() {
+    if (LIVE) return;
+    if ($('#job-add') && $('#job-add').hidden) return;
+    showNewJobError('');
+    var name = $('#new-job-name');
+    var address = $('#new-job-address');
+    var note = $('#new-job-note');
+    if (name) name.value = '';
+    if (address) address.value = '';
+    if (note) note.value = '';
+    when('#new-job-btn', function (btn) { btn.disabled = false; });
+    show('s-new-job');
+    if (name) name.focus();
+  }
+
+  function selectCreatedJob(job) {
+    var listed = toListedJob(job);
+    state.jobs = [listed].concat(
+      (state.jobs || []).filter(function (j) {
+        return j.id !== listed.id;
+      }),
+    );
+    state.activeJobId = listed.id;
+    renderExpect(state.jobs);
+    when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
+    setStatus('Ready — start the day.');
+  }
+
+  function startRecordingForNewJob() {
+    if (DEMO && typeof window.__startDemoDay === 'function') {
+      window.__startDemoDay();
+      return;
+    }
+    startLiveDay();
+  }
+
+  function bindNewJob() {
+    var add = $('#job-add');
+    if (add && add.getAttribute('data-bound') !== '1') {
+      add.setAttribute('data-bound', '1');
+      add.addEventListener('click', openNewJobForm);
+    }
+    when('#new-job-cancel', function (btn) {
+      if (btn.getAttribute('data-bound') === '1') return;
+      btn.setAttribute('data-bound', '1');
+      btn.addEventListener('click', function () {
+        show('s-home');
+      });
+    });
+    var form = $('#new-job-form');
+    if (!form || form.getAttribute('data-bound') === '1') return;
+    form.setAttribute('data-bound', '1');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var title = (($('#new-job-name') && $('#new-job-name').value) || '').trim();
+      var address = (($('#new-job-address') && $('#new-job-address').value) || '').trim();
+      var situation = (($('#new-job-note') && $('#new-job-note').value) || '').trim();
+      var btn = $('#new-job-btn');
+      showNewJobError('');
+      if (!title) {
+        showNewJobError('Enter a name.');
+        return;
+      }
+      if (!address || address.toLowerCase() === 'address to confirm') {
+        showNewJobError('Enter the site address.');
+        return;
+      }
+      if (btn) btn.disabled = true;
+
+      function finishLocal(job) {
+        selectCreatedJob(job);
+        if (btn) btn.disabled = false;
+        startRecordingForNewJob();
+      }
+
+      if (DEMO || (!state.account && !state.accessToken)) {
+        finishLocal({
+          id: 'new-' + Date.now(),
+          name: title,
+          address: address,
+          at: 'Today',
+          placed: true,
+        });
+        return;
+      }
+
+      Core.createTodayJob({
+        apiBase: API_BASE,
+        accessToken: state.accessToken,
+        title: title,
+        address: address,
+        situation: situation,
+      })
+        .then(function (job) {
+          finishLocal(job);
+        })
+        .catch(function (err) {
+          if (btn) btn.disabled = false;
+          showNewJobError(err.message || 'Could not create that job.');
+        });
     });
   }
 
@@ -257,9 +390,14 @@
     var hint = $('#job-hint');
     if (!all.length) {
       if (hint) hint.hidden = true;
+      var addOpen = $('#job-add') && !$('#job-add').hidden;
       root.innerHTML =
         '<div class="erow erow-empty" role="status">' +
-        '<span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span>' +
+        '<span class="t"><b>Nothing assigned yet</b><span>' +
+        (addOpen
+          ? 'Tap + to start a new job, or ask the office to put you on one.'
+          : 'Ask the office to put you on a job, then refresh.') +
+        '</span></span>' +
         '</div>';
       return;
     }
@@ -346,6 +484,7 @@
             sharePath: '/shared/' + TOKEN,
           },
         ]);
+        showJobAdd(false);
         setStatus('Ready — pick a job.');
         when('#daybtn', function (btn) { btn.disabled = false; });
       })
@@ -360,6 +499,7 @@
   function bootBlocked() {
     show('s-blocked');
     showFieldAccount(false);
+    showJobAdd(false);
     $('#blocked-msg').textContent =
       'Sign in once — Field Capture and the in-app Platform use the same account.';
   }
@@ -413,17 +553,7 @@
 
   function enterAccountHome(me, jobs) {
     state.account = true;
-    state.jobs = (jobs || []).map(function (j) {
-      return {
-        id: j.id,
-        name: (j.number ? j.number + ' · ' : '') + (j.name || 'Job'),
-        addr: j.address || '',
-        at: j.at || 'Today',
-        placed: Boolean(j.placed),
-        filmed: Boolean(j.filmed),
-        sharePath: j.sharePath || '',
-      };
-    });
+    state.jobs = (jobs || []).map(toListedJob);
     if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
       state.activeJobId = state.jobs[0] ? state.jobs[0].id : null;
     }
@@ -434,12 +564,13 @@
       avatarUrl: (me.user && me.user.avatarUrl) || null,
       account: true,
     });
+    showJobAdd(true);
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
       state.activeJobId
         ? 'Ready — pick a job.'
-        : 'No jobs yet. Ask the office to start a job.',
+        : 'No jobs yet. Tap + to start one.',
     );
     show('s-home');
     warmPlatformFrame();
@@ -857,33 +988,36 @@
       org: 'Your office',
       account: true,
     });
+    showJobAdd(true);
     renderExpect(JOBS);
 
     var seconds = 0;
     var timer = null;
+    function startDemoDay() {
+      show('s-rec');
+      $('#scene').innerHTML = '';
+      var preview = $('#preview');
+      if (preview) preview.hidden = false;
+      seconds = 0;
+      $('#clock').textContent = fmt(0);
+      timer = setInterval(function () {
+        seconds += 1;
+        $('#clock').textContent = fmt(seconds);
+      }, 1000);
+      $('#site-text').textContent = 'Demo site';
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices
+          .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+          .then(function (stream) {
+            state.demoStream = stream;
+            Core.bindLivePreview(preview, stream);
+          })
+          .catch(function () {});
+      }
+    }
+    window.__startDemoDay = startDemoDay;
     when('#daybtn', function (btn) {
-      btn.onclick = function () {
-        show('s-rec');
-        $('#scene').innerHTML = '';
-        var preview = $('#preview');
-        if (preview) preview.hidden = false;
-        seconds = 0;
-        $('#clock').textContent = fmt(0);
-        timer = setInterval(function () {
-          seconds += 1;
-          $('#clock').textContent = fmt(seconds);
-        }, 1000);
-        $('#site-text').textContent = 'Demo site';
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          navigator.mediaDevices
-            .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
-            .then(function (stream) {
-              state.demoStream = stream;
-              Core.bindLivePreview(preview, stream);
-            })
-            .catch(function () {});
-        }
-      };
+      btn.onclick = startDemoDay;
     });
     window.__demoFinish = function () {
       if (timer) clearInterval(timer);
@@ -1027,6 +1161,7 @@
       state.account = false;
       state.jobs = [];
       state.activeJobId = null;
+      showJobAdd(false);
       if (frame) frame.setAttribute('src', 'about:blank');
       showLoginError('');
       bootBlocked();
@@ -1115,6 +1250,7 @@
   });
 
   bindJobSearch();
+  bindNewJob();
 
   if (LIVE) {
     document.body.setAttribute('data-mode', 'live');

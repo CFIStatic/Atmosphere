@@ -161,3 +161,14 @@ test('field-app/me returns the saved profile photo so Field Capture matches the 
   assert.match(src, /select\('full_name, avatar_url'\)/);
   assert.match(src, /avatarUrl: isDisplayableAvatarUrl/);
 });
+
+test('POST /api/field-app/jobs starts a job from Field Capture then assigns the crew', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/routes/fieldApp.ts', import.meta.url), 'utf8');
+  assert.match(src, /fieldAppRouter\.post\('\/jobs'/);
+  assert.match(src, /fieldStartJobSchema\.parse/);
+  assert.match(src, /intakeFromFieldStart/);
+  assert.match(src, /createJobFile/);
+  assert.match(src, /role_on_job: 'crew'/);
+  assert.match(src, /j\.created_by === userId/);
+});

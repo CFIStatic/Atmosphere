@@ -91,7 +91,7 @@ assert.match(html, /Field Capture<small>/);
 assert.match(html, /Platform<small>/);
 assert.match(
   appSrc,
-  /id === 's-home' \|\| id === 's-office' \|\| id === 's-platform'/,
+  /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-office' \|\| id === 's-platform'/,
   'the Field Capture / Platform bar returns after sign-in and on the office pane',
 );
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
@@ -127,8 +127,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=job-search/);
-assert.match(html, /js\/app\.js\?v=job-search/);
+assert.match(html, /js\/capture-core\.js\?v=new-job/);
+assert.match(html, /js\/app\.js\?v=new-job/);
 assert.match(appSrc, /atmosphere: 'theme'/, 'Field Capture switchbar follows the office dark/light toggle');
 assert.match(appSrc, /function applyOfficeTheme/);
 assert.match(html, /html\[data-theme="dark"\] \{ color-scheme: dark; \}/);
@@ -148,10 +148,25 @@ assert.match(html, /class="joblist"/, 'jobs must live in a scrollable list');
 assert.match(html, /id="job-hint"/);
 assert.match(html, /id="job-search"/);
 assert.match(html, /placeholder="Search jobs"/);
+assert.match(html, /class="job-search-row"/, 'search and + sit in one row, not inside the field');
+assert.match(html, /id="job-add"/);
+assert.match(html, /aria-label="Start recording a new job"/);
+assert.match(html, /id="s-new-job"/);
+assert.match(html, /id="new-job-form"/);
+assert.match(html, /id="new-job-name"[^>]*required/);
+assert.match(html, /id="new-job-address"[^>]*required/);
+assert.match(html, /id="new-job-note"/);
+assert.match(html, />Start recording</);
+assert.match(html, /<\/label>\s*<button type="button" class="job-add" id="job-add"/);
 assert.doesNotMatch(html, /footage carries where it was/);
 assert.doesNotMatch(html, /hold it for 5 seconds when you are done/);
 assert.match(appSrc, /bindJobSearch/);
+assert.match(appSrc, /bindNewJob/);
 assert.match(appSrc, /Core\.filterJobs/);
+assert.match(appSrc, /Core\.createTodayJob/);
+assert.match(coreSrc, /function createTodayJob/);
+assert.match(coreSrc, /\/api\/field-app\/jobs/);
+assert.equal(typeof Core.createTodayJob, 'function');
 assert.deepEqual(
   Core.filterJobs(
     [

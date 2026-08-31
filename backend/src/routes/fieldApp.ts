@@ -28,6 +28,9 @@ import {
 } from '../field/todayJobs.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { isDisplayableAvatarUrl } from '../lib/avatar.js';
+import { fieldStartJobSchema } from '../lib/validation.js';
+import { intakeFromFieldStart } from '../field/startJob.js';
+import { createJobFile } from './jobIntake.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -234,9 +237,10 @@ async function orgTimezone(
 /**
  * GET /api/field-app/today
  * Every open job this person can add video to. If the office has put them on
- * a crew, only those jobs (plus anything they already filmed today) show.
- * Until then, the org's open jobs still appear so the first day of filming
- * is not blocked on an assignment — and a missing start date never hides a job.
+ * a crew, only those jobs (plus anything they already filmed today, or a job
+ * they started from Field Capture) show. Until then, the org's open jobs still
+ * appear so the first day of filming is not blocked on an assignment — and a
+ * missing start date never hides a job.
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -247,7 +251,7 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
     const [{ data: jobs, error }, proofsResult, assignedResult] = await Promise.all([
       supabase
         .from('crm_jobs')
-        .select('id, job_number, title, status, scheduled_start, property_id')
+        .select('id, job_number, title, status, scheduled_start, property_id, created_by')
         .eq('org_id', orgId)
         .order('scheduled_start', { ascending: true, nullsFirst: false })
         .limit(200),
@@ -281,7 +285,8 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         (j) =>
           assignedIds.size === 0 ||
           assignedIds.has(j.id as string) ||
-          filmedIds.includes(j.id as string),
+          filmedIds.includes(j.id as string) ||
+          j.created_by === userId,
       )
       .map((j) => ({
         id: j.id as string,
@@ -364,6 +369,71 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
     });
 
     res.json({ jobs: out, today: day });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/jobs
+ * Crew starts a job from Field Capture: name + site, optional note, then film.
+ * The job file is the same record office intake would have created.
+ */
+fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = fieldStartJobSchema.parse(req.body ?? {});
+    const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input));
+    const jobId = created.job.id;
+    const address = [input.address, input.city, input.postalCode]
+      .map((part) => (part ?? '').trim())
+      .filter(Boolean)
+      .join(', ');
+
+    const { error: assignError } = await supabase.from('job_assignments').insert({
+      org_id: orgId,
+      job_id: jobId,
+      user_id: userId,
+      role_on_job: 'crew',
+    });
+    if (assignError && assignError.code !== '23505') {
+      console.warn('[field-app] could not assign creator to new job:', assignError.message);
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const email = req.user?.email ?? null;
+    let sharePath: string | null = null;
+    try {
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        jobId,
+        userId,
+        email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      if (party.access_token) sharePath = jobSharePagePath(party.access_token, email);
+    } catch {
+      /* job exists; they can still film through the signed-in proof path */
+    }
+
+    res.status(201).json({
+      job: {
+        id: jobId,
+        number: created.job.jobNumber != null ? `#${created.job.jobNumber}` : '',
+        name: created.job.title,
+        address: address || 'Address on file',
+        at: '',
+        status: created.summary.status,
+        placed: Boolean(address),
+        filmed: false,
+        sharePath,
+      },
+    });
   } catch (err) {
     next(err);
   }

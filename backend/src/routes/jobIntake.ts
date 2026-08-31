@@ -446,7 +446,7 @@ function scopeLinesForDb(input: z.infer<typeof approveSchema>) {
  * Preferred path: one SECURITY DEFINER transaction that creates the full job
  * file. Falls back to stepwise inserts when the migration is not applied yet.
  */
-async function createJobFile(
+export async function createJobFile(
   supabase: any,
   orgId: string,
   userId: string,

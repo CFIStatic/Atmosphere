@@ -203,9 +203,13 @@
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
   .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
   .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
+  .job-search-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px;
+  }
   .job-search {
     display: flex; align-items: center; gap: 10px;
-    margin-top: 14px;
+    flex: 1; min-width: 0;
     min-height: 44px;
     padding: 0 12px;
     border: 1px solid var(--line);
@@ -225,6 +229,31 @@
   .job-search input::placeholder { color: var(--faint); }
   .job-search input::-webkit-search-decoration,
   .job-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+  .job-add {
+    flex: none;
+    width: 44px; height: 44px;
+    display: grid; place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--accent);
+    padding: 0;
+  }
+  .job-add:active { background: var(--accent-soft); transform: scale(0.97); }
+  .job-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .job-cancel {
+    border: 0; background: none; padding: 0;
+    font: inherit; font-size: 13px; font-weight: 650;
+    color: var(--accent); margin-bottom: 10px; text-align: left;
+  }
+  .auth-form textarea {
+    display: block; width: 100%; margin-top: 6px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--ink); font: inherit;
+    resize: vertical; min-height: 84px;
+  }
+  .auth-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .auth-form .opt { font-weight: 500; color: var(--faint); }
   #live-status { margin-top: 14px; font-size: 13px; color: var(--muted); }
 
   /* ---------- the one button ----------
@@ -711,10 +740,15 @@
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
       <h1 class="h1">Start it and go to work</h1>
-      <label class="job-search" for="job-search">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="job-search" type="search" placeholder="Search jobs" autocomplete="off" enterkeyhint="search" aria-label="Search jobs" />
-      </label>
+      <div class="job-search-row">
+        <label class="job-search" for="job-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="job-search" type="search" placeholder="Search jobs" autocomplete="off" enterkeyhint="search" aria-label="Search jobs" />
+        </label>
+        <button type="button" class="job-add" id="job-add" hidden aria-label="Start recording a new job">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
 
       <div class="expect">
         <h3>Jobs</h3>
@@ -737,6 +771,32 @@
         Your location, clock, video, and microphone ride along with the footage and are checked at
         the door — that is what makes it proof instead of silent video.
       </p>
+    </div>
+  </div>
+
+  <!-- ================= NEW JOB: name + site, then record ================= -->
+  <div class="screen" id="s-new-job" data-on="0">
+    <div class="home-scroll">
+    <div class="pad">
+      <button type="button" class="job-cancel" id="new-job-cancel">Cancel</button>
+      <h1 class="h1">New job</h1>
+      <p class="lede">Name it and the site. Then start recording.</p>
+      <form class="auth-form" id="new-job-form" novalidate>
+        <label for="new-job-name">Job name
+          <input id="new-job-name" name="title" type="text" required maxlength="200" autocomplete="off" placeholder="East Racine Avenue" />
+        </label>
+        <label for="new-job-address">Address
+          <input id="new-job-address" name="address" type="text" required maxlength="200" autocomplete="street-address" placeholder="1842 Meridian Ave, Austin, TX 78702" />
+        </label>
+        <label for="new-job-note">What needs to be done <span class="opt">(optional)</span>
+          <textarea id="new-job-note" name="situation" maxlength="2000" rows="3" placeholder="Extract standing water in the living room. Set drying equipment."></textarea>
+        </label>
+        <p class="auth-err" id="new-job-err" hidden></p>
+        <button class="daybtn" type="submit" id="new-job-btn">
+          <span class="lbl">Start recording</span>
+        </button>
+      </form>
+    </div>
     </div>
   </div>
 
@@ -891,7 +951,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=job-search"></script>
-<script src="js/app.js?v=job-search"></script>
+<script src="js/capture-core.js?v=new-job"></script>
+<script src="js/app.js?v=new-job"></script>
 </body>
 </html>
