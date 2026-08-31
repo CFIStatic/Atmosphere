@@ -132,7 +132,7 @@ assert.match(html, /js\/app\.js\?v=home-door/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after upload');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
-assert.match(html, /visibility: hidden/, 'home button stays hidden while uploading');
+assert.match(html, /\.donebtn\.on, \.retrybtn\.on \{ display: block; \}/, 'home button stays hidden while uploading');
 assert.match(html, /\.donebtn\.on/);
 assert.match(appSrc, /function uploadLastClip/);
 assert.match(appSrc, /showHomeAction/);
