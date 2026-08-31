@@ -3385,10 +3385,35 @@ const routes: Array<[string, RegExp, Handler]> = [
     const aboutHomeowner = /homeowner|said|skylight|owner/i.test(asked);
     const aboutWork = /happen|tarp|slope|crew|unfinished|deck/i.test(asked);
     const aboutAddress = /address|where|located|site/i.test(asked);
-    const aboutLockbox = /lockbox|gate|access|code/i.test(asked);
+    const aboutLockbox = /lockbox|gate|access/i.test(asked);
     const aboutClaim = /claim|policy/i.test(asked);
     const aboutDoNot = /do not|don'?t|exclu|out of scope|solar/i.test(asked);
-    const aboutInvite = /invited|who is on|sub|delgado|brightline/i.test(asked);
+    const aboutInvite = /invited|who is on|delgado|brightline|kestrel/i.test(asked);
+    const joinAnd = (items: string[]) =>
+      items.length <= 1 ? (items[0] ?? '') : items.length === 2
+        ? `${items[0]} and ${items[1]}`
+        : `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+    const doNotTitles = (record?.scope ?? [])
+      .filter((s: any) => s.state === 'excluded')
+      .map((s: any) => String(s.title ?? '').trim())
+      .filter(Boolean);
+    const doNotMarked = doNotTitles.length === 1 ? 'it is' : doNotTitles.length === 2 ? 'both are' : 'these are';
+    const homeownerNote = (record?.messages ?? []).find((msg: any) => /homeowner/i.test(String(msg.author_label ?? '')));
+    const doNotAnswer = doNotTitles.length
+      ? `${joinAnd(doNotTitles)} — ${doNotMarked} marked out of scope on this file.${
+          homeownerNote?.body ? ` The homeowner also wrote: “${homeownerNote.body}”` : ''
+        }`
+      : 'Nothing is marked out of scope on this file.';
+    const parties = record?.parties ?? [];
+    const inviteNamed = parties.map((p: any) => {
+      const company = String(p.company ?? '').trim() || 'A party';
+      if (p.clear) return company;
+      if (p.acknowledgedRevision == null) return `${company} (has not accepted)`;
+      return `${company} (behind on the brief)`;
+    });
+    const inviteAnswer = parties.length
+      ? `${joinAnd(inviteNamed)} ${parties.length === 1 ? 'is' : 'are'} invited on this file.`
+      : 'Nobody is invited on this file.';
     const answer = aboutLockbox && facts['Gate / access']
       ? `On the brief: Gate / access is “${facts['Gate / access']}”.`
       : aboutAddress && facts['Site address']
@@ -3396,9 +3421,9 @@ const routes: Array<[string, RegExp, Handler]> = [
         : aboutClaim && record?.job?.claimNumber
           ? `Claim ${record.job.claimNumber} is on this job file.`
           : aboutDoNot
-            ? 'Do not touch the solar array or its conduit, and do not remove the skylights — both are marked out of scope on this file. The homeowner also wrote: “Please do not touch the skylights — we have a separate guy for those.”'
+            ? doNotAnswer
             : aboutInvite
-              ? 'Ortiz Restoration, Delgado Roofing (behind on the brief), and Brightline Electric (has not accepted) are invited on this file.'
+              ? inviteAnswer
               : aboutHomeowner
                 ? 'Yes. On the August 5 after clip, the mic picks up the homeowner asking the crew not to touch the skylights. That matches what they wrote on the file: “Please do not touch the skylights — we have a separate guy for those.”'
                 : aboutWork

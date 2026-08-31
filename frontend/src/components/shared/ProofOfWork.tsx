@@ -604,19 +604,22 @@ export function ProofOfWork({
 
           {questions.length > 0 && (
             <ol className="mt-3 space-y-2">
-              {questions.slice(0, 6).map((q) => (
-                <li key={q.id} className="rounded-lg border border-line px-3 py-2">
-                  <p className="text-[11px] font-medium text-ink-700">{q.question}</p>
-                  <p className="mt-0.5 text-xs text-ink-800">{q.answer}</p>
-                  {/* Which days it drew on, so the answer can be checked rather
-                      than trusted. */}
-                  <p className="mt-1 text-[10.5px] text-ink-400">
-                    From {q.grounded_on?.length ?? 0} clip
-                    {(q.grounded_on?.length ?? 0) === 1 ? '' : 's'} on file ·{' '}
-                    {new Date(q.created_at).toLocaleDateString()}
-                  </p>
-                </li>
-              ))}
+              {questions.slice(0, 6).map((q) => {
+                const clipCount = (q.grounded_on ?? []).filter((id) => /^\d{4}-\d{2}-\d{2}/.test(id)).length;
+                return (
+                  <li key={q.id} className="rounded-lg border border-line px-3 py-2">
+                    <p className="text-[11px] font-medium text-ink-700">{q.question}</p>
+                    <p className="mt-0.5 text-xs text-ink-800">{q.answer}</p>
+                    {/* Which days it drew on, so the answer can be checked rather
+                        than trusted. */}
+                    <p className="mt-1 text-[10.5px] text-ink-400">
+                      From {clipCount} clip
+                      {clipCount === 1 ? '' : 's'} on file ·{' '}
+                      {new Date(q.created_at).toLocaleDateString()}
+                    </p>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </div>
