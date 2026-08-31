@@ -144,39 +144,109 @@ export async function extractSparseFramesFromUrl(input: {
     intervalSeconds: candidateInterval,
     maxFrames: maxCandidates,
   });
-  if (!timestamps.length) return [];
 
   const workDir = join(tmpdir(), `atm-sparse-${randomUUID()}`);
   await mkdir(workDir, { recursive: true });
+  const pattern = join(workDir, 'frame_%04d.jpg');
+
+  const listJpegs = async (): Promise<string[]> =>
+    (await readdir(workDir)).filter((n) => n.endsWith('.jpg')).sort();
+
   try {
-    const interval = Math.max(1, candidateInterval);
-    const args = [
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      input.url,
-      '-vf',
-      `fps=1/${interval}`,
-      '-frames:v',
-      String(timestamps.length),
-      '-q:v',
-      '5',
-      join(workDir, 'frame_%04d.jpg'),
-    ];
-    const { code, stderr } = await runner(ffmpeg, args);
-    if (code !== 0) {
-      throw new Error(`ffmpeg sparse extract failed: ${stderr.slice(0, 500)}`);
+    let names: string[] = [];
+    let stampAt = timestamps;
+    let interval = Math.max(1, candidateInterval);
+
+    // Interval sampling only when we have a real clock. A 0:00 WebM (or a
+    // short clip we lied was 60s) makes fps=1/30 write zero JPEGs — the
+    // office then says the AI could not read a file the player can show.
+    if (duration > 0 && timestamps.length) {
+      try {
+        const { code } = await runner(ffmpeg, [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          input.url,
+          '-vf',
+          `fps=1/${interval}`,
+          '-frames:v',
+          String(timestamps.length),
+          '-q:v',
+          '5',
+          pattern,
+        ]);
+        if (code === 0) names = await listJpegs();
+      } catch {
+        // Fall through to a first-frame grab. Spawn errors on the fallback
+        // still surface below.
+      }
     }
 
-    const names = (await readdir(workDir))
-      .filter((n) => n.endsWith('.jpg'))
-      .sort();
+    // Unknown length, or the interval was longer than the real clip: walk
+    // at 1 fps until EOF or a small cap. A 2-second recording then yields
+    // stills instead of an empty folder.
+    if (!names.length) {
+      const walkCap = Math.min(maxFrames, 12);
+      try {
+        const { code } = await runner(ffmpeg, [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          input.url,
+          '-vf',
+          'fps=1',
+          '-frames:v',
+          String(Math.max(1, walkCap)),
+          '-q:v',
+          '5',
+          pattern,
+        ]);
+        if (code === 0) {
+          names = await listJpegs();
+          stampAt = names.map((_, i) => i);
+          interval = 1;
+        }
+      } catch {
+        /* last resort below */
+      }
+    }
+
+    // A still, a screenshot muxed as video, or a single-keyframe WebM has
+    // a picture and no clock. fps=1 still writes nothing; decode the first
+    // frames with no filter.
+    if (!names.length) {
+      const grab = Math.min(maxFrames, 8);
+      const { code, stderr } = await runner(ffmpeg, [
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        input.url,
+        '-frames:v',
+        String(grab),
+        '-q:v',
+        '5',
+        pattern,
+      ]);
+      if (code !== 0) {
+        throw new Error(`ffmpeg sparse extract failed: ${stderr.slice(0, 500)}`);
+      }
+      names = await listJpegs();
+      stampAt = names.map((_, i) => i);
+      interval = 1;
+    }
+
+    if (!names.length) return [];
+
     const candidates: Array<{ atSeconds: number; jpeg: Buffer }> = [];
     for (let i = 0; i < names.length; i += 1) {
-      const at = timestamps[Math.min(i, timestamps.length - 1)] ?? i * interval;
-      candidates.push({ atSeconds: at, jpeg: await readFile(join(workDir, names[i])) });
+      const at = stampAt[Math.min(i, stampAt.length - 1)] ?? i * interval;
+      candidates.push({ atSeconds: at, jpeg: await readFile(join(workDir, names[i]!)) });
     }
 
     const diverse = selectDiverseFrames(candidates, {

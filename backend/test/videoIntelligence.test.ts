@@ -84,6 +84,20 @@ test('prepareVideoFrames is source-agnostic (field_capture and media_upload shar
   // Fingerprints differ by content, not by source label.
   assert.equal(typeof framesContentFingerprint(a.frames), 'string');
 
+  const undated = await prepareVideoFrames(
+    {
+      id: 'zero-1',
+      source: 'field_capture',
+      url: 'https://example.test/undated.webm',
+      durationSeconds: 0,
+      maxFrames: 8,
+    },
+    { runner },
+  );
+  assert.ok(undated.frames.length >= 1, 'unknown duration must still yield a still');
+  assert.equal(undated.longForm, false);
+  assert.equal(undated.durationSeconds, 0);
+
   // Cleanup any leftover temp dirs from failed runs is handled inside extract.
   await rm(join(tmpdir(), 'atm-sparse-unused'), { recursive: true, force: true }).catch(() => undefined);
 });

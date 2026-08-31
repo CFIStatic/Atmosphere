@@ -430,7 +430,7 @@ async function runDayAnalysis(
     const frames = await framesFor(admin, row.id);
     if (frames.length) return frames.slice(0, 12);
     const durationSeconds = Number(row.duration_seconds ?? 0);
-    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds || 60);
+    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds);
     return (await framesFor(admin, row.id)).slice(0, 12);
   };
 
@@ -746,10 +746,10 @@ async function ensureSparseFramesFromStorage(
  *
  * The length matters because a browser recording does not carry one. A phone
  * filming into MediaRecorder produces WebM with no duration in the header, so
- * the page reads 0, uploads 0, and — because the client extractor gives up on
- * a clip it cannot measure — sends no frames either. FFprobe over the stored
- * file settles it, and the answer is written back: the list, the length check
- * and retention all read that column.
+ * the page reads 0, uploads 0, and the client may only send the first painted
+ * still. FFprobe over the stored file settles the clock when it can. When it
+ * cannot, sparse extract still grabs the first decoded frames so the model
+ * has something to read.
  *
  * Idempotent and safe to call from anywhere. A clip that already has both is
  * two cheap selects, and a clip FFmpeg cannot open is attempted once per
@@ -816,11 +816,7 @@ export async function ensureStillsAndDuration(
   if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
     if (!opts?.force) stillsAttempted.add(proofId);
     try {
-      await ensureSparseFramesFromStorage(
-        admin,
-        proofId,
-        durationSeconds || (longForm ? 24 * 60 * 60 : 60),
-      );
+      await ensureSparseFramesFromStorage(admin, proofId, durationSeconds);
       // A clip that yielded stills is worth retrying later if it is asked for
       // again; only a genuine failure needs the once-per-process brake.
       stillsAttempted.delete(proofId);
