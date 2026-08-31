@@ -16,10 +16,6 @@ vi.mock('../components/shared/JobProgressDashboard', () => ({
   JobProgressDashboard: () => <div>Job progress</div>,
 }));
 
-vi.mock('../components/shared/JobLegalHoldPortal', () => ({
-  JobLegalHoldPortal: () => null,
-}));
-
 vi.mock('../components/shared/EvidenceLocker', () => ({
   EvidenceLocker: () => <div>Evidence locker</div>,
 }));

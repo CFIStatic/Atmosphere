@@ -115,4 +115,10 @@ describe('verifier office rail', () => {
       "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
     );
   });
+
+  it('does not show a Legal hold filter on the Dashboard', () => {
+    expect(verifierHtml).not.toContain('data-view="hold"');
+    expect(verifierHtml).not.toContain('id="n-hold"');
+    expect(verifierHtml).not.toMatch(/data-label="Legal hold"/);
+  });
 });
