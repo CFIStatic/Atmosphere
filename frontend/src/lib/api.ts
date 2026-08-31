@@ -1029,6 +1029,10 @@ export interface ProgressShareGuestView {
     claimNumber: string | null;
     status: string | null;
   } | null;
+  /** Current brief — facts and note the office published on this file. */
+  brief?: SharedJobRecord['brief'];
+  /** Scope lines including do-nots. Amounts are stripped. */
+  scope?: JobScopeItem[];
   progress: {
     scopePct: number;
     scopeApproved: number;

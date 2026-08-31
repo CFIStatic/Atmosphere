@@ -62,7 +62,7 @@ describe('ShareJobProgressPanel', () => {
     expect(screen.getByRole('button', { name: /revoke/i })).toBeInTheDocument();
 
     const email = screen.getByLabelText(/email them/i);
-    expect(email).toHaveAttribute('placeholder', "We'll email them the link");
+    expect(email).toHaveAttribute('placeholder', 'homeowner@example.com');
     expect(email).toHaveClass('glass-field');
     expect(screen.getByLabelText(/who is this for/i)).toHaveClass('glass-field');
     expect(screen.getByLabelText(/link expires/i)).toHaveClass('glass-field');

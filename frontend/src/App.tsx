@@ -273,7 +273,7 @@ export default function App() {
 
           {/* Tokenized HomeOwner Report — no staff session required. */}
           <Route path="/report/:token" element={<HomeownerReportPage />} />
-          {/* Read-only job progress for homeowners, counsel, banks — no login. */}
+          {/* Read-only job file for homeowners, counsel, banks — no login. */}
           <Route path="/progress/:token" element={<JobProgressGuestPage />} />
 
           <Route

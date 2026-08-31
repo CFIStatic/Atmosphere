@@ -3,8 +3,9 @@ import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../l
 import { SpinnerIcon } from '../icons';
 
 /**
- * Share the job progress dashboard with third parties — homeowners, attorneys,
- * banks, insurance adjusters — via a read-only link that opens without login.
+ * Share the job file with third parties — homeowners, attorneys, banks,
+ * insurance adjusters — via a read-only link that opens without login.
+ * They see the brief, do-nots, and every recording on the file.
  */
 
 const STATE_STYLE: Record<EvidenceShare['state'], string> = {
@@ -110,8 +111,8 @@ export function ShareJobProgressPanel({
             Share this job
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            Send a read-only link — no account needed. Homeowners, attorneys, banks and insurers
-            can see progress and daily site updates.
+            Email a read-only link — no account needed. Homeowners see the job file
+            and every recording on it.
           </p>
         </div>
         {modal ? (
@@ -150,7 +151,7 @@ export function ShareJobProgressPanel({
               required
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Cedar Ridge HOA — homeowner"
+              placeholder="e.g. Homeowner — Cedar Ridge"
               className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
@@ -161,7 +162,7 @@ export function ShareJobProgressPanel({
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="We'll email them the link"
+              placeholder="homeowner@example.com"
               className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
@@ -184,7 +185,7 @@ export function ShareJobProgressPanel({
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-            {email.trim() ? 'Email the link' : 'Create share'}
+            {email.trim() ? 'Email the job file' : 'Create share'}
           </button>
         </form>
       )}
@@ -192,7 +193,7 @@ export function ShareJobProgressPanel({
       {made && (
         <p className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-700">
           {made.emailed
-            ? 'Emailed. They can open the link directly — no account needed.'
+            ? 'Emailed. They can open the job file and every recording — no account needed.'
             : 'Share created. It is listed below.'}
         </p>
       )}
@@ -201,7 +202,7 @@ export function ShareJobProgressPanel({
         <p className="mt-3 text-xs text-ink-500">Loading…</p>
       ) : shares.length === 0 ? (
         <p className="mt-3 text-xs text-ink-500">
-          Nobody outside has a progress link for this job yet.
+          Nobody outside has a job-file link yet.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">

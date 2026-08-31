@@ -3,14 +3,15 @@ import rateLimit from 'express-rate-limit';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { shareState } from '../verifier/library.js';
+import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess } from './proofOfWork.js';
 
 /**
- * Guest access to a read-only job progress dashboard.
+ * Guest access to a read-only job file.
  *
  * The token in the URL is the whole credential — no login required, because
  * homeowners, attorneys, banks and insurance adjusters should not need an
- * Atmosphere account to see how work is advancing.
+ * Atmosphere account to see the job file and every recording on it.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -73,20 +74,27 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
   try {
     const { share, admin } = await progressShareForToken(req.params.token);
 
-    const [{ data: job }, { data: org }, { data: scopeRows }, proof] = await Promise.all([
-      admin
-        .from('crm_jobs')
-        .select('id, title, job_number, claim_number, status')
-        .eq('id', share.job_id)
-        .maybeSingle(),
-      admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
-      admin
-        .from('job_scope_items')
-        .select('id, state, title')
-        .eq('job_id', share.job_id)
-        .order('created_at'),
-      buildJobProofPayload(admin, share.org_id, share.job_id),
-    ]);
+    const [{ data: job }, { data: org }, { data: scopeRows }, { data: briefRows }, proof] =
+      await Promise.all([
+        admin
+          .from('crm_jobs')
+          .select('id, title, job_number, claim_number, status')
+          .eq('id', share.job_id)
+          .maybeSingle(),
+        admin.from('orgs').select('name').eq('id', share.org_id).maybeSingle(),
+        admin
+          .from('job_scope_items')
+          .select('id, party_id, state, title, detail, reason, revision, decided_at, created_at')
+          .eq('job_id', share.job_id)
+          .order('created_at'),
+        admin
+          .from('job_briefs')
+          .select('id, revision, facts, note')
+          .eq('job_id', share.job_id)
+          .order('revision', { ascending: false })
+          .limit(1),
+        buildJobProofPayload(admin, share.org_id, share.job_id),
+      ]);
 
     await admin
       .from('verifier_shares')
@@ -97,6 +105,10 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
       .eq('id', share.id);
 
     const scope = (scopeRows ?? []) as any[];
+    const jobFile = homeownerJobFileFromRows({
+      brief: (briefRows ?? [])[0] ?? null,
+      scope,
+    });
 
     res.json({
       share: {
@@ -114,6 +126,8 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
             status: (job as any).status,
           }
         : null,
+      brief: jobFile.brief,
+      scope: jobFile.scope,
       progress: progressFromRecord(scope, proof),
       proof,
     });

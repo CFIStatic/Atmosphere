@@ -3126,6 +3126,18 @@ const routes: Array<[string, RegExp, Handler]> = [
         },
         org: { name: 'Ortiz Restoration' },
         job: record?.job ?? null,
+        brief: record?.brief
+          ? {
+              id: record.brief.id,
+              revision: record.brief.revision,
+              facts: record.brief.facts ?? {},
+              note: record.brief.note ?? null,
+            }
+          : null,
+        scope: (scope as any[]).map((item) => ({
+          ...item,
+          amount: null,
+        })),
         progress: {
           scopePct,
           scopeApproved,
@@ -3136,8 +3148,10 @@ const routes: Array<[string, RegExp, Handler]> = [
         },
         proof: {
           days,
+          videos: proofRecord.videos ?? [],
           counts: {
             days: days.length,
+            videos: (proofRecord.videos ?? []).length,
             payable: days.filter((d: any) => d.payable && !d.accepted).length,
             contradicted: days.filter((d: any) => d.contradicted).length,
             awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,

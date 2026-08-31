@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, ApiError, type ProgressShareGuestView } from '../lib/api';
+import { api, ApiError, type JobScopeItem, type ProgressShareGuestView } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 
 /**
- * Read-only job progress for third parties — homeowners, attorneys, banks,
+ * Read-only job file for third parties — homeowners, attorneys, banks,
  * insurance companies. The token in the URL is the credential; no login.
+ * They see the brief, do-nots, scope, and every recording on the file.
  */
 
 export function JobProgressGuestPage() {
@@ -26,7 +27,7 @@ export function JobProgressGuestPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Could not open this progress link.');
+          setError(err instanceof ApiError ? err.message : 'Could not open this job file.');
         }
       }
     })();
@@ -34,6 +35,11 @@ export function JobProgressGuestPage() {
       cancelled = true;
     };
   }, [token]);
+
+  const exclusions = useMemo(
+    () => (view?.scope ?? []).filter((item) => item.state === 'excluded'),
+    [view],
+  );
 
   if (!view && !error) {
     return (
@@ -63,7 +69,7 @@ export function JobProgressGuestPage() {
             <Logo to={null} />
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-                Job progress
+                Job file
               </p>
               <h1 className="text-lg font-semibold text-ink-900">{view.org.name}</h1>
             </div>
@@ -74,16 +80,59 @@ export function JobProgressGuestPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main className="mx-auto max-w-3xl space-y-4 px-6 py-8">
+        {view.brief && Object.keys(view.brief.facts).length > 0 && (
+          <section className="rounded-xl glass-card p-5" data-testid="homeowner-job-facts">
+            <h2 className="text-base font-semibold text-ink-900">On this file</h2>
+            {view.brief.note && (
+              <p className="mt-1 text-sm text-ink-600">{view.brief.note}</p>
+            )}
+            <dl className="mt-3 space-y-2">
+              {Object.entries(view.brief.facts).map(([key, value]) => (
+                <div key={key} className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  <dt className="w-36 shrink-0 text-xs font-medium text-ink-500">{key}</dt>
+                  <dd className="min-w-0 flex-1 text-sm text-ink-800">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+
+        {exclusions.length > 0 && (
+          <section className="rounded-xl border border-danger-200 bg-danger-50/50 px-5 py-4" data-testid="homeowner-do-nots">
+            <h2 className="text-sm font-semibold text-ink-900">Do not</h2>
+            <ul className="mt-2 space-y-2">
+              {exclusions.map((item) => (
+                <ExclusionRow key={item.id} item={item} />
+              ))}
+            </ul>
+          </section>
+        )}
+
         <JobProgressDashboard
           jobId={view.job.id}
-          record={{ job: view.job, scope: [], risks: [], brief: null }}
+          record={{
+            job: view.job,
+            scope: view.scope ?? [],
+            risks: [],
+            brief: view.brief ?? null,
+          }}
           readOnly
           initialProof={view.proof}
           metrics={view.progress}
           videoFetcher={(proofId) => api.progressShareVideo(token, proofId)}
+          alwaysShowRecordings
         />
       </main>
     </div>
+  );
+}
+
+function ExclusionRow({ item }: { item: JobScopeItem }) {
+  return (
+    <li>
+      <p className="text-sm font-medium text-ink-800">{item.title}</p>
+      {item.reason && <p className="mt-0.5 text-xs text-ink-600">{item.reason}</p>}
+    </li>
   );
 }

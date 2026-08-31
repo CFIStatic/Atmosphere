@@ -33,6 +33,7 @@ import {
 import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
+import { sendSystemMail } from '../lib/systemMail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
@@ -917,39 +918,50 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     let emailed = false;
     if (!erased && recipientEmail) {
       try {
-        const sender = await buildMailSender(orgId);
-        if (sender) {
-          const [{ data: org }, sharerName] = await Promise.all([
-            supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
-            actorLabelFor(supabase, userId),
-          ]);
-          const mail =
-            body.kind === 'progress'
-              ? progressShareEmail({
-                  orgName: (org as any)?.name ?? 'An Atmosphere member',
-                  sharerName,
-                  jobTitle: (job as any)?.title ?? null,
-                  recipientEmail,
-                  origin: publicAppOrigin(),
-                  path: sharePath,
-                  expiresAt,
-                })
-              : shareEmail({
-                  orgName: (org as any)?.name ?? 'An Atmosphere member',
-                  sharerName,
-                  jobTitle: (job as any)?.title ?? null,
-                  recipientEmail,
-                  recipientHasAccount,
-                  origin: publicAppOrigin(),
-                  path: sharePath,
-                  expiresAt,
-                });
-          const result = await sender.send({
+        const [{ data: org }, sharerName] = await Promise.all([
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+          actorLabelFor(supabase, userId),
+        ]);
+        const orgName = (org as any)?.name ?? 'An Atmosphere member';
+        if (body.kind === 'progress') {
+          // Atmosphere sends homeowner job-file mail the same way it sends
+          // capture invites — no connected customer mailbox required.
+          const mail = progressShareEmail({
+            orgName,
+            sharerName,
+            jobTitle: (job as any)?.title ?? null,
+            recipientEmail,
+            origin: publicAppOrigin(),
+            path: sharePath,
+            expiresAt,
+          });
+          const result = await sendSystemMail({
             to: recipientEmail,
             subject: mail.subject,
             text: mail.text,
+            html: mail.html,
           });
           emailed = result.ok;
+        } else {
+          const sender = await buildMailSender(orgId);
+          if (sender) {
+            const mail = shareEmail({
+              orgName,
+              sharerName,
+              jobTitle: (job as any)?.title ?? null,
+              recipientEmail,
+              recipientHasAccount,
+              origin: publicAppOrigin(),
+              path: sharePath,
+              expiresAt,
+            });
+            const result = await sender.send({
+              to: recipientEmail,
+              subject: mail.subject,
+              text: mail.text,
+            });
+            emailed = result.ok;
+          }
         }
       } catch {
         // The share stands; only the delivery failed, and the response's

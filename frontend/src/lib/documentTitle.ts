@@ -24,7 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/my-jobs': 'My jobs',
   '/shared': 'Shared job',
   '/report': 'Report',
-  '/progress': 'Job progress',
+  '/progress': 'Job file',
 };
 
 function pageNameFor(pathname: string): string | undefined {

@@ -5,6 +5,7 @@ import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
   api,
   type CaptureTeamMember,
+  type CreateEvidenceShareResult,
   type IntakeApproveResult,
   type IntakeProposal,
   type ResolvedPlaceAddress,
@@ -66,7 +67,10 @@ export function JobIntakePage() {
   const [extName, setExtName] = useState('');
   const [extCompany, setExtCompany] = useState('');
   const [extEmail, setExtEmail] = useState('');
+  const [homeownerName, setHomeownerName] = useState('');
+  const [homeownerEmail, setHomeownerEmail] = useState('');
   const [result, setResult] = useState<IntakeApproveResult | null>(null);
+  const [homeownerShare, setHomeownerShare] = useState<CreateEvidenceShareResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -204,6 +208,22 @@ export function JobIntakePage() {
         inviteCount: invitees.length,
         scopeLines: scope.length,
       });
+      const ownerEmail = homeownerEmail.trim().toLowerCase();
+      if (ownerEmail && isInviteEmail(ownerEmail)) {
+        try {
+          const share = await api.createProgressShare({
+            jobId: res.job.id,
+            label: homeownerName.trim() || 'Homeowner',
+            recipientEmail: ownerEmail,
+            expiresInDays: 0,
+          });
+          setHomeownerShare(share);
+        } catch {
+          setHomeownerShare(null);
+        }
+      } else {
+        setHomeownerShare(null);
+      }
       setResult(res);
       // Stay on this page so the invite copy buttons actually render. The
       // previous navigate() to /jobs/:id dropped that handoff — JobDetailPage
@@ -297,6 +317,11 @@ export function JobIntakePage() {
               {invites.some((i) => i.emailed)
                 ? ` · ${invites.filter((i) => i.emailed).length} emailed`
                 : ''}
+              {homeownerShare?.emailed
+                ? ' · homeowner emailed the job file'
+                : homeownerShare
+                  ? ' · homeowner job-file link created'
+                  : ''}
               {phone ? '.' : '. It is on your job progress dashboard now.'}
             </p>
           </div>
@@ -727,6 +752,35 @@ export function JobIntakePage() {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
+              <p className="text-xs font-medium text-ink-600">Homeowner (optional)</p>
+              <p className="mt-1 text-[11px] leading-snug text-ink-500">
+                They get the job file and every recording. No account needed — the link is the
+                credential.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="block text-xs font-medium text-ink-600">
+                  Homeowner name
+                  <input
+                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                    value={homeownerName}
+                    onChange={(e) => setHomeownerName(e.target.value)}
+                    placeholder="Jordan Lee"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-ink-600">
+                  Homeowner email
+                  <input
+                    type="email"
+                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                    value={homeownerEmail}
+                    onChange={(e) => setHomeownerEmail(e.target.value)}
+                    placeholder="jordan@example.com"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>

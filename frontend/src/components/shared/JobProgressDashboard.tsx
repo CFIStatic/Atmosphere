@@ -128,6 +128,7 @@ export function JobProgressDashboard({
   initialProof,
   videoFetcher,
   showProofOfWork = true,
+  alwaysShowRecordings = false,
   metrics: metricsOverride,
 }: {
   jobId: string;
@@ -137,6 +138,8 @@ export function JobProgressDashboard({
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   /** When false, the parent already mounts the video catalog (office job file). */
   showProofOfWork?: boolean;
+  /** Homeowner / guest shares always show every recording, not a collapsed history. */
+  alwaysShowRecordings?: boolean;
   /** Guest shares supply pre-computed metrics instead of scope rows. */
   metrics?: {
     scopePct: number;
@@ -333,7 +336,7 @@ export function JobProgressDashboard({
             items={story.happened}
             empty="Nothing completed yet. Each day, crews film before they start and again when they finish — those days will show up here."
             footer={
-              showProofOfWork && (proof?.days.length ?? 0) > 5 ? (
+              showProofOfWork && !alwaysShowRecordings && (proof?.days.length ?? 0) > 5 ? (
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((v) => !v)}
@@ -363,10 +366,10 @@ export function JobProgressDashboard({
         </>
       )}
 
-      {showProofOfWork && historyOpen && proof && (
+      {showProofOfWork && (alwaysShowRecordings || historyOpen) && proof && (
         <ProofOfWork
           jobId={readOnly ? undefined : jobId}
-          heading="Full work history"
+          heading={alwaysShowRecordings ? 'All recordings' : 'Full work history'}
           readOnly={readOnly}
           initialData={proof}
           videoFetcher={videoFetcher}
