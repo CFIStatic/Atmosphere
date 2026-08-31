@@ -842,7 +842,19 @@ async function finishProofActions(
   });
 }
 
+const narrationLocks = new Map<string, Promise<void>>();
+
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
+  const existing = narrationLocks.get(job.proofId);
+  if (existing) return existing;
+  const work = runNarration(admin, job).finally(() => {
+    narrationLocks.delete(job.proofId);
+  });
+  narrationLocks.set(job.proofId, work);
+  return work;
+}
+
+async function runNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
   const write = async (patch: Record<string, unknown>) =>

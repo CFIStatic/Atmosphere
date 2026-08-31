@@ -14,7 +14,7 @@ import { queueNarration } from '../routes/proofOfWork.js';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const SWEEP_LIMIT = 20;
-const FIRST_DELAY_MS = 20_000;
+const FIRST_DELAY_MS = 3_000;
 const INTERVAL_MS = 5 * 60_000;
 
 let timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null = null;

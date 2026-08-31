@@ -106,6 +106,29 @@ export function analysisStateOf(input: {
 
 export type ClipKick = 'done' | 'queued' | 'skipped' | 'failed' | 'none';
 
+/**
+ * Should this clip be sent to the model without anyone opening it.
+ *
+ * Uploads already enqueue. A restart drops that in-memory queue, and a first
+ * extract can skip. The library list and the sweep both use this so a filed
+ * video is read automatically — Scope of Work is just where the words land.
+ */
+export function shouldKickUnreadClip(input: {
+  hasReading: boolean;
+  analysisState?: string | null;
+  alreadyKicked: boolean;
+  alreadyRetried: boolean;
+}): boolean {
+  if (input.hasReading) return false;
+  if (input.analysisState === 'done') return false;
+  if (!input.alreadyKicked) return true;
+  const stale =
+    input.analysisState === 'skipped' ||
+    input.analysisState === 'failed' ||
+    input.analysisState === 'none';
+  return stale && !input.alreadyRetried;
+}
+
 /** True when Scope of Work already has something to print beside the player. */
 export function clipHasReading(item: {
   analysis?: {

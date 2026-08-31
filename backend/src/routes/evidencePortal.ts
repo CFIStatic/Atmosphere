@@ -21,6 +21,7 @@ import {
 } from '../shared/clipAsk.js';
 import {
   clipHasReading,
+  shouldKickUnreadClip,
   downloadDecision,
   matchesLibraryQuery,
   pickPosterFrame,
@@ -207,10 +208,25 @@ async function propertyAddresses(
 
 /** One kick per clip per process so open + 4s polls do not restart the model. */
 const kickedThisProcess = new Set<string>();
+/** A skipped/failed extract gets one automatic retry in this process. */
+const retriedThisProcess = new Set<string>();
+const LIBRARY_AUTO_READ_CAP = 10;
 
 function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
-  if (clipHasReading(item) || !admin || !item?.id) return false;
-  if (kickedThisProcess.has(item.id)) return false;
+  if (!admin || !item?.id) return false;
+  const alreadyKicked = kickedThisProcess.has(item.id);
+  const alreadyRetried = retriedThisProcess.has(item.id);
+  if (
+    !shouldKickUnreadClip({
+      hasReading: clipHasReading(item),
+      analysisState: item.analysisState ?? null,
+      alreadyKicked,
+      alreadyRetried,
+    })
+  ) {
+    return false;
+  }
+  if (alreadyKicked) retriedThisProcess.add(item.id);
   kickedThisProcess.add(item.id);
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   void queueProofTranscript(admin, item.id).catch(() => undefined);
@@ -218,6 +234,17 @@ function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
     console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
   });
   return true;
+}
+
+/** Dashboard open is enough — do not wait for someone to click the clip. */
+function kickUnreadLibraryReads(admin: any, orgId: string, items: any[]): number {
+  if (!admin) return 0;
+  let kicked = 0;
+  for (const item of items) {
+    if (kicked >= LIBRARY_AUTO_READ_CAP) break;
+    if (startUnreadClipRead(admin, orgId, item)) kicked += 1;
+  }
+  return kicked;
 }
 
 /**
@@ -228,9 +255,8 @@ function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
  */
 async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
   if (clipHasReading(item) || !admin || !item?.id) return item;
-  const alreadyKicked = kickedThisProcess.has(item.id);
   const started = startUnreadClipRead(admin, orgId, item);
-  if (!alreadyKicked && started) {
+  if (started) {
     return { ...item, analysisState: 'queued' };
   }
   const fresh = (await reloadEvidenceItem(admin, orgId, item.id)) ?? item;
@@ -658,6 +684,9 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       if (!prev || workDate > prev) lastWorkDateByJob.set(id, workDate);
     }
     jobs = sortJobsForOpen(jobs, lastWorkDateByJob, todayKey());
+
+    const admin = createAdminClient();
+    if (admin) kickUnreadLibraryReads(admin, orgId, items);
 
     res.json({
       items,
@@ -1199,6 +1228,7 @@ evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
       .eq('id', share.id);
 
     const items = await assembleLibrary(admin, share.org_id, proofs ?? []);
+    kickUnreadLibraryReads(admin, share.org_id, items);
     res.json({
       share: { label: share.label, expiresAt: share.expires_at },
       job: job
