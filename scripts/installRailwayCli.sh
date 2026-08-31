@@ -11,7 +11,7 @@
 # that directory is not writable and sudo is unavailable).
 set -euo pipefail
 
-version="${RAILWAY_CLI_VERSION:-5.43.3}"
+version="${RAILWAY_CLI_VERSION:-5.45.10}"
 
 arch="$(uname -m)"
 case "$arch" in

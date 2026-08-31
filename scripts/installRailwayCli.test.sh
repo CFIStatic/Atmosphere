@@ -5,7 +5,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 script="$root/scripts/installRailwayCli.sh"
-pin="5.43.3"
+pin="5.45.10"
 
 test -f "$script"
 test -x "$script"
