@@ -546,6 +546,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .from('job_proofs')
       .select(PORTAL_PROOF_SELECT)
       .eq('org_id', orgId)
+      .is('deleted_at', null)
       .order('received_at', { ascending: false })
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');
@@ -569,6 +570,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .from('crm_jobs')
       .select('id, title, job_number, created_at, property_id, claim_number')
       .eq('org_id', orgId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(200);
     if (jobsError) {

@@ -7,6 +7,7 @@ const sharedJobs = vi.fn();
 const sharedJob = vi.fn();
 const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
+const deleteJobFile = vi.fn();
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -50,6 +51,7 @@ vi.mock('../lib/api', () => ({
     sharedJob: (...args: unknown[]) => sharedJob(...args),
     renameJobFile: (...args: unknown[]) => renameJobFile(...args),
     duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
+    deleteJobFile: (...args: unknown[]) => deleteJobFile(...args),
   },
 }));
 
@@ -93,6 +95,8 @@ describe('SharedDashboardPage job file identity', () => {
     sharedJob.mockReset();
     renameJobFile.mockReset();
     duplicateJobFile.mockReset();
+    deleteJobFile.mockReset();
+    deleteJobFile.mockResolvedValue({ ok: true, deletedAt: '2026-08-31T00:00:00Z', jobId: 'job-1038' });
     sharedJobs.mockResolvedValue({
       jobs: [summary],
       counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 },
