@@ -262,7 +262,7 @@ describe('JobDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Share this job file' }));
     expect(await screen.findByRole('heading', { name: 'Share this job' })).toBeInTheDocument();
     expect(
-      screen.getByText(/Homeowners, attorneys, banks and insurers/i),
+      screen.getByText(/Homeowners see the job file and every recording/i),
     ).toBeInTheDocument();
   });
 });
