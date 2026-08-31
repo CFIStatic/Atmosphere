@@ -5,7 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { Opening, RoomMeasurements } from '../estimator/types.js';
-import { deriveGeometry, round } from '../estimator/mitigation/lib/geometry.js';
+import { deriveGeometry, round } from './roomGeometry.js';
 import type { DeviceGeometryIngest, DeviceRoomPayload, TwinRoom } from './types.js';
 
 export function deviceRoomToMeasurements(room: DeviceRoomPayload): RoomMeasurements {

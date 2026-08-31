@@ -1,5 +1,5 @@
 import type { WorkAction } from './actions.js';
-import type { CitationId } from '../estimator/mitigation/standards/s500.js';
+import type { CitationId } from './citationIds.js';
 
 /**
  * The construction work ontology.

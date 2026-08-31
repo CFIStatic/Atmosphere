@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTakeoff, workLinesOf, type WorkLine } from '../src/purchasing/takeoff.js';
 import { DEMANDS_BY_CODE, MATERIAL_BY_KEY, NO_MATERIALS_REASON } from '../src/purchasing/materials.js';
-import { CATALOG } from '../src/estimator/mitigation/catalog/lineItems.js';
 
 /**
  * The takeoff.
@@ -11,6 +10,10 @@ import { CATALOG } from '../src/estimator/mitigation/catalog/lineItems.js';
  * the difference between ordering what a job needs and quietly over-ordering
  * on every multi-room job. The rest is the classification contract — every
  * estimate line accounted for in exactly one bucket.
+ *
+ * Work codes here are the legacy estimate vocabulary (WTR*, CLN*, …) that
+ * purchasing still reads from stored estimate payloads. They are not the
+ * construction estimator catalog keys.
  */
 
 const line = (over: Partial<WorkLine> & { catalogKey: string; quantity: number }): WorkLine => ({
@@ -103,13 +106,11 @@ test('estTotal is the sum of line totals', () => {
   assert.equal(result.estTotal, kit!.estTotal);
 });
 
-test('every catalog code is either mapped or classified — no silent gaps', () => {
-  // The whole point of the classification is that a code added to the
-  // estimator without a decision here shows up as unmapped in the UI. This
-  // test makes that decision visible at build time instead.
-  const known = new Set([...Object.keys(DEMANDS_BY_CODE), ...Object.keys(NO_MATERIALS_REASON)]);
-  const gaps = CATALOG.map((item) => item.key).filter((key) => !known.has(key));
-  assert.deepEqual(gaps, [], `estimator codes with no takeoff decision: ${gaps.join(', ')}`);
+test('a work code is either mapped to materials or classified — never both', () => {
+  const mapped = new Set(Object.keys(DEMANDS_BY_CODE));
+  const classified = new Set(Object.keys(NO_MATERIALS_REASON));
+  const overlap = [...mapped].filter((key) => classified.has(key));
+  assert.deepEqual(overlap, [], `codes both mapped and classified: ${overlap.join(', ')}`);
 });
 
 test('every demand names a material that exists', () => {

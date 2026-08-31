@@ -16,7 +16,6 @@
     "test": "node --import tsx --test $(find src test -name '*.test.ts' | sort)",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "verify:supabase": "node scripts/verify-supabase.mjs",
-    "mitigation:demo": "tsx src/estimator/mitigation/demo.ts",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
     "smoke:synthetic": "tsx scripts/smokeSyntheticPipeline.ts",

@@ -164,9 +164,9 @@ describe('product intelligence: cut / invest / stickiness', () => {
   it('recommends investing in the hottest tools', () => {
     const features = [
       feature({
-        featureKey: 'mitigation_estimator',
-        label: 'Mitigation estimator',
-        area: 'Estimating',
+        featureKey: 'work_verification',
+        label: 'Work verification',
+        area: 'Verification',
         activeHours: 50,
         sharePct: 60,
         timeRank: 1,
@@ -228,7 +228,7 @@ describe('product intelligence: cut / invest / stickiness', () => {
     });
 
     const invest = intel.insights.filter((i) => i.kind === 'invest');
-    assert.ok(invest.some((i) => i.featureKeys.includes('mitigation_estimator')));
+    assert.ok(invest.some((i) => i.featureKeys.includes('work_verification')));
     assert.equal(invest[0]?.priority, 'high');
   });
 

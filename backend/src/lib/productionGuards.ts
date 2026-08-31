@@ -74,11 +74,6 @@ export function assertProductionReady(): void {
 
   const allowMock = process.env.ALLOW_MOCK_DRIVERS === 'true';
   if (!allowMock) {
-    if (config.xactimate.driver === 'mock') {
-      warnings.push(
-        'XACTIMATE_DRIVER=mock — estimator writes will not reach Xactimate. Set a real driver or ALLOW_MOCK_DRIVERS=true.',
-      );
-    }
     if (config.crmSync.driver === 'mock') {
       warnings.push(
         'CRM_SYNC_DRIVER=mock — job-file sync will not call a vendor CRM. Set CRM_SYNC_DRIVER=api or ALLOW_MOCK_DRIVERS=true.',

@@ -1,14 +1,9 @@
 import { createApp } from './app.js';
 import { listenHost } from './bootFlags.js';
 import { config } from './config.js';
-import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
-import {
-  startCaptureAgent,
-  stopCaptureAgent,
-} from './estimator/mitigation/capture/scheduler.js';
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
 import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
@@ -32,10 +27,8 @@ const server = app.listen(config.port, host, () => {
     port: config.port,
     supabaseUrl: config.supabase.url,
     origins: config.frontendOrigins,
-    xactimateDriver: config.xactimate.driver,
     mediaBackend: config.media.backend,
     computerUse: config.computerUse.enabled,
-    captureAgent: config.estimator.captureAgent.enabled,
     cyber: config.cyber.enabled,
     mode: config.isProduction ? 'production' : 'development',
   });
@@ -48,10 +41,6 @@ const server = app.listen(config.port, host, () => {
   // Filed videos that never got a reading — including clips uploaded before
   // the analysis queues existed — get vision + speech so Ask has a record.
   startProofAnalysisSweep();
-
-  // Mitigation capture agent — on by default. Pulls MICA Dash / Outlook and
-  // rewrites open estimates without a human sync click.
-  startCaptureAgent();
 
   // Started after the listener so a backup can never delay readiness.
   startBackupScheduler();
@@ -72,16 +61,11 @@ if (config.computerUse.enabled) {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     logger.info('shutdown', { signal });
-    // Subsystems that hold resources the process should not simply drop.
     stopScheduler();
     stopProofAnalysisSweep();
-    stopCaptureAgent();
     stopBackupScheduler();
     stopCyberScheduler();
     agentHub.close();
-    void connections
-      .closeAll()
-      .catch(() => undefined)
-      .finally(() => server.close(() => process.exit(0)));
+    server.close(() => process.exit(0));
   });
 }

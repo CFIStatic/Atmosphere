@@ -173,7 +173,7 @@ export function buildTakeoff(work: WorkLine[]): TakeoffResult {
   };
 }
 
-/** Pull the takeoff's input out of a stored mitigation estimate payload. */
+/** Pull the takeoff's input out of a stored estimate payload. */
 export function workLinesOf(payload: unknown): WorkLine[] {
   const items = (payload as { lineItems?: unknown[] } | null)?.lineItems;
   if (!Array.isArray(items)) return [];

@@ -10,7 +10,6 @@
  * Nothing here ships in a normal build: `main.tsx` only imports this module
  * when VITE_DEMO is set, so production bundles never contain it.
  */
-import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
 import { isLiveFirstPath } from './liveFirst';
 import { jobSharePagePath } from '../lib/jobSharePath';
 import type {
@@ -40,7 +39,6 @@ import type {
   Verification,
   WebConnection,
   WebRun,
-  XactimateStatus,
 } from '../lib/api';
 
 const realFetch = window.fetch.bind(window);
@@ -89,7 +87,7 @@ const profile = (): Profile => ({
 const membership = (): Membership => ({
   role: 'project_manager',
   workType: 'mitigation',
-  usageIntents: ['project_management', 'mitigation_estimating', 'billing'],
+  usageIntents: ['project_management', 'field_work', 'billing'],
   status: 'active',
   org: {
     id: 'org-1',
@@ -103,7 +101,7 @@ const membership = (): Membership => ({
 /* ---------------------------------------------------------------- members */
 
 const MEMBERS: OrgMember[] = [
-  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
+  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', workType: 'mitigation', usageIntents: ['project_management', 'field_work', 'billing'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
@@ -273,7 +271,7 @@ const JOB_DETAIL: JobDetail = {
 
 const EVENTS: MemoryEvent[] = [
   { id: 'e-1', seq: 1287, actorId: 'u-marcus', actorEmail: 'marcus@ortizrestoration.com', actorRole: 'field_technician', eventType: 'work_logged', entityType: 'work_log', entityId: 'w-1', jobId: 'job-1041', job: { id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3' }, summary: 'Logged 45 min — air movers repositioned, subfloor at 14.2%', changes: {}, snapshot: null, source: 'app', occurredAt: '2026-08-01T12:20:00Z' },
-  { id: 'e-2', seq: 1286, actorId: null, actorEmail: null, actorRole: null, eventType: 'estimate_built', entityType: 'estimate', entityId: 'est-204', jobId: 'job-1041', job: { id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3' }, summary: 'Mitigation Estimator built a 214-line estimate and flagged $1,840 performed-but-unbilled', changes: {}, snapshot: null, source: 'app', occurredAt: '2026-08-01T09:44:00Z' },
+  { id: 'e-2', seq: 1286, actorId: null, actorEmail: null, actorRole: null, eventType: 'run_verified', entityType: 'verification_run', entityId: 'vr-204', jobId: 'job-1041', job: { id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3' }, summary: 'Verifier confirmed day-8 drying walkthrough — moisture map and equipment placement matched the scope', changes: {}, snapshot: null, source: 'app', occurredAt: '2026-08-01T09:44:00Z' },
   { id: 'e-3', seq: 1285, actorId: 'u-priya', actorEmail: 'priya@ortizrestoration.com', actorRole: 'sales', eventType: 'status_changed', entityType: 'job', entityId: 'job-1038', jobId: 'job-1038', job: { id: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild' }, summary: 'Carrier approved the $4,180 supplement', changes: { invoicedAmount: { from: 9800, to: 13980 } }, snapshot: null, source: 'app', occurredAt: '2026-08-01T10:05:00Z' },
   { id: 'e-4', seq: 1284, actorId: 'u-tom', actorEmail: 'tom@ortizrestoration.com', actorRole: 'office_manager', eventType: 'run_verified', entityType: 'web_run', entityId: 'wr-2', jobId: null, job: null, summary: 'Verifier confirmed the claim note landed in the Alliance portal', changes: {}, snapshot: null, source: 'app', occurredAt: '2026-07-31T17:26:00Z' },
   { id: 'e-5', seq: 1283, actorId: 'demo-user-1', actorEmail: 'dana@ortizrestoration.com', actorRole: 'project_manager', eventType: 'task_created', entityType: 'job_task', entityId: 't-2', jobId: 'job-1041', job: { id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3' }, summary: 'Task created: send drying update to adjuster', changes: {}, snapshot: null, source: 'app', occurredAt: '2026-07-31T09:00:00Z' },
@@ -300,7 +298,7 @@ const agentDef = (key: string, name: string, blurb: string, accent: AgentSummary
   ({ key, name, blurb, accent, intake: 'ledger' as const });
 
 const AUDIT_AGENTS: AgentSummary[] = [
-  { ...agentDef('mitigation-estimator', 'Mitigation Estimator', 'Reads the scan, the report, and the photos; prices the scope.', 'brand'), total: 128, succeeded: 121, failed: 4, active: 3, steps: 2432, lastRunAt: '2026-08-01T09:44:00Z', avgDurationMs: 214000 },
+  { ...agentDef('work-verification', 'Work Verification', 'Reads field capture and confirms the work that was performed.', 'brand'), total: 128, succeeded: 121, failed: 4, active: 3, steps: 2432, lastRunAt: '2026-08-01T09:44:00Z', avgDurationMs: 214000 },
   { ...agentDef('verifier', 'Verifier', 'Re-opens finished work read-only and confirms it happened.', 'success'), total: 96, succeeded: 92, failed: 2, active: 2, steps: 861, lastRunAt: '2026-07-31T17:26:00Z', avgDurationMs: 88000 },
   { ...agentDef('web-access', 'Web Access', 'Signs in to carrier and supplier portals and works in them.', 'neutral'), total: 84, succeeded: 79, failed: 5, active: 0, steps: 1204, lastRunAt: '2026-07-31T17:12:00Z', avgDurationMs: 132000 },
   { ...agentDef('project-manager', 'Project Manager', 'Nineteen rules watching every open project.', 'caution'), total: 62, succeeded: 62, failed: 0, active: 0, steps: 740, lastRunAt: '2026-08-01T07:00:00Z', avgDurationMs: 41000 },
@@ -326,7 +324,7 @@ const mkRun = (id: string, agentKey: string, title: string, status: AuditRun['st
 };
 
 const AUDIT_RUNS: AuditRun[] = [
-  mkRun('run-4187', 'mitigation-estimator', 'Mitigation estimate — Job 22-0148', 'succeeded', '2026-08-01T09:41:03Z', 415000, 8, 'Built a 214-line Xactimate estimate; found 3 items performed but never billed (+$1,840). Verifier confirmed.'),
+  mkRun('run-4187', 'work-verification', 'Verify walkthrough — Job 22-0148', 'succeeded', '2026-08-01T09:41:03Z', 415000, 8, 'Confirmed day-8 drying capture against the scope; flagged 1 room still above goal. Verifier confirmed.'),
   mkRun('run-4186', 'field-assistant', 'Assist — moisture mapping question', 'succeeded', '2026-08-01T11:52:00Z', 8000, 3, 'Explained dry-standard targets for Class 3 subfloor.'),
   mkRun('run-4185', 'project-manager', 'Morning sweep — 3 projects', 'succeeded', '2026-08-01T07:00:00Z', 41000, 12, 'Raised 1 critical and 2 warnings; created 2 tasks.'),
   mkRun('run-4184', 'verifier', 'Verify — claim note in Alliance portal', 'succeeded', '2026-07-31T17:24:00Z', 96000, 9, 'Re-opened the portal read-only; note present with the right claim number.'),
@@ -340,12 +338,12 @@ const mkStep = (seq: number, type: AuditStep['type'], action: string, detail: st
 });
 
 const RUN_DETAIL_STEPS: AuditStep[] = [
-  mkStep(1, 'tool_call', 'Read DocuSketch scan', '14 rooms mapped'),
-  mkStep(2, 'tool_call', 'Read MICA report + 62 field photos', 'moisture map merged'),
-  mkStep(3, 'decision', 'Classified losses against IICRC S500', 'Class 3 / Category 2'),
-  mkStep(4, 'artifact', 'Built Xactimate estimate', '214 line items'),
-  mkStep(5, 'observation', 'Found 3 items performed, never billed', '+$1,840'),
-  mkStep(6, 'navigation', 'Verifier: re-opened in a read-only browser', null),
+  mkStep(1, 'tool_call', 'Read field capture clip', 'day-8 walkthrough, 14 rooms'),
+  mkStep(2, 'tool_call', 'Read moisture map + 62 field photos', 'readings merged'),
+  mkStep(3, 'decision', 'Compared capture against open scope', 'Class 3 / Category 2'),
+  mkStep(4, 'artifact', 'Wrote verification report', '13 of 14 rooms at goal'),
+  mkStep(5, 'observation', 'Flagged master bath still above dry standard', 'subfloor 18.4%'),
+  mkStep(6, 'navigation', 'Verifier: re-opened capture read-only', null),
   mkStep(7, 'observation', 'Confirmed against the task as written', 'all expectations satisfied'),
   mkStep(8, 'status', 'Complete', 'replay available in the audit trail'),
 ];
@@ -396,7 +394,7 @@ const OVERVIEW = (): BillingOverview => ({
 });
 
 const LEDGER = [
-  { id: 'l-1', entryType: 'usage' as const, bucket: 'purchased' as const, amountNanos: -1_240_000_000, description: 'Mitigation estimate — run-4187', createdAt: '2026-08-01T09:48:00Z' },
+  { id: 'l-1', entryType: 'usage' as const, bucket: 'purchased' as const, amountNanos: -1_240_000_000, description: 'Work verification — run-4187', createdAt: '2026-08-01T09:48:00Z' },
   { id: 'l-2', entryType: 'usage' as const, bucket: 'purchased' as const, amountNanos: -310_000_000, description: 'PM morning sweep', createdAt: '2026-08-01T07:01:00Z' },
   { id: 'l-3', entryType: 'purchase' as const, bucket: 'purchased' as const, amountNanos: 105_000_000_000, description: 'Pro pack — $100 + $5 bonus', createdAt: '2026-07-28T14:00:00Z' },
   { id: 'l-4', entryType: 'usage' as const, bucket: 'purchased' as const, amountNanos: -860_000_000, description: 'Web access — Alliance portal push + verify', createdAt: '2026-07-31T17:30:00Z' },
@@ -419,7 +417,7 @@ const PAYMENTS = [
 
 const USAGE_EVENTS: UsageEvent[] = Array.from({ length: 12 }, (_, i) => ({
   id: `ue-${i + 1}`, modelId: 'atmosphere-core',
-  feature: ['mitigation-estimator', 'project-manager', 'web-access', 'field-assistant'][i % 4],
+  feature: ['work-verification', 'project-manager', 'web-access', 'field-assistant'][i % 4],
   inputTokens: 41000 - i * 2200, outputTokens: 5200 - i * 240, cacheTokens: 12000,
   isBatch: false, priceNanos: 1_240_000_000 - i * 61_000_000,
   createdAt: new Date(Date.parse('2026-08-01T12:00:00Z') - i * 5_400_000).toISOString(),
@@ -1642,26 +1640,6 @@ const SUPPLIER_STATUS: Array<Record<string, any>> = [
 const poTotal = (lines: Array<Record<string, any>>) =>
   Math.round(lines.reduce((sum, l) => sum + l.quantity * (l.unitPrice ?? 0), 0) * 100) / 100;
 
-/**
- * Saving an estimate on the Estimating tab registers it as a purchasing
- * source, so "Order the materials" lands on a takeoff that exists — the same
- * automatic flow the live backend gets from both features reading
- * estimator_estimates.
- */
-function registerDemoEstimateSource(estimateId: string) {
-  if (!PURCHASING_SOURCES.some((s) => s.estimateId === estimateId)) {
-    PURCHASING_SOURCES.unshift({
-      estimateId,
-      jobName: DEMO_ESTIMATE.assessment?.propertyAddress ?? 'Demo estimate',
-      claimNumber: DEMO_ESTIMATE.assessment?.claimNumber ?? null,
-      total: DEMO_ESTIMATE.lineItems.reduce((sum: number, l: any) => sum + (l.rcv ?? 0), 0),
-      createdAt: new Date().toISOString(),
-    });
-  }
-  TAKEOFFS[estimateId] = DEMO_ESTIMATE_TAKEOFF;
-  TAKEOFF_LINES[estimateId] = DEMO_ESTIMATE_TAKEOFF.lines;
-}
-
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1813,12 +1791,6 @@ function emptySharedRecord(
     money: { approved: 0, pending: 0, unpricedApprovals: 0 },
   };
 }
-
-const XACTIMATE_STATUS: XactimateStatus = {
-  connected: false, sessionActive: false, driver: 'mock', storageAvailable: true,
-  webAutomationEnabled: false, username: null, scopes: [], storageMode: 'session',
-  grantedAt: null, expiresAt: null, priceListId: null, availableScopes: [],
-};
 
 /* ------------------------------------------------------------ interceptor */
 
@@ -3423,22 +3395,6 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { summary: day?.aiSummary ?? null, findings: day?.aiFindings ?? null, model: 'claude' } };
   }],
 
-  /* ------------------------------------------- estimating (demo pipeline) */
-  // The estimate is the backend's own demo output, frozen at build time — the
-  // Estimating tab builds it, saves it, and hands it to Purchase orders, the
-  // same loop the live product runs.
-  ['GET', /^\/api\/mitigation\/demo-sources$/, () => ({ body: { sources: DEMO_ESTIMATE_SOURCES } })],
-  ['POST', /^\/api\/mitigation\/build$/, () => ({
-    body: { estimate: DEMO_ESTIMATE, priceListConnected: false },
-  })],
-  ['POST', /^\/api\/mitigation\/estimates$/, () => {
-    registerDemoEstimateSource('est-demo-1');
-    return {
-      status: 201,
-      body: { estimateId: 'est-demo-1', jobId: DEMO_ESTIMATE.jobId, estimate: DEMO_ESTIMATE },
-    };
-  }],
-
   /* ------------------------------------------- purchasing */
   ['GET', /^\/api\/purchasing\/sources$/, () => ({ body: { sources: PURCHASING_SOURCES } })],
   ['GET', /^\/api\/purchasing\/suppliers$/, () => ({ body: { suppliers: SUPPLIER_STATUS } })],
@@ -3970,7 +3926,6 @@ const routes: Array<[string, RegExp, Handler]> = [
     body: { sandbox: true, modelAvailable: true, credentialStorageAvailable: true, canManageCredentials: true, maxPhotosPerRun: 24, credentials: [] },
   })],
   ['GET', /^\/api\/estimator\/runs$/, () => ({ body: { runs: [] } })],
-  ['GET', /^\/api\/xactimate\/status$/, () => ({ body: XACTIMATE_STATUS })],
 
   /* ------------------------------------------- symbility */
   ['GET', /^\/api\/symbility\/status$/, () => ({
