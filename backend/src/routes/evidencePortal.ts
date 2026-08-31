@@ -546,6 +546,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .from('job_proofs')
       .select(PORTAL_PROOF_SELECT)
       .eq('org_id', orgId)
+      .is('deleted_at', null)
       .order('received_at', { ascending: false })
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');

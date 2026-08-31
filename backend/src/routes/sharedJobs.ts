@@ -42,6 +42,7 @@ import { jobHasOpenHold, markSourceDeleted, recordUserAction } from '../legal/in
 import {
   JOB_FILE_TITLE_MAX,
   JOB_FILE_TITLE_MIN,
+  displayJobFileName,
   jobFileDeleteNameMatches,
   normalizeJobFileTitle,
   scopeLinesForDuplicate,
@@ -368,7 +369,7 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
 
     const { data: job, error: readError } = await supabase
       .from('crm_jobs')
-      .select('id, title')
+      .select('id, title, property_id')
       .eq('org_id', orgId)
       .eq('id', req.params.jobId)
       .is('deleted_at', null)
@@ -376,7 +377,22 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
     if (readError) throw new HttpError(500, readError.message, 'job_read_failed');
     if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
 
-    if (!jobFileDeleteNameMatches(String(job.title ?? ''), title)) {
+    let address = '';
+    if (job.property_id) {
+      const { data: property } = await supabase
+        .from('crm_properties')
+        .select('address_line1, city, region, postal_code')
+        .eq('id', job.property_id)
+        .maybeSingle();
+      if (property) {
+        address = [property.address_line1, property.city, property.region, property.postal_code]
+          .map((part: unknown) => (typeof part === 'string' ? part.trim() : ''))
+          .filter(Boolean)
+          .join(', ');
+      }
+    }
+
+    if (!jobFileDeleteNameMatches(displayJobFileName(job.title, address), title)) {
       throw new HttpError(
         400,
         'Type the file name exactly as it appears on the dashboard.',
