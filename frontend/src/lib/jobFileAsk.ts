@@ -201,10 +201,6 @@ export function jobFileSuggestions(input: {
     uniquePush(suggestions, `What did the crew do on ${formatWorkDate(input.latestDate)}?`);
   }
 
-  if (beats.some((beat) => beat.title === 'Do not')) {
-    uniquePush(suggestions, 'What should we not do?');
-  }
-
   uniquePush(suggestions, input.hasVideo ? 'Is anything still unfinished?' : 'Did anyone on site mention a change?');
   return suggestions.slice(0, 4);
 }

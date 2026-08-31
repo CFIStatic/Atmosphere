@@ -76,12 +76,6 @@ test('groundedJobFileAnswer reads a do-not from scope', () => {
   assert.match(answer, /excluded|do not|unpaid/i);
 });
 
-test('groundedJobFileAnswer lists do-nots for “what should we not do”', () => {
-  const answer = groundedJobFileAnswer('what should we not do?', file);
-  assert.match(answer, /skylights/i);
-  assert.match(answer, /Do not/i);
-});
-
 test('groundedJobFileAnswer reads a task that is not on a clip', () => {
   const answer = groundedJobFileAnswer('what task is about the carrier', file);
   assert.match(answer, /valley rot/i);
