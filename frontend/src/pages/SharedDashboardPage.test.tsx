@@ -35,7 +35,9 @@ vi.mock('../components/shared/EvidenceLocker', () => ({
 }));
 
 vi.mock('../components/shared/ProofOfWork', () => ({
-  ProofOfWork: ({ heading }: { heading?: string }) => <section>{heading ?? 'Proof of work'}</section>,
+  ProofOfWork: ({ heading }: { heading?: string }) => (
+    <section>{heading ?? 'Proof of work'}</section>
+  ),
 }));
 
 vi.mock('../components/shared/JobReadinessPanel', () => ({
@@ -89,12 +91,16 @@ const record = {
 
 describe('SharedDashboardPage job file identity', () => {
   beforeEach(() => {
+    localStorage.clear();
     usePhoneShell.mockReturnValue(false);
     sharedJobs.mockReset();
     sharedJob.mockReset();
     renameJobFile.mockReset();
     duplicateJobFile.mockReset();
-    sharedJobs.mockResolvedValue({ jobs: [summary], counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 } });
+    sharedJobs.mockResolvedValue({
+      jobs: [summary],
+      counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 },
+    });
     sharedJob.mockResolvedValue(record);
     renameJobFile.mockResolvedValue({
       job: { ...record.job, title: 'Cedar Ridge kitchen rebuild' },
@@ -120,7 +126,9 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Videos and analysis')).toBeInTheDocument();
     expect(screen.getByText('Evidence locker')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
@@ -136,7 +144,9 @@ describe('SharedDashboardPage job file identity', () => {
     await waitFor(() => {
       expect(renameJobFile).toHaveBeenCalledWith('job-1038', 'Cedar Ridge kitchen rebuild');
     });
-    expect(await screen.findByRole('heading', { name: 'Cedar Ridge kitchen rebuild' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Cedar Ridge kitchen rebuild' }),
+    ).toBeInTheDocument();
   });
 
   it('pins Ask on the job file so Overview and Job Files share the same chat', async () => {
@@ -146,7 +156,9 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
+    ).toBeInTheDocument();
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('aria-label', 'Ask this job');
     expect(ask.className).toMatch(/lg:h-full/);
@@ -154,6 +166,9 @@ describe('SharedDashboardPage job file identity', () => {
     expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Overview/ })).toBeInTheDocument();
+    expect(
+      JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038'],
+    ).toEqual(expect.any(Number));
   });
 
   it('uses File and Ask tabs on a phone so chat is not buried under the file', async () => {
@@ -165,7 +180,9 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();

@@ -21,6 +21,7 @@ import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { jobFilePath } from '../lib/jobFileAsk';
+import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type HandoffState = {
@@ -88,7 +89,11 @@ function ago(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function placeholderRecord(jobId: string, title: string, jobNumber: number | null = null): SharedJobRecord {
+function placeholderRecord(
+  jobId: string,
+  title: string,
+  jobNumber: number | null = null,
+): SharedJobRecord {
   return {
     job: { id: jobId, jobNumber, title, status: null, claimNumber: null },
     brief: null,
@@ -109,7 +114,8 @@ export function SharedDashboardPage() {
   const requestedJob = searchParams.get('job');
   const requestedTitle = searchParams.get('title');
   const requestedNumber = searchParams.get('number');
-  const parsedNumber = requestedNumber != null && requestedNumber !== '' ? Number(requestedNumber) : null;
+  const parsedNumber =
+    requestedNumber != null && requestedNumber !== '' ? Number(requestedNumber) : null;
   const jobNumberHint = Number.isFinite(parsedNumber) ? parsedNumber : null;
   const handoff = (location.state as HandoffState | null) ?? null;
   const freshFromNav = handoff?.freshJob;
@@ -127,11 +133,12 @@ export function SharedDashboardPage() {
     freshFromNav ? [freshFromNav] : null,
   );
   const [openId, setOpenId] = useState<string | null>(seededId);
-  const [record, setRecord] = useState<SharedJobRecord | null>(() =>
-    freshRecord ??
-    (requestedJob
-      ? placeholderRecord(requestedJob, requestedTitle || 'Job', jobNumberHint)
-      : null),
+  const [record, setRecord] = useState<SharedJobRecord | null>(
+    () =>
+      freshRecord ??
+      (requestedJob
+        ? placeholderRecord(requestedJob, requestedTitle || 'Job', jobNumberHint)
+        : null),
   );
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
@@ -142,6 +149,10 @@ export function SharedDashboardPage() {
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
   }, [record]);
+
+  useEffect(() => {
+    if (openId) touchJobFile(openId);
+  }, [openId]);
 
   useEffect(() => {
     if (!stayOnRecord) navigate('/verifier-library', { replace: true });
@@ -261,7 +272,9 @@ export function SharedDashboardPage() {
     if (!record) return;
     const amount =
       decision === 'approved'
-        ? Number(window.prompt(`Approve "${item.title}" for how much?`, String(item.amount ?? '')) ?? '')
+        ? Number(
+            window.prompt(`Approve "${item.title}" for how much?`, String(item.amount ?? '')) ?? '',
+          )
         : null;
     if (decision === 'approved' && (!Number.isFinite(amount) || amount === null)) return;
     try {
@@ -410,37 +423,42 @@ export function SharedDashboardPage() {
               <EvidenceLocker jobId={record.job.id} />
             </div>
 
-                <details className="mt-4 rounded-xl glass-card group">
-                  <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
-                    <span className="flex items-center justify-between gap-2">
-                      Job setup — scope, crew &amp; documents
-                      <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
-                      <span className="hidden text-xs font-normal text-ink-500 group-open:inline">Hide</span>
-                    </span>
-                  </summary>
-                  <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
-                    <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
-                    <PartyList
-                      record={record}
-                      onChanged={() => {
-                        void openJob(record.job.id);
-                        void loadList();
-                      }}
-                    />
-                    <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
-                    <ScopeDocPanel
-                      jobId={record.job.id}
-                      onChanged={() => {
-                        void openJob(record.job.id);
-                        setReadinessKey((k) => k + 1);
-                      }}
-                    />
-                    <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
-                    <Thread record={record} onPosted={() => void openJob(record.job.id)} />
-                  </div>
-                </details>
+            <details className="mt-4 rounded-xl glass-card group">
+              <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  Job setup — scope, crew &amp; documents
+                  <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
+                  <span className="hidden text-xs font-normal text-ink-500 group-open:inline">
+                    Hide
+                  </span>
+                </span>
+              </summary>
+              <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
+                <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
+                <PartyList
+                  record={record}
+                  onChanged={() => {
+                    void openJob(record.job.id);
+                    void loadList();
+                  }}
+                />
+                <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+                <ScopeDocPanel
+                  jobId={record.job.id}
+                  onChanged={() => {
+                    void openJob(record.job.id);
+                    setReadinessKey((k) => k + 1);
+                  }}
+                />
+                <ScopeList
+                  record={record}
+                  onDecide={decide}
+                  onChanged={() => void openJob(record.job.id)}
+                />
+                <Thread record={record} onPosted={() => void openJob(record.job.id)} />
+              </div>
+            </details>
           </div>
-
         </>
       ) : (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
@@ -476,7 +494,13 @@ export function SharedDashboardPage() {
  * acceptance. The button says so before it is pressed, because the cost of
  * that action lands on other people.
  */
-function SharedFacts({ record, onPublished }: { record: SharedJobRecord; onPublished: () => void }) {
+function SharedFacts({
+  record,
+  onPublished,
+}: {
+  record: SharedJobRecord;
+  onPublished: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState('');
   const [facts, setFacts] = useState(() =>
@@ -513,7 +537,9 @@ function SharedFacts({ record, onPublished }: { record: SharedJobRecord; onPubli
         <h2 className="text-base font-semibold text-ink-900">
           Job facts
           {record.currentRevision !== null && (
-            <span className="ml-2 text-xs font-normal text-ink-500">revision {record.currentRevision}</span>
+            <span className="ml-2 text-xs font-normal text-ink-500">
+              revision {record.currentRevision}
+            </span>
           )}
         </h2>
         <button
@@ -903,7 +929,6 @@ function Thread({ record, onPosted }: { record: SharedJobRecord; onPosted: () =>
     </section>
   );
 }
-
 
 /**
  * Open, or copy, a company's link.
