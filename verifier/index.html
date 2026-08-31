@@ -1087,7 +1087,11 @@
     color: var(--faint);
   }
 
-  /* Phone All videos: one compact card per job, not a stacked desktop table. */
+  /* Phone All videos: one compact card per job, not a stacked desktop table.
+     Long "Site — work" names used to wrap as one block next to the action
+     cluster, which left a single leftover word on the second line. Split
+     those names: the site stays on the icon row, the work line uses the
+     width under the buttons, each line ellipsizes instead of wrapping. */
   @media (max-width: 640px) {
     .toolbar { padding: 10px 14px 8px; gap: 6px 10px; }
     .toolbar h1 { font-size: 18px; }
@@ -1119,37 +1123,85 @@
       grid-template-columns: 28px minmax(0, 1fr);
       grid-template-rows: auto auto;
       column-gap: 10px;
-      row-gap: 5px;
+      row-gap: 4px;
       align-items: start;
-      padding: 12px 116px 12px 12px;
+      padding: 12px;
       border-radius: 14px;
     }
     tbody tr.jobrow td.jobpreview {
       grid-column: 1;
-      grid-row: 1 / span 2;
+      grid-row: 1;
       padding-top: 2px !important;
     }
     tbody tr.jobrow .jobfile { gap: 0; }
     tbody tr.jobrow .caret2 { display: none; }
     tbody tr.jobrow .folder { width: 22px; height: 22px; }
-    tbody tr.jobrow td.titlecell { grid-column: 2; grid-row: 1 / span 2; }
-    tbody tr.jobrow td.titlecell .t {
+    tbody tr.jobrow td.titlecell { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+    tbody tr.jobrow td.titlecell .t,
+    tbody tr.jobrow td.titlecell .job-open {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       font-size: 14.5px;
       font-weight: 650;
-      line-height: 1.3;
+      line-height: 1.25;
       letter-spacing: -0.01em;
+      text-align: left;
+    }
+    tbody tr.jobrow td.titlecell .t:not(.job-title-split) {
+      padding-right: 104px;
       white-space: normal;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      text-wrap: pretty;
+    }
+    tbody tr.jobrow td.titlecell .t.job-title-split {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      white-space: normal;
+      overflow: visible;
+      -webkit-line-clamp: unset;
+    }
+    tbody tr.jobrow td.titlecell .t-lead {
+      display: block;
+      min-width: 0;
+      padding-right: 104px;
+      box-sizing: border-box;
+      font-size: 14.5px;
+      font-weight: 650;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    tbody tr.jobrow td.titlecell .t-dash { display: none; }
+    tbody tr.jobrow td.titlecell .t-rest {
+      display: block;
+      min-width: 0;
+      padding-right: 104px;
+      box-sizing: border-box;
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: 0;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     tbody tr.jobrow .job-card-meta {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 5px 8px;
-      margin-top: 6px;
+      margin-top: 8px;
     }
     tbody tr.jobrow .job-card-meta .chip { padding: 2px 7px; font-size: 11px; }
     tbody tr.jobrow .job-card-sep { color: var(--muted); font-size: 12px; line-height: 1.3; }
@@ -3100,6 +3152,26 @@
   }
 
   /**
+   * Job files are named "site — work". On a phone the em-dash wrap left a
+   * leftover word under a two-line block; splitting at that separator keeps
+   * the site on one line and the work as a quieter second line.
+   */
+  function splitJobTitle(name) {
+    var text = String(name || '').trim();
+    var match = text.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+    if (!match) return { lead: text, rest: '' };
+    return { lead: match[1].trim(), rest: match[2].trim() };
+  }
+
+  function jobTitleMarkup(name) {
+    var parts = splitJobTitle(name);
+    if (!parts.rest) return esc(parts.lead);
+    return '<span class="t-lead">' + esc(parts.lead) + '</span>' +
+      '<span class="t-dash"> — </span>' +
+      '<span class="t-rest">' + esc(parts.rest) + '</span>';
+  }
+
+  /**
    * A job file's header row — same five columns as a clip, so the folder
    * icon, name, recording status, latest date, and latest uploader line up.
    */
@@ -3120,10 +3192,12 @@
     var uploader = latestUpload
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
       : '—';
-    var nameInner = esc(job.name);
+    var titleParts = splitJobTitle(job.name);
+    var nameInner = jobTitleMarkup(job.name);
+    var titleClass = 't fname' + (titleParts.rest ? ' job-title-split' : '');
     var nameCell = canOpenJobRecord(key)
-      ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
-      : '<div class="t fname">' + nameInner + '</div>';
+      ? '<button type="button" class="' + titleClass + ' job-open" title="' + esc(job.name) + '">' + nameInner + '</button>'
+      : '<div class="' + titleClass + '" title="' + esc(job.name) + '">' + nameInner + '</div>';
     var acts =
       '<span class="job-acts">' +
         '<button type="button" class="job-act" data-job-act="invite" title="Invite people" aria-label="Invite people to ' + esc(job.name) + '">' +

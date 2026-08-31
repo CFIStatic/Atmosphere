@@ -95,7 +95,43 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('tbody tr.jobrow td.job-status');
     expect(verifierHtml).toContain('display: none !important');
     expect(verifierHtml).toContain('-webkit-line-clamp: 2');
+    expect(verifierHtml).toContain('job-title-split');
+    expect(verifierHtml).toContain('tbody tr.jobrow td.titlecell .t-lead');
+    expect(verifierHtml).toContain('tbody tr.jobrow td.titlecell .t-rest');
+    expect(verifierHtml).toContain('padding-right: 104px');
+    expect(verifierHtml).not.toContain('padding: 12px 116px 12px 12px');
     expect(verifierHtml).not.toContain('tbody tr, tr.jobrow {\n      margin: 0 0 10px');
+  });
+
+  it('splits Site — work job names for the phone card title', () => {
+    const start = verifierHtml.indexOf('function splitJobTitle(name)');
+    const end = verifierHtml.indexOf('function jobTitleMarkup(name)');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const { splitJobTitle } = new Function(
+      `${verifierHtml.slice(start, end)}; return { splitJobTitle };`,
+    )() as { splitJobTitle: (name: string) => { lead: string; rest: string } };
+
+    expect(splitJobTitle('Camden Court — HOA clubhouse rebuild')).toEqual({
+      lead: 'Camden Court',
+      rest: 'HOA clubhouse rebuild',
+    });
+    expect(splitJobTitle('Cedar Ridge — storm damage, roof tarp + rebuild')).toEqual({
+      lead: 'Cedar Ridge',
+      rest: 'storm damage, roof tarp + rebuild',
+    });
+    expect(splitJobTitle('Meridian Ave - water loss, Class 3')).toEqual({
+      lead: 'Meridian Ave',
+      rest: 'water loss, Class 3',
+    });
+    expect(splitJobTitle('Clubhouse-rebuild')).toEqual({
+      lead: 'Clubhouse-rebuild',
+      rest: '',
+    });
+    expect(splitJobTitle('Copy of Cedar Ridge — storm — phase 2')).toEqual({
+      lead: 'Copy of Cedar Ridge',
+      rest: 'storm — phase 2',
+    });
   });
 
   it('loads the org library with the Field Capture Bearer token', () => {
