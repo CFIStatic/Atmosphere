@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config.js';
@@ -6,6 +7,8 @@ import { assistantSchema } from '../lib/validation.js';
 import { assistantEnabled, generateReply } from '../lib/assistant.js';
 import { transcribeAudio, transcriptionEnabled } from '../lib/transcription.js';
 import { badRequest } from '../lib/errors.js';
+import { requireOrgContext } from '../lib/orgContext.js';
+import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 
 /**
  * The technician app's server surface.
@@ -63,7 +66,21 @@ technicianRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { message, history, context } = assistantSchema.parse(req.body);
-      const { reply, model } = await generateReply(message, history, context);
+      const { reply, model, usage } = await generateReply(message, history, context);
+      try {
+        const { orgId, userId, supabase } = await requireOrgContext(req);
+        recordMeasuredTokenUsage(supabase, {
+          orgId,
+          requestId: `chat:${randomUUID()}`,
+          feature: 'chat',
+          source: 'technician_assist',
+          userId,
+          modelId: model,
+          usage,
+        });
+      } catch {
+        /* Field capture can talk before the org membership is fully loaded. */
+      }
       res.json({ reply, model });
     } catch (err) {
       next(err);

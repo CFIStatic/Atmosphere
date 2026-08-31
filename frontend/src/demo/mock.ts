@@ -35,6 +35,7 @@ import type {
   PmSettingsResponse,
   Profile,
   TechnicianCapabilities,
+  TokenUsageReport,
   UsageDay,
   UsageEvent,
   Verification,
@@ -435,6 +436,134 @@ const USAGE_DAYS: UsageDay[] = Array.from({ length: 14 }, (_, i) => {
     priceNanos: events * 235_000_000,
   };
 });
+
+const zeroTokens = () => ({
+  events: 0, inputTokens: 0, outputTokens: 0, cacheTokens: 0, totalTokens: 0, priceNanos: 0,
+});
+
+const TOKEN_USAGE = (): TokenUsageReport => {
+  const days = USAGE_DAYS.map((row) => {
+    const video = Math.round(row.inputTokens * 0.62);
+    const chat = Math.round(row.inputTokens * 0.24);
+    const ask = Math.max(0, row.inputTokens + row.outputTokens + row.cacheTokens - video - chat);
+    const total = video + chat + ask;
+    return {
+      day: row.day,
+      events: row.events,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheTokens: row.cacheTokens,
+      totalTokens: total,
+      priceNanos: row.priceNanos,
+      byFeature: {
+        video_analysis: { ...zeroTokens(), events: Math.round(row.events * 0.45), totalTokens: video, priceNanos: Math.round(row.priceNanos * 0.58) },
+        chat: { ...zeroTokens(), events: Math.round(row.events * 0.35), totalTokens: chat, priceNanos: Math.round(row.priceNanos * 0.27) },
+        ask: { ...zeroTokens(), events: Math.max(0, row.events - Math.round(row.events * 0.8)), totalTokens: ask, priceNanos: Math.round(row.priceNanos * 0.15) },
+        other: zeroTokens(),
+      },
+    };
+  });
+  const totals = days.reduce(
+    (acc, day) => ({
+      events: acc.events + day.events,
+      inputTokens: acc.inputTokens + day.inputTokens,
+      outputTokens: acc.outputTokens + day.outputTokens,
+      cacheTokens: acc.cacheTokens + day.cacheTokens,
+      totalTokens: acc.totalTokens + day.totalTokens,
+      priceNanos: acc.priceNanos + day.priceNanos,
+    }),
+    zeroTokens(),
+  );
+  const feature = (key: 'video_analysis' | 'chat' | 'ask') =>
+    days.reduce(
+      (acc, day) => ({
+        events: acc.events + day.byFeature[key].events,
+        inputTokens: acc.inputTokens,
+        outputTokens: acc.outputTokens,
+        cacheTokens: acc.cacheTokens,
+        totalTokens: acc.totalTokens + day.byFeature[key].totalTokens,
+        priceNanos: acc.priceNanos + day.byFeature[key].priceNanos,
+      }),
+      zeroTokens(),
+    );
+  return {
+    periodStart: '2026-08-01T00:00:00Z',
+    periodEnd: '2026-09-01T00:00:00Z',
+    range: 'period',
+    totals,
+    byFeature: [
+      { feature: 'video_analysis', ...feature('video_analysis') },
+      { feature: 'chat', ...feature('chat') },
+      { feature: 'ask', ...feature('ask') },
+      { feature: 'other', ...zeroTokens() },
+    ],
+    byDay: days,
+    byEmployee: [
+      {
+        userId: 'demo-user-1',
+        name: 'Elena Ortiz',
+        email: 'elena@ortizrestoration.com',
+        role: 'global_admin',
+        roleLabel: 'Global Admin',
+        events: 186,
+        inputTokens: Math.round(totals.inputTokens * 0.58),
+        outputTokens: Math.round(totals.outputTokens * 0.55),
+        cacheTokens: Math.round(totals.cacheTokens * 0.5),
+        totalTokens: Math.round(totals.totalTokens * 0.56),
+        priceNanos: Math.round(totals.priceNanos * 0.56),
+        byFeature: {
+          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.38) },
+          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.1) },
+          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.08) },
+          other: zeroTokens(),
+        },
+      },
+      {
+        userId: 'demo-user-2',
+        name: 'Marcus Chen',
+        email: 'marcus@ortizrestoration.com',
+        role: 'employee',
+        roleLabel: 'Employee',
+        events: 94,
+        inputTokens: Math.round(totals.inputTokens * 0.27),
+        outputTokens: Math.round(totals.outputTokens * 0.3),
+        cacheTokens: Math.round(totals.cacheTokens * 0.3),
+        totalTokens: Math.round(totals.totalTokens * 0.28),
+        priceNanos: Math.round(totals.priceNanos * 0.28),
+        byFeature: {
+          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.12) },
+          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.1) },
+          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.06) },
+          other: zeroTokens(),
+        },
+      },
+      {
+        userId: 'demo-user-3',
+        name: 'Priya Shah',
+        email: 'priya@ortizrestoration.com',
+        role: 'employee',
+        roleLabel: 'Employee',
+        events: 42,
+        inputTokens: Math.round(totals.inputTokens * 0.15),
+        outputTokens: Math.round(totals.outputTokens * 0.15),
+        cacheTokens: Math.round(totals.cacheTokens * 0.2),
+        totalTokens: Math.round(totals.totalTokens * 0.16),
+        priceNanos: Math.round(totals.priceNanos * 0.16),
+        byFeature: {
+          video_analysis: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.08) },
+          chat: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.05) },
+          ask: { ...zeroTokens(), totalTokens: Math.round(totals.totalTokens * 0.03) },
+          other: zeroTokens(),
+        },
+      },
+    ],
+    recent: [
+      { id: 'tu-1', createdAt: '2026-08-01T16:12:00Z', feature: 'video_analysis', source: 'video_analysis', modelId: 'gemini-2.5-pro', userId: 'demo-user-1', userName: 'Elena Ortiz', inputTokens: 18400, outputTokens: 2100, cacheTokens: 0, totalTokens: 20500, priceNanos: 620_000_000 },
+      { id: 'tu-2', createdAt: '2026-08-01T15:40:00Z', feature: 'ask', source: 'proof_ask', modelId: 'claude-sonnet', userId: 'demo-user-2', userName: 'Marcus Chen', inputTokens: 2400, outputTokens: 480, cacheTokens: 800, totalTokens: 3680, priceNanos: 94_000_000 },
+      { id: 'tu-3', createdAt: '2026-08-01T14:05:00Z', feature: 'chat', source: 'technician_assist', modelId: 'claude-sonnet', userId: 'demo-user-3', userName: 'Priya Shah', inputTokens: 860, outputTokens: 140, cacheTokens: 0, totalTokens: 1000, priceNanos: 28_000_000 },
+    ],
+  };
+};
 
 /* --------------------------------------------------------------------- pm */
 
@@ -2098,6 +2227,7 @@ const routes: Array<[string, RegExp, Handler]> = [
 
   ['GET', /^\/api\/usage\/events$/, () => ({ body: { events: USAGE_EVENTS } })],
   ['GET', /^\/api\/usage\/daily$/, () => ({ body: { days: USAGE_DAYS } })],
+  ['GET', /^\/api\/billing\/token-usage$/, () => ({ body: TOKEN_USAGE() })],
 
   ['GET', /^\/api\/pm\/overview$/, () => ({ body: PM_OVERVIEW })],
   ['GET', /^\/api\/pm\/settings$/, () => ({ body: PM_SETTINGS_RESPONSE })],

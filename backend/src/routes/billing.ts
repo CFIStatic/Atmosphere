@@ -3,11 +3,12 @@ import { createAnonClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
-import { HttpError, badRequest } from '../lib/errors.js';
+import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import { ensureCustomer, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
 import {
   billingError,
   serializeBalance,
@@ -466,6 +467,37 @@ billingRouter.get('/workspace', async (req: Request, res: Response, next: NextFu
   try {
     const supabase = createUserClient(req.accessToken!);
     res.json(await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const TOKEN_USAGE_RANGES = new Set<TokenUsageRange>(['period', '30d', '90d']);
+
+/**
+ * GET /api/billing/token-usage
+ *
+ * Org-wide token meter plus a per-employee breakdown. Global Admins only —
+ * employees do not see Settings → Billing.
+ *
+ * `range=period` (default) is the current Stripe / org billing period.
+ * `30d` and `90d` are rolling windows for the usage graph.
+ */
+billingRouter.get('/token-usage', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const { data: overview, error } = await supabase.rpc('billing_overview', { p_org: req.orgId });
+    if (error) throw billingError(error);
+    if (!(overview as { can_manage?: boolean } | null)?.can_manage) {
+      throw forbidden('Only a Global Admin can view token usage.', 'billing_forbidden');
+    }
+
+    const raw = typeof req.query.range === 'string' ? req.query.range : 'period';
+    const range: TokenUsageRange = TOKEN_USAGE_RANGES.has(raw as TokenUsageRange)
+      ? (raw as TokenUsageRange)
+      : 'period';
+
+    res.json(await loadTokenUsageReport(supabase, req.orgId!, range));
   } catch (err) {
     next(err);
   }

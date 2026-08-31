@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
@@ -461,6 +463,17 @@ async function settleClipQuestion(opts: {
     question: opts.question,
     record,
     history: opts.history,
+  });
+
+  recordMeasuredTokenUsage(opts.client, {
+    orgId: opts.orgId,
+    requestId: `ask:${opts.proofId}:${randomUUID()}`,
+    feature: 'ask',
+    source: 'clip_ask',
+    userId: opts.askedBy ?? null,
+    jobId: opts.jobId,
+    modelId: result.model,
+    usage: result.usage,
   });
 
   try {

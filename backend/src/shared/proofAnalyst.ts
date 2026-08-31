@@ -1,4 +1,9 @@
-import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
+import {
+  anthropicClient,
+  isModelProviderConfigured,
+  tryExtractUsage,
+  type MeasuredUsage,
+} from '../lib/anthropic.js';
 import { config } from '../config.js';
 
 /**
@@ -567,7 +572,7 @@ export async function answerFromProofs(input: {
   question: string;
   days?: Array<{ workDate: string; summary: string; changes: string[]; concerns: string[] }>;
   clips?: CollectionClip[];
-}): Promise<{ answer: string; model: string | null } | null> {
+}): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null } | null> {
   const clips: CollectionClip[] =
     input.clips ??
     (input.days ?? []).map((day) => ({
@@ -581,11 +586,12 @@ export async function answerFromProofs(input: {
     return {
       answer: 'Nothing has been filed for this job yet, so there is nothing to answer from.',
       model: null,
+      usage: null,
     };
   }
 
   if (!isModelProviderConfigured()) {
-    return { answer: groundedCollectionAnswer(input.question, clips), model: null };
+    return { answer: groundedCollectionAnswer(input.question, clips), model: null, usage: null };
   }
 
   const record = formatCollectionRecord(clips);
@@ -607,5 +613,7 @@ export async function answerFromProofs(input: {
     .join('\n')
     .trim();
 
-  return answer ? { answer, model: response.model } : null;
+  return answer
+    ? { answer, model: response.model, usage: tryExtractUsage(response.usage) }
+    : null;
 }

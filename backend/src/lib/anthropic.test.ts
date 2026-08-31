@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractUsage } from './anthropic.js';
+import { cacheTokensOf, extractUsage, tryExtractUsage } from './anthropic.js';
 
 /**
  * These assertions guard revenue. Every case here is a way the provider's usage
@@ -91,5 +91,11 @@ describe('extractUsage', () => {
     assert.throws(() => extractUsage(undefined), /missing usage|no usage/i);
     assert.throws(() => extractUsage({ input_tokens: -5, output_tokens: 0 }), /invalid/i);
     assert.throws(() => extractUsage({ input_tokens: 'lots', output_tokens: 0 }), /invalid/i);
+  });
+
+  it('tryExtractUsage returns zeros instead of throwing', () => {
+    const usage = tryExtractUsage(null);
+    assert.equal(usage.totalTokens, 0);
+    assert.equal(cacheTokensOf(usage), 0);
   });
 });
