@@ -33,7 +33,7 @@ import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '
  * Field Capture's Platform tab is a 480px iframe. The proof chain is five
  * stages, so it stays a five-column strip — wrapping to two columns leaves a
  * hole and wastes the height a phone does not have. Queue rows stay to two
- * lines; the list fills the leftover frame and scrolls inside the card.
+ * lines so several files are on screen before the page scrolls.
  */
 
 const TONE: Record<(typeof ACTION_META)[keyof typeof ACTION_META]['tone'], string> = {
@@ -79,7 +79,7 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   return (
     <div
       data-testid="company-overview"
-      className={phone ? 'flex min-h-0 flex-1 flex-col' : undefined}
+      className={phone ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : undefined}
     >
       <div className={cn('min-w-0', phone && 'shrink-0')}>
         <p className="text-xs font-medium text-brand-600 sm:text-sm">Overview</p>
@@ -106,19 +106,9 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
         compact={phone}
       />
 
-      <div
-        className={
-          phone
-            ? 'mt-3 flex min-h-0 flex-1 flex-col overflow-hidden'
-            : 'mt-6 grid gap-4 lg:grid-cols-3'
-        }
-      >
+      <div className={phone ? 'mt-3 min-w-0' : 'mt-6 grid gap-4 lg:grid-cols-3'}>
         <section
-          className={
-            phone
-              ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl glass-card'
-              : 'rounded-xl glass-card lg:col-span-2'
-          }
+          className="rounded-xl glass-card lg:col-span-2"
           aria-label="Do this next"
         >
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-3 py-3 sm:items-baseline sm:px-5 sm:py-4">
@@ -141,9 +131,7 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
               Start a job
             </Link>
           </header>
-          <div className={phone ? 'min-h-0 flex-1 overflow-y-auto' : undefined}>
-            <ActionList model={model} loaded={loaded} stage={stage} compact={phone} />
-          </div>
+          <ActionList model={model} loaded={loaded} stage={stage} compact={phone} />
         </section>
 
         {!phone && (
@@ -199,7 +187,7 @@ function PipelineStrip({
               aria-label={bucket.label}
               aria-pressed={active}
               title={bucket.hint}
-              className={`min-w-0 rounded-lg px-1.5 py-2 text-left transition sm:px-3 sm:py-2.5 ${
+              className={`min-w-0 rounded-lg px-1 py-2 text-center transition sm:px-3 sm:py-2.5 sm:text-left ${
                 active
                   ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20'
                   : 'bg-paper-200/70 text-ink-900 hover:bg-paper-200'
@@ -309,19 +297,40 @@ function ActionRow({ action, compact }: { action: OverviewAction; compact: boole
           }`}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
             {action.jobNumber != null && (
               <span className="shrink-0 font-mono text-xs text-ink-500">#{action.jobNumber}</span>
             )}
-            <span className="min-w-0 truncate text-sm font-semibold text-ink-900">{action.title}</span>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
-              {meta.label}
+            <span
+              className={
+                compact
+                  ? 'min-w-0 text-sm font-semibold leading-snug text-ink-900 line-clamp-2'
+                  : 'min-w-0 truncate text-sm font-semibold text-ink-900'
+              }
+            >
+              {action.title}
             </span>
+            {!compact && (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
+                {meta.label}
+              </span>
+            )}
           </div>
-          <p className="mt-0.5 truncate text-[13px] text-ink-700">{action.headline}</p>
-          {!compact && <p className="mt-0.5 text-[13px] text-ink-500">{action.detail}</p>}
-          {!compact && action.notes.length > 0 && (
-            <p className="mt-1 truncate text-xs text-ink-400">{action.notes.join(' · ')}</p>
+          {compact ? (
+            <div className="mt-1 flex min-w-0 items-center gap-2">
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
+                {meta.label}
+              </span>
+              <p className="min-w-0 truncate text-[13px] text-ink-700">{action.headline}</p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-0.5 truncate text-[13px] text-ink-700">{action.headline}</p>
+              <p className="mt-0.5 text-[13px] text-ink-500">{action.detail}</p>
+              {action.notes.length > 0 && (
+                <p className="mt-1 truncate text-xs text-ink-400">{action.notes.join(' · ')}</p>
+              )}
+            </>
           )}
         </div>
         <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-brand-600">
