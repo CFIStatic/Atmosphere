@@ -456,6 +456,11 @@ type IntakeAddress = {
   row: Record<string, unknown>;
 };
 
+type ResolveIntakeOptions = {
+  /** Field Capture has no Places picker — keep the typed line if lookup misses. */
+  allowTypedFallback?: boolean;
+};
+
 async function resolveIntakeAddress(
   orgId: string,
   input: {
@@ -464,6 +469,7 @@ async function resolveIntakeAddress(
     postalCode?: string;
     placeId?: string;
   },
+  options?: ResolveIntakeOptions,
 ): Promise<IntakeAddress> {
   const parsed = cityPostalFromAddress(input.address);
   const resolved = await resolvePlace({
@@ -480,7 +486,7 @@ async function resolveIntakeAddress(
       row,
     };
   }
-  if (placesProvider() === 'google') {
+  if (placesProvider() === 'google' && !options?.allowTypedFallback) {
     throw new HttpError(
       400,
       'Search for the site address and pick it from the Google results.',
@@ -505,8 +511,9 @@ export async function createJobFile(
   orgId: string,
   userId: string,
   input: z.infer<typeof approveSchema>,
+  options?: ResolveIntakeOptions,
 ): Promise<CreatedJobFile> {
-  const site = await resolveIntakeAddress(orgId, input);
+  const site = await resolveIntakeAddress(orgId, input, options);
   const scopeLines = scopeLinesForDb(input);
   const jobTitle = jobTitleForIntake(input.title, site.line);
   const invitees = input.invitees.map((person) => ({
@@ -525,6 +532,10 @@ export async function createJobFile(
     p_address: site.line,
     p_city: site.city ?? null,
     p_postal_code: site.postalCode ?? null,
+    p_region: (site.row.region as string | null | undefined) ?? input.region ?? null,
+    p_country: (site.row.country as string | null | undefined) ?? input.country ?? null,
+    p_latitude: (site.row.latitude as number | null | undefined) ?? input.latitude ?? null,
+    p_longitude: (site.row.longitude as number | null | undefined) ?? input.longitude ?? null,
     p_claim_number: input.claimNumber ?? null,
     p_brief_note: input.briefNote ?? null,
     p_facts: input.facts ?? {},

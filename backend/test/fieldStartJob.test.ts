@@ -76,6 +76,15 @@ test('intakeFromFieldStart maps the phone form onto the office job file', () => 
   assert.equal(addressOnly.facts.Source, 'Field Capture — address only');
 });
 
+test('intake RPC writes resolved country and coordinates', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/routes/jobIntake.ts', import.meta.url), 'utf8');
+  assert.match(src, /p_region:/);
+  assert.match(src, /p_country:/);
+  assert.match(src, /p_latitude:/);
+  assert.match(src, /p_longitude:/);
+});
+
 test('situation helpers match office intake', () => {
   assert.deepEqual(scopeFromSituation('  Extract standing water.  '), [
     { title: 'Extract standing water.', state: 'included' },

@@ -207,9 +207,8 @@ export function JobIntakePage() {
         resolvedLng = lookedUp.address.lng;
         resolvedLine = lookedUp.address.formatted || lookedUp.address.addressLine1 || resolvedLine;
       } catch {
-        setBusy(false);
-        setError('Search for the site address and pick it from the Google results.');
-        return;
+        // OSM / no-key still accepts the typed line. Google rejects on the server
+        // if lookup cannot complete.
       }
     }
     const proposal = buildProposal();

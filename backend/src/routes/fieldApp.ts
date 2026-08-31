@@ -383,7 +383,9 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = fieldStartJobSchema.parse(req.body ?? {});
-    const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input));
+    const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input), {
+      allowTypedFallback: true,
+    });
     const jobId = created.job.id;
     const address = [input.address, input.city, input.postalCode]
       .map((part) => (part ?? '').trim())
