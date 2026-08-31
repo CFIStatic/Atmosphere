@@ -52,6 +52,7 @@ export function progressShareEmail(input: {
 
   const html = `<!DOCTYPE html>
 <html lang="en">
+<head><meta charset="utf-8" /></head>
 <body style="margin:0;padding:0;background:#f4f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f1ea;padding:32px 16px;">
     <tr><td align="center">

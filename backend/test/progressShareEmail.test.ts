@@ -21,6 +21,7 @@ test('progressShareEmail — job file and recordings, no account required', () =
   assert.match(text, /No account is required/i);
   assert.match(text, /every recording/i);
   assert.match(text, /expire on 2026-10-01/i);
+  assert.match(html, /charset="utf-8"/);
   assert.match(html, /View job file/);
   assert.match(html, /Ask this job/);
   assert.match(html, /https:\/\/app\.atmosphere\.example\/progress\/tok123"/);
