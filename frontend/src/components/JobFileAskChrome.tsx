@@ -33,11 +33,11 @@ export function JobFileAskChrome({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
+      className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden"
       data-testid="job-file"
     >
       {phone ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex h-full min-h-0 flex-1 flex-col">
           {back && (
             <div className="shrink-0 border-b border-line bg-paper-0 px-3 pt-2">{back}</div>
           )}
@@ -48,14 +48,22 @@ export function JobFileAskChrome({
               { value: 'file', label: 'File' },
               { value: 'ask', label: 'Ask' },
             ]}
-            className="flex min-h-0 flex-1 flex-col px-3"
+            className="flex h-full min-h-0 flex-1 flex-col px-3"
           >
-            <TabPanel value="file" className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none">
+            {/*
+              Do not put a bare `flex` utility on these panels. Tailwind's
+              display:flex overrides the HTML hidden attribute Radix uses for
+              the inactive tab, so File and Ask each take half the phone frame.
+            */}
+            <TabPanel
+              value="file"
+              className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none data-[state=inactive]:hidden"
+            >
               {children}
             </TabPanel>
             <TabPanel
               value="ask"
-              className="flex min-h-0 flex-1 flex-col outline-none"
+              className="min-h-0 flex-1 flex-col outline-none data-[state=active]:flex data-[state=inactive]:hidden"
               aria-label="Ask this job"
               data-testid="job-file-ask"
             >
