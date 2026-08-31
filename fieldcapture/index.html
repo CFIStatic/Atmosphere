@@ -501,18 +501,23 @@
   .lrow .ok { color: var(--pass); font-weight: 700; margin-left: auto; }
   .lrow em { color: var(--ink); font-style: normal; }
   .doneline {
-    margin-top: 16px; padding: 13px 15px; border-radius: 11px;
+    display: none; margin-top: 16px; padding: 13px 15px; border-radius: 11px;
     background: var(--pass-soft); color: var(--pass); font-size: 13.5px; font-weight: 650;
-    opacity: 0;
   }
-  .doneline.on { opacity: 1; transition: opacity .4s; }
+  .doneline.on { display: block; }
   .doneline small { display: block; font-weight: 500; font-size: 12px; margin-top: 3px; opacity: .85; }
-  .donebtn {
-    display: block; width: 100%; margin-top: 16px; padding: 15px;
-    border: 0; border-radius: 12px; background: var(--ink); color: var(--bg);
-    font-size: 15px; font-weight: 700; opacity: 0;
+  .door-actions {
+    display: flex; flex-direction: column; gap: 10px; margin-top: 16px;
   }
-  .donebtn.on { opacity: 1; transition: opacity .4s; }
+  .donebtn, .retrybtn {
+    display: none; width: 100%; padding: 15px;
+    border: 0; border-radius: 12px; background: var(--ink); color: var(--bg);
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .donebtn.on, .retrybtn.on { display: block; }
+  .retrybtn {
+    background: transparent; color: var(--ink); border: 1px solid var(--line);
+  }
 
   .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
 
@@ -929,9 +934,12 @@
 
       <div class="doneline" id="doneline">
         Your part is done.
-        <small>You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
+        <small id="doneline-copy">You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
-      <button class="donebtn" id="donebtn">Back to today</button>
+      <div class="door-actions" id="door-actions">
+        <button type="button" class="retrybtn" id="retrybtn">Retry upload</button>
+        <button type="button" class="donebtn" id="donebtn">Back to Home Screen</button>
+      </div>
     </div>
   </div>
 
@@ -971,7 +979,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=places"></script>
-<script src="js/app.js?v=places"></script>
+<script src="js/capture-core.js?v=home-door"></script>
+<script src="js/app.js?v=home-door"></script>
 </body>
 </html>

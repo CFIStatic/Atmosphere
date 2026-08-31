@@ -90,7 +90,7 @@ struct DoorView: View {
                 .padding(18)
             }
 
-            Button("Back to today") {
+            Button("Back to Home Screen") {
                 session.backToToday()
             }
             .font(.system(size: 16, weight: .bold))
