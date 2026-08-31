@@ -88,7 +88,7 @@ const profile = (): Profile => ({
 });
 
 const membership = (): Membership => ({
-  role: 'project_manager',
+  role: 'global_admin',
   workType: 'mitigation',
   usageIntents: ['project_management', 'mitigation_estimating', 'billing'],
   status: 'active',
@@ -104,7 +104,7 @@ const membership = (): Membership => ({
 /* ---------------------------------------------------------------- members */
 
 const MEMBERS: OrgMember[] = [
-  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
+  { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'global_admin', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
