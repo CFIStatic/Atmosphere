@@ -330,6 +330,13 @@
     var form = $('#new-job-form');
     if (!form || form.getAttribute('data-bound') === '1') return;
     form.setAttribute('data-bound', '1');
+    ['#new-job-name', '#new-job-address'].forEach(function (sel) {
+      when(sel, function (input) {
+        input.addEventListener('input', function () {
+          showNewJobError('');
+        });
+      });
+    });
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var title = (($('#new-job-name') && $('#new-job-name').value) || '').trim();
