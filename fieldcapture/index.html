@@ -232,7 +232,14 @@
      place on both screens so the hand learns it once: tap it when you get
      to work, hold it when you are done. Everything between those two
      presses is the system's problem, not the crew's. */
-  .recwrap { padding: 6px 18px 26px; margin-top: auto; text-align: center; }
+  .recwrap {
+    padding: 20px 18px 22px;
+    margin-top: auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
   .daybtn {
     position: relative; overflow: hidden;
     width: 100%; padding: 20px 18px;
@@ -733,10 +740,6 @@
         </span>
         <span class="lbl">Start the day</span>
       </button>
-      <p class="rechint" id="btnhint">
-        Your location, clock, video, and microphone ride along with the footage and are checked at
-        the door — that is what makes it proof instead of silent video.
-      </p>
     </div>
   </div>
 

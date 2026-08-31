@@ -150,6 +150,8 @@ assert.match(html, /id="job-search"/);
 assert.match(html, /placeholder="Search jobs"/);
 assert.doesNotMatch(html, /footage carries where it was/);
 assert.doesNotMatch(html, /hold it for 5 seconds when you are done/);
+assert.doesNotMatch(html, /proof instead of silent video/);
+assert.doesNotMatch(html, /id="btnhint"/, 'Start the day no longer carries the proof explainer');
 assert.match(appSrc, /bindJobSearch/);
 assert.match(appSrc, /Core\.filterJobs/);
 assert.deepEqual(
