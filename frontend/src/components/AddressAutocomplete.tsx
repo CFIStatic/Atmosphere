@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { api, type ResolvedPlaceAddress } from '../lib/api';
 
 type Suggestion = {
@@ -17,8 +18,8 @@ function newSessionToken(): string {
 
 /**
  * Site address field backed by the BFF (Google Places when configured,
- * otherwise OpenStreetMap). Suggestions are position:fixed so they stay
- * visible inside the Field Capture Platform iframe.
+ * otherwise OpenStreetMap). The suggestion list is portaled to document.body
+ * so a transformed card or the phone iframe scroller cannot clip or offset it.
  */
 export function AddressAutocomplete({
   value,
@@ -229,35 +230,38 @@ export function AddressAutocomplete({
           Looking up…
         </span>
       )}
-      {showList && listPos && (
-        <ul
-          id={listId}
-          role="listbox"
-          style={{ top: listPos.top, left: listPos.left, width: listPos.width }}
-          className="fixed z-[80] max-h-60 overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
-        >
-          {suggestions.map((s, i) => (
-            <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
-              <button
-                type="button"
-                className={`flex w-full flex-col px-3 py-2 text-left text-sm ${
-                  i === active ? 'bg-brand-50 text-ink-900' : 'text-ink-800 hover:bg-paper-100'
-                }`}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  if (blurTimer.current) window.clearTimeout(blurTimer.current);
-                  void pick(s);
-                }}
-              >
-                <span className="font-medium">{s.mainText}</span>
-                {s.secondaryText ? (
-                  <span className="text-xs text-ink-500">{s.secondaryText}</span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {showList &&
+        listPos &&
+        createPortal(
+          <ul
+            id={listId}
+            role="listbox"
+            style={{ top: listPos.top, left: listPos.left, width: listPos.width }}
+            className="fixed z-[80] max-h-60 overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
+          >
+            {suggestions.map((s, i) => (
+              <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
+                <button
+                  type="button"
+                  className={`flex w-full flex-col px-3 py-2 text-left text-sm ${
+                    i === active ? 'bg-brand-50 text-ink-900' : 'text-ink-800 hover:bg-paper-100'
+                  }`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (blurTimer.current) window.clearTimeout(blurTimer.current);
+                    void pick(s);
+                  }}
+                >
+                  <span className="font-medium">{s.mainText}</span>
+                  {s.secondaryText ? (
+                    <span className="text-xs text-ink-500">{s.secondaryText}</span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
       {configured !== false && !chosen && !hint && !value.trim() && (
         <p className="mt-1 text-[11px] text-ink-500">
           {provider === 'osm'
