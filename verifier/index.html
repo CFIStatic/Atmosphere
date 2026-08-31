@@ -3733,7 +3733,7 @@
     jobSheet.busy = true;
     jobSheet.error = null;
     paintJobFileSheet();
-    if (!canOpenJobRecord(key)) {
+    if (!canOpenJobRecord(key) || !ORG_MODE) {
       applyDeletedJob(key);
       jobSheet.busy = false;
       closeJobFileSheet();
