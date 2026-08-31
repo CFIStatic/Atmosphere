@@ -426,7 +426,9 @@ export function jobFileMatches(
   return haystack.includes(needle);
 }
 
-export function siteLine(record: SharedJobRecord | null): string | null {
+export function siteLine(
+  record: { brief?: { facts?: Record<string, string> | null } | null } | null,
+): string | null {
   const facts = record?.brief?.facts ?? {};
   return (
     facts['Site address'] ||
