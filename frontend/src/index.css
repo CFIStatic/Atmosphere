@@ -3,6 +3,15 @@
 @tailwind utilities;
 
 /*
+ * Keep the HTML hidden attribute authoritative. Tailwind utilities such as
+ * `flex` and `grid` are the same specificity as `[hidden]` and can paint an
+ * inactive Radix tab as a second half-screen pane on the phone.
+ */
+[hidden] {
+  display: none !important;
+}
+
+/*
  * Theme tokens.
  *
  * Every color in tailwind.config.js resolves to one of these variables, stored

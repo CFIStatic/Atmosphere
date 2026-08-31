@@ -1,5 +1,5 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { cn } from './cn';
 
 export interface TabItem {
@@ -24,7 +24,7 @@ export function Tabs({
 }) {
   return (
     <TabsPrimitive.Root value={value} onValueChange={onValueChange} className={className}>
-      <TabsPrimitive.List className="flex gap-1 overflow-x-auto border-b border-line/10">
+      <TabsPrimitive.List className="flex shrink-0 gap-1 overflow-x-auto border-b border-line/10">
         {items.map((item) => (
           <TabsPrimitive.Trigger
             key={item.value}
@@ -51,5 +51,19 @@ export function Tabs({
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const TabPanel = TabsPrimitive.Content;
+/**
+ * Inactive panels must stay `display: none`. A later `flex` / `grid` utility
+ * would otherwise override the HTML hidden attribute and leave both panes
+ * sharing the phone viewport.
+ */
+export function TabPanel({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof TabsPrimitive.Content>) {
+  return (
+    <TabsPrimitive.Content
+      className={cn(className, 'data-[state=inactive]:hidden')}
+      {...props}
+    />
+  );
+}

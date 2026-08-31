@@ -232,6 +232,8 @@ describe('JobDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).toHaveAttribute('hidden');
+    expect(screen.getByTestId('job-file-ask').className.split(/\s+/)).not.toContain('flex');
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Place on legal hold')).not.toBeInTheDocument();

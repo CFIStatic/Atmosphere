@@ -184,6 +184,10 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
+    const ask = screen.getByTestId('job-file-ask');
+    expect(ask).toHaveAttribute('hidden');
+    expect(ask.className.split(/\s+/)).not.toContain('flex');
+    expect(ask.className).toMatch(/data-\[state=active\]:flex/);
 
     await user.click(screen.getByRole('tab', { name: 'Ask' }));
     expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
