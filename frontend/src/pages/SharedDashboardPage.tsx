@@ -9,7 +9,8 @@ import {
   type ScopeState,
   type IntakeCaptureInvite,
 } from '../lib/api';
-import { SpinnerIcon } from '../components/icons';
+import { JobFileAskChrome } from '../components/JobFileAskChrome';
+import { ChevronLeftIcon, SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
@@ -274,15 +275,20 @@ export function SharedDashboardPage() {
 
   if (!stayOnRecord) return null;
 
-  return (
+  const jobId = record?.job.id ?? requestedJob ?? '';
+  const back = (
+    <button
+      type="button"
+      onClick={() => navigate('/field')}
+      className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-ink-500 transition hover:text-ink-800 lg:mb-4"
+    >
+      <ChevronLeftIcon width={16} height={16} />
+      Overview
+    </button>
+  );
+
+  const fileBody = (
     <>
-      <button
-        type="button"
-        onClick={() => navigate('/verifier-library')}
-        className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
-      >
-        ← Dashboard
-      </button>
       <PageHeader
         title={record?.job.title ?? 'Job'}
         description="What is happening on site, what has already been done, and what is still ahead."
@@ -307,9 +313,9 @@ export function SharedDashboardPage() {
                   setSearchParams(next, { replace: true, state: location.state });
                 }
               }}
-              onDuplicated={({ jobId, title: nextTitle, summary }) => {
+              onDuplicated={({ jobId: nextId, title: nextTitle, summary }) => {
                 ensureListed(summary);
-                navigate(jobFilePath(jobId, { title: nextTitle }), {
+                navigate(jobFilePath(nextId, { title: nextTitle }), {
                   state: { freshJob: summary },
                 });
               }}
@@ -435,20 +441,31 @@ export function SharedDashboardPage() {
                 </details>
           </div>
 
-          {shareFormOpen && (
-            <ShareJobProgressPanel
-              jobId={record.job.id}
-              creating
-              modal
-              onClose={() => setShareFormOpen(false)}
-              onCreatingChange={setShareFormOpen}
-            />
-          )}
         </>
       ) : (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
       )}
     </>
+  );
+
+  return (
+    <JobFileAskChrome
+      jobId={jobId}
+      back={back}
+      extra={
+        shareFormOpen && record ? (
+          <ShareJobProgressPanel
+            jobId={record.job.id}
+            creating
+            modal
+            onClose={() => setShareFormOpen(false)}
+            onCreatingChange={setShareFormOpen}
+          />
+        ) : null
+      }
+    >
+      {fileBody}
+    </JobFileAskChrome>
   );
 }
 

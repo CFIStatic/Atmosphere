@@ -16,6 +16,10 @@ describe('office rail routes', () => {
     expect(shell).toContain('path="/intake"');
     expect(shell).toContain('path="/verifier-library"');
     expect(shell).toContain('path="/jobs"');
+    expect(shell).toContain('JobFileFromProfileRedirect');
+    expect(shell).toContain('path="/job-progress"');
+    expect(shell).toContain('element={<SharedDashboardPage />}');
+    expect(shell).not.toContain('element={<JobDetailPage />}');
   });
 
   it('does not put a Field Capture / Platform bar on the office console', () => {
@@ -30,6 +34,7 @@ describe('office rail routes', () => {
 describe('isJobFilePath', () => {
   it('treats a job profile as a full-height file, not the Job Files list', () => {
     expect(isJobFilePath('/jobs/job-1038')).toBe(true);
+    expect(isJobFilePath('/job-progress')).toBe(true);
     expect(isJobFilePath('/jobs')).toBe(false);
     expect(isJobFilePath('/field')).toBe(false);
   });

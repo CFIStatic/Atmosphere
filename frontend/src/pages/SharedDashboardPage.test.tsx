@@ -12,6 +12,16 @@ vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
 }));
 
+const usePhoneShell = vi.fn(() => false);
+
+vi.mock('../lib/usePhoneShell', () => ({
+  usePhoneShell: () => usePhoneShell(),
+}));
+
+vi.mock('../components/JobAskPanel', () => ({
+  JobAskPanel: () => <h2>Ask this job</h2>,
+}));
+
 vi.mock('../components/shared/JobProgressDashboard', () => ({
   JobProgressDashboard: () => <div>Job progress</div>,
 }));
@@ -79,6 +89,7 @@ const record = {
 
 describe('SharedDashboardPage job file identity', () => {
   beforeEach(() => {
+    usePhoneShell.mockReturnValue(false);
     sharedJobs.mockReset();
     sharedJob.mockReset();
     renameJobFile.mockReset();
@@ -126,5 +137,41 @@ describe('SharedDashboardPage job file identity', () => {
       expect(renameJobFile).toHaveBeenCalledWith('job-1038', 'Cedar Ridge kitchen rebuild');
     });
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge kitchen rebuild' })).toBeInTheDocument();
+  });
+
+  it('pins Ask on the job file so Overview and Job Files share the same chat', async () => {
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    const ask = screen.getByTestId('job-file-ask');
+    expect(ask).toHaveAttribute('aria-label', 'Ask this job');
+    expect(ask.className).toMatch(/lg:h-full/);
+    expect(ask.className).toMatch(/lg:w-\[min\(32rem,42%\)\]/);
+    expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
+    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Overview/ })).toBeInTheDocument();
+  });
+
+  it('uses File and Ask tabs on a phone so chat is not buried under the file', async () => {
+    usePhoneShell.mockReturnValue(true);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Ask' }));
+    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
   });
 });

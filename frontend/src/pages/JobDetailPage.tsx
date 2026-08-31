@@ -10,12 +10,10 @@ import {
   type SharedJobRecord,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
-import { JobAskPanel } from '../components/JobAskPanel';
+import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ChevronLeftIcon, ShareIcon } from '../components/icons';
-import { TabPanel, Tabs } from '../design/Tabs';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
-import { usePhoneShell } from '../lib/usePhoneShell';
 import {
   buildJobFileDossier,
   filePulse,
@@ -33,19 +31,15 @@ import { touchJobFile } from '../lib/jobFileRecents';
  * is first-class instead of buried under the dossier.
  */
 
-type JobFilePane = 'file' | 'ask';
-
 export function JobDetailPage() {
   useFeatureTimer('job_detail');
   const { id = '' } = useParams();
-  const phone = usePhoneShell();
   const [job, setJob] = useState<Job | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const [pane, setPane] = useState<JobFilePane>('file');
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,10 +66,6 @@ export function JobDetailPage() {
 
   useEffect(() => {
     if (id) touchJobFile(id);
-  }, [id]);
-
-  useEffect(() => {
-    setPane('file');
   }, [id]);
 
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
@@ -223,77 +213,35 @@ export function JobDetailPage() {
     </>
   );
 
-  return (
-    <div
-      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
-      data-testid="job-file"
+  const back = (
+    <Link
+      to="/jobs"
+      className="mb-2 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800 lg:mb-4"
     >
-      {phone ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-line bg-paper-0 px-3 pt-2">
-            <Link
-              to="/jobs"
-              className="mb-2 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
-            >
-              <ChevronLeftIcon width={16} height={16} />
-              Job Files
-            </Link>
-          </div>
-          <Tabs
-            value={pane}
-            onValueChange={(value) => setPane(value as JobFilePane)}
-            items={[
-              { value: 'file', label: 'File' },
-              { value: 'ask', label: 'Ask' },
-            ]}
-            className="flex min-h-0 flex-1 flex-col px-3"
-          >
-            <TabPanel value="file" className="min-h-0 flex-1 overflow-y-auto px-1 py-4 outline-none">
-              {fileBody}
-            </TabPanel>
-            <TabPanel
-              value="ask"
-              className="flex min-h-0 flex-1 flex-col outline-none"
-              aria-label="Ask this job"
-              data-testid="job-file-ask"
-            >
-              <JobAskPanel jobId={job.id} file={file} fill />
-            </TabPanel>
-          </Tabs>
-        </div>
-      ) : (
-        <>
-          <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-            <Link
-              to="/jobs"
-              className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
-            >
-              <ChevronLeftIcon width={16} height={16} />
-              Job Files
-            </Link>
-            {fileBody}
-          </div>
+      <ChevronLeftIcon width={16} height={16} />
+      Job Files
+    </Link>
+  );
 
-          <aside
-            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
-            aria-label="Ask this job"
-            data-testid="job-file-ask"
-          >
-            <JobAskPanel jobId={job.id} file={file} fill />
-          </aside>
-        </>
-      )}
-
-      {shareOpen && (
-        <ShareJobProgressPanel
-          jobId={job.id}
-          creating
-          modal
-          onClose={() => setShareOpen(false)}
-          onCreatingChange={setShareOpen}
-        />
-      )}
-    </div>
+  return (
+    <JobFileAskChrome
+      jobId={job.id}
+      file={file}
+      back={back}
+      extra={
+        shareOpen ? (
+          <ShareJobProgressPanel
+            jobId={job.id}
+            creating
+            modal
+            onClose={() => setShareOpen(false)}
+            onCreatingChange={setShareOpen}
+          />
+        ) : null
+      }
+    >
+      {fileBody}
+    </JobFileAskChrome>
   );
 }
 

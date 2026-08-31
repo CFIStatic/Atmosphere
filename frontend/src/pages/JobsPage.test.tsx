@@ -91,7 +91,7 @@ function renderJobs() {
     <MemoryRouter initialEntries={['/jobs']}>
       <Routes>
         <Route path="/jobs" element={<JobFilesHarness />} />
-        <Route path="/jobs/:id" element={<h1>Job profile</h1>} />
+        <Route path="/job-progress" element={<h1>Job file</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -109,7 +109,7 @@ describe('JobsPage', () => {
 
     expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toHaveAttribute(
       'href',
-      '/jobs/job-1038',
+      expect.stringContaining('/job-progress?job=job-1038'),
     );
     expect(screen.getByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
     expect(screen.queryByText('#1038')).not.toBeInTheDocument();
