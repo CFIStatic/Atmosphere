@@ -26,5 +26,6 @@ describe('Dashboard job-file delete', () => {
     expect(verifierHtml).toContain("method: 'DELETE'");
     expect(verifierHtml).toContain('function submitJobFileDelete');
     expect(verifierHtml).toContain('function applyDeletedJob');
+    expect(verifierHtml).toContain('!canOpenJobRecord(key) || !ORG_MODE');
   });
 });
