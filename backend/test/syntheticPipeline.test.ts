@@ -74,6 +74,45 @@ test(
   },
 );
 
+test(
+  'a short clip reported as 60s still yields a frame (interval was longer than the file)',
+  { skip: !hasFfmpeg },
+  async () => {
+    const clip = await makeSyntheticDayClip({
+      durationSeconds: 2,
+      withAudio: false,
+      name: 'short-2s-as-60.mp4',
+    });
+    const frames = await extractSparseFramesFromUrl({
+      url: clip.path,
+      durationSeconds: 60,
+      maxFrames: 8,
+      candidateIntervalSeconds: 120,
+    });
+    assert.ok(frames.length >= 1, 'fps=1/30 on a 2s file must fall back to a still');
+  },
+);
+
+test(
+  'a clip with unknown duration still yields a frame for the model',
+  { skip: !hasFfmpeg },
+  async () => {
+    const clip = await makeSyntheticDayClip({
+      durationSeconds: 2,
+      withAudio: false,
+      name: 'short-2s-undated.mp4',
+    });
+    const prepared = await prepareVideoFrames({
+      id: 'undated-1',
+      source: 'field_capture',
+      url: clip.path,
+      durationSeconds: 0,
+      maxFrames: 8,
+    });
+    assert.ok(prepared.frames.length >= 1, '0:00 recordings must still be readable');
+  },
+);
+
 test('media catalog accepts A/V day film and rejects silent field_day_video', async () => {
   resetMediaCatalogForTests();
   const driver = new MemoryMediaStorage();

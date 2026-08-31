@@ -5538,7 +5538,7 @@
   function watchRemoteReading(item) {
     if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
     var next = item.analysis && item.analysis.state;
-    if (next === 'failed' || next === 'skipped') return;
+    if (next === 'failed') return;
     var tries = 0;
     item._watchReading = setInterval(function () {
       tries += 1;

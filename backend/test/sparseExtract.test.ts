@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+  extractSparseFramesFromUrl,
+  longFormBudget,
+  planSparseTimestamps,
+} from '../src/shared/sparseExtract.js';
 import { segmentFrames } from '../src/shared/longAnalyst.js';
 
 /**
@@ -60,4 +66,51 @@ test('short clips still get at least one sparse timestamp under a 60s preferred 
   // spacing is 60s — otherwise FFmpeg fps=1/60 extracts nothing.
   const timestamps = planSparseTimestamps(12, { intervalSeconds: 60, maxFrames: 180 });
   assert.ok(timestamps.length >= 1);
+});
+
+async function writeJpeg(args: string[], bytes: Buffer): Promise<void> {
+  const outPattern = args[args.length - 1]!;
+  const dir = outPattern.replace(/frame_%04d\.jpg$/, '');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'frame_0001.jpg'), bytes);
+}
+
+test('unknown duration still extracts the first decoded still', async () => {
+  const runner = async (_bin: string, args: string[]) => {
+    assert.equal(args.includes('fps=1'), true, 'unknown duration walks at 1 fps');
+    await writeJpeg(args, Buffer.from('still-zero-duration'));
+    return { stdout: '', stderr: '', code: 0 };
+  };
+  const frames = await extractSparseFramesFromUrl({
+    url: 'https://example.test/undated.webm',
+    durationSeconds: 0,
+    maxFrames: 8,
+    runner,
+  });
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0]!.jpeg.toString(), 'still-zero-duration');
+});
+
+test('interval extract that writes nothing falls back to the first decoded frame', async () => {
+  let calls = 0;
+  const runner = async (_bin: string, args: string[]) => {
+    calls += 1;
+    const vf = args[args.indexOf('-vf') + 1];
+    if (calls === 1) {
+      assert.match(String(vf), /^fps=1\//);
+      return { stdout: '', stderr: '', code: 0 };
+    }
+    await writeJpeg(args, Buffer.from('first-frame-fallback'));
+    return { stdout: '', stderr: '', code: 0 };
+  };
+  const frames = await extractSparseFramesFromUrl({
+    url: 'https://example.test/short.webm',
+    durationSeconds: 60,
+    maxFrames: 8,
+    candidateIntervalSeconds: 120,
+    runner,
+  });
+  assert.ok(calls >= 2, `expected a fallback after empty interval extract, got ${calls} calls`);
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0]!.jpeg.toString(), 'first-frame-fallback');
 });

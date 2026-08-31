@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   analysisStateOf,
   clipHasReading,
+  shouldKickUnreadClip,
   dateSearchPhrases,
   presentUnreadClip,
   downloadDecision,
@@ -479,6 +480,40 @@ test('serialization: a wrong-house clip arrives flagged with no analysis body', 
   assert.equal(item.gps, null);
   assert.equal(item.tier, 1, 'no episode yet reads as Tier 1, not as nothing');
   assert.equal(item.legalHold, true);
+});
+
+test('shouldKickUnreadClip starts a filed clip without anyone opening it', () => {
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'none', alreadyKicked: false, alreadyRetried: false }),
+    true,
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'queued', alreadyKicked: false, alreadyRetried: false }),
+    true,
+    'a restart drops the in-memory queue — the list must put it back',
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'queued', alreadyKicked: true, alreadyRetried: false }),
+    false,
+    'an in-flight read is not started again',
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'skipped', alreadyKicked: true, alreadyRetried: false }),
+    true,
+    'a first extract skip is retried once automatically',
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'skipped', alreadyKicked: true, alreadyRetried: true }),
+    false,
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: true, analysisState: 'none', alreadyKicked: false, alreadyRetried: false }),
+    false,
+  );
+  assert.equal(
+    shouldKickUnreadClip({ hasReading: false, analysisState: 'done', alreadyKicked: false, alreadyRetried: false }),
+    false,
+  );
 });
 
 test('presentUnreadClip never hides a skip or fail behind queued', () => {

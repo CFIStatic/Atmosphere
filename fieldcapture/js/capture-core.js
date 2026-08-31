@@ -105,6 +105,25 @@
     });
   }
 
+  function grabPaintedFrame(video, maxEdge) {
+    maxEdge = maxEdge || 900;
+    if (!video.videoWidth) return null;
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d');
+    if (!context) return null;
+    var scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    try {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    } catch (e) {
+      return null;
+    }
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    var base64 = dataUrl.split(',')[1];
+    return base64 || null;
+  }
+
   function extractFrames(file, count, maxEdge) {
     count = count || 6;
     maxEdge = maxEdge || 900;
@@ -116,18 +135,42 @@
     video.src = url;
 
     return new Promise(function (resolve) {
-      video.onloadedmetadata = function () {
-        var duration = Number.isFinite(video.duration) ? video.duration : null;
-        if (!duration || duration <= 0) {
-          URL.revokeObjectURL(url);
-          resolve({ durationSeconds: duration, frames: [] });
+      var done = false;
+      function finish(duration, frames) {
+        if (done) return;
+        done = true;
+        URL.revokeObjectURL(url);
+        resolve({ durationSeconds: duration, frames: frames || [] });
+      }
+
+      function measured() {
+        return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+      }
+
+      function firstFrameOnly(duration) {
+        var grab = function () {
+          var base64 = grabPaintedFrame(video, maxEdge);
+          finish(duration, base64 ? [{ atSeconds: 0, base64: base64 }] : []);
+        };
+        if (video.readyState >= 2 && video.videoWidth) {
+          grab();
           return;
         }
+        video.onloadeddata = grab;
+        video.onseeked = grab;
+        try {
+          video.currentTime = 0;
+        } catch (e) {
+          grab();
+        }
+        setTimeout(grab, 1500);
+      }
+
+      function pullAcross(duration) {
         var canvas = document.createElement('canvas');
         var context = canvas.getContext('2d');
         if (!context) {
-          URL.revokeObjectURL(url);
-          resolve({ durationSeconds: duration, frames: [] });
+          firstFrameOnly(duration);
           return;
         }
         var frames = [];
@@ -135,53 +178,76 @@
 
         function next() {
           if (i >= count) {
-            URL.revokeObjectURL(url);
-            resolve({ durationSeconds: duration, frames: frames });
+            finish(duration, frames);
             return;
           }
           var at = duration * ((i + 0.5) / count);
           i += 1;
           var settled = false;
-          var finish = function (ok) {
+          var oneDone = function (ok) {
             if (settled) return;
             settled = true;
             if (ok) {
-              var scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-              canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-              canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-              context.drawImage(video, 0, 0, canvas.width, canvas.height);
-              var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-              var base64 = dataUrl.split(',')[1];
+              var base64 = grabPaintedFrame(video, maxEdge);
               if (base64) frames.push({ atSeconds: Math.round(at * 100) / 100, base64: base64 });
             }
             next();
           };
           video.onseeked = function () {
-            finish(true);
+            oneDone(true);
           };
           video.onerror = function () {
-            finish(false);
+            oneDone(false);
           };
           setTimeout(function () {
-            finish(false);
+            oneDone(false);
           }, 4000);
           try {
             video.currentTime = at;
           } catch (e) {
-            finish(false);
+            oneDone(false);
           }
         }
         next();
+      }
+
+      video.onloadedmetadata = function () {
+        var duration = measured();
+        if (duration) {
+          pullAcross(duration);
+          return;
+        }
+        // MediaRecorder WebM: no duration in the header. Seek past any
+        // plausible length so the browser scans to the end; if that still
+        // yields 0:00, keep the first painted frame so the office model
+        // has something to read.
+        var settle = function () {
+          video.ontimeupdate = null;
+          video.onseeked = null;
+          video.currentTime = 0;
+          var d = measured();
+          if (d) pullAcross(d);
+          else firstFrameOnly(d);
+        };
+        video.ontimeupdate = settle;
+        video.onseeked = settle;
+        try {
+          video.currentTime = Number.MAX_SAFE_INTEGER;
+        } catch (e) {
+          firstFrameOnly(measured());
+        }
       };
       video.onerror = function () {
-        URL.revokeObjectURL(url);
-        resolve({ durationSeconds: null, frames: [] });
+        finish(null, []);
       };
       setTimeout(function () {
-        if (!Number.isFinite(video.duration)) {
-          URL.revokeObjectURL(url);
-          resolve({ durationSeconds: null, frames: [] });
-        }
+        if (done) return;
+        var d = measured();
+        // A known clock means pullAcross is already seeking. Each seek has
+        // its own 4s fallback, so six frames routinely exceed 5s. Restarting
+        // would overwrite onseeked and finish with a single still.
+        if (d) return;
+        firstFrameOnly(d);
       }, 5000);
     });
   }
@@ -754,6 +820,7 @@
     bindLivePreview: bindLivePreview,
     todayISO: todayISO,
     readCapture: readCapture,
+    extractFrames: extractFrames,
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
     joinCrew: joinCrew,

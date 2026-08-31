@@ -141,11 +141,39 @@ export async function extractFrames(
       setTimeout(done, 5000);
     });
 
-    if (!duration || duration <= 0) return { durationSeconds: duration, frames: [] };
-
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (!context) return { durationSeconds: duration, frames: [] };
+
+    const paint = (): string | null => {
+      if (!video.videoWidth) return null;
+      const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.7).split(',')[1] ?? null;
+    };
+
+    // Duration still unknown — the player can often paint frame 0 anyway
+    // (the office screenshot). One still is enough for the model to start.
+    if (!duration || duration <= 0) {
+      const first = await new Promise<string | null>((resolve) => {
+        const grab = () => resolve(paint());
+        if (video.readyState >= 2 && video.videoWidth) {
+          grab();
+          return;
+        }
+        video.onloadeddata = grab;
+        video.onseeked = grab;
+        try {
+          video.currentTime = 0;
+        } catch {
+          grab();
+        }
+        setTimeout(grab, 1500);
+      });
+      return { durationSeconds: duration, frames: first ? [{ atSeconds: 0, base64: first }] : [] };
+    }
 
     const frames: Array<{ atSeconds: number; base64: string }> = [];
     for (let i = 0; i < count; i += 1) {
@@ -154,11 +182,7 @@ export async function extractFrames(
       const at = duration * ((i + 0.5) / count);
       const drew = await new Promise<boolean>((resolve) => {
         const onSeeked = () => {
-          const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-          canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          resolve(true);
+          resolve(Boolean(paint()));
         };
         video.onseeked = onSeeked;
         video.onerror = () => resolve(false);
@@ -167,10 +191,8 @@ export async function extractFrames(
       });
       if (!drew) continue;
 
-      // 0.7 is the point where a JPEG of a room still shows what changed and
-      // the payload stops growing. Six of these is well under a megabyte.
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-      const base64 = dataUrl.split(',')[1];
+      // paint() already encoded the JPEG; read it back off the same canvas.
+      const base64 = paint();
       if (base64) frames.push({ atSeconds: Math.round(at * 100) / 100, base64 });
     }
 

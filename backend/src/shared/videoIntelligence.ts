@@ -113,16 +113,26 @@ export async function prepareVideoFrames(
   ref: InboundVideoRef,
   opts?: { runner?: CommandRunner },
 ): Promise<PreparedVideoFrames> {
-  assertProcessableDuration(ref.durationSeconds);
+  const duration = Number(ref.durationSeconds);
+  if (Number.isFinite(duration) && duration > config.verification.maxDurationSeconds) {
+    throw new HttpError(
+      400,
+      `Video exceeds maximum processable duration (${config.verification.maxDurationSeconds}s / ~${Math.round(config.verification.maxDurationSeconds / 3600)}h)`,
+      'duration_too_long',
+    );
+  }
+  // duration 0 / NaN = unknown (MediaRecorder WebM, a screenshot, a still).
+  // The extractor grabs the first decoded frames instead of refusing the file.
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const maxFrames = Math.max(
     1,
     Math.min(ref.maxFrames ?? config.verification.sparseMaxFrames, config.verification.sparseMaxFrames),
   );
-  const longForm = isLongFormVideo(ref.durationSeconds);
+  const longForm = isLongFormVideo(safeDuration);
 
   const frames = await extractSparseFramesFromUrl({
     url: ref.url,
-    durationSeconds: ref.durationSeconds,
+    durationSeconds: safeDuration,
     maxFrames,
     candidateIntervalSeconds:
       config.verification.sparseCandidateIntervalSeconds ||
@@ -136,7 +146,7 @@ export async function prepareVideoFrames(
   return {
     id: ref.id,
     source: ref.source,
-    durationSeconds: ref.durationSeconds,
+    durationSeconds: safeDuration,
     frames,
     longForm,
   };

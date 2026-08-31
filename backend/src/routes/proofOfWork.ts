@@ -286,15 +286,9 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Two readings queue here, not one. The narration is per-video. The scene
-  // reading describes what this file shows — every upload is analysed on its
-  // own, however the crew labelled it.
-  //
-  // Day-length recordings and the iOS app often arrive with zero device
-  // frames. Those still queue: the worker sparsely extracts stills from
-  // storage with FFmpeg before reading.
-  await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
-  const analysis = await queueDayAnalysis(admin, party, input.workDate, (proof as any).id);
+  // Step 2 — the file is on disk, so the model reads it now. Nobody has to
+  // open Scope of Work. That tab only displays what this already wrote.
+  const analysis = await analyseUploadedProof(admin, party, proof as any, input.workDate);
 
   // The clip's own length and stills, settled off the critical path. Neither
   // needs a model, and a crew standing in a doorway must not wait on FFmpeg
@@ -315,7 +309,6 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     proofPhase: input.phase,
     performerLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
   });
-  await queueProofTranscript(admin, (proof as any).id);
 
   await recordAccess(admin, {
     orgId: party.org_id,
@@ -430,7 +423,7 @@ async function runDayAnalysis(
     const frames = await framesFor(admin, row.id);
     if (frames.length) return frames.slice(0, 12);
     const durationSeconds = Number(row.duration_seconds ?? 0);
-    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds || 60);
+    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds);
     return (await framesFor(admin, row.id)).slice(0, 12);
   };
 
@@ -746,10 +739,10 @@ async function ensureSparseFramesFromStorage(
  *
  * The length matters because a browser recording does not carry one. A phone
  * filming into MediaRecorder produces WebM with no duration in the header, so
- * the page reads 0, uploads 0, and — because the client extractor gives up on
- * a clip it cannot measure — sends no frames either. FFprobe over the stored
- * file settles it, and the answer is written back: the list, the length check
- * and retention all read that column.
+ * the page reads 0, uploads 0, and the client may only send the first painted
+ * still. FFprobe over the stored file settles the clock when it can. When it
+ * cannot, sparse extract still grabs the first decoded frames so the model
+ * has something to read.
  *
  * Idempotent and safe to call from anywhere. A clip that already has both is
  * two cheap selects, and a clip FFmpeg cannot open is attempted once per
@@ -846,7 +839,19 @@ async function finishProofActions(
   });
 }
 
+const narrationLocks = new Map<string, Promise<void>>();
+
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
+  const existing = narrationLocks.get(job.proofId);
+  if (existing) return existing;
+  const work = runNarration(admin, job).finally(() => {
+    narrationLocks.delete(job.proofId);
+  });
+  narrationLocks.set(job.proofId, work);
+  return work;
+}
+
+async function runNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
   const write = async (patch: Record<string, unknown>) =>
@@ -1201,11 +1206,40 @@ export async function queueNarration(admin: any, party: any, proofId: string, ph
 }
 
 /**
+ * Step 2 after a video is filed.
+ *
+ * 1. Video uploaded
+ * 2. AI analysis is performed automatically
+ *
+ * Vision, day reading, and the mic all start here. The upload request
+ * returns; the model runs in the background. Opening the clip is display,
+ * not the trigger.
+ */
+export async function analyseUploadedProof(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string; trade?: string | null },
+  proof: { id: string; phase: string },
+  workDate: string,
+  hooks?: {
+    queueNarrationFn?: typeof queueNarration;
+    queueDayAnalysisFn?: typeof queueDayAnalysis;
+    queueTranscriptFn?: typeof queueProofTranscript;
+  },
+): Promise<'queued'> {
+  const narrate = hooks?.queueNarrationFn ?? queueNarration;
+  const analyseDay = hooks?.queueDayAnalysisFn ?? queueDayAnalysis;
+  const transcribe = hooks?.queueTranscriptFn ?? queueProofTranscript;
+  await narrate(admin, party, proof.id, proof.phase, workDate);
+  await analyseDay(admin, party, workDate, proof.id);
+  await transcribe(admin, proof.id);
+  return 'queued';
+}
+
+/**
  * Read this file now so Ask can answer from a dictation.
  *
- * Uploads enqueue and return. Existing clips that never got a reading sit
- * unread until somebody Asks — that question is the moment to look at the
- * frames, not to say the clip has not been read.
+ * Uploads already started this read. This path is for Ask and for a clip
+ * that lost its in-memory queue — not the trigger for a new file.
  */
 const CLIP_READ_HARD_MS = Number(process.env.CLIP_READ_TIMEOUT_MS || 180_000);
 

@@ -6,6 +6,7 @@
   // Browser smoke — open manually. Asserts API surface exists.
   var ok = window.FieldCaptureCore
     && typeof FieldCaptureCore.recordDayFilm === 'function'
+    && typeof FieldCaptureCore.extractFrames === 'function'
     && typeof FieldCaptureCore.uploadDayFilm === 'function'
     && typeof FieldCaptureCore.todayISO === 'function'
     && typeof FieldCaptureCore.bindLivePreview === 'function'
