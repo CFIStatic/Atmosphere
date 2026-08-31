@@ -2,6 +2,11 @@
 # "Atmosphere - Field Capture"). Serves the crew web app at / and proxies
 # /api to the Atmosphere BFF so name + office-code connect works.
 #
+# Office Overview lives in the Platform iframe on this host, not in this
+# nginx image. A frontend-only SHA skips these watch paths, so production
+# can sit behind the office app until this file (or anything else under
+# fieldcapture/) changes — or until Repair Field Capture Railway is run.
+#
 # One-time on this service (Settings → Config-as-code), or via
 # fieldcapture/scripts/apply-railway-config.sh:
 #   Config File    = /fieldcapture/railway.toml
