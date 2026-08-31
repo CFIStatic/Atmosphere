@@ -146,6 +146,34 @@ describe('jobFileSuggestions', () => {
     expect(prompts.some((prompt) => /crew do on/.test(prompt))).toBe(true);
     expect(prompts).toContain('Is anything still unfinished?');
   });
+
+  it('offers a do-not prompt when the file has exclusions', () => {
+    const beats = buildJobFileDossier({
+      proofs: { ...proofs, videos: [], days: [], counts: { ...proofs.counts, days: 0, videos: 0 } },
+      messages: [],
+      scope: [
+        {
+          id: 'sc-1',
+          party_id: null,
+          state: 'excluded',
+          title: 'Do not remove the skylights',
+          detail: null,
+          amount: null,
+          reason: 'Carrier declined them.',
+          revision: 4,
+          decided_at: null,
+          created_at: '2026-08-04T08:05:00Z',
+        },
+      ],
+    });
+    const prompts = jobFileSuggestions({
+      hasMic: false,
+      hasVideo: false,
+      latestDate: null,
+      beats,
+    });
+    expect(prompts).toContain('What should we not do?');
+  });
 });
 
 describe('turnsFromQuestions', () => {
