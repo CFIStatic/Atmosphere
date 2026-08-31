@@ -195,6 +195,7 @@ describe('buildOverview', () => {
     expect(byStage.needs_review).toBe(1);
     expect(byStage.being_read).toBe(1);
     expect(byStage.needs_brief).toBe(1);
+    expect(model.pipeline.map((b) => b.short)).toEqual(['Brief', 'Film', 'Reading', 'Look', 'Proving']);
     expect(model.openCount).toBe(3);
     expect(todayLine(model)).toBe('1 clip filmed today on 1 job · 1 waiting to be read · 2 failed');
   });
