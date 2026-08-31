@@ -59,12 +59,20 @@ export const PIPELINE_STAGES: readonly PipelineStage[] = [
   'proving',
 ] as const;
 
-export const PIPELINE_META: Record<PipelineStage, { label: string; hint: string }> = {
-  needs_brief: { label: 'Needs a brief', hint: 'Opened, nothing published to judge film against' },
-  waiting_on_film: { label: 'Waiting on film', hint: 'Brief is live; no clips on file yet' },
-  being_read: { label: 'Being read', hint: 'Film is on file and still being described' },
-  needs_review: { label: 'Needs a look', hint: 'A failed read or an unanswered question' },
-  proving: { label: 'Proving', hint: 'Film is read; the file can answer for the work' },
+export const PIPELINE_META: Record<PipelineStage, { label: string; short: string; hint: string }> = {
+  needs_brief: {
+    label: 'Needs a brief',
+    short: 'Brief',
+    hint: 'Opened, nothing published to judge film against',
+  },
+  waiting_on_film: {
+    label: 'Waiting on film',
+    short: 'Film',
+    hint: 'Brief is live; no clips on file yet',
+  },
+  being_read: { label: 'Being read', short: 'Reading', hint: 'Film is on file and still being described' },
+  needs_review: { label: 'Needs a look', short: 'Look', hint: 'A failed read or an unanswered question' },
+  proving: { label: 'Proving', short: 'Proving', hint: 'Film is read; the file can answer for the work' },
 };
 
 export const ACTION_META: Record<
@@ -98,6 +106,7 @@ export interface OverviewAction {
 export interface PipelineBucket {
   stage: PipelineStage;
   label: string;
+  short: string;
   hint: string;
   count: number;
 }
@@ -307,6 +316,7 @@ export function buildOverview(
   const pipeline: PipelineBucket[] = PIPELINE_STAGES.map((stage) => ({
     stage,
     label: PIPELINE_META[stage].label,
+    short: PIPELINE_META[stage].short,
     hint: PIPELINE_META[stage].hint,
     count: overviewJobs.filter((j) => j.stage === stage).length,
   }));

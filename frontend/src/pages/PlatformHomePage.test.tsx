@@ -213,6 +213,46 @@ describe('PlatformHomePage', () => {
 
     expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
+    expect(screen.getByTestId('proof-chain-grid')).toHaveClass('grid-cols-5');
+  });
+
+  it('fits the proof chain as a five-stage strip in the Field Capture frame', async () => {
+    document.documentElement.dataset.fieldEmbed = '1';
+    window.innerWidth = 390;
+
+    try {
+      render(
+        <MemoryRouter>
+          <PlatformHomePage platform="field" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'What needs you' })).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByText('Proof stuck — unread film, briefs behind, unanswered questions.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Jobs where proof is stuck', { exact: false })).not.toBeInTheDocument();
+      expect(screen.getByTestId('proof-chain-grid')).toHaveClass('grid-cols-5');
+      expect(screen.getByRole('button', { name: 'Needs a brief' })).toBeInTheDocument();
+      expect(screen.getByText('Brief')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Start a job' })).toBeInTheDocument();
+      expect(screen.queryByText("Today's film")).not.toBeInTheDocument();
+      expect(screen.queryByText('Who is on jobs')).not.toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+      });
+      expect(screen.getByText('2 clips failed')).toBeInTheDocument();
+      expect(
+        screen.queryByText('The assistant could not read the film. A person has to look.'),
+      ).not.toBeInTheDocument();
+    } finally {
+      delete document.documentElement.dataset.fieldEmbed;
+      window.innerWidth = 1024;
+    }
   });
 
   it('lets the office filter the queue by proof-chain stage', async () => {

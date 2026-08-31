@@ -17,6 +17,8 @@ import {
 } from '../lib/companyOverview';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { buildCrewBoard, type CrewBoardRow } from '../lib/workerBoard';
+import { usePhoneShell } from '../lib/usePhoneShell';
+import { cn } from '../design';
 import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '../components/icons';
 
 /**
@@ -27,6 +29,11 @@ import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '
  * invoiced) belongs nowhere here — Atmosphere does not run the money loop.
  * A second job list belongs on Job Files. Clip counts without a job name are
  * vanity. This page names the file and the break.
+ *
+ * Field Capture's Platform tab is a 480px iframe. The proof chain is five
+ * stages, so it stays a five-column strip — wrapping to two columns leaves a
+ * hole and wastes the height a phone does not have. Queue rows stay to two
+ * lines so several files are on screen before the page scrolls.
  */
 
 const TONE: Record<(typeof ACTION_META)[keyof typeof ACTION_META]['tone'], string> = {
@@ -37,6 +44,7 @@ const TONE: Record<(typeof ACTION_META)[keyof typeof ACTION_META]['tone'], strin
 };
 
 export function PlatformHomePage({ platform: _platform }: { platform: string }) {
+  const phone = usePhoneShell();
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [shared, setShared] = useState<SharedJobSummary[] | null>(null);
   const [pulse, setPulse] = useState(emptyPulse());
@@ -69,24 +77,42 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   const crew = useMemo(() => buildCrewBoard(jobs ?? []), [jobs]);
 
   return (
-    <div data-testid="company-overview">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-brand-600">Overview</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
+    <div
+      data-testid="company-overview"
+      className={phone ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : undefined}
+    >
+      <div className={cn('min-w-0', phone && 'shrink-0')}>
+        <p className="text-xs font-medium text-brand-600 sm:text-sm">Overview</p>
+        <h1 className="mt-0.5 text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+          What needs you
+        </h1>
+        {phone ? (
+          <p className="mt-1 text-[13px] leading-snug text-ink-600">
+            Proof stuck — unread film, briefs behind, unanswered questions.
+          </p>
+        ) : (
           <p className="mt-1 max-w-2xl text-sm text-ink-600">
             Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
             file when you are ready to move it.
           </p>
-        </div>
+        )}
       </div>
 
-      <PipelineStrip model={model} loaded={loaded} selected={stage} onSelect={setStage} />
+      <PipelineStrip
+        model={model}
+        loaded={loaded}
+        selected={stage}
+        onSelect={setStage}
+        compact={phone}
+      />
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <section className="rounded-xl glass-card lg:col-span-2" aria-label="Do this next">
-          <header className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-4">
-            <div>
+      <div className={phone ? 'mt-3 min-w-0' : 'mt-6 grid gap-4 lg:grid-cols-3'}>
+        <section
+          className="rounded-xl glass-card lg:col-span-2"
+          aria-label="Do this next"
+        >
+          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-3 py-3 sm:items-baseline sm:px-5 sm:py-4">
+            <div className="min-w-0">
               <h2 className="text-[15px] font-semibold text-ink-900">Do this next</h2>
               <p className="mt-0.5 text-xs text-ink-500">
                 {!loaded
@@ -98,17 +124,22 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
                       : 'Nothing waiting on you'}
               </p>
             </div>
-            <Link to="/intake" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+            <Link
+              to="/intake"
+              className="shrink-0 text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
               Start a job
             </Link>
           </header>
-          <ActionList model={model} loaded={loaded} stage={stage} />
+          <ActionList model={model} loaded={loaded} stage={stage} compact={phone} />
         </section>
 
-        <div className="space-y-4">
-          <TodayCard model={model} loaded={loaded} />
-          <OnJobsCard crew={crew} loaded={loaded} />
-        </div>
+        {!phone && (
+          <div className="space-y-4">
+            <TodayCard model={model} loaded={loaded} />
+            <OnJobsCard crew={crew} loaded={loaded} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -119,23 +150,33 @@ function PipelineStrip({
   loaded,
   selected,
   onSelect,
+  compact,
 }: {
   model: OverviewModel;
   loaded: boolean;
   selected: PipelineStage | null;
   onSelect: (stage: PipelineStage | null) => void;
+  compact: boolean;
 }) {
   return (
-    <section className="mt-6 rounded-xl glass-card px-3 py-3 sm:px-4" aria-label="Proof chain">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 px-2 pb-2">
+    <section
+      className={cn(
+        'rounded-xl glass-card',
+        compact ? 'mt-3 shrink-0 px-2.5 py-2.5' : 'mt-6 px-3 py-3 sm:px-4',
+      )}
+      aria-label="Proof chain"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 px-1 pb-2 sm:px-2">
         <h2 className="text-[15px] font-semibold text-ink-900">Proof chain</h2>
         <p className="text-xs text-ink-500">
           {loaded
-            ? `${model.openCount} open job${model.openCount === 1 ? '' : 's'} · click a stage to see those files`
+            ? compact
+              ? `${model.openCount} open · tap a stage`
+              : `${model.openCount} open job${model.openCount === 1 ? '' : 's'} · click a stage to see those files`
             : 'Counting open jobs…'}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2" data-testid="proof-chain-grid">
         {model.pipeline.map((bucket) => {
           const active = selected === bucket.stage;
           return (
@@ -143,22 +184,23 @@ function PipelineStrip({
               key={bucket.stage}
               type="button"
               onClick={() => onSelect(active ? null : bucket.stage)}
+              aria-label={bucket.label}
               aria-pressed={active}
               title={bucket.hint}
-              className={`rounded-lg px-3 py-2.5 text-left transition ${
+              className={`min-w-0 rounded-lg px-1 py-2 text-center transition sm:px-3 sm:py-2.5 sm:text-left ${
                 active
                   ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20'
                   : 'bg-paper-200/70 text-ink-900 hover:bg-paper-200'
               }`}
             >
               <p
-                className={`text-[10.5px] font-semibold uppercase tracking-[0.08em] ${
+                className={`text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] sm:text-[10.5px] sm:tracking-[0.08em] ${
                   active ? 'text-white/80' : 'text-ink-500'
                 }`}
               >
-                {bucket.label}
+                {compact ? bucket.short : bucket.label}
               </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">
+              <p className="mt-0.5 text-lg font-bold tabular-nums tracking-tight sm:mt-1 sm:text-2xl">
                 {loaded ? bucket.count : '—'}
               </p>
             </button>
@@ -173,14 +215,16 @@ function ActionList({
   model,
   loaded,
   stage,
+  compact,
 }: {
   model: OverviewModel;
   loaded: boolean;
   stage: PipelineStage | null;
+  compact: boolean;
 }) {
   if (!loaded) {
     return (
-      <div className="space-y-2 px-5 py-4">
+      <div className="space-y-2 px-3 py-3 sm:px-5 sm:py-4">
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
         <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
@@ -190,7 +234,7 @@ function ActionList({
 
   if (model.openCount === 0) {
     return (
-      <div className="px-5 py-10 text-center">
+      <div className="px-3 py-8 text-center sm:px-5 sm:py-10">
         <p className="text-sm font-medium text-ink-800">No job files yet</p>
         <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">
           Start a job — publish a brief, invite the crew, and this page will fill with what needs a
@@ -212,7 +256,7 @@ function ActionList({
 
   if (rows.length === 0) {
     return (
-      <p className="px-5 py-8 text-sm text-ink-500">
+      <p className="px-3 py-6 text-sm text-ink-500 sm:px-5 sm:py-8">
         {showingActions
           ? 'Every open job is moving through the proof chain.'
           : `No open jobs in ${PIPELINE_META[stage!].label.toLowerCase()}.`}
@@ -224,7 +268,7 @@ function ActionList({
     <ul>
       {rows.map((row) =>
         row.action ? (
-          <ActionRow key={row.jobId} action={row.action} />
+          <ActionRow key={row.jobId} action={row.action} compact={compact} />
         ) : (
           <QuietRow key={row.jobId} title={row.title} jobId={row.jobId} jobNumber={row.jobNumber} />
         ),
@@ -233,13 +277,13 @@ function ActionList({
   );
 }
 
-function ActionRow({ action }: { action: OverviewAction }) {
+function ActionRow({ action, compact }: { action: OverviewAction; compact: boolean }) {
   const meta = ACTION_META[action.kind];
   return (
     <li>
       <Link
         to={action.href}
-        className="flex items-start gap-3 border-b border-line px-5 py-3.5 transition last:border-b-0 hover:bg-paper-200"
+        className="flex items-start gap-2.5 border-b border-line px-3 py-2.5 transition last:border-b-0 hover:bg-paper-200 sm:gap-3 sm:px-5 sm:py-3.5"
       >
         <AlertIcon
           width={15}
@@ -253,23 +297,44 @@ function ActionRow({ action }: { action: OverviewAction }) {
           }`}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
             {action.jobNumber != null && (
-              <span className="font-mono text-xs text-ink-500">#{action.jobNumber}</span>
+              <span className="shrink-0 font-mono text-xs text-ink-500">#{action.jobNumber}</span>
             )}
-            <span className="truncate text-sm font-semibold text-ink-900">{action.title}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
-              {meta.label}
+            <span
+              className={
+                compact
+                  ? 'min-w-0 text-sm font-semibold leading-snug text-ink-900 line-clamp-2'
+                  : 'min-w-0 truncate text-sm font-semibold text-ink-900'
+              }
+            >
+              {action.title}
             </span>
+            {!compact && (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
+                {meta.label}
+              </span>
+            )}
           </div>
-          <p className="mt-1 text-[13px] text-ink-700">{action.headline}</p>
-          <p className="mt-0.5 text-[13px] text-ink-500">{action.detail}</p>
-          {action.notes.length > 0 && (
-            <p className="mt-1 truncate text-xs text-ink-400">{action.notes.join(' · ')}</p>
+          {compact ? (
+            <div className="mt-1 flex min-w-0 items-center gap-2">
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
+                {meta.label}
+              </span>
+              <p className="min-w-0 truncate text-[13px] text-ink-700">{action.headline}</p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-0.5 truncate text-[13px] text-ink-700">{action.headline}</p>
+              <p className="mt-0.5 text-[13px] text-ink-500">{action.detail}</p>
+              {action.notes.length > 0 && (
+                <p className="mt-1 truncate text-xs text-ink-400">{action.notes.join(' · ')}</p>
+              )}
+            </>
           )}
         </div>
         <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-brand-600">
-          {meta.verb}
+          {!compact && meta.verb}
           <ChevronRightIcon width={14} height={14} />
         </span>
       </Link>
@@ -290,11 +355,11 @@ function QuietRow({
     <li>
       <Link
         to={jobFilePath(jobId, { title, number: jobNumber })}
-        className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-paper-200"
+        className="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0 hover:bg-paper-200 sm:items-start sm:px-5 sm:py-3.5"
       >
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
-          <p className="mt-0.5 text-[13px] text-ink-500">Moving — nothing waiting on you</p>
+          <p className="mt-0.5 truncate text-[13px] text-ink-500">Moving — nothing waiting on you</p>
         </div>
         {jobNumber != null && <span className="shrink-0 font-mono text-[11px] text-ink-400">#{jobNumber}</span>}
       </Link>
