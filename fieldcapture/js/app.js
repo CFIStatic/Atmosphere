@@ -210,6 +210,8 @@
     'You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.';
   var DONELINE_FAIL =
     'The recording is still on this phone. Fix signal and tap Retry upload — or go back to Home Screen and ask the office for help.';
+  var DONELINE_FAIL_NO_CLIP =
+    'The recording was not saved on this phone. Go back to Home Screen and start the day again — or ask the office for help.';
 
   function readStoredSession() {
     try {
@@ -1243,7 +1245,7 @@
       '</em><span class="ok">→</span></div>';
     $('#daytl').innerHTML = '';
     var copy = $('#doneline-copy');
-    if (copy) copy.textContent = DONELINE_FAIL;
+    if (copy) copy.textContent = state.lastClip ? DONELINE_FAIL : DONELINE_FAIL_NO_CLIP;
     $('#doneline').classList.add('on');
     hideDoorActions();
     if (state.lastClip) showRetryAction();
