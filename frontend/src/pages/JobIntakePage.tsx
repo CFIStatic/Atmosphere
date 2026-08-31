@@ -423,7 +423,9 @@ export function JobIntakePage() {
       >
         <div
           className={
-            phone ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto' : 'contents'
+            phone
+              ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+              : 'contents'
           }
         >
           {phone && (
@@ -441,7 +443,7 @@ export function JobIntakePage() {
               />
             </label>
 
-            <h2 className={cn(sectionTitle, 'mt-4')}>Address</h2>
+            <h2 className={cn(sectionTitle, 'mt-3.5')}>Address</h2>
             <label className="mt-2 block text-xs font-medium text-ink-600">
               <span className="sr-only">Address</span>
               <AddressAutocomplete
@@ -453,7 +455,7 @@ export function JobIntakePage() {
               />
             </label>
 
-            <div className="mt-4 flex items-baseline justify-between gap-2">
+            <div className="mt-3.5 flex items-baseline justify-between gap-2">
               <h2 className={sectionTitle}>Situation</h2>
               <button
                 type="button"
@@ -711,7 +713,7 @@ export function JobIntakePage() {
         <div
           className={
             phone
-              ? 'sticky bottom-0 z-10 -mx-3 shrink-0 border-t border-line bg-paper-100/95 px-3 pb-1 pt-2 backdrop-blur-sm'
+              ? 'sticky bottom-0 z-10 -mx-3 shrink-0 border-t border-line bg-paper-100/95 px-3 pt-2 pb-[max(6px,env(safe-area-inset-bottom))] backdrop-blur-sm'
               : 'flex flex-wrap items-center justify-end gap-3 pb-8 pt-2'
           }
         >
