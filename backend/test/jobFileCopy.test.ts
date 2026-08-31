@@ -37,6 +37,10 @@ test('jobFileDeleteNameMatches requires the exact dashboard name', () => {
   assert.equal(jobFileDeleteNameMatches('Cedar Ridge', 'Cedar'), false);
   assert.equal(jobFileDeleteNameMatches('Cedar Ridge', ''), false);
   assert.equal(jobFileDeleteNameMatches('', 'Job'), false);
+  assert.equal(
+    jobFileDeleteNameMatches(displayJobFileName('', '1842 Meridian Ave, Austin, TX'), '1842 Meridian Ave'),
+    true,
+  );
 });
 
 test('suggestedDuplicateTitle prefixes once and stays within length', () => {
