@@ -108,6 +108,8 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
     expect(screen.getByText('Videos and analysis')).toBeInTheDocument();
     expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
