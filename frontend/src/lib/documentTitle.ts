@@ -28,6 +28,7 @@ const PAGE_TITLES: Record<string, string> = {
 };
 
 function pageNameFor(pathname: string): string | undefined {
+  if (/^\/jobs\/[^/]+/.test(pathname)) return 'Job file';
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
 
   const match = Object.keys(PAGE_TITLES)

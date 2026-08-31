@@ -188,7 +188,9 @@ describe('buildOverview', () => {
     expect(model.actions[1].href).toBe(
       jobFilePath('meridian', { title: 'Meridian Ave — water loss', number: 1041 }),
     );
-    expect(model.actions[2].href).toBe('/job-progress?job=east');
+    expect(model.actions[2].href).toBe(
+      jobFilePath('east', { title: 'East 6th — kitchen, water', number: 1 }),
+    );
     expect(model.actions.map((a) => a.title)).not.toContain('Paid rebuild');
 
     const byStage = Object.fromEntries(model.pipeline.map((b) => [b.stage, b.count]));
