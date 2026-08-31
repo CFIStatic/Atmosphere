@@ -809,7 +809,11 @@ export async function ensureStillsAndDuration(
   if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
     if (!opts?.force) stillsAttempted.add(proofId);
     try {
-      await ensureSparseFramesFromStorage(admin, proofId, durationSeconds);
+      await ensureSparseFramesFromStorage(
+        admin,
+        proofId,
+        durationSeconds || (longForm ? 24 * 60 * 60 : 60),
+      );
       // A clip that yielded stills is worth retrying later if it is asked for
       // again; only a genuine failure needs the once-per-process brake.
       stillsAttempted.delete(proofId);

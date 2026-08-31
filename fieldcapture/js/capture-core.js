@@ -243,8 +243,11 @@
       setTimeout(function () {
         if (done) return;
         var d = measured();
-        if (d) pullAcross(d);
-        else firstFrameOnly(d);
+        // A known clock means pullAcross is already seeking. Each seek has
+        // its own 4s fallback, so six frames routinely exceed 5s. Restarting
+        // would overwrite onseeked and finish with a single still.
+        if (d) return;
+        firstFrameOnly(d);
       }, 5000);
     });
   }
