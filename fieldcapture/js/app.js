@@ -1053,6 +1053,10 @@
       setStatus('No open job to file this day against.', true);
       return;
     }
+    if (state.finishing) {
+      setStatus('The last day is still uploading.', true);
+      return;
+    }
     state.finishing = false;
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
@@ -1131,7 +1135,7 @@
     }).then(
       function (result) {
         state.uploadResult = result;
-        state.lastClip = null;
+        if (state.lastClip === clip) state.lastClip = null;
         renderDoorLive(result);
         return result;
       },
@@ -1154,7 +1158,10 @@
     $('#doneline').classList.remove('on');
     var copy = $('#doneline-copy');
     if (copy) copy.textContent = DONELINE_OK;
+    /* Home stays available while reading/uploading — crews must never be
+       stuck on the door if the phone stalls mid-step. Retry waits for fail. */
     hideDoorActions();
+    showHomeAction();
   }
 
   function hideDoorActions() {
@@ -1236,6 +1243,7 @@
   }
 
   function renderDoorFailed(err) {
+    show('s-door');
     $('#ledger').innerHTML =
       '<div class="lrow on"><span>Upload failed</span><em>' +
       escapeHtml(err.message || 'Try again') +
@@ -1624,9 +1632,13 @@
     }
   })();
   $('#donebtn').addEventListener('click', function () {
-    state.finishing = false;
+    /* Leave even if reading/uploading is still running — do not trap the crew.
+       Keep lastClip and finishing while the PUT is in flight so a later
+       failure can still offer Retry, and a second day cannot race this upload. */
+    if (!state.finishing) {
+      state.lastClip = null;
+    }
     state.recorder = null;
-    state.lastClip = null;
     hideDoorActions();
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');

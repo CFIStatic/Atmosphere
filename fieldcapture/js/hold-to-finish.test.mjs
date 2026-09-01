@@ -127,17 +127,39 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=home-door/);
-assert.match(html, /js\/app\.js\?v=home-door/);
-assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after upload');
+assert.match(html, /js\/capture-core\.js\?v=home-during-upload/);
+assert.match(html, /js\/app\.js\?v=home-during-upload/);
+assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
-assert.match(html, /\.donebtn\.on, \.retrybtn\.on \{ display: block; \}/, 'home button stays hidden while uploading');
+assert.match(html, /\.donebtn\.on, \.retrybtn\.on \{ display: block; \}/);
+assert.match(html, /class="door-actions"/, 'home actions stay pinned under the door scroll');
+assert.match(html, /\.door-actions \{[\s\S]*?flex: 0 0 auto/, 'home button stays visible while checks scroll');
 assert.match(html, /\.donebtn\.on/);
 assert.match(appSrc, /function uploadLastClip/);
 assert.match(appSrc, /showHomeAction/);
 assert.match(appSrc, /showRetryAction/);
+assert.match(
+  appSrc,
+  /function openDoorUploading\([\s\S]*?showHomeAction\(\)/,
+  'Back to Home Screen must appear as soon as recording ends, including while uploading',
+);
 assert.match(appSrc, /state\.lastClip/, 'keep the day film on device until upload succeeds');
+assert.match(
+  appSrc,
+  /if \(!state\.finishing\) \{\s*state\.lastClip = null;/,
+  'Home must not drop lastClip while an upload is still in flight',
+);
+assert.match(
+  appSrc,
+  /if \(state\.lastClip === clip\) state\.lastClip = null;/,
+  'a settled PUT must not wipe a newer recording',
+);
+assert.match(
+  appSrc,
+  /if \(state\.finishing\) \{\s*setStatus\('The last day is still uploading\.'/,
+  'a second day must not start while the previous PUT is still running',
+);
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
 assert.match(coreSrc, /hadAudio/, 'stop must confirm the mic track before filing');
 assert.match(coreSrc, /Microphone is required/);
