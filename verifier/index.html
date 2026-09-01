@@ -1736,7 +1736,7 @@
   </button>
   <button role="menuitem" data-job-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>
-    Share this job
+    Share this job file
   </button>
   <button role="menuitem" data-job-act="invite">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -1755,7 +1755,7 @@
   <div class="sheet sheet-narrow">
     <div class="sheethead">
       <div>
-        <h2 id="jf-title">Share this job</h2>
+        <h2 id="jf-title">Share this job file</h2>
         <div class="meta" id="jf-meta"></div>
       </div>
       <button class="closebtn" id="jf-close" aria-label="Close">
@@ -1763,7 +1763,7 @@
       </button>
     </div>
     <div class="jf-tabs" role="tablist">
-      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Send a link</button>
+      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Share file</button>
       <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Add people</button>
     </div>
     <div class="jf-body" id="jf-body"></div>
@@ -3088,7 +3088,7 @@
 
   function hydrateJobBoard(key) {
     var items = EVIDENCE.filter(function (e) { return e.job === key; });
-    if (!canOpenJobRecord(key)) {
+    if (!ORG_MODE || !canOpenJobRecord(key)) {
       JOB_BOARD[key] = boardFromClips(key, items);
       return;
     }
@@ -3142,7 +3142,7 @@
         '<button type="button" class="job-act" data-job-act="invite" title="Invite people" aria-label="Invite people to ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
         '</button>' +
-        '<button type="button" class="job-act" data-job-act="share" title="Share this job" aria-label="Share ' + esc(job.name) + '">' +
+        '<button type="button" class="job-act" data-job-act="share" title="Share this job file" aria-label="Share ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>' +
         '</button>' +
         '<button type="button" class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(job.name) + '">' +
@@ -3520,7 +3520,7 @@
     if (tab === 'rename') return 'Rename this job file';
     if (tab === 'duplicate') return 'Duplicate this job file';
     if (tab === 'delete') return 'Delete this job file';
-    return 'Share this job';
+    return 'Share this job file';
   }
 
   function jobFileDeleteNameMatches(fileName, typed) {
@@ -3552,9 +3552,9 @@
     document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
       btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
     });
+    paintJobFileSheet();
     var sheet = document.getElementById('jobfile-sheet');
     if (sheet) sheet.setAttribute('data-open', '1');
-    paintJobFileSheet();
   }
 
   function closeJobFileSheet() {
@@ -3569,7 +3569,6 @@
     var key = jobSheet.key;
     var job = JOBS[key] || { name: 'Job' };
     var b = JOB_BOARD[key];
-    var live = canOpenJobRecord(key);
     if (jobSheet.tab === 'delete') {
       body.innerHTML =
         '<p class="jf-warn">This cannot be undone. The file leaves the dashboard. Footage and the record stay in the vault, but you cannot open them from here again.</p>' +
@@ -3649,29 +3648,15 @@
       return;
     }
     body.innerHTML =
-      '<p class="jf-note">Send a read-only progress link — no account needed. Homeowners, HOAs, attorneys, banks, and insurers can see the board and daily site updates.</p>' +
       (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
       '<form id="jf-share-form">' +
-        '<label><span>Who is this for?</span><input name="label" required placeholder="e.g. Cedar Ridge HOA — homeowner" /></label>' +
-        '<label><span>Email them (optional)</span><input name="email" type="email" placeholder="Leave blank to copy the link yourself" /></label>' +
-        '<label><span>Link expires</span><select name="days">' +
-          '<option value="7">In 7 days</option>' +
-          '<option value="30" selected>In 30 days</option>' +
-          '<option value="90">In 90 days</option>' +
-          '<option value="0">Never — until you revoke it</option>' +
-        '</select></label>' +
-        '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Create link</button>' +
+        '<label><span>Email</span><input name="email" type="email" required autocomplete="email" placeholder="homeowner@example.com" /></label>' +
+        '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Send invite</button>' +
       '</form>' +
-      (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
-        (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
-      shareListHtml(b, live);
+      (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) + '</div>' : '') +
+      shareListHtml(b);
     var shareForm = document.getElementById('jf-share-form');
     if (shareForm) shareForm.addEventListener('submit', function (ev) { ev.preventDefault(); submitShare(shareForm); });
-    Array.prototype.forEach.call(body.querySelectorAll('[data-copy]'), function (btn) {
-      btn.addEventListener('click', function () {
-        copyText(btn.getAttribute('data-copy'), 'Link copied.');
-      });
-    });
   }
 
   function peopleListHtml(b) {
@@ -3685,16 +3670,12 @@
 
   function shareListHtml(b) {
     var shares = (b && b.shares) || [];
-    if (!shares.length) return '<p class="jf-note" style="margin-top:14px">No progress links issued yet.</p>';
+    if (!shares.length) return '<p class="jf-note" style="margin-top:14px">Nobody has been invited yet.</p>';
     return '<ul class="jf-list">' + shares.map(function (s) {
-      var path = s.path || '';
-      var full = path.indexOf('http') === 0 ? path : (location.origin + path);
+      var who = s.recipientEmail || s.recipient_email || s.label || 'Invite';
       var state = s.state || 'live';
-      return '<li><div><div class="who">' + esc(s.label || 'Share') + '</div><div class="meta">' +
-        esc(state) + (s.recipientEmail || s.recipient_email ? ' · ' + esc(s.recipientEmail || s.recipient_email) : '') +
-        '</div></div>' +
-        (path ? '<button type="button" class="jf-copy" data-copy="' + esc(full) + '">Copy link</button>' : '') +
-        '</li>';
+      return '<li><div><div class="who">' + esc(who) + '</div><div class="meta">' +
+        esc(state) + '</div></div></li>';
     }).join('') + '</ul>';
   }
 
@@ -3833,19 +3814,21 @@
 
   function submitShare(form) {
     var key = jobSheet.key;
-    var label = (form.label.value || '').trim();
-    var email = (form.email.value || '').trim();
-    var days = Number(form.days.value);
-    if (!label) return;
+    var email = (form.email.value || '').trim().toLowerCase();
+    if (!email) {
+      jobSheet.error = 'Enter an email to send the invite.';
+      paintJobFileSheet();
+      return;
+    }
     jobSheet.busy = true;
     jobSheet.error = null;
     paintJobFileSheet();
-    if (!canOpenJobRecord(key)) {
-      var fake = { id: 'demo-' + Date.now(), label: label, path: '/progress/demo-' + key, state: 'live', recipientEmail: email || null };
+    if (!ORG_MODE) {
+      var fake = { id: 'demo-' + Date.now(), label: email, path: '/progress/demo-' + key, state: 'live', recipientEmail: email };
       DEMO_SHARES[key] = (DEMO_SHARES[key] || []).concat([fake]);
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
-      jobSheet.made = { note: email ? 'Demo link ready for ' + label + '.' : 'Demo link created. Copy it below.', path: location.origin + fake.path };
+      jobSheet.made = { note: 'Invite sent to ' + email + '.' };
       jobSheet.busy = false;
       paintJobFileSheet();
       render();
@@ -3856,24 +3839,23 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jobId: key,
-        label: label,
+        label: email,
         kind: 'progress',
-        recipientEmail: email || undefined,
-        expiresInDays: days
+        recipientEmail: email
       })
     }).then(function (r) {
       return r.json().then(function (body) { return { ok: r.ok, body: body }; });
     }).then(function (res) {
       jobSheet.busy = false;
       if (!res.ok) {
-        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not create the share.';
+        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not send the invite.';
         paintJobFileSheet();
         return;
       }
-      var path = (res.body.share && res.body.share.path) || (res.body.path);
       jobSheet.made = {
-        note: res.body.emailed ? 'Emailed. They can open the link directly — no account needed.' : 'Link created. Copy it and send it yourself:',
-        path: path ? (location.origin + path) : ''
+        note: res.body.emailed
+          ? 'Invite sent to ' + email + '.'
+          : 'Invite created for ' + email + ', but the email did not send. Try again.'
       };
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
@@ -3881,7 +3863,7 @@
       render();
     }).catch(function (err) {
       jobSheet.busy = false;
-      jobSheet.error = err && err.message ? err.message : 'Could not create the share.';
+      jobSheet.error = err && err.message ? err.message : 'Could not send the invite.';
       paintJobFileSheet();
     });
   }
