@@ -45,6 +45,9 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
         eq() {
           return api;
         },
+        or() {
+          return api;
+        },
         order() {
           return api;
         },
