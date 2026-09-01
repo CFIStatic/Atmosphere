@@ -7,12 +7,12 @@ export function jobFileDeleteNameMatches(fileName: string, typed: string): boole
   return expected.length > 0 && expected === typed.trim();
 }
 
-/** Default name for a duplicated job file. Keep in step with the backend helper. */
 /** Job Files last-event line after a dashboard delete. Hide that card everywhere. */
 export function jobLooksDeletedFromLibrary(summary: string | null | undefined): boolean {
   return /deleted from the library/i.test(summary ?? '');
 }
 
+/** Default name for a duplicated job file. Keep in step with the backend helper. */
 export function suggestedDuplicateTitle(title: string): string {
   const base = title.trim() || 'Job';
   const prefix = 'Copy of ';
