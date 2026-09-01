@@ -490,7 +490,14 @@ crmRouter.get('/audit', async (req: Request, res: Response, next: NextFunction) 
       .order('changed_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) throw new HttpError(500, error.message, 'audit_failed');
+    if (error) {
+      // Table was removed with the old CRM product. Empty ledger is correct.
+      if (/crm_audit_log/i.test(error.message) && /does not exist/i.test(error.message)) {
+        res.json({ entries: [], total: 0, limit, offset });
+        return;
+      }
+      throw new HttpError(500, error.message, 'audit_failed');
+    }
 
     res.json({
       entries: (data ?? []).map((row) => camelize(row as Record<string, any>)),

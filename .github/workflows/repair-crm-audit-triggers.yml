@@ -1,0 +1,40 @@
+# Repair: drop leftover CRM audit triggers that break job-file delete.
+#
+# Soft-delete updates crm_jobs; orphaned crm_jobs_audit still inserts into
+# public.crm_audit_log, which was removed with the old CRM product. Run this
+# when delete shows: relation "public.crm_audit_log" does not exist.
+#
+# Uses the GitHub environment `Keys` (same as Deploy Work Verification).
+
+name: Repair CRM audit triggers
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: repair-crm-audit-triggers
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Drop leftover CRM audit triggers
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Apply drop_crm_audit_triggers SQL
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
+        run: node scripts/applyCrmAuditTriggerDrop.mjs

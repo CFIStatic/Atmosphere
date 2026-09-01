@@ -45,11 +45,6 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: 'crm_external_records', cursor: 'id', orgFilter: { kind: 'org_id' } },
   { name: 'crm_sync_runs', cursor: 'id', orgFilter: { kind: 'org_id' } },
 
-  // ---- Change ledger ---------------------------------------------------
-  // Included so a restored database can still answer "what changed and when"
-  // for the period before the snapshot.
-  { name: 'crm_audit_log', cursor: 'id', orgFilter: { kind: 'org_id' } },
-
   // ---- Email Marketing (storm outreach) --------------------------------
   { name: 'em_settings', cursor: 'id', orgFilter: { kind: 'org_id' } },
   { name: 'em_storms', cursor: 'id', orgFilter: { kind: 'org_id' } },
@@ -78,4 +73,8 @@ export const EXCLUDED_TABLES: Record<string, string> = {
   backup_snapshots: 'Backup catalog — regenerated, not restored.',
   backup_snapshot_items: 'Backup catalog — regenerated, not restored.',
   backup_verifications: 'Backup catalog — regenerated, not restored.',
+
+  // Removed with the old CRM product. Soft-delete of job files no longer writes
+  // here; leftover triggers that did are dropped in 20260901010000.
+  crm_audit_log: 'Old CRM change ledger — table dropped; job-file delete must not require it.',
 };

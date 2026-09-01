@@ -58,6 +58,17 @@ drop table if exists public.crm_leads cascade;
 drop table if exists public.crm_contacts cascade;
 drop table if exists public.crm_accounts cascade;
 
+-- Kept tables (crm_jobs, crm_properties) still had audit triggers that write
+-- into crm_audit_log. After the drop above, soft-deleting a job file fails
+-- with "relation public.crm_audit_log does not exist". Remove the orphans.
+drop trigger if exists crm_jobs_audit on public.crm_jobs;
+drop trigger if exists crm_properties_audit on public.crm_properties;
+drop trigger if exists crm_accounts_audit on public.crm_accounts;
+drop trigger if exists crm_contacts_audit on public.crm_contacts;
+drop trigger if exists crm_leads_audit on public.crm_leads;
+drop trigger if exists crm_activities_audit on public.crm_activities;
+drop function if exists private.crm_audit();
+
 -- Finance
 drop table if exists public.finance_share_links cascade;
 drop table if exists public.finance_share_documents cascade;
