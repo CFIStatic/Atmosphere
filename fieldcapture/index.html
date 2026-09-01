@@ -557,22 +557,6 @@
     background: var(--panel); color: var(--ink); font: inherit;
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .addr-hint { display: block; margin-top: 6px; font-size: 11px; font-weight: 500; color: var(--faint); }
-  .addr-list {
-    position: fixed; z-index: 80; margin: 0; padding: 4px 0; list-style: none;
-    max-height: 220px; overflow: auto; border: 1px solid var(--line);
-    border-radius: 10px; background: var(--panel);
-    box-shadow: 0 10px 28px rgba(0,0,0,.16);
-  }
-  .addr-list[hidden] { display: none; }
-  .addr-item {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-    width: 100%; padding: 10px 14px; border: 0; background: transparent;
-    color: var(--ink); font: inherit; text-align: left;
-  }
-  .addr-item:hover, .addr-item:focus { background: var(--bg); }
-  .addr-item b { font-weight: 650; }
-  .addr-item small { color: var(--muted); font-size: 12px; }
   .auth-form .field-head {
     display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   }
@@ -805,20 +789,16 @@
     </div>
   </div>
 
-  <!-- ================= NEW JOB: name + site, then record ================= -->
+  <!-- ================= NEW JOB: name, then record ================= -->
   <div class="screen" id="s-new-job" data-on="0">
     <div class="home-scroll">
     <div class="pad">
       <button type="button" class="job-cancel" id="new-job-cancel">Cancel</button>
       <h1 class="h1">New job</h1>
-      <p class="lede">Name it and the site. Then start recording.</p>
+      <p class="lede">Name it, then start recording.</p>
       <form class="auth-form" id="new-job-form" novalidate>
         <label for="new-job-name">Job name
           <input id="new-job-name" name="title" type="text" required maxlength="200" autocomplete="off" placeholder="East Racine Avenue" />
-        </label>
-        <label for="new-job-address">Address
-          <input id="new-job-address" name="address" type="text" required maxlength="200" autocomplete="off" placeholder="Search Google for the site address" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="new-job-address-list" />
-          <span class="addr-hint">Search Google for the site, then pick a result.</span>
         </label>
         <label for="new-job-note">What needs to be done <span class="opt">(optional)</span>
           <textarea id="new-job-note" name="situation" maxlength="2000" rows="3" placeholder="Extract standing water in the living room. Set drying equipment."></textarea>
@@ -986,7 +966,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=home-during-upload"></script>
-<script src="js/app.js?v=home-during-upload"></script>
+<script src="js/capture-core.js?v=no-address"></script>
+<script src="js/app.js?v=no-address"></script>
 </body>
 </html>

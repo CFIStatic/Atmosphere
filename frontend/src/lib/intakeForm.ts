@@ -5,7 +5,6 @@ const SAMPLE_SITUATION =
 
 export const INTAKE_SAMPLE = {
   situation: SAMPLE_SITUATION,
-  address: '1842 Meridian Ave, Austin, TX 78702',
 } as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

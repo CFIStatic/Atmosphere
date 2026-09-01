@@ -438,7 +438,7 @@ fieldAppRouter.post('/places/resolve', async (req: Request, res: Response, next:
 
 /**
  * POST /api/field-app/jobs
- * Crew starts a job from Field Capture: name + site, optional note, then film.
+ * Crew starts a job from Field Capture: name, optional note, then film.
  * The job file is the same record office intake would have created.
  */
 fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
@@ -449,10 +449,6 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
       allowTypedFallback: true,
     });
     const jobId = created.job.id;
-    const address = [input.address, input.city, input.postalCode]
-      .map((part) => (part ?? '').trim())
-      .filter(Boolean)
-      .join(', ');
 
     const { error: assignError } = await supabase.from('job_assignments').insert({
       org_id: orgId,
@@ -490,10 +486,10 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
         id: jobId,
         number: created.job.jobNumber != null ? `#${created.job.jobNumber}` : '',
         name: created.job.title,
-        address: address || 'Address on file',
+        address: '',
         at: '',
         status: created.summary.status,
-        placed: Boolean(address),
+        placed: true,
         filmed: false,
         sharePath,
       },

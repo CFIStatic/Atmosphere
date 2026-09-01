@@ -1,19 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
-import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
   api,
   type CaptureTeamMember,
   type CreateEvidenceShareResult,
   type IntakeApproveResult,
   type IntakeProposal,
-  type ResolvedPlaceAddress,
 } from '../lib/api';
 import { jobFilePath } from '../lib/jobFileAsk';
 import {
   INTAKE_SAMPLE,
-  cityPostalFromAddress,
   isInviteEmail,
   membersToCaptureTeam,
   scopeFromSituation,
@@ -26,7 +23,7 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useExperiment } from '../hooks/useExperiment';
 
 /**
- * Office intake — name, site, optional situation, invite list.
+ * Office intake — name, optional situation, invite list.
  *
  * One page. Creates the job file, publishes a brief, and can invite Field Capture.
  *
@@ -43,7 +40,6 @@ type ExternalInvite = {
   email: string;
 };
 
-const PLACEHOLDER_ADDRESS = /^address to confirm$/i;
 const DEFAULT_BRIEF =
   'No work description yet. Field Capture can still film — AI will describe what happened from the video.';
 
@@ -58,14 +54,6 @@ export function JobIntakePage() {
       : 'Approve & invite';
 
   const [name, setName] = useState('');
-  const [siteAddress, setSiteAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [placeId, setPlaceId] = useState('');
-  const [region, setRegion] = useState('');
-  const [country, setCountry] = useState('');
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
   const [situation, setSituation] = useState('');
   const [captureTeam, setCaptureTeam] = useState<CaptureTeamMember[]>([]);
   const [externals, setExternals] = useState<ExternalInvite[]>([]);
@@ -99,25 +87,6 @@ export function JobIntakePage() {
     [captureTeam],
   );
 
-  function applyResolvedPlace(addr: ResolvedPlaceAddress) {
-    setSiteAddress(addr.formatted || addr.addressLine1);
-    setCity(addr.city || '');
-    setPostalCode(addr.postalCode || '');
-    setPlaceId(addr.placeId || '');
-    setRegion(addr.state || '');
-    setCountry(addr.country || '');
-    setLatitude(addr.lat ?? null);
-    setLongitude(addr.lng ?? null);
-  }
-
-  function clearResolvedPlace() {
-    setPlaceId('');
-    setRegion('');
-    setCountry('');
-    setLatitude(null);
-    setLongitude(null);
-  }
-
   function addExternal() {
     const email = extEmail.trim().toLowerCase();
     const fullName = extName.trim();
@@ -145,25 +114,19 @@ export function JobIntakePage() {
   }
 
   function buildProposal(): IntakeProposal {
-    const address = siteAddress.trim();
-    const parsed = cityPostalFromAddress(address);
-    const siteCity = city.trim() || parsed.city;
-    const sitePostal = postalCode.trim() || parsed.postalCode;
     const note = situation.trim();
     const scope = scopeFromSituation(note);
     return {
       title: name.trim(),
       workType: workTypeFromSituation(note),
-      address,
-      city: siteCity,
-      postalCode: sitePostal,
+      address: '',
+      city: '',
+      postalCode: '',
       claimNumber: '',
       briefNote: note || DEFAULT_BRIEF,
       facts: {
-        Site: address,
-        'Site address': [address, siteCity, sitePostal].filter(Boolean).join(', '),
         ...(note ? { Work: note.slice(0, 500) } : {}),
-        Source: note ? 'Address and work description' : 'Address only — work description optional',
+        Source: note ? 'Name and work description' : 'Name only — work description optional',
       },
       scope,
       party: {
@@ -173,8 +136,8 @@ export function JobIntakePage() {
       },
       source: 'heuristic',
       summary: note
-        ? 'Job drafted from the address and what needs to be done.'
-        : 'Job drafted from the address.',
+        ? 'Job drafted from the name and what needs to be done.'
+        : 'Job drafted from the name.',
     };
   }
 
@@ -184,37 +147,8 @@ export function JobIntakePage() {
       setError('Enter a name.');
       return;
     }
-    if (!siteAddress.trim() || PLACEHOLDER_ADDRESS.test(siteAddress)) {
-      setError('Search for the site address and pick it from the list.');
-      return;
-    }
     setBusy(true);
     setError(null);
-    let resolvedPlaceId = placeId;
-    let resolvedCity = city;
-    let resolvedPostal = postalCode;
-    let resolvedRegion = region;
-    let resolvedCountry = country;
-    let resolvedLat = latitude;
-    let resolvedLng = longitude;
-    let resolvedLine = siteAddress.trim();
-    if (!resolvedPlaceId) {
-      try {
-        const lookedUp = await api.placesResolve({ input: siteAddress.trim() });
-        applyResolvedPlace(lookedUp.address);
-        resolvedPlaceId = lookedUp.address.placeId;
-        resolvedCity = lookedUp.address.city;
-        resolvedPostal = lookedUp.address.postalCode;
-        resolvedRegion = lookedUp.address.state;
-        resolvedCountry = lookedUp.address.country;
-        resolvedLat = lookedUp.address.lat;
-        resolvedLng = lookedUp.address.lng;
-        resolvedLine = lookedUp.address.formatted || lookedUp.address.addressLine1 || resolvedLine;
-      } catch {
-        // OSM / no-key still accepts the typed line. Google rejects on the server
-        // if lookup cannot complete.
-      }
-    }
     const proposal = buildProposal();
     const invitees = [
       ...captureTeam
@@ -239,14 +173,6 @@ export function JobIntakePage() {
       const res = await api.approveIntake({
         title: proposal.title,
         workType: proposal.workType,
-        address: resolvedLine || proposal.address,
-        city: resolvedCity || proposal.city || undefined,
-        postalCode: resolvedPostal || proposal.postalCode || undefined,
-        region: resolvedRegion || undefined,
-        country: resolvedCountry || undefined,
-        placeId: resolvedPlaceId || undefined,
-        latitude: resolvedLat,
-        longitude: resolvedLng,
         briefNote: proposal.briefNote,
         facts: proposal.facts,
         scope,
@@ -463,10 +389,6 @@ export function JobIntakePage() {
               onClick={() => {
                 setResult(null);
                 setName('');
-                setSiteAddress('');
-                setCity('');
-                setPostalCode('');
-                clearResolvedPlace();
                 setSituation('');
                 setExternals([]);
               }}
@@ -492,13 +414,13 @@ export function JobIntakePage() {
         <div className="min-w-0 shrink-0">
           <h1 className="text-xl font-bold tracking-tight text-ink-900">Start a job</h1>
           <p className="mt-1 text-[13px] leading-snug text-ink-600">
-            Name it and the site. A note and invites are optional.
+            Name it. A note and invites are optional.
           </p>
         </div>
       ) : (
         <PageHeader
           title="Start a job"
-          description="Name the job, then the site. A short note and invites are optional."
+          description="Name the job. A short note and invites are optional."
         />
       )}
 
@@ -537,21 +459,6 @@ export function JobIntakePage() {
               />
             </label>
 
-            <h2 className={cn(sectionTitle, 'mt-3.5')}>Address</h2>
-            <label className="mt-2 block text-xs font-medium text-ink-600">
-              <span className="sr-only">Address</span>
-              <AddressAutocomplete
-                value={siteAddress}
-                onChange={(next) => {
-                  setSiteAddress(next);
-                  clearResolvedPlace();
-                }}
-                onResolved={applyResolvedPlace}
-                required
-                placeholder="Search Google for the site address"
-              />
-            </label>
-
             <div className="mt-3.5 flex items-baseline justify-between gap-2">
               <h2 className={sectionTitle}>Situation</h2>
               <button
@@ -559,7 +466,6 @@ export function JobIntakePage() {
                 className="shrink-0 text-xs font-medium text-brand-600"
                 onClick={() => {
                   setSituation(INTAKE_SAMPLE.situation);
-                  if (!siteAddress.trim()) setSiteAddress(INTAKE_SAMPLE.address);
                 }}
               >
                 Use a sample note
@@ -596,24 +502,6 @@ export function JobIntakePage() {
                 </label>
               </div>
 
-              <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
-                <h2 className="text-base font-semibold text-ink-900">Address</h2>
-                <p className="mt-1 text-sm text-ink-600">Where the crew will work.</p>
-                <label className="mt-4 block text-xs font-medium text-ink-600">
-                  Address
-                  <AddressAutocomplete
-                    value={siteAddress}
-                    onChange={(next) => {
-                      setSiteAddress(next);
-                      clearResolvedPlace();
-                    }}
-                    onResolved={applyResolvedPlace}
-                    required
-                    placeholder="Search Google for the site address"
-                  />
-                </label>
-              </div>
-
               <div className="rounded-xl glass-card p-5">
                 <h2 className="text-base font-semibold text-ink-900">Situation</h2>
                 <p className="mt-1 text-sm text-ink-600">
@@ -631,7 +519,6 @@ export function JobIntakePage() {
                   className="mt-3 text-sm font-medium text-brand-600"
                   onClick={() => {
                     setSituation(INTAKE_SAMPLE.situation);
-                    if (!siteAddress.trim()) setSiteAddress(INTAKE_SAMPLE.address);
                   }}
                 >
                   Use a sample note
@@ -836,7 +723,7 @@ export function JobIntakePage() {
         >
           <button
             type="submit"
-            disabled={busy || !name.trim() || !siteAddress.trim()}
+            disabled={busy || !name.trim()}
             data-experiment="intake_cta_copy"
             data-variant={intakeCta.variantKey ?? 'control'}
             className={cn(

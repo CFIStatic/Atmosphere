@@ -619,10 +619,6 @@
       accessToken: opts.accessToken,
       body: {
         title: opts.title,
-        address: opts.address,
-        city: opts.city || undefined,
-        postalCode: opts.postalCode || undefined,
-        placeId: opts.placeId || undefined,
         situation: opts.situation || undefined,
       },
     }).then(function (body) {
