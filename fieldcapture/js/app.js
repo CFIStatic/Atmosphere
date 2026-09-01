@@ -835,12 +835,20 @@
       storageBase: STORAGE_BASE,
       blob: clip.blob,
       mimeType: clip.mimeType,
+      knownSite: state.site || null,
       onStep: function (step) {
         var stepEl = $('#upload-step');
         if (stepEl) {
           stepEl.textContent = step;
           stepEl.style.color = '';
         }
+      },
+      onProgress: function (ratio) {
+        var bar = $('#upload-bar');
+        var pct = $('#upload-pct');
+        var pctVal = Math.round((ratio || 0) * 100);
+        if (bar) bar.style.width = pctVal + '%';
+        if (pct) pct.textContent = pctVal + '%';
       },
     }).then(
       function (result) {
@@ -863,7 +871,8 @@
   function openDoorUploading() {
     show('s-door');
     $('#ledger').innerHTML =
-      '<div class="lrow on"><span>Uploading</span><em id="upload-step">Starting…</em><span class="ok">…</span></div>';
+      '<div class="lrow on"><span>Uploading</span><em id="upload-step">Starting…</em><span class="ok" id="upload-pct">0%</span></div>' +
+      '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>';
     $('#daytl').innerHTML = '';
     $('#doneline').classList.remove('on');
     var copy = $('#doneline-copy');

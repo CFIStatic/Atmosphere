@@ -42,3 +42,14 @@ test('recordProof calls analyseUploadedProof after the file is stored', async ()
   const analyseIndex = src.indexOf('await analyseUploadedProof');
   assert.ok(fileIndex > 0 && analyseIndex > fileIndex, 'analysis must start after the row is stored');
 });
+
+test('recordProof stores client frames off the critical path', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/routes/proofOfWork.ts', import.meta.url), 'utf8');
+  const framesIdx = src.indexOf('void storeClientFrames(');
+  const analyseIdx = src.indexOf('await analyseUploadedProof(');
+  assert.ok(framesIdx > 0, 'client frames must be fired without awaiting');
+  assert.ok(analyseIdx > framesIdx, 'analysis still starts after the proof row exists');
+  assert.match(src, /async function storeClientFrames\(/);
+});
+

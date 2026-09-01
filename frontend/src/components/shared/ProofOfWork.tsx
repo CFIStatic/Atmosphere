@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   api,
   type PhysicalWorkRecord,
@@ -10,6 +10,7 @@ import {
 } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
+import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 
 /**
  * Proof of work.
@@ -93,10 +94,13 @@ export function ProofOfWork({
   const [error, setError] = useState<string | null>(null);
   const [episodes, setEpisodes] = useState<WorkEpisodeListItem[]>([]);
   const [records, setRecords] = useState<Record<string, PhysicalWorkRecord>>({});
+  const [freshNotice, setFreshNotice] = useState<string | null>(null);
+  const knownVideoCount = useRef<number | null>(null);
 
-  async function load() {
+  async function load(opts?: { silent?: boolean }) {
     if (initialData) {
       setData(initialData);
+      knownVideoCount.current = initialData.videos?.length ?? initialData.counts?.videos ?? 0;
       return;
     }
     if (!jobId) return;
@@ -108,17 +112,29 @@ export function ProofOfWork({
           : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
         api.jobEpisodes(jobId).catch(() => ({ episodes: [] as WorkEpisodeListItem[] })),
       ]);
+      const nextCount = proofs.videos?.length ?? proofs.counts?.videos ?? 0;
+      if (
+        opts?.silent &&
+        knownVideoCount.current != null &&
+        nextCount > knownVideoCount.current
+      ) {
+        const added = nextCount - knownVideoCount.current;
+        setFreshNotice(added === 1 ? 'New video filed on this job.' : `${added} new videos filed on this job.`);
+      }
+      knownVideoCount.current = nextCount;
       setData(proofs);
       setQuestions(qs.questions);
       setEpisodes(episodeList.episodes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-      setData({
-        days: [],
-        videos: [],
-        counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
-        siteKnown: false,
-      });
+      if (!opts?.silent) {
+        setError(err instanceof Error ? err.message : 'Could not load the proof record.');
+        setData({
+          days: [],
+          videos: [],
+          counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
+          siteKnown: false,
+        });
+      }
     }
   }
 
@@ -126,9 +142,16 @@ export function ProofOfWork({
     setData(null);
     setOpenDay(null);
     setRecords({});
+    setFreshNotice(null);
+    knownVideoCount.current = null;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, initialData]);
+
+  useVisiblePolling(() => void load({ silent: true }), {
+    enabled: Boolean(jobId) && !initialData,
+    intervalMs: 12_000,
+  });
 
   useEffect(() => {
     if (!openDay) return;
@@ -219,6 +242,11 @@ export function ProofOfWork({
         </p>
       )}
 
+      {freshNotice && (
+        <p role="status" className="mb-3 rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">
+          {freshNotice}
+        </p>
+      )}
       {error && (
         <p role="alert" className="mt-3 text-sm text-danger-600">
           {error}

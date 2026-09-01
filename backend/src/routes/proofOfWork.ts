@@ -266,24 +266,13 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   const { data: proof, error } = await write.select(PROOF_SELECT).single();
   if (error) throw new HttpError(400, error.message, 'proof_failed');
 
+  // Client stills are useful, but a crew in the doorway must not wait on
+  // twelve JPEG uploads before "filed" returns. Store them off the critical
+  // path; ensureStillsAndDuration fills gaps if they land late or fail.
   if (input.frames?.length) {
-    for (const frame of input.frames) {
-      const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}-f${Math.round(frame.atSeconds)}.jpg`;
-      const bytes = Buffer.from(frame.base64, 'base64');
-      await admin.storage.from(PROOF_BUCKET).upload(path, bytes, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-      await admin.from('job_proof_frames').upsert(
-        {
-          org_id: party.org_id,
-          proof_id: (proof as any).id,
-          at_seconds: frame.atSeconds,
-          storage_path: path,
-        },
-        { onConflict: 'proof_id,at_seconds' },
-      );
-    }
+    void storeClientFrames(admin, party, proof as any, input).catch((err) => {
+      console.warn('[proof] client frames failed:', err instanceof Error ? err.message : err);
+    });
   }
 
   // Step 2 — the file is on disk, so the model reads it now. Nobody has to
@@ -1215,6 +1204,33 @@ export async function queueNarration(admin: any, party: any, proofId: string, ph
  * returns; the model runs in the background. Opening the clip is display,
  * not the trigger.
  */
+
+async function storeClientFrames(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string },
+  proof: { id: string },
+  input: { workDate: string; phase: string; frames?: Array<{ atSeconds: number; base64: string }> },
+): Promise<void> {
+  if (!input.frames?.length) return;
+  for (const frame of input.frames) {
+    const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}-f${Math.round(frame.atSeconds)}.jpg`;
+    const bytes = Buffer.from(frame.base64, 'base64');
+    await admin.storage.from(PROOF_BUCKET).upload(path, bytes, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    await admin.from('job_proof_frames').upsert(
+      {
+        org_id: party.org_id,
+        proof_id: proof.id,
+        at_seconds: frame.atSeconds,
+        storage_path: path,
+      },
+      { onConflict: 'proof_id,at_seconds' },
+    );
+  }
+}
+
 export async function analyseUploadedProof(
   admin: any,
   party: { org_id: string; job_id: string; id: string; trade?: string | null },

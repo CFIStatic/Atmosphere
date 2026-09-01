@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type EvidenceItem, type CustodyEntry } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
+import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 
 /**
  * The evidence locker.
@@ -90,26 +91,48 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  async function load(keepSelection = true) {
+  const knownItemCount = useRef<number | null>(null);
+  const [freshNotice, setFreshNotice] = useState<string | null>(null);
+
+  async function load(keepSelection = true, opts?: { silent?: boolean }) {
     try {
       const res = await api.jobEvidence(jobId);
+      const nextCount = res.counts?.items ?? res.items.length;
+      if (
+        opts?.silent &&
+        knownItemCount.current != null &&
+        nextCount > knownItemCount.current
+      ) {
+        const added = nextCount - knownItemCount.current;
+        setFreshNotice(added === 1 ? 'New file filed on this job.' : `${added} new files filed on this job.`);
+      }
+      knownItemCount.current = nextCount;
       setItems(res.items);
       setCounts(res.counts);
       if (keepSelection && selected) {
         setSelected(res.items.find((i) => i.id === selected.id) ?? null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open the evidence locker.');
-      setItems([]);
+      if (!opts?.silent) {
+        setError(err instanceof Error ? err.message : 'Could not open the evidence locker.');
+        setItems([]);
+      }
     }
   }
 
   useEffect(() => {
     setItems(null);
     setSelected(null);
+    setFreshNotice(null);
+    knownItemCount.current = null;
     void load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  useVisiblePolling(() => void load(true, { silent: true }), {
+    enabled: Boolean(jobId),
+    intervalMs: 12_000,
+  });
 
   const query = filter.trim().toLowerCase();
   const listed = (items ?? []).filter(
@@ -144,6 +167,11 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
         </div>
       </header>
 
+      {freshNotice && (
+        <p role="status" className="px-5 py-3 text-sm text-success-700 bg-success-50">
+          {freshNotice}
+        </p>
+      )}
       {error && (
         <p role="alert" className="px-5 py-3 text-sm text-danger-600">
           {error}
