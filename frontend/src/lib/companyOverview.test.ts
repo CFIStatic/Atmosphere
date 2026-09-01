@@ -313,6 +313,39 @@ describe('buildOverview', () => {
       NOW,
     );
     expect(model.jobs.map((row) => row.title)).toEqual(['Meridian Ave — water loss']);
+    expect(todayLine(model)).toBe('No film landed today');
+  });
+
+  it('does not count film on a job the Dashboard already dropped', () => {
+    const model = buildOverview(
+      [job({ jobId: 'live', title: 'Meridian Ave — water loss', lastEventAt: NOW.toISOString() })],
+      [shared({ jobId: 'live', title: 'Meridian Ave — water loss' })],
+      {
+        clips: 3,
+        read: 0,
+        analysing: 0,
+        failed: 1,
+        unread: 2,
+        heard: 0,
+        filmedToday: 1,
+        byJob: [
+          {
+            jobId: 'cursor-1',
+            clips: 3,
+            read: 0,
+            analysing: 0,
+            failed: 1,
+            unread: 2,
+            heard: 0,
+            filmedToday: 1,
+          },
+        ],
+      },
+      NOW,
+    );
+    expect(model.jobs.map((row) => row.title)).toEqual(['Meridian Ave — water loss']);
+    expect(model.today).toEqual({ filmed: 0, unread: 0, failed: 0, analysing: 0, jobsFilmed: 0 });
+    expect(todayLine(model)).toBe('No film landed today');
   });
 
   it('does not revive a Dashboard delete from the shared list', () => {

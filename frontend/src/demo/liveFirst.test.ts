@@ -21,6 +21,7 @@ describe('isLiveFirstPath', () => {
     expect(isLiveFirstPath('/api/operations/shared/abc-123')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared/abc-123/proof')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared/abc-123/duplicate')).toBe(true);
+    expect(isLiveFirstPath('/api/operations/shared/abc-123/evidence/clip-9')).toBe(true);
   });
 
   it('leaves unrelated demo fixtures in place', () => {

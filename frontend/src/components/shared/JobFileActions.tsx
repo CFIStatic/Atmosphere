@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type SharedJobSummary } from '../../lib/api';
 import { jobFileDeleteNameMatches, suggestedDuplicateTitle } from '../../lib/jobFileCopy';
+import { notifyLibraryChanged } from '../../lib/libraryChanged';
 import { SpinnerIcon } from '../icons';
 
 /**
@@ -59,6 +60,7 @@ export function JobFileActions({
       setError(null);
       try {
         await api.deleteJobFile(jobId, title);
+        notifyLibraryChanged();
         setMode(null);
         onDeleted?.();
       } catch (err) {

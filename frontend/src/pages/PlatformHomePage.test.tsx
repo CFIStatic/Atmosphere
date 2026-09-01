@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobSummary, SharedJobSummary } from '../lib/api';
+import { LIBRARY_CHANGED_EVENT } from '../lib/libraryChanged';
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
@@ -119,58 +120,79 @@ const shared: SharedJobSummary[] = [
   },
 ];
 
+const pulse = {
+  clips: 8,
+  read: 5,
+  analysing: 1,
+  failed: 2,
+  unread: 1,
+  heard: 3,
+  filmedToday: 2,
+  byJob: [
+    {
+      jobId: 'job-failed',
+      clips: 4,
+      read: 2,
+      analysing: 0,
+      failed: 2,
+      unread: 0,
+      heard: 2,
+      filmedToday: 0,
+    },
+    {
+      jobId: 'job-dated',
+      clips: 4,
+      read: 3,
+      analysing: 1,
+      failed: 0,
+      unread: 1,
+      heard: 1,
+      filmedToday: 2,
+    },
+  ],
+};
+
+const getJobs = vi.fn();
+const sharedJobs = vi.fn();
+const proofPulse = vi.fn();
+
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
   return {
     ...actual,
     api: {
-      getJobs: () => Promise.resolve({ jobs }),
-      sharedJobs: () => Promise.resolve({ jobs: shared, counts: { jobs: 3, parties: 4, blockers: 2, awaiting: 1 } }),
-      proofPulse: () =>
-        Promise.resolve({
-          clips: 8,
-          read: 5,
-          analysing: 1,
-          failed: 2,
-          unread: 1,
-          heard: 3,
-          filmedToday: 2,
-          byJob: [
-            {
-              jobId: 'job-failed',
-              clips: 4,
-              read: 2,
-              analysing: 0,
-              failed: 2,
-              unread: 0,
-              heard: 2,
-              filmedToday: 0,
-            },
-            {
-              jobId: 'job-dated',
-              clips: 4,
-              read: 3,
-              analysing: 1,
-              failed: 0,
-              unread: 1,
-              heard: 1,
-              filmedToday: 2,
-            },
-          ],
-        }),
+      getJobs: (...args: unknown[]) => getJobs(...args),
+      sharedJobs: (...args: unknown[]) => sharedJobs(...args),
+      proofPulse: (...args: unknown[]) => proofPulse(...args),
     },
   };
 });
 
 import { PlatformHomePage } from './PlatformHomePage';
 
+function renderOverview() {
+  return render(
+    <MemoryRouter>
+      <PlatformHomePage platform="field" />
+    </MemoryRouter>,
+  );
+}
+
 describe('PlatformHomePage', () => {
+  beforeEach(() => {
+    getJobs.mockReset();
+    sharedJobs.mockReset();
+    proofPulse.mockReset();
+    getJobs.mockResolvedValue({ jobs });
+    sharedJobs.mockResolvedValue({
+      jobs: shared,
+      counts: { jobs: 3, parties: 4, blockers: 2, awaiting: 1 },
+    });
+    proofPulse.mockResolvedValue(pulse);
+  });
+
   it('is a proof-chain decision queue, not a company inventory dashboard', async () => {
-    render(
-      <MemoryRouter>
-        <PlatformHomePage platform="field" />
-      </MemoryRouter>,
-    );
+    renderOverview();
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'What needs you' })).toBeInTheDocument();
@@ -221,11 +243,7 @@ describe('PlatformHomePage', () => {
     window.innerWidth = 390;
 
     try {
-      render(
-        <MemoryRouter>
-          <PlatformHomePage platform="field" />
-        </MemoryRouter>,
-      );
+      renderOverview();
 
       await waitFor(() => {
         expect(screen.getByRole('heading', { name: 'What needs you' })).toBeInTheDocument();
@@ -257,11 +275,7 @@ describe('PlatformHomePage', () => {
 
   it('lets the office filter the queue by proof-chain stage', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <PlatformHomePage platform="field" />
-      </MemoryRouter>,
-    );
+    renderOverview();
 
     await waitFor(() => {
       expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
@@ -275,5 +289,53 @@ describe('PlatformHomePage', () => {
     await user.click(screen.getByRole('button', { name: /needs a look/i }));
     expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
     expect(screen.queryByText('East 6th — kitchen, water')).not.toBeInTheDocument();
+  });
+
+  it('hides a job file the Dashboard already deleted even when last event is older', async () => {
+    getJobs.mockResolvedValue({
+      jobs: [
+        ...jobs,
+        {
+          ...jobs[0],
+          jobId: 'cursor-1',
+          jobNumber: 1,
+          title: 'Cursor 1',
+          lastEvent: 'opened job #1 — Cursor 1',
+          lastEventAt: '2026-08-01T13:00:00Z',
+        },
+      ],
+    });
+    renderOverview();
+    expect(await screen.findByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    expect(screen.queryByText('Cursor 1')).not.toBeInTheDocument();
+  });
+
+  it('reloads the proof chain after a library delete', async () => {
+    renderOverview();
+    expect(await screen.findByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    expect(screen.getByText('2 clips failed')).toBeInTheDocument();
+
+    getJobs.mockResolvedValue({
+      jobs: jobs.filter((job) => job.jobId !== 'job-failed'),
+    });
+    sharedJobs.mockResolvedValue({
+      jobs: shared.filter((job) => job.jobId !== 'job-failed'),
+      counts: { jobs: 2, parties: 1, blockers: 0, awaiting: 0 },
+    });
+    proofPulse.mockResolvedValue({
+      ...pulse,
+      clips: 4,
+      failed: 0,
+      byJob: pulse.byJob.filter((row) => row.jobId !== 'job-failed'),
+    });
+
+    window.dispatchEvent(new Event(LIBRARY_CHANGED_EVENT));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Cedar Ridge — storm damage')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Meridian Ave — water loss')).toBeInTheDocument();
+    expect(screen.queryByText('2 clips failed')).not.toBeInTheDocument();
+    expect(getJobs).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   api,
@@ -16,6 +16,8 @@ import {
   type PipelineStage,
 } from '../lib/companyOverview';
 import { jobFilePath } from '../lib/jobFileAsk';
+import { visibleJobFiles } from '../lib/jobFileCopy';
+import { subscribeLibraryChanged } from '../lib/libraryChanged';
 import { buildCrewBoard, type CrewBoardRow } from '../lib/workerBoard';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { cn } from '../design';
@@ -47,34 +49,56 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   const phone = usePhoneShell();
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [shared, setShared] = useState<SharedJobSummary[] | null>(null);
+  const [dashboardIds, setDashboardIds] = useState<Set<string> | null>(null);
   const [pulse, setPulse] = useState(emptyPulse());
   const [pulseReady, setPulseReady] = useState(false);
   const [stage, setStage] = useState<PipelineStage | null>(null);
+  const loadGen = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
+  const load = useCallback(async () => {
+    const gen = ++loadGen.current;
+    const [nextJobs, nextShared, nextPulse] = await Promise.all([
       api.getJobs({ status: 'all' }).then(({ jobs: next }) => next).catch(() => [] as JobSummary[]),
-      api.sharedJobs().then(({ jobs: next }) => next).catch(() => [] as SharedJobSummary[]),
+      api
+        .sharedJobs()
+        .then(({ jobs: next }) => ({ ok: true as const, jobs: next }))
+        .catch(() => ({ ok: false as const, jobs: [] as SharedJobSummary[] })),
       api.proofPulse().catch(() => emptyPulse()),
-    ]).then(([nextJobs, nextShared, nextPulse]) => {
-      if (cancelled) return;
-      setJobs(nextJobs);
-      setShared(nextShared);
-      setPulse({ ...emptyPulse(), ...nextPulse, byJob: nextPulse.byJob ?? [] });
-      setPulseReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
+    ]);
+    if (gen !== loadGen.current) return;
+    setJobs(nextJobs);
+    setShared(nextShared.jobs);
+    setDashboardIds(nextShared.ok ? new Set(nextShared.jobs.map((job) => job.jobId)) : null);
+    setPulse({ ...emptyPulse(), ...nextPulse, byJob: nextPulse.byJob ?? [] });
+    setPulseReady(true);
   }, []);
 
+  useEffect(() => {
+    void load();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const stop = subscribeLibraryChanged(() => {
+      void load();
+    });
+    return () => {
+      loadGen.current += 1;
+      document.removeEventListener('visibilitychange', onVisible);
+      stop();
+    };
+  }, [load]);
+
+  const visibleJobs = useMemo(
+    () => visibleJobFiles(jobs ?? [], dashboardIds),
+    [jobs, dashboardIds],
+  );
   const model = useMemo(
-    () => buildOverview(jobs ?? [], shared ?? [], pulseReady ? pulse : null),
-    [jobs, shared, pulse, pulseReady],
+    () => buildOverview(visibleJobs, shared ?? [], pulseReady ? pulse : null),
+    [visibleJobs, shared, pulse, pulseReady],
   );
   const loaded = jobs != null && shared != null && pulseReady;
-  const crew = useMemo(() => buildCrewBoard(jobs ?? []), [jobs]);
+  const crew = useMemo(() => buildCrewBoard(visibleJobs), [visibleJobs]);
 
   return (
     <div

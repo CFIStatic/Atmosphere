@@ -3433,6 +3433,9 @@ const routes: Array<[string, RegExp, Handler]> = [
     SHARED_RECORDS[id] = record;
     return { body: record };
   }],
+  ['DELETE', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)$/, () => ({
+    body: { ok: true, deletedAt: new Date().toISOString() },
+  })],
   ['DELETE', /^\/api\/operations\/shared\/([\w-]+)$/, (m, b) => {
     const id = m[1];
     const title = String(b.title ?? '').trim();

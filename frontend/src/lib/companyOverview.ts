@@ -317,8 +317,18 @@ export function buildOverview(
     count: overviewJobs.filter((j) => j.stage === stage).length,
   }));
 
+  // Film on a deleted file is gone from the office. Closed jobs still have
+  // their clips on the record, so Today's film keeps those counts.
+  const hiddenFilm = (pulse?.byJob ?? []).filter((row) => {
+    const job = jobsById.get(row.jobId);
+    return !job || jobLooksDeletedFromLibrary(job.lastEvent);
+  });
+  const hiddenJobIds = new Set(hiddenFilm.map((row) => row.jobId));
+
   const filmedJobIds = new Set(
-    (pulse?.byJob ?? []).filter((row) => row.filmedToday > 0).map((row) => row.jobId),
+    (pulse?.byJob ?? [])
+      .filter((row) => row.filmedToday > 0 && !hiddenJobIds.has(row.jobId))
+      .map((row) => row.jobId),
   );
 
   return {
@@ -326,13 +336,32 @@ export function buildOverview(
     jobs: overviewJobs,
     actions,
     pipeline,
-    today: {
-      filmed: pulse?.filmedToday ?? 0,
-      unread: pulse?.unread ?? 0,
-      failed: pulse?.failed ?? 0,
-      analysing: pulse?.analysing ?? 0,
-      jobsFilmed: filmedJobIds.size,
-    },
+    today: subtractHiddenFilm(
+      {
+        filmed: pulse?.filmedToday ?? 0,
+        unread: pulse?.unread ?? 0,
+        failed: pulse?.failed ?? 0,
+        analysing: pulse?.analysing ?? 0,
+        jobsFilmed: filmedJobIds.size,
+      },
+      hiddenFilm,
+    ),
+  };
+}
+
+function subtractHiddenFilm(
+  today: OverviewModel['today'],
+  hidden: ProofPulseJob[],
+): OverviewModel['today'] {
+  if (hidden.length === 0) return today;
+  const take = (key: 'filmedToday' | 'unread' | 'failed' | 'analysing') =>
+    hidden.reduce((n, row) => n + row[key], 0);
+  return {
+    filmed: Math.max(0, today.filmed - take('filmedToday')),
+    unread: Math.max(0, today.unread - take('unread')),
+    failed: Math.max(0, today.failed - take('failed')),
+    analysing: Math.max(0, today.analysing - take('analysing')),
+    jobsFilmed: today.jobsFilmed,
   };
 }
 
