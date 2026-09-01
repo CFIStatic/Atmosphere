@@ -23,10 +23,12 @@ async function txt(name) {
     const rows = await resolveTxt(name);
     return rows.map((parts) => parts.join(''));
   } catch (err) {
-    if (err && (err.code === 'ENODATA' || err.code === 'ENOTFOUND' || err.code === 'NXDOMAIN')) {
-      return [];
+    // Missing records and transient resolver failures (ETIMEOUT, ESERVFAIL,
+    // ENETUNREACH, …) are advisory — this script never fails the deploy.
+    if (err && err.code && err.code !== 'ENODATA' && err.code !== 'ENOTFOUND' && err.code !== 'NXDOMAIN') {
+      console.warn(`  DNS lookup failed for ${name}: ${err.code}`);
     }
-    throw err;
+    return [];
   }
 }
 

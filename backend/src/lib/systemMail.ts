@@ -72,14 +72,21 @@ export function logMailEnabled(): boolean {
   return !config.isProduction && !smtpConfigured() && !process.env.RESEND_API_KEY?.trim();
 }
 
-export function systemMailConfigured(): boolean {
-  if (logMailEnabled()) return true;
-  if (smtpConfigured()) return true;
-  return Boolean(process.env.RESEND_API_KEY?.trim());
-}
-
 function mailFrom(): string {
   return fromAddress() || 'jack@jettx.ai';
+}
+
+/** SMTP credentials that sendSystemMail will actually use for this From. */
+function smtpUsableForFrom(from: string): boolean {
+  if (!smtpConfigured()) return false;
+  if (driverOverride() === 'smtp') return true;
+  return smtpFromMatchesAccount(from, process.env.SMTP_USER);
+}
+
+export function systemMailConfigured(): boolean {
+  if (logMailEnabled()) return true;
+  if (process.env.RESEND_API_KEY?.trim()) return true;
+  return smtpUsableForFrom(mailFrom());
 }
 
 async function sendViaLog(input: {
@@ -236,7 +243,7 @@ export async function sendSystemMail(input: {
   const order = systemMailTransportOrder({
     driver,
     resendReady: Boolean(process.env.RESEND_API_KEY?.trim()),
-    smtpReady: smtpConfigured(),
+    smtpReady: smtpUsableForFrom(from),
     logReady: logMailEnabled(),
   });
 
@@ -254,10 +261,7 @@ export async function sendSystemMail(input: {
     }
 
     if (transport === 'smtp') {
-      if (
-        !smtpFromMatchesAccount(from, process.env.SMTP_USER) &&
-        driver !== 'smtp'
-      ) {
+      if (!smtpUsableForFrom(from)) {
         console.warn(
           `[system-mail] skipping SMTP — ${process.env.SMTP_USER || '(no user)'} cannot authenticate From ${from}`,
         );

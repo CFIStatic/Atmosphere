@@ -76,6 +76,10 @@ export function smtpFromMatchesAccount(
 ): boolean {
   const user = smtpUser?.trim();
   if (!user) return false;
+  // SES / Postmark / SendGrid SMTP logins are access keys or tokens, not
+  // mailboxes. Those hosts authenticate From via SPF/DKIM on the account,
+  // not via the username domain.
+  if (!emailDomain(user)) return true;
   return sameOrganization(fromAddress, user);
 }
 

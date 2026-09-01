@@ -27,7 +27,7 @@ export function renderApplicationEmail(app: CareersApplication): string {
     '—',
     'Sent from the Atmosphere careers page.',
   ]
-    .filter((line): line is string => Boolean(line))
+    .filter((line): line is string => line !== null)
     .join('\n');
 }
 

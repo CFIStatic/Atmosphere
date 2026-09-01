@@ -56,6 +56,12 @@ describe('From header / SMTP match', () => {
     assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'jack@jettx.ai'), true);
     assert.equal(smtpFromMatchesAccount('hello@invites.jettx.ai', 'jack@jettx.ai'), true);
   });
+
+  it('treats SES / Postmark / SendGrid SMTP logins as able to sign From', () => {
+    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'AKIAIOSFODNN7EXAMPLE'), true);
+    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'apikey'), true);
+    assert.equal(smtpFromMatchesAccount('hello@invites.jettx.ai', 'server-token-without-at'), true);
+  });
 });
 
 describe('deliverability headers', () => {
