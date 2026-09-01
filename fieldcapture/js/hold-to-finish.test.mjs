@@ -145,6 +145,21 @@ assert.match(
   'Back to Home Screen must appear as soon as recording ends, including while uploading',
 );
 assert.match(appSrc, /state\.lastClip/, 'keep the day film on device until upload succeeds');
+assert.match(
+  appSrc,
+  /if \(!state\.finishing\) \{\s*state\.lastClip = null;/,
+  'Home must not drop lastClip while an upload is still in flight',
+);
+assert.match(
+  appSrc,
+  /if \(state\.lastClip === clip\) state\.lastClip = null;/,
+  'a settled PUT must not wipe a newer recording',
+);
+assert.match(
+  appSrc,
+  /if \(state\.finishing\) \{\s*setStatus\('The last day is still uploading\.'/,
+  'a second day must not start while the previous PUT is still running',
+);
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
 assert.match(coreSrc, /hadAudio/, 'stop must confirm the mic track before filing');
 assert.match(coreSrc, /Microphone is required/);
