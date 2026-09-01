@@ -7,8 +7,10 @@
 # Runtime variable (Variables tab, not GitHub Keys):
 #   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 #
-# Then generate a domain (or attach app.atmosphereteam.com) and put that origin
-# on the backend as FRONTEND_ORIGIN. See docs/production.md.
+# Then generate a domain (or attach platform.atmosphereteam.com) and put that
+# origin on the backend as FRONTEND_ORIGIN. See docs/production.md.
+# Production CORS also allows https://platform.atmosphereteam.com without that
+# edit so login keeps working after a domain cutover.
 
 [build]
 builder = "DOCKERFILE"

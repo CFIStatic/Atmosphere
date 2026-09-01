@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  isAtmosphereCustomAppOrigin,
   isAtmosphereRailwayFieldCaptureOrigin,
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
+  LIVE_CUSTOM_APP_ORIGIN,
 } from './previewOrigins.js';
 
 describe('isCloudflareQuickTunnelOrigin', () => {
@@ -60,6 +62,22 @@ describe('isAtmosphereRailwayWebOrigin', () => {
       false,
     );
     assert.equal(isAtmosphereRailwayWebOrigin('https://app.atmosphereteam.com'), false);
+    assert.equal(isAtmosphereRailwayWebOrigin(LIVE_CUSTOM_APP_ORIGIN), false);
+  });
+});
+
+describe('isAtmosphereCustomAppOrigin', () => {
+  it('accepts the live platform.atmosphereteam.com office host', () => {
+    assert.equal(isAtmosphereCustomAppOrigin(LIVE_CUSTOM_APP_ORIGIN), true);
+    assert.equal(isAtmosphereCustomAppOrigin('https://www.platform.atmosphereteam.com'), true);
+  });
+
+  it('rejects lookalikes and the unmapped app. host', () => {
+    assert.equal(isAtmosphereCustomAppOrigin('http://platform.atmosphereteam.com'), false);
+    assert.equal(isAtmosphereCustomAppOrigin('https://app.atmosphereteam.com'), false);
+    assert.equal(isAtmosphereCustomAppOrigin('https://platform.atmosphereteam.com.evil.com'), false);
+    assert.equal(isAtmosphereCustomAppOrigin('https://evil-platform.atmosphereteam.com'), false);
+    assert.equal(isAtmosphereCustomAppOrigin('https://atmosphere-web-production.up.railway.app'), false);
   });
 });
 

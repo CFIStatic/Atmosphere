@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  LIVE_CUSTOM_APP_ORIGIN,
   LIVE_OFFICE_ORIGIN,
   isUnusablePasswordResetUrl,
   passwordResetRedirectUrl,
@@ -9,6 +10,16 @@ import {
 } from './publicAppOrigin.js';
 
 describe('publicAppOrigin', () => {
+  it('prefers platform.atmosphereteam.com over the Railway office', () => {
+    assert.equal(
+      publicAppOrigin([
+        LIVE_CUSTOM_APP_ORIGIN,
+        'https://atmosphere-web-production.up.railway.app',
+      ]),
+      LIVE_CUSTOM_APP_ORIGIN,
+    );
+  });
+
   it('prefers the live Railway office over the unmapped custom domain', () => {
     assert.equal(
       publicAppOrigin([

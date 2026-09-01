@@ -171,7 +171,7 @@ message rather than silently failing.
 The marketing → account creation → product chain is wired but dormant until
 the office app is hosted on Railway (see `docs/production.md`). Set the
 `WEBSITE_APP_ORIGIN` repository variable to the app's https origin (e.g.
-`https://app.atmosphereteam.com`) and the next deploy
+`https://platform.atmosphereteam.com`) and the next deploy
 stamps it onto every page as `<html data-app-origin>`; `site.js` then:
 
 - rewrites every **Sign in** CTA to `{origin}/login` and every **Get

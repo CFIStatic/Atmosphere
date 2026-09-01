@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 
 const OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+const PLATFORM_ORIGIN = 'https://platform.atmosphereteam.com';
 const FIELD_CAPTURE_ORIGIN = 'https://field-capture-production.up.railway.app';
 
 async function listen(): Promise<{
@@ -36,6 +37,24 @@ test('CORS allows the Atmosphere-web Railway origin', async () => {
     assert.notEqual(res.status, 500);
     assert.ok(res.status === 204 || res.status === 200);
     assert.equal(res.headers.get('access-control-allow-origin'), OFFICE_ORIGIN);
+  } finally {
+    await close();
+  }
+});
+
+test('CORS allows the live platform.atmosphereteam.com origin', async () => {
+  const { url, close } = await listen();
+  try {
+    const res = await fetch(`${url}/api/auth/me`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: PLATFORM_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+      },
+    });
+    assert.notEqual(res.status, 500);
+    assert.ok(res.status === 204 || res.status === 200);
+    assert.equal(res.headers.get('access-control-allow-origin'), PLATFORM_ORIGIN);
   } finally {
     await close();
   }

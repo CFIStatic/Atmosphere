@@ -421,15 +421,15 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
 ### 2. Public origin
 
-On the **Atmosphere-web** service: Settings → Networking → **Generate domain**, then attach `app.atmosphereteam.com` (or your real app host).
+On the **Atmosphere-web** service: Settings → Networking → **Generate domain**, then attach `platform.atmosphereteam.com` (or your real app host).
 
 On the **backend** service, `FRONTEND_ORIGIN` must include that https origin (comma-separated if you also keep the `*.up.railway.app` URL):
 
 ```text
-FRONTEND_ORIGIN=https://app.atmosphereteam.com,https://${{Atmosphere-web.RAILWAY_PUBLIC_DOMAIN}}
+FRONTEND_ORIGIN=https://platform.atmosphereteam.com,https://${{Atmosphere-web.RAILWAY_PUBLIC_DOMAIN}}
 ```
 
-The deploy workflow already defaults `FRONTEND_ORIGIN` to `https://app.atmosphereteam.com` from GitHub Keys. Add the Railway domain in the dashboard if you sign in before the custom domain is live.
+Production CORS already allows `https://platform.atmosphereteam.com` even if `FRONTEND_ORIGIN` is stale — without that, login shows **Origin not allowed**. The deploy workflow defaults `FRONTEND_ORIGIN` to the platform host plus the Railway office and staff hosts. If GitHub Actions variable `FRONTEND_ORIGIN` is set, it must include `https://platform.atmosphereteam.com` or the next Keys sync will drop it.
 
 ### 3. Ship it
 
@@ -446,7 +446,7 @@ Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field C
 
 | Where | What |
 | --- | --- |
-| GitHub Actions variable `WEBSITE_APP_ORIGIN` | `https://app.atmosphereteam.com` — marketing Sign in / Get started CTAs (see `website/README.md`) |
+| GitHub Actions variable `WEBSITE_APP_ORIGIN` | `https://platform.atmosphereteam.com` — marketing Sign in / Get started CTAs (see `website/README.md`) |
 | GitHub Actions variable `WEBSITE_API_ORIGIN` | Backend’s public https origin — careers/contact forms on Pages |
 | GitHub Actions variable `FRONTEND_ORIGIN` | Same as backend `FRONTEND_ORIGIN` (synced onto Railway by the deploy job) |
 | Supabase → Auth → URL configuration | Site URL = live office origin (never `http://localhost:3000`). Also allow `{origin}/reset-password`. Recovery mail is sent by Atmosphere with a `token_hash` link, so a leftover localhost Site URL cannot hijack the click. |

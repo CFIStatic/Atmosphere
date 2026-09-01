@@ -9,6 +9,12 @@
  * /api same-origin, but browsers still send that Origin and production CORS
  * must accept it or signup/login become a 500.
  *
+ * The live custom office host is platform.atmosphereteam.com (Cloudflare in
+ * front of Atmosphere-web). Browsers send that Origin on every /api call —
+ * login included — whether nginx proxies same-origin or the SPA talks to
+ * the Railway API directly. FRONTEND_ORIGIN should list it too; this match
+ * keeps sign-in working if the env var is stale after a domain change.
+ *
  * Atmosphere-internal is the staff data platform (accounts + analytics). Same
  * same-origin /api proxy, same cookie Origin problem.
  *
@@ -27,6 +33,10 @@ const ATMOSPHERE_RAILWAY_INTERNAL_GROWTH =
   /^https:\/\/melodious-inspiration(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 const ATMOSPHERE_RAILWAY_FIELD_CAPTURE =
   /^https:\/\/field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
+const ATMOSPHERE_CUSTOM_APP = /^https:\/\/(?:www\.)?platform\.atmosphereteam\.com$/i;
+
+/** Live office console on the custom domain (Cloudflare → Atmosphere-web). */
+export const LIVE_CUSTOM_APP_ORIGIN = 'https://platform.atmosphereteam.com';
 
 export function isCloudflareQuickTunnelOrigin(origin: string): boolean {
   return QUICK_TUNNEL.test(origin);
@@ -42,4 +52,8 @@ export function isAtmosphereRailwayInternalOrigin(origin: string): boolean {
 
 export function isAtmosphereRailwayFieldCaptureOrigin(origin: string): boolean {
   return ATMOSPHERE_RAILWAY_FIELD_CAPTURE.test(origin);
+}
+
+export function isAtmosphereCustomAppOrigin(origin: string): boolean {
+  return ATMOSPHERE_CUSTOM_APP.test(origin);
 }

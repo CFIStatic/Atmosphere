@@ -1,11 +1,17 @@
 import { config } from '../config.js';
-import { isAtmosphereRailwayWebOrigin } from './previewOrigins.js';
+import {
+  isAtmosphereCustomAppOrigin,
+  isAtmosphereRailwayWebOrigin,
+  LIVE_CUSTOM_APP_ORIGIN,
+} from './previewOrigins.js';
 
 /**
- * Live office console until app.atmosphereteam.com has public DNS.
- * Invite emails must open this host — CORS already allows it.
+ * Live office console. Prefer platform.atmosphereteam.com when it is listed;
+ * fall back to the Railway office so invite mail still opens a real host.
+ * CORS already allows both.
  */
 export const LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+export { LIVE_CUSTOM_APP_ORIGIN };
 
 /** Live Field Capture web host (Railway service "Field Capture"). */
 export const LIVE_FIELD_CAPTURE_ORIGIN = 'https://field-capture-production.up.railway.app';
@@ -21,12 +27,15 @@ function stripSlash(origin: string): string {
 /**
  * Public URL stamped into invite / share emails.
  *
- * FRONTEND_ORIGIN still lists https://app.atmosphereteam.com as the intended
- * product host, but that name has no A/CNAME yet. Prefer the Railway office
- * that Jack is already using so "Open job on phone" is a real link.
+ * Prefer https://platform.atmosphereteam.com (the live custom office host)
+ * over the Railway atmosphere-web URL. app.atmosphereteam.com is still
+ * listed as an intended name but has no public DNS — skip it.
  */
 export function publicAppOrigin(origins: string[] = config.frontendOrigins): string {
   const cleaned = origins.map((o) => o.trim()).filter(Boolean);
+
+  const custom = cleaned.find((o) => isAtmosphereCustomAppOrigin(o));
+  if (custom) return stripSlash(custom);
 
   const railway = cleaned.find((o) => isAtmosphereRailwayWebOrigin(o));
   if (railway) return stripSlash(railway);

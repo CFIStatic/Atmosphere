@@ -86,7 +86,7 @@ On the **Atmosphere** (backend) service, add that https origin to
 `FRONTEND_ORIGIN` (comma-separated with the office app). Example:
 
 ```text
-FRONTEND_ORIGIN=https://app.atmosphereteam.com,https://atmosphere-web-production.up.railway.app,https://atmosphere-internal-production.up.railway.app
+FRONTEND_ORIGIN=https://platform.atmosphereteam.com,https://atmosphere-web-production.up.railway.app,https://atmosphere-internal-production.up.railway.app
 ```
 
 CORS also allows `https://atmosphere-internal*.up.railway.app` without that
