@@ -43,6 +43,8 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain("parts.push(r === 1 ? '1 second' : r + ' seconds')");
     expect(verifierHtml).toContain("parts.push(m === 1 ? '1 minute' : m + ' minutes')");
     expect(verifierHtml).toContain('currentTime = Number.MAX_SAFE_INTEGER');
+    expect(verifierHtml).toContain('if (!video.paused) return');
+    expect(verifierHtml).toContain('video.currentTime = origin');
   });
 
   it('uses a compact 16:9 screenshot in the Preview column', () => {

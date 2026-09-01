@@ -66,14 +66,24 @@ export function bindMeasuredDuration(video: HTMLVideoElement): () => void {
   const measured = () =>
     Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
 
+  const onPause = () => discover();
+
   const discover = () => {
     if (cancelled || measured() != null) return;
+    // Visible players with native controls. A dummy seek during Play
+    // flashes the last frame and restarts the clip.
+    if (!video.paused) {
+      video.addEventListener('pause', onPause, { once: true });
+      return;
+    }
+    const origin = video.currentTime;
     const settle = () => {
       video.removeEventListener('seeked', settle);
       video.removeEventListener('timeupdate', settle);
       if (cancelled) return;
       try {
-        video.currentTime = 0;
+        if (!video.paused) return;
+        video.currentTime = origin;
       } catch {
         /* the playhead is decorative until the user presses play */
       }
@@ -94,5 +104,6 @@ export function bindMeasuredDuration(video: HTMLVideoElement): () => void {
   return () => {
     cancelled = true;
     video.removeEventListener('loadedmetadata', discover);
+    video.removeEventListener('pause', onPause);
   };
 }

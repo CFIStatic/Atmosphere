@@ -2422,12 +2422,23 @@
     var measured = function () {
       return knownDuration(video.duration);
     };
+    var onPause = function () { discover(); };
     var discover = function () {
       if (measured() != null) return;
+      // Visible player with native controls. A dummy seek during Play
+      // flashes the last frame and restarts the clip.
+      if (!video.paused) {
+        video.addEventListener('pause', onPause, { once: true });
+        return;
+      }
+      var origin = video.currentTime;
       var settle = function () {
         video.removeEventListener('seeked', settle);
         video.removeEventListener('timeupdate', settle);
-        try { video.currentTime = 0; } catch (err) {}
+        try {
+          if (!video.paused) return;
+          video.currentTime = origin;
+        } catch (err) {}
       };
       video.addEventListener('seeked', settle);
       video.addEventListener('timeupdate', settle);

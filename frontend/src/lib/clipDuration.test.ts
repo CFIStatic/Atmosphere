@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bindMeasuredDuration,
   formatClipClock,
   formatClipLength,
   isKnownDuration,
@@ -49,5 +50,87 @@ describe('formatClipClock', () => {
     expect(formatClipClock(50 * 60)).toBe('50:00');
     expect(formatClipClock(3661)).toBe('1:01:01');
     expect(formatClipClock(0)).toBe('—');
+  });
+});
+
+type FakeVideo = HTMLVideoElement & {
+  dispatch(type: string): void;
+};
+
+function fakeVideo(init: {
+  duration?: number;
+  paused?: boolean;
+  currentTime?: number;
+  readyState?: number;
+}): FakeVideo {
+  const listeners = new Map<string, Set<EventListener>>();
+  const video = {
+    duration: init.duration ?? Number.POSITIVE_INFINITY,
+    paused: init.paused ?? true,
+    currentTime: init.currentTime ?? 0,
+    readyState: init.readyState ?? 0,
+    addEventListener(type: string, fn: EventListener) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(fn);
+    },
+    removeEventListener(type: string, fn: EventListener) {
+      listeners.get(type)?.delete(fn);
+    },
+    dispatch(type: string) {
+      for (const fn of [...(listeners.get(type) ?? [])]) {
+        fn(new Event(type));
+      }
+    },
+  };
+  return video as FakeVideo;
+}
+
+describe('bindMeasuredDuration', () => {
+  it('does not seek a clip the user is already watching', () => {
+    const video = fakeVideo({ paused: false, currentTime: 3.2, readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(3.2);
+  });
+
+  it('puts a paused playhead back where it was, not always at 0', () => {
+    const video = fakeVideo({ currentTime: 4, readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+    video.duration = 10;
+    video.currentTime = 10;
+    video.dispatch('seeked');
+    expect(video.currentTime).toBe(4);
+  });
+
+  it('leaves the playhead alone if Play starts before the dummy seek settles', () => {
+    const video = fakeVideo({ readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+    video.paused = false;
+    video.duration = 10;
+    video.currentTime = 2.5;
+    video.dispatch('timeupdate');
+    expect(video.currentTime).toBe(2.5);
+  });
+
+  it('scans after Pause when metadata arrived during Play', () => {
+    const video = fakeVideo({ paused: false, currentTime: 1.5, readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(1.5);
+
+    video.paused = true;
+    video.dispatch('pause');
+    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+
+    video.duration = 12;
+    video.currentTime = 12;
+    video.dispatch('seeked');
+    expect(video.currentTime).toBe(1.5);
+  });
+
+  it('skips discovery when the header already has a real length', () => {
+    const video = fakeVideo({ duration: 10, readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(0);
   });
 });
