@@ -125,6 +125,7 @@ export function ProofOfWork({
       setData(proofs);
       setQuestions(qs.questions);
       setEpisodes(episodeList.episodes);
+      setError(null);
     } catch (err) {
       if (!opts?.silent) {
         setError(err instanceof Error ? err.message : 'Could not load the proof record.');

@@ -768,6 +768,8 @@
       return;
     }
     state.finishing = false;
+    // Fresh recording — do not file the last clip's fix if watch has not fired yet.
+    state.site = null;
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,

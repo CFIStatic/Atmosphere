@@ -109,8 +109,11 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
       knownItemCount.current = nextCount;
       setItems(res.items);
       setCounts(res.counts);
-      if (keepSelection && selected) {
-        setSelected(res.items.find((i) => i.id === selected.id) ?? null);
+      setError(null);
+      if (keepSelection) {
+        setSelected((current) =>
+          current ? res.items.find((i) => i.id === current.id) ?? null : current,
+        );
       }
     } catch (err) {
       if (!opts?.silent) {
