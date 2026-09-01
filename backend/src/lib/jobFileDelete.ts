@@ -1,6 +1,8 @@
 import { createAdminClient } from './supabase.js';
 import { repairMemoryJobFk } from './memoryLedger.js';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Soft-delete of a job file updates `crm_jobs`. Leftover CRM product triggers
  * still call `private.crm_audit()` → `public.crm_audit_log`. That table was
@@ -36,14 +38,13 @@ export async function repairCrmAuditTriggers(): Promise<boolean> {
   if (!error) return true;
   const msg = error.message ?? '';
   if (/does not exist|PGRST202|schema cache/i.test(msg)) return false;
-  // eslint-disable-next-line no-console
   console.warn('[job-file] repair_crm_audit_triggers:', msg);
   return false;
 }
 
 type Writer = {
   from: (table: string) => any;
-  rpc?: (fn: string, args: Record<string, unknown>) => Promise<{ data?: unknown; error: { message?: string } | null }>;
+  rpc?: (fn: string, args: Record<string, unknown>) => any;
 };
 
 function collectTombstoneIds(rows: Array<{ job_id?: string | null; entity_id?: string | null }>): Set<string> {
@@ -66,7 +67,6 @@ export async function listTombstonedJobIds(
     .in('event_type', [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT])
     .limit(5_000);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[job-file] tombstone list failed:', error.message);
     return new Set();
   }
@@ -87,7 +87,6 @@ export async function jobFileIsTombstoned(
     .limit(1)
     .maybeSingle();
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[job-file] tombstone check failed:', error.message);
     return false;
   }
