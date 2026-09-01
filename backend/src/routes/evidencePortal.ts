@@ -32,6 +32,7 @@ import {
   type ClipKick,
 } from '../verifier/library.js';
 import { displayJobFileName } from '../shared/jobFileCopy.js';
+import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
@@ -576,12 +577,15 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     if (jobsError) {
       console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
+      const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+      const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
+      items = items.filter((item: any) => !tombstoned.has(item.jobId as string));
       const addrByProperty = await propertyAddresses(
         supabase,
-        ((jobRows ?? []) as any[]).map((j) => j.property_id as string | null),
+        liveJobRows.map((j) => j.property_id as string | null),
       );
       const partyByJob = new Map<string, { company: string | null; person: string | null }>();
-      const jobIds = ((jobRows ?? []) as any[]).map((j) => j.id as string).filter(Boolean);
+      const jobIds = liveJobRows.map((j) => j.id as string).filter(Boolean);
       if (jobIds.length) {
         const { data: parties, error: partiesError } = await supabase
           .from('job_parties')
@@ -601,7 +605,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
           }
         }
       }
-      jobs = ((jobRows ?? []) as any[]).map((j) => {
+      jobs = liveJobRows.map((j) => {
         const address = addrByProperty.get(j.property_id) ?? null;
         const party = partyByJob.get(j.id);
         return {
