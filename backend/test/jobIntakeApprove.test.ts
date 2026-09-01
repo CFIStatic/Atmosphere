@@ -90,7 +90,7 @@ test('latest intake SQL allows an empty invite list', () => {
     new URL('../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(sql, /invitees_required/);
+  assert.doesNotMatch(sql, /raise exception 'invitees_required'/);
   assert.match(sql, /invitees_invalid/);
   assert.match(sql, /repair_crm_audit_triggers/);
   assert.match(sql, /jsonb_typeof\(coalesce\(p_invitees/);

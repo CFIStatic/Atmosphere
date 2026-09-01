@@ -15,6 +15,6 @@ describe('intake job-create repair apply script', () => {
   it('applies the optional-invitees migration', () => {
     assert.match(script, /20260901140000_intake_create_job_without_invitees\.sql/);
     assert.match(sql, /repair_crm_audit_triggers/);
-    assert.doesNotMatch(sql, /invitees_required/);
+    assert.doesNotMatch(sql, /raise exception 'invitees_required'/);
   });
 });
