@@ -3823,7 +3823,7 @@
     jobSheet.busy = true;
     jobSheet.error = null;
     paintJobFileSheet();
-    if (!canOpenJobRecord(key)) {
+    if (!ORG_MODE) {
       var fake = { id: 'demo-' + Date.now(), label: email, path: '/progress/demo-' + key, state: 'live', recipientEmail: email };
       DEMO_SHARES[key] = (DEMO_SHARES[key] || []).concat([fake]);
       JOB_BOARD[key] = null;
