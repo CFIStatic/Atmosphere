@@ -85,6 +85,7 @@ describe('JobIntakePage', () => {
     expect(screen.queryByPlaceholderText('Search Google for the site address')).toBeNull();
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    expect(screen.queryByText('Invite an outside worker')).toBeNull();
     expect(screen.getByText('Homeowner (optional)')).toBeInTheDocument();
     expect(
       screen.getByText(/We email them a link to the job file and every recording/i),
@@ -183,8 +184,9 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     expect(screen.queryByText('Capture')).toBeNull();
     expect(
-      screen.getByText('Selected people get a capture link. Add someone outside by email.'),
+      screen.getByText('Teammates and outside emails go on this list. Optional.'),
     ).toBeInTheDocument();
+    expect(screen.queryByText('Invite an outside worker')).toBeNull();
 
     const approve = screen.getByRole('button', { name: /Approve & invite/i });
     expect(approve.className).toMatch(/w-full/);
@@ -239,6 +241,72 @@ describe('JobIntakePage', () => {
     expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
     expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
+  });
+
+  it('creates the job file when the name is filled and nobody is invited', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue({
+      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+      briefRevision: 1,
+      scopeSaved: 1,
+      invites: [],
+      party: { id: 'job-new', company: 'East Racine' },
+      sharePath: '',
+      fieldCapturePath: '',
+      readiness: {
+        level: 'limited',
+        ceiling: 'work_only',
+        headline: 'Job created',
+        gaps: [],
+        strengths: [],
+        source: null,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText(/Extract standing water/i),
+      'Extract standing water in the living room.',
+    );
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Job created' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Invites' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open this job file' })).toBeInTheDocument();
+    expect(api.approveIntake).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'East Racine',
+        invitees: [],
+      }),
+    );
+  });
+
+  it('adds an outside email onto the same invite list as teammates', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Contact name'), 'Alex Rivera');
+    await user.type(screen.getByLabelText('Company'), 'Rio Grande Mitigation');
+    await user.type(screen.getByLabelText(/^Email$/i), 'alex@example.com');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument();
+    expect(screen.getByText('Rio Grande Mitigation · alex@example.com')).toBeInTheDocument();
+    expect(screen.getByText(/2 invited/)).toBeInTheDocument();
+    expect(screen.getAllByRole('list')).toHaveLength(1);
   });
 
   it('emails the homeowner the job file after approve, account or not', async () => {

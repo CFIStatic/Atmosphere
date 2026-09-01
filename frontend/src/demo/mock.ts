@@ -2822,10 +2822,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     const id = `job-intake-${Date.now()}`;
     const scope = Array.isArray(b.scope) ? b.scope : [];
     const invitees = Array.isArray(b.invitees) ? b.invitees : [];
-    const people =
-      invitees.length > 0
-        ? invitees
-        : [{ fullName: 'Field Capture', email: null, external: false }];
+    const people = invitees;
     const stamp = Date.now().toString(36);
     const knownAccounts = new Set(
       MEMBERS.map((m) => m.email?.toLowerCase()).filter((e): e is string => Boolean(e)),
@@ -2859,7 +2856,7 @@ const routes: Array<[string, RegExp, Handler]> = [
         };
       },
     );
-    const primary = invites[0]!;
+    const primary = invites[0];
     MANUAL_JOBS[id] = {
       hasAddress: Boolean(b.address),
       hasCoordinates: false,
@@ -2959,9 +2956,9 @@ const routes: Array<[string, RegExp, Handler]> = [
           awaiting: invites.length,
           exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
         },
-        party: { id: primary.id, company: primary.name },
-        sharePath: primary.sharePath,
-        fieldCapturePath: primary.fieldCapturePath,
+        party: primary ? { id: primary.id, company: primary.name } : { id, company: title },
+        sharePath: primary?.sharePath ?? '',
+        fieldCapturePath: primary?.fieldCapturePath ?? '',
         readiness: readinessFor(id),
       },
     };
