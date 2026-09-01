@@ -14,8 +14,8 @@ import {
 import { recordAccess } from './proofOfWork.js';
 import {
   intakeWriteError,
-  isMemoryLedgerError,
-  repairMemoryJobFk,
+  isJobCreateBlockingError,
+  repairJobCreateSideEffects,
 } from '../lib/memoryLedger.js';
 import { placesProvider, resolvePlace } from '../lib/googlePlaces.js';
 import {
@@ -46,12 +46,12 @@ import {
 type CrmJobRow = { id: string; title: string; job_number: number | null };
 
 async function insertCrmJob(writer: any, row: Record<string, unknown>): Promise<CrmJobRow> {
-  await repairMemoryJobFk();
+  await repairJobCreateSideEffects();
   const attempt = () => writer.from('crm_jobs').insert(row).select('id, title, job_number').single();
   const first = await attempt();
   if (!first.error && first.data) return first.data as CrmJobRow;
-  if (isMemoryLedgerError(first.error?.message)) {
-    await repairMemoryJobFk();
+  if (isJobCreateBlockingError(first.error?.message)) {
+    await repairJobCreateSideEffects();
     const retry = await attempt();
     if (!retry.error && retry.data) return retry.data as CrmJobRow;
     throw intakeWriteError(retry.error ?? first.error, 'Could not create the job.', 'job_failed');
@@ -354,13 +354,20 @@ jobIntakeRouter.post('/intake/propose', async (req: Request, res: Response, next
   }
 });
 
+const inviteEmailSchema = z.preprocess((value) => {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}, z.string().email().max(200).nullable().optional());
+
 const inviteeSchema = z
   .object({
     userId: z.string().trim().min(1).max(80).optional(),
     fullName: z.string().trim().min(1).max(120),
     /** Company / crew label when inviting someone outside the org. */
     company: z.string().trim().min(1).max(160).optional(),
-    email: z.string().trim().email().max(200).nullable().optional(),
+    email: inviteEmailSchema,
     trade: z.string().trim().max(60).optional(),
     /** Outside the org — mainly subcontractors invited by email. */
     external: z.boolean().optional(),
@@ -415,6 +422,31 @@ const approveSchema = z.object({
   /** Optional — org members can still film from Field Capture once the job exists. */
   invitees: z.array(inviteeSchema).max(20).default([]),
 });
+
+export const intakeApproveSchema = approveSchema;
+
+export function parseIntakeApprove(body: unknown) {
+  return approveSchema.parse(body ?? {});
+}
+
+export function intakeApproveCompatFields(
+  invites: Array<{ id: string; name: string; sharePath: string; fieldCapturePath: string }>,
+  job: { id: string; title: string },
+): {
+  party: { id: string; company: string };
+  sharePath: string;
+  fieldCapturePath: string;
+} {
+  const primary = invites[0];
+  if (!primary) {
+    return { party: { id: job.id, company: job.title }, sharePath: '', fieldCapturePath: '' };
+  }
+  return {
+    party: { id: primary.id, company: primary.name },
+    sharePath: primary.sharePath,
+    fieldCapturePath: primary.fieldCapturePath,
+  };
+}
 
 type CreatedParty = {
   id: string;
@@ -566,14 +598,11 @@ export async function createJobFile(
     p_invitees: invitees,
   };
 
-  await repairMemoryJobFk();
-  let rpc =
-    invitees.length > 0
-      ? await supabase.rpc('intake_create_job_file', rpcArgs)
-      : { error: null, data: null };
+  await repairJobCreateSideEffects();
+  let rpc = await supabase.rpc('intake_create_job_file', rpcArgs);
 
-  if (rpc.error && isMemoryLedgerError(rpc.error.message) && invitees.length > 0) {
-    await repairMemoryJobFk();
+  if (rpc.error && isJobCreateBlockingError(rpc.error.message)) {
+    await repairJobCreateSideEffects();
     rpc = await supabase.rpc('intake_create_job_file', rpcArgs);
   }
 
@@ -804,7 +833,7 @@ async function createJobFileStepwise(
 jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase, userId } = await requireOrgContext(req);
-    const input = approveSchema.parse(req.body ?? {});
+    const input = parseIntakeApprove(req.body);
 
     const created = await createJobFile(supabase, orgId, userId, input);
     const jobId = created.job.id;
@@ -881,23 +910,23 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
     const facts = await factsFor(supabase, jobId).catch(async () => ({
       scopeLineCount: created.scopeSaved,
       scopeFromDocument: created.scopeSaved > 0,
-      hasAddress: true,
+      hasAddress: Boolean(input.address?.trim()),
       hasCoordinates: false,
       scheduledStart: null as string | null,
       partyCount: created.parties.length,
       intakeSource: (created.scopeSaved > 0 ? 'scope_document' : 'manual') as IntakeSource,
     }));
-    const primary = invites[0]!;
+    const compat = intakeApproveCompatFields(invites, created.job);
     res.status(201).json({
       job: created.job,
       briefRevision: created.briefRevision,
       scopeSaved: created.scopeSaved,
       invites,
       jobFile: created.summary,
-      // Back-compat for older UI: first invitee
-      party: { id: primary.id, company: primary.name },
-      sharePath: primary.sharePath,
-      fieldCapturePath: primary.fieldCapturePath,
+      // Back-compat for older UI: first invitee, or the job itself when none.
+      party: compat.party,
+      sharePath: compat.sharePath,
+      fieldCapturePath: compat.fieldCapturePath,
       readiness: assessReadiness(facts),
     });
   } catch (err) {

@@ -229,20 +229,7 @@ export function JobIntakePage() {
     }
   }
 
-  const invites = result?.invites?.length
-    ? result.invites
-    : result
-      ? [
-          {
-            id: result.party.id,
-            name: result.party.company,
-            email: null as string | null,
-            sharePath: result.sharePath,
-            fieldCapturePath: result.fieldCapturePath,
-            token: '',
-          },
-        ]
-      : [];
+  const invites = result?.invites ?? [];
 
   if (result) {
     return (
@@ -280,7 +267,7 @@ export function JobIntakePage() {
             )}
           >
             <h2 className={cn('font-semibold text-ink-900', phone ? 'text-[15px]' : 'text-base')}>
-              Job created — capture invited
+              {invites.length ? 'Job created — capture invited' : 'Job created'}
             </h2>
             <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
               <span className="font-medium text-ink-800">{result.job.title}</span>
@@ -299,6 +286,7 @@ export function JobIntakePage() {
             </p>
           </div>
 
+          {invites.length > 0 && (
           <div className={cn('rounded-xl glass-card', phone ? 'p-3.5' : 'p-5')}>
             <h3 className="text-sm font-semibold text-ink-900">Invites</h3>
             <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
@@ -359,6 +347,7 @@ export function JobIntakePage() {
               ))}
             </ul>
           </div>
+          )}
           </div>
 
           <div

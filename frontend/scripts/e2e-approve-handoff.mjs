@@ -45,20 +45,16 @@ try {
   await page.screenshot({ path: `${OUT}/01-intake.png` });
 
   await page.getByLabel('Name').fill(uniqueTitle);
-  const address = page.getByPlaceholder(/Search Google|Start typing a street address|Meridian Ave/i).first();
-  await address.fill('1842 Meridian Ave, Austin, TX 78702');
   await page.getByRole('button', { name: /Use a sample note/i }).click();
   await page.screenshot({ path: `${OUT}/02-intake-filled.png` });
 
   const approve = page.getByRole('button', { name: /Approve & invite|Publish brief/i });
   await approve.click();
 
-  // Must land on the job record (not the empty Dashboard library).
-  await page.getByRole('heading', { name: uniqueTitle }).waitFor({ timeout: 15_000 });
-  await page.getByText('Job created').waitFor({ timeout: 10_000 });
+  // Must stay on Start a job with the new file created (not the empty Dashboard).
+  await page.getByText('Job created').waitFor({ timeout: 15_000 });
   await page.getByText(uniqueTitle).first().waitFor({ timeout: 10_000 });
-  // Invite links / copy actions must be available right after approve.
-  await page.getByRole('button', { name: /Copy link/i }).first().waitFor({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Open this job file' }).waitFor({ timeout: 10_000 });
   await page.screenshot({ path: `${OUT}/03-job-progress.png` });
 
   const body = await page.locator('body').innerText();
@@ -72,8 +68,8 @@ try {
   if (!body.includes('Job created')) {
     throw new Error('Missing "Job created" success banner');
   }
-  if (!/Copy link/i.test(body) && !/Emailed/i.test(body)) {
-    throw new Error('Missing invite delivery status / copy link after approve');
+  if (!/Open this job file/i.test(body)) {
+    throw new Error('Missing Open this job file after approve');
   }
 
   console.log('PASS: Approve & invite opened the job record with', uniqueTitle);

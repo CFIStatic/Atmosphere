@@ -1,0 +1,250 @@
+-- Start a job treats invites as optional. The previous intake_create_job_file
+-- raised invitees_required, so a name-only approve skipped the atomic RPC and
+-- then crashed when the API assumed a party row existed.
+--
+-- Also exposes repair_crm_audit_triggers() so a leftover crm_jobs_audit
+-- trigger (writes to the dropped crm_audit_log) can be dropped at runtime —
+-- the same class of failure that already blocks Delete.
+
+create or replace function public.repair_crm_audit_triggers()
+returns boolean
+language plpgsql
+security definer
+set search_path = public, private, pg_temp
+as $$
+begin
+  drop trigger if exists crm_jobs_audit on public.crm_jobs;
+  drop trigger if exists crm_properties_audit on public.crm_properties;
+  drop trigger if exists crm_accounts_audit on public.crm_accounts;
+  drop trigger if exists crm_contacts_audit on public.crm_contacts;
+  drop trigger if exists crm_leads_audit on public.crm_leads;
+  drop trigger if exists crm_activities_audit on public.crm_activities;
+  drop function if exists private.crm_audit();
+  return true;
+end;
+$$;
+
+comment on function public.repair_crm_audit_triggers() is
+  'Drops leftover CRM audit triggers that write to the removed crm_audit_log. '
+  'Creating or deleting a job file must not depend on that table.';
+
+revoke all on function public.repair_crm_audit_triggers() from public, anon, authenticated;
+grant execute on function public.repair_crm_audit_triggers() to service_role;
+
+select public.repair_crm_audit_triggers();
+
+create or replace function public.intake_create_job_file(
+  p_org_id uuid,
+  p_title text,
+  p_work_type text,
+  p_address text,
+  p_city text default null,
+  p_postal_code text default null,
+  p_region text default null,
+  p_country text default null,
+  p_latitude double precision default null,
+  p_longitude double precision default null,
+  p_claim_number text default null,
+  p_brief_note text default null,
+  p_facts jsonb default '{}'::jsonb,
+  p_scope jsonb default '[]'::jsonb,
+  p_invitees jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, private, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_property_id uuid;
+  v_job_id uuid;
+  v_job_number bigint;
+  v_job_title text;
+  v_revision integer;
+  v_invitee jsonb;
+  v_party_id uuid;
+  v_party_company text;
+  v_party_email text;
+  v_party_token text;
+  v_parties jsonb := '[]'::jsonb;
+  v_scope_count integer := 0;
+  v_source text;
+  v_external boolean;
+  v_company text;
+  v_trade text;
+  v_address text := nullif(btrim(coalesce(p_address, '')), '');
+begin
+  if v_uid is null then
+    raise exception 'not_authenticated' using errcode = '28000';
+  end if;
+  if p_org_id is null or not private.is_org_member(p_org_id) then
+    raise exception 'not_org_member' using errcode = '42501';
+  end if;
+  if p_title is null or length(btrim(p_title)) < 1 then
+    raise exception 'title_required';
+  end if;
+  if p_work_type is null or p_work_type not in ('mitigation', 'construction') then
+    raise exception 'work_type_invalid';
+  end if;
+  if jsonb_typeof(coalesce(p_invitees, '[]'::jsonb)) <> 'array' then
+    raise exception 'invitees_invalid';
+  end if;
+
+  if v_address is not null then
+    insert into public.crm_properties (
+      org_id, address_line1, city, postal_code, region, country, latitude, longitude
+    )
+    values (
+      p_org_id,
+      left(v_address, 200),
+      nullif(left(btrim(coalesce(p_city, '')), 120), ''),
+      nullif(left(btrim(coalesce(p_postal_code, '')), 20), ''),
+      nullif(left(btrim(coalesce(p_region, '')), 120), ''),
+      coalesce(nullif(left(btrim(coalesce(p_country, '')), 8), ''), 'US'),
+      p_latitude,
+      p_longitude
+    )
+    returning id into v_property_id;
+  end if;
+
+  insert into public.crm_jobs (
+    org_id, title, work_type, property_id, claim_number, status, created_by
+  )
+  values (
+    p_org_id,
+    left(btrim(p_title), 200),
+    p_work_type::public.work_type,
+    v_property_id,
+    nullif(left(btrim(coalesce(p_claim_number, '')), 80), ''),
+    'scheduled',
+    v_uid
+  )
+  returning id, title, job_number into v_job_id, v_job_title, v_job_number;
+
+  v_source := case
+    when jsonb_array_length(coalesce(p_scope, '[]'::jsonb)) > 0 then 'scope_document'
+    else 'manual'
+  end;
+
+  insert into public.job_intake (job_id, org_id, source, source_detail, entered_by)
+  values (
+    v_job_id,
+    p_org_id,
+    v_source,
+    jsonb_build_object(
+      'enteredFrom', 'intake_package',
+      'captureInvites', jsonb_array_length(coalesce(p_invitees, '[]'::jsonb)),
+      'scopeOptional', v_source = 'manual'
+    ),
+    v_uid
+  );
+
+  insert into public.job_briefs (org_id, job_id, revision, facts, note, created_by)
+  values (
+    p_org_id,
+    v_job_id,
+    0,
+    coalesce(p_facts, '{}'::jsonb),
+    nullif(left(btrim(coalesce(p_brief_note, '')), 2000), ''),
+    v_uid
+  )
+  returning revision into v_revision;
+
+  insert into public.job_scope_items (
+    org_id, job_id, title, state, reason, revision, created_by
+  )
+  select
+    p_org_id,
+    v_job_id,
+    left(btrim(s->>'title'), 200),
+    case
+      when s->>'state' = 'excluded' then 'excluded'::public.job_scope_state
+      else 'included'::public.job_scope_state
+    end,
+    nullif(left(btrim(coalesce(s->>'reason', '')), 1000), ''),
+    v_revision,
+    v_uid
+  from jsonb_array_elements(coalesce(p_scope, '[]'::jsonb)) as s
+  where length(btrim(coalesce(s->>'title', ''))) >= 2;
+
+  get diagnostics v_scope_count = row_count;
+
+  for v_invitee in
+    select value from jsonb_array_elements(coalesce(p_invitees, '[]'::jsonb)) as t(value)
+  loop
+    v_external := coalesce((v_invitee->>'external')::boolean, false)
+      or coalesce(v_invitee->>'userId', '') = '';
+    v_company := left(
+      btrim(coalesce(nullif(v_invitee->>'company', ''), v_invitee->>'fullName', 'Field Capture')),
+      160
+    );
+    v_trade := left(
+      btrim(
+        coalesce(
+          nullif(v_invitee->>'trade', ''),
+          case when v_external then 'subcontractor' else 'field_capture' end
+        )
+      ),
+      60
+    );
+
+    insert into public.job_parties (
+      org_id, job_id, company, trade, contact_name, email, role, invited_at, created_by
+    )
+    values (
+      p_org_id,
+      v_job_id,
+      v_company,
+      v_trade,
+      left(btrim(coalesce(v_invitee->>'fullName', v_company)), 120),
+      nullif(lower(btrim(coalesce(v_invitee->>'email', ''))), ''),
+      'subcontractor',
+      now(),
+      v_uid
+    )
+    returning id, company, email, access_token
+    into v_party_id, v_party_company, v_party_email, v_party_token;
+
+    v_parties := v_parties || jsonb_build_array(
+      jsonb_build_object(
+        'id', v_party_id,
+        'name', v_party_company,
+        'email', v_party_email,
+        'token', v_party_token,
+        'external', v_external
+      )
+    );
+  end loop;
+
+  return jsonb_build_object(
+    'job', jsonb_build_object(
+      'id', v_job_id,
+      'title', v_job_title,
+      'jobNumber', v_job_number
+    ),
+    'briefRevision', v_revision,
+    'scopeSaved', v_scope_count,
+    'parties', v_parties,
+    'summary', jsonb_build_object(
+      'jobId', v_job_id,
+      'jobNumber', v_job_number,
+      'title', v_job_title,
+      'status', 'scheduled',
+      'parties', jsonb_array_length(v_parties),
+      'currentRevision', v_revision,
+      'behind', 0,
+      'awaiting', jsonb_array_length(v_parties),
+      'exclusions', (
+        select count(*)::int
+        from public.job_scope_items
+        where job_id = v_job_id and state = 'excluded'
+      )
+    )
+  );
+end;
+$$;
+
+comment on function public.intake_create_job_file is
+  'Approve & invite: atomically create the job file (optional property, optional '
+  'invitees, job, intake, brief, scope, parties) so the dashboard can list it.';
