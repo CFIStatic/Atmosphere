@@ -139,7 +139,7 @@ export function JobFileActions({
         >
           <form
             onSubmit={(event) => void submit(event)}
-            className="w-full max-w-md rounded-xl border border-line bg-paper-0 p-5 shadow-lg"
+            className="w-full max-w-sm rounded-xl border border-line bg-paper-0 p-5 shadow-lg"
             role="dialog"
             aria-modal="true"
             aria-labelledby="job-file-action-title"

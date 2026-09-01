@@ -28,4 +28,15 @@ describe('Dashboard job-file delete', () => {
     expect(verifierHtml).toContain('function applyDeletedJob');
     expect(verifierHtml).toContain('!canOpenJobRecord(key) || !ORG_MODE');
   });
+
+  it('sizes the delete confirm as a compact centered sheet, not a full-page panel', () => {
+    expect(verifierHtml).toContain('#jobfile-sheet > .sheet');
+    expect(verifierHtml).toMatch(
+      /#jobfile-sheet\s*>\s*\.sheet[\s\S]*?height:\s*fit-content/,
+    );
+    expect(verifierHtml).toMatch(
+      /#jobfile-sheet\s*>\s*\.sheet[\s\S]*?width:\s*min\(380px/,
+    );
+  });
 });
+
