@@ -45,7 +45,8 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
         eq() {
           return api;
         },
-        order() {
+        in(_column: string, types: string[]) {
+          assert.deepEqual(types, [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT, 'job.deleted']);
           return api;
         },
         limit() {
@@ -53,12 +54,7 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
             data: [
               { job_id: 'job-1', entity_id: 'job-1', event_type: JOB_FILE_DELETED_EVENT },
               { job_id: null, entity_id: 'job-2', event_type: JOB_FILE_DELETED_RPC_EVENT },
-              {
-                job_id: 'job-3',
-                entity_id: 'job-3',
-                event_type: 'job.updated',
-                summary: 'Job file “Cursor 1” deleted from the library.',
-              },
+              { job_id: 'job-3', entity_id: 'job-3', event_type: 'job.deleted' },
               { job_id: null, entity_id: null, event_type: JOB_FILE_DELETED_EVENT },
               { job_id: 'job-4', entity_id: 'job-4', event_type: 'job.created', summary: 'opened' },
             ],

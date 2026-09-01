@@ -91,7 +91,7 @@ export async function listTombstonedJobIds(
     .from('memory_events')
     .select('job_id, entity_id, event_type, summary')
     .eq('org_id', orgId)
-    .order('seq', { ascending: false })
+    .in('event_type', [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT, 'job.deleted'])
     .limit(5_000);
   if (error) {
     console.warn('[job-file] tombstone list failed:', error.message);
@@ -113,17 +113,17 @@ export async function jobFileIsTombstoned(
 ): Promise<boolean> {
   const { data, error } = await writer
     .from('memory_events')
-    .select('id, event_type, summary')
+    .select('id')
     .eq('org_id', orgId)
+    .in('event_type', [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT, 'job.deleted'])
     .or(`job_id.eq.${jobId},entity_id.eq.${jobId}`)
-    .order('seq', { ascending: false })
-    .limit(20);
+    .limit(1)
+    .maybeSingle();
   if (error) {
     console.warn('[job-file] tombstone check failed:', error.message);
     return false;
   }
-  const rows = (data ?? []) as Array<{ event_type?: string | null; summary?: string | null }>;
-  return rows.some((row) => isJobFileDeletedEvent(row.event_type) || jobLooksDeletedFromLibrary(row.summary));
+  return Boolean(data);
 }
 
 async function insertTombstone(
