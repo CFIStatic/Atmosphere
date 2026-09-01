@@ -72,31 +72,33 @@ export function mergeWorkerJobs(
   const byId = new Map(liveJobs.map((job) => [job.jobId, job]));
 
   if (today) {
+    // Job Files is the inventory. A Dashboard delete drops the file there;
+    // do not keep a today card whose office row is gone or tombstoned.
     return today
-      .filter((row) => !jobs.some((j) => j.jobId === row.id) || byId.has(row.id))
+      .filter((row) => byId.has(row.id))
       .map((row) => {
-      const job = byId.get(row.id);
-      const crew = job?.crew ?? [];
-      return {
-        id: row.id,
-        number: row.number,
-        name: row.name,
-        address: row.address,
-        at: row.at,
-        status: row.status,
-        filmed: row.filmed,
-        reason: row.reason,
-        sharePath: row.sharePath,
-        href: jobFilePath(row.id, {
-          title: row.name,
-          number: row.number.replace(/^#/, '') || job?.jobNumber,
-        }),
-        filmHref: workerFilmHref(row.sharePath),
-        lastEvent: job?.lastEvent ?? null,
-        crewNames: crew.map((person) => person.name),
-        assignedToMe: Boolean(userId && crew.some((person) => person.userId === userId)),
-      };
-    });
+        const job = byId.get(row.id);
+        const crew = job?.crew ?? [];
+        return {
+          id: row.id,
+          number: row.number,
+          name: row.name,
+          address: row.address,
+          at: row.at,
+          status: row.status,
+          filmed: row.filmed,
+          reason: row.reason,
+          sharePath: row.sharePath,
+          href: jobFilePath(row.id, {
+            title: row.name,
+            number: row.number.replace(/^#/, '') || job?.jobNumber,
+          }),
+          filmHref: workerFilmHref(row.sharePath),
+          lastEvent: job?.lastEvent ?? null,
+          crewNames: crew.map((person) => person.name),
+          assignedToMe: Boolean(userId && crew.some((person) => person.userId === userId)),
+        };
+      });
   }
 
   const open = liveJobs.filter(isOpenJob);
@@ -115,7 +117,9 @@ export function workerListIsUnassigned(cards: WorkerJobCard[], userId: string | 
 /** People on open jobs — the office picture of who is working. */
 export function buildCrewBoard(jobs: JobSummary[]): CrewBoardRow[] {
   const byUser = new Map<string, CrewBoardRow>();
-  for (const job of jobs.filter((row) => isOpenJob(row) && !jobLooksDeletedFromLibrary(row.lastEvent))) {
+  for (const job of jobs.filter(
+    (row) => isOpenJob(row) && !jobLooksDeletedFromLibrary(row.lastEvent),
+  )) {
     for (const person of job.crew ?? []) {
       const row = byUser.get(person.userId) ?? {
         userId: person.userId,

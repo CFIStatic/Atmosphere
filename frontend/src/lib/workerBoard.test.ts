@@ -111,6 +111,36 @@ describe('mergeWorkerJobs', () => {
     expect(cards.map((c) => c.id)).toEqual(['a']);
     expect(workerListIsUnassigned(cards, 'u-marcus')).toBe(true);
   });
+
+  it('hides a today row after a Dashboard delete drops it from Job Files', () => {
+    const cards = mergeWorkerJobs(
+      [todayRow, { ...todayRow, id: 'gone', name: 'Cursor 1', number: '#1' }],
+      [
+        job({
+          jobId: 'job-1041',
+          title: 'Meridian Ave — water loss',
+          lastEvent: 'Film uploaded',
+        }),
+      ],
+      'u-marcus',
+    );
+    expect(cards.map((c) => c.id)).toEqual(['job-1041']);
+  });
+
+  it('hides a today row whose office last-event says it left the library', () => {
+    const cards = mergeWorkerJobs(
+      [todayRow],
+      [
+        job({
+          jobId: 'job-1041',
+          title: 'Meridian Ave — water loss',
+          lastEvent: 'Job file “Meridian Ave” deleted from the library.',
+        }),
+      ],
+      'u-marcus',
+    );
+    expect(cards).toEqual([]);
+  });
 });
 
 describe('buildCrewBoard', () => {

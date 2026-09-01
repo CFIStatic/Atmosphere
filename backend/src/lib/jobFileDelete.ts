@@ -93,9 +93,10 @@ export async function listTombstonedJobIds(
     .eq('org_id', orgId)
     .or(
       [
-        `event_type.eq.${JOB_FILE_DELETED_EVENT}`,
-        `event_type.eq.${JOB_FILE_DELETED_RPC_EVENT}`,
-        'event_type.eq.job.deleted',
+        // Dots are reserved in PostgREST `or=()`; quote the event-type values.
+        `event_type.eq."${JOB_FILE_DELETED_EVENT}"`,
+        `event_type.eq."${JOB_FILE_DELETED_RPC_EVENT}"`,
+        'event_type.eq."job.deleted"',
         'summary.ilike.%deleted from the library%',
       ].join(','),
     )

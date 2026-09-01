@@ -35,6 +35,7 @@ test('jobLooksDeletedFromLibrary matches the Job Files last-event line', () => {
 });
 
 test('listTombstonedJobIds reads job_id and entity_id from delete events', async () => {
+  let orFilter = '';
   const writer = {
     from(table: string) {
       assert.equal(table, 'memory_events');
@@ -45,7 +46,8 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
         eq() {
           return api;
         },
-        or() {
+        or(filter: string) {
+          orFilter = filter;
           return api;
         },
         order() {
@@ -75,6 +77,9 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
 
   const ids = await listTombstonedJobIds(writer, 'org-1');
   assert.deepEqual([...ids].sort(), ['job-1', 'job-2', 'job-3']);
+  assert.match(orFilter, /event_type\.eq\."job\.file_deleted"/);
+  assert.match(orFilter, /event_type\.eq\."note\.file_deleted"/);
+  assert.match(orFilter, /event_type\.eq\."job\.deleted"/);
 });
 
 test('writeJobFileDeleteTombstone inserts an app-sourced memory event', async () => {
