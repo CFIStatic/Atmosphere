@@ -3330,6 +3330,12 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  deleteEvidence: (jobId: string, proofId: string) =>
+    request<{ ok: boolean; deletedAt: string }>(
+      `/api/operations/shared/${jobId}/evidence/${proofId}`,
+      { method: 'DELETE' },
+    ),
+
   jobLegalHold: (jobId: string) =>
     request<JobLegalHoldPortal>(`/api/operations/shared/${jobId}/legal-hold`, { method: 'GET' }),
 

@@ -13,6 +13,7 @@ import { ROLE_LABELS } from '../lib/api';
 import { usePreferences } from '../lib/preferences';
 import { isThemePreference, setThemePreference } from '../lib/theme';
 import { usePhoneShell } from '../lib/usePhoneShell';
+import { notifyLibraryChanged } from '../lib/libraryChanged';
 import { verifierSessionUser } from '../lib/verifierSession';
 
 /**
@@ -115,6 +116,10 @@ export function VerifierFrame({
       }
       if (data.atmosphere === 'theme' && isThemePreference(data.preference)) {
         setThemePreference(data.preference);
+        return;
+      }
+      if (data.atmosphere === 'library-changed') {
+        notifyLibraryChanged();
       }
     }
     window.addEventListener('message', onMessage);

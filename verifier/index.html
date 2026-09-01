@@ -3500,10 +3500,7 @@
         return;
       }
       if (!window.confirm('Delete ' + item.id + '? The chain of custody keeps the record of its life either way.')) return;
-      EVIDENCE = EVIDENCE.filter(function (e) { return e.id !== item.id; });
-      render();
-      counts();
-      toast('Removed from this library view. Deletion on the record itself is wired next.');
+      deleteLibraryClip(item);
       return;
     }
 
@@ -3755,11 +3752,49 @@
     render();
   }
 
+  function notifyLibraryChanged() {
+    if (EMBEDDED) window.parent.postMessage({ atmosphere: 'library-changed' }, '*');
+  }
+
   function applyDeletedJob(key) {
     delete JOBS[key];
     EVIDENCE = EVIDENCE.filter(function (e) { return e.job !== key; });
     render();
     counts();
+    notifyLibraryChanged();
+  }
+
+  function applyDeletedClip(id) {
+    EVIDENCE = EVIDENCE.filter(function (e) { return e.id !== id; });
+    if (state.open && state.open.id === id) closePreview();
+    render();
+    counts();
+    notifyLibraryChanged();
+  }
+
+  function deleteLibraryClip(item) {
+    if (!item || !item.id) return;
+    if (item._remote && ORG_MODE && item.job) {
+      apiFetch('/api/operations/shared/' + encodeURIComponent(item.job) + '/evidence/' + encodeURIComponent(item.id), {
+        method: 'DELETE'
+      }).then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; }).catch(function () {
+          return { ok: r.ok, body: {} };
+        });
+      }).then(function (res) {
+        if (!res.ok) {
+          toast((res.body && (res.body.error || res.body.message)) || 'Could not delete that clip.');
+          return;
+        }
+        applyDeletedClip(item.id);
+        toast('Removed from the library.');
+      }).catch(function (err) {
+        toast(err && err.message ? err.message : 'Could not delete that clip.');
+      });
+      return;
+    }
+    applyDeletedClip(item.id);
+    toast('Removed from this library view.');
   }
 
   function applyDuplicatedJob(payload) {
