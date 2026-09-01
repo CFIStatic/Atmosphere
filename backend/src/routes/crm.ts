@@ -492,7 +492,13 @@ crmRouter.get('/audit', async (req: Request, res: Response, next: NextFunction) 
 
     if (error) {
       // Table was removed with the old CRM product. Empty ledger is correct.
-      if (/crm_audit_log/i.test(error.message) && /does not exist/i.test(error.message)) {
+      // PostgREST usually answers from the schema cache (PGRST205), not 42P01.
+      const missing =
+        error.code === 'PGRST205' ||
+        error.code === '42P01' ||
+        (/crm_audit_log/i.test(error.message) &&
+          /could not find|does not exist|schema cache/i.test(error.message));
+      if (missing) {
         res.json({ entries: [], total: 0, limit, offset });
         return;
       }
