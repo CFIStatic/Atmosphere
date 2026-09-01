@@ -67,6 +67,9 @@ final class FieldDaySession: ObservableObject {
             guard tracks.hasAudio, tracks.hasVideo else {
                 throw CaptureError.missingAudio
             }
+            let durationSeconds = tracks.duration > 0
+                ? tracks.duration
+                : Double(max(elapsedSeconds, recorder.elapsedSeconds))
 
             guard let jobId = activeJobId ?? jobs.first?.id else {
                 throw APIError.http(status: 0, body: "No job selected for this day film.")
@@ -87,7 +90,7 @@ final class FieldDaySession: ObservableObject {
                     phase: "after",
                     storagePath: begin.path,
                     byteSize: uploaded.byteSize,
-                    durationSeconds: tracks.duration,
+                    durationSeconds: durationSeconds,
                     contentHash: uploaded.sha256Hex,
                     capturedAt: iso,
                     lat: locator.coordinate?.latitude,
@@ -155,7 +158,7 @@ final class FieldDaySession: ObservableObject {
                 twinId: twinId,
                 geometrySessionId: geometrySessionId,
                 videoRef: videoRef,
-                durationSeconds: tracks.duration,
+                durationSeconds: durationSeconds,
                 byteSize: uploaded.byteSize,
                 contentType: "video/mp4",
                 hasAudio: true,

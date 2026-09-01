@@ -36,6 +36,17 @@ describe('verifier dashboard video preview screen', () => {
     localStorage.clear();
   });
 
+  it('labels uploaded clip length in the unit a person would say', () => {
+    expect(verifierHtml).toContain('function durLabel');
+    expect(verifierHtml).toContain('function knownDuration');
+    expect(verifierHtml).toContain('function bindVideoDuration');
+    expect(verifierHtml).toContain("parts.push(r === 1 ? '1 second' : r + ' seconds')");
+    expect(verifierHtml).toContain("parts.push(m === 1 ? '1 minute' : m + ' minutes')");
+    expect(verifierHtml).toContain('currentTime = Number.MAX_SAFE_INTEGER');
+    expect(verifierHtml).toContain('if (!video.paused) return');
+    expect(verifierHtml).toContain('video.currentTime = origin');
+  });
+
   it('uses a compact 16:9 screenshot in the Preview column', () => {
     expect(verifierHtml).toContain('width: 112px; height: 63px');
     expect(verifierHtml).toContain('function capturedStill');

@@ -8,6 +8,7 @@ import {
   type ProofVideoRecord,
   type WorkEpisodeListItem,
 } from '../../lib/api';
+import { bindMeasuredDuration, formatClipLength } from '../../lib/clipDuration';
 import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
@@ -694,6 +695,8 @@ function VideoCatalog({
                   </span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-ink-500">
+                  {formatClipLength(video.durationSeconds)}
+                  {' · '}
                   Picture: {statusWord(video.analysisStatus ?? video.narrationStatus, 'read')}
                   {' · '}
                   Mic: {statusWord(video.transcriptStatus, 'heard')}
@@ -712,6 +715,22 @@ function VideoCatalog({
       </ul>
     </div>
   );
+}
+
+function MeasuredVideo({
+  src,
+  className,
+}: {
+  src: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return bindMeasuredDuration(el);
+  }, [src]);
+  return <video ref={ref} src={src} controls playsInline preload="metadata" className={className} />;
 }
 
 /**
@@ -746,13 +765,7 @@ function PlayClip({
   if (url) {
     return (
       <div className="basis-full sm:basis-64">
-        <video
-          src={url}
-          controls
-          playsInline
-          preload="metadata"
-          className="block max-h-40 w-full rounded-lg bg-black"
-        />
+        <MeasuredVideo src={url} className="block max-h-40 w-full rounded-lg bg-black" />
       </div>
     );
   }
@@ -828,13 +841,7 @@ function ProofVideo({
       </div>
 
       {url ? (
-        <video
-          src={url}
-          controls
-          playsInline
-          preload="metadata"
-          className="block max-h-64 w-full bg-black"
-        />
+        <MeasuredVideo src={url} className="block max-h-64 w-full bg-black" />
       ) : (
         <button
           onClick={() => void open()}

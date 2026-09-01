@@ -58,7 +58,7 @@ struct DoorView: View {
                     .cornerRadius(12)
 
                     if let m = session.manifest {
-                        Text("hasAudio=\(m.hasAudio) · \(Int(m.durationSeconds))s · media \(m.mediaId ?? "—")")
+                        Text("hasAudio=\(m.hasAudio) · \(formatClipLength(m.durationSeconds)) · media \(m.mediaId ?? "—")")
                             .font(FieldTheme.mono)
                             .font(.system(size: 11))
                             .foregroundStyle(FieldTheme.faint)

@@ -22,6 +22,8 @@
  * unproven is a state the whole system is built to handle honestly.
  */
 
+import { isKnownDuration, knownDurationSeconds } from './clipDuration';
+
 export interface CaptureFacts {
   contentHash: string | null;
   durationSeconds: number | null;
@@ -101,8 +103,7 @@ export async function extractFrames(
 
   try {
     const duration = await new Promise<number | null>((resolve) => {
-      const measured = () =>
-        Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+      const measured = () => (isKnownDuration(video.duration) ? video.duration : null);
       const done = () => resolve(measured());
 
       video.onloadedmetadata = () => {
@@ -216,10 +217,49 @@ export async function readDuration(file: File): Promise<number | null> {
   video.src = url;
   try {
     return await new Promise<number | null>((resolve) => {
-      const done = () => resolve(Number.isFinite(video.duration) ? video.duration : null);
-      video.onloadedmetadata = done;
-      video.onerror = () => resolve(null);
-      setTimeout(done, 8000);
+      let settled = false;
+      const finish = (value: number | null) => {
+        if (settled) return;
+        settled = true;
+        video.ontimeupdate = null;
+        video.onseeked = null;
+        video.onloadedmetadata = null;
+        video.onerror = null;
+        resolve(value);
+      };
+      const measured = () => (isKnownDuration(video.duration) ? video.duration : null);
+      const discover = () => {
+        if (measured() != null) {
+          finish(measured());
+          return;
+        }
+        /*
+         * MediaRecorder WebM reports 0 or Infinity. Seeking past any
+         * plausible length makes the browser scan to the end so a
+         * 50-minute film files as 50 minutes, not 0:00.
+         */
+        const settle = () => {
+          video.ontimeupdate = null;
+          video.onseeked = null;
+          try {
+            video.currentTime = 0;
+          } catch {
+            /* playhead reset is best-effort */
+          }
+          finish(measured());
+        };
+        video.ontimeupdate = settle;
+        video.onseeked = settle;
+        try {
+          video.currentTime = Number.MAX_SAFE_INTEGER;
+        } catch {
+          finish(measured());
+        }
+      };
+      video.onloadedmetadata = discover;
+      video.onerror = () => finish(null);
+      setTimeout(() => finish(measured()), 8000);
+      if (video.readyState >= 1) discover();
     });
   } finally {
     URL.revokeObjectURL(url);
@@ -249,7 +289,7 @@ export async function readCapture(file: File): Promise<CaptureFacts> {
 
   return {
     contentHash: hash,
-    durationSeconds: media.durationSeconds ?? durationHint,
+    durationSeconds: knownDurationSeconds(media.durationSeconds, durationHint),
     // The file's own modification time, which for a fresh recording is when it
     // was filmed. Falls back to now — recorded either way, and the server's
     // receipt time is what the check actually compares against.
