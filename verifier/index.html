@@ -3552,9 +3552,9 @@
     document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
       btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
     });
+    paintJobFileSheet();
     var sheet = document.getElementById('jobfile-sheet');
     if (sheet) sheet.setAttribute('data-open', '1');
-    paintJobFileSheet();
   }
 
   function closeJobFileSheet() {
