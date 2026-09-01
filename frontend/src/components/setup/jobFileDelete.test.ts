@@ -28,4 +28,16 @@ describe('Dashboard job-file delete', () => {
     expect(verifierHtml).toContain('function applyDeletedJob');
     expect(verifierHtml).toContain('!canOpenJobRecord(key) || !ORG_MODE');
   });
+
+  it('sizes the Dashboard delete sheet like the office job-file dialog', () => {
+    expect(verifierHtml).toContain('class="sheet sheet-narrow"');
+    expect(verifierHtml).toMatch(/\.sheet\.sheet-narrow\s*\{[^}]*width:\s*min\(28rem,\s*100%\)/);
+    expect(verifierHtml).toMatch(/\.sheet\.sheet-narrow\s*\{[^}]*height:\s*auto/);
+    const fullBleed = verifierHtml.indexOf('.sheet {\n    position: relative;\n    width: min(1440px, 100%)');
+    const compact = verifierHtml.indexOf('.sheet.sheet-narrow {');
+    expect(fullBleed).toBeGreaterThan(-1);
+    expect(compact).toBeGreaterThan(fullBleed);
+    expect(verifierHtml).toContain('class="jf-actions"');
+    expect(verifierHtml).toContain('id="jf-delete-cancel"');
+  });
 });

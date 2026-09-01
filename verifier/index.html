@@ -1218,7 +1218,6 @@
     tbody tr.cliprow .kebab { width: 36px; height: 36px; }
   }
 
-  .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
   .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
   .jf-tabs[hidden] { display: none; }
   .jf-tabs button {
@@ -1246,6 +1245,15 @@
     opacity: 1;
     cursor: not-allowed;
   }
+  .jf-actions {
+    display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px;
+  }
+  .jf-actions .jf-submit { width: auto; margin-top: 0; }
+  .jf-cancel {
+    border: 0; background: none; padding: 10px 12px; font: inherit; font-size: 13px;
+    font-weight: 550; color: var(--muted); cursor: pointer;
+  }
+  .jf-cancel:hover { color: var(--ink); }
   .jf-warn {
     margin: 0 0 10px; padding: 10px 12px; border-radius: 8px;
     background: var(--fail-soft); border: 1px solid color-mix(in srgb, var(--fail) 28%, var(--line));
@@ -1326,6 +1334,12 @@
     background: var(--bg);
     box-shadow: 0 28px 80px -24px rgba(0,0,0,.55);
     display: flex; flex-direction: column;
+  }
+  /* After .sheet so width/height win — same footprint as the office JobFileActions dialog. */
+  .sheet.sheet-narrow {
+    width: min(28rem, 100%);
+    height: auto;
+    max-height: min(88vh, 36rem);
   }
   @media (max-width: 860px) {
     .detail { padding: 8px; }
@@ -3627,14 +3641,19 @@
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
         '<form id="jf-delete-form">' +
           '<label><span>File name</span><input name="title" required autocomplete="off" spellcheck="false" placeholder="' + esc(job.name) + '" /></label>' +
-          '<button type="submit" class="jf-submit danger" disabled>' +
-            (jobSheet.busy ? 'Deleting…' : 'Delete permanently') +
-          '</button>' +
+          '<div class="jf-actions">' +
+            '<button type="button" class="jf-cancel" id="jf-delete-cancel">Cancel</button>' +
+            '<button type="submit" class="jf-submit danger" disabled>' +
+              (jobSheet.busy ? 'Deleting…' : 'Delete permanently') +
+            '</button>' +
+          '</div>' +
         '</form>';
       var deleteForm = document.getElementById('jf-delete-form');
       if (deleteForm) {
         var confirmInput = deleteForm.querySelector('input[name="title"]');
         var deleteBtn = deleteForm.querySelector('button[type="submit"]');
+        var cancelBtn = document.getElementById('jf-delete-cancel');
+        if (cancelBtn) cancelBtn.addEventListener('click', closeJobFileSheet);
         function syncDeleteBtn() {
           if (!deleteBtn) return;
           deleteBtn.disabled = jobSheet.busy || !jobFileDeleteNameMatches(job.name, confirmInput && confirmInput.value);
