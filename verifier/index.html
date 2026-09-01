@@ -3494,12 +3494,12 @@
 
     if (act === 'delete') {
       // The hold outranks the click, exactly as it outranks the retention
-      // schedule. The refusal is the feature.
+      // schedule. The refusal is the feature. Otherwise Delete is the
+      // confirmation — no second browser prompt.
       if (item.hold && item.hold.on) {
         toast('On legal hold — this clip cannot be deleted while the hold stands.');
         return;
       }
-      if (!window.confirm('Delete ' + item.id + '? The chain of custody keeps the record of its life either way.')) return;
       EVIDENCE = EVIDENCE.filter(function (e) { return e.id !== item.id; });
       render();
       counts();
