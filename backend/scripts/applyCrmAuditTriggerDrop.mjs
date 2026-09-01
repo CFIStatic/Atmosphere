@@ -82,7 +82,7 @@ if (accessToken && ref && (await applyViaManagementApi(accessToken, ref, 'SUPABA
 
 // Prefer an sbp_ personal token, but also try whatever is in SERVICE_ROLE_KEY —
 // some Keys setups store the management token there by mistake, and a failed
- // attempt is cheap compared to a broken Delete button.
+// attempt is cheap compared to a broken Delete button.
 if (
   serviceRole &&
   ref &&
