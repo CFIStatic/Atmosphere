@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProofResponse } from '../../lib/api';
@@ -117,4 +117,59 @@ describe('ProofOfWork video collection', () => {
       'https://signed.test/morning.mp4',
     );
   });
+
+
+  it('polls for new videos while the job file is open', async () => {
+    vi.useFakeTimers();
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [],
+      counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
+      siteKnown: true,
+    });
+    proofQuestions.mockResolvedValue({ questions: [] });
+    jobEpisodes.mockResolvedValue({ episodes: [] });
+
+    render(<ProofOfWork jobId="job-1" heading="Videos and analysis" />);
+
+    // Flush the initial load.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(jobProofs).toHaveBeenCalled();
+    const callsAfterMount = jobProofs.mock.calls.length;
+
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [
+        {
+          id: 'proof-new',
+          partyId: 'party-1',
+          company: 'Acme Drywall',
+          workDate: '2026-08-20',
+          phase: 'after',
+          durationSeconds: 30,
+          analysisStatus: 'queued',
+          narrationStatus: 'queued',
+          transcriptStatus: 'queued',
+          transcriptError: null,
+          aiSummary: null,
+          heardOnMic: null,
+        },
+      ],
+      counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 1 },
+      siteKnown: true,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(jobProofs.mock.calls.length).toBeGreaterThan(callsAfterMount);
+    expect(screen.getByText(/New video filed on this job/i)).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
 });

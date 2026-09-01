@@ -267,6 +267,30 @@ export function JobSharePage() {
  * miles from the site" at 4pm while the crew is still there is actionable;
  * the same sentence on Friday about Tuesday is an argument.
  */
+
+function putFileWithProgress(
+  url: string,
+  file: File,
+  onProgress: (ratio: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !file.size) return;
+      onProgress(Math.max(0, Math.min(1, event.loaded / file.size)));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error('The upload did not go through. Try again on a better signal.'));
+    };
+    xhr.onerror = () => reject(new Error('The upload did not go through. Try again on a better signal.'));
+    xhr.onabort = () => reject(new Error('The upload did not go through. Try again on a better signal.'));
+    xhr.send(file);
+  });
+}
+
 function ProofSection({
   token,
   today,
@@ -282,6 +306,7 @@ function ProofSection({
 }) {
   const [uploading, setUploading] = useState<'before' | 'after' | null>(null);
   const [step, setStep] = useState('');
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [done, setDone] = useState<string | null>(null);
   const [guide, setGuide] = useState<CaptureGuide | null>(null);
@@ -310,30 +335,30 @@ function ProofSection({
     setUploading(phase);
     setProblems([]);
     setDone(null);
+    setUploadPct(0);
     try {
-      setStep('Reading the video…');
-      const facts = await readCapture(file);
-
       setStep('Getting somewhere to put it…');
       const extension = (file.name.split('.').pop() ?? 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const slot = await call<{ path: string; token: string; uploadUrl?: string }>(shareApi(token, '/proof/upload-url'), {
+      const slotP = call<{ path: string; token: string; uploadUrl?: string }>(shareApi(token, '/proof/upload-url'), {
         method: 'POST',
         body: JSON.stringify({ workDate: today, phase, extension: extension || 'mp4' }),
       });
 
-      setStep('Uploading…');
-      // Prefer absolute signed URL from the API (works without a Vite storage proxy).
+      // Read facts while the signed URL is minted, then PUT overlaps remaining work.
+      setStep('Reading and uploading…');
+      const factsP = readCapture(file);
+      const slot = await slotP;
       const putUrl =
         slot.uploadUrl ||
         `/storage/v1/object/upload/sign/job-proofs/${slot.path}?token=${encodeURIComponent(slot.token)}`;
-      const put = await fetch(putUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type || 'video/mp4' },
-      });
-      if (!put.ok) throw new Error('The upload did not go through. Try again on a better signal.');
+
+      const [facts] = await Promise.all([
+        factsP,
+        putFileWithProgress(putUrl, file, (ratio) => setUploadPct(Math.round(ratio * 100))),
+      ]);
 
       setStep('Filing it…');
+      setUploadPct(100);
       const result = await call<{ problems: string[] }>(shareApi(token, '/proof'), {
         method: 'POST',
         body: JSON.stringify({
@@ -365,14 +390,10 @@ function ProofSection({
     } finally {
       setUploading(null);
       setStep('');
+      setUploadPct(null);
     }
   }
 
-  /**
-   * Both inputs live at the section root, mounted whichever buttons are —
-   * a refilm link for a half whose big button is not on screen still needs
-   * its input to exist.
-   */
   const CameraInput = ({ phase }: { phase: 'before' | 'after' }) => (
     <input
       ref={phase === 'before' ? beforeInput : afterInput}
@@ -407,7 +428,7 @@ function ProofSection({
           {uploading === phase ? (
             <span className="flex items-center justify-center gap-2">
               <SpinnerIcon className="animate-spin" width={15} height={15} />
-              {step}
+              {uploadPct != null ? `${step} ${uploadPct}%` : step}
             </span>
           ) : filed ? (
             `${phase === 'before' ? 'Before' : 'After'} filed — refilm`
