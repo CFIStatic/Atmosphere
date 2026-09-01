@@ -3088,7 +3088,7 @@
 
   function hydrateJobBoard(key) {
     var items = EVIDENCE.filter(function (e) { return e.job === key; });
-    if (!canOpenJobRecord(key)) {
+    if (!ORG_MODE || !canOpenJobRecord(key)) {
       JOB_BOARD[key] = boardFromClips(key, items);
       return;
     }
