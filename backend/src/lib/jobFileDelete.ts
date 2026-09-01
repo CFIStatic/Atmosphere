@@ -42,10 +42,28 @@ export async function repairCrmAuditTriggers(): Promise<boolean> {
   return false;
 }
 
+/** Recreate public.crm_audit_log when the repair RPC has been applied. */
+export async function ensureCrmAuditLog(): Promise<boolean> {
+  const admin = createAdminClient();
+  if (!admin) return false;
+  const { error } = await admin.rpc('ensure_crm_audit_log');
+  if (!error) return true;
+  const msg = error.message ?? '';
+  if (/does not exist|PGRST202|schema cache/i.test(msg)) return false;
+  console.warn('[job-file] ensure_crm_audit_log:', msg);
+  return false;
+}
+
 type Writer = {
   from: (table: string) => any;
   rpc?: (fn: string, args: Record<string, unknown>) => any;
 };
+
+export async function crmAuditLogAvailable(writer: Writer): Promise<boolean> {
+  const { error } = await writer.from('crm_audit_log').select('id').limit(1);
+  if (!error) return true;
+  return !isCrmAuditLogMissingError(error.message);
+}
 
 function collectTombstoneIds(rows: Array<{ job_id?: string | null; entity_id?: string | null }>): Set<string> {
   const ids = new Set<string>();
@@ -173,29 +191,28 @@ export async function softDeleteCrmJobRow(
     now: string;
   },
 ): Promise<{ id: string; title: string } | null> {
-  const attempt = () =>
-    writer
-      .from('crm_jobs')
-      .update({ deleted_at: input.now, deleted_by: input.userId })
-      .eq('org_id', input.orgId)
-      .eq('id', input.jobId)
-      .is('deleted_at', null)
-      .select('id, title')
-      .maybeSingle();
+  await ensureCrmAuditLog();
+  await repairCrmAuditTriggers();
 
-  let { data, error } = await attempt();
-  if (!error) return (data as { id: string; title: string } | null) ?? null;
-
-  if (!isCrmAuditLogMissingError(error.message)) {
-    throw new Error(error.message);
+  if (!(await crmAuditLogAvailable(writer))) {
+    // Do not UPDATE crm_jobs — the leftover trigger would fail and the
+    // dashboard would show relation "public.crm_audit_log" does not exist.
+    throw Object.assign(new Error('relation "public.crm_audit_log" does not exist'), {
+      code: 'crm_audit_log_missing' as const,
+    });
   }
 
-  await repairCrmAuditTriggers();
-  ({ data, error } = await attempt());
+  const { data, error } = await writer
+    .from('crm_jobs')
+    .update({ deleted_at: input.now, deleted_by: input.userId })
+    .eq('org_id', input.orgId)
+    .eq('id', input.jobId)
+    .is('deleted_at', null)
+    .select('id, title')
+    .maybeSingle();
   if (!error) return (data as { id: string; title: string } | null) ?? null;
 
   if (isCrmAuditLogMissingError(error.message)) {
-    // Caller falls back to a tombstone so Delete permanently still succeeds.
     throw Object.assign(new Error(error.message), { code: 'crm_audit_log_missing' as const });
   }
   throw new Error(error.message);
