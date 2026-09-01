@@ -23,6 +23,7 @@ import {
   formatTodayAt,
   pickInviteToken,
   pickTodayJobs,
+  todayJobLocation,
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
@@ -360,14 +361,19 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
 
     const out = picked.map((j) => {
       const token = inviteByJob.get(j.id) ?? null;
+      const site = todayJobLocation(
+        j.propertyId,
+        j.propertyId ? addressById.get(j.propertyId) : undefined,
+        j.filmed,
+      );
       return {
         id: j.id,
         number: j.jobNumber != null ? `#${j.jobNumber}` : '',
         name: j.title || 'Job',
-        address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
+        address: site.address,
         at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
         status: j.status ?? null,
-        placed: Boolean(j.propertyId && addressById.get(j.propertyId)) || j.filmed,
+        placed: site.placed,
         filmed: j.filmed,
         reason: j.reason,
         sharePath: token ? jobSharePagePath(token, email) : null,

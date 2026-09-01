@@ -94,6 +94,22 @@ export function pickTodayJobs(
   });
 }
 
+/**
+ * Today-list address and map pin. Jobs without a property are name-only —
+ * not "Address on file" and not unplaced.
+ */
+export function todayJobLocation(
+  propertyId: string | null,
+  address: string | undefined,
+  filmed: boolean,
+): { address: string; placed: boolean } {
+  const line = (propertyId && address) || '';
+  return {
+    address: line,
+    placed: Boolean(line) || !propertyId || filmed,
+  };
+}
+
 export function formatTodayAt(
   scheduledStart: string | null,
   filmed: boolean,

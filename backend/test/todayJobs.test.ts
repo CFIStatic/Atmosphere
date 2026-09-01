@@ -5,6 +5,7 @@ import {
   pickInviteToken,
   pickTodayJobs,
   sortJobsForOpen,
+  todayJobLocation,
   todayKey,
   type TodayJobInput,
 } from '../src/field/todayJobs.js';
@@ -163,6 +164,17 @@ test('formatTodayAt says Filmed once the day film is on file', () => {
   assert.equal(formatTodayAt('2026-08-12T13:00:00Z', true, TZ), 'Filmed');
   assert.equal(formatTodayAt(null, false, TZ), '');
   assert.match(formatTodayAt('2026-08-12T13:00:00Z', false, TZ), /\d/);
+});
+
+test('todayJobLocation does not invent an address or treat a nameless site as unplaced', () => {
+  assert.deepEqual(todayJobLocation(null, undefined, false), { address: '', placed: true });
+  assert.deepEqual(todayJobLocation(null, undefined, true), { address: '', placed: true });
+  assert.deepEqual(todayJobLocation('prop-1', '412 Meridian Ave', false), {
+    address: '412 Meridian Ave',
+    placed: true,
+  });
+  assert.deepEqual(todayJobLocation('prop-1', undefined, false), { address: '', placed: false });
+  assert.deepEqual(todayJobLocation('prop-1', undefined, true), { address: '', placed: true });
 });
 
 test('the dashboard puts the job worked today above older folders', () => {

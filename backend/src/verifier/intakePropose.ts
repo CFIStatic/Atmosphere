@@ -61,11 +61,12 @@ export function looksLikeScopeTitle(title: string): boolean {
   );
 }
 
-/** Prefer a human-edited title; never keep a numbered scope line as the job name. */
+/** Prefer a human-edited title; a scope-like name yields to the street when one exists. */
 export function jobTitleForIntake(title: string | undefined, address: string): string {
   const t = (title ?? '').trim();
-  if (t && !looksLikeScopeTitle(t)) return t.slice(0, 200);
-  return titleFromSiteAddress(address);
+  const fromSite = titleFromSiteAddress(address);
+  if (t && (!looksLikeScopeTitle(t) || fromSite === 'New job')) return t.slice(0, 200);
+  return fromSite;
 }
 
 function addressOnlyProposal(address: string): IntakeProposal {

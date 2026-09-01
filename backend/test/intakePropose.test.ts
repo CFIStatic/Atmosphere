@@ -61,3 +61,10 @@ test('jobTitleForIntake replaces a numbered scope line with the street', () => {
     'Cedar Ridge rebuild',
   );
 });
+
+test('jobTitleForIntake keeps a work-like name when the site line is blank', () => {
+  assert.equal(jobTitleForIntake('Extract standing water', ''), 'Extract standing water');
+  assert.equal(jobTitleForIntake('Demo kitchen', ''), 'Demo kitchen');
+  assert.equal(jobTitleForIntake('Paint the hall', ''), 'Paint the hall');
+  assert.equal(jobTitleForIntake('Clean the basement', ''), 'Clean the basement');
+});
