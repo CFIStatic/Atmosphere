@@ -164,4 +164,21 @@ describe('JobProgressGuestPage', () => {
     expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
   });
+
+  it('puts Atmosphere on the left and stacks the job file plus share on the right', async () => {
+    const { container } = renderGuest();
+
+    expect(await screen.findByText('Job file')).toBeInTheDocument();
+    const header = container.querySelector('header');
+    expect(header).toBeTruthy();
+    const row = header!.firstElementChild as HTMLElement;
+    expect(row.className).toContain('justify-between');
+    expect(row.firstElementChild).toHaveAttribute('data-atmosphere-lockup');
+    const meta = row.lastElementChild as HTMLElement;
+    expect(meta.className).toContain('text-right');
+    expect(meta).toHaveTextContent('Job file');
+    expect(meta).toHaveTextContent('Ortiz Restoration');
+    expect(meta).toHaveTextContent('Shared with');
+    expect(meta).toHaveTextContent('Cedar Ridge HOA — homeowner');
+  });
 });
