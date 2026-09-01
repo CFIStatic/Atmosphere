@@ -54,6 +54,7 @@ import {
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
+import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
 
 /**
@@ -1589,15 +1590,18 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
       .limit(2000);
     if (error) throw new HttpError(500, error.message, 'pulse_failed');
 
+    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
     res.json(
       summarizeProofPulse(
-        ((data ?? []) as any[]).map((row) => ({
-          jobId: row.job_id ?? null,
-          analysisStatus: row.analysis_status ?? null,
-          transcriptStatus: row.transcript_status ?? null,
-          receivedAt: row.received_at ?? null,
-          workDate: String(row.work_date ?? ''),
-        })),
+        ((data ?? []) as any[])
+          .filter((row) => !tombstoned.has(row.job_id as string))
+          .map((row) => ({
+            jobId: row.job_id ?? null,
+            analysisStatus: row.analysis_status ?? null,
+            transcriptStatus: row.transcript_status ?? null,
+            receivedAt: row.received_at ?? null,
+            workDate: String(row.work_date ?? ''),
+          })),
       ),
     );
   } catch (err) {

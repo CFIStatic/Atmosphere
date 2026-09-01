@@ -126,16 +126,13 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     // The job_memory view hides rows with deleted_at. Tombstone deletes leave
     // that column null, so they must be filtered the same way as the library.
-    let rows = data ?? [];
-    if (rows.length) {
-      const orgId = (rows[0] as { org_id?: string }).org_id;
-      if (orgId) {
-        const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
-        rows = rows.filter(
-          (r: any) =>
-            !tombstoned.has(r.job_id as string) && !jobLooksDeletedFromLibrary(r.last_event as string | null),
-        );
-      }
+    let rows = ((data ?? []) as any[]).filter(
+      (r) => !jobLooksDeletedFromLibrary(r.last_event as string | null),
+    );
+    const orgId = rows[0]?.org_id as string | undefined;
+    if (orgId) {
+      const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+      rows = rows.filter((r: any) => !tombstoned.has(r.job_id as string));
     }
 
     // The job_memory view carries the rollups but not the money or the

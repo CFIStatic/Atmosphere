@@ -1,5 +1,6 @@
 import type { JobSummary, ProofPulse, ProofPulseJob, SharedJobSummary } from './api';
 import { jobFilePath } from './jobFileAsk';
+import { jobLooksDeletedFromLibrary } from './jobFileCopy';
 
 const OPEN_STATUSES = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
 
@@ -290,6 +291,7 @@ export function buildOverview(
     const status = job?.status ?? brief?.status ?? null;
     if (status && !isOpenJob({ status })) continue;
     if (!job && !brief) continue;
+    if (jobLooksDeletedFromLibrary(job?.lastEvent)) continue;
 
     const title = job?.title ?? brief?.title ?? 'Job';
     const jobNumber = job?.jobNumber ?? brief?.jobNumber ?? null;

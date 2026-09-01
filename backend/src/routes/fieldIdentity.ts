@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { createAdminClient } from '../lib/supabase.js';
+import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { HttpError } from '../lib/errors.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { recordAccess } from './proofOfWork.js';
@@ -374,7 +375,13 @@ async function listForIdentity(db: any, identityId: string) {
   const { data: jobs } = await db
     .from('crm_jobs')
     .select('id, title, job_number, status, scheduled_start, property_id')
-    .in('id', jobIds);
+    .in('id', jobIds)
+    .is('deleted_at', null);
+
+  const tombstoned = new Set<string>();
+  for (const orgId of new Set(rows.map((r) => r.org_id).filter(Boolean) as string[])) {
+    for (const id of await listTombstonedJobIds(db, orgId)) tombstoned.add(id);
+  }
 
   const propertyIds = [
     ...new Set(((jobs ?? []) as any[]).map((j) => j.property_id).filter(Boolean)),
@@ -383,7 +390,9 @@ async function listForIdentity(db: any, identityId: string) {
     ? await db.from('crm_properties').select('id, address_line1, city').in('id', propertyIds)
     : { data: [] as any[] };
 
-  const jobById = new Map(((jobs ?? []) as any[]).map((j) => [j.id, j]));
+  const jobById = new Map(
+    ((jobs ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string)).map((j) => [j.id, j]),
+  );
   const propertyById = new Map(((properties ?? []) as any[]).map((p) => [p.id, p]));
 
   const claimed: ClaimedJobRow[] = rows
