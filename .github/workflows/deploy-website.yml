@@ -21,6 +21,7 @@ on:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/fix-website-start-command-64db
     paths:
       - 'website/**'
       - '.dockerignore'
@@ -33,9 +34,12 @@ permissions:
   pages: write
   id-token: write
 
+# One production Railway service. A new ship cancels a stuck retry loop
+# (the previous group was `pages` with cancel-in-progress: false, so a
+# skip-loop railway up held the runner for ~1h40m and blocked the next SHA).
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: deploy-website-production
+  cancel-in-progress: true
 
 jobs:
   pages-enabled:
@@ -190,10 +194,12 @@ jobs:
         run: |
           cp website/railway.toml railway.toml
           cp website/railway.json railway.json
-          # Each attempt must change a file under website/** or Railway skips
-          # the rebuild after a failed healthcheck and we treat that as success.
-          echo "# railway-up $(date -u +%s)" > website/.railway-up-stamp
-          export RAILWAY_UP_STAMP_FILE="$PWD/website/.railway-up-stamp"
+          # Each attempt must change a *tracked* file under website/** or
+          # Railway skips the rebuild. A hidden gitignored stamp never
+          # reached the upload, so every attempt logged
+          # "no changes detected in watch paths".
+          printf '\n# railway-up %s %s\n' "${GITHUB_SHA:-local}" "$(date -u +%s)" >> website/railway-rebuild.stamp
+          export RAILWAY_UP_STAMP_FILE="$PWD/website/railway-rebuild.stamp"
           export RAILWAY_SERVICE="$RAILWAY_WEBSITE_SERVICE"
           echo "Deploying Railway service: $RAILWAY_SERVICE"
           chmod +x backend/scripts/railwayUp.sh

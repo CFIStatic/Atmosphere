@@ -26,5 +26,8 @@ healthcheckPath = "/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
-# Official nginx entrypoint via website-start.sh. Never node dist/index.js.
-startCommand = "/usr/local/bin/website-start.sh"
+# Official nginx entrypoint (same as the staff site). Never node dist/index.js
+# and never a custom script that only exists if this Dockerfile was the one
+# that actually built — GitHub Autodeploy of a backend commit used to ship
+# the BFF image and die at Create container looking for website-start.sh.
+startCommand = "/docker-entrypoint.sh nginx -g 'daemon off;'"

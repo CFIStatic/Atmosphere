@@ -1,0 +1,7 @@
+# Touched by deploy-website.yml before each `railway up`.
+# Must stay a tracked file under website/** — a hidden gitignored
+# stamp never reached Railway, so every CLI deploy said "no changes
+# detected in watch paths" and left the last image in place. That
+# last image was the Work Verification BFF, which does not contain
+# the marketing start script.
+# railway-rebuild 0

@@ -9,6 +9,10 @@ finished_failure() {
   grep -qiE 'Deployment failed|Healthcheck failed|healthcheck failure' "$1"
 }
 
+missing_executable() {
+  grep -qiE 'could not be found' "$1"
+}
+
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -41,6 +45,20 @@ if ! finished_failure "$tmpdir/probe-failed.log"; then
   exit 1
 fi
 
+printf '%s\n' \
+  'Deploy > Create container' \
+  'The executable `/usr/local/bin/website-start.sh` could not be found.' \
+  >"$tmpdir/missing-start.log"
+if ! missing_executable "$tmpdir/missing-start.log"; then
+  echo "missing website-start.sh log must match" >&2
+  exit 1
+fi
+if missing_executable "$tmpdir/retrying.log"; then
+  echo "retrying probe log must not match a missing executable" >&2
+  exit 1
+fi
+
 echo "railwayUp healthcheck matcher ok"
 # Touch the script so a rename of railwayUp.sh fails this job if we forget.
 test -f "$here/railwayUp.sh"
+grep -q 'could not be found' "$here/railwayUp.sh"

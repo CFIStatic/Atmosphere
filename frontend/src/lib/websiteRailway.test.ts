@@ -56,10 +56,11 @@ describe('Railway corporate-website image', () => {
     expect(toml).toContain('dockerfilePath = "website/Dockerfile"');
     expect(toml).toContain('healthcheckPath = "/health"');
     expect(toml).toContain('healthcheckTimeout = 120');
-    expect(toml).toContain('startCommand = "/usr/local/bin/website-start.sh"');
+    expect(toml).toContain('startCommand = "/docker-entrypoint.sh nginx -g \'daemon off;\'"');
     expect(toml).toContain('website/**');
     expect(toml).not.toContain('healthcheckPath = "/api/health"');
     expect(toml).not.toContain('startCommand = "node dist/index.js"');
+    expect(toml).not.toContain('startCommand = "/usr/local/bin/website-start.sh"');
   });
 
   it('resolves the live Corporate Website service before railway variable set', () => {
@@ -68,7 +69,14 @@ describe('Railway corporate-website image', () => {
     expect(workflow).toContain('RAILWAY_WEBSITE_SERVICE');
     expect(workflow).toContain('website/scripts/apply-railway-config.sh');
     expect(workflow).toContain('RAILWAY_UP_STAMP_FILE');
-    expect(workflow).toContain('website/.railway-up-stamp');
+    expect(workflow).toContain('website/railway-rebuild.stamp');
+    expect(workflow).not.toContain('website/.railway-up-stamp');
+    // A gitignored stamp never reaches `railway up`, so every CLI deploy
+    // skipped the image and left Create container looking for website-start.sh
+    // in the leftover BFF image.
+    expect(read('.gitignore')).not.toContain('railway-rebuild.stamp');
+    expect(read('.gitignore')).not.toContain('website/.railway-up-stamp');
+    expect(read('website/railway-rebuild.stamp')).toContain('tracked file');
 
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");
@@ -78,7 +86,8 @@ describe('Railway corporate-website image', () => {
   it('applies nginx + GET /health onto the Railway service from CI', () => {
     const script = read('website/scripts/apply-railway-config.sh');
     expect(script).toContain('website/Dockerfile');
-    expect(script).toContain('/usr/local/bin/website-start.sh');
+    expect(script).toContain("/docker-entrypoint.sh nginx -g 'daemon off;'");
+    expect(script).not.toContain('/usr/local/bin/website-start.sh');
     expect(script).toContain("healthcheck_path=\"/health\"");
     expect(script).toContain("healthcheck_timeout=\"120\"");
     expect(script).toContain('Corporate Website');
@@ -90,13 +99,14 @@ describe('Railway corporate-website image', () => {
     };
     expect(json.build.dockerfilePath).toBe('website/Dockerfile');
     expect(json.deploy.healthcheckPath).toBe('/health');
-    expect(json.deploy.startCommand).toBe('/usr/local/bin/website-start.sh');
+    expect(json.deploy.startCommand).toBe("/docker-entrypoint.sh nginx -g 'daemon off;'");
     expect(json.deploy.healthcheckTimeout).toBe(120);
   });
 
   it('does not treat in-window Railway probe retries as a finished failure', () => {
     const up = read('backend/scripts/railwayUp.sh');
     expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');
+    expect(up).toContain('could not be found');
     expect(up).not.toMatch(/grep -qi 'failed with service unavailable'/);
   });
 });
