@@ -276,6 +276,40 @@ describe('buildOverview', () => {
     expect(model.jobs[0].stage).toBe('being_read');
   });
 
+  it('hides a job file after a dashboard delete', () => {
+    const model = buildOverview(
+      [
+        job({
+          jobId: 'cursor-1',
+          title: 'Cursor 1',
+          lastEvent: 'Job file “Cursor 1” deleted from the library.',
+          lastEventAt: NOW.toISOString(),
+        }),
+        job({
+          jobId: 'live',
+          title: 'Meridian Ave — water loss',
+          lastEventAt: NOW.toISOString(),
+        }),
+      ],
+      [
+        shared({ jobId: 'cursor-1', title: 'Cursor 1' }),
+        shared({ jobId: 'live', title: 'Meridian Ave — water loss' }),
+      ],
+      {
+        clips: 1,
+        read: 1,
+        analysing: 0,
+        failed: 0,
+        unread: 0,
+        heard: 0,
+        filmedToday: 0,
+        byJob: [{ jobId: 'cursor-1', clips: 1, read: 1, analysing: 0, failed: 0, unread: 0, heard: 0, filmedToday: 0 }],
+      },
+      NOW,
+    );
+    expect(model.jobs.map((row) => row.title)).toEqual(['Meridian Ave — water loss']);
+  });
+
   it('treats a missing byJob payload as empty, not as a crash', () => {
     const model = buildOverview(
       [job({ jobId: 'live', title: 'Meridian Ave — water loss', lastEventAt: NOW.toISOString() })],

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { jobFileDeleteNameMatches, suggestedDuplicateTitle } from './jobFileCopy';
+import {
+  jobFileDeleteNameMatches,
+  jobLooksDeletedFromLibrary,
+  suggestedDuplicateTitle,
+} from './jobFileCopy';
 
 describe('jobFileDeleteNameMatches', () => {
   it('requires the exact dashboard name', () => {
@@ -10,6 +14,13 @@ describe('jobFileDeleteNameMatches', () => {
     expect(jobFileDeleteNameMatches('Cedar Ridge', 'cedar ridge')).toBe(false);
     expect(jobFileDeleteNameMatches('Cedar Ridge', 'Cedar')).toBe(false);
     expect(jobFileDeleteNameMatches('Cedar Ridge', '')).toBe(false);
+  });
+});
+
+describe('jobLooksDeletedFromLibrary', () => {
+  it('hides the Job Files card after a dashboard delete', () => {
+    expect(jobLooksDeletedFromLibrary('Job file “Cursor 1” deleted from the library.')).toBe(true);
+    expect(jobLooksDeletedFromLibrary('opened job #5 — Cursor 1')).toBe(false);
   });
 });
 

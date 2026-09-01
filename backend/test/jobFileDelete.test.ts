@@ -5,6 +5,7 @@ import {
   JOB_FILE_DELETED_RPC_EVENT,
   isCrmAuditLogMissingError,
   isJobFileDeletedEvent,
+  jobLooksDeletedFromLibrary,
   listTombstonedJobIds,
   softDeleteCrmJobRow,
   writeJobFileDeleteTombstone,
@@ -21,11 +22,19 @@ test('isCrmAuditLogMissingError matches the production Postgres wording', () => 
 test('isJobFileDeletedEvent accepts both ledger spellings', () => {
   assert.equal(isJobFileDeletedEvent(JOB_FILE_DELETED_EVENT), true);
   assert.equal(isJobFileDeletedEvent(JOB_FILE_DELETED_RPC_EVENT), true);
+  assert.equal(isJobFileDeletedEvent('job.deleted'), true);
   assert.equal(isJobFileDeletedEvent('job.created'), false);
 });
 
+test('jobLooksDeletedFromLibrary matches the Job Files last-event line', () => {
+  assert.equal(
+    jobLooksDeletedFromLibrary('Job file “Cursor 1” deleted from the library.'),
+    true,
+  );
+  assert.equal(jobLooksDeletedFromLibrary('opened job #5 — Cursor 1'), false);
+});
+
 test('listTombstonedJobIds reads job_id and entity_id from delete events', async () => {
-  const calls: unknown[] = [];
   const writer = {
     from(table: string) {
       assert.equal(table, 'memory_events');
@@ -33,12 +42,10 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
         select() {
           return api;
         },
-        eq(col: string, val: unknown) {
-          calls.push(['eq', col, val]);
+        eq() {
           return api;
         },
-        in(col: string, val: unknown) {
-          calls.push(['in', col, val]);
+        order() {
           return api;
         },
         limit() {
@@ -46,7 +53,14 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
             data: [
               { job_id: 'job-1', entity_id: 'job-1', event_type: JOB_FILE_DELETED_EVENT },
               { job_id: null, entity_id: 'job-2', event_type: JOB_FILE_DELETED_RPC_EVENT },
+              {
+                job_id: 'job-3',
+                entity_id: 'job-3',
+                event_type: 'job.updated',
+                summary: 'Job file “Cursor 1” deleted from the library.',
+              },
               { job_id: null, entity_id: null, event_type: JOB_FILE_DELETED_EVENT },
+              { job_id: 'job-4', entity_id: 'job-4', event_type: 'job.created', summary: 'opened' },
             ],
             error: null,
           });
@@ -57,13 +71,7 @@ test('listTombstonedJobIds reads job_id and entity_id from delete events', async
   };
 
   const ids = await listTombstonedJobIds(writer, 'org-1');
-  assert.deepEqual([...ids].sort(), ['job-1', 'job-2']);
-  assert.deepEqual(calls[0], ['eq', 'org_id', 'org-1']);
-  assert.deepEqual(calls[1], [
-    'in',
-    'event_type',
-    [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT],
-  ]);
+  assert.deepEqual([...ids].sort(), ['job-1', 'job-2', 'job-3']);
 });
 
 test('writeJobFileDeleteTombstone inserts an app-sourced memory event', async () => {

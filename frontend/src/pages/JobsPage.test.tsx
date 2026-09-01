@@ -144,6 +144,23 @@ describe('JobsPage', () => {
     expect(getJobs).toHaveBeenCalledWith({ status: 'all' });
   });
 
+  it('hides a job file whose last event is a dashboard delete', async () => {
+    getJobs.mockResolvedValue({
+      jobs: [
+        jobs[0],
+        {
+          ...jobs[1],
+          title: 'Cursor 1',
+          lastEvent: 'Job file “Cursor 1” deleted from the library.',
+          lastEventAt: '2026-09-01T13:00:00Z',
+        },
+      ],
+    });
+    renderJobs();
+    expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Cursor 1/ })).not.toBeInTheDocument();
+  });
+
   it('ranks job files by last recorded event, then last clicked', async () => {
     getJobs.mockResolvedValue({ jobs: [jobs[1], jobs[0]] });
     const firstView = renderJobs();

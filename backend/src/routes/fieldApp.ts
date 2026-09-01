@@ -5,6 +5,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
+import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
 import {
@@ -260,6 +261,7 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         .from('crm_jobs')
         .select('id, job_number, title, status, scheduled_start, property_id, created_by')
         .eq('org_id', orgId)
+        .is('deleted_at', null)
         .order('scheduled_start', { ascending: true, nullsFirst: false })
         .limit(200),
       supabase.from('job_proofs').select('job_id').eq('org_id', orgId).eq('work_date', day),
@@ -287,7 +289,9 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         .filter(Boolean) as string[],
     );
 
+    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
     const inputs: TodayJobInput[] = ((jobs ?? []) as any[])
+      .filter((j) => !tombstoned.has(j.id as string))
       .filter(
         (j) =>
           assignedIds.size === 0 ||
