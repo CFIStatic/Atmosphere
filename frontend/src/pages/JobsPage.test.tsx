@@ -13,7 +13,6 @@ vi.mock('../hooks/useFeatureTimer', () => ({
 }));
 
 const getJobs = vi.fn();
-const sharedJobs = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -22,7 +21,6 @@ vi.mock('../lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       getJobs: (...args: unknown[]) => getJobs(...args),
-      sharedJobs: (...args: unknown[]) => sharedJobs(...args),
     },
   };
 });
@@ -103,9 +101,7 @@ describe('JobsPage', () => {
   beforeEach(() => {
     localStorage.clear();
     getJobs.mockReset();
-    sharedJobs.mockReset();
     getJobs.mockResolvedValue({ jobs });
-    sharedJobs.mockRejectedValue(new Error('offline'));
   });
 
   it('lists job cards without a job number, title, create button, or status filters', async () => {
@@ -118,12 +114,16 @@ describe('JobsPage', () => {
     expect(screen.getByRole('link', { name: /Harbor Point/ })).toBeInTheDocument();
     expect(screen.queryByText('#1038')).not.toBeInTheDocument();
     expect(screen.queryByText('#1042')).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search by job, company, date, address, ID, or hash')).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Search by job, company, date, address, ID, or hash'),
+    ).toBeInTheDocument();
 
     expect(screen.queryByRole('heading', { name: 'Jobs' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Job Files' })).not.toBeInTheDocument();
     expect(
-      screen.queryByText('Every job the organization has opened. Each one carries its own complete history.'),
+      screen.queryByText(
+        'Every job the organization has opened. Each one carries its own complete history.',
+      ),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open a job/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
@@ -165,7 +165,7 @@ describe('JobsPage', () => {
     expect(screen.queryByRole('link', { name: /Cursor 1/ })).not.toBeInTheDocument();
   });
 
-  it('hides a job file the Dashboard already deleted even when last event is older', async () => {
+  it('keeps a live job file even when its last event is older', async () => {
     getJobs.mockResolvedValue({
       jobs: [
         jobs[0],
@@ -178,13 +178,9 @@ describe('JobsPage', () => {
         },
       ],
     });
-    sharedJobs.mockResolvedValue({
-      jobs: [{ jobId: 'job-1038', title: 'Cedar Ridge — storm damage' }],
-      counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 },
-    });
     renderJobs();
     expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Cursor 1/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Cursor 1/ })).toBeInTheDocument();
   });
 
   it('ranks job files by last recorded event, then last clicked', async () => {

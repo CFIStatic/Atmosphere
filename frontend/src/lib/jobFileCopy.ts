@@ -13,17 +13,16 @@ export function jobLooksDeletedFromLibrary(summary: string | null | undefined): 
 }
 
 /**
- * Job Files must match the Dashboard library. Drop delete tombstones,
- * files the Dashboard already hid, and duplicate cards for the same id.
+ * Drop delete tombstones and duplicate cards for the same id.
+ * A missing Dashboard snapshot id is not a delete — that list is a
+ * 200-row created_at window and can omit a live /api/jobs row.
  */
 export function visibleJobFiles<T extends { jobId: string; lastEvent?: string | null }>(
   jobs: T[],
-  dashboardIds: Set<string> | null = null,
 ): T[] {
   const unique = new Map<string, T>();
   for (const job of jobs) {
     if (!job.jobId || jobLooksDeletedFromLibrary(job.lastEvent)) continue;
-    if (dashboardIds && !dashboardIds.has(job.jobId)) continue;
     unique.set(job.jobId, job);
   }
   return [...unique.values()];

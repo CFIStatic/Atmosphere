@@ -44,13 +44,13 @@ function JobCard({ job }: { job: JobSummary }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
         <span>{WORK_TYPE_LABELS[job.workType]}</span>
-        <span className={JOB_PRIORITY_STYLES[job.priority]}>{JOB_PRIORITY_LABELS[job.priority]}</span>
+        <span className={JOB_PRIORITY_STYLES[job.priority]}>
+          {JOB_PRIORITY_LABELS[job.priority]}
+        </span>
         <span>
           {job.tasksDone}/{job.taskCount} tasks
         </span>
-        <span>
-          {job.crewSize} on crew
-        </span>
+        <span>{job.crewSize} on crew</span>
         {job.minutesLogged > 0 && <span>{formatMinutes(job.minutesLogged)} logged</span>}
         <span>{job.eventCount} recorded</span>
       </div>
@@ -64,7 +64,10 @@ function JobCard({ job }: { job: JobSummary }) {
           aria-valuemax={100}
           aria-label={`${job.title} task progress`}
         >
-          <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
+          <div
+            className="h-full rounded-full bg-brand-500 transition-all"
+            style={{ width: `${progress}%` }}
+          />
         </div>
       )}
 
@@ -87,12 +90,8 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [{ jobs: next }, shared] = await Promise.all([
-        api.getJobs({ status: 'all' }),
-        api.sharedJobs().catch(() => null),
-      ]);
-      const dashboardIds = shared ? new Set(shared.jobs.map((job) => job.jobId)) : null;
-      setJobs(visibleJobFiles(next, dashboardIds));
+      const { jobs: next } = await api.getJobs({ status: 'all' });
+      setJobs(visibleJobFiles(next));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
       setJobs([]);
@@ -104,10 +103,7 @@ export function JobsPage() {
   }, [load]);
 
   const visible = useMemo(
-    () =>
-      sortJobFilesByLastOpened(
-        (jobs ?? []).filter((job) => jobFileMatchesQuery(job, query)),
-      ),
+    () => sortJobFilesByLastOpened((jobs ?? []).filter((job) => jobFileMatchesQuery(job, query))),
     [jobs, query],
   );
 
