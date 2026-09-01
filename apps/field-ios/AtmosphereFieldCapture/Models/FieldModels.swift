@@ -64,3 +64,20 @@ struct DayFilmManifest: Codable, Equatable {
     var hasVideo: Bool
     var capturedAt: Date
 }
+
+func formatClipLength(_ seconds: Double) -> String {
+    guard seconds.isFinite, seconds > 0 else { return "—" }
+    let total = Int(seconds.rounded())
+    let hours = total / 3600
+    let minutes = (total % 3600) / 60
+    let rest = total % 60
+    var parts: [String] = []
+    if hours > 0 { parts.append(hours == 1 ? "1 hour" : "\(hours) hours") }
+    if minutes > 0 { parts.append(minutes == 1 ? "1 minute" : "\(minutes) minutes") }
+    if hours == 0 && minutes == 0 {
+        parts.append(rest == 1 ? "1 second" : "\(rest) seconds")
+    } else if hours == 0 && rest > 0 {
+        parts.append(rest == 1 ? "1 second" : "\(rest) seconds")
+    }
+    return parts.joined(separator: " ")
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type EvidenceItem, type CustodyEntry } from '../../lib/api';
+import { bindMeasuredDuration, formatClipLength } from '../../lib/clipDuration';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 
@@ -74,12 +75,7 @@ const when = (iso: string | null) =>
       })
     : '—';
 
-const length = (seconds: number | null) => {
-  if (seconds === null) return '—';
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
+const length = (seconds: number | null) => formatClipLength(seconds);
 
 const size = (bytes: number | null) =>
   bytes === null ? '—' : `${(bytes / 1_048_576).toFixed(1)} MB`;
@@ -353,7 +349,7 @@ function EvidenceDetail({
       <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div>
           {url ? (
-            <video src={url} controls playsInline className="w-full rounded-lg bg-black" />
+            <MeasuredEvidenceVideo src={url} />
           ) : (
             <button
               onClick={() => void play()}
@@ -461,6 +457,16 @@ function EvidenceDetail({
       </div>
     </div>
   );
+}
+
+function MeasuredEvidenceVideo({ src }: { src: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return bindMeasuredDuration(el);
+  }, [src]);
+  return <video ref={ref} src={src} controls playsInline className="w-full rounded-lg bg-black" />;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

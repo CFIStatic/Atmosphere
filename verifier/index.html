@@ -2389,15 +2389,55 @@
 
   function money(n) { return n.toLocaleString('en-US'); }
   function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
+  function knownDuration(s) {
+    var n = Number(s);
+    return isFinite(n) && n > 0 ? n : null;
+  }
   function dur(s) {
-    if (s == null) return '—';
-    var total = Math.round(Number(s));
-    if (!isFinite(total) || total < 0) return '—';
+    var known = knownDuration(s);
+    if (known == null) return '—';
+    var total = Math.round(known);
     var h = Math.floor(total / 3600);
     var m = Math.floor((total % 3600) / 60);
     var r = total % 60;
     if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
     return m + ':' + String(r).padStart(2, '0');
+  }
+  /** Spoken length after upload: 10 seconds, 50 minutes. */
+  function durLabel(s) {
+    var known = knownDuration(s);
+    if (known == null) return '—';
+    var total = Math.round(known);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var r = total % 60;
+    var parts = [];
+    if (h) parts.push(h === 1 ? '1 hour' : h + ' hours');
+    if (m) parts.push(m === 1 ? '1 minute' : m + ' minutes');
+    if (!h && !m) parts.push(r === 1 ? '1 second' : r + ' seconds');
+    else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
+    return parts.join(' ');
+  }
+  function bindVideoDuration(video) {
+    var measured = function () {
+      return knownDuration(video.duration);
+    };
+    var discover = function () {
+      if (measured() != null) return;
+      var settle = function () {
+        video.removeEventListener('seeked', settle);
+        video.removeEventListener('timeupdate', settle);
+        try { video.currentTime = 0; } catch (err) {}
+      };
+      video.addEventListener('seeked', settle);
+      video.addEventListener('timeupdate', settle);
+      try { video.currentTime = Number.MAX_SAFE_INTEGER; } catch (err) {
+        video.removeEventListener('seeked', settle);
+        video.removeEventListener('timeupdate', settle);
+      }
+    };
+    video.addEventListener('loadedmetadata', discover);
+    if (video.readyState >= 1) discover();
   }
   function durSpoken(s) {
     if (s == null || !isFinite(Number(s)) || Number(s) < 0) return '';
@@ -4033,7 +4073,7 @@
         (waiting ? '<div class="preview-wait" id="d-wait">Opening the clip on file…</div>' : '') +
       '</div>';
     $('#d-scrub').innerHTML = '';
-    $('#d-time').textContent = item.duration ? ('screenshot · ' + dur(item.duration)) : 'screenshot';
+    $('#d-time').textContent = knownDuration(item.duration) ? ('screenshot · ' + durLabel(item.duration)) : 'screenshot';
     bindYoutubePlay(item);
   }
 
@@ -4062,9 +4102,10 @@
         ' src="' + esc(item._videoUrl) + '"></video>' +
       '</div>';
     $('#d-scrub').innerHTML = '';
-    $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+    $('#d-time').textContent = 'full clip · ' + durLabel(item.duration);
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
+    bindVideoDuration(vid);
     vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
     vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
     vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
@@ -4883,7 +4924,7 @@
       '<dt>Capture</dt><dd>' + esc(clipKind(item.phase)) + ' · ' + dayLabel(item.workDate) + '</dd>' +
       '<dt>Filmed</dt><dd>' + (item.capturedAt ? stamp(item.capturedAt) : 'not reported by the device') + '</dd>' +
       '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
-      '<dt>Duration</dt><dd>' + dur(item.duration) + '</dd>' +
+      '<dt>Duration</dt><dd>' + durLabel(item.duration) + '</dd>' +
       '<dt>Size</dt><dd>' + mb(item.bytes) + '</dd>' +
       '<dt>Device</dt><dd>' + esc(item.device || 'not recorded') + '</dd>' +
       '<dt>Location</dt><dd>' + (g ? g.lat.toFixed(4) + ', ' + g.lon.toFixed(4) + ' (±' + g.accuracy + ' ft)' : 'not reported') + '</dd>' +
@@ -5615,7 +5656,7 @@
     if (state.open && state.open.id === item.id && (settled || next !== prev)) {
       fillPreviewChrome(item);
       var time = document.getElementById('d-time');
-      if (time && item._videoUrl) time.textContent = 'full clip · ' + dur(item.duration);
+      if (time && item._videoUrl) time.textContent = 'full clip · ' + durLabel(item.duration);
       if (state.tab === 'integrity') setTab('integrity');
     }
     return settled;

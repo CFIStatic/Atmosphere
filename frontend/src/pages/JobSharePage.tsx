@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
+import { knownDurationSeconds } from '../lib/clipDuration';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { signupHref } from '../lib/authRedirect';
 import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
@@ -366,7 +367,7 @@ function ProofSection({
           phase,
           storagePath: slot.path,
           byteSize: file.size,
-          durationSeconds: facts.durationSeconds ?? undefined,
+          durationSeconds: knownDurationSeconds(facts.durationSeconds) ?? undefined,
           contentHash: facts.contentHash ?? undefined,
           capturedAt: facts.capturedAt,
           lat: facts.lat ?? undefined,

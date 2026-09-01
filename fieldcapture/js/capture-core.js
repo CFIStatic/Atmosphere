@@ -47,6 +47,37 @@
     return new Date(now.getTime() - offset).toISOString().slice(0, 10);
   }
 
+  function isKnownDuration(value) {
+    var n = Number(value);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  /** First real clock. 0 and Infinity are unknown — not a 0:00 film. */
+  function knownDurationSeconds() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      if (isKnownDuration(arguments[i])) return Number(arguments[i]);
+    }
+    return null;
+  }
+
+  /**
+   * Spoken length after upload: 10 seconds, 50 minutes, 1 hour 20 minutes.
+   */
+  function formatClipLength(seconds) {
+    var total = knownDurationSeconds(seconds);
+    if (total == null) return '—';
+    var rounded = Math.round(total);
+    var hours = Math.floor(rounded / 3600);
+    var minutes = Math.floor((rounded % 3600) / 60);
+    var rest = rounded % 60;
+    var parts = [];
+    if (hours) parts.push(hours === 1 ? '1 hour' : hours + ' hours');
+    if (minutes) parts.push(minutes === 1 ? '1 minute' : minutes + ' minutes');
+    if (!hours && !minutes) parts.push(rest === 1 ? '1 second' : rest + ' seconds');
+    else if (!hours && rest) parts.push(rest === 1 ? '1 second' : rest + ' seconds');
+    return parts.join(' ');
+  }
+
   function hashFile(file) {
     if (!global.crypto || !global.crypto.subtle) return Promise.resolve(null);
     if (file.size > SAFE_HASH_BYTES) return Promise.resolve(null);
@@ -91,17 +122,52 @@
     video.playsInline = true;
     video.src = url;
     return new Promise(function (resolve) {
-      var done = function () {
-        var d = Number.isFinite(video.duration) ? video.duration : null;
+      var settled = false;
+      var finish = function (value) {
+        if (settled) return;
+        settled = true;
+        video.ontimeupdate = null;
+        video.onseeked = null;
+        video.onloadedmetadata = null;
+        video.onerror = null;
         URL.revokeObjectURL(url);
-        resolve(d);
+        resolve(value);
       };
-      video.onloadedmetadata = done;
+      var measured = function () {
+        return isKnownDuration(video.duration) ? video.duration : null;
+      };
+      var discover = function () {
+        if (measured() != null) {
+          finish(measured());
+          return;
+        }
+        // MediaRecorder WebM has no duration in the header. Seek past any
+        // plausible length so the browser scans to the end — a 50-minute
+        // film files as 50 minutes, a 10-second clip as 10 seconds.
+        var settle = function () {
+          video.ontimeupdate = null;
+          video.onseeked = null;
+          try {
+            video.currentTime = 0;
+          } catch (e) {}
+          finish(measured());
+        };
+        video.ontimeupdate = settle;
+        video.onseeked = settle;
+        try {
+          video.currentTime = Number.MAX_SAFE_INTEGER;
+        } catch (e) {
+          finish(measured());
+        }
+      };
+      video.onloadedmetadata = discover;
       video.onerror = function () {
-        URL.revokeObjectURL(url);
-        resolve(null);
+        finish(null);
       };
-      setTimeout(done, 8000);
+      setTimeout(function () {
+        finish(measured());
+      }, 8000);
+      if (video.readyState >= 1) discover();
     });
   }
 
@@ -144,7 +210,7 @@
       }
 
       function measured() {
-        return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+        return isKnownDuration(video.duration) ? video.duration : null;
       }
 
       function firstFrameOnly(duration) {
@@ -280,7 +346,7 @@
         var media = parts[2];
         return {
           contentHash: hash,
-          durationSeconds: media.durationSeconds != null ? media.durationSeconds : durationHint,
+          durationSeconds: knownDurationSeconds(media.durationSeconds, durationHint),
           capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
           lat: position && position.coords ? position.coords.latitude : null,
           lon: position && position.coords ? position.coords.longitude : null,
@@ -730,6 +796,8 @@
 
       return Promise.all([factsP, putP]).then(function (parts) {
         var facts = parts[0];
+        var duration = knownDurationSeconds(facts.durationSeconds, opts.durationSeconds);
+        if (duration != null) facts.durationSeconds = duration;
         onStep('Filing it with the office…');
         onProgress(1);
         return apiJson(filePath, {
@@ -741,7 +809,7 @@
             phase: 'after',
             storagePath: slot.path,
             byteSize: file.size,
-            durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
+            durationSeconds: knownDurationSeconds(facts.durationSeconds) || undefined,
             contentHash: facts.contentHash || undefined,
             capturedAt: facts.capturedAt,
             lat: facts.lat != null ? facts.lat : undefined,
@@ -856,6 +924,8 @@
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
     todayISO: todayISO,
+    knownDurationSeconds: knownDurationSeconds,
+    formatClipLength: formatClipLength,
     readCapture: readCapture,
     extractFrames: extractFrames,
     recordDayFilm: recordDayFilm,

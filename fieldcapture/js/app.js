@@ -838,6 +838,7 @@
       blob: clip.blob,
       mimeType: clip.mimeType,
       knownSite: state.site || null,
+      durationSeconds: clip.durationSeconds,
       onStep: function (step) {
         var stepEl = $('#upload-step');
         if (stepEl) {
@@ -911,8 +912,8 @@
     );
     rows.push(
       '<div class="lrow on"><span>Uploaded</span><em>' +
-        (result.facts && result.facts.durationSeconds
-          ? Math.round(result.facts.durationSeconds) + 's'
+        (result.facts && Core.formatClipLength(result.facts.durationSeconds) !== '—'
+          ? Core.formatClipLength(result.facts.durationSeconds)
           : 'filed') +
         '</em><span class="ok">✓</span></div>',
     );
