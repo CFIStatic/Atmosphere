@@ -93,5 +93,6 @@ test('latest intake SQL allows an empty invite list', () => {
   assert.doesNotMatch(sql, /raise exception 'invitees_required'/);
   assert.match(sql, /invitees_invalid/);
   assert.match(sql, /repair_crm_audit_triggers/);
+  assert.match(sql, /to_regclass\('public\.crm_accounts'\)/);
   assert.match(sql, /jsonb_typeof\(coalesce\(p_invitees/);
 });

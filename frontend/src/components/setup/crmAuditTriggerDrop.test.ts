@@ -29,6 +29,10 @@ describe('CRM audit trigger cleanup for job-file delete', () => {
     );
     expect(dropTriggersSql).toContain('drop function if exists private.crm_audit()');
     expect(dropTriggersSql).toMatch(/crm_audit_log/);
+    // Preview clones production after crm_accounts was dropped. DROP TRIGGER
+    // IF EXISTS still errors if the table is gone (SQLSTATE 42P01).
+    expect(dropTriggersSql).toContain("to_regclass('public.crm_accounts')");
+    expect(dropTriggersSql).toContain("to_regclass('public.crm_jobs')");
   });
 
   it('keeps the same cleanup in the old-product drop so redeploys heal production', () => {
