@@ -218,6 +218,13 @@ export function JobIntakePage() {
     setCaptureTeam((team) => team.map((m) => ({ ...m, selected })));
   }
 
+  function clearInvites() {
+    setAllSelected(false);
+    setExternals([]);
+  }
+
+  const invitedCount = selectedCount + externals.length;
+
   async function copyLink(path: string, id: string) {
     const url = `${window.location.origin}${path}`;
     try {
@@ -522,28 +529,30 @@ export function JobIntakePage() {
                 <h2 className={sectionTitle}>Invite list</h2>
                 <p className={sectionHint}>
                   {phone
-                    ? 'Selected people get a capture link. Add someone outside by email.'
-                    : 'Selected people get a link to capture this job on site. Add someone outside the company by email.'}
+                    ? 'Teammates and outside emails go on this list. Optional.'
+                    : 'One list. Check teammates or add someone by email. They get a capture link for this job only.'}
                 </p>
               </div>
-              {captureTeam.length > 0 && (
+              {(captureTeam.length > 0 || externals.length > 0) && (
                 <div className="flex shrink-0 gap-2 text-xs font-medium">
-                  <button type="button" className="text-brand-600" onClick={() => setAllSelected(true)}>
-                    Invite all
-                  </button>
-                  <span className="text-ink-400">·</span>
-                  <button type="button" className="text-ink-500" onClick={() => setAllSelected(false)}>
+                  {captureTeam.length > 0 && (
+                    <button type="button" className="text-brand-600" onClick={() => setAllSelected(true)}>
+                      Invite all
+                    </button>
+                  )}
+                  {captureTeam.length > 0 && <span className="text-ink-400">·</span>}
+                  <button type="button" className="text-ink-500" onClick={clearInvites}>
                     Clear
                   </button>
                 </div>
               )}
             </div>
 
-            {captureTeam.length === 0 ? (
+            {captureTeam.length === 0 && externals.length === 0 ? (
               <p className={cn(phone ? 'mt-3 text-[13px] leading-snug text-ink-600' : 'mt-4 text-sm text-ink-600')}>
                 {phone
-                  ? 'No employees yet. Invite an outside worker by email — they only see this job.'
-                  : 'No employees in this org yet. Invite an outside worker (subcontractor) by email below — they only see this job — or add Employees under Team.'}
+                  ? 'No teammates yet. Add someone by email — they only see this job.'
+                  : 'No teammates in this org yet. Add someone by email — they only see this job — or add Employees under Team.'}
               </p>
             ) : (
               <ul className={cn('divide-y divide-line/50', phone ? 'mt-3' : 'mt-4')}>
@@ -570,31 +579,45 @@ export function JobIntakePage() {
                         {[m.email, m.workType].filter(Boolean).join(' · ') || m.role}
                       </span>
                     </label>
-                    {!phone && (
-                      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-400">
-                        Capture
-                      </span>
+                  </li>
+                ))}
+                {externals.map((x) => (
+                  <li
+                    key={x.id}
+                    className={cn(
+                      'flex min-w-0 items-center gap-3 first:pt-0 last:pb-0',
+                      phone ? 'py-2' : 'py-2.5',
                     )}
+                  >
+                    <span className="h-4 w-4 shrink-0" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink-900">
+                        {x.fullName}
+                      </span>
+                      <span className="block truncate text-xs text-ink-500">
+                        {[x.company !== x.fullName ? x.company : null, x.email]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-medium text-ink-500 hover:text-danger-600"
+                      onClick={() => setExternals((list) => list.filter((i) => i.id !== x.id))}
+                    >
+                      Remove
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
             <p className="mt-3 text-xs text-ink-500">
-              {selectedCount} selected · {externals.length} outside invite
-              {externals.length === 1 ? '' : 's'}
-              {phone
-                ? ''
-                : ' · org members can also film from Field Capture without an extra invite'}
+              {invitedCount} invited
+              {phone ? '' : ' · teammates can also film from Field Capture without an extra invite'}
             </p>
 
             <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
-              <p className="text-xs font-medium text-ink-600">Invite an outside worker</p>
-              <p className="mt-1 text-[11px] leading-snug text-ink-500">
-                {phone
-                  ? 'They film this job only — they do not join the org.'
-                  : 'Job-specific access only — they film this job; they do not join the org or see billing.'}
-              </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-3">
                 <label className="block text-xs font-medium text-ink-600">
                   Contact name
                   <input
@@ -602,6 +625,7 @@ export function JobIntakePage() {
                     value={extName}
                     onChange={(e) => setExtName(e.target.value)}
                     placeholder="Alex Rivera"
+                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -617,6 +641,7 @@ export function JobIntakePage() {
                     value={extCompany}
                     onChange={(e) => setExtCompany(e.target.value)}
                     placeholder="Rio Grande Mitigation"
+                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -633,6 +658,7 @@ export function JobIntakePage() {
                     value={extEmail}
                     onChange={(e) => setExtEmail(e.target.value)}
                     placeholder="alex@example.com"
+                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -650,38 +676,8 @@ export function JobIntakePage() {
                   phone ? 'mt-2.5 text-[13px]' : 'mt-3 text-sm',
                 )}
               >
-                Add to invite list
+                Add
               </button>
-              {externals.length > 0 && (
-                <ul className="mt-4 divide-y divide-line/50">
-                  {externals.map((x) => (
-                    <li key={x.id} className="flex min-w-0 items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <div className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink-900">
-                          {x.fullName}
-                        </span>
-                        <span className="block truncate text-xs text-ink-500">
-                          {[x.company !== x.fullName ? x.company : null, x.email]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      </div>
-                      {!phone && (
-                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-400">
-                          Email
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs font-medium text-ink-500 hover:text-danger-600"
-                        onClick={() => setExternals((list) => list.filter((i) => i.id !== x.id))}
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
             <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>

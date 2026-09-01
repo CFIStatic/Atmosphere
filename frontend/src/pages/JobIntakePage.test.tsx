@@ -85,6 +85,7 @@ describe('JobIntakePage', () => {
     expect(screen.queryByPlaceholderText('Search Google for the site address')).toBeNull();
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    expect(screen.queryByText('Invite an outside worker')).toBeNull();
     expect(screen.getByText('Homeowner (optional)')).toBeInTheDocument();
     expect(
       screen.getByText(/We email them a link to the job file and every recording/i),
@@ -183,8 +184,9 @@ describe('JobIntakePage', () => {
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     expect(screen.queryByText('Capture')).toBeNull();
     expect(
-      screen.getByText('Selected people get a capture link. Add someone outside by email.'),
+      screen.getByText('Teammates and outside emails go on this list. Optional.'),
     ).toBeInTheDocument();
+    expect(screen.queryByText('Invite an outside worker')).toBeNull();
 
     const approve = screen.getByRole('button', { name: /Approve & invite/i });
     expect(approve.className).toMatch(/w-full/);
@@ -285,6 +287,26 @@ describe('JobIntakePage', () => {
         invitees: [],
       }),
     );
+  });
+
+  it('adds an outside email onto the same invite list as teammates', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <JobIntakePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Contact name'), 'Alex Rivera');
+    await user.type(screen.getByLabelText('Company'), 'Rio Grande Mitigation');
+    await user.type(screen.getByLabelText(/^Email$/i), 'alex@example.com');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument();
+    expect(screen.getByText('Rio Grande Mitigation · alex@example.com')).toBeInTheDocument();
+    expect(screen.getByText(/2 invited/)).toBeInTheDocument();
+    expect(screen.getAllByRole('list')).toHaveLength(1);
   });
 
   it('emails the homeowner the job file after approve, account or not', async () => {
