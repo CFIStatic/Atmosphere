@@ -146,6 +146,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: supabase/tests/run.sh -h localhost -p 5432 -U postgres
+      - name: CRM audit trigger drop without old-product tables
+        env:
+          PGPASSWORD: postgres
+        run: supabase/tests/03_crm_audit_trigger_drop.sh -h localhost -p 5432 -U postgres
 
   docker-backend:
     name: Backend image

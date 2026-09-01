@@ -13,12 +13,26 @@ security definer
 set search_path = public, private, pg_temp
 as $$
 begin
-  drop trigger if exists crm_jobs_audit on public.crm_jobs;
-  drop trigger if exists crm_properties_audit on public.crm_properties;
-  drop trigger if exists crm_accounts_audit on public.crm_accounts;
-  drop trigger if exists crm_contacts_audit on public.crm_contacts;
-  drop trigger if exists crm_leads_audit on public.crm_leads;
-  drop trigger if exists crm_activities_audit on public.crm_activities;
+  -- DROP TRIGGER IF EXISTS still requires the table. Preview / production may
+  -- already have dropped crm_accounts and the other old-product relations.
+  if to_regclass('public.crm_jobs') is not null then
+    execute 'drop trigger if exists crm_jobs_audit on public.crm_jobs';
+  end if;
+  if to_regclass('public.crm_properties') is not null then
+    execute 'drop trigger if exists crm_properties_audit on public.crm_properties';
+  end if;
+  if to_regclass('public.crm_accounts') is not null then
+    execute 'drop trigger if exists crm_accounts_audit on public.crm_accounts';
+  end if;
+  if to_regclass('public.crm_contacts') is not null then
+    execute 'drop trigger if exists crm_contacts_audit on public.crm_contacts';
+  end if;
+  if to_regclass('public.crm_leads') is not null then
+    execute 'drop trigger if exists crm_leads_audit on public.crm_leads';
+  end if;
+  if to_regclass('public.crm_activities') is not null then
+    execute 'drop trigger if exists crm_activities_audit on public.crm_activities';
+  end if;
   drop function if exists private.crm_audit();
   return true;
 end;
