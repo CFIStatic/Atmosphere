@@ -80,7 +80,18 @@ if (accessToken && ref && (await applyViaManagementApi(accessToken, ref, 'SUPABA
   process.exit(0);
 }
 
-if (serviceRole.startsWith('sbp_') && ref && (await applyViaManagementApi(serviceRole, ref, 'service_role'))) {
+// Prefer an sbp_ personal token, but also try whatever is in SERVICE_ROLE_KEY —
+// some Keys setups store the management token there by mistake, and a failed
+ // attempt is cheap compared to a broken Delete button.
+if (
+  serviceRole &&
+  ref &&
+  (await applyViaManagementApi(
+    serviceRole,
+    ref,
+    serviceRole.startsWith('sbp_') ? 'service_role' : 'SUPABASE_SERVICE_ROLE_KEY',
+  ))
+) {
   process.exit(0);
 }
 
