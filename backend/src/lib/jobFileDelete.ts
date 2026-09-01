@@ -27,7 +27,16 @@ export function isCrmAuditLogMissingError(message: string | null | undefined): b
 }
 
 export function isJobFileDeletedEvent(eventType: string | null | undefined): boolean {
-  return eventType === JOB_FILE_DELETED_EVENT || eventType === JOB_FILE_DELETED_RPC_EVENT;
+  return (
+    eventType === JOB_FILE_DELETED_EVENT ||
+    eventType === JOB_FILE_DELETED_RPC_EVENT ||
+    eventType === 'job.deleted'
+  );
+}
+
+/** Job Files paints last_event from memory_events. A delete tombstone must hide the card. */
+export function jobLooksDeletedFromLibrary(summary: string | null | undefined): boolean {
+  return /deleted from the library/i.test(summary ?? '');
 }
 
 /** Drop leftover CRM audit triggers. No-ops when the RPC is not applied yet. */
@@ -80,15 +89,21 @@ export async function listTombstonedJobIds(
 ): Promise<Set<string>> {
   const { data, error } = await writer
     .from('memory_events')
-    .select('job_id, entity_id, event_type')
+    .select('job_id, entity_id, event_type, summary')
     .eq('org_id', orgId)
-    .in('event_type', [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT])
+    .order('seq', { ascending: false })
     .limit(5_000);
   if (error) {
     console.warn('[job-file] tombstone list failed:', error.message);
     return new Set();
   }
-  return collectTombstoneIds((data ?? []) as Array<{ job_id?: string | null; entity_id?: string | null }>);
+  const hidden = ((data ?? []) as Array<{
+    job_id?: string | null;
+    entity_id?: string | null;
+    event_type?: string | null;
+    summary?: string | null;
+  }>).filter((row) => isJobFileDeletedEvent(row.event_type) || jobLooksDeletedFromLibrary(row.summary));
+  return collectTombstoneIds(hidden);
 }
 
 export async function jobFileIsTombstoned(
@@ -98,17 +113,17 @@ export async function jobFileIsTombstoned(
 ): Promise<boolean> {
   const { data, error } = await writer
     .from('memory_events')
-    .select('id')
+    .select('id, event_type, summary')
     .eq('org_id', orgId)
-    .in('event_type', [JOB_FILE_DELETED_EVENT, JOB_FILE_DELETED_RPC_EVENT])
     .or(`job_id.eq.${jobId},entity_id.eq.${jobId}`)
-    .limit(1)
-    .maybeSingle();
+    .order('seq', { ascending: false })
+    .limit(20);
   if (error) {
     console.warn('[job-file] tombstone check failed:', error.message);
     return false;
   }
-  return Boolean(data);
+  const rows = (data ?? []) as Array<{ event_type?: string | null; summary?: string | null }>;
+  return rows.some((row) => isJobFileDeletedEvent(row.event_type) || jobLooksDeletedFromLibrary(row.summary));
 }
 
 async function insertTombstone(

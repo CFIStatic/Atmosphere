@@ -1,6 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createAdminClient, createUserClient } from '../lib/supabase.js';
-import { listTombstonedJobIds, jobFileIsTombstoned } from '../lib/jobFileDelete.js';
+import {
+  listTombstonedJobIds,
+  jobFileIsTombstoned,
+  jobLooksDeletedFromLibrary,
+} from '../lib/jobFileDelete.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
@@ -127,7 +131,10 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
       const orgId = (rows[0] as { org_id?: string }).org_id;
       if (orgId) {
         const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
-        rows = rows.filter((r: any) => !tombstoned.has(r.job_id as string));
+        rows = rows.filter(
+          (r: any) =>
+            !tombstoned.has(r.job_id as string) && !jobLooksDeletedFromLibrary(r.last_event as string | null),
+        );
       }
     }
 

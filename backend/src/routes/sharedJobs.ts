@@ -384,15 +384,24 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
 
     const { data: job, error: readError } = await supabase
       .from('crm_jobs')
-      .select('id, title, property_id')
+      .select('id, title, property_id, deleted_at')
       .eq('org_id', orgId)
       .eq('id', req.params.jobId)
-      .is('deleted_at', null)
       .maybeSingle();
     if (readError) throw new HttpError(500, readError.message, 'job_read_failed');
     if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
-    if (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, job.id)) {
-      throw new HttpError(404, 'No such job.', 'job_not_found');
+    const alreadyHidden =
+      Boolean(job.deleted_at) ||
+      (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, job.id));
+    if (alreadyHidden) {
+      // Dashboard and Job Files must agree. A second delete is a success, not
+      // "No such job", so the file leaves every list.
+      res.json({
+        ok: true,
+        deletedAt: (job.deleted_at as string | null) ?? new Date().toISOString(),
+        jobId: job.id,
+      });
+      return;
     }
 
     let address = '';

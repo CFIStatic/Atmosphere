@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { jobFileMatchesQuery } from '../lib/jobFileSearch';
 import { sortJobFilesByLastOpened } from '../lib/jobFileRecents';
+import { jobLooksDeletedFromLibrary } from '../lib/jobFileCopy';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { useJobFilesSearch } from '../layouts/jobFilesSearch';
 import { PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
@@ -100,7 +101,11 @@ export function JobsPage() {
 
   const visible = useMemo(
     () =>
-      sortJobFilesByLastOpened((jobs ?? []).filter((job) => jobFileMatchesQuery(job, query))),
+      sortJobFilesByLastOpened(
+        (jobs ?? []).filter(
+          (job) => jobFileMatchesQuery(job, query) && !jobLooksDeletedFromLibrary(job.lastEvent),
+        ),
+      ),
     [jobs, query],
   );
 
