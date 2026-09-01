@@ -380,12 +380,14 @@ const inviteeSchema = z
 const approveSchema = z.object({
   title: z.string().trim().min(1).max(200),
   workType: z.enum(['mitigation', 'construction']).default('mitigation'),
+  /** Optional — Start a job no longer collects a site address. */
   address: z
     .string()
     .trim()
-    .min(1)
     .max(200)
-    .refine((value) => value.toLowerCase() !== 'address to confirm', {
+    .optional()
+    .transform((value) => value ?? '')
+    .refine((value) => !value || value.toLowerCase() !== 'address to confirm', {
       message: 'Enter the real site address before inviting Field Capture.',
     }),
   city: z.string().trim().max(120).optional(),
@@ -514,9 +516,21 @@ export async function createJobFile(
   input: z.infer<typeof approveSchema>,
   options?: ResolveIntakeOptions,
 ): Promise<CreatedJobFile> {
-  const site = await resolveIntakeAddress(orgId, input, options);
+  const addressLine = (input.address ?? '').trim();
+  const site: IntakeAddress | null = addressLine
+    ? await resolveIntakeAddress(
+        orgId,
+        {
+          address: addressLine,
+          city: input.city,
+          postalCode: input.postalCode,
+          placeId: input.placeId,
+        },
+        options,
+      )
+    : null;
   const scopeLines = scopeLinesForDb(input);
-  const jobTitle = jobTitleForIntake(input.title, site.line);
+  const jobTitle = jobTitleForIntake(input.title, site?.line ?? '');
   const invitees = input.invitees.map((person) => ({
     userId: person.userId ?? null,
     fullName: person.fullName,
@@ -530,16 +544,24 @@ export async function createJobFile(
     p_org_id: orgId,
     p_title: jobTitle,
     p_work_type: input.workType,
-    p_address: site.line,
-    p_city: site.city ?? null,
-    p_postal_code: site.postalCode ?? null,
-    p_region: (site.row.region as string | null | undefined) ?? input.region ?? null,
-    p_country: (site.row.country as string | null | undefined) ?? input.country ?? null,
-    p_latitude: (site.row.latitude as number | null | undefined) ?? input.latitude ?? null,
-    p_longitude: (site.row.longitude as number | null | undefined) ?? input.longitude ?? null,
+    p_address: site?.line ?? '',
+    p_city: site?.city ?? null,
+    p_postal_code: site?.postalCode ?? null,
+    p_region: site
+      ? ((site.row.region as string | null | undefined) ?? input.region ?? null)
+      : null,
+    p_country: site
+      ? ((site.row.country as string | null | undefined) ?? input.country ?? null)
+      : null,
+    p_latitude: site
+      ? ((site.row.latitude as number | null | undefined) ?? input.latitude ?? null)
+      : null,
+    p_longitude: site
+      ? ((site.row.longitude as number | null | undefined) ?? input.longitude ?? null)
+      : null,
     p_claim_number: input.claimNumber ?? null,
     p_brief_note: input.briefNote ?? null,
-    p_facts: siteAddressFacts(site, input.facts),
+    p_facts: site ? siteAddressFacts(site, input.facts) : { ...(input.facts ?? {}) },
     p_scope: scopeLines,
     p_invitees: invitees,
   };
@@ -624,37 +646,41 @@ async function createJobFileStepwise(
     trade: string | null;
     external: boolean;
   }>,
-  site: IntakeAddress,
+  site: IntakeAddress | null,
 ): Promise<CreatedJobFile> {
   // Prefer the service-role client for the write path when available so a
   // missing GRANT on job_* tables cannot strand a half-created job file.
   const writer = createAdminClient() ?? supabase;
-  const jobTitle = jobTitleForIntake(input.title, site.line);
+  const jobTitle = jobTitleForIntake(input.title, site?.line ?? '');
 
-  let property = (
-    await writer.from('crm_properties').insert(site.row).select('id').single()
-  ) as { data: { id: string } | null; error: { message?: string } | null };
-  if (property.error || !property.data) {
-    property = await writer
-      .from('crm_properties')
-      .insert({
-        org_id: orgId,
-        address_line1: site.line,
-        city: site.city ?? null,
-        postal_code: site.postalCode ?? null,
-      })
-      .select('id')
-      .single();
-  }
-  if (property.error || !property.data) {
-    throw intakeWriteError(property.error, 'Could not save the address.', 'property_failed');
+  let propertyId: string | null = null;
+  if (site?.line.trim()) {
+    let property = (
+      await writer.from('crm_properties').insert(site.row).select('id').single()
+    ) as { data: { id: string } | null; error: { message?: string } | null };
+    if (property.error || !property.data) {
+      property = await writer
+        .from('crm_properties')
+        .insert({
+          org_id: orgId,
+          address_line1: site.line,
+          city: site.city ?? null,
+          postal_code: site.postalCode ?? null,
+        })
+        .select('id')
+        .single();
+    }
+    if (property.error || !property.data) {
+      throw intakeWriteError(property.error, 'Could not save the address.', 'property_failed');
+    }
+    propertyId = property.data.id;
   }
 
   const job = await insertCrmJob(writer, {
     org_id: orgId,
     title: jobTitle,
     work_type: input.workType,
-    property_id: property.data.id,
+    property_id: propertyId,
     claim_number: input.claimNumber || null,
     status: 'scheduled',
     created_by: userId,
@@ -682,7 +708,7 @@ async function createJobFileStepwise(
       org_id: orgId,
       job_id: jobId,
       revision: 0,
-      facts: siteAddressFacts(site, input.facts),
+      facts: site ? siteAddressFacts(site, input.facts) : { ...(input.facts ?? {}) },
       note: input.briefNote ?? null,
       created_by: userId,
     })

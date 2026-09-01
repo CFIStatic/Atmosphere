@@ -70,6 +70,12 @@ test('siteAddressFacts writes Site and Site address for the dashboard', () => {
   );
 });
 
+test('siteAddressFacts skips Site keys when there is no address', () => {
+  assert.deepEqual(siteAddressFacts({ line: '  ' }, { Source: 'Name only' }), {
+    Source: 'Name only',
+  });
+});
+
 test('propertyRowFromTyped keeps a typed line under the column limit', () => {
   const row = propertyRowFromTyped(
     'org-1',

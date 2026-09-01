@@ -395,21 +395,10 @@ export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
 
 /**
  * Field Capture: start a job from the phone, then record.
- * Name + site are required; a short note is optional.
+ * Name is required; a short note is optional. Site address is not collected.
  */
 export const fieldStartJobSchema = z.object({
   title: z.string().trim().min(1, 'Enter a name.').max(200, 'That name is too long.'),
-  address: z
-    .string()
-    .trim()
-    .min(1, 'Enter the site address.')
-    .max(200, 'That address is too long.')
-    .refine((value) => value.toLowerCase() !== 'address to confirm', {
-      message: 'Enter the real site address.',
-    }),
-  city: z.string().trim().max(120).optional(),
-  postalCode: z.string().trim().max(20).optional(),
-  placeId: z.string().trim().max(300).optional(),
   situation: z.string().trim().max(2000).optional(),
 });
 

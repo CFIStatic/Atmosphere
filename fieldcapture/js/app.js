@@ -286,285 +286,14 @@
     el.textContent = message;
   }
 
-  var newJobPlace = { placeId: '', city: '', postalCode: '', formatted: '' };
-  var addressSession = '';
-  var addressTimer = null;
-  var addressPickGen = 0;
-  var addressTyped = false;
-  var addressChosen = false;
-  var addressSuggestions = [];
-  var addressActive = -1;
-
-  function newAddressSession() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID().replace(/-/g, '').slice(0, 32);
-    }
-    return String(Date.now()) + Math.random().toString(36).slice(2, 10);
-  }
-
-  function setAddressHint(message) {
-    var el = document.querySelector('#s-new-job .addr-hint');
-    if (!el) return;
-    el.textContent = message || 'Search Google for the site, then pick a result.';
-  }
-
-  function addressListEl() {
-    var el = document.getElementById('new-job-address-list');
-    if (el) return el;
-    el = document.createElement('ul');
-    el.id = 'new-job-address-list';
-    el.className = 'addr-list';
-    el.setAttribute('role', 'listbox');
-    el.hidden = true;
-    document.body.appendChild(el);
-    return el;
-  }
-
-  function hideAddressList() {
-    var list = document.getElementById('new-job-address-list');
-    var input = $('#new-job-address');
-    if (list) {
-      list.hidden = true;
-      list.replaceChildren();
-    }
-    if (input) input.setAttribute('aria-expanded', 'false');
-    addressSuggestions = [];
-    addressActive = -1;
-  }
-
-  function positionAddressList() {
-    var input = $('#new-job-address');
-    var list = document.getElementById('new-job-address-list');
-    if (!input || !list || list.hidden) return;
-    var r = input.getBoundingClientRect();
-    list.style.top = r.bottom + 4 + 'px';
-    list.style.left = r.left + 'px';
-    list.style.width = r.width + 'px';
-  }
-
-  function resetNewJobPlace() {
-    newJobPlace = { placeId: '', city: '', postalCode: '', formatted: '' };
-    addressSession = newAddressSession();
-    addressTyped = false;
-    addressChosen = false;
-    addressPickGen += 1;
-    if (addressTimer) {
-      window.clearTimeout(addressTimer);
-      addressTimer = null;
-    }
-    hideAddressList();
-    setAddressHint('');
-  }
-
-  function applyPickedAddress(addr) {
-    addr = addr || {};
-    var line = String(addr.formatted || addr.addressLine1 || '').trim();
-    var input = $('#new-job-address');
-    if (input && line) input.value = line;
-    newJobPlace = {
-      placeId: addr.placeId || '',
-      city: addr.city || '',
-      postalCode: addr.postalCode || '',
-      formatted: line,
-    };
-    addressChosen = true;
-    addressTyped = false;
-    addressSession = newAddressSession();
-    hideAddressList();
-    setAddressHint('');
-  }
-
-  function pickAddressSuggestion(s) {
-    addressPickGen += 1;
-    addressChosen = true;
-    addressTyped = false;
-    hideAddressList();
-    var input = $('#new-job-address');
-    if (input) input.value = s.description || s.mainText || '';
-    if (!state.accessToken || !Core.placesDetails) return;
-    Core.placesDetails({
-      apiBase: API_BASE,
-      accessToken: state.accessToken,
-      placeId: s.placeId,
-      sessionToken: addressSession,
-    }).then(function (res) {
-      applyPickedAddress((res && res.address) || {});
-    }).catch(function () {
-      addressChosen = false;
-      setAddressHint('Could not confirm that place — pick another result.');
-    });
-  }
-
-  function renderAddressSuggestions(suggestions) {
-    addressSuggestions = suggestions || [];
-    addressActive = -1;
-    var list = addressListEl();
-    var input = $('#new-job-address');
-    list.replaceChildren();
-    if (!addressSuggestions.length) {
-      hideAddressList();
-      return;
-    }
-    addressSuggestions.forEach(function (s, i) {
-      var item = document.createElement('li');
-      item.setAttribute('role', 'option');
-      item.id = 'new-job-address-list-' + i;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'addr-item';
-      btn.setAttribute('data-index', String(i));
-      var main = document.createElement('b');
-      main.textContent = s.mainText || s.description || '';
-      btn.appendChild(main);
-      if (s.secondaryText) {
-        var sub = document.createElement('small');
-        sub.textContent = s.secondaryText;
-        btn.appendChild(sub);
-      }
-      btn.addEventListener('mousedown', function (event) {
-        event.preventDefault();
-      });
-      btn.addEventListener('click', function () {
-        pickAddressSuggestion(s);
-      });
-      item.appendChild(btn);
-      list.appendChild(item);
-    });
-    list.hidden = false;
-    if (input) input.setAttribute('aria-expanded', 'true');
-    positionAddressList();
-  }
-
-  function requestAddressSuggestions(query) {
-    if (!state.accessToken || !Core.placesAutocomplete) return;
-    if (addressChosen || !addressTyped) return;
-    var q = String(query || '').trim();
-    if (q.length < 3) {
-      hideAddressList();
-      return;
-    }
-    var gen = addressPickGen;
-    if (addressTimer) window.clearTimeout(addressTimer);
-    addressTimer = window.setTimeout(function () {
-      addressTimer = null;
-      Core.placesAutocomplete({
-        apiBase: API_BASE,
-        accessToken: state.accessToken,
-        input: q,
-        sessionToken: addressSession,
-      }).then(function (res) {
-        if (gen !== addressPickGen || addressChosen) return;
-        var suggestions = (res && res.suggestions) || [];
-        renderAddressSuggestions(suggestions);
-        setAddressHint(suggestions.length ? '' : 'No matching streets — keep typing or try the town.');
-      }).catch(function (err) {
-        if (gen !== addressPickGen) return;
-        var msg = String((err && err.message) || '');
-        if (/maps_unconfigured|not configured/i.test(msg)) {
-          setAddressHint('Address search is unavailable — type the full street, town, and postal code.');
-        } else {
-          setAddressHint('Address search is unavailable. Try again in a moment.');
-        }
-        hideAddressList();
-      });
-    }, 280);
-  }
-
-  function bindAddressLookup() {
-    var input = $('#new-job-address');
-    if (!input || input.getAttribute('data-places-bound') === '1') return;
-    input.setAttribute('data-places-bound', '1');
-    addressSession = newAddressSession();
-    input.addEventListener('input', function () {
-      addressTyped = true;
-      addressChosen = false;
-      newJobPlace = { placeId: '', city: '', postalCode: '', formatted: '' };
-      showNewJobError('');
-      requestAddressSuggestions(input.value);
-    });
-    input.addEventListener('focus', function () {
-      if (!addressChosen && addressTyped && addressSuggestions.length) {
-        renderAddressSuggestions(addressSuggestions);
-      }
-    });
-    input.addEventListener('blur', function () {
-      window.setTimeout(hideAddressList, 160);
-    });
-    input.addEventListener('keydown', function (event) {
-      var openList = document.getElementById('new-job-address-list');
-      if (!addressSuggestions.length || !openList || openList.hidden) {
-        return;
-      }
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        addressActive = (addressActive + 1) % addressSuggestions.length;
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        addressActive = addressActive <= 0 ? addressSuggestions.length - 1 : addressActive - 1;
-      } else if (event.key === 'Enter' && addressActive >= 0) {
-        event.preventDefault();
-        pickAddressSuggestion(addressSuggestions[addressActive]);
-        return;
-      } else if (event.key === 'Escape') {
-        hideAddressList();
-        return;
-      } else {
-        return;
-      }
-      var list = document.getElementById('new-job-address-list');
-      if (!list) return;
-      list.querySelectorAll('.addr-item').forEach(function (btn, i) {
-        if (i === addressActive) btn.focus();
-      });
-    });
-    window.addEventListener('resize', positionAddressList);
-    window.addEventListener('scroll', positionAddressList, true);
-  }
-
-  function resolveNewJobSite(address) {
-    if (newJobPlace.placeId) {
-      return Promise.resolve({
-        address: address,
-        city: newJobPlace.city,
-        postalCode: newJobPlace.postalCode,
-        placeId: newJobPlace.placeId,
-      });
-    }
-    if (!state.accessToken || !Core.placesResolve) {
-      return Promise.resolve({
-        address: address,
-        city: '',
-        postalCode: '',
-        placeId: '',
-      });
-    }
-    return Core.placesResolve({
-      apiBase: API_BASE,
-      accessToken: state.accessToken,
-      input: address,
-    }).then(function (res) {
-      var addr = (res && res.address) || {};
-      applyPickedAddress(addr);
-      return {
-        address: String(addr.formatted || addr.addressLine1 || address).trim(),
-        city: addr.city || '',
-        postalCode: addr.postalCode || '',
-        placeId: addr.placeId || '',
-      };
-    });
-  }
-
   function openNewJobForm() {
     if (LIVE) return;
     if ($('#job-add') && $('#job-add').hidden) return;
     showNewJobError('');
     var name = $('#new-job-name');
-    var address = $('#new-job-address');
     var note = $('#new-job-note');
     if (name) name.value = '';
-    if (address) address.value = '';
     if (note) note.value = '';
-    resetNewJobPlace();
     when('#new-job-btn', function (btn) { btn.disabled = false; });
     show('s-new-job');
     if (name) name.focus();
@@ -592,7 +321,6 @@
   }
 
   function bindNewJob() {
-    bindAddressLookup();
     var add = $('#job-add');
     if (add && add.getAttribute('data-bound') !== '1') {
       add.setAttribute('data-bound', '1');
@@ -602,7 +330,6 @@
       if (btn.getAttribute('data-bound') === '1') return;
       btn.setAttribute('data-bound', '1');
       btn.addEventListener('click', function () {
-        hideAddressList();
         show('s-home');
       });
     });
@@ -617,17 +344,11 @@
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var title = (($('#new-job-name') && $('#new-job-name').value) || '').trim();
-      var address = (($('#new-job-address') && $('#new-job-address').value) || '').trim();
       var situation = (($('#new-job-note') && $('#new-job-note').value) || '').trim();
       var btn = $('#new-job-btn');
       showNewJobError('');
-      hideAddressList();
       if (!title) {
         showNewJobError('Enter a name.');
-        return;
-      }
-      if (!address || address.toLowerCase() === 'address to confirm') {
-        showNewJobError('Search for the site address and pick it from the list.');
         return;
       }
       if (btn && btn.disabled) return;
@@ -642,7 +363,7 @@
         finishLocal({
           id: 'new-' + Date.now(),
           name: title,
-          address: address,
+          address: '',
           at: 'Today',
           placed: true,
         });
@@ -662,20 +383,14 @@
 
       media
         .then(function (stream) {
-          return resolveNewJobSite(address).then(
-            function (site) {
-              return Core.createTodayJob({
-                apiBase: API_BASE,
-                accessToken: state.accessToken,
-                title: title,
-                address: site.address,
-                city: site.city,
-                postalCode: site.postalCode,
-                placeId: site.placeId,
-                situation: situation,
-              }).then(function (job) {
-                return { job: job, stream: stream };
-              });
+          return Core.createTodayJob({
+            apiBase: API_BASE,
+            accessToken: state.accessToken,
+            title: title,
+            situation: situation,
+          }).then(
+            function (job) {
+              return { job: job, stream: stream };
             },
             function (err) {
               stream.getTracks().forEach(function (t) {
@@ -683,12 +398,7 @@
               });
               throw err;
             },
-          ).then(null, function (err) {
-            stream.getTracks().forEach(function (t) {
-              t.stop();
-            });
-            throw err;
-          });
+          );
         })
         .then(function (result) {
           finishLocal(result.job, result.stream);

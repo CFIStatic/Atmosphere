@@ -1142,7 +1142,7 @@ export type IntakeInvitee = {
 export type IntakeApproveInput = {
   title: string;
   workType?: 'mitigation' | 'construction';
-  address: string;
+  address?: string;
   city?: string;
   postalCode?: string;
   region?: string;

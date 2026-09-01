@@ -23,6 +23,7 @@ import {
   formatTodayAt,
   pickInviteToken,
   pickTodayJobs,
+  todayJobLocation,
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
@@ -360,14 +361,19 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
 
     const out = picked.map((j) => {
       const token = inviteByJob.get(j.id) ?? null;
+      const site = todayJobLocation(
+        j.propertyId,
+        j.propertyId ? addressById.get(j.propertyId) : undefined,
+        j.filmed,
+      );
       return {
         id: j.id,
         number: j.jobNumber != null ? `#${j.jobNumber}` : '',
         name: j.title || 'Job',
-        address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
+        address: site.address,
         at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
         status: j.status ?? null,
-        placed: Boolean(j.propertyId && addressById.get(j.propertyId)) || j.filmed,
+        placed: site.placed,
         filmed: j.filmed,
         reason: j.reason,
         sharePath: token ? jobSharePagePath(token, email) : null,
@@ -438,7 +444,7 @@ fieldAppRouter.post('/places/resolve', async (req: Request, res: Response, next:
 
 /**
  * POST /api/field-app/jobs
- * Crew starts a job from Field Capture: name + site, optional note, then film.
+ * Crew starts a job from Field Capture: name, optional note, then film.
  * The job file is the same record office intake would have created.
  */
 fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
@@ -449,10 +455,6 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
       allowTypedFallback: true,
     });
     const jobId = created.job.id;
-    const address = [input.address, input.city, input.postalCode]
-      .map((part) => (part ?? '').trim())
-      .filter(Boolean)
-      .join(', ');
 
     const { error: assignError } = await supabase.from('job_assignments').insert({
       org_id: orgId,
@@ -490,10 +492,10 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
         id: jobId,
         number: created.job.jobNumber != null ? `#${created.job.jobNumber}` : '',
         name: created.job.title,
-        address: address || 'Address on file',
+        address: '',
         at: '',
         status: created.summary.status,
-        placed: Boolean(address),
+        placed: true,
         filmed: false,
         sharePath,
       },

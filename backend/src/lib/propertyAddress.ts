@@ -59,10 +59,12 @@ export function siteAddressFacts(
   site: { line: string; city?: string | null; postalCode?: string | null },
   extra?: Record<string, string>,
 ): Record<string, string> {
-  const display = [site.line, site.city, site.postalCode].filter(Boolean).join(', ');
+  const line = site.line.trim();
+  if (!line) return { ...(extra ?? {}) };
+  const display = [line, site.city, site.postalCode].filter(Boolean).join(', ');
   return {
     ...(extra ?? {}),
-    Site: site.line,
+    Site: line,
     'Site address': display,
   };
 }

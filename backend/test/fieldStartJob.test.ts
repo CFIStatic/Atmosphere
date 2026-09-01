@@ -3,89 +3,57 @@ import assert from 'node:assert/strict';
 import { fieldStartJobSchema } from '../src/lib/validation.js';
 import {
   FIELD_DEFAULT_BRIEF,
-  cityPostalFromAddress,
   intakeFromFieldStart,
   scopeFromSituation,
   workTypeFromSituation,
 } from '../src/field/startJob.js';
 
-test('field start job: name and address are required', () => {
+test('field start job: name is required; address is not collected', () => {
   const parsed = fieldStartJobSchema.parse({
     title: '  East Racine Avenue  ',
-    address: '  1842 Meridian Ave, Austin, TX 78702  ',
   });
   assert.equal(parsed.title, 'East Racine Avenue');
-  assert.equal(parsed.address, '1842 Meridian Ave, Austin, TX 78702');
   assert.equal(parsed.situation, undefined);
+  assert.equal('address' in parsed, false);
 });
 
-test('field start job: rejects a blank name or a placeholder address', () => {
-  assert.throws(() => fieldStartJobSchema.parse({ title: '  ', address: '1842 Meridian Ave' }));
-  assert.throws(() =>
-    fieldStartJobSchema.parse({ title: 'East Racine', address: 'Address to confirm' }),
-  );
+test('field start job: rejects a blank name', () => {
+  assert.throws(() => fieldStartJobSchema.parse({ title: '  ' }));
 });
 
 test('field start job: optional situation is trimmed', () => {
   const parsed = fieldStartJobSchema.parse({
     title: 'East Racine',
-    address: '1842 Meridian Ave, Austin, TX 78702',
     situation: '  Extract standing water.  ',
   });
   assert.equal(parsed.situation, 'Extract standing water.');
 });
 
-test('cityPostalFromAddress reads city and ZIP from a Places-formatted line', () => {
-  assert.deepEqual(cityPostalFromAddress('East Racine Avenue, Waukesha, Wisconsin, 53186, US'), {
-    city: 'Waukesha',
-    postalCode: '53186',
-  });
-});
-
-test('cityPostalFromAddress reads a UK postcode', () => {
-  assert.deepEqual(cityPostalFromAddress('School Street, Llanbradach, Wales, CF83 3NB, GB'), {
-    city: 'Llanbradach',
-    postalCode: 'CF83 3NB',
-  });
-});
-
 test('intakeFromFieldStart maps the phone form onto the office job file', () => {
   const withNote = intakeFromFieldStart({
     title: 'East Racine Avenue',
-    address: '1842 Meridian Ave, Austin, TX 78702',
     situation: 'Extract standing water in the living room.',
   });
   assert.equal(withNote.title, 'East Racine Avenue');
   assert.equal(withNote.workType, 'mitigation');
-  assert.equal(withNote.city, 'Austin');
-  assert.equal(withNote.postalCode, '78702');
+  assert.equal(withNote.address, '');
   assert.equal(withNote.briefNote, 'Extract standing water in the living room.');
   assert.deepEqual(withNote.scope, [
     { title: 'Extract standing water in the living room.', state: 'included' },
   ]);
-  assert.equal(withNote.facts.Source, 'Field Capture — address and work description');
-  assert.equal(withNote.facts.Site, '1842 Meridian Ave, Austin, TX 78702');
-  assert.equal(withNote.facts['Site address'], '1842 Meridian Ave, Austin, TX 78702, Austin, 78702');
+  assert.equal(withNote.facts.Source, 'Field Capture — name and work description');
+  assert.equal(withNote.facts.Work, 'Extract standing water in the living room.');
+  assert.equal(withNote.facts.Site, undefined);
   assert.deepEqual(withNote.invitees, []);
 
-  const withPlace = intakeFromFieldStart({
-    title: 'East Racine Avenue',
-    address: '1842 Meridian Ave',
-    city: 'Austin',
-    postalCode: '78702',
-    placeId: 'ChIJ-meridian',
-  });
-  assert.equal(withPlace.placeId, 'ChIJ-meridian');
-  assert.equal(withPlace.facts['Site address'], '1842 Meridian Ave, Austin, 78702');
-
-  const addressOnly = intakeFromFieldStart({
+  const nameOnly = intakeFromFieldStart({
     title: 'Cedar Ridge',
-    address: '902 Cedar Ridge Dr, Austin, TX',
   });
-  assert.equal(addressOnly.workType, 'construction');
-  assert.equal(addressOnly.briefNote, FIELD_DEFAULT_BRIEF);
-  assert.deepEqual(addressOnly.scope, []);
-  assert.equal(addressOnly.facts.Source, 'Field Capture — address only');
+  assert.equal(nameOnly.workType, 'construction');
+  assert.equal(nameOnly.briefNote, FIELD_DEFAULT_BRIEF);
+  assert.deepEqual(nameOnly.scope, []);
+  assert.equal(nameOnly.facts.Source, 'Field Capture — name only');
+  assert.equal(nameOnly.address, '');
 });
 
 test('intake RPC writes resolved country and coordinates', async () => {
