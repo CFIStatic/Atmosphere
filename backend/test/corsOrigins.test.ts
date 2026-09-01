@@ -5,6 +5,7 @@ import { createApp } from '../src/app.js';
 const OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
 const PLATFORM_ORIGIN = 'https://platform.atmosphereteam.com';
 const FIELD_CAPTURE_ORIGIN = 'https://field-capture-production.up.railway.app';
+const FIELD_CAPTURE_CUSTOM_ORIGIN = 'https://app.atmosphereteam.com';
 
 async function listen(): Promise<{
   url: string;
@@ -55,6 +56,24 @@ test('CORS allows the live platform.atmosphereteam.com origin', async () => {
     assert.notEqual(res.status, 500);
     assert.ok(res.status === 204 || res.status === 200);
     assert.equal(res.headers.get('access-control-allow-origin'), PLATFORM_ORIGIN);
+  } finally {
+    await close();
+  }
+});
+
+test('CORS allows the live app.atmosphereteam.com Field Capture origin', async () => {
+  const { url, close } = await listen();
+  try {
+    const res = await fetch(`${url}/api/field-app/join`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: FIELD_CAPTURE_CUSTOM_ORIGIN,
+        'Access-Control-Request-Method': 'POST',
+      },
+    });
+    assert.notEqual(res.status, 500);
+    assert.ok(res.status === 204 || res.status === 200);
+    assert.equal(res.headers.get('access-control-allow-origin'), FIELD_CAPTURE_CUSTOM_ORIGIN);
   } finally {
     await close();
   }

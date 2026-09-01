@@ -9,8 +9,9 @@
   var SAFE_HASH_BYTES = 512 * 1024 * 1024;
   /** Pocket-proof: the day film stops only after a continuous 5s hold. */
   var HOLD_TO_FINISH_MS = 5000;
-  var LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+  var LIVE_OFFICE_ORIGIN = 'https://platform.atmosphereteam.com';
   var FIELD_CAPTURE_HOST = /^field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
+  var FIELD_CAPTURE_CUSTOM = /^(?:www\.)?app\.atmosphereteam\.com$/i;
 
   /**
    * Put the live camera on screen. iPhone Safari / home-screen Field Capture
@@ -554,15 +555,17 @@
     return (apiBase || '').replace(/\/$/, '');
   }
 
-  /** Railway Field Capture service — not the office /fieldcapture/ path. */
+  /** Standalone Field Capture host — not the office /fieldcapture/ path. */
   function isStandaloneFieldCaptureHost(hostname) {
-    return FIELD_CAPTURE_HOST.test(hostname || '');
+    var host = (hostname || '').replace(/:\d+$/, '');
+    return FIELD_CAPTURE_HOST.test(host) || FIELD_CAPTURE_CUSTOM.test(host);
   }
 
   /**
    * Same-origin on the office console. On the standalone Field Capture
-   * Railway host, talk to the live office /api so the same email +
-   * password as the Platform can attach this phone to the office account.
+   * host (app.atmosphereteam.com or the Railway field-capture service),
+   * talk to the live office /api so the same email + password as the
+   * Platform can attach this phone to the office account.
    */
   function resolveApiBase(explicit) {
     var given = (explicit || '').trim().replace(/\/$/, '');
@@ -615,8 +618,8 @@
   /**
    * Office web console origin + path. Same-origin only when Field Capture
    * is served under /fieldcapture/ on the office host. The standalone
-   * Railway app and a local phone preview are not that SPA — they point
-   * at the live office origin and stay in the phone web frame.
+   * standalone Field Capture host and a local phone preview are not that
+   * SPA — they point at the live office origin and stay in the phone web frame.
    */
   function resolveOfficeHref(pathname) {
     var path = pathname || '/';

@@ -69,6 +69,7 @@ import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js
 import { forbidden } from './lib/errors.js';
 import {
   isAtmosphereCustomAppOrigin,
+  isAtmosphereCustomFieldCaptureOrigin,
   isAtmosphereRailwayFieldCaptureOrigin,
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
@@ -80,13 +81,14 @@ import {
  * In development, treat localhost and 127.0.0.1 as interchangeable — Cursor's
  * preview and some OS stacks use one while .env lists the other.
  * Production also allows the live custom office host
- * (platform.atmosphereteam.com) plus the Atmosphere-web, Atmosphere-internal,
- * and Field Capture Railway hostnames so those SPAs can call /api before
- * FRONTEND_ORIGIN is updated.
+ * (platform.atmosphereteam.com), Field Capture (app.atmosphereteam.com),
+ * plus the Atmosphere-web, Atmosphere-internal, and Field Capture Railway
+ * hostnames so those SPAs can call /api before FRONTEND_ORIGIN is updated.
  */
 function isAllowedFrontendOrigin(origin: string): boolean {
   if (config.frontendOrigins.includes(origin)) return true;
   if (isAtmosphereCustomAppOrigin(origin)) return true;
+  if (isAtmosphereCustomFieldCaptureOrigin(origin)) return true;
   if (isAtmosphereRailwayWebOrigin(origin)) return true;
   if (isAtmosphereRailwayInternalOrigin(origin)) return true;
   if (isAtmosphereRailwayFieldCaptureOrigin(origin)) return true;

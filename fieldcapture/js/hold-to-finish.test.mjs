@@ -68,7 +68,10 @@ assert.match(appSrc, /Core\.bindLivePreview/);
 assert.equal(typeof Core.resolveApiBase, 'function');
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
 assert.equal(Core.isStandaloneFieldCaptureHost('field-capture.up.railway.app'), true);
+assert.equal(Core.isStandaloneFieldCaptureHost('app.atmosphereteam.com'), true);
+assert.equal(Core.isStandaloneFieldCaptureHost('www.app.atmosphereteam.com'), true);
 assert.equal(Core.isStandaloneFieldCaptureHost('atmosphere-web-production.up.railway.app'), false);
+assert.equal(Core.isStandaloneFieldCaptureHost('platform.atmosphereteam.com'), false);
 assert.equal(Core.isStandaloneFieldCaptureHost('fieldcapture-production.up.railway.app'), false);
 assert.equal(Core.resolveApiBase('https://example.test/api/'), 'https://example.test/api');
 assert.equal(Core.resolveApiBase(''), '');
@@ -102,7 +105,7 @@ assert.match(html, /id="platform-frame"/);
 assert.match(html, /max-width: 480px/, 'the web frame stays phone-width');
 assert.match(
   html,
-  /id="platform-link"[^>]*href="https:\/\/atmosphere-web-production\.up\.railway\.app\/verifier-library\?embed=field"/,
+  /id="platform-link"[^>]*href="https:\/\/platform\.atmosphereteam\.com\/verifier-library\?embed=field"/,
   'standalone Field Capture must not use /field — that path is this same app',
 );
 assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library?embed=field');

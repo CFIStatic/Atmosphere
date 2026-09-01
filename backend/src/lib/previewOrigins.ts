@@ -19,9 +19,10 @@
  * same-origin /api proxy, same cookie Origin problem.
  *
  * Field Capture on Railway publishes as field-capture.up.railway.app and
- * field-capture-<environment>.up.railway.app. Crews open that host, type a
- * name + office join code, and the page calls /api/field-app/join. CORS must
- * accept that Origin or the connect screen shows a generic "Request failed."
+ * field-capture-<environment>.up.railway.app. The live custom host is
+ * app.atmosphereteam.com. Crews open that host, sign in, and the page
+ * calls /api plus iframes the office Platform tab. CORS must accept that
+ * Origin or the connect screen shows a generic "Request failed."
  */
 
 const QUICK_TUNNEL = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i;
@@ -34,9 +35,13 @@ const ATMOSPHERE_RAILWAY_INTERNAL_GROWTH =
 const ATMOSPHERE_RAILWAY_FIELD_CAPTURE =
   /^https:\/\/field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 const ATMOSPHERE_CUSTOM_APP = /^https:\/\/(?:www\.)?platform\.atmosphereteam\.com$/i;
+const ATMOSPHERE_CUSTOM_FIELD_CAPTURE = /^https:\/\/(?:www\.)?app\.atmosphereteam\.com$/i;
 
 /** Live office console on the custom domain (Cloudflare → Atmosphere-web). */
 export const LIVE_CUSTOM_APP_ORIGIN = 'https://platform.atmosphereteam.com';
+
+/** Live Field Capture host (Cloudflare → Field Capture service). */
+export const LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN = 'https://app.atmosphereteam.com';
 
 export function isCloudflareQuickTunnelOrigin(origin: string): boolean {
   return QUICK_TUNNEL.test(origin);
@@ -56,4 +61,8 @@ export function isAtmosphereRailwayFieldCaptureOrigin(origin: string): boolean {
 
 export function isAtmosphereCustomAppOrigin(origin: string): boolean {
   return ATMOSPHERE_CUSTOM_APP.test(origin);
+}
+
+export function isAtmosphereCustomFieldCaptureOrigin(origin: string): boolean {
+  return ATMOSPHERE_CUSTOM_FIELD_CAPTURE.test(origin);
 }

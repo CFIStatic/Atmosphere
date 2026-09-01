@@ -4,7 +4,7 @@
 #   docker build -f fieldcapture/Dockerfile -t atmosphere-fieldcapture .
 #
 # Railway: Config File = /fieldcapture/railway.toml, Root Directory = /.
-# Live URL: https://field-capture-production.up.railway.app/
+# Live URL: https://app.atmosphereteam.com/
 # Office /fieldcapture/ remains as a same-origin fallback.
 
 FROM nginx:1.27-alpine AS runtime

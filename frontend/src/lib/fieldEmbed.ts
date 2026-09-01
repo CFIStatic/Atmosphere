@@ -22,6 +22,7 @@ export const FIELD_SESSION_MISSING = 'field-session-missing';
 export const REQUEST_FIELD_SESSION = 'request-field-session';
 
 const FIELD_CAPTURE_HOST = /^field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
+const FIELD_CAPTURE_CUSTOM = /^(?:www\.)?app\.atmosphereteam\.com$/i;
 const ACCESS_KEY = 'atmosphere.fieldEmbed.accessToken';
 const REFRESH_KEY = 'atmosphere.fieldEmbed.refreshToken';
 
@@ -31,7 +32,7 @@ let navigatingAfterAdopt = false;
 export function isFieldCaptureHost(hostname: string): boolean {
   const host = (hostname || '').replace(/:\d+$/, '');
   if (host === 'localhost' || host === '127.0.0.1') return true;
-  return FIELD_CAPTURE_HOST.test(host);
+  return FIELD_CAPTURE_HOST.test(host) || FIELD_CAPTURE_CUSTOM.test(host);
 }
 
 export function isFieldCaptureOrigin(origin: string): boolean {

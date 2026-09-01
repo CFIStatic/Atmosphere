@@ -32,9 +32,13 @@ describe('field embed helpers', () => {
     expect(isFieldCaptureHost('field-capture-production.up.railway.app')).toBe(true);
     expect(isFieldCaptureHost('field-capture.up.railway.app')).toBe(true);
     expect(isFieldCaptureHost('field-capture-staging.up.railway.app')).toBe(true);
+    expect(isFieldCaptureHost('app.atmosphereteam.com')).toBe(true);
+    expect(isFieldCaptureHost('www.app.atmosphereteam.com')).toBe(true);
     expect(isFieldCaptureHost('localhost')).toBe(true);
     expect(isFieldCaptureHost('atmosphere-web-production.up.railway.app')).toBe(false);
+    expect(isFieldCaptureHost('platform.atmosphereteam.com')).toBe(false);
     expect(isFieldCaptureOrigin('https://field-capture-production.up.railway.app')).toBe(true);
+    expect(isFieldCaptureOrigin('https://app.atmosphereteam.com')).toBe(true);
     expect(isFieldCaptureOrigin('https://evil.example')).toBe(false);
   });
 

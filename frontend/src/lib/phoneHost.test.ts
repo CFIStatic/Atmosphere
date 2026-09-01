@@ -75,8 +75,9 @@ describe('phone home-screen manifests', () => {
     const core = readFileSync(resolve(repoRoot, 'fieldcapture/js/capture-core.js'), 'utf8');
     const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
     const htmlFromField = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
-    expect(core).toContain('https://atmosphere-web-production.up.railway.app');
+    expect(core).toContain('https://platform.atmosphereteam.com');
     expect(core).toContain('field-capture(?:-[a-z0-9]+)*\\.up\\.railway\\.app');
+    expect(core).toContain('app\\.atmosphereteam\\.com');
     expect(core).toContain('function resolveApiBase');
     expect(app).toContain('Core.resolveApiBase');
     expect(app.indexOf('var Core = window.FieldCaptureCore')).toBeGreaterThan(-1);

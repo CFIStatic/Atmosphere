@@ -3,6 +3,7 @@ import {
   isAtmosphereCustomAppOrigin,
   isAtmosphereRailwayWebOrigin,
   LIVE_CUSTOM_APP_ORIGIN,
+  LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN,
 } from './previewOrigins.js';
 
 /**
@@ -11,11 +12,12 @@ import {
  * CORS already allows both.
  */
 export const LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
-export { LIVE_CUSTOM_APP_ORIGIN };
+export { LIVE_CUSTOM_APP_ORIGIN, LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN };
 
-/** Live Field Capture web host (Railway service "Field Capture"). */
-export const LIVE_FIELD_CAPTURE_ORIGIN = 'https://field-capture-production.up.railway.app';
+/** Live Field Capture web host (custom domain on the Field Capture service). */
+export const LIVE_FIELD_CAPTURE_ORIGIN = LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN;
 
+/** app.atmosphereteam.com is Field Capture, not the office. api. is unused. */
 const UNMAPPED_INTENDED_APP = /^https:\/\/(app|api)\.atmosphereteam\.com\/?$/i;
 const UNMAPPED_APP_HOST = /^(app|api)\.atmosphereteam\.com$/i;
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1)$/i;
@@ -28,8 +30,8 @@ function stripSlash(origin: string): string {
  * Public URL stamped into invite / share emails.
  *
  * Prefer https://platform.atmosphereteam.com (the live custom office host)
- * over the Railway atmosphere-web URL. app.atmosphereteam.com is still
- * listed as an intended name but has no public DNS — skip it.
+ * over the Railway atmosphere-web URL. app.atmosphereteam.com is Field
+ * Capture — skip it so invite mail does not open the phone app.
  */
 export function publicAppOrigin(origins: string[] = config.frontendOrigins): string {
   const cleaned = origins.map((o) => o.trim()).filter(Boolean);

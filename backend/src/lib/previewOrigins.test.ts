@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   isAtmosphereCustomAppOrigin,
+  isAtmosphereCustomFieldCaptureOrigin,
   isAtmosphereRailwayFieldCaptureOrigin,
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
   LIVE_CUSTOM_APP_ORIGIN,
+  LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN,
 } from './previewOrigins.js';
 
 describe('isCloudflareQuickTunnelOrigin', () => {
@@ -72,7 +74,7 @@ describe('isAtmosphereCustomAppOrigin', () => {
     assert.equal(isAtmosphereCustomAppOrigin('https://www.platform.atmosphereteam.com'), true);
   });
 
-  it('rejects lookalikes and the unmapped app. host', () => {
+  it('rejects lookalikes and the Field Capture custom host', () => {
     assert.equal(isAtmosphereCustomAppOrigin('http://platform.atmosphereteam.com'), false);
     assert.equal(isAtmosphereCustomAppOrigin('https://app.atmosphereteam.com'), false);
     assert.equal(isAtmosphereCustomAppOrigin('https://platform.atmosphereteam.com.evil.com'), false);
@@ -169,6 +171,24 @@ describe('isAtmosphereRailwayFieldCaptureOrigin', () => {
     );
     assert.equal(
       isAtmosphereRailwayFieldCaptureOrigin('https://fieldcapture-production.up.railway.app'),
+      false,
+    );
+    assert.equal(isAtmosphereRailwayFieldCaptureOrigin(LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN), false);
+  });
+});
+
+describe('isAtmosphereCustomFieldCaptureOrigin', () => {
+  it('accepts the live app.atmosphereteam.com Field Capture host', () => {
+    assert.equal(isAtmosphereCustomFieldCaptureOrigin(LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN), true);
+    assert.equal(isAtmosphereCustomFieldCaptureOrigin('https://www.app.atmosphereteam.com'), true);
+  });
+
+  it('rejects lookalikes and the office host', () => {
+    assert.equal(isAtmosphereCustomFieldCaptureOrigin('http://app.atmosphereteam.com'), false);
+    assert.equal(isAtmosphereCustomFieldCaptureOrigin(LIVE_CUSTOM_APP_ORIGIN), false);
+    assert.equal(isAtmosphereCustomFieldCaptureOrigin('https://app.atmosphereteam.com.evil.com'), false);
+    assert.equal(
+      isAtmosphereCustomFieldCaptureOrigin('https://field-capture-production.up.railway.app'),
       false,
     );
   });

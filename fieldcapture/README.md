@@ -9,8 +9,9 @@ Open Field Capture and sign in with the **same email and password** as the
 office Platform. Today’s jobs load from that office account; the day film
 files into that org’s evidence library.
 
-Live web host: `https://field-capture-production.up.railway.app/`
-(office fallback: `/fieldcapture/` on the dashboard).
+Live web host: `https://app.atmosphereteam.com/`
+(Railway: `https://field-capture-production.up.railway.app/`;
+office fallback: `/fieldcapture/` on `https://platform.atmosphereteam.com`).
 
 A job share link (`?token=`) still works without signing in — that path is for
 subs who were invited to one job.

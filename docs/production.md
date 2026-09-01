@@ -363,9 +363,14 @@ folder with no image of its own and failed; Railway then retried the failed
 deploy on every later `main` push — including office-rail-only merges.
 
 That service is now the live Field Capture web host
-(`https://field-capture-production.up.railway.app/`). It must proxy `/api`
+(`https://app.atmosphereteam.com/`, Railway
+`https://field-capture-production.up.railway.app/`). It must proxy `/api`
 to the Atmosphere BFF. A static-only nginx answers `POST /api/field-app/join`
 with 405 HTML, which the connect screen shows as **Request failed.**
+
+The Platform tab iframes `https://platform.atmosphereteam.com`. Office nginx
+CSP `frame-ancestors` must include `https://app.atmosphereteam.com` or the
+iframe shows a refused-to-connect page.
 
 Fix:
 
@@ -375,9 +380,10 @@ Fix:
 2. Optional: set `API_UPSTREAM` to the Atmosphere APIs private HTTP URL
    (`api.upstream`). Unset or broken values fall back to the public BFF so
    the connect screen still works.
-3. Backend CORS already allows `https://field-capture*.up.railway.app`.
+3. Backend CORS already allows `https://app.atmosphereteam.com` and
+   `https://field-capture*.up.railway.app`.
 4. Office fallback stays
-   `https://atmosphere-web-production.up.railway.app/fieldcapture/`.
+   `https://platform.atmosphereteam.com/fieldcapture/`.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
