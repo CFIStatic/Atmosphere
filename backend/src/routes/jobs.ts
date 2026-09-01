@@ -98,6 +98,12 @@ async function loadJob(supabase: any, jobId: string) {
 jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
+    let orgId: string | undefined;
+    try {
+      orgId = (await requireOrgContext(req)).orgId;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+    }
     let query = supabase.from('job_memory').select('*');
 
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
@@ -126,14 +132,23 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     // The job_memory view hides rows with deleted_at. Tombstone deletes leave
     // that column null, so they must be filtered the same way as the library.
+    // Org id comes from the session — not the first row — so a missing
+    // job_memory.org_id cannot skip the hide and leave deleted files on Job Files.
+    orgId = orgId ?? ((data ?? []) as any[])[0]?.org_id;
     let rows = ((data ?? []) as any[]).filter(
       (r) => !jobLooksDeletedFromLibrary(r.last_event as string | null),
     );
-    const orgId = rows[0]?.org_id as string | undefined;
     if (orgId) {
       const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
       rows = rows.filter((r: any) => !tombstoned.has(r.job_id as string));
     }
+    const seen = new Set<string>();
+    rows = rows.filter((r: any) => {
+      const id = r.job_id as string | undefined;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 
     // The job_memory view carries the rollups but not the money or the
     // schedule; the Overview's revenue and receivables tiles need both, so

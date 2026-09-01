@@ -14,7 +14,7 @@ import {
 } from '../lib/api';
 import { jobFileMatchesQuery } from '../lib/jobFileSearch';
 import { sortJobFilesByLastOpened } from '../lib/jobFileRecents';
-import { jobLooksDeletedFromLibrary } from '../lib/jobFileCopy';
+import { visibleJobFiles } from '../lib/jobFileCopy';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { useJobFilesSearch } from '../layouts/jobFilesSearch';
 import { PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
@@ -87,8 +87,12 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { jobs } = await api.getJobs({ status: 'all' });
-      setJobs(jobs);
+      const [{ jobs: next }, shared] = await Promise.all([
+        api.getJobs({ status: 'all' }),
+        api.sharedJobs().catch(() => null),
+      ]);
+      const dashboardIds = shared ? new Set(shared.jobs.map((job) => job.jobId)) : null;
+      setJobs(visibleJobFiles(next, dashboardIds));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
       setJobs([]);
@@ -102,9 +106,7 @@ export function JobsPage() {
   const visible = useMemo(
     () =>
       sortJobFilesByLastOpened(
-        (jobs ?? []).filter(
-          (job) => jobFileMatchesQuery(job, query) && !jobLooksDeletedFromLibrary(job.lastEvent),
-        ),
+        (jobs ?? []).filter((job) => jobFileMatchesQuery(job, query)),
       ),
     [jobs, query],
   );
