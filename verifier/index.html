@@ -1218,7 +1218,6 @@
     tbody tr.cliprow .kebab { width: 36px; height: 36px; }
   }
 
-  .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
   .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
   .jf-tabs[hidden] { display: none; }
   .jf-tabs button {
@@ -1327,9 +1326,26 @@
     box-shadow: 0 28px 80px -24px rgba(0,0,0,.55);
     display: flex; flex-direction: column;
   }
+  /* Job-file confirm / share card. Higher specificity than .sheet so
+     height: 100% cannot stretch this into a full-page panel. */
+  #jobfile-sheet > .sheet,
+  .sheet.sheet-narrow {
+    width: min(380px, calc(100vw - 32px));
+    height: fit-content;
+    max-height: min(85vh, 480px);
+    flex: none;
+    align-self: center;
+    justify-self: center;
+  }
+  #jobfile-sheet > .sheet .jf-body {
+    flex: none;
+    max-height: min(70vh, 360px);
+  }
   @media (max-width: 860px) {
     .detail { padding: 8px; }
     .sheet { border-radius: 10px; }
+    #jobfile-sheet > .sheet,
+    .sheet.sheet-narrow { width: min(380px, calc(100vw - 16px)); }
   }
   .sheethead {
     display: flex; align-items: flex-start; gap: 14px; flex: none;
