@@ -74,7 +74,7 @@ export const EXCLUDED_TABLES: Record<string, string> = {
   backup_snapshot_items: 'Backup catalog — regenerated, not restored.',
   backup_verifications: 'Backup catalog — regenerated, not restored.',
 
-  // Removed with the old CRM product. Soft-delete of job files no longer writes
-  // here; leftover triggers that did are dropped in 20260901010000.
-  crm_audit_log: 'Old CRM change ledger — table dropped; job-file delete must not require it.',
+  // Restored in 20260901183000 so leftover crm_jobs_audit can write. The
+  // office vault is the source of truth; this ledger is optional history.
+  crm_audit_log: 'Job-file change ledger — recreated so delete can stamp deleted_at.',
 };

@@ -16,6 +16,10 @@ const repairSql = readFileSync(
   resolve(here, '../../../../supabase/migrations/20260901160000_repair_crm_audit_for_job_delete.sql'),
   'utf8',
 );
+const restoreSql = readFileSync(
+  resolve(here, '../../../../supabase/migrations/20260901183000_restore_crm_audit_log.sql'),
+  'utf8',
+);
 
 describe('CRM audit trigger cleanup for job-file delete', () => {
   it('drops the orphaned audit writer that breaks soft-delete', () => {
@@ -37,5 +41,11 @@ describe('CRM audit trigger cleanup for job-file delete', () => {
     expect(repairSql).toContain('create or replace function public.repair_crm_audit_triggers()');
     expect(repairSql).toContain("execute 'drop trigger if exists crm_jobs_audit on public.crm_jobs'");
     expect(repairSql).toContain('grant execute on function public.repair_crm_audit_triggers() to service_role');
+  });
+
+  it('recreates crm_audit_log so leftover triggers can write', () => {
+    expect(restoreSql).toContain('create table if not exists public.crm_audit_log');
+    expect(restoreSql).toContain('create or replace function public.ensure_crm_audit_log()');
+    expect(restoreSql).toContain('when undefined_table then');
   });
 });
