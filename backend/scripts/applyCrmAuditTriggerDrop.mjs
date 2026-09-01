@@ -18,6 +18,7 @@
  *   3. psql via DATABASE_URL / SUPABASE_DB_URL / constructed pooler URL
  *
  * Missing credentials skip with a warning so a Railway-only deploy still runs.
+ * Redeploy from main after restoring crm_audit_log.
  */
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
