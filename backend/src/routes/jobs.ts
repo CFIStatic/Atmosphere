@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createUserClient } from '../lib/supabase.js';
+import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { listTombstonedJobIds, jobFileIsTombstoned } from '../lib/jobFileDelete.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
@@ -119,10 +120,20 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const { data, error } = await query.order('updated_at', { ascending: false }).limit(200);
     if (error) throw dbError(error, 'Could not load jobs.');
 
+    // The job_memory view hides rows with deleted_at. Tombstone deletes leave
+    // that column null, so they must be filtered the same way as the library.
+    let rows = data ?? [];
+    if (rows.length) {
+      const orgId = (rows[0] as { org_id?: string }).org_id;
+      if (orgId) {
+        const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+        rows = rows.filter((r: any) => !tombstoned.has(r.job_id as string));
+      }
+    }
+
     // The job_memory view carries the rollups but not the money or the
     // schedule; the Overview's revenue and receivables tiles need both, so
     // they are merged in from crm_jobs rather than widening the view.
-    const rows = data ?? [];
     const financials = new Map<string, any>();
     const crewByJob = new Map<string, { userId: string; name: string }[]>();
     if (rows.length) {
@@ -206,6 +217,11 @@ jobsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) =
     const supabase = createUserClient(req.accessToken!);
     const jobId = req.params.id;
     const job = await loadJob(supabase, jobId);
+    const hidden =
+      Boolean(job.deleted_at) ||
+      (Boolean(job.org_id) &&
+        (await jobFileIsTombstoned(createAdminClient() ?? supabase, job.org_id, jobId)));
+    if (hidden) throw new HttpError(404, 'Job not found.', 'job_not_found');
 
     const [tasks, crew, logs, events] = await Promise.all([
       supabase

@@ -12,6 +12,10 @@ const dropOldProductSql = readFileSync(
   resolve(here, '../../../../supabase/migrations/20260828220000_drop_old_product_tables.sql'),
   'utf8',
 );
+const repairSql = readFileSync(
+  resolve(here, '../../../../supabase/migrations/20260901160000_repair_crm_audit_for_job_delete.sql'),
+  'utf8',
+);
 
 describe('CRM audit trigger cleanup for job-file delete', () => {
   it('drops the orphaned audit writer that breaks soft-delete', () => {
@@ -27,5 +31,11 @@ describe('CRM audit trigger cleanup for job-file delete', () => {
     expect(dropOldProductSql).toContain('drop table if exists public.crm_audit_log cascade');
     expect(dropOldProductSql).toContain('drop trigger if exists crm_jobs_audit on public.crm_jobs');
     expect(dropOldProductSql).toContain('drop function if exists private.crm_audit()');
+  });
+
+  it('exposes a service-role repair RPC the BFF can call before soft-delete', () => {
+    expect(repairSql).toContain('create or replace function public.repair_crm_audit_triggers()');
+    expect(repairSql).toContain("execute 'drop trigger if exists crm_jobs_audit on public.crm_jobs'");
+    expect(repairSql).toContain('grant execute on function public.repair_crm_audit_triggers() to service_role');
   });
 });
