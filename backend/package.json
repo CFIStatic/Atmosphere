@@ -30,6 +30,7 @@
     "check:backup": "tsx src/scripts/checkBackupArchive.ts",
     "check:csv": "tsx src/scripts/checkCsvImport.ts",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:email-auth": "node scripts/checkEmailAuthDns.mjs",
     "stripe:sync": "tsx src/scripts/syncStripeCatalog.ts",
     "test:vitest": "vitest run --passWithNoTests"
   },

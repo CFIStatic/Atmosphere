@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import {
+  alignedReplyTo,
+  deliverabilityHeaders,
+  formatFromHeader,
+  resendTags,
+} from '../lib/mailDeliverability.js';
+import { remapToVerifiedSendingDomain } from '../lib/resendFrom.js';
+import {
   ATMOSPHERE_PRODUCT_BLURB,
   ATMOSPHERE_PRODUCT_NAME,
   DEMO_CTA,
@@ -24,7 +31,8 @@ export function salesFromAddress(fallback?: string | null): string {
   return (
     process.env.SALES_FROM_EMAIL ||
     fallback ||
-    'outreach@atmosphere.local'
+    process.env.RESEND_FROM_EMAIL ||
+    'hello@invites.jettx.ai'
   );
 }
 
@@ -206,11 +214,15 @@ export async function sendEmail(input: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: input.fromName ? `${input.fromName} <${input.from}>` : input.from,
+        from: input.fromName
+          ? formatFromHeader(remapToVerifiedSendingDomain(input.from), input.fromName)
+          : formatFromHeader(remapToVerifiedSendingDomain(input.from)),
         to: [input.to],
         subject: input.subject,
         text: input.body,
-        reply_to: input.replyTo || undefined,
+        reply_to: alignedReplyTo(remapToVerifiedSendingDomain(input.from), input.replyTo) || undefined,
+        headers: deliverabilityHeaders({ kind: 'marketing' }),
+        tags: resendTags('marketing'),
       }),
       signal: AbortSignal.timeout(20_000),
     });

@@ -1,7 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
-import { getTransporter, smtpConfigured } from './careersMail.js';
+import { getTransporter, smtpConfigured } from './smtpTransport.js';
+import {
+  alignedReplyTo,
+  deliverabilityHeaders,
+  formatFromHeader,
+  resendTags,
+  smtpFromMatchesAccount,
+  systemMailTransportOrder,
+} from './mailDeliverability.js';
 import {
   RESEND_ONBOARDING_FROM,
   RESEND_VERIFIED_FROM,
@@ -15,15 +24,19 @@ import {
  * Platform mail — Atmosphere sends it.
  *
  * Job invites, claim codes, and other "come into the system" messages go out
- * from our SMTP account, not from a customer's connected Gmail/Microsoft
- * mailbox. Campaigns still send as the customer when they connect one; invites
- * do not wait on that.
+ * from our authenticated sending domain, not from a customer's connected
+ * Gmail/Microsoft mailbox. Campaigns still send as the customer when they
+ * connect one; invites do not wait on that.
  *
- * Delivery order:
- *   1. SMTP (SMTP_HOST + SMTP_USER + SMTP_PASS + CAREERS_FROM_EMAIL)
- *   2. Resend API (RESEND_API_KEY). From-address is hello@invites.jettx.ai
- *      (verified subdomain). Reply-To stays jack@jettx.ai. Falls back to
+ * Delivery order (inbox placement, not historical habit):
+ *   1. Resend API (RESEND_API_KEY). From is hello@invites.jettx.ai — the
+ *      domain with DKIM + SES return-path. Reply-To stays jack@jettx.ai
+ *      when that address is the same org. Falls back to
  *      onboarding@resend.dev only if Resend still rejects the From.
+ *   2. SMTP only when Resend is unset, or SYSTEM_MAIL_DRIVER=smtp, and only
+ *      when the SMTP account can authenticate the From domain. Sending
+ *      jack@jettx.ai through a Yahoo/Gmail SMTP login is what put Atmosphere
+ *      mail in junk.
  *   3. File log sink in development (or SYSTEM_MAIL_DRIVER=log) so Approve &
  *      invite still delivers a readable invite when SMTP/Resend are unset
  */
@@ -114,6 +127,7 @@ async function postResend(input: {
   html?: string | null;
   replyTo?: string | null;
   from: string;
+  headers?: Record<string, string>;
 }): Promise<{ ok: true } | { ok: false; why: string; status?: number; body?: string }> {
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -123,12 +137,14 @@ async function postResend(input: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `Atmosphere <${input.from}>`,
+        from: formatFromHeader(input.from),
         to: [input.to],
         subject: input.subject,
         text: input.text,
         ...(input.html ? { html: input.html } : {}),
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+        ...(input.headers ? { headers: input.headers } : {}),
+        tags: resendTags('transactional'),
       }),
       signal: AbortSignal.timeout(20_000),
     });
@@ -156,6 +172,8 @@ async function sendViaResend(input: {
   html?: string | null;
   replyTo?: string | null;
   from: string;
+  headers?: Record<string, string>;
+  keepReplyTo?: boolean;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -170,7 +188,10 @@ async function sendViaResend(input: {
     if (from !== input.from) {
       console.info(`[system-mail] Resend from ${input.from} → ${from}`);
     }
-    const result = await postResend({ ...input, apiKey, from });
+    const replyTo = input.keepReplyTo
+      ? input.replyTo?.trim() || null
+      : alignedReplyTo(from, input.replyTo);
+    const result = await postResend({ ...input, apiKey, from, replyTo });
     if (result.ok) return result;
     last = result;
     if (!result.status || !isResendSenderRestriction(result.status, result.body ?? '')) {
@@ -195,55 +216,75 @@ export async function sendSystemMail(input: {
   html?: string | null;
   /** Optional reply-to (e.g. the inviting office contact). */
   replyTo?: string | null;
+  /**
+   * Contact / careers forms must keep the visitor's inbox as Reply-To so
+   * a reply reaches them. Invite / OTP mail aligns Reply-To to the From
+   * org so a yahoo.com Reply-To on a jettx.ai From does not look spoofed.
+   */
+  keepReplyTo?: boolean;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();
   const driver = driverOverride();
-  const replyTo = input.replyTo?.trim() || defaultReplyTo();
-  const payload = { ...input, replyTo, from };
+  const requestedReplyTo = input.replyTo?.trim() || defaultReplyTo();
+  const replyTo = input.keepReplyTo
+    ? requestedReplyTo
+    : alignedReplyTo(from, requestedReplyTo);
+  const sendId = randomUUID();
+  const headers = deliverabilityHeaders({ kind: 'transactional', sendId });
+  const payload = { ...input, replyTo, from, headers };
 
-  if (driver === 'log' || (logMailEnabled() && driver !== 'smtp' && driver !== 'resend')) {
-    // Prefer real transports when present, even if log is the auto fallback.
-    if (!smtpConfigured() && !process.env.RESEND_API_KEY?.trim()) {
+  const order = systemMailTransportOrder({
+    driver,
+    resendReady: Boolean(process.env.RESEND_API_KEY?.trim()),
+    smtpReady: smtpConfigured(),
+    logReady: logMailEnabled(),
+  });
+
+  if (order.length === 0) {
+    return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
+  }
+
+  let lastWhy = 'The email could not be sent.';
+  for (const transport of order) {
+    if (transport === 'resend') {
+      const result = await sendViaResend(payload);
+      if (result.ok) return result;
+      lastWhy = result.why;
+      continue;
+    }
+
+    if (transport === 'smtp') {
+      if (
+        !smtpFromMatchesAccount(from, process.env.SMTP_USER) &&
+        driver !== 'smtp'
+      ) {
+        console.warn(
+          `[system-mail] skipping SMTP — ${process.env.SMTP_USER || '(no user)'} cannot authenticate From ${from}`,
+        );
+        continue;
+      }
+      try {
+        await getTransporter().sendMail({
+          from: formatFromHeader(from),
+          to: input.to,
+          subject: input.subject,
+          text: input.text,
+          ...(input.html ? { html: input.html } : {}),
+          ...(replyTo ? { replyTo } : {}),
+          headers,
+        });
+        return { ok: true };
+      } catch (err) {
+        console.error('[system-mail] SMTP send failed:', (err as Error)?.message ?? err);
+        lastWhy = 'The email could not be sent.';
+        continue;
+      }
+    }
+
+    if (transport === 'log') {
       return sendViaLog(payload);
     }
   }
 
-  if (!smtpConfigured() && !process.env.RESEND_API_KEY?.trim()) {
-    if (logMailEnabled()) return sendViaLog(payload);
-    return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
-  }
-
-  if (smtpConfigured() && driver !== 'resend' && driver !== 'log') {
-    try {
-      await getTransporter().sendMail({
-        from: `"Atmosphere" <${from}>`,
-        to: input.to,
-        subject: input.subject,
-        text: input.text,
-        ...(input.html ? { html: input.html } : {}),
-        ...(replyTo ? { replyTo } : {}),
-      });
-      return { ok: true };
-    } catch (err) {
-      console.error('[system-mail] SMTP send failed:', (err as Error)?.message ?? err);
-      // Fall through to Resend when SMTP is misconfigured but Resend is available.
-      if (!process.env.RESEND_API_KEY?.trim()) {
-        if (logMailEnabled()) return sendViaLog(payload);
-        return { ok: false, why: 'The email could not be sent.' };
-      }
-    }
-  }
-
-  if (process.env.RESEND_API_KEY?.trim() && driver !== 'log') {
-    const result = await sendViaResend(payload);
-    if (result.ok) return result;
-    if (logMailEnabled()) return sendViaLog(payload);
-    return result;
-  }
-
-  if (logMailEnabled()) {
-    return sendViaLog(payload);
-  }
-
-  return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
+  return { ok: false, why: lastWhy };
 }

@@ -96,6 +96,8 @@ export function inviteEmail(input: {
   );
   lines.push(
     'If you were not expecting this, you can ignore it.',
+    '',
+    'Sent by Atmosphere · jettx.ai',
   );
 
   const signup = input.origin
@@ -148,6 +150,9 @@ export function inviteEmail(input: {
           }
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             Use the invited email address. Only invited people can join this workspace.
+          </p>
+          <p style="margin:16px 0 0;font-size:11px;line-height:1.4;color:#78716c;">
+            Sent by Atmosphere · jettx.ai
           </p>
         </td></tr>
       </table>

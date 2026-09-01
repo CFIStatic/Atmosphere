@@ -7,6 +7,12 @@
  */
 
 import { config } from '../config.js';
+import {
+  alignedReplyTo,
+  deliverabilityHeaders,
+  resendTags,
+} from '../lib/mailDeliverability.js';
+import { remapToVerifiedSendingDomain } from '../lib/resendFrom.js';
 
 export interface SendEmailInput {
   to: string;
@@ -32,8 +38,10 @@ function resolveProvider(): EmailMarketingProvider {
 }
 
 async function sendViaResend(input: SendEmailInput): Promise<SendEmailResult> {
-  const fromDomain = config.emailMarketing.fromDomain || 'onboarding@resend.dev';
-  const from = `${input.fromName} <${fromDomain.includes('@') ? fromDomain : `outreach@${fromDomain}`}>`;
+  const fromDomain = config.emailMarketing.fromDomain || 'hello@invites.jettx.ai';
+  const rawFrom = fromDomain.includes('@') ? fromDomain : `outreach@${fromDomain}`;
+  const fromAddress = remapToVerifiedSendingDomain(rawFrom);
+  const from = `${input.fromName} <${fromAddress}>`;
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -46,7 +54,9 @@ async function sendViaResend(input: SendEmailInput): Promise<SendEmailResult> {
       to: [input.toName ? `${input.toName} <${input.to}>` : input.to],
       subject: input.subject,
       text: input.bodyText,
-      reply_to: input.replyTo || undefined,
+      reply_to: alignedReplyTo(fromAddress, input.replyTo) || undefined,
+      headers: deliverabilityHeaders({ kind: 'marketing' }),
+      tags: resendTags('marketing'),
     }),
   });
 

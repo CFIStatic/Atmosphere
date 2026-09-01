@@ -95,22 +95,25 @@ Both site forms are wired end to end through one JS helper in `assets/site.js`:
   (`CONTACT_TO_EMAIL`, falling back to the careers inbox).
 
 Both validate with zod, drop honeypot submissions, rate-limit to 5/hour per IP,
-and share one SMTP transport (`backend/src/lib/careersMail.ts`).
+and share Atmosphere mail (`backend/src/lib/systemMail.ts`) — Resend first,
+SMTP only when the account can authenticate `jettx.ai`.
 
 Configure delivery with environment variables on the backend:
 
 | Variable             | Meaning                                              |
 | -------------------- | ---------------------------------------------------- |
-| `CAREERS_TO_EMAIL`   | Where applications land (default `jackcyganiak@yahoo.com`) |
-| `CAREERS_FROM_EMAIL` | Envelope sender (defaults to `SMTP_USER`)            |
-| `SMTP_HOST`          | SMTP server hostname                                 |
+| `CAREERS_TO_EMAIL`   | Where applications land (default `jack@jettx.ai`)    |
+| `CAREERS_FROM_EMAIL` | Reply-To / configured From (defaults to `jack@jettx.ai`) |
+| `RESEND_API_KEY`     | Preferred. Sends as `hello@invites.jettx.ai`         |
+| `SMTP_HOST`          | SMTP fallback hostname                               |
 | `SMTP_PORT`          | Port (default `587`)                                 |
 | `SMTP_SECURE`        | `true` for implicit TLS (port 465)                   |
 | `SMTP_USER`          | SMTP username                                        |
 | `SMTP_PASS`          | SMTP password / app password                         |
 
-Without SMTP configured, development accepts and logs applications so the flow
-is testable; production returns 503 so a misconfigured deploy fails loudly.
+See `docs/email-deliverability.md` for the GoDaddy DMARC + Google DKIM records
+required so `jettx.ai` mail is not junked. Without Resend or SMTP, development
+accepts and logs applications; production returns 503.
 
 The site assumes it is served on the same origin as the backend (`/api/...`).
 Hosted elsewhere? Set `data-api="https://your-backend"` on the form in

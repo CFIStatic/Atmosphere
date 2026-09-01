@@ -118,6 +118,16 @@ describe('systemMail Resend', () => {
     const send = calls.find((c) => c.url.includes('/emails'));
     assert.ok(send);
     assert.match(String((send!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    const payload = send!.body as {
+      from: string;
+      reply_to?: string;
+      headers?: Record<string, string>;
+      tags?: Array<{ name: string; value: string }>;
+    };
+    assert.equal(payload.reply_to, 'jack@jettx.ai');
+    assert.equal(payload.headers?.['Auto-Submitted'], 'auto-generated');
+    assert.ok(payload.headers?.['X-Entity-Ref-ID']);
+    assert.ok(payload.tags?.some((t) => t.name === 'category' && t.value === 'transactional'));
   });
 
   it('sends as jack@jettx.ai when that domain is verified', async () => {
@@ -180,6 +190,34 @@ describe('systemMail Resend', () => {
     assert.equal(emailCalls.length, 2);
     assert.match(String((emailCalls[0]!.body as { from: string }).from), /jack@jettx\.ai/);
     assert.match(String((emailCalls[1]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+  });
+
+  it('prefers Resend over SMTP when both are configured', async () => {
+    const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
+    resetResendDomainCache();
+    process.env.SMTP_HOST = 'smtp.yahoo.com';
+    process.env.SMTP_USER = 'jackcyganiak@yahoo.com';
+    process.env.SMTP_PASS = 'not-a-real-password';
+    mockFetch(async (url) => {
+      if (url.includes('/domains')) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 'msg_resend_first' }), { status: 200 });
+    });
+
+    const { sendSystemMail } = await import('../src/lib/systemMail.js');
+    const result = await sendSystemMail({
+      to: 'crew@example.com',
+      subject: 'Capture invite',
+      text: 'Open the link',
+    });
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
+    assert.equal(result.ok, true);
+    const emailCalls = calls.filter((c) => c.url.includes('/emails'));
+    assert.equal(emailCalls.length, 1);
+    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
   });
 
   it('send-only API key sends as hello@invites.jettx.ai', async () => {

@@ -1,15 +1,15 @@
 import { config } from '../config.js';
-import { getTransporter, smtpConfigured } from './careersMail.js';
+import { sendSystemMail, systemMailConfigured } from './systemMail.js';
 import type { ContactMessage } from './validation.js';
 
 /**
  * Delivery for contact-form messages: one email per message to the sales
- * inbox (CONTACT_TO_EMAIL, falling back to the careers inbox). Shares the
- * careers SMTP transport — one configured account serves all outbound mail.
+ * inbox (CONTACT_TO_EMAIL, falling back to the careers inbox). Uses the
+ * same authenticated Atmosphere mail path as invites (Resend first).
  */
 
 export function contactMailConfigured(): boolean {
-  return smtpConfigured() && Boolean(config.contact.toEmail);
+  return systemMailConfigured() && Boolean(config.contact.toEmail);
 }
 
 /** Render the message as a plain-text email body. */
@@ -32,11 +32,14 @@ export function renderContactEmail(msg: ContactMessage): string {
 
 /** Send one contact message to the sales inbox. Throws on transport failure. */
 export async function sendContactEmail(msg: ContactMessage): Promise<void> {
-  await getTransporter().sendMail({
-    from: `"Atmosphere Contact" <${config.careers.fromEmail}>`,
+  const result = await sendSystemMail({
     to: config.contact.toEmail,
-    replyTo: `"${msg.name.replaceAll('"', "'")}" <${msg.email}>`,
     subject: `Contact — ${msg.company || msg.name}`,
     text: renderContactEmail(msg),
+    replyTo: `"${msg.name.replaceAll('"', "'")}" <${msg.email}>`,
+    keepReplyTo: true,
   });
+  if (!result.ok) {
+    throw new Error(result.why);
+  }
 }

@@ -81,7 +81,7 @@ export function partyInviteEmail(input: {
     '',
     'If you were not expecting this, you can ignore it — nothing happens until the link is opened.',
     '',
-    '— Atmosphere',
+    '— Atmosphere · jettx.ai',
   );
 
   const metaRows = [
@@ -145,6 +145,9 @@ export function partyInviteEmail(input: {
           ${accountBlock ? `\n          ${accountBlock}` : ''}
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             If you were not expecting this, ignore it — nothing happens until the link is opened.
+          </p>
+          <p style="margin:16px 0 0;font-size:11px;line-height:1.4;color:#78716c;">
+            Sent by Atmosphere · jettx.ai
           </p>
         </td></tr>
       </table>
