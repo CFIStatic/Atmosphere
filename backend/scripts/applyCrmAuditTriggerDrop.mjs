@@ -16,6 +16,8 @@
  *   3. psql via DATABASE_URL / SUPABASE_DB_URL / constructed pooler URL
  *
  * Missing credentials skip with a warning so a Railway-only deploy still runs.
+ * The BFF also calls repair_crm_audit_triggers() (and falls back to a
+ * memory_events tombstone) so Delete permanently works even when this skip.
  */
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -25,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260901010000_drop_crm_audit_triggers.sql',
+  '../supabase/migrations/20260901030000_repair_crm_audit_for_job_delete.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 

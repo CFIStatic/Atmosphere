@@ -53,6 +53,12 @@ import {
   isMemoryLedgerError,
   repairMemoryJobFk,
 } from '../lib/memoryLedger.js';
+import {
+  jobFileIsTombstoned,
+  listTombstonedJobIds,
+  softDeleteCrmJobRow,
+  writeJobFileDeleteTombstone,
+} from '../lib/jobFileDelete.js';
 
 /**
  * The shared job record.
@@ -158,7 +164,8 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
       .limit(200);
     if (jobsError) throw new HttpError(500, jobsError.message, 'shared_failed');
 
-    const jobRows = (jobs ?? []) as any[];
+    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+    const jobRows = ((jobs ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
     if (!jobRows.length) {
       res.json({ jobs: [], counts: { jobs: 0, parties: 0, blockers: 0, awaiting: 0 } });
       return;
@@ -243,6 +250,9 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     const { orgId, supabase } = await requireOrgContext(req);
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
+    if (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, record.job.id)) {
+      throw new HttpError(404, 'No such job.', 'job_not_found');
+    }
 
     const currentRevision = record.briefs[0]?.revision ?? null;
     const ackByParty = new Map<string, number>();
@@ -313,6 +323,11 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const { title } = jobTitleSchema.parse(req.body ?? {});
     const nextTitle = normalizeJobFileTitle(title);
+    const writer = createAdminClient() ?? supabase;
+
+    if (await jobFileIsTombstoned(writer, orgId, req.params.jobId)) {
+      throw new HttpError(404, 'No such job.', 'job_not_found');
+    }
 
     const { data, error } = await supabase
       .from('crm_jobs')
@@ -376,6 +391,9 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
       .maybeSingle();
     if (readError) throw new HttpError(500, readError.message, 'job_read_failed');
     if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
+    if (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, job.id)) {
+      throw new HttpError(404, 'No such job.', 'job_not_found');
+    }
 
     let address = '';
     if (job.property_id) {
@@ -410,18 +428,39 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
     }
 
     const now = new Date().toISOString();
-    const { data: deleted, error: deleteError } = await supabase
-      .from('crm_jobs')
-      .update({ deleted_at: now, deleted_by: userId })
-      .eq('org_id', orgId)
-      .eq('id', job.id)
-      .is('deleted_at', null)
-      .select('id, title')
-      .maybeSingle();
-    if (deleteError) throw new HttpError(400, deleteError.message, 'delete_failed');
-    if (!deleted) throw new HttpError(404, 'No such job.', 'job_not_found');
+    const writer = createAdminClient() ?? supabase;
+    let deletedTitle = job.title as string;
+    let usedTombstone = false;
 
-    const { data: proofs } = await supabase
+    try {
+      const deleted = await softDeleteCrmJobRow(writer, {
+        orgId,
+        jobId: job.id,
+        userId,
+        now,
+      });
+      if (!deleted) throw new HttpError(404, 'No such job.', 'job_not_found');
+      deletedTitle = deleted.title;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const auditMissing =
+        (err as { code?: string } | null)?.code === 'crm_audit_log_missing' ||
+        /crm_audit_log/i.test(msg);
+      if (!auditMissing) {
+        throw err instanceof HttpError ? err : new HttpError(400, msg, 'delete_failed');
+      }
+      // Leftover CRM audit trigger still points at a dropped table. Hide the
+      // file with a tombstone so Delete permanently works before deploy SQL runs.
+      await writeJobFileDeleteTombstone(writer, {
+        orgId,
+        jobId: job.id,
+        title: deletedTitle,
+        actorId: userId,
+      });
+      usedTombstone = true;
+    }
+
+    const { data: proofs } = await writer
       .from('job_proofs')
       .update({ deleted_at: now, deleted_by: userId })
       .eq('org_id', orgId)
@@ -438,7 +477,7 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
       action: 'deleted',
       actorId: userId,
       actorLabel: 'Office',
-      detail: `Job file “${deleted.title}” deleted from the library. The vault still holds it.`,
+      detail: `Job file “${deletedTitle}” deleted from the library. The vault still holds it.`,
     }).catch(() => undefined);
 
     await recordUserAction({
@@ -448,7 +487,7 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
       action: 'job.deleted',
       resourceType: 'job',
       resourceId: job.id,
-      detail: { title: deleted.title },
+      detail: { title: deletedTitle, tombstone: usedTombstone },
     });
 
     res.json({ ok: true, deletedAt: now, jobId: job.id });
@@ -504,6 +543,9 @@ sharedJobsRouter.post(
         .maybeSingle();
       if (sourceError) throw new HttpError(500, sourceError.message, 'job_read_failed');
       if (!source) throw new HttpError(404, 'No such job.', 'job_not_found');
+      if (await jobFileIsTombstoned(writer, orgId, source.id)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
 
       const record = await loadRecord(supabase, orgId, source.id);
       const currentRevision = record.briefs[0]?.revision ?? null;

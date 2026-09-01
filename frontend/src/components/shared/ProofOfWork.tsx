@@ -85,7 +85,10 @@ export function ProofOfWork({
   initialData?: ProofResponse;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
 }) {
-  const [data, setData] = useState<ProofResponse | null>(null);
+  // Seed from initialData so guest / shared views paint summaries on the first
+  // commit. Waiting for useEffect left a one-frame empty catalog and made
+  // JobProgressGuestPage tests flake under CI load.
+  const [data, setData] = useState<ProofResponse | null>(initialData ?? null);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
   const [question, setQuestion] = useState('');
@@ -140,7 +143,7 @@ export function ProofOfWork({
   }
 
   useEffect(() => {
-    setData(null);
+    if (!initialData) setData(null);
     setOpenDay(null);
     setRecords({});
     setFreshNotice(null);

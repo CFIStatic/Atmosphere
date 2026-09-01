@@ -149,8 +149,10 @@ describe('JobProgressGuestPage', () => {
     expect(screen.getAllByText('2214 Cedar Ridge Dr, Round Rock TX').length).toBeGreaterThan(0);
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByText('Carrier declined them on revision 4.')).toBeInTheDocument();
-    expect(screen.getByText('All recordings')).toBeInTheDocument();
-    expect(screen.getByText('The north slope is stripped to decking.')).toBeInTheDocument();
+    expect(await screen.findByText('All recordings')).toBeInTheDocument();
+    expect(
+      await screen.findByText('The north slope is stripped to decking.'),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/sign in/i)).toBeNull();
     expect(screen.queryByText(/create.*account/i)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
