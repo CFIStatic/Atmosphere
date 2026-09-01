@@ -290,8 +290,9 @@ export function buildOverview(
     const film = pulseById.get(jobId);
     const status = job?.status ?? brief?.status ?? null;
     if (status && !isOpenJob({ status })) continue;
-    if (!job && !brief) continue;
-    if (jobLooksDeletedFromLibrary(job?.lastEvent)) continue;
+    // Job Files is the inventory. A Dashboard delete drops the file there;
+    // do not revive it here from shared or pulse.
+    if (!job || jobLooksDeletedFromLibrary(job.lastEvent)) continue;
 
     const title = job?.title ?? brief?.title ?? 'Job';
     const jobNumber = job?.jobNumber ?? brief?.jobNumber ?? null;

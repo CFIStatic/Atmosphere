@@ -91,8 +91,16 @@ export async function listTombstonedJobIds(
     .from('memory_events')
     .select('job_id, entity_id, event_type, summary')
     .eq('org_id', orgId)
+    .or(
+      [
+        `event_type.eq.${JOB_FILE_DELETED_EVENT}`,
+        `event_type.eq.${JOB_FILE_DELETED_RPC_EVENT}`,
+        'event_type.eq.job.deleted',
+        'summary.ilike.%deleted from the library%',
+      ].join(','),
+    )
     .order('seq', { ascending: false })
-    .limit(5_000);
+    .limit(10_000);
   if (error) {
     console.warn('[job-file] tombstone list failed:', error.message);
     return new Set();

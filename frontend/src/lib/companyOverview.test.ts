@@ -154,6 +154,11 @@ describe('buildOverview', () => {
           title: 'Paid rebuild',
           status: 'paid',
         }),
+        job({
+          jobId: 'east',
+          title: 'East 6th — kitchen, water',
+          status: 'draft',
+        }),
       ],
       [
         shared({
@@ -291,6 +296,28 @@ describe('buildOverview', () => {
           lastEventAt: NOW.toISOString(),
         }),
       ],
+      [
+        shared({ jobId: 'cursor-1', title: 'Cursor 1' }),
+        shared({ jobId: 'live', title: 'Meridian Ave — water loss' }),
+      ],
+      {
+        clips: 1,
+        read: 1,
+        analysing: 0,
+        failed: 0,
+        unread: 0,
+        heard: 0,
+        filmedToday: 0,
+        byJob: [{ jobId: 'cursor-1', clips: 1, read: 1, analysing: 0, failed: 0, unread: 0, heard: 0, filmedToday: 0 }],
+      },
+      NOW,
+    );
+    expect(model.jobs.map((row) => row.title)).toEqual(['Meridian Ave — water loss']);
+  });
+
+  it('does not revive a Dashboard delete from the shared list', () => {
+    const model = buildOverview(
+      [job({ jobId: 'live', title: 'Meridian Ave — water loss', lastEventAt: NOW.toISOString() })],
       [
         shared({ jobId: 'cursor-1', title: 'Cursor 1' }),
         shared({ jobId: 'live', title: 'Meridian Ave — water loss' }),

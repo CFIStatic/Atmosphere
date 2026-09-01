@@ -1,6 +1,7 @@
 import type { FieldTodayJob, JobSummary } from './api';
 import { isOpenJob } from './companyOverview';
 import { jobFilePath } from './jobFileAsk';
+import { jobLooksDeletedFromLibrary } from './jobFileCopy';
 
 export type TodayReason = FieldTodayJob['reason'];
 
@@ -67,10 +68,13 @@ export function mergeWorkerJobs(
   jobs: JobSummary[],
   userId: string | null,
 ): WorkerJobCard[] {
-  const byId = new Map(jobs.map((job) => [job.jobId, job]));
+  const liveJobs = jobs.filter((job) => !jobLooksDeletedFromLibrary(job.lastEvent));
+  const byId = new Map(liveJobs.map((job) => [job.jobId, job]));
 
   if (today) {
-    return today.map((row) => {
+    return today
+      .filter((row) => !jobs.some((j) => j.jobId === row.id) || byId.has(row.id))
+      .map((row) => {
       const job = byId.get(row.id);
       const crew = job?.crew ?? [];
       return {
@@ -95,7 +99,7 @@ export function mergeWorkerJobs(
     });
   }
 
-  const open = jobs.filter(isOpenJob);
+  const open = liveJobs.filter(isOpenJob);
   const mine = userId
     ? open.filter((job) => (job.crew ?? []).some((p) => p.userId === userId))
     : [];
@@ -111,7 +115,7 @@ export function workerListIsUnassigned(cards: WorkerJobCard[], userId: string | 
 /** People on open jobs — the office picture of who is working. */
 export function buildCrewBoard(jobs: JobSummary[]): CrewBoardRow[] {
   const byUser = new Map<string, CrewBoardRow>();
-  for (const job of jobs.filter(isOpenJob)) {
+  for (const job of jobs.filter((row) => isOpenJob(row) && !jobLooksDeletedFromLibrary(row.lastEvent))) {
     for (const person of job.crew ?? []) {
       const row = byUser.get(person.userId) ?? {
         userId: person.userId,
