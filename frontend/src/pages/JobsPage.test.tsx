@@ -13,6 +13,7 @@ vi.mock('../hooks/useFeatureTimer', () => ({
 }));
 
 const getJobs = vi.fn();
+const sharedJobs = vi.fn();
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -21,6 +22,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       getJobs: (...args: unknown[]) => getJobs(...args),
+      sharedJobs: (...args: unknown[]) => sharedJobs(...args),
     },
   };
 });
@@ -101,7 +103,9 @@ describe('JobsPage', () => {
   beforeEach(() => {
     localStorage.clear();
     getJobs.mockReset();
+    sharedJobs.mockReset();
     getJobs.mockResolvedValue({ jobs });
+    sharedJobs.mockRejectedValue(new Error('offline'));
   });
 
   it('lists job cards without a job number, title, create button, or status filters', async () => {
@@ -155,6 +159,28 @@ describe('JobsPage', () => {
           lastEventAt: '2026-09-01T13:00:00Z',
         },
       ],
+    });
+    renderJobs();
+    expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Cursor 1/ })).not.toBeInTheDocument();
+  });
+
+  it('hides a job file the Dashboard already deleted even when last event is older', async () => {
+    getJobs.mockResolvedValue({
+      jobs: [
+        jobs[0],
+        {
+          ...jobs[1],
+          jobId: 'cursor-1',
+          title: 'Cursor 1',
+          lastEvent: 'opened job #1 — Cursor 1',
+          lastEventAt: '2026-08-01T13:00:00Z',
+        },
+      ],
+    });
+    sharedJobs.mockResolvedValue({
+      jobs: [{ jobId: 'job-1038', title: 'Cedar Ridge — storm damage' }],
+      counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 },
     });
     renderJobs();
     expect(await screen.findByRole('link', { name: /Cedar Ridge/ })).toBeInTheDocument();

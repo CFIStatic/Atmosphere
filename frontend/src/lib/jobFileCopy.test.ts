@@ -3,6 +3,7 @@ import {
   jobFileDeleteNameMatches,
   jobLooksDeletedFromLibrary,
   suggestedDuplicateTitle,
+  visibleJobFiles,
 } from './jobFileCopy';
 
 describe('jobFileDeleteNameMatches', () => {
@@ -21,6 +22,19 @@ describe('jobLooksDeletedFromLibrary', () => {
   it('hides the Job Files card after a dashboard delete', () => {
     expect(jobLooksDeletedFromLibrary('Job file “Cursor 1” deleted from the library.')).toBe(true);
     expect(jobLooksDeletedFromLibrary('opened job #5 — Cursor 1')).toBe(false);
+  });
+});
+
+describe('visibleJobFiles', () => {
+  it('hides Dashboard deletes and duplicate cards', () => {
+    const rows = [
+      { jobId: 'live', title: 'Cedar Ridge', lastEvent: 'opened job #2' },
+      { jobId: 'live', title: 'Cedar Ridge copy', lastEvent: 'opened job #2' },
+      { jobId: 'gone', title: 'Cursor 1', lastEvent: 'Job file “Cursor 1” deleted from the library.' },
+      { jobId: 'stale', title: 'Cursor 1', lastEvent: 'opened job #1 — Cursor 1' },
+    ];
+    expect(visibleJobFiles(rows, new Set(['live'])).map((row) => row.jobId)).toEqual(['live']);
+    expect(visibleJobFiles(rows).map((row) => row.jobId)).toEqual(['live', 'stale']);
   });
 });
 

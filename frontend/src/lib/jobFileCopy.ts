@@ -12,6 +12,23 @@ export function jobLooksDeletedFromLibrary(summary: string | null | undefined): 
   return /deleted from the library/i.test(summary ?? '');
 }
 
+/**
+ * Job Files must match the Dashboard library. Drop delete tombstones,
+ * files the Dashboard already hid, and duplicate cards for the same id.
+ */
+export function visibleJobFiles<T extends { jobId: string; lastEvent?: string | null }>(
+  jobs: T[],
+  dashboardIds: Set<string> | null = null,
+): T[] {
+  const unique = new Map<string, T>();
+  for (const job of jobs) {
+    if (!job.jobId || jobLooksDeletedFromLibrary(job.lastEvent)) continue;
+    if (dashboardIds && !dashboardIds.has(job.jobId)) continue;
+    unique.set(job.jobId, job);
+  }
+  return [...unique.values()];
+}
+
 /** Default name for a duplicated job file. Keep in step with the backend helper. */
 export function suggestedDuplicateTitle(title: string): string {
   const base = title.trim() || 'Job';
