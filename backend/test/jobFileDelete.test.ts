@@ -126,27 +126,33 @@ test('writeJobFileDeleteTombstone falls back to record_memory_event', async () =
   assert.equal(rpcArgs?.p_job_id, null);
 });
 
-test('softDeleteCrmJobRow skips crm_jobs when crm_audit_log is missing', async () => {
+test('softDeleteCrmJobRow surfaces crm_audit_log_missing after a failed repair', async () => {
   let updates = 0;
   const writer = {
     from(table: string) {
-      if (table === 'crm_audit_log') {
-        return {
-          select() {
-            return {
-              limit() {
-                return Promise.resolve({
-                  data: null,
-                  error: { message: 'relation "public.crm_audit_log" does not exist' },
-                });
-              },
-            };
-          },
-        };
-      }
       assert.equal(table, 'crm_jobs');
-      updates += 1;
-      return {};
+      const api = {
+        update() {
+          return api;
+        },
+        eq() {
+          return api;
+        },
+        is() {
+          return api;
+        },
+        select() {
+          return api;
+        },
+        maybeSingle() {
+          updates += 1;
+          return Promise.resolve({
+            data: null,
+            error: { message: 'relation "public.crm_audit_log" does not exist' },
+          });
+        },
+      };
+      return api;
     },
   };
 
@@ -164,5 +170,6 @@ test('softDeleteCrmJobRow skips crm_jobs when crm_audit_log is missing', async (
       return true;
     },
   );
-  assert.equal(updates, 0);
+  // First attempt + retry after repairCrmAuditTriggers (no admin client here).
+  assert.equal(updates, 2);
 });

@@ -7,10 +7,10 @@
  * Updating deleted_at then fails with:
  *   relation "public.crm_audit_log" does not exist
  *
- * Railway does not run migrations on boot. This script recreates
- * public.crm_audit_log and makes private.crm_audit() swallow a missing table
- * so job-file delete can stamp deleted_at. When Keys has no DB credentials,
- * the BFF probes the table and hides the file with a tombstone instead.
+ * Railway does not run migrations on boot. This script applies the repair
+ * RPC + trigger-drop SQL on deploy (and via the repair workflow) when Keys
+ * has DB credentials. Delete permanently also tombstones the file when this
+ * SQL cannot run, so the dashboard still hides it.
  *
  * Tries, in order:
  *   1. Management API with SUPABASE_ACCESS_TOKEN (sbp_… personal token)
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const sqlPath = join(
   here,
-  '../supabase/migrations/20260901183000_restore_crm_audit_log.sql',
+  '../supabase/migrations/20260901160000_repair_crm_audit_for_job_delete.sql',
 );
 const sql = readFileSync(sqlPath, 'utf8');
 
