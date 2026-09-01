@@ -323,6 +323,11 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const { title } = jobTitleSchema.parse(req.body ?? {});
     const nextTitle = normalizeJobFileTitle(title);
+    const writer = createAdminClient() ?? supabase;
+
+    if (await jobFileIsTombstoned(writer, orgId, req.params.jobId)) {
+      throw new HttpError(404, 'No such job.', 'job_not_found');
+    }
 
     const { data, error } = await supabase
       .from('crm_jobs')
@@ -538,6 +543,9 @@ sharedJobsRouter.post(
         .maybeSingle();
       if (sourceError) throw new HttpError(500, sourceError.message, 'job_read_failed');
       if (!source) throw new HttpError(404, 'No such job.', 'job_not_found');
+      if (await jobFileIsTombstoned(writer, orgId, source.id)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
 
       const record = await loadRecord(supabase, orgId, source.id);
       const currentRevision = record.briefs[0]?.revision ?? null;
