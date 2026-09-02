@@ -66,6 +66,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('data-full=');
     expect(verifierHtml).not.toContain('<h4>AI analysis</h4>');
     expect(verifierHtml).toContain('function isSceneViewNote');
+    expect(verifierHtml).toContain('function jobOverviewParts');
+    expect(verifierHtml).toContain('id="d-job-summary"');
+    expect(verifierHtml).toContain('id="d-analysis-lead"');
+    expect(verifierHtml.indexOf('id="d-analysis-lead"')).toBeLessThan(verifierHtml.indexOf('id="d-saw"'));
   });
 
   it('answers clip questions from the reading of that clip', () => {
@@ -183,7 +187,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
-  it('does not put AI analysis chrome or scene-viewing notes on the Scope of work tab', async () => {
+  it('does not put AI analysis chrome or scene-viewing notes on the Analysis tab', async () => {
     const dom = bootVerifier();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
@@ -204,6 +208,35 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
+  it('puts the job summary above the disclaimer, then the timestamped clip reading', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const summary = document.getElementById('d-job-summary');
+    const lead = document.getElementById('d-analysis-lead');
+    const saw = document.getElementById('d-saw');
+    const alog = document.getElementById('alog');
+    expect(summary).not.toBeNull();
+    expect(lead).not.toBeNull();
+    expect(saw).not.toBeNull();
+    expect(alog).not.toBeNull();
+    expect(summary!.compareDocumentPosition(lead!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lead!.compareDocumentPosition(saw!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(saw!.compareDocumentPosition(alog!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary!.textContent).toMatch(/north slope/i);
+    expect(summary!.textContent).toMatch(/garage panel/i);
+    expect(lead!.textContent).toMatch(/never an acceptance/i);
+    expect(saw!.textContent).toMatch(/Looking at the after clip/i);
+    expect(alog!.textContent).toMatch(/tarp gone/i);
+    expect(document.querySelector('#d-panel > .footnote:last-child')).toBeNull();
+    dom.window.close();
+  });
+
   it('shows a wait note only while a clip is actually queued, not after a skip', async () => {
     const dom = bootVerifier();
 
@@ -216,6 +249,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('alog-pill')).toBeNull();
     expect(document.querySelector('.alog-wait')?.textContent).toMatch(/Queued for analysis/i);
     expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.getElementById('d-analysis-lead')).toBeNull();
+    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/board is hung|single wall/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis|Paused/i);
     dom.window.close();
   });

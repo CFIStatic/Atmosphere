@@ -1492,6 +1492,20 @@
     margin: 16px 0 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
     color: var(--faint); font-weight: 750;
   }
+  .saw-k:first-child { margin-top: 0; }
+  .job-summary { margin: 0 0 2px; }
+  .job-summary p {
+    margin: 0 0 12px; font-size: 14px; line-height: 1.55; color: var(--ink);
+  }
+  .job-summary p:last-child { margin-bottom: 0; }
+  .job-summary .clip-day {
+    display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750; margin-bottom: 4px;
+  }
+  .analysis-lead {
+    margin: 12px 0 14px; padding-top: 11px;
+    border-top: 1px solid var(--line-soft);
+  }
 
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
@@ -4827,6 +4841,67 @@
     return /^(viewing|watching|looking at)\b/i.test(String(text || '').trim());
   }
 
+  function looksTimestamped(text) {
+    var t = String(text || '').trim();
+    return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
+  }
+
+  function untimedLead(text) {
+    var t = String(text || '').trim()
+      .replace(/^(at\s+\d+\s+seconds?,?\s*)/i, '')
+      .replace(/^\[\d+:\d{2}(?::\d{2})?\]\s*/, '');
+    var sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
+    return sentences.slice(0, 2).join(' ').trim();
+  }
+
+  function clipOverviewText(clip) {
+    var a = clip.analysis || {};
+    var summary = String(a.summary || '').trim();
+    var dictation = String(a.dictation || '').trim();
+    if (summary && !looksTimestamped(summary)) return summary;
+    if (dictation && !looksTimestamped(dictation)) {
+      var sentences = dictation.split(/(?<=[.!?])\s+/).filter(Boolean);
+      return sentences.slice(0, 3).join(' ');
+    }
+    if (dictation) return untimedLead(dictation);
+    return '';
+  }
+
+  function jobOverviewParts(item) {
+    var clips = EVIDENCE.filter(function (e) { return e.job === item.job; }).slice().sort(function (a, b) {
+      return String(a.workDate || a.capturedAt || '').localeCompare(String(b.workDate || b.capturedAt || '')) ||
+        String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    var parts = [];
+    var seen = {};
+    clips.forEach(function (clip) {
+      var text = clipOverviewText(clip);
+      if (!text || seen[text]) return;
+      seen[text] = true;
+      var day = clip.workDate ? dayLabel(clip.workDate) : '';
+      parts.push({ id: clip.id, day: day === '—' ? '' : day, text: text });
+    });
+    return parts.slice(0, 10);
+  }
+
+  function renderJobSummary(item) {
+    var parts = jobOverviewParts(item);
+    if (!parts.length) return '';
+    var dated = parts.length > 1;
+    var html = '<p class="saw-k">Job summary</p><div class="job-summary" id="d-job-summary">';
+    parts.forEach(function (p) {
+      html += '<p>';
+      if (dated && p.day) html += '<span class="clip-day">' + esc(p.day) + '</span>';
+      html += esc(p.text) + '</p>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  var ANALYSIS_DISCLAIMER =
+    'This is what the model could see in the frames and, when the mic was on, what was said — rooms, agreements, concerns. ' +
+    'It does not infer off-camera work, and it is never an acceptance.';
+
   function analysisLog(item) {
     var a = item.analysis || {};
     var rows = [];
@@ -4949,9 +5024,13 @@
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var saw = String(a.dictation || a.summary || '').trim();
+    var overviewParts = jobOverviewParts(item);
+    var overviewHtml = renderJobSummary(item);
+    var saw = String(a.dictation || '').trim();
+    if (!saw) saw = String(a.summary || '').trim();
+    if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
     var heard = String(a.transcript || '').trim();
-    var html = '';
+    var html = overviewHtml;
     if (!rows.length && !saw && !heard) {
       var wait = a.reason || item.analysisError ||
         (a.state === 'failed'
@@ -4962,6 +5041,7 @@
       html += '<p class="footnote alog-wait">' + esc(wait) + '</p>';
       return html;
     }
+    html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
     if (saw) {
       html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
     }
@@ -4997,9 +5077,6 @@
       html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
         a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
     }
-    html += '<p class="footnote" style="margin-top:14px;padding-top:11px;border-top:1px solid var(--line-soft)">' +
-      'This is what the model could see in the frames and, when the mic was on, what was said — rooms, agreements, concerns. ' +
-      'It does not infer off-camera work, and it is never an acceptance.</p>';
     return html;
   }
 
