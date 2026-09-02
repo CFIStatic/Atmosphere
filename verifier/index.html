@@ -1929,6 +1929,8 @@
           { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' }
         ],
         actions: [
+          // Scene-only watch notes are omitted from the Scope of work list.
+          { atSeconds: 0, action: 'watch', description: 'Viewing an office desk setup with multiple active computer screens and a laptop displaying software and video.' },
           { atSeconds: 12, action: 'remove', description: 'Temporary tarp pulled off the north slope; decking exposed.' },
           { atSeconds: 48, action: 'position', description: 'Synthetic underlayment being laid across mid-slope.' }
         ],
@@ -4516,13 +4518,17 @@
 
   var ASK_THREADS = {};
 
+  function isSceneViewNote(text) {
+    return /^(viewing|watching|looking at)\b/i.test(String(text || '').trim());
+  }
+
   function analysisLog(item) {
     var a = item.analysis || {};
     var rows = [];
     var seen = {};
     function add(at, text, kind) {
       var t = String(text || '').trim();
-      if (!t) return;
+      if (!t || isSceneViewNote(t)) return;
       var key = at + '|' + t;
       if (seen[key]) return;
       seen[key] = true;
@@ -4532,6 +4538,7 @@
       add(e.atSeconds, e.text || e.note || e.summary, 'read');
     });
     (a.actions || []).forEach(function (act) {
+      if (String(act.action || '').toLowerCase() === 'watch') return;
       var verb = String(act.action || '').replace(/_/g, ' ');
       var room = String(act.room || '').trim();
       var body = act.description || ((verb ? verb + ' — ' : '') + (act.object || ''));
@@ -4553,25 +4560,6 @@
         add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
       });
     }
-    if (rows.length < 5) {
-      var prose = a.dictation || a.summary || '';
-      String(prose).split(/(?<=[.!?])\s+/).forEach(function (sentence, i, all) {
-        var s = String(sentence || '').trim();
-        if (!s) return;
-        add(Math.round((i + 0.5) * (item.duration || 120) / Math.max(all.length, 1)), s, 'read');
-      });
-    }
-    if (rows.length < 2 && a.scope && a.scope.length) {
-      var d2 = item.duration || 120;
-      a.scope.forEach(function (s, i) {
-        var w = VERDICT_WORD[s.verdict];
-        add(
-          Math.round(i * d2 / Math.max(a.scope.length - 1, 1)),
-          s.title + (w ? ' — ' + w[1] : ''),
-          'scope'
-        );
-      });
-    }
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
   }
@@ -4583,18 +4571,6 @@
     var item = state.open;
     if (item && item._frames && item._frames[state.frame]) return item._frames[state.frame].at || 0;
     return 0;
-  }
-
-  function isFootagePlaying() {
-    if (state.playing) return true;
-    var host = $('#d-frame');
-    var vid = host && host.querySelector('video');
-    return Boolean(vid && !vid.paused && !vid.ended);
-  }
-
-  function setAnalysisPill(text) {
-    var pill = document.getElementById('alog-pill');
-    if (pill) pill.textContent = text;
   }
 
   function fillNote(li) {
@@ -4614,7 +4590,6 @@
       if (seconds + 0.15 >= Number(li.getAttribute('data-at'))) lastSeen = i;
     });
     var empty = document.getElementById('alog-empty');
-    var playing = isFootagePlaying();
     Array.prototype.forEach.call(items, function (li, i) {
       var due = i <= lastSeen;
       li.classList.toggle('on', i === lastSeen && lastSeen >= 0);
@@ -4622,14 +4597,10 @@
       li.classList.toggle('soon', !due);
       if (!due) return;
       if (li.getAttribute('data-written') || li.classList.contains('writing')) return;
-      fillNote(li, playing && i === lastSeen);
+      fillNote(li);
     });
     if (empty) empty.hidden = false;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    if (lastSeen < 0) setAnalysisPill(playing ? 'Watching' : 'Ready');
-    else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
-    else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
-    else setAnalysisPill('Paused');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -4661,11 +4632,7 @@
     var rows = analysisLog(item);
     var saw = String(a.dictation || a.summary || '').trim();
     var heard = String(a.transcript || '').trim();
-    var pill = a.state === 'failed' ? 'Failed'
-      : a.state === 'skipped' ? 'Could not read'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
-      : 'Ready';
-    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
+    var html = '';
     if (!rows.length && !saw && !heard) {
       var wait = a.reason || item.analysisError ||
         (a.state === 'failed'
