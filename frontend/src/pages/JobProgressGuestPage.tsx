@@ -83,19 +83,20 @@ export function JobProgressGuestPage() {
   return (
     <div className="cx-aurora flex h-svh flex-col bg-paper-100">
       <header className="shrink-0 border-b border-line bg-paper-0/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <div className="flex items-center gap-4">
-            <Logo to={null} />
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-                Job file
-              </p>
-              <h1 className="text-lg font-semibold text-ink-900">{view.org.name}</h1>
-            </div>
+        <div className="flex items-start justify-between gap-4 px-6 py-5">
+          <Logo to={null} />
+          <div className="min-w-0 text-right">
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
+              Job file
+            </p>
+            <h1 className="text-lg font-semibold text-ink-900">{view.org.name}</h1>
+            <p className="mt-0.5 truncate text-sm text-ink-600">
+              Shared with{' '}
+              <span className="font-medium text-ink-800">
+                {view.share.recipientEmail ?? view.share.label}
+              </span>
+            </p>
           </div>
-          <p className="text-sm text-ink-600">
-            Shared with <span className="font-medium text-ink-800">{view.share.label}</span>
-          </p>
         </div>
       </header>
 
