@@ -5028,7 +5028,6 @@
     var overviewHtml = renderJobSummary(item);
     var saw = String(a.dictation || '').trim();
     if (!saw) saw = String(a.summary || '').trim();
-    if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
     var heard = String(a.transcript || '').trim();
     var html = overviewHtml;
     if (!rows.length && !saw && !heard) {
@@ -5041,6 +5040,7 @@
       html += '<p class="footnote alog-wait">' + esc(wait) + '</p>';
       return html;
     }
+    if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
     html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
     if (saw) {
       html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
