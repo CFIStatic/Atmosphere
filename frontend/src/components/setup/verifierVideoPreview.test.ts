@@ -147,6 +147,8 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.getElementById('d-yt-play')).not.toBeNull();
     expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
+    expect(document.getElementById('d-time')?.hidden).toBe(true);
+    expect(document.getElementById('d-time')?.textContent).not.toMatch(/screenshot/i);
     expect(document.getElementById('d-meta')?.textContent).toBe('Aug 5');
     expect(document.getElementById('d-meta')?.textContent).not.toMatch(
       /EV-1038|Video|Delgado|MB|:/,
@@ -194,5 +196,25 @@ describe('verifier dashboard video preview screen', () => {
       "$('#d-meta').innerHTML = '<span class=\"meta-line\">' + esc(dayLabel(item.workDate)) + '</span>';",
     );
     expect(verifierHtml).not.toContain("'<span class=\"id\">' + esc(item.id)");
+  });
+
+  it('does not label the poster as screenshot · duration under the player', async () => {
+    expect(verifierHtml).not.toContain("'screenshot · '");
+    expect(verifierHtml).not.toContain(" : 'screenshot'");
+    expect(verifierHtml).toContain('function setPlayerTime');
+
+    const dom = bootVerifier();
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const time = document.getElementById('d-time');
+    expect(time?.hidden).toBe(true);
+    expect(time?.textContent).toBe('');
+    expect(document.querySelector('#d-frame .yt-dur')?.textContent).toBe('2:23');
+    dom.window.close();
   });
 });
