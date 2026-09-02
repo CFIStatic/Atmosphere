@@ -96,6 +96,18 @@ describe('Job Files search chrome', () => {
     expect(shell).toContain("pathname === '/jobs'");
   });
 
+  it('uses the Dashboard 72px top bar on every rail-only office tab', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const shell = readFileSync(resolve(here, './OperationsShell.tsx'), 'utf8');
+    const verifier = readFileSync(resolve(here, '../../../verifier/index.html'), 'utf8');
+    expect(shell).toContain(
+      ": 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'",
+    );
+    expect(shell).not.toContain('justify-end border-b border-line px-4 py-2.5 sm:px-6');
+    expect(verifier).toMatch(/\.rail-head\s*\{[^}]*height:\s*72px/);
+    expect(verifier).toMatch(/\.topbar\s*\{[^}]*height:\s*72px/);
+  });
+
   it('lets the phone search field use the leftover top-bar width', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),

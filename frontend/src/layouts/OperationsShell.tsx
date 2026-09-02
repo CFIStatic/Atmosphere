@@ -17,8 +17,10 @@ import { JobFilesSearchContext } from './jobFilesSearch';
  * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
  * menu — same as Dashboard. The rail itself only has Settings.
  *
- * Job Files reuses the Dashboard search chrome: same 72px bar, same field,
- * same placeholder. The list itself has no second title or filter row.
+ * Every rail-only tab uses Dashboard's 72px top bar so the hairline under
+ * the Atmosphere wordmark continues straight across into the page. Job Files
+ * also reuses the search field and placeholder; the list itself has no
+ * second title or filter row.
  *
  * On a phone — including the Field Capture 480px web frame — the office rail
  * becomes a hamburger drawer. The account chip stays in the top-right of
@@ -83,13 +85,11 @@ export function OperationsShell() {
           >
             <header
               className={
-                isJobsList
-                  ? phone
+                phone
+                  ? isJobsList
                     ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
-                    : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
-                  : phone
-                    ? 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2'
-                    : 'flex shrink-0 items-center justify-end border-b border-line px-4 py-2.5 sm:px-6'
+                    : 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
+                  : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
               }
             >
               {phone && (
