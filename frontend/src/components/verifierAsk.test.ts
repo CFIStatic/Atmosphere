@@ -64,6 +64,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('You do not have to watch the clip');
     expect(verifierHtml).toContain('function watchRemoteReading');
     expect(verifierHtml).toContain('data-full=');
+    expect(verifierHtml).not.toContain('<h4>AI analysis</h4>');
+    expect(verifierHtml).toContain('function isSceneViewNote');
   });
 
   it('answers clip questions from the reading of that clip', () => {
@@ -95,10 +97,15 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(tabLabels).toEqual(['Analysis', 'Ask', 'Details']);
     expect(document.getElementById('d-saw')).not.toBeNull();
     expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('alog-pill')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis/i);
     expect(document.getElementById('alog')).not.toBeNull();
     const notes = Array.from(document.querySelectorAll('#alog [data-full]'));
     expect(notes.length).toBeGreaterThan(0);
     expect(notes.some((el) => (el.textContent || '').length > 0)).toBe(true);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(
+      /Viewing an office desk setup with multiple active computer screens/i,
+    );
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
     expect(askTab).not.toBeNull();
@@ -176,7 +183,28 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
-  it('shows Writing only while a clip is actually queued, not after a skip', async () => {
+  it('does not put AI analysis chrome or scene-viewing notes on the Scope of work tab', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const panel = document.getElementById('d-panel')?.textContent || '';
+    expect(document.getElementById('alog-pill')).toBeNull();
+    expect(panel).not.toMatch(/AI analysis/i);
+    expect(panel).not.toMatch(/\bPaused\b/i);
+    expect(panel).not.toMatch(
+      /Viewing an office desk setup with multiple active computer screens/i,
+    );
+    expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/tarp gone/i);
+    dom.window.close();
+  });
+
+  it('shows a wait note only while a clip is actually queued, not after a skip', async () => {
     const dom = bootVerifier();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
@@ -185,9 +213,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    expect(document.getElementById('alog-pill')?.textContent).toMatch(/Writing/i);
+    expect(document.getElementById('alog-pill')).toBeNull();
     expect(document.querySelector('.alog-wait')?.textContent).toMatch(/Queued for analysis/i);
     expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis|Paused/i);
     dom.window.close();
   });
 
