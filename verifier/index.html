@@ -716,9 +716,7 @@
     transition: height .12s ease;
   }
   .progress-line:hover .progress-track,
-  .progress-line:focus-visible .progress-track,
-  .scrub:hover .progress-track,
-  .scrub:focus-visible .progress-track {
+  .progress-line:focus-visible .progress-track {
     height: 5px;
   }
   .progress-fill {
@@ -1433,14 +1431,7 @@
     border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
   }
   .controls button:hover { background: var(--accent); color: #FFFFFF; }
-  .scrub {
-    flex: 1; position: relative; height: 16px; display: flex; align-items: center;
-    cursor: pointer; touch-action: none; background: transparent;
-  }
-  .scrub:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
-  .scrub .progress-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); }
-  .scrub .progress-fill { border-radius: 2px; }
-  .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; text-align: right; }
+  .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; margin-left: auto; text-align: right; }
 
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
@@ -1761,11 +1752,6 @@
             <button id="d-play" aria-label="Play">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
-            <div class="scrub" id="d-scrub" role="slider" aria-label="Clip position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-              <div class="progress-track">
-                <div class="progress-fill" id="d-scrub-fill"></div>
-              </div>
-            </div>
             <span class="time" id="d-time">on file</span>
           </div>
         </div>
@@ -2556,15 +2542,10 @@
 
   function setProgressRatio(ratio) {
     var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
-    var fills = document.querySelectorAll('.progress-fill');
-    for (var i = 0; i < fills.length; i++) {
-      fills[i].style.transform = 'scaleX(' + clamped + ')';
-    }
-    var now = String(Math.round(clamped * 100));
+    var fill = document.getElementById('d-progress-fill');
+    if (fill) fill.style.transform = 'scaleX(' + clamped + ')';
     var line = document.getElementById('d-progress');
-    var scrub = document.getElementById('d-scrub');
-    if (line) line.setAttribute('aria-valuenow', now);
-    if (scrub) scrub.setAttribute('aria-valuenow', now);
+    if (line) line.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
   }
 
   function updatePlayClock(at, duration) {
@@ -2704,7 +2685,6 @@
 
   function bindProgressSeek() {
     bindSeekSurface(document.getElementById('d-progress'));
-    bindSeekSurface(document.getElementById('d-scrub'));
   }
 
   function resetProgress() {

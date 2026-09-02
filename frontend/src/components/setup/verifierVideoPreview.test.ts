@@ -233,14 +233,16 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('id="d-progress"');
     expect(verifierHtml).toContain('class="progress-line"');
     expect(verifierHtml).toContain('id="d-progress-fill"');
-    expect(verifierHtml).toContain('id="d-scrub-fill"');
+    expect(verifierHtml).not.toContain('id="d-scrub"');
+    expect(verifierHtml).not.toContain('id="d-scrub-fill"');
     expect(verifierHtml).toContain('function startProgressLoop');
     expect(verifierHtml).toContain('function setProgressRatio');
     expect(verifierHtml).toContain('requestAnimationFrame');
     expect(verifierHtml).toContain('transform-origin: left center');
     expect(verifierHtml).toContain('will-change: transform');
-    expect(verifierHtml).not.toContain("$('#d-scrub').innerHTML = ''");
-    expect(verifierHtml).not.toContain("$('#d-scrub').innerHTML = item._frames.map");
+    const fills = new JSDOM(verifierHtml).window.document.querySelectorAll('.progress-fill');
+    expect(fills).toHaveLength(1);
+    expect(fills[0].id).toBe('d-progress-fill');
   });
 
   it('advances the progress line smoothly while a demo clip plays', async () => {
@@ -265,10 +267,10 @@ describe('verifier dashboard video preview screen', () => {
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     const fill = document.getElementById('d-progress-fill');
-    const scrub = document.getElementById('d-scrub-fill');
     expect(document.getElementById('d-progress')).not.toBeNull();
     expect(fill).not.toBeNull();
-    expect(scrub).not.toBeNull();
+    expect(document.querySelectorAll('.progress-fill')).toHaveLength(1);
+    expect(document.getElementById('d-scrub-fill')).toBeNull();
     expect(fill!.style.transform === '' || fill!.style.transform === 'scaleX(0)').toBe(true);
     expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('0');
 
@@ -281,7 +283,6 @@ describe('verifier dashboard video preview screen', () => {
     pending.forEach((cb) => cb(now.t));
 
     expect(fill!.style.transform).toBe('scaleX(0.5)');
-    expect(scrub!.style.transform).toBe('scaleX(0.5)');
     expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('50');
     expect(document.getElementById('d-time')?.textContent).toMatch(/1:12\s*\/\s*2:23/);
 
