@@ -5724,7 +5724,10 @@
     }
     if (state.open && state.open.id === item.id && (settled || next !== prev)) {
       fillPreviewChrome(item);
-      if (item._videoUrl) setPlayerTime('full clip · ' + durLabel(item.duration));
+      var stage = $('#d-frame .preview-stage');
+      if (item._videoUrl && stage && stage.getAttribute('data-preview-state') === 'video') {
+        setPlayerTime('full clip · ' + durLabel(item.duration));
+      }
       if (state.tab === 'integrity') setTab('integrity');
     }
     return settled;
