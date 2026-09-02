@@ -5,6 +5,7 @@ import {
   clipRecordFromEvidenceItem,
   formatClipTime,
   formatClipTimeSpoken,
+  formatWorkDateSpoken,
   groundedAnswerFromClip,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
@@ -53,12 +54,19 @@ test('formatClipTimeSpoken says the clock the way a person would', () => {
   assert.equal(formatClipTimeSpoken(null), null);
 });
 
-test('did anything happen cites the changes on the clip, with the work date', () => {
+test('formatWorkDateSpoken says the calendar date the way a person would', () => {
+  assert.equal(formatWorkDateSpoken('2026-08-25'), 'August 25, 2026');
+  assert.equal(formatWorkDateSpoken('2026-08-05'), 'August 5, 2026');
+  assert.equal(formatWorkDateSpoken(null), null);
+});
+
+test('did anything happen cites the scene in ordinary sentences', () => {
   const answer = groundedAnswerFromClip('Did anything happen?', cedarAfter);
-  assert.match(answer, /Yes/);
-  assert.match(answer, /2026-08-05/);
-  assert.match(answer, /Tarp removed/);
-  assert.match(answer, /Underlayment/);
+  assert.match(answer, /^Yes\./);
+  assert.match(answer, /tarp/i);
+  assert.match(answer, /underlayment/i);
+  assert.doesNotMatch(answer, /Yes —/);
+  assert.doesNotMatch(answer, /footage on 2026-08-05 shows:/);
 });
 
 test('a specific question cites the timestamped beat it was drawn from', () => {
@@ -70,7 +78,7 @@ test('a specific question cites the timestamped beat it was drawn from', () => {
 
 test('something the camera never showed is refused rather than inferred', () => {
   const answer = groundedAnswerFromClip('Did they replace the water heater?', cedarAfter);
-  assert.equal(answer, 'No. The footage on file does not show that.');
+  assert.equal(answer, "No. I don't see that in this clip.");
 });
 
 test('a room question does not match a different room that only shares the word room', () => {
@@ -80,7 +88,7 @@ test('a room question does not match a different room that only shares the word 
       { atSeconds: 180, text: 'Living room extraction; air movers on the wet carpet.' },
     ],
   });
-  assert.equal(answer, 'No. The footage on file does not show that.');
+  assert.equal(answer, "No. I don't see that in this clip.");
 });
 
 test('a work question in a room that was only walked through answers no', () => {
@@ -206,7 +214,7 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
     conversationRooms: ['bathroom'],
   };
   const answer = groundedAnswerFromClip('What did the homeowner say?', talk);
-  assert.match(answer, /^Yes/);
+  assert.doesNotMatch(answer, /Yes — this is what was said/);
   assert.match(answer, /vanity/i);
   assert.match(answer, /insurance/i);
 
@@ -216,12 +224,39 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
 
   const agreed = groundedAnswerFromClip('What did they agree to?', talk);
   assert.match(agreed, /mirror|cabinets|adjuster/i);
+  assert.doesNotMatch(agreed, /^Yes —/);
+});
+
+test('what happened here reads like a person, not a field dump', () => {
+  const answer = groundedAnswerFromClip('what happened here', {
+    analysisState: 'done',
+    workDate: '2026-08-25',
+    changes: [
+      'Viewing an election news broadcast on a computer screen at an office desk.',
+      'office: Continuing to view the election coverage playing on the monitor.',
+    ],
+  });
+  assert.doesNotMatch(answer, /Yes —/);
+  assert.doesNotMatch(answer, /footage on 2026-08-25 shows:/);
+  assert.doesNotMatch(answer, /office:/i);
+  assert.doesNotMatch(answer, /;\s/);
+  assert.match(answer, /election/i);
+  assert.match(answer, /August 25/);
+  assert.match(answer, /desk|monitor|computer/i);
+});
+
+test('what happened prefers the dictation over a raw change list', () => {
+  const answer = groundedAnswerFromClip('what happened here', cedarAfter);
+  assert.match(answer, /temporary tarp is gone/i);
+  assert.doesNotMatch(answer, /Yes — the footage/);
+  assert.doesNotMatch(answer, /shows:/);
+  assert.doesNotMatch(answer, /^Yes\./);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {
   const result = await answerFromClip({ question: 'Did anything happen?', record: cedarAfter });
   assert.equal(result.model, null);
-  assert.match(result.answer, /Tarp removed/);
+  assert.match(result.answer, /tarp/i);
 });
 
 test('Ask describes the scene after a late reading lands on an existing clip', () => {

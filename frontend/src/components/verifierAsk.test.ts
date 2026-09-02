@@ -97,7 +97,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
       .map((el) => el.textContent || '')
       .join('\n');
-    expect(reply).toMatch(/Tarp removed|footage/i);
+    expect(reply).toMatch(/tarp/i);
     dom.window.close();
   });
 
@@ -155,7 +155,7 @@ describe('verifier clip Ask tab and live analysis', () => {
       .map((el) => el.textContent || '')
       .join('\n');
     expect(reply).not.toMatch(/after video/i);
-    expect(reply).toMatch(/panel|breaker|garage|footage|reading of this clip/i);
+    expect(reply).toMatch(/panel|breaker|garage/i);
     dom.window.close();
   });
 
@@ -200,7 +200,6 @@ describe('verifier clip Ask tab and live analysis', () => {
     const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
       .map((el) => el.textContent || '')
       .join('\n');
-    expect(reply).toMatch(/^Yes/);
     expect(reply).toMatch(/vanity|insurance|cabinets/i);
     dom.window.close();
   });

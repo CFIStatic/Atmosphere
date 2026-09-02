@@ -3077,22 +3077,22 @@ const routes: Array<[string, RegExp, Handler]> = [
       if (found) break;
     }
     const summary = found?.aiSummary;
-    const happen = /did anything|anything happen|what (happened|work)|what is visible/i.test(question);
+    const happen = /did anything|anything happen|what (happened|work)|what is happening|what is visible/i.test(question);
     const answer = !summary
-      ? 'This clip is still being read. Ask again once the dictation lands.'
+      ? 'This clip is still being read. Ask again in a moment.'
       : happen
-        ? `Yes — the footage${found?.workDate ? ` on ${found.workDate}` : ''} shows: ${summary}`
+        ? (/^(did|does|do|was|were|is|are)\b/i.test(question) ? `Yes. ${summary}` : summary)
         : summary.toLowerCase().includes(question.toLowerCase().slice(0, 12))
           ? summary
-          : 'The footage on file does not show that.';
+          : "I don't see that in this clip.";
     return { status: 201, body: { answer, model: null } };
   }],
   ['POST', /^\/api\/verifier-share\/([^/]+)\/evidence\/([^/]+)\/ask$/, (_m, b) => {
     const question = String(b.question ?? '').trim();
-    const happen = /did anything|anything happen|what (happened|work)|what is visible/i.test(question);
+    const happen = /did anything|anything happen|what (happened|work)|what is happening|what is visible/i.test(question);
     const answer = happen
-      ? 'Yes — the footage on this shared clip shows the work described in the reading.'
-      : 'The footage on file does not show that.';
+      ? 'Yes. This shared clip shows the work described in the reading.'
+      : "I don't see that in this clip.";
     return { status: 201, body: { answer, model: null } };
   }],
 
