@@ -144,7 +144,7 @@ describe('JobProgressGuestPage', () => {
 
     expect(await screen.findByText('Job file')).toBeInTheDocument();
     expect(screen.getByText('Ortiz Restoration')).toBeInTheDocument();
-    expect(screen.getByText('Cedar Ridge HOA — homeowner')).toBeInTheDocument();
+    expect(screen.getByText('board@cedarridgehoa.org')).toBeInTheDocument();
     expect(screen.getByText('Skylights removed from scope.')).toBeInTheDocument();
     expect(screen.getAllByText('2214 Cedar Ridge Dr, Round Rock TX').length).toBeGreaterThan(0);
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
@@ -165,20 +165,21 @@ describe('JobProgressGuestPage', () => {
     expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
   });
 
-  it('puts Atmosphere on the left and stacks the job file plus share on the right', async () => {
+  it('puts Atmosphere on the left and stacks the job file plus share email on the right', async () => {
     const { container } = renderGuest();
 
     expect(await screen.findByText('Job file')).toBeInTheDocument();
     const header = container.querySelector('header');
     expect(header).toBeTruthy();
-    const row = header!.firstElementChild as HTMLElement;
-    expect(row.className).toContain('justify-between');
+    const row = header!.querySelector('.justify-between') as HTMLElement;
+    expect(row).toBeTruthy();
     expect(row.firstElementChild).toHaveAttribute('data-atmosphere-lockup');
     const meta = row.lastElementChild as HTMLElement;
     expect(meta.className).toContain('text-right');
     expect(meta).toHaveTextContent('Job file');
     expect(meta).toHaveTextContent('Ortiz Restoration');
     expect(meta).toHaveTextContent('Shared with');
-    expect(meta).toHaveTextContent('Cedar Ridge HOA — homeowner');
+    expect(meta).toHaveTextContent('board@cedarridgehoa.org');
+    expect(meta).not.toHaveTextContent('Cedar Ridge HOA — homeowner');
   });
 });
