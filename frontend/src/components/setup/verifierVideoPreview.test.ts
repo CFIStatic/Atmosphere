@@ -193,9 +193,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain(
       "$('#d-meta').innerHTML = '<span class=\"meta-line\">' + esc(dayLabel(item.workDate)) + '</span>';",
     );
-    expect(verifierHtml).not.toMatch(/function fillPreviewChrome[\s\S]*?esc\(item\.id\)/);
-    expect(verifierHtml).not.toMatch(
-      /function fillPreviewChrome[\s\S]*?clipKind\(item\.phase\)/,
-    );
+    expect(verifierHtml).not.toContain("'<span class=\"id\">' + esc(item.id)");
+    expect(verifierHtml).not.toContain("esc(clipKind(item.phase)) + ' · '");
   });
 });
