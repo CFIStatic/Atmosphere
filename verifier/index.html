@@ -564,7 +564,6 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    .screen-preview .sheethead .id { display: none; }
     .screen-preview .sheethead .meta {
       margin-top: 2px;
       font-size: 11.5px;
@@ -1406,7 +1405,6 @@
   }
   .sheethead h2 { margin: 0; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
   .sheethead .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .sheethead .id + .meta-line::before { content: " · "; }
   .closebtn {
     margin-left: auto; border: 1px solid var(--line); background: var(--panel);
     width: 30px; height: 30px; border-radius: 7px; cursor: pointer; color: var(--muted);
@@ -1535,6 +1533,11 @@
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; color: var(--ink); word-break: break-word; }
   .kv dd.mono { font-family: var(--mono); font-size: 11.5px; }
+  .detail-section + .detail-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+  }
 
   .checkrow { display: flex; gap: 9px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
   .checkrow:last-child { border-bottom: 0; }
@@ -1752,17 +1755,16 @@
             <button id="d-play" aria-label="Play">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
-            <span class="time" id="d-time">on file</span>
+            <span class="time" id="d-time" hidden></span>
           </div>
         </div>
       </section>
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
-          <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
-          <button role="tab" data-tab="details" aria-selected="false">Details</button>
+          <button role="tab" data-tab="integrity" aria-selected="true">Analysis</button>
           <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
+          <button role="tab" data-tab="details" aria-selected="false">Details</button>
         </div>
         <div id="d-panel" style="margin-top:14px"></div>
       </section>
@@ -1983,6 +1985,8 @@
           { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' }
         ],
         actions: [
+          // Scene-only watch notes are omitted from the Scope of work list.
+          { atSeconds: 0, action: 'watch', description: 'Viewing an office desk setup with multiple active computer screens and a laptop displaying software and video.' },
           { atSeconds: 12, action: 'remove', description: 'Temporary tarp pulled off the north slope; decking exposed.' },
           { atSeconds: 48, action: 'position', description: 'Synthetic underlayment being laid across mid-slope.' }
         ],
@@ -2540,6 +2544,15 @@
     return 0;
   }
 
+  function setPlayerTime(label) {
+    var el = document.getElementById('d-time');
+    if (!el) return;
+    var text = label == null ? '' : String(label);
+    el.textContent = text;
+    if (text) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
+
   function setProgressRatio(ratio) {
     var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
     var fill = document.getElementById('d-progress-fill');
@@ -2549,9 +2562,11 @@
   }
 
   function updatePlayClock(at, duration) {
-    var el = document.getElementById('d-time');
-    if (!el || !(duration > 0)) return;
-    el.textContent = dur(at) + ' / ' + dur(duration);
+    if (!(duration > 0)) {
+      setPlayerTime('');
+      return;
+    }
+    setPlayerTime(dur(at) + ' / ' + dur(duration));
   }
 
   function setPlayButton(playing) {
@@ -2693,6 +2708,7 @@
     pendingSeek = null;
     setProgressRatio(0);
     setPlayButton(false);
+    setPlayerTime('');
   }
 
   function durSpoken(s) {
@@ -4308,10 +4324,7 @@
 
   function fillPreviewChrome(item) {
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span>' +
-      '<span class="meta-line">' + esc(clipKind(item.phase)) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes) + '</span>';
+    $('#d-meta').innerHTML = '<span class="meta-line">' + esc(dayLabel(item.workDate)) + '</span>';
   }
 
   function showPreviewScreen() {
@@ -4368,7 +4381,6 @@
         (waiting ? '<div class="preview-wait" id="d-wait">Opening the clip on file…</div>' : '') +
       '</div>';
     resetProgress();
-    $('#d-time').textContent = knownDuration(item.duration) ? ('screenshot · ' + durLabel(item.duration)) : 'screenshot';
     bindYoutubePlay(item);
   }
 
@@ -4397,7 +4409,7 @@
         ' src="' + esc(item._videoUrl) + '"></video>' +
       '</div>';
     setProgressRatio(0);
-    $('#d-time').textContent = 'full clip · ' + durLabel(item.duration);
+    setPlayerTime('full clip · ' + durLabel(item.duration));
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
     bindVideoDuration(vid);
@@ -4634,7 +4646,7 @@
       '</div>';
     var duration = clipLength(item, null);
     if (!frameRaf && !progressRaf) {
-      $('#d-time').textContent = 'frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at);
+      setPlayerTime('frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at));
       if (duration > 0) setProgressRatio((f.at || 0) / duration);
     }
     syncAnalysisLog(f.at);
@@ -4811,13 +4823,17 @@
 
   var ASK_THREADS = {};
 
+  function isSceneViewNote(text) {
+    return /^(viewing|watching|looking at)\b/i.test(String(text || '').trim());
+  }
+
   function analysisLog(item) {
     var a = item.analysis || {};
     var rows = [];
     var seen = {};
     function add(at, text, kind) {
       var t = String(text || '').trim();
-      if (!t) return;
+      if (!t || isSceneViewNote(t)) return;
       var key = at + '|' + t;
       if (seen[key]) return;
       seen[key] = true;
@@ -4827,6 +4843,7 @@
       add(e.atSeconds, e.text || e.note || e.summary, 'read');
     });
     (a.actions || []).forEach(function (act) {
+      if (String(act.action || '').toLowerCase() === 'watch') return;
       var verb = String(act.action || '').replace(/_/g, ' ');
       var room = String(act.room || '').trim();
       var body = act.description || ((verb ? verb + ' — ' : '') + (act.object || ''));
@@ -4848,25 +4865,6 @@
         add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
       });
     }
-    if (rows.length < 5) {
-      var prose = a.dictation || a.summary || '';
-      String(prose).split(/(?<=[.!?])\s+/).forEach(function (sentence, i, all) {
-        var s = String(sentence || '').trim();
-        if (!s) return;
-        add(Math.round((i + 0.5) * (item.duration || 120) / Math.max(all.length, 1)), s, 'read');
-      });
-    }
-    if (rows.length < 2 && a.scope && a.scope.length) {
-      var d2 = item.duration || 120;
-      a.scope.forEach(function (s, i) {
-        var w = VERDICT_WORD[s.verdict];
-        add(
-          Math.round(i * d2 / Math.max(a.scope.length - 1, 1)),
-          s.title + (w ? ' — ' + w[1] : ''),
-          'scope'
-        );
-      });
-    }
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
   }
@@ -4878,17 +4876,6 @@
     var item = state.open;
     if (item && item._frames && item._frames[state.frame]) return item._frames[state.frame].at || 0;
     return 0;
-  }
-
-  function isFootagePlaying() {
-    if (state.playing || frameRaf) return true;
-    var vid = previewVideo();
-    return Boolean(vid && !vid.paused && !vid.ended);
-  }
-
-  function setAnalysisPill(text) {
-    var pill = document.getElementById('alog-pill');
-    if (pill) pill.textContent = text;
   }
 
   function fillNote(li) {
@@ -4908,7 +4895,6 @@
       if (seconds + 0.15 >= Number(li.getAttribute('data-at'))) lastSeen = i;
     });
     var empty = document.getElementById('alog-empty');
-    var playing = isFootagePlaying();
     Array.prototype.forEach.call(items, function (li, i) {
       var due = i <= lastSeen;
       li.classList.toggle('on', i === lastSeen && lastSeen >= 0);
@@ -4916,14 +4902,10 @@
       li.classList.toggle('soon', !due);
       if (!due) return;
       if (li.getAttribute('data-written') || li.classList.contains('writing')) return;
-      fillNote(li, playing && i === lastSeen);
+      fillNote(li);
     });
     if (empty) empty.hidden = false;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    if (lastSeen < 0) setAnalysisPill(playing ? 'Watching' : 'Ready');
-    else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
-    else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
-    else setAnalysisPill('Paused');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -4969,11 +4951,7 @@
     var rows = analysisLog(item);
     var saw = String(a.dictation || a.summary || '').trim();
     var heard = String(a.transcript || '').trim();
-    var pill = a.state === 'failed' ? 'Failed'
-      : a.state === 'skipped' ? 'Could not read'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
-      : 'Ready';
-    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
+    var html = '';
     if (!rows.length && !saw && !heard) {
       var wait = a.reason || item.analysisError ||
         (a.state === 'failed'
@@ -5179,7 +5157,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">Ask about this clip. Answers come from the Scope of Work reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
@@ -5249,49 +5227,29 @@
     if (input) setTimeout(function () { input.focus(); }, 0);
   }
 
-  function setTab(tab) {
-    state.tab = tab;
-    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
-      b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-    });
-    var side = document.querySelector('.side');
-    if (side) side.classList.toggle('ask-mode', tab === 'ask');
-    var item = state.open;
-    if (!item) return;
-    var el = $('#d-panel');
-
-    if (tab === 'integrity') {
-      el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
-        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
-      });
-      var goto = el.querySelector('[data-goto]');
-      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
-      syncAnalysisLog(currentPlayhead());
-      return;
-    }
-
-    if (tab === 'custody') {
-      el.innerHTML = '<ul class="custody">' + item.custody.map(function (c) {
-        return '<li class="' + (c.role === 'ai' ? 'ai' : '') + '">' +
-          '<div><span class="act">' + esc(c.action) + '</span> <span class="by">· ' + esc(c.by) + '</span></div>' +
-          '<div class="at">' + stamp(c.at) + (c.detail ? ' · ' + esc(c.detail) : '') + '</div></li>';
-      }).join('') + '</ul>' +
+  function renderViewingHistory(item) {
+    var rows = (item.custody || []).map(function (c) {
+      return '<li class="' + (c.role === 'ai' ? 'ai' : '') + '">' +
+        '<div><span class="act">' + esc(c.action) + '</span> <span class="by">· ' + esc(c.by) + '</span></div>' +
+        '<div class="at">' + stamp(c.at) + (c.detail ? ' · ' + esc(c.detail) : '') + '</div></li>';
+    }).join('');
+    return '<div class="detail-section" data-section="viewing-history">' +
+      '<div class="alog-head"><h4>Viewing history</h4></div>' +
+      (rows
+        ? '<ul class="custody">' + rows + '</ul>'
+        : '<p class="footnote">No views recorded yet.</p>') +
       '<p class="footnote">Every access is logged at the moment a viewing link is minted, including external ' +
       'shares. The log is append-only: entries cannot be edited or removed, by anyone, including the account ' +
-      'that owns the job.</p>';
-      return;
-    }
+      'that owns the job.</p>' +
+      '</div>';
+  }
 
-    if (tab === 'ask') {
-      el.innerHTML = renderAsk(item);
-      bindAsk(item);
-      return;
-    }
-
+  function renderClipDetails(item) {
     var g = item.gps;
     var job = JOBS[item.job] || { name: item.jobName || 'Job', address: '' };
-    el.innerHTML = '<dl class="kv">' +
+    return '<div class="detail-section" data-section="clip-details">' +
+      '<div class="alog-head"><h4>Clip details</h4></div>' +
+      '<dl class="kv">' +
       '<dt>Evidence ID</dt><dd class="mono">' + esc(item.id) + '</dd>' +
       '<dt>Job</dt><dd>' + esc(job.name) + '</dd>' +
       '<dt>Address</dt><dd>' + esc(job.address) + '</dd>' +
@@ -5316,8 +5274,40 @@
             ? 'Free for your organization \u2014 the download still lands on the access log, because "who holds a copy" should always be a query.'
             : 'Viewing is free. Keeping a copy carries the sharing organization\u2019s download fee, and every download is on the access log.') +
           '</p></div>'
-        : '');
+        : '') +
+      '</div>';
+  }
 
+  function setTab(tab) {
+    if (tab === 'custody') tab = 'details';
+    state.tab = tab;
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+      b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    });
+    var side = document.querySelector('.side');
+    if (side) side.classList.toggle('ask-mode', tab === 'ask');
+    var item = state.open;
+    if (!item) return;
+    var el = $('#d-panel');
+
+    if (tab === 'integrity') {
+      el.innerHTML = renderScopeLog(item);
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+      });
+      var goto = el.querySelector('[data-goto]');
+      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+      syncAnalysisLog(currentPlayhead());
+      return;
+    }
+
+    if (tab === 'ask') {
+      el.innerHTML = renderAsk(item);
+      bindAsk(item);
+      return;
+    }
+
+    el.innerHTML = renderViewingHistory(item) + renderClipDetails(item);
     var dlBtn = document.getElementById('dl-btn');
     if (dlBtn) dlBtn.addEventListener('click', function () { requestDownload(item, null); });
   }
@@ -6031,14 +6021,16 @@
     }
     if (state.open && state.open.id === item.id && (settled || next !== prev)) {
       fillPreviewChrome(item);
-      var time = document.getElementById('d-time');
-      if (time && item._videoUrl) time.textContent = 'full clip · ' + durLabel(item.duration);
+      var stage = $('#d-frame .preview-stage');
+      if (item._videoUrl && stage && stage.getAttribute('data-preview-state') === 'video') {
+        setPlayerTime('full clip · ' + durLabel(item.duration));
+      }
       if (state.tab === 'integrity') setTab('integrity');
     }
     return settled;
   }
 
-  /** Scope of Work reads the video. Keep asking the server until that reading lands. */
+  /** Analysis reads the video. Keep asking the server until that reading lands. */
   function watchRemoteReading(item) {
     if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
     var next = item.analysis && item.analysis.state;

@@ -186,6 +186,12 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.getElementById('d-yt-play')).not.toBeNull();
     expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
+    expect(document.getElementById('d-time')?.hidden).toBe(true);
+    expect(document.getElementById('d-time')?.textContent).not.toMatch(/screenshot/i);
+    expect(document.getElementById('d-meta')?.textContent).toBe('Aug 5');
+    expect(document.getElementById('d-meta')?.textContent).not.toMatch(
+      /EV-1038|Video|Delgado|MB|:/,
+    );
 
     document
       .getElementById('d-back')!
@@ -219,14 +225,38 @@ describe('verifier dashboard video preview screen', () => {
   });
 
   it('stacks the phone clip viewer: video above notes, no two-column squeeze', () => {
-    expect(verifierHtml).toContain(
-      'Phone / Field Capture: full-screen clip, video above the notes.',
-    );
-    expect(verifierHtml).toContain('.screen-preview .sheethead .id { display: none; }');
+    expect(verifierHtml).toContain('Phone / Field Capture: full-screen clip, video above the notes.');
     expect(verifierHtml).toContain('grid-template-rows: auto minmax(0, 1fr)');
     expect(verifierHtml).toContain('aspect-ratio: 9 / 16');
     expect(verifierHtml).toContain('.screen-preview .back-label { display: none; }');
     expect(verifierHtml).toContain('class="meta-line"');
+  });
+
+  it('shows only the recording date under the job title', () => {
+    expect(verifierHtml).toContain(
+      "$('#d-meta').innerHTML = '<span class=\"meta-line\">' + esc(dayLabel(item.workDate)) + '</span>';",
+    );
+    expect(verifierHtml).not.toContain("'<span class=\"id\">' + esc(item.id)");
+  });
+
+  it('does not label the poster as screenshot · duration under the player', async () => {
+    expect(verifierHtml).not.toContain("'screenshot · '");
+    expect(verifierHtml).not.toContain(" : 'screenshot'");
+    expect(verifierHtml).toContain('function setPlayerTime');
+
+    const dom = bootVerifier();
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const time = document.getElementById('d-time');
+    expect(time?.hidden).toBe(true);
+    expect(time?.textContent).toBe('');
+    expect(document.querySelector('#d-frame .yt-dur')?.textContent).toBe('2:23');
+    dom.window.close();
   });
 
   it('keeps a compositor progress line on the clip that glides with playback', () => {
@@ -285,6 +315,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(fill!.style.transform).toBe('scaleX(0.5)');
     expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('50');
     expect(document.getElementById('d-time')?.textContent).toMatch(/1:12\s*\/\s*2:23/);
+    expect(document.getElementById('d-time')?.hidden).toBe(false);
 
     const line = document.getElementById('d-progress') as HTMLElement;
     Object.defineProperty(line, 'getBoundingClientRect', {
