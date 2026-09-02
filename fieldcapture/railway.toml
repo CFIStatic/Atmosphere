@@ -7,10 +7,9 @@
 # can sit behind the office app until this file (or anything else under
 # fieldcapture/) changes — or until Repair Field Capture Railway is run.
 #
-# Rebuild stamp 2026-08-31T15:15Z: last CLI/GHA replica was 04:00Z (PR #244).
-# Phone Start a job, job-file Ask, Legal hold removal, job-file height, and
-# billing metering landed on main after that image. This file change rebuilds
-# the live Field Capture host from current main.
+# Rebuild stamp 2026-09-02T01:59Z: ship one-click clip delete with this
+# main. The office image already embeds /fieldcapture/; this stamp rebuilds
+# the standalone Field Capture host from current main.
 #
 # One-time on this service (Settings → Config-as-code), or via
 # fieldcapture/scripts/apply-railway-config.sh:
