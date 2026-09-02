@@ -171,8 +171,8 @@ describe('JobProgressGuestPage', () => {
     expect(await screen.findByText('Job file')).toBeInTheDocument();
     const header = container.querySelector('header');
     expect(header).toBeTruthy();
-    const row = header!.querySelector('.justify-between') as HTMLElement;
-    expect(row).toBeTruthy();
+    const row = header!.firstElementChild as HTMLElement;
+    expect(row.className).toContain('justify-between');
     expect(row.firstElementChild).toHaveAttribute('data-atmosphere-lockup');
     const meta = row.lastElementChild as HTMLElement;
     expect(meta.className).toContain('text-right');
