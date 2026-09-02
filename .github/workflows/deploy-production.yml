@@ -53,6 +53,7 @@ on:
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
       - cursor/google-address-lookup-377e
+      - cursor/align-office-header-lines-9acd
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
