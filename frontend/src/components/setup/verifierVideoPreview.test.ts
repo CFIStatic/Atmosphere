@@ -185,4 +185,74 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('.screen-preview .back-label { display: none; }');
     expect(verifierHtml).toContain('class="meta-line"');
   });
+
+  it('keeps a compositor progress line on the clip that glides with playback', () => {
+    expect(verifierHtml).toContain('id="d-progress"');
+    expect(verifierHtml).toContain('class="progress-line"');
+    expect(verifierHtml).toContain('id="d-progress-fill"');
+    expect(verifierHtml).toContain('id="d-scrub-fill"');
+    expect(verifierHtml).toContain('function startProgressLoop');
+    expect(verifierHtml).toContain('function setProgressRatio');
+    expect(verifierHtml).toContain('requestAnimationFrame');
+    expect(verifierHtml).toContain('transform-origin: left center');
+    expect(verifierHtml).toContain('will-change: transform');
+    expect(verifierHtml).not.toContain("$('#d-scrub').innerHTML = ''");
+    expect(verifierHtml).not.toContain("$('#d-scrub').innerHTML = item._frames.map");
+  });
+
+  it('advances the progress line smoothly while a demo clip plays', async () => {
+    const queued: FrameRequestCallback[] = [];
+    const now = { t: 0 };
+    const dom = bootVerifier();
+    const originalRaf = dom.window.requestAnimationFrame;
+    const originalNow = dom.window.performance.now.bind(dom.window.performance);
+    dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      queued.push(cb);
+      return queued.length;
+    }) as typeof requestAnimationFrame;
+    Object.defineProperty(dom.window.performance, 'now', {
+      configurable: true,
+      value: () => now.t,
+    });
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const fill = document.getElementById('d-progress-fill');
+    const scrub = document.getElementById('d-scrub-fill');
+    expect(document.getElementById('d-progress')).not.toBeNull();
+    expect(fill).not.toBeNull();
+    expect(scrub).not.toBeNull();
+    expect(fill!.style.transform === '' || fill!.style.transform === 'scaleX(0)').toBe(true);
+    expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('0');
+
+    document.getElementById('d-yt-play')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    now.t = 71500;
+    const pending = queued.splice(0);
+    pending.forEach((cb) => cb(now.t));
+
+    expect(fill!.style.transform).toBe('scaleX(0.5)');
+    expect(scrub!.style.transform).toBe('scaleX(0.5)');
+    expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('50');
+    expect(document.getElementById('d-time')?.textContent).toMatch(/1:12\s*\/\s*2:23/);
+
+    const line = document.getElementById('d-progress') as HTMLElement;
+    Object.defineProperty(line, 'getBoundingClientRect', {
+      value: () => ({ left: 0, width: 200, top: 0, right: 200, bottom: 16, height: 16, x: 0, y: 0, toJSON() {} }),
+    });
+    line.dispatchEvent(new dom.window.PointerEvent('pointerdown', { clientX: 50, bubbles: true }));
+    expect(fill!.style.transform).toBe('scaleX(0.25)');
+    expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('25');
+
+    dom.window.requestAnimationFrame = originalRaf;
+    Object.defineProperty(dom.window.performance, 'now', {
+      configurable: true,
+      value: originalNow,
+    });
+    dom.window.close();
+  });
 });

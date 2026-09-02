@@ -590,6 +590,7 @@
     }
     .screen-preview .stage { padding: 0; flex: none; }
     .screen-preview .player { border-radius: 0; box-shadow: none; }
+    .screen-preview .player .frame-stack,
     .screen-preview .player .frame,
     .screen-preview .preview-stage {
       min-height: 0;
@@ -597,6 +598,11 @@
       height: auto;
       max-height: min(58vh, 520px);
       aspect-ratio: 9 / 16;
+    }
+    .screen-preview .player .frame-stack .frame {
+      aspect-ratio: auto;
+      max-height: none;
+      height: 100%;
     }
     .screen-preview .player .frame video,
     .screen-preview .player .frame img,
@@ -668,7 +674,7 @@
   .yt-dur {
     position: absolute;
     right: 10px;
-    bottom: 10px;
+    bottom: 18px;
     padding: 2px 7px;
     border-radius: 4px;
     background: rgba(0, 0, 0, .82);
@@ -676,6 +682,55 @@
     font-size: 12px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  /* Playback progress — compositor-only scaleX so the line glides with
+     the clip instead of jumping on timeupdate (~4 Hz). */
+  .progress-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    height: 16px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+    display: flex;
+    align-items: flex-end;
+  }
+  .progress-line:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .progress-track {
+    position: relative;
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,.28);
+    overflow: hidden;
+    pointer-events: none;
+    transition: height .12s ease;
+  }
+  .progress-line:hover .progress-track,
+  .progress-line:focus-visible .progress-track,
+  .scrub:hover .progress-track,
+  .scrub:focus-visible .progress-track {
+    height: 5px;
+  }
+  .progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    will-change: transform;
     pointer-events: none;
   }
   .preview-wait {
@@ -1366,6 +1421,7 @@
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player .frame-stack { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
@@ -1377,12 +1433,13 @@
     border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
   }
   .controls button:hover { background: var(--accent); color: #FFFFFF; }
-  .scrub { flex: 1; display: flex; gap: 3px; }
-  .scrub button {
-    flex: 1; height: 6px; border-radius: 3px; background: var(--stage-2); width: auto;
-    padding: 0; border: 0; cursor: pointer;
+  .scrub {
+    flex: 1; position: relative; height: 16px; display: flex; align-items: center;
+    cursor: pointer; touch-action: none; background: transparent;
   }
-  .scrub button[aria-pressed="true"] { background: var(--accent); }
+  .scrub:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .scrub .progress-track { height: 4px; border-radius: 2px; background: var(--stage-2); }
+  .scrub .progress-fill { border-radius: 2px; }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; text-align: right; }
 
   .player video {
@@ -1692,12 +1749,23 @@
       <div class="sheetbody">
       <section class="stage">
         <div class="player">
-          <div class="frame" id="d-frame"></div>
+          <div class="frame-stack">
+            <div class="frame" id="d-frame"></div>
+            <div class="progress-line" id="d-progress" role="slider" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+              <div class="progress-track">
+                <div class="progress-fill" id="d-progress-fill"></div>
+              </div>
+            </div>
+          </div>
           <div class="controls">
             <button id="d-play" aria-label="Play">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
-            <div class="scrub" id="d-scrub"></div>
+            <div class="scrub" id="d-scrub" role="slider" aria-label="Clip position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+              <div class="progress-track">
+                <div class="progress-fill" id="d-scrub-fill"></div>
+              </div>
+            </div>
             <span class="time" id="d-time">on file</span>
           </div>
         </div>
@@ -2372,8 +2440,13 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity'
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity',
+    playStartedAt: null
   };
+
+  var progressRaf = 0;
+  var frameRaf = 0;
+  var progressDragging = false;
 
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
@@ -2466,6 +2539,178 @@
     video.addEventListener('loadedmetadata', discover);
     if (video.readyState >= 1) discover();
   }
+
+  /**
+   * How long this clip is, from the file if it reports a length, otherwise
+   * the length on the record. 0 is unknown — never a duration.
+   */
+  function clipLength(item, video) {
+    if (video && knownDuration(video.duration)) return video.duration;
+    if (item && knownDuration(item.duration)) return item.duration;
+    if (item && item._frames && item._frames.length) {
+      return knownDuration(item._frames[item._frames.length - 1].at) || 0;
+    }
+    return 0;
+  }
+
+  function setProgressRatio(ratio) {
+    var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+    var fills = document.querySelectorAll('.progress-fill');
+    for (var i = 0; i < fills.length; i++) {
+      fills[i].style.transform = 'scaleX(' + clamped + ')';
+    }
+    var now = String(Math.round(clamped * 100));
+    var line = document.getElementById('d-progress');
+    var scrub = document.getElementById('d-scrub');
+    if (line) line.setAttribute('aria-valuenow', now);
+    if (scrub) scrub.setAttribute('aria-valuenow', now);
+  }
+
+  function updatePlayClock(at, duration) {
+    var el = document.getElementById('d-time');
+    if (!el || !(duration > 0)) return;
+    el.textContent = dur(at) + ' / ' + dur(duration);
+  }
+
+  function setPlayButton(playing) {
+    var btn = document.getElementById('d-play');
+    if (!btn) return;
+    btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    btn.innerHTML = playing
+      ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>'
+      : '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  }
+
+  function previewVideo() {
+    var host = document.getElementById('d-frame');
+    return host ? host.querySelector('video') : null;
+  }
+
+  function playbackSeconds(item, video) {
+    if (video) return video.currentTime || 0;
+    if (item && state.playStartedAt != null) {
+      return Math.max(0, (performance.now() - state.playStartedAt) / 1000);
+    }
+    return currentPlayhead();
+  }
+
+  function paintLiveProgress() {
+    var item = state.open;
+    var vid = previewVideo();
+    var duration = clipLength(item, vid);
+    var at = playbackSeconds(item, vid);
+    if (duration > 0 && at > duration) at = duration;
+    setProgressRatio(duration > 0 ? at / duration : 0);
+    if (duration > 0 && (vid || state.playStartedAt != null || frameRaf)) {
+      updatePlayClock(at, duration);
+    }
+  }
+
+  function shouldKeepProgressLoop() {
+    if (progressDragging) return true;
+    var vid = previewVideo();
+    if (vid && !vid.paused && !vid.ended) return true;
+    if (frameRaf) return true;
+    return false;
+  }
+
+  function stopProgressLoop() {
+    if (progressRaf) {
+      cancelAnimationFrame(progressRaf);
+      progressRaf = 0;
+    }
+  }
+
+  function startProgressLoop() {
+    if (progressRaf) return;
+    var tick = function () {
+      progressRaf = 0;
+      paintLiveProgress();
+      if (shouldKeepProgressLoop()) progressRaf = requestAnimationFrame(tick);
+    };
+    progressRaf = requestAnimationFrame(tick);
+  }
+
+  function progressFromPointer(el, clientX) {
+    var rect = el.getBoundingClientRect();
+    if (!rect.width) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }
+
+  function seekByRatio(ratio) {
+    var item = state.open;
+    var vid = previewVideo();
+    var duration = clipLength(item, vid);
+    if (!(duration > 0)) {
+      setProgressRatio(ratio);
+      return;
+    }
+    var seconds = ratio * duration;
+    setProgressRatio(ratio);
+    updatePlayClock(seconds, duration);
+    if (vid) {
+      try { vid.currentTime = seconds; } catch (err) {}
+      syncAnalysisLog(seconds);
+      return;
+    }
+    seekTo(seconds);
+  }
+
+  function bindSeekSurface(el) {
+    if (!el || el.getAttribute('data-bound-progress')) return;
+    el.setAttribute('data-bound-progress', '1');
+    var xOf = function (ev) {
+      if (ev.touches && ev.touches[0]) return ev.touches[0].clientX;
+      return ev.clientX;
+    };
+    var move = function (ev) {
+      if (!progressDragging) return;
+      ev.preventDefault();
+      seekByRatio(progressFromPointer(el, xOf(ev)));
+    };
+    var up = function () {
+      progressDragging = false;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    var down = function (ev) {
+      progressDragging = true;
+      seekByRatio(progressFromPointer(el, xOf(ev)));
+      window.addEventListener('pointermove', move);
+      window.addEventListener('mousemove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('mouseup', up);
+      window.addEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+      ev.preventDefault();
+      var item = state.open;
+      var vid = previewVideo();
+      var duration = clipLength(item, vid);
+      if (!(duration > 0)) return;
+      var at = playbackSeconds(item, vid);
+      var next = at + (ev.key === 'ArrowRight' ? 5 : -5);
+      seekByRatio(Math.max(0, Math.min(1, next / duration)));
+    });
+  }
+
+  function bindProgressSeek() {
+    bindSeekSurface(document.getElementById('d-progress'));
+    bindSeekSurface(document.getElementById('d-scrub'));
+  }
+
+  function resetProgress() {
+    stopProgressLoop();
+    state.playStartedAt = null;
+    setProgressRatio(0);
+    setPlayButton(false);
+  }
+
   function durSpoken(s) {
     if (s == null || !isFinite(Number(s)) || Number(s) < 0) return '';
     var total = Math.round(Number(s));
@@ -4138,7 +4383,7 @@
         '<span class="yt-dur">' + dur(item.duration) + '</span>' +
         (waiting ? '<div class="preview-wait" id="d-wait">Opening the clip on file…</div>' : '') +
       '</div>';
-    $('#d-scrub').innerHTML = '';
+    resetProgress();
     $('#d-time').textContent = knownDuration(item.duration) ? ('screenshot · ' + durLabel(item.duration)) : 'screenshot';
     bindYoutubePlay(item);
   }
@@ -4167,16 +4412,37 @@
         '<video controls playsinline preload="metadata"' + posterAttr +
         ' src="' + esc(item._videoUrl) + '"></video>' +
       '</div>';
-    $('#d-scrub').innerHTML = '';
+    setProgressRatio(0);
     $('#d-time').textContent = 'full clip · ' + durLabel(item.duration);
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
     bindVideoDuration(vid);
-    vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-    vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-    vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
-    vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
-    vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('timeupdate', function () {
+      syncAnalysisLog(vid.currentTime);
+      if (!progressRaf) paintLiveProgress();
+    });
+    vid.addEventListener('seeked', function () {
+      syncAnalysisLog(vid.currentTime);
+      paintLiveProgress();
+    });
+    vid.addEventListener('play', function () {
+      syncAnalysisLog(vid.currentTime);
+      setPlayButton(true);
+      startProgressLoop();
+    });
+    vid.addEventListener('pause', function () {
+      syncAnalysisLog(vid.currentTime);
+      paintLiveProgress();
+      stopProgressLoop();
+      setPlayButton(false);
+    });
+    vid.addEventListener('ended', function () {
+      syncAnalysisLog(vid.currentTime);
+      paintLiveProgress();
+      stopProgressLoop();
+      setPlayButton(false);
+    });
+    vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
     vid.addEventListener('error', function () {
       paintPreviewPoster(item, false);
       var wait = document.getElementById('d-wait');
@@ -4268,12 +4534,6 @@
       return;
     }
     ensureFrames(item);
-    $('#d-scrub').innerHTML = item._frames.map(function (f, i) {
-      return '<button data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Frame ' + (i + 1) + '"></button>';
-    }).join('');
-    Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
-    });
     setFrame(0);
     startFramePlayback();
   }
@@ -4373,33 +4633,64 @@
 
   function setFrame(i) {
     var item = state.open;
-    if (!item) return;
+    if (!item || !item._frames || !item._frames[i]) return;
     state.frame = i;
     var f = item._frames[i];
     $('#d-frame').innerHTML =
       '<div class="preview-stage" data-preview-state="frame">' +
         '<img alt="Frame ' + (i + 1) + ' of the clip" src="' + f.src + '" />' +
       '</div>';
-    $('#d-time').textContent = 'frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at);
-    Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
-      b.setAttribute('aria-pressed', String(+b.dataset.i === i));
-    });
+    var duration = clipLength(item, null);
+    if (!frameRaf && !progressRaf) {
+      $('#d-time').textContent = 'frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at);
+      if (duration > 0) setProgressRatio((f.at || 0) / duration);
+    }
     syncAnalysisLog(f.at);
   }
 
   function stopPlay() {
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
+    if (frameRaf) { cancelAnimationFrame(frameRaf); frameRaf = 0; }
+    state.playStartedAt = null;
+    stopProgressLoop();
+    setPlayButton(false);
   }
 
   function startFramePlayback() {
-    if (state.playing) return;
-    state.playing = setInterval(function () {
-      var item = state.open;
-      if (!item || !item._frames) return stopPlay();
-      var next = state.frame + 1;
-      if (next >= item._frames.length) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
-      setFrame(next);
-    }, 700);
+    if (frameRaf) return;
+    var item = state.open;
+    if (!item) return;
+    ensureFrames(item);
+    var duration = clipLength(item, null) || 1;
+    var already = 0;
+    if (state.playStartedAt != null) already = playbackSeconds(item, null);
+    else if (state.frame > 0) already = currentPlayhead();
+    state.playStartedAt = performance.now() - already * 1000;
+    setPlayButton(true);
+    var tick = function (now) {
+      frameRaf = 0;
+      if (!state.open || state.open.id !== item.id) {
+        setPlayButton(false);
+        return;
+      }
+      var at = Math.min(duration, (now - state.playStartedAt) / 1000);
+      var best = 0;
+      for (var i = 0; i < item._frames.length; i++) {
+        if ((item._frames[i].at || 0) <= at) best = i;
+      }
+      if (best !== state.frame) setFrame(best);
+      else syncAnalysisLog(at);
+      if (at >= duration) {
+        state.playStartedAt = null;
+        setProgressRatio(1);
+        updatePlayClock(duration, duration);
+        setPlayButton(false);
+        return;
+      }
+      frameRaf = requestAnimationFrame(tick);
+    };
+    startProgressLoop();
+    frameRaf = requestAnimationFrame(tick);
   }
 
   function startLivePlayback(item) {
@@ -4415,7 +4706,7 @@
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
     if (vid && !vid.paused && !vid.ended) return;
-    if (state.playing) return;
+    if (state.playing || frameRaf) return;
     var times = analysisLog(item).map(function (row) { return row.at; });
     if (!times.length) {
       syncAnalysisLog(0);
@@ -4425,10 +4716,19 @@
     syncAnalysisLog(times[0]);
     idx = 1;
     state.playing = setInterval(function () {
-      if (!state.open || state.open.id !== item.id) { stopPlay(); return; }
-      var live = $('#d-frame') && $('#d-frame').querySelector('video');
-      if (live && !live.paused && !live.ended) { stopPlay(); return; }
-      if (idx >= times.length) { stopPlay(); return; }
+      if (!state.open || state.open.id !== item.id) {
+        if (state.playing) { clearInterval(state.playing); state.playing = null; }
+        return;
+      }
+      var live = previewVideo();
+      if (live && !live.paused && !live.ended) {
+        if (state.playing) { clearInterval(state.playing); state.playing = null; }
+        return;
+      }
+      if (idx >= times.length) {
+        if (state.playing) { clearInterval(state.playing); state.playing = null; }
+        return;
+      }
       syncAnalysisLog(times[idx]);
       idx += 1;
     }, 700);
@@ -4586,9 +4886,8 @@
   }
 
   function isFootagePlaying() {
-    if (state.playing) return true;
-    var host = $('#d-frame');
-    var vid = host && host.querySelector('video');
+    if (state.playing || frameRaf) return true;
+    var vid = previewVideo();
     return Boolean(vid && !vid.paused && !vid.ended);
   }
 
@@ -4636,12 +4935,17 @@
   function seekTo(seconds) {
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
+    var item = state.open;
+    var duration = clipLength(item, vid);
+    if (duration > 0) {
+      setProgressRatio(seconds / duration);
+      updatePlayClock(seconds, duration);
+    }
     if (vid) {
-      vid.currentTime = seconds;
+      try { vid.currentTime = seconds; } catch (err) {}
       syncAnalysisLog(seconds);
       return;
     }
-    var item = state.open;
     if (!item || !item._frames || !item._frames.length) {
       syncAnalysisLog(seconds);
       return;
@@ -4652,6 +4956,11 @@
       var d = Math.abs((f.at || 0) - seconds);
       if (d < dist) { dist = d; best = i; }
     });
+    if (frameRaf || progressDragging) {
+      state.playStartedAt = performance.now() - seconds * 1000;
+      setFrame(best);
+      return;
+    }
     stopPlay();
     setFrame(best);
   }
@@ -5610,9 +5919,11 @@
       startPreviewPlayback(state.open);
       return;
     }
-    if (state.playing) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
+    if (state.playing || frameRaf) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
     startFramePlayback();
   });
+
+  bindProgressSeek();
 
   function boot() {
     EVIDENCE.forEach(function (e) {
