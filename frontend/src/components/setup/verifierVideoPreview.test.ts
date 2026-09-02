@@ -147,6 +147,10 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.getElementById('d-yt-play')).not.toBeNull();
     expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
+    expect(document.getElementById('d-meta')?.textContent).toBe('Aug 5');
+    expect(document.getElementById('d-meta')?.textContent).not.toMatch(
+      /EV-1038|Video|Delgado|MB|:/,
+    );
 
     document.getElementById('d-back')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
@@ -179,10 +183,16 @@ describe('verifier dashboard video preview screen', () => {
 
   it('stacks the phone clip viewer: video above notes, no two-column squeeze', () => {
     expect(verifierHtml).toContain('Phone / Field Capture: full-screen clip, video above the notes.');
-    expect(verifierHtml).toContain('.screen-preview .sheethead .id { display: none; }');
     expect(verifierHtml).toContain('grid-template-rows: auto minmax(0, 1fr)');
     expect(verifierHtml).toContain('aspect-ratio: 9 / 16');
     expect(verifierHtml).toContain('.screen-preview .back-label { display: none; }');
     expect(verifierHtml).toContain('class="meta-line"');
+  });
+
+  it('shows only the recording date under the job title', () => {
+    expect(verifierHtml).toContain(
+      "$('#d-meta').innerHTML = '<span class=\"meta-line\">' + esc(dayLabel(item.workDate)) + '</span>';",
+    );
+    expect(verifierHtml).not.toContain("'<span class=\"id\">' + esc(item.id)");
   });
 });
