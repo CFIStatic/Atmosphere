@@ -2309,7 +2309,11 @@ export async function deleteEvidence(req: Request, res: Response, next: NextFunc
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const now = new Date().toISOString();
-    const { data, error } = await supabase
+    // SELECT policies hide deleted_at rows. Postgres treats that as an implicit
+    // WITH CHECK on UPDATE, so a user-JWT stamp fails with an RLS error.
+    // Service role bypasses it; the caller is already an org member here.
+    const writer = createAdminClient() ?? supabase;
+    const { data, error } = await writer
       .from('job_proofs')
       .update({ deleted_at: now, deleted_by: userId })
       .eq('org_id', orgId)
