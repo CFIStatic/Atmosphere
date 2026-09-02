@@ -36,20 +36,26 @@ describe('verifier clip Ask tab and live analysis', () => {
     localStorage.clear();
   });
 
-  it('puts Ask next to Details on the evidence sheet', () => {
+  it('puts Details to the right of Ask on the evidence sheet', () => {
     const tabs = verifierHtml.match(/<div class="tabs" role="tablist">[\s\S]*?<\/div>/);
     expect(tabs).not.toBeNull();
     expect(tabs![0]).toMatch(/>Analysis</);
-    expect(tabs![0]).toMatch(/>Viewing History</);
-    expect(tabs![0]).toContain('data-tab="details"');
     expect(tabs![0]).toContain('data-tab="ask"');
-    expect(tabs![0].indexOf('data-tab="details"')).toBeLessThan(tabs![0].indexOf('data-tab="ask"'));
-    expect(tabs![0]).toMatch(/>Details</);
+    expect(tabs![0]).toContain('data-tab="details"');
+    expect(tabs![0].indexOf('data-tab="ask"')).toBeLessThan(tabs![0].indexOf('data-tab="details"'));
     expect(tabs![0]).toMatch(/>Ask</);
+    expect(tabs![0]).toMatch(/>Details</);
+    expect(tabs![0]).not.toMatch(/Viewing History/i);
+    expect(tabs![0]).not.toMatch(/data-tab="custody"/);
     expect(tabs![0]).not.toMatch(/Scope of work/i);
     expect(tabs![0]).not.toMatch(/Chain of custody/i);
     expect(verifierHtml).toContain('Answers come from the Analysis reading');
     expect(verifierHtml).not.toContain('Answers come from the Scope of Work reading');
+    expect(verifierHtml).toContain('function renderViewingHistory');
+    expect(verifierHtml).toContain('function renderClipDetails');
+    expect(verifierHtml.indexOf('renderViewingHistory(item)')).toBeLessThan(
+      verifierHtml.indexOf('renderClipDetails(item)'),
+    );
   });
 
   it('shows what the AI saw on the Analysis tab without requiring playback', () => {
@@ -86,7 +92,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     const tabLabels = Array.from(document.querySelectorAll('.tabs [role="tab"]')).map(
       (el) => (el.textContent || '').trim(),
     );
-    expect(tabLabels).toEqual(['Analysis', 'Viewing History', 'Details', 'Ask']);
+    expect(tabLabels).toEqual(['Analysis', 'Ask', 'Details']);
     expect(document.getElementById('d-saw')).not.toBeNull();
     expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog')).not.toBeNull();
@@ -213,6 +219,35 @@ describe('verifier clip Ask tab and live analysis', () => {
       .join('\n');
     expect(reply).toMatch(/^Yes/);
     expect(reply).toMatch(/vanity|insurance|cabinets/i);
+    dom.window.close();
+  });
+
+  it('stacks viewing history above clip details on the combined Details tab', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const detailsTab = document.querySelector('[data-tab="details"]') as HTMLElement | null;
+    expect(detailsTab).not.toBeNull();
+    detailsTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const viewing = document.querySelector('[data-section="viewing-history"]') as HTMLElement | null;
+    const clip = document.querySelector('[data-section="clip-details"]') as HTMLElement | null;
+    expect(viewing).not.toBeNull();
+    expect(clip).not.toBeNull();
+    expect(viewing!.compareDocumentPosition(clip!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(viewing!.textContent).toMatch(/Viewing history/i);
+    expect(viewing!.textContent).toMatch(/viewed/i);
+    expect(viewing!.querySelectorAll('.custody li').length).toBeGreaterThan(0);
+    expect(clip!.textContent).toMatch(/Clip details/i);
+    expect(clip!.textContent).toMatch(/Evidence ID/);
+    expect(clip!.textContent).toContain('EV-1038-0805-A');
+    expect(document.querySelector('[data-tab="custody"]')).toBeNull();
+    expect(document.querySelector('[data-tab="ask"]')?.nextElementSibling).toBe(detailsTab);
     dom.window.close();
   });
 });
