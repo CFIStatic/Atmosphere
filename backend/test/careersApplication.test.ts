@@ -62,6 +62,7 @@ test('renders the application into a readable email body', () => {
   assert.match(body, /Role: {2}Field Operations — Onboarding/);
   assert.match(body, /Email: sam@example\.com/);
   assert.match(body, /Links: https:\/\/example\.com/);
+  assert.match(body, /Links: https:\/\/example\.com\n\nI onboard crews for a living\.\n\n—/);
   assert.match(body, /I onboard crews for a living\./);
 });
 

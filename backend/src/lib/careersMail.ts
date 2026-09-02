@@ -1,39 +1,17 @@
-import nodemailer, { type Transporter } from 'nodemailer';
 import { config } from '../config.js';
+import { sendSystemMail, systemMailConfigured } from './systemMail.js';
 import type { CareersApplication } from './validation.js';
 
 /**
  * Delivery for careers applications: one email per application to the hiring
- * inbox (CAREERS_TO_EMAIL), sent over whatever SMTP account is configured.
- *
- * The transport is a plain SMTP client on purpose — every mail provider a
- * small company might use (Google Workspace, Fastmail, SES, Resend, Postmark)
- * speaks it, so hosting the site never means changing this code, only env.
+ * inbox (CAREERS_TO_EMAIL), sent through the same authenticated Atmosphere
+ * mail path as invites (Resend first, SMTP only when it can sign jettx.ai).
  */
 
-let transporter: Transporter | null = null;
-
-/** True when the SMTP transport itself is usable, regardless of destination. */
-export function smtpConfigured(): boolean {
-  const { host, user, pass } = config.careers.smtp;
-  return Boolean(host && user && pass);
-}
+export { getTransporter, smtpConfigured } from './smtpTransport.js';
 
 export function careersMailConfigured(): boolean {
-  return smtpConfigured() && Boolean(config.careers.toEmail);
-}
-
-export function getTransporter(): Transporter {
-  if (!transporter) {
-    const { host, port, secure, user, pass } = config.careers.smtp;
-    transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-    });
-  }
-  return transporter;
+  return systemMailConfigured() && Boolean(config.careers.toEmail);
 }
 
 /** Render the application as a plain-text email body. */
@@ -55,11 +33,14 @@ export function renderApplicationEmail(app: CareersApplication): string {
 
 /** Send one application to the hiring inbox. Throws on transport failure. */
 export async function sendApplicationEmail(app: CareersApplication): Promise<void> {
-  await getTransporter().sendMail({
-    from: `"Atmosphere Careers" <${config.careers.fromEmail}>`,
+  const result = await sendSystemMail({
     to: config.careers.toEmail,
-    replyTo: `"${app.name.replaceAll('"', "'")}" <${app.email}>`,
     subject: `Careers application — ${app.role} — ${app.name}`,
     text: renderApplicationEmail(app),
+    replyTo: `"${app.name.replaceAll('"', "'")}" <${app.email}>`,
+    keepReplyTo: true,
   });
+  if (!result.ok) {
+    throw new Error(result.why);
+  }
 }

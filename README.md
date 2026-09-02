@@ -262,11 +262,13 @@ Verifier can judge against an agreed brief.
 | Sales campaigns | Customer mailbox (later product; not required for verification) |
 
 Configure `CAREERS_FROM_EMAIL` (defaults to `jack@jettx.ai`) plus either SMTP
-(`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) or `RESEND_API_KEY`. Resend must
-verify `jettx.ai` before it will deliver to crew inboxes; until then it can
-only reach the Resend account owner. Invite emails include HTML + plain text
-and absolute app links from the live office origin. Without mail configured,
-invites still mint links; the UI falls back to copy-link.
+(`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) or `RESEND_API_KEY`. Resend is the
+preferred path and sends as `hello@invites.jettx.ai`. `jettx.ai` also needs
+DMARC and Google Workspace DKIM at GoDaddy or Gmail / Outlook / Yahoo junk
+the mail — see [`docs/email-deliverability.md`](docs/email-deliverability.md).
+Invite emails include HTML + plain text and absolute app links from the live
+office origin. Without mail configured, invites still mint links; the UI
+falls back to copy-link.
 
 ## Development scripts
 

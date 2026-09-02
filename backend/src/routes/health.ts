@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { visionProviderLabel } from '../lib/visionProvider.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import { smtpConfigured } from '../lib/careersMail.js';
+import { smtpConfigured } from '../lib/smtpTransport.js';
 import { systemMailConfigured } from '../lib/systemMail.js';
 
 export const healthRouter = Router();
@@ -59,10 +59,10 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
   };
   checks.mail = {
     ok: systemMailConfigured(),
-    detail: smtpConfigured()
-      ? 'smtp'
-      : process.env.RESEND_API_KEY?.trim()
-        ? 'resend'
+    detail: process.env.RESEND_API_KEY?.trim()
+      ? 'resend'
+      : smtpConfigured()
+        ? 'smtp'
         : 'unconfigured',
   };
   const vision = visionProviderLabel();

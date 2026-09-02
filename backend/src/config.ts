@@ -1035,9 +1035,10 @@ export const config = {
     // RESEND_API_KEY and actually delivers.
     provider: parseEmailMarketingProvider(process.env.EMAIL_MARKETING_PROVIDER),
     resendApiKey: process.env.RESEND_API_KEY ?? '',
-    // From address / domain for Resend. Defaults to Resend's onboarding sender
-    // so a key alone is enough to try a real delivery in development.
-    fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
+    // From address / domain for Resend. Defaults to the verified sending
+    // subdomain — onboarding@resend.dev is a spam magnet and only reaches
+    // the Resend account owner.
+    fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'hello@invites.jettx.ai',
   },
 
   /**

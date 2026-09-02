@@ -139,6 +139,10 @@ jobs:
         working-directory: backend
         run: node scripts/ensureResendSendingDomain.mjs
 
+      - name: Check jettx.ai SPF / DKIM / DMARC (public DNS)
+        working-directory: backend
+        run: node scripts/checkEmailAuthDns.mjs
+
       - name: Repair memory_events job FK on Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

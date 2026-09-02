@@ -54,8 +54,9 @@ function printRecords(records) {
     console.log(`  ${type} ${name} ${rec.value ?? ''}${priority}${status}`);
   }
   console.log('');
-  console.log('After DNS is in place, job invites can send to any crew inbox as jack@jettx.ai.');
-  console.log('Until then Resend only delivers to the Resend account owner via onboarding@resend.dev.');
+  console.log('After DNS is in place, job invites can send to any crew inbox as hello@invites.jettx.ai.');
+  console.log('Also add DMARC (see docs/email-deliverability.md) — without it Gmail/Yahoo junk the mail.');
+  console.log('Until the sending domain is verified, Resend only delivers to the account owner.');
 }
 
 const listed = await resend('/domains');
