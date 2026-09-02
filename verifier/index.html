@@ -1705,8 +1705,8 @@
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
-          <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
+          <button role="tab" data-tab="integrity" aria-selected="true">Analysis</button>
+          <button role="tab" data-tab="custody" aria-selected="false">Viewing History</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
           <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
         </div>
@@ -4871,7 +4871,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">Ask about this clip. Answers come from the Scope of Work reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
@@ -5728,7 +5728,7 @@
     return settled;
   }
 
-  /** Scope of Work reads the video. Keep asking the server until that reading lands. */
+  /** Analysis reads the video. Keep asking the server until that reading lands. */
   function watchRemoteReading(item) {
     if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
     var next = item.analysis && item.analysis.state;

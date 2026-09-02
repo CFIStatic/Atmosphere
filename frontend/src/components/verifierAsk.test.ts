@@ -39,13 +39,20 @@ describe('verifier clip Ask tab and live analysis', () => {
   it('puts Ask next to Details on the evidence sheet', () => {
     const tabs = verifierHtml.match(/<div class="tabs" role="tablist">[\s\S]*?<\/div>/);
     expect(tabs).not.toBeNull();
+    expect(tabs![0]).toMatch(/>Analysis</);
+    expect(tabs![0]).toMatch(/>Viewing History</);
     expect(tabs![0]).toContain('data-tab="details"');
     expect(tabs![0]).toContain('data-tab="ask"');
     expect(tabs![0].indexOf('data-tab="details"')).toBeLessThan(tabs![0].indexOf('data-tab="ask"'));
+    expect(tabs![0]).toMatch(/>Details</);
     expect(tabs![0]).toMatch(/>Ask</);
+    expect(tabs![0]).not.toMatch(/Scope of work/i);
+    expect(tabs![0]).not.toMatch(/Chain of custody/i);
+    expect(verifierHtml).toContain('Answers come from the Analysis reading');
+    expect(verifierHtml).not.toContain('Answers come from the Scope of Work reading');
   });
 
-  it('shows what the AI saw on the Scope of work tab without requiring playback', () => {
+  it('shows what the AI saw on the Analysis tab without requiring playback', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
     expect(verifierHtml).toContain('What the AI saw, in order');
     expect(verifierHtml).toContain('You do not have to watch the clip');
@@ -76,6 +83,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     expect(document.getElementById('detail')?.getAttribute('data-open')).toBe('1');
+    const tabLabels = Array.from(document.querySelectorAll('.tabs [role="tab"]')).map(
+      (el) => (el.textContent || '').trim(),
+    );
+    expect(tabLabels).toEqual(['Analysis', 'Viewing History', 'Details', 'Ask']);
     expect(document.getElementById('d-saw')).not.toBeNull();
     expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog')).not.toBeNull();
