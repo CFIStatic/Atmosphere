@@ -9,6 +9,47 @@ const verifierHtml = readFileSync(
   'utf8',
 );
 
+function scaleXOf(el: HTMLElement | null) {
+  const match = /scaleX\(([^)]+)\)/.exec(el?.style.transform || '');
+  return match ? Number(match[1]) : NaN;
+}
+
+function installPlaybackClock(dom: JSDOM) {
+  const queued: Array<FrameRequestCallback | null> = [];
+  const now = { t: 0 };
+  const originalRaf = dom.window.requestAnimationFrame;
+  const originalCancel = dom.window.cancelAnimationFrame;
+  const originalNow = dom.window.performance.now.bind(dom.window.performance);
+  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+    queued.push(cb);
+    return queued.length;
+  }) as typeof requestAnimationFrame;
+  dom.window.cancelAnimationFrame = ((id: number) => {
+    if (id > 0 && id <= queued.length) queued[id - 1] = null;
+  }) as typeof cancelAnimationFrame;
+  Object.defineProperty(dom.window.performance, 'now', {
+    configurable: true,
+    value: () => now.t,
+  });
+  return {
+    now,
+    flush() {
+      const pending = queued.splice(0);
+      pending.forEach((cb) => {
+        if (cb) cb(now.t);
+      });
+    },
+    restore() {
+      dom.window.requestAnimationFrame = originalRaf;
+      dom.window.cancelAnimationFrame = originalCancel;
+      Object.defineProperty(dom.window.performance, 'now', {
+        configurable: true,
+        value: originalNow,
+      });
+    },
+  };
+}
+
 function bootVerifier(html = verifierHtml) {
   return new JSDOM(html, {
     url: 'https://atmosphere.test/verifier/?demo=1',
@@ -59,9 +100,7 @@ describe('verifier dashboard video preview screen', () => {
     const previewBody = verifierHtml.match(/\.screen-preview \.sheetbody \{[\s\S]*?\n  \}/);
     expect(previewBody?.[0]).toContain('minmax(420px, 1.15fr)');
     expect(previewBody?.[0]).not.toContain('minmax(300px, 0.8fr)');
-    expect(verifierHtml).toContain(
-      'grid-template-columns: minmax(0, 1.35fr) minmax(400px, 1.1fr)',
-    );
+    expect(verifierHtml).toContain('grid-template-columns: minmax(0, 1.35fr) minmax(400px, 1.1fr)');
   });
 
   it('opens the clip as a liquid-glass overlay over the dashboard', () => {
@@ -148,7 +187,9 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
 
-    document.getElementById('d-back')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    document
+      .getElementById('d-back')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     expect(preview?.getAttribute('data-open')).toBe('0');
     expect(preview?.hidden).toBe(true);
@@ -178,7 +219,9 @@ describe('verifier dashboard video preview screen', () => {
   });
 
   it('stacks the phone clip viewer: video above notes, no two-column squeeze', () => {
-    expect(verifierHtml).toContain('Phone / Field Capture: full-screen clip, video above the notes.');
+    expect(verifierHtml).toContain(
+      'Phone / Field Capture: full-screen clip, video above the notes.',
+    );
     expect(verifierHtml).toContain('.screen-preview .sheethead .id { display: none; }');
     expect(verifierHtml).toContain('grid-template-rows: auto minmax(0, 1fr)');
     expect(verifierHtml).toContain('aspect-ratio: 9 / 16');
@@ -229,7 +272,9 @@ describe('verifier dashboard video preview screen', () => {
     expect(fill!.style.transform === '' || fill!.style.transform === 'scaleX(0)').toBe(true);
     expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('0');
 
-    document.getElementById('d-yt-play')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     now.t = 71500;
     const pending = queued.splice(0);
@@ -242,7 +287,17 @@ describe('verifier dashboard video preview screen', () => {
 
     const line = document.getElementById('d-progress') as HTMLElement;
     Object.defineProperty(line, 'getBoundingClientRect', {
-      value: () => ({ left: 0, width: 200, top: 0, right: 200, bottom: 16, height: 16, x: 0, y: 0, toJSON() {} }),
+      value: () => ({
+        left: 0,
+        width: 200,
+        top: 0,
+        right: 200,
+        bottom: 16,
+        height: 16,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }),
     });
     line.dispatchEvent(new dom.window.PointerEvent('pointerdown', { clientX: 50, bubbles: true }));
     expect(fill!.style.transform).toBe('scaleX(0.25)');
@@ -253,6 +308,137 @@ describe('verifier dashboard video preview screen', () => {
       configurable: true,
       value: originalNow,
     });
+    dom.window.close();
+  });
+
+  it('starts playback from a pre-play scrub instead of jumping back to zero', async () => {
+    const dom = bootVerifier();
+    const clock = installPlaybackClock(dom);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const fill = document.getElementById('d-progress-fill');
+    const line = document.getElementById('d-progress') as HTMLElement;
+    Object.defineProperty(line, 'getBoundingClientRect', {
+      value: () => ({
+        left: 0,
+        width: 200,
+        top: 0,
+        right: 200,
+        bottom: 16,
+        height: 16,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }),
+    });
+    line.dispatchEvent(new dom.window.PointerEvent('pointerdown', { clientX: 50, bubbles: true }));
+    dom.window.dispatchEvent(
+      new dom.window.PointerEvent('pointerup', { clientX: 50, bubbles: true }),
+    );
+    expect(fill!.style.transform).toBe('scaleX(0.25)');
+
+    document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    clock.now.t = 1000;
+    clock.flush();
+
+    expect(scaleXOf(fill)).toBeCloseTo(36.75 / 143, 5);
+    expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('26');
+    expect(document.getElementById('d-time')?.textContent).toMatch(/0:37\s*\/\s*2:23/);
+
+    clock.restore();
+    dom.window.close();
+  });
+
+  it('does not add idle time after a paused demo scrub', async () => {
+    const dom = bootVerifier();
+    const clock = installPlaybackClock(dom);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    clock.now.t = 20000;
+    clock.flush();
+
+    document
+      .getElementById('d-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const fill = document.getElementById('d-progress-fill');
+    const line = document.getElementById('d-progress') as HTMLElement;
+    Object.defineProperty(line, 'getBoundingClientRect', {
+      value: () => ({
+        left: 0,
+        width: 200,
+        top: 0,
+        right: 200,
+        bottom: 16,
+        height: 16,
+        x: 0,
+        y: 0,
+        toJSON() {},
+      }),
+    });
+    line.dispatchEvent(new dom.window.PointerEvent('pointerdown', { clientX: 50, bubbles: true }));
+    dom.window.dispatchEvent(
+      new dom.window.PointerEvent('pointerup', { clientX: 50, bubbles: true }),
+    );
+    expect(scaleXOf(fill)).toBeCloseTo(0.25, 1);
+
+    clock.now.t = 50000;
+    clock.flush();
+    expect(scaleXOf(fill)).toBeCloseTo(0.25, 1);
+
+    document
+      .getElementById('d-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    clock.now.t = 51000;
+    clock.flush();
+
+    expect(scaleXOf(fill)).toBeCloseTo(36.75 / 143, 5);
+    expect(document.getElementById('d-time')?.textContent).toMatch(/0:37\s*\/\s*2:23/);
+
+    clock.restore();
+    dom.window.close();
+  });
+
+  it('keeps the demo progress line at the end after the last frame', async () => {
+    const dom = bootVerifier();
+    const clock = installPlaybackClock(dom);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    clock.now.t = 143000;
+    clock.flush();
+    clock.flush();
+
+    const fill = document.getElementById('d-progress-fill');
+    expect(fill!.style.transform).toBe('scaleX(1)');
+    expect(document.getElementById('d-progress')?.getAttribute('aria-valuenow')).toBe('100');
+    expect(document.getElementById('d-time')?.textContent).toMatch(/2:23\s*\/\s*2:23/);
+
+    clock.restore();
     dom.window.close();
   });
 });

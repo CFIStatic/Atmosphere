@@ -2447,6 +2447,7 @@
   var progressRaf = 0;
   var frameRaf = 0;
   var progressDragging = false;
+  var pendingSeek = null;
 
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
@@ -2588,9 +2589,10 @@
 
   function playbackSeconds(item, video) {
     if (video) return video.currentTime || 0;
-    if (item && state.playStartedAt != null) {
+    if (item && state.playStartedAt != null && frameRaf) {
       return Math.max(0, (performance.now() - state.playStartedAt) / 1000);
     }
+    if (pendingSeek != null) return pendingSeek;
     return currentPlayhead();
   }
 
@@ -2646,6 +2648,7 @@
       return;
     }
     var seconds = ratio * duration;
+    if (!vid && !frameRaf) pendingSeek = seconds;
     setProgressRatio(ratio);
     updatePlayClock(seconds, duration);
     if (vid) {
@@ -2707,6 +2710,7 @@
   function resetProgress() {
     stopProgressLoop();
     state.playStartedAt = null;
+    pendingSeek = null;
     setProgressRatio(0);
     setPlayButton(false);
   }
@@ -4518,11 +4522,18 @@
 
   function startPreviewPlayback(item) {
     if (!item) return;
+    var startAt = pendingSeek;
     stopPlay();
     if (item._videoUrl) {
       paintPreviewVideo(item);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
+        if (startAt != null) {
+          try { vid.currentTime = startAt; } catch (err) {}
+          var length = clipLength(item, vid);
+          if (length > 0) setProgressRatio(startAt / length);
+          pendingSeek = null;
+        }
         var attempt = vid.play();
         if (attempt && attempt.catch) {
           attempt.catch(function () {
@@ -4534,7 +4545,8 @@
       return;
     }
     ensureFrames(item);
-    setFrame(0);
+    if (startAt != null) seekTo(startAt);
+    else setFrame(0);
     startFramePlayback();
   }
 
@@ -4663,8 +4675,9 @@
     ensureFrames(item);
     var duration = clipLength(item, null) || 1;
     var already = 0;
-    if (state.playStartedAt != null) already = playbackSeconds(item, null);
+    if (pendingSeek != null) already = pendingSeek;
     else if (state.frame > 0) already = currentPlayhead();
+    pendingSeek = null;
     state.playStartedAt = performance.now() - already * 1000;
     setPlayButton(true);
     var tick = function (now) {
@@ -4682,6 +4695,8 @@
       else syncAnalysisLog(at);
       if (at >= duration) {
         state.playStartedAt = null;
+        pendingSeek = null;
+        stopProgressLoop();
         setProgressRatio(1);
         updatePlayClock(duration, duration);
         setPlayButton(false);
@@ -4956,8 +4971,12 @@
       var d = Math.abs((f.at || 0) - seconds);
       if (d < dist) { dist = d; best = i; }
     });
-    if (frameRaf || progressDragging) {
+    if (frameRaf) {
       state.playStartedAt = performance.now() - seconds * 1000;
+      setFrame(best);
+      return;
+    }
+    if (progressDragging) {
       setFrame(best);
       return;
     }
