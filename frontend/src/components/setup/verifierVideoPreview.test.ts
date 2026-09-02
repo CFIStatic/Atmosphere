@@ -54,6 +54,16 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toMatch(/th style="width:128px"[^>]*data-sort-key="preview"/);
   });
 
+  it('gives the Ask chat a wider column so transcript lines are not cramped', () => {
+    expect(verifierHtml).toContain('width: min(1280px, 100%)');
+    const previewBody = verifierHtml.match(/\.screen-preview \.sheetbody \{[\s\S]*?\n  \}/);
+    expect(previewBody?.[0]).toContain('minmax(420px, 1.15fr)');
+    expect(previewBody?.[0]).not.toContain('minmax(300px, 0.8fr)');
+    expect(verifierHtml).toContain(
+      'grid-template-columns: minmax(0, 1.35fr) minmax(400px, 1.1fr)',
+    );
+  });
+
   it('opens the clip as a liquid-glass overlay over the dashboard', () => {
     expect(verifierHtml).toContain('id="screen-dashboard"');
     expect(verifierHtml).toMatch(/id="detail"[^>]*role="dialog"/);
