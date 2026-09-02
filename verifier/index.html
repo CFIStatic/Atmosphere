@@ -3499,7 +3499,6 @@
         toast('On legal hold — this clip cannot be deleted while the hold stands.');
         return;
       }
-      if (!window.confirm('Delete ' + item.id + '? The chain of custody keeps the record of its life either way.')) return;
       deleteLibraryClip(item);
       return;
     }
