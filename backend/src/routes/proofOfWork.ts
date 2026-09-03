@@ -1702,6 +1702,7 @@ export async function runProofAsk(input: {
   requestId: string;
 }): Promise<{
   answer: string;
+  model: string | null;
   groundedOn: number;
   question: { id: string; question: string; answer: string; grounded_on: unknown; created_at: string } | null;
 }> {
@@ -1940,6 +1941,7 @@ export async function runProofAsk(input: {
 
     return {
       answer: result.answer,
+      model: result.model,
       question: stored ?? null,
       groundedOn: result.groundedOn || groundedOn.length,
     };

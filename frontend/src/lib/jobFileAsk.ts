@@ -43,6 +43,7 @@ export interface JobFileTurn {
   role: 'user' | 'assistant';
   content: string;
   groundedOn?: number;
+  model?: string | null;
   at: string;
 }
 

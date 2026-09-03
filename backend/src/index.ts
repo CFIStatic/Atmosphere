@@ -12,6 +12,8 @@ import {
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
 import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
+import { askProviderLabel } from './lib/askModel.js';
+import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
 
 try {
@@ -37,6 +39,8 @@ const server = app.listen(config.port, host, () => {
     computerUse: config.computerUse.enabled,
     captureAgent: config.estimator.captureAgent.enabled,
     cyber: config.cyber.enabled,
+    ask: askProviderLabel(),
+    vision: visionProviderLabel(),
     mode: config.isProduction ? 'production' : 'development',
   });
 

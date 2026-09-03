@@ -44,7 +44,12 @@ function TypingDots() {
 
 export type JobAskFn = (
   question: string,
-) => Promise<{ answer: string; groundedOn: number; question?: ProofQuestion | null }>;
+) => Promise<{
+  answer: string;
+  groundedOn: number;
+  model?: string | null;
+  question?: ProofQuestion | null;
+}>;
 
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
@@ -160,6 +165,7 @@ export function JobAskPanel({
           role: 'assistant',
           content: res.answer,
           groundedOn: res.groundedOn,
+          model: res.model,
           at: res.question?.created_at ?? now,
         },
       ]);
@@ -245,7 +251,9 @@ export function JobAskPanel({
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
+                    <p className="mt-1.5 text-[11px] text-ink-400">
+                      {turn.model ? `Live model · ${turn.model}` : 'From this job file'}
+                    </p>
                   )}
                 </div>
               </li>

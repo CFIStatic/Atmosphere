@@ -7,17 +7,12 @@
  * "describe only what is visible", so an answer built from them inherits that
  * discipline.
  *
- * When a model is configured it writes the prose; when it is not, a grounded
- * lookup still answers from the same record so the Ask tab works in demo and
- * in environments without a provider.
+ * When a model is configured (Anthropic or Gemini) it writes the prose; when
+ * it is not, a grounded lookup still answers from the same record so the Ask
+ * tab works in demo and in environments without a provider.
  */
-import {
-  anthropicClient,
-  isModelProviderConfigured,
-  tryExtractUsage,
-  type MeasuredUsage,
-} from '../lib/anthropic.js';
-import { config } from '../config.js';
+import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { type MeasuredUsage } from '../lib/anthropic.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -502,7 +497,7 @@ export async function answerFromClip(input: {
   history?: ClipAskTurn[];
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  if (!isModelProviderConfigured()) return { answer: grounded, model: null, usage: null };
+  if (!isAskModelConfigured()) return { answer: grounded, model: null, usage: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
   if (!reading) return { answer: grounded, model: null, usage: null };
@@ -513,31 +508,14 @@ export async function answerFromClip(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${turn.text.trim()}`)
     .join('\n');
 
-  try {
-    const response = await anthropicClient().messages.create({
-      model: config.technician.assistant.model,
-      max_tokens: 500,
-      system: CLIP_QA_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Reading of this clip:\n\n${reading}` +
-            (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
-            `\n\nQuestion: ${input.question}`,
-        },
-      ],
-    });
-    const answer = response.content
-      .filter((block: { type: string }) => block.type === 'text')
-      .map((block: { type: string; text?: string }) => block.text ?? '')
-      .join('\n')
-      .trim();
-    const usage = tryExtractUsage(response.usage);
-    return answer
-      ? { answer, model: response.model, usage }
-      : { answer: grounded, model: null, usage };
-  } catch {
-    return { answer: grounded, model: null, usage: null };
-  }
+  const completed = await completeAskText({
+    system: CLIP_QA_SYSTEM,
+    user:
+      `Reading of this clip:\n\n${reading}` +
+      (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
+      `\n\nQuestion: ${input.question}`,
+  });
+  return completed
+    ? { answer: completed.text, model: completed.model, usage: completed.usage }
+    : { answer: grounded, model: null, usage: null };
 }

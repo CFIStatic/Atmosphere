@@ -3302,7 +3302,7 @@ export const api = {
     }),
 
   askAboutProofs: (jobId: string, question: string) =>
-    request<{ answer: string; groundedOn: number; question: ProofQuestion }>(
+    request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion }>(
       `/api/operations/shared/${jobId}/proof/ask`,
       { method: 'POST', body: JSON.stringify({ question }) },
     ),
@@ -3403,7 +3403,7 @@ export const api = {
     ),
 
   progressShareAsk: (token: string, question: string) =>
-    request<{ answer: string; groundedOn: number; question: ProofQuestion | null }>(
+    request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }>(
       `/api/progress-share/${encodeURIComponent(token)}/ask`,
       { method: 'POST', body: JSON.stringify({ question }) },
     ),

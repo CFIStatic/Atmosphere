@@ -5,12 +5,12 @@
  * do-nots, notes, invited companies, tasks, crew, work logs, memory, uploaded
  * documents, and clip readings. A question like "what's the lockbox" or
  * "who is invited" is answerable from that record even when nothing has been
- * filmed. When a model key is wired (server ANTHROPIC_API_KEY or the org's
- * connected key) it writes the prose; otherwise a grounded lookup still
- * answers from the same text.
+ * filmed. When a model key is wired (server ANTHROPIC_API_KEY, the org's
+ * connected key, or GEMINI_API_KEY / GOOGLE_API_KEY) it writes the prose;
+ * otherwise a grounded lookup still answers from the same text.
  */
-import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
-import { config } from '../config.js';
+import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   formatCollectionRecord,
   groundedCollectionAnswer,
@@ -429,13 +429,12 @@ export async function answerFromJobFile(input: {
 }): Promise<{ answer: string; model: string | null; groundedOn: number; usage: MeasuredUsage | null }> {
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
-  const apiKey = (input.apiKey === undefined ? config.anthropic.apiKey : input.apiKey ?? '').trim();
-  const canCallModel = Boolean(apiKey);
+  const apiKey = (input.apiKey ?? '').trim();
 
   if (!jobFileHasContent(input.file)) {
     return { answer: grounded, model: null, groundedOn: 0, usage: null };
   }
-  if (!canCallModel) {
+  if (!isAskModelConfigured(apiKey || null)) {
     return { answer: grounded, model: null, groundedOn, usage: null };
   }
 
@@ -448,31 +447,15 @@ export async function answerFromJobFile(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
     .join('\n');
 
-  try {
-    const client = anthropicClientForKey(apiKey || config.anthropic.apiKey);
-    const response = await client.messages.create({
-      model: config.technician.assistant.model,
-      max_tokens: 500,
-      system: FILE_QA_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Job file record:\n\n${record}` +
-            (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
-            `\n\nQuestion: ${input.question}`,
-        },
-      ],
-    });
-    const answer = response.content
-      .filter((block: { type: string }) => block.type === 'text')
-      .map((block: { type: string; text?: string }) => block.text ?? '')
-      .join('\n')
-      .trim();
-    return answer
-      ? { answer, model: response.model, groundedOn, usage: tryExtractUsage(response.usage) }
-      : { answer: grounded, model: null, groundedOn, usage: null };
-  } catch {
-    return { answer: grounded, model: null, groundedOn, usage: null };
-  }
+  const completed = await completeAskText({
+    system: FILE_QA_SYSTEM,
+    user:
+      `Job file record:\n\n${record}` +
+      (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
+      `\n\nQuestion: ${input.question}`,
+    anthropicApiKey: apiKey || null,
+  });
+  return completed
+    ? { answer: completed.text, model: completed.model, groundedOn, usage: completed.usage }
+    : { answer: grounded, model: null, groundedOn, usage: null };
 }

@@ -3674,7 +3674,7 @@ const routes: Array<[string, RegExp, Handler]> = [
                   : 'This job file does not have that. The record covers the brief, scope, notes, and clips from 2026-08-01, 08-04 and 08-05.';
     const entry = { id: `q-${Date.now()}`, question: asked, answer, grounded_on: ['brief', 'scope', '2026-08-05:after', '2026-08-04:after'], created_at: new Date().toISOString() };
     (PROOF_QUESTIONS[m[1]] ??= []).unshift(entry);
-    return { status: 201, body: { answer, question: entry, groundedOn: 4 } };
+    return { status: 201, body: { answer, question: entry, groundedOn: 4, model: null } };
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/decide$/, (m, b) => {
     const record = PROOF_DAYS[m[1]];

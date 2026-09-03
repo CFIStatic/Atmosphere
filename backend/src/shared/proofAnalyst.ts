@@ -1,9 +1,5 @@
-import {
-  anthropicClient,
-  isModelProviderConfigured,
-  tryExtractUsage,
-  type MeasuredUsage,
-} from '../lib/anthropic.js';
+import { anthropicClient, isModelProviderConfigured, type MeasuredUsage } from '../lib/anthropic.js';
+import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { config } from '../config.js';
 
 /**
@@ -590,34 +586,16 @@ export async function answerFromProofs(input: {
     };
   }
 
-  if (!isModelProviderConfigured()) {
+  if (!isAskModelConfigured()) {
     return { answer: groundedCollectionAnswer(input.question, clips), model: null, usage: null };
   }
 
   const record = formatCollectionRecord(clips);
-  try {
-    const response = await anthropicClient().messages.create({
-      model: config.technician.assistant.model,
-      max_tokens: 500,
-      system: QA_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content: `Video collection for this job:\n\n${record}\n\nQuestion: ${input.question}`,
-        },
-      ],
-    });
-
-    const answer = response.content
-      .filter((block: any) => block.type === 'text')
-      .map((block: any) => block.text)
-      .join('\n')
-      .trim();
-
-    return answer
-      ? { answer, model: response.model, usage: tryExtractUsage(response.usage) }
-      : { answer: groundedCollectionAnswer(input.question, clips), model: null, usage: null };
-  } catch {
-    return { answer: groundedCollectionAnswer(input.question, clips), model: null, usage: null };
-  }
+  const completed = await completeAskText({
+    system: QA_SYSTEM,
+    user: `Video collection for this job:\n\n${record}\n\nQuestion: ${input.question}`,
+  });
+  return completed
+    ? { answer: completed.text, model: completed.model, usage: completed.usage }
+    : { answer: groundedCollectionAnswer(input.question, clips), model: null, usage: null };
 }

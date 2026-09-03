@@ -108,15 +108,23 @@ test('empty file says so', () => {
 });
 
 test('answerFromJobFile uses the grounded file when no model key is wired', async () => {
-  const prev = process.env.ANTHROPIC_API_KEY;
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
   try {
     const result = await answerFromJobFile({ question: 'what is the permit number', file, apiKey: null });
     assert.equal(result.model, null);
     assert.match(result.answer, /BP-2026-8841/);
     assert.ok(result.groundedOn >= 4);
   } finally {
-    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = prev;
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
   }
 });

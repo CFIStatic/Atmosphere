@@ -87,6 +87,7 @@ describe('JobAskPanel', () => {
     askAboutProofs.mockResolvedValue({
       answer: 'Yes. The homeowner asked that the skylights be left alone.',
       groundedOn: 1,
+      model: 'gemini-3.6-flash',
       question: {
         id: 'q1',
         question: 'What did the homeowner say about the skylights?',
@@ -115,6 +116,7 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
+    expect(await screen.findByText('Live model · gemini-3.6-flash')).toBeInTheDocument();
   });
 
   it('asks through a guest share instead of the office session', async () => {

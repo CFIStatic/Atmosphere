@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { config } from '../config.js';
+import { askProviderLabel } from '../lib/askModel.js';
 import { visionProviderLabel } from '../lib/visionProvider.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
@@ -69,6 +70,11 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
   checks.vision = {
     ok: vision !== 'unconfigured',
     detail: vision,
+  };
+  const ask = askProviderLabel();
+  checks.ask = {
+    ok: ask !== 'unconfigured',
+    detail: ask,
   };
 
   const required = ['supabaseAuth', 'config'] as const;
