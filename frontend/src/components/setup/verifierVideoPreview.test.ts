@@ -188,7 +188,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
     expect(document.getElementById('d-time')?.hidden).toBe(true);
     expect(document.getElementById('d-time')?.textContent).not.toMatch(/screenshot/i);
-    expect(document.getElementById('d-meta')?.textContent).toBe('Aug 5');
+    expect(document.getElementById('d-meta')?.textContent).toBe('Aug 5, 2026');
     expect(document.getElementById('d-meta')?.textContent).not.toMatch(
       /EV-1038|Video|Delgado|MB|:/,
     );

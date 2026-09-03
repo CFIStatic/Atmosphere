@@ -1091,6 +1091,24 @@
   }
   .when { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
   .when small { display: block; color: var(--faint); font-size: 11px; }
+  /* Recorded column: calendar day on top, clock time underneath — never
+     restating the date in a syslog-style 24h stamp. */
+  td.job-when {
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+  td.job-when time {
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 550;
+    letter-spacing: -0.01em;
+  }
+  td.job-when small {
+    margin-top: 1px;
+    font-size: 11.5px;
+    font-weight: 450;
+    color: var(--faint);
+  }
 
   /* ---------- job files ---------- */
   tr.jobrow { background: var(--bg); cursor: pointer; }
@@ -1718,7 +1736,7 @@
             <th style="width:128px" data-sort-key="preview" aria-sort="none"><button type="button">Preview <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="job" aria-sort="none"><button type="button">Job name <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="status" aria-sort="none"><button type="button">Status <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded date <span class="sortcaret" aria-hidden="true">↓</span></button></th>
+            <th style="width:132px" data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded <span class="sortcaret" aria-hidden="true">↓</span></button></th>
             <th data-sort-key="uploader" aria-sort="none"><button type="button">Uploaded by <span class="sortcaret" aria-hidden="true">↕</span></button></th>
           </tr>
         </thead>
@@ -2738,15 +2756,38 @@
     else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
     return parts.join(' and ') + ' into the recording';
   }
+  function parseDate(iso) {
+    if (!iso) return null;
+    var raw = String(iso);
+    var d = raw.length <= 10 ? new Date(raw + 'T12:00:00') : new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
   function dayLabel(iso) {
-    var d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    var d = parseDate(iso);
+    if (!d) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function timeLabel(iso) {
+    if (!iso || String(iso).length <= 10) return '';
+    var d = parseDate(iso);
+    if (!d) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
   function stamp(iso) {
-    if (!iso) return '—';
-    var d = new Date(iso);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    var d = parseDate(iso);
+    if (!d) return '—';
+    var day = dayLabel(iso);
+    var time = timeLabel(iso);
+    return time ? day + ' · ' + time : day;
+  }
+  function whenCell(dayIso, instantIso) {
+    var day = dayLabel(dayIso || instantIso);
+    var time = timeLabel(instantIso);
+    var dt = instantIso || dayIso || '';
+    var title = stamp(instantIso || dayIso);
+    var html = '<time datetime="' + String(dt) + '" title="' + title + '">' + day + '</time>';
+    if (time) html += '<small>' + time + '</small>';
+    return html;
   }
 
   /** The overall integrity verdict, and the rule that governs the whole product. */
@@ -3146,7 +3187,7 @@
           '</div>' +
         '</td>' +
         '<td class="job-status"><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
-        '<td class="when job-when">' + clipDay + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
+        '<td class="when job-when">' + whenCell(e.workDate, e.capturedAt || e.uploadedAt) + '</td>' +
         '<td class="when uploader job-who"><span class="cellrow"><span>' + esc(e.person || '—') + '<small>' + esc(e.company || '') + '</small></span>' +
           '<button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(e.id) + '">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
@@ -3448,13 +3489,15 @@
     var latestRecorded = latestClip(items, ['capturedAt', 'workDate', 'uploadedAt']);
     var latestUpload = latestClip(items, ['uploadedAt', 'capturedAt']);
     var recordedDay = '—';
-    var recordedStamp = '';
+    var recordedInstant = '';
+    var daySrc = '';
     if (latestRecorded) {
-      var daySrc = latestRecorded.workDate ||
+      daySrc = latestRecorded.workDate ||
         (latestRecorded.capturedAt && String(latestRecorded.capturedAt).slice(0, 10)) ||
-        (latestRecorded.uploadedAt && String(latestRecorded.uploadedAt).slice(0, 10));
+        (latestRecorded.uploadedAt && String(latestRecorded.uploadedAt).slice(0, 10)) ||
+        '';
       recordedDay = daySrc ? dayLabel(daySrc) : '—';
-      recordedStamp = stamp(latestRecorded.capturedAt || latestRecorded.uploadedAt);
+      recordedInstant = latestRecorded.capturedAt || latestRecorded.uploadedAt || '';
     }
     var uploader = latestUpload
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
@@ -3491,7 +3534,7 @@
         '</span></td>' +
         '<td class="titlecell">' + nameCell + phoneMeta + '</td>' +
         '<td class="job-status"><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
-        '<td class="when job-when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
+        '<td class="when job-when">' + whenCell(daySrc, recordedInstant) + '</td>' +
         '<td class="when uploader job-who"><span class="cellrow"><span>' + uploader + '</span>' + acts + '</span></td>' +
       '</tr>';
   }
