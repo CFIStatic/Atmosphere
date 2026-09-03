@@ -1936,7 +1936,7 @@ export async function runProofAsk(input: {
         grounded_on: groundedOn,
         asked_by: userId ?? null,
       })
-      .select('id, question, answer, grounded_on, created_at')
+      .select('id, question, answer, model, grounded_on, created_at')
       .single();
 
     return {
@@ -1980,7 +1980,7 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
     const { orgId, supabase } = await requireOrgContext(req);
     const { data } = await supabase
       .from('job_proof_questions')
-      .select('id, question, answer, grounded_on, created_at')
+      .select('id, question, answer, model, grounded_on, created_at')
       .eq('org_id', orgId)
       .eq('job_id', req.params.jobId)
       .order('created_at', { ascending: false })

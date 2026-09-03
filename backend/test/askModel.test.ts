@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  GEMINI_ASK_MAX_TOKENS,
   askProviderLabel,
   completeAskText,
   isAskModelConfigured,
@@ -45,18 +46,25 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
   delete process.env.GOOGLE_API_KEY;
   process.env.GEMINI_API_KEY = 'live-gemini';
   try {
-    const calls: Array<{ url: string; key: string | null }> = [];
+    const calls: Array<{ url: string; key: string | null; maxOutputTokens: number | null }> = [];
     const fetchFn: typeof fetch = async (input, init) => {
       const url = String(input);
       const headers = new Headers(init?.headers);
-      calls.push({ url, key: headers.get('x-goog-api-key') });
-      assert.match(url, /gemini-3\.6-flash:generateContent/);
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         system_instruction?: { parts?: Array<{ text?: string }> };
         contents?: Array<{ parts?: Array<{ text?: string }> }>;
+        generationConfig?: { maxOutputTokens?: number };
       };
+      calls.push({
+        url,
+        key: headers.get('x-goog-api-key'),
+        maxOutputTokens: body.generationConfig?.maxOutputTokens ?? null,
+      });
+      assert.match(url, /gemini-3\.6-flash:generateContent/);
       assert.match(body.system_instruction?.parts?.[0]?.text ?? '', /job file/i);
       assert.match(body.contents?.[0]?.parts?.[0]?.text ?? '', /what happens/i);
+      assert.equal(body.generationConfig?.maxOutputTokens, GEMINI_ASK_MAX_TOKENS);
+      assert.ok((body.generationConfig?.maxOutputTokens ?? 0) >= 2048);
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'North slope is stripped to decking.' }] } }],

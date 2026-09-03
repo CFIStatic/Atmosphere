@@ -20,6 +20,15 @@ import { logger } from './logger.js';
 
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
+/** Short office replies. Anthropic counts only visible output. */
+export const ANTHROPIC_ASK_MAX_TOKENS = 500;
+/**
+ * Gemini thinking models spend `maxOutputTokens` on hidden reasoning first.
+ * 500 can return an empty candidate and dump Ask back to keyword matching.
+ * Clip reading on the same Flash default uses 2048–2500.
+ */
+export const GEMINI_ASK_MAX_TOKENS = 2048;
+
 export type AskModelResult = {
   text: string;
   model: string;
@@ -150,7 +159,8 @@ export async function completeAskText(input: {
   maxTokens?: number;
   fetchFn?: typeof fetch;
 }): Promise<AskModelResult | null> {
-  const maxTokens = input.maxTokens ?? 500;
+  const anthropicMax = input.maxTokens ?? ANTHROPIC_ASK_MAX_TOKENS;
+  const geminiMax = Math.max(anthropicMax, GEMINI_ASK_MAX_TOKENS);
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
 
   if (anthropicKey) {
@@ -159,7 +169,7 @@ export async function completeAskText(input: {
         apiKey: anthropicKey,
         system: input.system,
         user: input.user,
-        maxTokens,
+        maxTokens: anthropicMax,
       });
     } catch (err) {
       logger.warn('ask_anthropic_failed', { detail: errorDetail(err) });
@@ -173,7 +183,7 @@ export async function completeAskText(input: {
         apiKey: googleKey,
         system: input.system,
         user: input.user,
-        maxTokens,
+        maxTokens: geminiMax,
         fetchFn: input.fetchFn,
       });
     } catch (err) {

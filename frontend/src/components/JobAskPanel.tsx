@@ -165,7 +165,7 @@ export function JobAskPanel({
           role: 'assistant',
           content: res.answer,
           groundedOn: res.groundedOn,
-          model: res.model,
+          model: res.model ?? res.question?.model,
           at: res.question?.created_at ?? now,
         },
       ]);

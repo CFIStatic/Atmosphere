@@ -829,6 +829,7 @@ export interface ProofQuestion {
   id: string;
   question: string;
   answer: string | null;
+  model?: string | null;
   grounded_on: string[];
   created_at: string;
 }

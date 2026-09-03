@@ -171,6 +171,7 @@ describe('turnsFromQuestions', () => {
         id: 'q2',
         question: 'Was the tarp removed?',
         answer: 'Yes. Twelve seconds into the after clip.',
+        model: 'gemini-3.6-flash',
         grounded_on: ['2026-08-05:after'],
         created_at: '2026-08-06T12:00:00Z',
       },
@@ -178,6 +179,7 @@ describe('turnsFromQuestions', () => {
         id: 'q1',
         question: 'What happened?',
         answer: 'The north slope was stripped.',
+        model: 'gemini-3.6-flash',
         grounded_on: ['2026-08-05:after'],
         created_at: '2026-08-06T11:00:00Z',
       },
@@ -187,6 +189,10 @@ describe('turnsFromQuestions', () => {
       'The north slope was stripped.',
       'Was the tarp removed?',
       'Yes. Twelve seconds into the after clip.',
+    ]);
+    expect(turns.filter((turn) => turn.role === 'assistant').map((turn) => turn.model)).toEqual([
+      'gemini-3.6-flash',
+      'gemini-3.6-flash',
     ]);
   });
 });
