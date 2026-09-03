@@ -1,6 +1,5 @@
 import {
   BoltIcon,
-  BriefcaseIcon,
   DecisionIcon,
   GaugeIcon,
   MicIcon,
@@ -48,14 +47,12 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
-/** Office rail — these four labels only, in this order. */
+/** Office rail — Start a job and Dashboard, in this order. */
 const WORK: NavGroup = {
   label: 'Work',
   items: [
-    { to: '/field', label: 'Overview', Icon: GaugeIcon },
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-    { to: '/jobs', label: 'Job Files', Icon: BriefcaseIcon },
   ],
 };
 

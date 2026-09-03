@@ -8,25 +8,25 @@ const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html
 const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 
 describe('verifier office rail', () => {
-  it('lists Overview, Start a job, Dashboard, and Job Files', () => {
+  it('lists Start a job and Dashboard', () => {
     const nav = verifierHtml.match(
       /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
     );
     expect(nav).not.toBeNull();
     const labels = [...nav![0].matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1]);
-    expect(labels).toEqual(['Overview', 'Start a job', 'Dashboard', 'Job Files']);
-    expect(nav![0]).toContain('data-route="/field"');
+    expect(labels).toEqual(['Start a job', 'Dashboard']);
+    expect(nav![0]).not.toContain('data-route="/field"');
     expect(nav![0]).not.toContain('data-route="/my-work"');
     expect(nav![0]).toContain('data-screen="dashboard"');
-    expect(nav![0]).toContain('data-route="/jobs"');
+    expect(nav![0]).not.toContain('data-route="/jobs"');
     expect(nav![0]).not.toContain('>Field<');
   });
 
-  it('hands Overview and Job Files to the office shell', () => {
-    expect(verifierHtml).toContain("goShell('/field')");
+  it('hands Start a job to the office shell', () => {
+    expect(verifierHtml).not.toContain("goShell('/field')");
     expect(verifierHtml).toContain("to: '/settings'");
     expect(verifierHtml).not.toContain("goShell('/my-work')");
-    expect(verifierHtml).toContain("goShell('/jobs')");
+    expect(verifierHtml).not.toContain("goShell('/jobs')");
     expect(verifierHtml).toContain("goShell('/intake')");
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
