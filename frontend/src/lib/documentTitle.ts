@@ -20,7 +20,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/jobs': 'Job Files',
   '/technician': 'Field capture',
   '/settings': 'Settings',
-  '/field': 'Overview',
+  '/field': 'Dashboard',
   '/my-jobs': 'My jobs',
   '/shared': 'Shared job',
   '/report': 'Report',

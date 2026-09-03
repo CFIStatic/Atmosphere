@@ -4,6 +4,7 @@ import { DASHBOARD_HOME, PLATFORM_HOME, PLATFORMS } from './platforms';
 describe('operations rail destinations', () => {
   it('keeps sign-in on the Dashboard library', () => {
     expect(PLATFORM_HOME.operations).toBe('/verifier-library');
+    expect(PLATFORM_HOME.field).toBe('/verifier-library');
     expect(DASHBOARD_HOME).toBe('/verifier-library');
   });
 

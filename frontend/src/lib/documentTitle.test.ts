@@ -15,7 +15,7 @@ describe('documentTitleFor', () => {
     expect(documentTitleFor('/jobs/abc')).toBe('Job file · Atmosphere');
     expect(documentTitleFor('/job-progress')).toBe('Job file · Atmosphere');
     expect(documentTitleFor('/progress/abc')).toBe('Job file · Atmosphere');
-    expect(documentTitleFor('/field')).toBe('Overview · Atmosphere');
+    expect(documentTitleFor('/field')).toBe('Dashboard · Atmosphere');
     expect(documentTitleFor('/settings')).toBe('Settings · Atmosphere');
   });
 

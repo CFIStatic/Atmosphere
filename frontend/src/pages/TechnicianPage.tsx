@@ -182,11 +182,11 @@ export function TechnicianPage() {
             Operate
           </p>
           <Link
-            to="/field"
+            to="/verifier-library"
             className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-600 transition hover:bg-paper-300/60 hover:text-ink-900"
           >
             <GaugeIcon width={17} height={17} />
-            Overview
+            Dashboard
           </Link>
         </nav>
 

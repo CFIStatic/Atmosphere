@@ -233,7 +233,7 @@ export function MyWorkPage() {
 
         {fieldFirst && (
           <div className="flex justify-center">
-            <Link to="/field">
+            <Link to="/technician">
               <Button variant="primary" size="lg">
                 Open field mode
               </Button>

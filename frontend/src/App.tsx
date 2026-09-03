@@ -26,7 +26,6 @@ import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
 import { OperationsShell } from './layouts/OperationsShell';
 import { JobSharePage } from './pages/JobSharePage';
-import { PlatformHomePage } from './pages/PlatformHomePage';
 import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
 import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
@@ -287,10 +286,10 @@ export default function App() {
             }
           />
 
-          {/* /overview and /dashboard keep older links alive by landing on the
-              platform the person last used. */}
+          {/* /overview and /dashboard keep older links alive on the Dashboard.
+              The Overview screen is gone. */}
           <Route path="/dashboard" element={<PlatformRedirect />} />
-          <Route path="/overview" element={<PlatformRedirect />} />
+          <Route path="/overview" element={<Navigate to="/verifier-library" replace />} />
 
           <Route
             element={
@@ -304,8 +303,8 @@ export default function App() {
             }
           >
             <Route path="/verifier-library" element={null} />
-            <Route path="/field" element={<PlatformHomePage platform="field" />} />
-            <Route path="/my-work" element={<Navigate to="/field" replace />} />
+            <Route path="/field" element={<Navigate to="/verifier-library" replace />} />
+            <Route path="/my-work" element={<Navigate to="/verifier-library" replace />} />
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
             {/* Same job file as Overview — /jobs/:id bookmarks join /job-progress. */}
