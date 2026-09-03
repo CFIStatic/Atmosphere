@@ -1788,7 +1788,7 @@
 </div>
 
 <!-- One menu, repositioned to whichever row's dots opened it. Share, Delete,
-     Save, Export, Property twin — clip actions only appear once a video exists. -->
+     Save, Export — clip actions only appear once a video exists. -->
 <div class="rowmenu" id="rowmenu" role="menu" aria-label="Clip actions" hidden>
   <button role="menuitem" data-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg>
@@ -1805,10 +1805,6 @@
   <button role="menuitem" data-act="export">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3H7a1.8 1.8 0 0 0-1.8 1.8v14.4A1.8 1.8 0 0 0 7 21h10a1.8 1.8 0 0 0 1.8-1.8V8.3z"/><path d="M13.5 3v5.3h5.3"/></svg>
     Export
-  </button>
-  <button role="menuitem" data-act="twin">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
-    Property twin
   </button>
 </div>
 <div class="rowmenu" id="jobmenu" role="menu" aria-label="Job file actions" hidden>
@@ -3800,18 +3796,6 @@
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
       toast('Record exported: metadata, checks, analysis, custody. The video itself goes through the download flow.');
-      return;
-    }
-
-    if (act === 'twin') {
-      // Twins belong to a filed clip's job — open from the row menu once a
-      // video exists, not from the empty library chrome.
-      var twinUrl = '/verifier/twin.html';
-      if (item.job) twinUrl += '?job=' + encodeURIComponent(item.job);
-      var embedded = document.body.hasAttribute('data-atm-embed') ||
-        new URLSearchParams(location.search).get('embed') === '1';
-      if (embedded) window.open(twinUrl, '_blank', 'noopener');
-      else location.href = twinUrl;
       return;
     }
   }
