@@ -297,25 +297,6 @@ export function JobProgressDashboard({
                 </p>
               </div>
             )}
-
-            <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
-              {(
-                [
-                  ['happening', 'Happening now', happeningCount, happeningCount > 0 ? 'text-caution-600' : 'text-ink-900'],
-                  ['happened', 'Already done', doneCount, 'text-success-600'],
-                  ['next', 'Still ahead', nextItems.length || nextCount, 'text-ink-900'],
-                ] as const
-              ).map(([target, label, value, valueClass]) => (
-                <div key={target} className="rounded-lg border border-line bg-paper-50/40 px-2 py-3">
-                  <dt className="text-xs text-ink-500">
-                    <a href={`#${target}`} className="hover:text-ink-800">
-                      {label}
-                    </a>
-                  </dt>
-                  <dd className={`mt-0.5 text-2xl font-semibold tabular-nums ${valueClass}`}>{value}</dd>
-                </div>
-              ))}
-            </dl>
           </>
         )}
       </section>
