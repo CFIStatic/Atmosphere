@@ -10,7 +10,7 @@ import {
   type IntakeCaptureInvite,
 } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
-import { ChevronLeftIcon, SpinnerIcon } from '../components/icons';
+import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
@@ -288,16 +288,6 @@ export function SharedDashboardPage() {
   if (!stayOnRecord) return null;
 
   const jobId = record?.job.id ?? requestedJob ?? '';
-  const back = (
-    <button
-      type="button"
-      onClick={() => navigate('/field')}
-      className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-ink-500 transition hover:text-ink-800 lg:mb-4"
-    >
-      <ChevronLeftIcon width={16} height={16} />
-      Overview
-    </button>
-  );
 
   const fileBody = (
     <>
@@ -470,7 +460,6 @@ export function SharedDashboardPage() {
   return (
     <JobFileAskChrome
       jobId={jobId}
-      back={back}
       extra={
         shareFormOpen && record ? (
           <ShareJobProgressPanel
