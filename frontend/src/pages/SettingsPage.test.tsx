@@ -34,6 +34,7 @@ const apiMocks = vi.hoisted(() => ({
   orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
   createOrgInvite: vi.fn(),
   revokeOrgInvite: vi.fn(),
+  removeMember: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -141,7 +142,40 @@ describe('Settings profile photo', () => {
   });
 });
 
+const LINKED_ACCOUNTS = [
+  {
+    userId: 'user-1',
+    email: 'jack@jettx.ai',
+    fullName: 'Jack Cyganiak',
+    avatarUrl: null,
+    role: 'global_admin' as const,
+    workType: 'mitigation' as const,
+    usageIntents: [],
+    status: 'active',
+  },
+  {
+    userId: 'user-2',
+    email: 'el.presidente@field.atmosphere.app',
+    fullName: 'El Presidente',
+    avatarUrl: null,
+    role: 'employee' as const,
+    workType: 'construction' as const,
+    usageIntents: [],
+    status: 'active',
+  },
+];
+
 describe('Settings organization', () => {
+  beforeEach(() => {
+    authState.membership = {
+      role: 'global_admin',
+      org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' },
+    };
+    apiMocks.getMembers.mockResolvedValue({ members: [] });
+    apiMocks.removeMember.mockReset();
+    apiMocks.removeMember.mockResolvedValue({ ok: true });
+  });
+
   it('keeps team invites and linked accounts, without the org profile or Field Capture cards', async () => {
     renderSettings('/settings?section=organization');
 
@@ -154,6 +188,64 @@ describe('Settings organization', () => {
     expect(screen.queryByText('Company type')).toBeNull();
     expect(screen.queryByRole('link', { name: 'field-capture-production.up.railway.app' })).toBeNull();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
+  });
+
+  it('lets a Global Admin remove someone else, but not themselves', async () => {
+    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
+    renderSettings('/settings?section=organization');
+
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    expect(
+      screen.getByRole('button', { name: 'Remove El Presidente from this workspace' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Remove Jack Cyganiak from this workspace' }),
+    ).toBeNull();
+  });
+
+  it('unlinks a teammate after they confirm', async () => {
+    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderSettings('/settings?section=organization');
+
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Remove El Presidente from this workspace' }),
+    );
+
+    expect(confirm).toHaveBeenCalled();
+    expect(apiMocks.removeMember).toHaveBeenCalledWith('user-2');
+    await waitFor(() => expect(screen.queryByText('El Presidente')).toBeNull());
+    confirm.mockRestore();
+  });
+
+  it('leaves the teammate in place when the confirm is cancelled', async () => {
+    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSettings('/settings?section=organization');
+
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Remove El Presidente from this workspace' }),
+    );
+
+    expect(apiMocks.removeMember).not.toHaveBeenCalled();
+    expect(screen.getByText('El Presidente')).toBeInTheDocument();
+    confirm.mockRestore();
+  });
+
+  it('hides remove controls from Employees', async () => {
+    authState.membership = {
+      role: 'employee',
+      org: { id: 'org-1', name: 'Jett', joinCode: 'ABC123' },
+    };
+    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
+    renderSettings('/settings?section=organization');
+
+    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
+    expect(
+      screen.queryByRole('button', { name: /Remove .+ from this workspace/ }),
+    ).toBeNull();
   });
 });
 

@@ -2769,6 +2769,9 @@ export const api = {
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
 
+  removeMember: (userId: string) =>
+    request<{ ok: boolean }>(`/api/org/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
   // ---- CRM (customers) ----
   crmAccounts: (search = '') =>
     request<CrmList<CrmAccount>>(

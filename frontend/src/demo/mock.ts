@@ -2077,6 +2077,17 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
   ['PATCH', /^\/api\/org$/, () => ({ body: { org: membership().org } })],
   ['GET', /^\/api\/org\/members$/, () => ({ body: { members: MEMBERS } })],
+  ['DELETE', /^\/api\/org\/members\/([\w-]+)$/, (m) => {
+    const idx = MEMBERS.findIndex((row) => row.userId === m[1]);
+    if (idx < 0) {
+      return { status: 404, body: { error: 'That person is not in this workspace.', code: 'not_found' } };
+    }
+    if (MEMBERS[idx].userId === 'demo-user-1') {
+      return { status: 400, body: { error: 'You cannot remove your own login here.', code: 'cannot_remove_self' } };
+    }
+    MEMBERS.splice(idx, 1);
+    return { body: { ok: true } };
+  }],
 
   ['GET', /^\/api\/audit\/agents$/, () => ({ body: { agents: AUDIT_AGENTS } })],
   ['GET', /^\/api\/audit\/stats$/, () => ({ body: { stats: AUDIT_STATS } })],
