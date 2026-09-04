@@ -95,7 +95,7 @@ export function initPreferences(): void {
   applyDocumentPreferences(current);
   persistThemePreference(current.theme);
   // Keep React state aligned when another tab (or the marketing site) changes
-  // atmosphere.theme — otherwise Settings can show a stale selection.
+  // atmosphere.theme — otherwise the header toggle can show a stale selection.
   subscribeTheme(() => {
     const nextTheme = readThemePreference();
     if (current.theme === nextTheme) return;

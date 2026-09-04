@@ -153,14 +153,14 @@ describe('Settings organization', () => {
   });
 });
 
-describe('Settings preferences', () => {
-  it('no longer offers a product walkthrough replay', () => {
+describe('Settings sections', () => {
+  it('does not offer a Preferences tab', () => {
     renderSettings('/settings?section=preferences');
 
-    expect(screen.getByText('This device')).toBeInTheDocument();
-    expect(screen.getByText('Reduce motion')).toBeInTheDocument();
-    expect(screen.getByText('Appearance')).toBeInTheDocument();
-    expect(screen.queryByText('Product walkthrough')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Replay tour' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Preferences' })).toBeNull();
+    expect(screen.queryByText('This device')).toBeNull();
+    expect(screen.queryByText('Reduce motion')).toBeNull();
+    expect(screen.queryByText('Confirm before signing out')).toBeNull();
+    expect(screen.getByText('Your profile')).toBeInTheDocument();
   });
 });
