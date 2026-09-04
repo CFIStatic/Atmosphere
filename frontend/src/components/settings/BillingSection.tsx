@@ -6,19 +6,19 @@ import { AlertIcon, SpinnerIcon } from '../icons';
 import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
-  active: 'bg-success-50 text-success-700 ring-1 ring-success-200',
+  active: 'bg-success-50 text-success-600 ring-1 ring-success-200',
   trialing: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',
   past_due: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
-  unpaid: 'bg-caution-50 text-caution-800 ring-1 ring-caution-200',
-  incomplete: 'bg-caution-50 text-caution-800 ring-1 ring-caution-200',
+  unpaid: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
+  incomplete: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
   canceled: 'bg-paper-200/60 text-ink-500 ring-1 ring-line',
   cancelled: 'bg-paper-200/60 text-ink-500 ring-1 ring-line',
 };
 
 const PAYMENT_STYLE: Record<string, string> = {
-  succeeded: 'bg-success-50 text-success-700 ring-1 ring-success-200',
-  paid: 'bg-success-50 text-success-700 ring-1 ring-success-200',
-  pending: 'bg-caution-50 text-caution-800 ring-1 ring-caution-200',
+  succeeded: 'bg-success-50 text-success-600 ring-1 ring-success-200',
+  paid: 'bg-success-50 text-success-600 ring-1 ring-success-200',
+  pending: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
   failed: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
   refunded: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
 };
@@ -157,12 +157,12 @@ export function BillingSection() {
           </Row>
           <Row label={renewsLabel}>
             {day(sub.periodEnd)}
-            {sub.cancelAtPeriodEnd ? <span className="ml-1.5 text-caution-700">Cancelling</span> : null}
+            {sub.cancelAtPeriodEnd ? <span className="ml-1.5 text-caution-600">Cancelling</span> : null}
           </Row>
         </dl>
 
         {sub.cancelAtPeriodEnd ? (
-          <p className="mt-4 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-800">
+          <p className="mt-4 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600">
             This plan ends on {day(sub.periodEnd)}. Everything keeps working until then.
           </p>
         ) : null}
@@ -182,10 +182,10 @@ export function BillingSection() {
             role="status"
             className="mt-5 flex gap-3 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3"
           >
-            <AlertIcon className="mt-0.5 shrink-0 text-caution-700" width={16} height={16} />
+            <AlertIcon className="mt-0.5 shrink-0 text-caution-600" width={16} height={16} />
             <div>
-              <p className="text-sm font-medium text-caution-800">Payments aren't available</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-caution-700">
+              <p className="text-sm font-medium text-caution-600">Payments aren't available</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-600">
                 Stripe is not configured on this server. This plan stays unpaid until a payment
                 provider is connected.
               </p>
