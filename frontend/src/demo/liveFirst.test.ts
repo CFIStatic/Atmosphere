@@ -9,6 +9,7 @@ describe('isLiveFirstPath', () => {
     expect(isLiveFirstPath('/api/profile/avatar')).toBe(true);
     expect(isLiveFirstPath('/api/org/me')).toBe(true);
     expect(isLiveFirstPath('/api/org/members')).toBe(true);
+    expect(isLiveFirstPath('/api/org/members/user-2')).toBe(true);
   });
 
   it('lets the Dashboard library and job record hit the live org', () => {

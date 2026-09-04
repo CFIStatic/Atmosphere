@@ -6,6 +6,7 @@ import { createAdminClient } from '../lib/supabase.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
+import { decideMemberRemoval } from '../org/members.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import {
   createOrgSchema,
@@ -395,6 +396,87 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
     if (result.error) throw new HttpError(500, result.error.message, 'members_failed');
 
     res.json({ members: (result.data ?? []).map(serializeMember) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/org/members/:userId
+ * Unlink a login from this office account. Only a Global Admin can do it,
+ * and they cannot remove themselves or the last Global Admin seat.
+ *
+ * The person's auth login stays — they just lose this workspace until
+ * someone invites that address again. Pending invites for the same email
+ * are withdrawn so the join code alone cannot walk them back in.
+ */
+orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const targetUserId = String(req.params.userId ?? '').trim();
+    if (!targetUserId) {
+      throw new HttpError(400, 'Missing member to remove.', 'bad_request');
+    }
+
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId, role: callerRole } = await orgForInvites(supabase, req.user!.id);
+
+    const { data: memberRows, error: listError } = await supabase
+      .from('org_members')
+      .select('user_id, role, profiles(email)')
+      .eq('org_id', orgId);
+    if (listError) throw new HttpError(500, listError.message, 'members_failed');
+
+    const members = (memberRows ?? []) as any[];
+    const target = members.find((row) => row.user_id === targetUserId);
+    if (!target) {
+      throw new HttpError(404, 'That person is not in this workspace.', 'not_found');
+    }
+
+    const decision = decideMemberRemoval({
+      callerUserId: req.user!.id,
+      callerRole,
+      targetUserId,
+      targetRole: target.role,
+      adminCountInOrg: members.filter((row) => isGlobalAdmin(row.role)).length,
+    });
+    if (!decision.allowed) {
+      throw new HttpError(decision.status, decision.message, decision.code);
+    }
+
+    const admin = createAdminClient();
+    const writer = admin ?? supabase;
+    const { data: removed, error: deleteError } = await writer
+      .from('org_members')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('user_id', targetUserId)
+      .select('user_id')
+      .maybeSingle();
+    if (deleteError) throw new HttpError(400, deleteError.message, 'remove_member_failed');
+    if (!removed) {
+      if (!admin) {
+        throw new HttpError(
+          503,
+          'Removing teammates is not configured on this server.',
+          'no_admin',
+        );
+      }
+      throw new HttpError(404, 'That person is not in this workspace.', 'not_found');
+    }
+
+    const email = (Array.isArray(target.profiles) ? target.profiles[0] : target.profiles)?.email
+      ?.trim()
+      .toLowerCase();
+    if (email) {
+      await writer
+        .from('org_invites')
+        .update({ status: 'revoked', revoked_at: new Date().toISOString() })
+        .eq('org_id', orgId)
+        .eq('email', email)
+        .eq('status', 'pending');
+    }
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

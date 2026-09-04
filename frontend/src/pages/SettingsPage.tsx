@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { canManageBilling } from '../domain/productRoles';
+import { canManageBilling, isGlobalAdmin } from '../domain/productRoles';
 import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -27,6 +27,7 @@ import {
   ShieldIcon,
   SlidersIcon,
   SpinnerIcon,
+  TrashIcon,
   UserIcon,
   CreditCardIcon,
 } from '../components/icons';
@@ -637,8 +638,11 @@ function SignOutCard() {
  * -------------------------------------------------------------------------- */
 
 function LinkedAccountsCard() {
-  const { user } = useAuth();
+  const { user, membership } = useAuth();
+  const canRemoveMembers = isGlobalAdmin(membership?.role);
   const [members, setMembers] = useState<OrgMember[] | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -654,6 +658,27 @@ function LinkedAccountsCard() {
       cancelled = true;
     };
   }, []);
+
+  async function removeMember(member: OrgMember) {
+    const name = displayName(member.fullName, member.email);
+    if (
+      !window.confirm(
+        `Remove ${name} from this workspace? They lose access until you invite them again.`,
+      )
+    ) {
+      return;
+    }
+    setRemovingId(member.userId);
+    setRemoveError(null);
+    try {
+      await api.removeMember(member.userId);
+      setMembers((prev) => (prev ?? []).filter((row) => row.userId !== member.userId));
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Could not remove that person.');
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   return (
     <Card
@@ -673,6 +698,7 @@ function LinkedAccountsCard() {
           {members.map((member) => {
             const isYou = member.userId === user?.id;
             const name = displayName(member.fullName, member.email);
+            const showRemove = canRemoveMembers && !isYou;
             return (
               <li
                 key={member.userId}
@@ -696,13 +722,40 @@ function LinkedAccountsCard() {
                     </p>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
-                  {ROLE_LABELS[member.role] ?? member.role}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
+                    {ROLE_LABELS[member.role] ?? member.role}
+                  </span>
+                  {showRemove && (
+                    <button
+                      type="button"
+                      onClick={() => void removeMember(member)}
+                      disabled={removingId === member.userId}
+                      aria-label={`Remove ${name} from this workspace`}
+                      className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+                    >
+                      {removingId === member.userId ? (
+                        <SpinnerIcon className="animate-spin" width={16} height={16} />
+                      ) : (
+                        <TrashIcon width={16} height={16} />
+                      )}
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {canRemoveMembers && members && members.length > 0 && (
+        <p className="mt-3 text-[11px] text-ink-400">
+          Remove unlinks their login from this office. Invite that address again if they should come back.
+        </p>
+      )}
+      {removeError && (
+        <p role="alert" className="mt-3 text-xs text-danger-600">
+          {removeError}
+        </p>
       )}
     </Card>
   );
