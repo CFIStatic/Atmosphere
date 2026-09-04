@@ -59,6 +59,7 @@ import {
   softDeleteCrmJobRow,
   writeJobFileDeleteTombstone,
 } from '../lib/jobFileDelete.js';
+import { renameCrmJobTitle } from '../lib/jobFileRename.js';
 
 /**
  * The shared job record.
@@ -329,16 +330,11 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
       throw new HttpError(404, 'No such job.', 'job_not_found');
     }
 
-    const { data, error } = await supabase
-      .from('crm_jobs')
-      .update({ title: nextTitle })
-      .eq('org_id', orgId)
-      .eq('id', req.params.jobId)
-      .is('deleted_at', null)
-      .select('id, job_number, title, status, claim_number')
-      .maybeSingle();
-    if (error) throw new HttpError(400, error.message, 'rename_failed');
-    if (!data) throw new HttpError(404, 'No such job.', 'job_not_found');
+    const data = await renameCrmJobTitle(writer, {
+      orgId,
+      jobId: req.params.jobId,
+      title: nextTitle,
+    });
 
     await recordAccess(supabase, {
       orgId,

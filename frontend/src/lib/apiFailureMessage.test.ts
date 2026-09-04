@@ -47,6 +47,17 @@ describe('apiFailureMessage', () => {
     });
   });
 
+  it('rewrites opaque Forbidden so the rename dialog is readable', () => {
+    expect(apiFailureMessage(403, { error: 'Forbidden', code: 'blocked' }, '')).toEqual({
+      message: 'That could not be saved. Refresh and try again.',
+      code: 'blocked',
+    });
+    expect(apiFailureMessage(401, { error: 'Unauthorized' }, '')).toEqual({
+      message: 'Sign in again to continue.',
+      code: 'unauthorized',
+    });
+  });
+
   it('surfaces email_taken from Create account', () => {
     expect(
       apiFailureMessage(

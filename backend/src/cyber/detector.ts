@@ -6,6 +6,19 @@ import { randomUUID } from 'node:crypto';
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']);
 
 /**
+ * Office writes carry user-typed titles, notes, and messages. Those strings
+ * can look like SQL ("select from inventory", "drop table saws") without
+ * being an attack. Body-injection signatures stay on for login and probe
+ * surfaces; they must not 403 a job-file rename.
+ */
+const USER_CONTENT_API =
+  /^\/api\/(operations|jobs|evidence-portal|crm|pm|sales)(\/|$)/i;
+
+export function isUserContentApiPath(path: string): boolean {
+  return USER_CONTENT_API.test(path);
+}
+
+/**
  * Score an inbound request against defensive signatures.
  *
  * Returns signals only — the agent decides whether to observe, deceive, or
@@ -40,6 +53,9 @@ export function detectThreats(req: Request): ThreatSignal[] {
       continue;
     }
     if (sig.body && bodyText && sig.body.test(bodyText)) {
+      if (sig.rule === 'injection.body' && isUserContentApiPath(path)) {
+        continue;
+      }
       signals.push(toSignal(sig));
       continue;
     }
