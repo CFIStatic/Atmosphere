@@ -110,9 +110,7 @@ export function BillingSection() {
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>
           <h3 className="text-base font-semibold text-ink-900">Plan</h3>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Subscription, allowance, and this billing period.
-          </p>
+          <p className="mt-0.5 text-xs text-ink-500">Subscription and this billing period.</p>
         </header>
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
@@ -133,23 +131,6 @@ export function BillingSection() {
             </p>
           </div>
         </div>
-
-        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-line bg-paper-50/70 px-3.5 py-3">
-            <dt className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">Included</dt>
-            <dd className="mt-1 text-sm font-semibold text-ink-900">{sub.includedJobs} jobs included</dd>
-            <p className="mt-0.5 text-[11px] text-ink-500">each billing period</p>
-          </div>
-          <div className="rounded-lg border border-line bg-paper-50/70 px-3.5 py-3">
-            <dt className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">
-              Additional jobs
-            </dt>
-            <dd className="mt-1 text-sm font-semibold text-ink-900">
-              {formatCents(sub.additionalJobPriceCents)} each
-            </dd>
-            <p className="mt-0.5 text-[11px] text-ink-500">after the included allowance</p>
-          </div>
-        </dl>
 
         <dl className="mt-5 space-y-3 border-t border-line pt-4 text-sm">
           <Row label="Current period">

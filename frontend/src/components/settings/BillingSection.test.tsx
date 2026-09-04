@@ -116,8 +116,9 @@ describe('BillingSection', () => {
     expect(await screen.findByRole('heading', { name: 'Work Verification' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
-    expect(screen.getByText(/50 jobs included/)).toBeInTheDocument();
-    expect(screen.getByText(/\$30 each/)).toBeInTheDocument();
+    expect(screen.queryByText(/50 jobs included/)).toBeNull();
+    expect(screen.queryByText(/\$30 each/)).toBeNull();
+    expect(screen.queryByText(/additional job/i)).toBeNull();
     expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
     expect(screen.getByText('Succeeded')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Receipt' })).toBeInTheDocument();
