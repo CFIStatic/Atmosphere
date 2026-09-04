@@ -25,9 +25,11 @@ export const ANTHROPIC_ASK_MAX_TOKENS = 500;
 /**
  * Gemini thinking models spend `maxOutputTokens` on hidden reasoning first.
  * 500 can return an empty candidate and dump Ask back to keyword matching.
- * Clip reading on the same Flash default uses 2048–2500.
+ * Ask holds a 10× clip-reading budget so Flash can think longer before answering.
  */
-export const GEMINI_ASK_MAX_TOKENS = 2048;
+export const GEMINI_ASK_MAX_TOKENS = 20_480;
+/** Gemini 3 default thinking is medium; high is the next step up for slower, fuller replies. */
+export const GEMINI_ASK_THINKING_LEVEL = 'high';
 
 export type AskModelResult = {
   text: string;
@@ -101,16 +103,21 @@ async function completeWithGemini(input: {
   const model = input.model || geminiAskModel();
   const fetchFn = input.fetchFn ?? fetch;
   const url = `${geminiBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const generationConfig: Record<string, unknown> = {
+    temperature: 0,
+    maxOutputTokens: input.maxTokens,
+  };
+  // Gemini 3 uses thinkingLevel; older Flash ids ignore or reject it, so only send on 3.x.
+  if (/^gemini-3/i.test(model)) {
+    generationConfig.thinkingConfig = { thinkingLevel: GEMINI_ASK_THINKING_LEVEL };
+  }
   const response = await fetchFn(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: input.system }] },
       contents: [{ role: 'user', parts: [{ text: input.user }] }],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: input.maxTokens,
-      },
+      generationConfig,
     }),
   });
   if (!response.ok) {

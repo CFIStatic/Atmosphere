@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   GEMINI_ASK_MAX_TOKENS,
+  GEMINI_ASK_THINKING_LEVEL,
   askProviderLabel,
   completeAskText,
   isAskModelConfigured,
@@ -53,7 +54,10 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         system_instruction?: { parts?: Array<{ text?: string }> };
         contents?: Array<{ parts?: Array<{ text?: string }> }>;
-        generationConfig?: { maxOutputTokens?: number };
+        generationConfig?: {
+          maxOutputTokens?: number;
+          thinkingConfig?: { thinkingLevel?: string };
+        };
       };
       calls.push({
         url,
@@ -64,7 +68,8 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
       assert.match(body.system_instruction?.parts?.[0]?.text ?? '', /job file/i);
       assert.match(body.contents?.[0]?.parts?.[0]?.text ?? '', /what happens/i);
       assert.equal(body.generationConfig?.maxOutputTokens, GEMINI_ASK_MAX_TOKENS);
-      assert.ok((body.generationConfig?.maxOutputTokens ?? 0) >= 2048);
+      assert.ok((body.generationConfig?.maxOutputTokens ?? 0) >= 20_480);
+      assert.equal(body.generationConfig?.thinkingConfig?.thinkingLevel, GEMINI_ASK_THINKING_LEVEL);
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'North slope is stripped to decking.' }] } }],

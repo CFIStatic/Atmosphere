@@ -18,7 +18,7 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
-import { JobAskPanel } from './JobAskPanel';
+import { ASK_MIN_TYPING_MS, JobAskPanel, waitOutAskHold } from './JobAskPanel';
 
 const record: SharedJobRecord = {
   job: {
@@ -116,7 +116,9 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('Live model · gemini-3.6-flash')).toBeInTheDocument();
+    expect(await screen.findByText('From this job file')).toBeInTheDocument();
+    expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gemini-3\.6-flash/)).not.toBeInTheDocument();
   });
 
   it('asks through a guest share instead of the office session', async () => {
@@ -150,5 +152,27 @@ describe('JobAskPanel', () => {
     });
     expect(askAboutProofs).not.toHaveBeenCalled();
     expect(await screen.findByText('From the guest file.')).toBeInTheDocument();
+    expect(await screen.findByText('From this job file')).toBeInTheDocument();
+    expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
+  });
+
+  it('holds the typing indicator for 10× a short reply', async () => {
+    vi.useFakeTimers();
+    try {
+      const started = Date.now();
+      const pending = waitOutAskHold(started, ASK_MIN_TYPING_MS);
+      await vi.advanceTimersByTimeAsync(ASK_MIN_TYPING_MS - 1);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

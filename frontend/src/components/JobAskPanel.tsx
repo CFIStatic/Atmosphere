@@ -18,6 +18,17 @@ import {
 } from '../lib/jobFileAsk';
 import { SpinnerIcon } from './icons';
 
+/** 10× a ~400ms instant reply so the typing dots do not flash and vanish. */
+export const ASK_MIN_TYPING_MS = 4_000;
+
+export async function waitOutAskHold(startedAt: number, holdMs = ASK_MIN_TYPING_MS): Promise<void> {
+  const remaining = holdMs - (Date.now() - startedAt);
+  if (remaining <= 0) return;
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, remaining);
+  });
+}
+
 function SendIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -150,8 +161,10 @@ export function JobAskPanel({
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
     setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
+    const startedAt = Date.now();
     try {
       const res = askFn ? await askFn(text) : await api.askAboutProofs(jobId, text);
+      await waitOutAskHold(startedAt, import.meta.env.MODE === 'test' ? 0 : ASK_MIN_TYPING_MS);
       setTurns((prev) => [
         ...prev.filter((turn) => turn.id !== pendingId),
         {
@@ -251,9 +264,7 @@ export function JobAskPanel({
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">
-                      {turn.model ? `Live model · ${turn.model}` : 'From this job file'}
-                    </p>
+                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                 </div>
               </li>
