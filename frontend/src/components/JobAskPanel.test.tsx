@@ -104,7 +104,9 @@ describe('JobAskPanel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
     await user.click(
-      await screen.findByRole('button', { name: 'What did the homeowner say about the skylights?' }),
+      await screen.findByRole('button', {
+        name: 'What did the homeowner say about the skylights?',
+      }),
     );
 
     await waitFor(() => {
@@ -116,9 +118,7 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('From this job file')).toBeInTheDocument();
-    expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/gemini-3\.6-flash/)).not.toBeInTheDocument();
+    expect(await screen.findByText('Live model · gemini-3.6-flash')).toBeInTheDocument();
   });
 
   it('asks through a guest share instead of the office session', async () => {
@@ -144,7 +144,9 @@ describe('JobAskPanel', () => {
     );
 
     await user.click(
-      await screen.findByRole('button', { name: 'What did the homeowner say about the skylights?' }),
+      await screen.findByRole('button', {
+        name: 'What did the homeowner say about the skylights?',
+      }),
     );
 
     await waitFor(() => {

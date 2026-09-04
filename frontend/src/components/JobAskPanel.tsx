@@ -53,9 +53,7 @@ function TypingDots() {
   );
 }
 
-export type JobAskFn = (
-  question: string,
-) => Promise<{
+export type JobAskFn = (question: string) => Promise<{
   answer: string;
   groundedOn: number;
   model?: string | null;
@@ -232,7 +230,9 @@ export function JobAskPanel({
           </p>
         ) : turns.length === 0 && !asking ? (
           <div>
-            <p className="text-sm text-ink-600">Forgot something? Ask what happened on site or what the homeowner said.</p>
+            <p className="text-sm text-ink-600">
+              Forgot something? Ask what happened on site or what the homeowner said.
+            </p>
             {suggestions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {suggestions.map((s) => (
@@ -264,7 +264,9 @@ export function JobAskPanel({
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
+                    <p className="mt-1.5 text-[11px] text-ink-400">
+                      {turn.model ? `Live model · ${turn.model}` : 'From this job file'}
+                    </p>
                   )}
                 </div>
               </li>
