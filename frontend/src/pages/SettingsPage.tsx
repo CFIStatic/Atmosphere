@@ -16,7 +16,7 @@ import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
 import { PersonAvatar } from '../components/PersonAvatar';
-import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
+import { usePreferences } from '../lib/preferences';
 import {
   BuildingIcon,
   CameraIcon,
@@ -25,14 +25,13 @@ import {
   EyeOffIcon,
   LogOutIcon,
   ShieldIcon,
-  SlidersIcon,
   SpinnerIcon,
   UserIcon,
   CreditCardIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
-type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'preferences';
+type SectionId = 'profile' | 'security' | 'organization' | 'billing';
 
 interface SettingsSection {
   id: SectionId;
@@ -56,7 +55,6 @@ const ALL_SECTIONS: SettingsSection[] = [
     blurb: 'Plan, tokens, and receipts',
     icon: CreditCardIcon,
   },
-  { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },
 ];
 
 function isSectionId(value: string | null): value is SectionId {
@@ -135,7 +133,6 @@ export function SettingsPage() {
             </>
           )}
           {active === 'billing' && showBilling && <BillingSection />}
-          {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
     </div>
@@ -223,42 +220,6 @@ function ErrorText({ message }: { message: string | null }) {
     <p role="alert" className="text-sm text-danger-600">
       {message}
     </p>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3.5">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-ink-800">{label}</p>
-        <p className="mt-0.5 text-sm text-ink-500">{description}</p>
-      </div>
-      <button
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${
-          checked ? 'bg-brand-600' : 'bg-line-strong'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper-200/50 transition-all ${
-            checked ? 'left-[1.375rem]' : 'left-0.5'
-          }`}
-        />
-      </button>
-    </div>
   );
 }
 
@@ -701,82 +662,6 @@ function LinkedAccountsCard() {
           })}
         </ul>
       )}
-    </Card>
-  );
-}
-
-/* -------------------------------------------------------------------------- *
- * Preferences
- * -------------------------------------------------------------------------- */
-
-/** The on/off preferences. Theme is a choice, not a switch, and rides below. */
-type BooleanPreference = {
-  [K in keyof Preferences]: Preferences[K] extends boolean ? K : never;
-}[keyof Preferences];
-
-const TOGGLES: { key: BooleanPreference; label: string; description: string }[] = [
-  {
-    key: 'reduceMotion',
-    label: 'Reduce motion',
-    description: 'Turn off entrance animations and transitions.',
-  },
-  {
-    key: 'confirmSignOut',
-    label: 'Confirm before signing out',
-    description: 'Ask first — useful on a shared tablet in the field.',
-  },
-];
-
-function PreferencesSection() {
-  const preferences = usePreferences();
-
-  return (
-    <Card
-      title="This device"
-      description="Saved in this browser only, so a phone in the field and an office desktop can differ."
-    >
-      <div className="divide-y divide-line">
-        {TOGGLES.map((toggle) => (
-          <Toggle
-            key={toggle.key}
-            checked={preferences[toggle.key]}
-            onChange={(next) => setPreference(toggle.key, next)}
-            label={toggle.label}
-            description={toggle.description}
-          />
-        ))}
-
-        <div className="flex items-center justify-between gap-4 py-4">
-          <div>
-            <p className="text-sm font-medium text-ink-900">Appearance</p>
-            <p className="mt-0.5 text-sm text-ink-600">
-              Light or dark — applies across every screen in this browser.
-            </p>
-          </div>
-          <div className="flex rounded-lg glass-card p-1">
-            {(
-              [
-                { mode: 'dark', label: 'Dark' },
-                { mode: 'light', label: 'Light' },
-              ] as const
-            ).map(({ mode, label }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setPreference('theme', mode)}
-                aria-pressed={preferences.theme === mode}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  preferences.theme === mode
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-ink-600 hover:text-ink-900'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </Card>
   );
 }
