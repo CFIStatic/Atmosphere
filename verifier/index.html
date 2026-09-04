@@ -3891,6 +3891,14 @@
     return ('Copy of ' + base).slice(0, 200);
   }
 
+  function friendlyJobFileError(raw, fallback) {
+    var msg = String(raw || '').trim();
+    if (!msg || /^(forbidden|unauthorized|access denied|not allowed|blocked)$/i.test(msg)) {
+      return fallback;
+    }
+    return msg;
+  }
+
   function openJobFileSheet(jobKey, tab) {
     closeJobMenu();
     hydrateJobBoard(jobKey);
@@ -4138,7 +4146,7 @@
     }).then(function (res) {
       jobSheet.busy = false;
       if (!res.ok) {
-        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not delete that job file.';
+        jobSheet.error = friendlyJobFileError(res.body && (res.body.error || res.body.message), 'Could not delete that job file.');
         paintJobFileSheet();
         return;
       }
@@ -4190,7 +4198,7 @@
     }).then(function (res) {
       jobSheet.busy = false;
       if (!res.ok) {
-        jobSheet.error = (res.body && (res.body.error || res.body.message)) || (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.');
+        jobSheet.error = friendlyJobFileError(res.body && (res.body.error || res.body.message), renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.');
         paintJobFileSheet();
         return;
       }

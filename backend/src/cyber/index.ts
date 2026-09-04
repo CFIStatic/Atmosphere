@@ -8,7 +8,13 @@
 export { cyberMonitor } from './monitor.js';
 export { startCyberScheduler, stopCyberScheduler, triggerCyberPatch, cyberSnapshot } from './scheduler.js';
 export { cyberStore, CyberStore } from './store.js';
-export { detectThreats, aggregateScore, severityForScore, clientIp } from './detector.js';
+export {
+  detectThreats,
+  aggregateScore,
+  severityForScore,
+  clientIp,
+  isUserContentApiPath,
+} from './detector.js';
 export { isDecoyPath, DECOY_PATHS, SIGNATURES } from './signatures.js';
 export { buildDecoy, classifyDecoy } from './deception.js';
 export { blockIp, unblockIp, isIpBlocked, ttlFor } from './blocker.js';

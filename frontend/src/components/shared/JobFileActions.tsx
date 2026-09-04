@@ -14,6 +14,14 @@ import { SpinnerIcon } from '../icons';
 
 type Mode = 'rename' | 'duplicate' | 'delete' | null;
 
+function jobFileActionError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message.trim() : '';
+  if (!raw || /^(forbidden|unauthorized|access denied|not allowed|blocked)$/i.test(raw)) {
+    return fallback;
+  }
+  return raw;
+}
+
 export function JobFileActions({
   jobId,
   title,
@@ -64,7 +72,7 @@ export function JobFileActions({
         setMode(null);
         onDeleted?.();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not delete that job file.');
+        setError(jobFileActionError(err, 'Could not delete that job file.'));
       } finally {
         setBusy(false);
       }
@@ -92,7 +100,7 @@ export function JobFileActions({
       }
       setMode(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update that job file.');
+      setError(jobFileActionError(err, 'Could not update that job file.'));
     } finally {
       setBusy(false);
     }

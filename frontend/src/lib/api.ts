@@ -2534,6 +2534,8 @@ const BACKEND_UNREACHABLE_MESSAGE = backendUnreachableMessage();
  * Turn opaque gateway / proxy failures into an actionable message.
  * Empty-body 500s are the classic Vite-proxy-when-API-is-down signature.
  */
+const OPAQUE_API_ERROR = /^(forbidden|unauthorized|access denied|not allowed|blocked)$/i;
+
 export function apiFailureMessage(
   status: number,
   body: Record<string, unknown>,
@@ -2542,7 +2544,16 @@ export function apiFailureMessage(
 ): { message: string; code: string } {
   const explicit = typeof body.error === 'string' ? body.error.trim() : '';
   const code = typeof body.code === 'string' && body.code ? body.code : 'error';
-  if (explicit) return { message: explicit, code };
+  if (explicit && !OPAQUE_API_ERROR.test(explicit)) return { message: explicit, code };
+  if (explicit && OPAQUE_API_ERROR.test(explicit)) {
+    if (status === 401) {
+      return { message: 'Sign in again to continue.', code: code === 'error' ? 'unauthorized' : code };
+    }
+    return {
+      message: 'That could not be saved. Refresh and try again.',
+      code: code === 'error' ? 'forbidden' : code,
+    };
+  }
 
   const emptyOrNonJson = !rawText.trim() || Object.keys(body).length === 0;
   if (

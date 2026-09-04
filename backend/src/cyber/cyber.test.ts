@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import {
   CyberStore,
 } from './store.js';
-import { detectThreats, aggregateScore, severityForScore } from './detector.js';
+import { detectThreats, aggregateScore, severityForScore, isUserContentApiPath } from './detector.js';
 import { isDecoyPath, DECOY_PATHS } from './signatures.js';
 import { buildDecoy, classifyDecoy } from './deception.js';
 import { ttlFor, blockIp, isIpBlocked, unblockIp } from './blocker.js';
@@ -41,6 +41,11 @@ describe('signatures: decoy paths', () => {
     for (const p of ['/.env', '/wp-admin', '/phpmyadmin', '/api/admin', '/.git/config']) {
       assert.equal(isDecoyPath(p), true, `${p} should be a decoy`);
     }
+  });
+
+  it('treats job-file writes as user-content API paths', () => {
+    assert.equal(isUserContentApiPath('/api/operations/shared/job-1'), true);
+    assert.equal(isUserContentApiPath('/api/auth/login'), false);
   });
 
   it('does not treat real Atmosphere routes as decoys', () => {
@@ -87,7 +92,22 @@ describe('detector: scoring', () => {
     assert.equal(aggregateScore(signals), 0);
   });
 
-  it('redacts secret-shaped body keys while still matching injection', () => {
+  it('does not treat a job-file rename body as SQL injection', () => {
+    const signals = detectThreats(
+      fakeReq({
+        path: '/api/operations/shared/job-1',
+        method: 'PATCH',
+        body: { title: "Mobil test one 1111 — select from inventory, drop table saws" },
+      }),
+    );
+    assert.equal(
+      signals.some((s) => s.rule === 'injection.body'),
+      false,
+      'office job titles must not trip injection.body',
+    );
+  });
+
+  it('still flags injection on login', () => {
     const signals = detectThreats(
       fakeReq({
         path: '/api/auth/login',

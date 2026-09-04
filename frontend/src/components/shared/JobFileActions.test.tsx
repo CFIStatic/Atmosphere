@@ -68,6 +68,30 @@ describe('JobFileActions', () => {
     expect(onRenamed).toHaveBeenCalledWith('Kitchen rebuild');
   });
 
+  it('does not show a raw Forbidden error when rename is refused', async () => {
+    renameJobFile.mockRejectedValueOnce(new Error('Forbidden'));
+    const user = userEvent.setup();
+    render(
+      <JobFileActions
+        jobId="job-1"
+        title="test one"
+        onRenamed={() => undefined}
+        onDuplicated={() => undefined}
+        onShare={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+    const field = screen.getByLabelText(/^Name$/i);
+    await user.clear(field);
+    await user.type(field, 'Mobil test one 1111');
+    await user.click(screen.getByRole('button', { name: 'Save name' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not update that job file.');
+    expect(alert).not.toHaveTextContent('Forbidden');
+  });
+
   it('duplicates the open job file under a new name', async () => {
     const onDuplicated = vi.fn();
     const user = userEvent.setup();
