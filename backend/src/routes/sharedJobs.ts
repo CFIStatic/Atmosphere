@@ -535,6 +535,14 @@ async function insertCopiedJob(writers: unknown[], row: Record<string, unknown>)
   );
 }
 
+/** True only when intake create failed before inserting crm_jobs. */
+function intakeCreateNeverWroteJob(error: unknown): boolean {
+  return (
+    error instanceof HttpError &&
+    (error.code === 'job_failed' || error.code === 'property_failed')
+  );
+}
+
 function duplicateCreatedPayload(input: {
   job: { id: string; title: string; job_number?: number | null; jobNumber?: number | null; status?: string | null };
   briefRevision: number;
@@ -624,8 +632,9 @@ sharedJobsRouter.post(
         }
       }
 
+      let created: Awaited<ReturnType<typeof createJobFile>> | null = null;
       try {
-        const created = await createJobFile(supabase, orgId, userId, {
+        created = await createJobFile(supabase, orgId, userId, {
           title: nextTitle,
           workType,
           address: String(property?.address_line1 ?? ''),
@@ -645,9 +654,18 @@ sharedJobsRouter.post(
           })),
           invitees: [],
         });
+      } catch (createError) {
+        if (!intakeCreateNeverWroteJob(createError)) throw createError;
+        console.warn(
+          '[shared] duplicate via intake create failed, falling back:',
+          createError instanceof Error ? createError.message : createError,
+        );
+      }
+
+      if (created) {
         if (source.description || source.policy_number) {
           const extras = admin ?? supabase;
-          await extras
+          const { error: extrasError } = await extras
             .from('crm_jobs')
             .update({
               description: source.description ?? null,
@@ -655,6 +673,9 @@ sharedJobsRouter.post(
             })
             .eq('id', created.job.id)
             .eq('org_id', orgId);
+          if (extrasError) {
+            console.warn('[shared] duplicate extras update failed:', extrasError.message);
+          }
         }
         await recordAccess(supabase, {
           orgId,
@@ -678,11 +699,6 @@ sharedJobsRouter.post(
           }),
         );
         return;
-      } catch (createError) {
-        console.warn(
-          '[shared] duplicate via intake create failed, falling back:',
-          createError instanceof Error ? createError.message : createError,
-        );
       }
 
       let propertyId: string | null = null;

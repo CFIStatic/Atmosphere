@@ -55,9 +55,17 @@ describe('signatures: decoy paths', () => {
       isTrustedProductPath('/api/operations/shared/abc-123/duplicate'),
       true,
     );
+    assert.equal(isTrustedProductPath('/api/operations/shared/abc-123'), true);
     assert.equal(isTrustedProductPath('/api/operations/intake/approve'), true);
+    assert.equal(isTrustedProductPath('/api/jobs'), true);
+    assert.equal(isTrustedProductPath('/api/jobs/abc-123'), true);
     assert.equal(isTrustedProductPath('/api/admin'), false);
     assert.equal(isTrustedProductPath('/.env'), false);
+    assert.equal(isTrustedProductPath('/api/operations/shared/abc-123/evidence'), false);
+    assert.equal(isTrustedProductPath('/api/operations/shared/abc-123/proof/ask'), false);
+    assert.equal(isTrustedProductPath('/api/operations/shared/abc-123/parties'), false);
+    assert.equal(isTrustedProductPath('/api/jobs/abc-123/tasks'), false);
+    assert.equal(isTrustedProductPath('/api/jobs/abc-123/memory'), false);
   });
 
   it('registers an explicit decoy list for operators', () => {

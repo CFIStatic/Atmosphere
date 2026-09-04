@@ -15,7 +15,6 @@ import { recordAccess } from './proofOfWork.js';
 import {
   attemptIntakeWrite,
   clientsToTry,
-  intakeWriteError,
   isJobCreateBlockingError,
   repairJobCreateSideEffects,
 } from '../lib/memoryLedger.js';
@@ -678,32 +677,35 @@ async function createJobFileStepwise(
   }>,
   site: IntakeAddress | null,
 ): Promise<CreatedJobFile> {
-  // Prefer the service-role client for the write path when available so a
-  // missing GRANT on job_* tables cannot strand a half-created job file.
-  const writer = createAdminClient() ?? supabase;
+  // Prefer the service-role client, then the signed-in user, so a restricted
+  // service-role key cannot insert the job and then fail the brief.
+  const admin = createAdminClient();
+  const writer = admin ?? supabase;
+  const writers = clientsToTry(admin, supabase);
   const jobTitle = jobTitleForIntake(input.title, site?.line ?? '');
 
   let propertyId: string | null = null;
   if (site?.line.trim()) {
-    let property = (
-      await writer.from('crm_properties').insert(site.row).select('id').single()
-    ) as { data: { id: string } | null; error: { message?: string } | null };
-    if (property.error || !property.data) {
-      property = await writer
-        .from('crm_properties')
-        .insert({
-          org_id: orgId,
-          address_line1: site.line,
-          city: site.city ?? null,
-          postal_code: site.postalCode ?? null,
-        })
-        .select('id')
-        .single();
-    }
-    if (property.error || !property.data) {
-      throw intakeWriteError(property.error, 'Could not save the address.', 'property_failed');
-    }
-    propertyId = property.data.id;
+    const property = await attemptIntakeWrite<{ id: string }>(
+      writers,
+      async (client) => {
+        const first = await client.from('crm_properties').insert(site.row).select('id').single();
+        if (!first.error && first.data) return first;
+        return client
+          .from('crm_properties')
+          .insert({
+            org_id: orgId,
+            address_line1: site.line,
+            city: site.city ?? null,
+            postal_code: site.postalCode ?? null,
+          })
+          .select('id')
+          .single();
+      },
+      'Could not save the address.',
+      'property_failed',
+    );
+    propertyId = property.id;
   }
 
   const job = await insertCrmJob(
@@ -721,88 +723,106 @@ async function createJobFileStepwise(
   );
   const jobId = job.id;
 
-  const { error: intakeError } = await writer.from('job_intake').insert({
-    job_id: jobId,
-    org_id: orgId,
-    source: (scopeLines.length ? 'scope_document' : 'manual') satisfies IntakeSource,
-    source_detail: {
-      enteredFrom: 'intake_package',
-      captureInvites: invitees.length,
-      scopeOptional: scopeLines.length === 0,
-    },
-    entered_by: userId,
-  });
+  let intakeError: { message?: string } | null = null;
+  for (const client of writers) {
+    const inserted = await (client as any).from('job_intake').insert({
+      job_id: jobId,
+      org_id: orgId,
+      source: (scopeLines.length ? 'scope_document' : 'manual') satisfies IntakeSource,
+      source_detail: {
+        enteredFrom: 'intake_package',
+        captureInvites: invitees.length,
+        scopeOptional: scopeLines.length === 0,
+      },
+      entered_by: userId,
+    });
+    if (!inserted.error) {
+      intakeError = null;
+      break;
+    }
+    intakeError = inserted.error;
+  }
   if (intakeError) {
     console.warn('[intake] job_intake insert failed:', intakeError.message);
   }
 
-  const { data: brief, error: briefError } = await writer
-    .from('job_briefs')
-    .insert({
-      org_id: orgId,
-      job_id: jobId,
-      revision: 0,
-      facts: site ? siteAddressFacts(site, input.facts) : { ...(input.facts ?? {}) },
-      note: input.briefNote ?? null,
-      created_by: userId,
-    })
-    .select('id, revision')
-    .single();
-  if (briefError || !brief) {
-    throw intakeWriteError(briefError, 'Could not publish the brief.', 'brief_failed');
-  }
-  const revision = (brief as any).revision ?? 1;
-
-  if (scopeLines.length) {
-    const inserted = await writer
-      .from('job_scope_items')
-      .insert(
-        scopeLines.map((line) => ({
+  const brief = await attemptIntakeWrite<{ id: string; revision: number | null }>(
+    writers,
+    (client) =>
+      client
+        .from('job_briefs')
+        .insert({
           org_id: orgId,
           job_id: jobId,
-          title: line.title,
-          state: line.state,
-          reason: line.reason ?? null,
-          revision,
+          revision: 0,
+          facts: site ? siteAddressFacts(site, input.facts) : { ...(input.facts ?? {}) },
+          note: input.briefNote ?? null,
           created_by: userId,
-        })),
-      )
-      .select('id');
-    if (inserted.error) {
-      throw intakeWriteError(inserted.error, 'Could not save scope lines.', 'scope_failed');
-    }
+        })
+        .select('id, revision')
+        .single(),
+    'Could not publish the brief.',
+    'brief_failed',
+  );
+  const revision = brief.revision ?? 1;
+
+  if (scopeLines.length) {
+    await attemptIntakeWrite(
+      writers,
+      (client) =>
+        client
+          .from('job_scope_items')
+          .insert(
+            scopeLines.map((line) => ({
+              org_id: orgId,
+              job_id: jobId,
+              title: line.title,
+              state: line.state,
+              reason: line.reason ?? null,
+              revision,
+              created_by: userId,
+            })),
+          )
+          .select('id'),
+      'Could not save scope lines.',
+      'scope_failed',
+    );
   }
 
   const parties: CreatedParty[] = [];
   for (const person of invitees) {
     const company = (person.company?.trim() || person.fullName).slice(0, 160);
-    const { data: party, error: partyError } = await writer
-      .from('job_parties')
-      .insert({
-        org_id: orgId,
-        job_id: jobId,
-        company,
-        trade: person.trade || (person.external ? 'subcontractor' : 'field_capture'),
-        contact_name: person.fullName,
-        email: person.email,
-        role: 'subcontractor',
-        invited_at: new Date().toISOString(),
-        created_by: userId,
-      })
-      .select('id, company, access_token, email')
-      .single();
-    if (partyError || !party) {
-      throw intakeWriteError(
-        partyError,
-        `Could not invite ${person.fullName}.`,
-        'party_failed',
-      );
-    }
+    const party = await attemptIntakeWrite<{
+      id: string;
+      company: string | null;
+      access_token: string;
+      email: string | null;
+    }>(
+      writers,
+      (client) =>
+        client
+          .from('job_parties')
+          .insert({
+            org_id: orgId,
+            job_id: jobId,
+            company,
+            trade: person.trade || (person.external ? 'subcontractor' : 'field_capture'),
+            contact_name: person.fullName,
+            email: person.email,
+            role: 'subcontractor',
+            invited_at: new Date().toISOString(),
+            created_by: userId,
+          })
+          .select('id, company, access_token, email')
+          .single(),
+      `Could not invite ${person.fullName}.`,
+      'party_failed',
+    );
     parties.push({
-      id: String((party as any).id),
-      name: String((party as any).company ?? company),
-      email: ((party as any).email as string) ?? person.email,
-      token: String((party as any).access_token),
+      id: String(party.id),
+      name: String(party.company ?? company),
+      email: party.email ?? person.email,
+      token: String(party.access_token),
       external: person.external,
     });
   }

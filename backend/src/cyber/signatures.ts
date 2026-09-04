@@ -159,7 +159,7 @@ export function isDecoyPath(path: string): boolean {
  * Start a job must still run — observe, do not refuse.
  */
 const TRUSTED_PRODUCT_PATH =
-  /^\/api\/(?:operations\/(?:shared\/[^/]+(?:\/duplicate)?|intake\/(?:approve|propose)|jobs\/quick-start)|jobs(?:\/[^/]+)?|auth(?:\/|$)|org(?:\/|$)|profile(?:\/|$))/i;
+  /^\/api\/(?:operations\/(?:shared\/[^/]+(?:\/duplicate)?|intake\/(?:approve|propose)|jobs\/quick-start)$|jobs(?:\/[^/]+)?$|auth(?:\/|$)|org(?:\/|$)|profile(?:\/|$))/i;
 
 export function isTrustedProductPath(path: string): boolean {
   const normalized = (path.split('?')[0] ?? path).replace(/\/+$/, '') || '/';

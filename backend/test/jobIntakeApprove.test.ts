@@ -90,7 +90,15 @@ test('duplicate uses the same intake create path and never leaks Forbidden', () 
   assert.match(src, /await createJobFile\(/);
   assert.match(src, /clientsToTry\(admin, supabase\)/);
   assert.match(src, /Could not duplicate the job file/);
+  assert.match(src, /intakeCreateNeverWroteJob/);
   assert.doesNotMatch(src, /throw new HttpError\(500, sourceError\.message/);
+});
+
+test('stepwise intake writes fall back to the user JWT after the job row', () => {
+  const src = readFileSync(new URL('../src/routes/jobIntake.ts', import.meta.url), 'utf8');
+  assert.match(src, /const writers = clientsToTry\(admin, supabase\)/);
+  assert.match(src, /from\('job_briefs'\)/);
+  assert.match(src, /attemptIntakeWrite/);
 });
 
 test('latest intake SQL allows an empty invite list', () => {
