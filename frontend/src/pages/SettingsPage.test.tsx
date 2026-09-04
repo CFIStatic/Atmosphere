@@ -93,6 +93,10 @@ describe('Settings profile photo', () => {
   it('lets someone replace the initials bubble with a photo or icon', () => {
     renderSettings();
 
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Manage your account, organization, and how Atmosphere behaves/),
+    ).toBeNull();
     expect(screen.getByText('JC')).toBeInTheDocument();
     expect(screen.getByLabelText('Upload a profile photo or icon')).toBeInTheDocument();
     expect(screen.getByText('Upload photo or icon')).toBeInTheDocument();
