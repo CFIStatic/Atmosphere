@@ -99,9 +99,6 @@ export function SettingsPage() {
       <div className={inShell ? 'mx-auto max-w-5xl' : 'mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10'}>
         <header>
           <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">Settings</h1>
-          <p className="mt-1.5 text-sm text-ink-600">
-            Manage your account, organization, and how Atmosphere behaves on this device.
-          </p>
         </header>
 
         <nav className="mt-8 border-b border-line" aria-label="Settings sections">
