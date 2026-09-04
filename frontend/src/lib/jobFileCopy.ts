@@ -29,6 +29,19 @@ export function visibleJobFiles<T extends { jobId: string; lastEvent?: string | 
   return [...unique.values()];
 }
 
+/** Opaque 403s from cyber / PostgREST must not appear as the word "Forbidden". */
+export function jobFileActionError(
+  mode: 'rename' | 'duplicate' | 'delete' | null,
+  err: unknown,
+): string {
+  const raw = err instanceof Error ? err.message.trim() : '';
+  if (raw && !/^forbidden$/i.test(raw)) return raw;
+  if (mode === 'duplicate') return 'Could not duplicate that job file. Try again.';
+  if (mode === 'rename') return 'Could not rename that job file.';
+  if (mode === 'delete') return 'Could not delete that job file.';
+  return 'Could not update that job file.';
+}
+
 /** Default name for a duplicated job file. Keep in step with the backend helper. */
 export function suggestedDuplicateTitle(title: string): string {
   const base = title.trim() || 'Job';

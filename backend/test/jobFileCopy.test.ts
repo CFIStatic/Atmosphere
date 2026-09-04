@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   displayJobFileName,
+  factsForDuplicate,
   jobFileDeleteNameMatches,
   normalizeJobFileTitle,
   scopeLinesForDuplicate,
   suggestedDuplicateTitle,
+  workTypeForDuplicate,
 } from '../src/shared/jobFileCopy.js';
 
 test('normalizeJobFileTitle trims and collapses spaces', () => {
@@ -49,6 +51,24 @@ test('suggestedDuplicateTitle prefixes once and stays within length', () => {
   assert.equal(suggestedDuplicateTitle('  '), 'Copy of Job');
   const long = 'X'.repeat(250);
   assert.equal(suggestedDuplicateTitle(long).length, 200);
+});
+
+test('workTypeForDuplicate stays on the two intake seats', () => {
+  assert.equal(workTypeForDuplicate('construction'), 'construction');
+  assert.equal(workTypeForDuplicate('mitigation'), 'mitigation');
+  assert.equal(workTypeForDuplicate('something-else'), 'mitigation');
+  assert.equal(workTypeForDuplicate(null), 'mitigation');
+});
+
+test('factsForDuplicate fits the intake approve schema', () => {
+  const facts = factsForDuplicate({
+    Site: '1842 Meridian Ave',
+    ['K'.repeat(120)]: 'x'.repeat(4000),
+    skip: null,
+  });
+  assert.equal(facts.Site, '1842 Meridian Ave');
+  assert.equal(Object.keys(facts).find((k) => k.startsWith('K'))?.length, 80);
+  assert.equal(facts['K'.repeat(80)]?.length, 2000);
 });
 
 test('scopeLinesForDuplicate keeps the current revision and resets decisions', () => {

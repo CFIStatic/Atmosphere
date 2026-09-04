@@ -152,3 +152,17 @@ export function isDecoyPath(path: string): boolean {
   }
   return HONEYPOT_PATHS.test(normalized);
 }
+
+/**
+ * Real office mutations. A job title like "drop cloths on the table" can
+ * trip injection.body (score 75 → 403 Forbidden). Duplicate / rename /
+ * Start a job must still run — observe, do not refuse.
+ */
+const TRUSTED_PRODUCT_PATH =
+  /^\/api\/(?:operations\/(?:shared\/[^/]+(?:\/duplicate)?|intake\/(?:approve|propose)|jobs\/quick-start)|jobs(?:\/[^/]+)?|auth(?:\/|$)|org(?:\/|$)|profile(?:\/|$))/i;
+
+export function isTrustedProductPath(path: string): boolean {
+  const normalized = (path.split('?')[0] ?? path).replace(/\/+$/, '') || '/';
+  if (isDecoyPath(normalized)) return false;
+  return TRUSTED_PRODUCT_PATH.test(normalized);
+}

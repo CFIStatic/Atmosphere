@@ -26,8 +26,25 @@ export function isCrmAuditError(message: string | null | undefined): boolean {
   return /private\.crm_audit/i.test(msg);
 }
 
+/**
+ * PostgREST / Supabase often collapse RLS, a bad service-role key, or a
+ * leftover SECURITY INVOKER trigger into the single word "Forbidden".
+ * That is a write we should retry with the user JWT after repairing
+ * side effects — never a message for the office UI.
+ */
+export function isPrivilegeError(message: string | null | undefined): boolean {
+  const msg = (message ?? '').trim();
+  if (!msg) return false;
+  if (/^forbidden$/i.test(msg)) return true;
+  if (/\b42501\b/.test(msg)) return true;
+  if (/row-level security|permission denied|not_org_member/i.test(msg)) return true;
+  if (/invalid api key/i.test(msg)) return true;
+  if (/jwt (expired|malformed|invalid)/i.test(msg)) return true;
+  return false;
+}
+
 export function isJobCreateBlockingError(message: string | null | undefined): boolean {
-  return isMemoryLedgerError(message) || isCrmAuditError(message);
+  return isMemoryLedgerError(message) || isCrmAuditError(message) || isPrivilegeError(message);
 }
 
 export function intakeWriteError(
@@ -40,10 +57,44 @@ export function intakeWriteError(
     // eslint-disable-next-line no-console
     console.warn(`[intake] ${code}:`, msg);
   }
-  if (isJobCreateBlockingError(msg)) {
+  if (isMemoryLedgerError(msg) || isCrmAuditError(msg)) {
     return new HttpError(500, 'Could not create the job. Try again.', 'job_failed');
   }
   return new HttpError(500, fallback, code);
+}
+
+/** Admin first when present, then the signed-in user — never the same client twice. */
+export function clientsToTry(admin: unknown, user: unknown): unknown[] {
+  if (admin && admin !== user) return [admin, user];
+  return user ? [user] : admin ? [admin] : [];
+}
+
+/**
+ * Insert/update through the service role when it works. If that client is
+ * forbidden (restricted key, RLS-shaped trigger), repair leftover CRM
+ * side effects and retry — including with the user JWT, the path Start a
+ * job already uses via intake_create_job_file.
+ */
+export async function attemptIntakeWrite<T>(
+  clients: unknown[],
+  write: (client: any) => Promise<{ data: T | null; error: { message?: string } | null }>,
+  fallback: string,
+  code: string,
+): Promise<T> {
+  await repairJobCreateSideEffects();
+  let lastError: { message?: string } | null = null;
+  for (const client of clients) {
+    const first = await write(client);
+    if (!first.error && first.data != null) return first.data;
+    lastError = first.error;
+    if (isJobCreateBlockingError(first.error?.message)) {
+      await repairJobCreateSideEffects();
+      const retry = await write(client);
+      if (!retry.error && retry.data != null) return retry.data;
+      lastError = retry.error ?? first.error;
+    }
+  }
+  throw intakeWriteError(lastError, fallback, code);
 }
 
 /** Drop a stray memory_events.job_id FK. No-ops when the RPC is not applied yet. */

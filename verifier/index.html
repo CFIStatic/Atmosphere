@@ -4190,7 +4190,10 @@
     }).then(function (res) {
       jobSheet.busy = false;
       if (!res.ok) {
-        jobSheet.error = (res.body && (res.body.error || res.body.message)) || (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.');
+        var rawErr = (res.body && (res.body.error || res.body.message)) || '';
+        jobSheet.error = /^forbidden$/i.test(String(rawErr).trim())
+          ? (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file. Try again.')
+          : (rawErr || (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.'));
         paintJobFileSheet();
         return;
       }

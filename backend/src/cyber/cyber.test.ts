@@ -4,8 +4,9 @@ import type { Request } from 'express';
 import {
   CyberStore,
 } from './store.js';
+import { inspectRequest } from './agent.js';
 import { detectThreats, aggregateScore, severityForScore } from './detector.js';
-import { isDecoyPath, DECOY_PATHS } from './signatures.js';
+import { isDecoyPath, isTrustedProductPath, DECOY_PATHS } from './signatures.js';
 import { buildDecoy, classifyDecoy } from './deception.js';
 import { ttlFor, blockIp, isIpBlocked, unblockIp } from './blocker.js';
 import { runAutoPatch } from './autoPatch.js';
@@ -49,6 +50,16 @@ describe('signatures: decoy paths', () => {
     }
   });
 
+  it('treats job-file duplicate as a trusted office path', () => {
+    assert.equal(
+      isTrustedProductPath('/api/operations/shared/abc-123/duplicate'),
+      true,
+    );
+    assert.equal(isTrustedProductPath('/api/operations/intake/approve'), true);
+    assert.equal(isTrustedProductPath('/api/admin'), false);
+    assert.equal(isTrustedProductPath('/.env'), false);
+  });
+
   it('registers an explicit decoy list for operators', () => {
     assert.ok(DECOY_PATHS.includes('/.env'));
     assert.ok(DECOY_PATHS.includes('/api/v1/secrets'));
@@ -85,6 +96,43 @@ describe('detector: scoring', () => {
     const signals = detectThreats(fakeReq({ path: '/api/health' }));
     assert.equal(signals.length, 0);
     assert.equal(aggregateScore(signals), 0);
+  });
+
+  it('does not flag duplicating a normal job title', () => {
+    const signals = detectThreats(
+      fakeReq({
+        path: '/api/operations/shared/abc-123/duplicate',
+        method: 'POST',
+        body: { title: 'Copy of Mobil test one' },
+      }),
+    );
+    assert.equal(signals.length, 0);
+    assert.equal(isTrustedProductPath('/api/operations/shared/abc-123/duplicate'), true);
+  });
+
+  it('does not 403 a trusted duplicate even when the title looks like SQL', async () => {
+    const req = fakeReq({
+      path: '/api/operations/shared/abc-123/duplicate',
+      method: 'POST',
+      body: { title: 'drop cloths on the table' },
+    });
+    const signals = detectThreats(req);
+    assert.ok(signals.some((s) => s.category === 'injection'));
+    assert.ok(aggregateScore(signals) >= 70);
+
+    let refused = false;
+    const res = {
+      setHeader() { return this; },
+      getHeader() { return undefined; },
+      status(code: number) {
+        if (code === 403) refused = true;
+        return this;
+      },
+      json() { return this; },
+    };
+    const result = await inspectRequest(req, res as never);
+    assert.equal(result.handled, false);
+    assert.equal(refused, false);
   });
 
   it('redacts secret-shaped body keys while still matching injection', () => {

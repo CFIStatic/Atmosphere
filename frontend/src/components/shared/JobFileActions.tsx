@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type SharedJobSummary } from '../../lib/api';
-import { jobFileDeleteNameMatches, suggestedDuplicateTitle } from '../../lib/jobFileCopy';
+import { jobFileActionError, jobFileDeleteNameMatches, suggestedDuplicateTitle } from '../../lib/jobFileCopy';
 import { notifyLibraryChanged } from '../../lib/libraryChanged';
 import { SpinnerIcon } from '../icons';
 
@@ -64,7 +64,7 @@ export function JobFileActions({
         setMode(null);
         onDeleted?.();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not delete that job file.');
+        setError(jobFileActionError('delete', err));
       } finally {
         setBusy(false);
       }
@@ -92,7 +92,7 @@ export function JobFileActions({
       }
       setMode(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update that job file.');
+      setError(jobFileActionError(mode, err));
     } finally {
       setBusy(false);
     }

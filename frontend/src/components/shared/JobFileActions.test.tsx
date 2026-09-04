@@ -68,6 +68,28 @@ describe('JobFileActions', () => {
     expect(onRenamed).toHaveBeenCalledWith('Kitchen rebuild');
   });
 
+  it('does not show the raw Forbidden status when duplicate fails', async () => {
+    duplicateJobFile.mockRejectedValueOnce(new Error('Forbidden'));
+    const user = userEvent.setup();
+    render(
+      <JobFileActions
+        jobId="job-1"
+        title="Mobil test one"
+        onRenamed={() => undefined}
+        onDuplicated={() => undefined}
+        onShare={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }));
+    await user.click(screen.getByRole('button', { name: 'Create copy' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not duplicate that job file. Try again.',
+    );
+    expect(screen.queryByText('Forbidden')).not.toBeInTheDocument();
+  });
+
   it('duplicates the open job file under a new name', async () => {
     const onDuplicated = vi.fn();
     const user = userEvent.setup();

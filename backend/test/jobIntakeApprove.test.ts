@@ -85,6 +85,14 @@ test('intake RPC creates a job file without invitees and always attempts the fun
   assert.doesNotMatch(src, /invites\[0\]!/);
 });
 
+test('duplicate uses the same intake create path and never leaks Forbidden', () => {
+  const src = readFileSync(new URL('../src/routes/sharedJobs.ts', import.meta.url), 'utf8');
+  assert.match(src, /await createJobFile\(/);
+  assert.match(src, /clientsToTry\(admin, supabase\)/);
+  assert.match(src, /Could not duplicate the job file/);
+  assert.doesNotMatch(src, /throw new HttpError\(500, sourceError\.message/);
+});
+
 test('latest intake SQL allows an empty invite list', () => {
   const sql = readFileSync(
     new URL('../supabase/migrations/20260901140000_intake_create_job_without_invitees.sql', import.meta.url),

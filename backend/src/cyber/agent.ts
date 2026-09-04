@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { aggregateScore, clientIp, detectThreats, severityForScore } from './detector.js';
 import { blockIp, isIpBlocked, noteBlockedHit } from './blocker.js';
 import { sendDecoy } from './deception.js';
-import { isDecoyPath } from './signatures.js';
+import { isDecoyPath, isTrustedProductPath } from './signatures.js';
 import { applySecurityHeaders, getHardeningContext } from './autoPatch.js';
 import { cyberStore } from './store.js';
 import type { DefenseAction, ThreatEvent } from './types.js';
@@ -46,9 +46,13 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
   const ip = clientIp(req);
   const requestId = (req.headers['x-request-id'] as string | undefined) || cyberStore.nextRequestId();
   res.setHeader('X-Request-Id', requestId);
+  const path = req.path || '/';
+  const trustedOfficePath = isTrustedProductPath(path);
 
-  // Already banned — do not touch real handlers.
-  if (config.cyber.autoBlock && isIpBlocked(ip)) {
+  // Already banned — do not touch real handlers, except the office paths a
+  // signed-in contractor still needs (duplicate / rename / intake). A
+  // false-positive ban must not paint "Forbidden" on Create copy.
+  if (config.cyber.autoBlock && isIpBlocked(ip) && !trustedOfficePath) {
     noteBlockedHit(ip);
     const event = record({
       req,
@@ -66,7 +70,6 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
 
   const signals = detectThreats(req);
   const score = aggregateScore(signals);
-  const path = req.path || '/';
   const decoyHit = config.cyber.deception && isDecoyPath(path);
 
   if (decoyHit) {
@@ -134,7 +137,7 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
   let action: DefenseAction = 'observe';
   let blocked = false;
 
-  if (config.cyber.autoBlock && score >= BLOCK_SCORE) {
+  if (config.cyber.autoBlock && score >= BLOCK_SCORE && !trustedOfficePath) {
     blockIp({
       ip,
       reason: signals.map((s) => s.reason).join(' '),

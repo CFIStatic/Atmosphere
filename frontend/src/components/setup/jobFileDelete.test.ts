@@ -31,6 +31,11 @@ describe('Dashboard job-file delete', () => {
     expect(verifierHtml).toContain('!canOpenJobRecord(key) || !ORG_MODE');
   });
 
+  it('does not paint a raw Forbidden on Create copy', () => {
+    expect(verifierHtml).toContain('/^forbidden$/i.test');
+    expect(verifierHtml).toContain('Could not duplicate that job file. Try again.');
+  });
+
   it('sizes the Dashboard delete sheet like the office job-file dialog', () => {
     expect(verifierHtml).toContain('class="sheet sheet-narrow"');
     expect(verifierHtml).toMatch(/\.sheet\.sheet-narrow\s*\{[^}]*width:\s*min\(28rem,\s*100%\)/);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  jobFileActionError,
   jobFileDeleteNameMatches,
   jobLooksDeletedFromLibrary,
   suggestedDuplicateTitle,
@@ -35,6 +36,17 @@ describe('visibleJobFiles', () => {
     ];
     expect(visibleJobFiles(rows, new Set(['live'])).map((row) => row.jobId)).toEqual(['live']);
     expect(visibleJobFiles(rows).map((row) => row.jobId)).toEqual(['live', 'stale']);
+  });
+});
+
+describe('jobFileActionError', () => {
+  it('does not show the raw Forbidden status on duplicate', () => {
+    expect(jobFileActionError('duplicate', new Error('Forbidden'))).toBe(
+      'Could not duplicate that job file. Try again.',
+    );
+    expect(jobFileActionError('duplicate', new Error('Job name is too short'))).toBe(
+      'Job name is too short',
+    );
   });
 });
 

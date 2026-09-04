@@ -13,6 +13,8 @@ import {
 } from '../verifier/deliverPartyInvite.js';
 import { recordAccess } from './proofOfWork.js';
 import {
+  attemptIntakeWrite,
+  clientsToTry,
   intakeWriteError,
   isJobCreateBlockingError,
   repairJobCreateSideEffects,
@@ -45,18 +47,17 @@ import {
 
 type CrmJobRow = { id: string; title: string; job_number: number | null };
 
-async function insertCrmJob(writer: any, row: Record<string, unknown>): Promise<CrmJobRow> {
-  await repairJobCreateSideEffects();
-  const attempt = () => writer.from('crm_jobs').insert(row).select('id, title, job_number').single();
-  const first = await attempt();
-  if (!first.error && first.data) return first.data as CrmJobRow;
-  if (isJobCreateBlockingError(first.error?.message)) {
-    await repairJobCreateSideEffects();
-    const retry = await attempt();
-    if (!retry.error && retry.data) return retry.data as CrmJobRow;
-    throw intakeWriteError(retry.error ?? first.error, 'Could not create the job.', 'job_failed');
-  }
-  throw intakeWriteError(first.error, 'Could not create the job.', 'job_failed');
+async function insertCrmJob(
+  writer: any,
+  row: Record<string, unknown>,
+  fallbackWriter?: any,
+): Promise<CrmJobRow> {
+  return attemptIntakeWrite<CrmJobRow>(
+    clientsToTry(writer, fallbackWriter ?? writer),
+    (client) => client.from('crm_jobs').insert(row).select('id, title, job_number').single(),
+    'Could not create the job.',
+    'job_failed',
+  );
 }
 
 export const jobIntakeRouter = Router();
@@ -705,15 +706,19 @@ async function createJobFileStepwise(
     propertyId = property.data.id;
   }
 
-  const job = await insertCrmJob(writer, {
-    org_id: orgId,
-    title: jobTitle,
-    work_type: input.workType,
-    property_id: propertyId,
-    claim_number: input.claimNumber || null,
-    status: 'scheduled',
-    created_by: userId,
-  });
+  const job = await insertCrmJob(
+    writer,
+    {
+      org_id: orgId,
+      title: jobTitle,
+      work_type: input.workType,
+      property_id: propertyId,
+      claim_number: input.claimNumber || null,
+      status: 'scheduled',
+      created_by: userId,
+    },
+    supabase,
+  );
   const jobId = job.id;
 
   const { error: intakeError } = await writer.from('job_intake').insert({

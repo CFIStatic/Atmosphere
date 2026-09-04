@@ -56,6 +56,24 @@ export type CopiedScopeLine = {
   amount: number | null;
 };
 
+export function workTypeForDuplicate(
+  workType: string | null | undefined,
+): 'mitigation' | 'construction' {
+  return workType === 'construction' ? 'construction' : 'mitigation';
+}
+
+/** Brief facts must fit the intake approve schema (80-char keys, 2000-char values). */
+export function factsForDuplicate(facts: unknown): Record<string, string> {
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(facts as Record<string, unknown>)) {
+    const nextKey = String(key).trim().slice(0, 80);
+    if (!nextKey) continue;
+    out[nextKey] = value == null ? '' : String(value).slice(0, 2000);
+  }
+  return out;
+}
+
 /** Decisions do not travel — a copy is a new file, not a second signature. */
 export function scopeStateForDuplicate(state: string | null | undefined): string {
   if (state === 'approved') return 'included';
