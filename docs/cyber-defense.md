@@ -21,6 +21,7 @@ request
   → body/cookie parse
   → Cyber monitor
        ├─ IP already banned? → 403, stop
+       │    (never on /api/auth/* or private / loopback hops)
        ├─ Decoy / probe path? → fake success (tarpit), often ban, stop
        ├─ High threat score on a real path? → ban + 403, stop
        └─ else → real Atmosphere routers

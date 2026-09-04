@@ -437,6 +437,8 @@ FRONTEND_ORIGIN=https://platform.atmosphereteam.com,https://${{Atmosphere-web.RA
 
 Production CORS already allows `https://platform.atmosphereteam.com` even if `FRONTEND_ORIGIN` is stale — without that, login shows **Origin not allowed**. The deploy workflow defaults `FRONTEND_ORIGIN` to the platform host plus the Railway office and staff hosts. If GitHub Actions variable `FRONTEND_ORIGIN` is set, it must include `https://platform.atmosphereteam.com` or the next Keys sync will drop it.
 
+`platform.atmosphereteam.com` is orange-clouded on Cloudflare. Bot Fight / Managed Challenge on `/api/*` turns `POST /api/auth/login` into a 403 the SPA cannot complete (the login card shows **Forbidden**). In Cloudflare: **Configuration rules** → if URI Path starts with `/api/` → **Skip** Bot Fight Mode, Browser Integrity Check, and Super Bot Fight Mode. Leave those on for `/` so the HTML page still gets challenged. The BFF already refuses honeypot and scanner traffic; it does not refuse `/api/auth/*`.
+
 ### 3. Ship it
 
 `.github/workflows/deploy-production.yml` deploys **both** services (`railway up --service Atmosphere` and `--service Atmosphere-web`). Needs `RAILWAY_TOKEN` in the `Keys` environment. Optional: `RAILWAY_APP_SERVICE` if the office service is not named `Atmosphere-web`.

@@ -14,6 +14,8 @@ export {
   severityForScore,
   clientIp,
   isUserContentApiPath,
+  isPublicAuthPath,
+  isUnblockableIp,
 } from './detector.js';
 export { isDecoyPath, DECOY_PATHS, SIGNATURES } from './signatures.js';
 export { buildDecoy, classifyDecoy } from './deception.js';

@@ -58,6 +58,36 @@ describe('apiFailureMessage', () => {
     });
   });
 
+  it('rewrites Forbidden on sign-in instead of a save error', () => {
+    expect(
+      apiFailureMessage(
+        403,
+        { error: 'Forbidden', code: 'blocked' },
+        '',
+        'Request failed',
+        '/api/auth/login',
+      ),
+    ).toEqual({
+      message: 'Sign-in was blocked. Reload this page and try again.',
+      code: 'blocked',
+    });
+  });
+
+  it('rewrites a Cloudflare challenge page on sign-in', () => {
+    expect(
+      apiFailureMessage(
+        403,
+        {},
+        '<html><title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></html>',
+        'Request failed',
+        '/api/auth/login',
+      ),
+    ).toEqual({
+      message: 'A security check interrupted sign-in. Reload this page and try again.',
+      code: 'security_check',
+    });
+  });
+
   it('surfaces email_taken from Create account', () => {
     expect(
       apiFailureMessage(

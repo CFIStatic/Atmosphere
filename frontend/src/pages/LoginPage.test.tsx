@@ -35,8 +35,13 @@ vi.mock('../lib/api', () => ({
     pinStatus: () => pinStatus(),
   },
   ApiError: class ApiError extends Error {
-    status = 401;
-    code = 'invalid_credentials';
+    status: number;
+    code: string;
+    constructor(status: number, message: string, code = 'error') {
+      super(message);
+      this.status = status;
+      this.code = code;
+    }
   },
 }));
 
@@ -205,5 +210,23 @@ describe('LoginPage', () => {
     expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(
       authState.login.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('shows a readable error instead of the raw word Forbidden', async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import('../lib/api');
+    authState.login.mockRejectedValueOnce(
+      new ApiError(403, 'Sign-in was blocked. Reload this page and try again.', 'blocked'),
+    );
+
+    renderLogin();
+    await user.type(screen.getByLabelText('Email'), 'jack@jettx.ai');
+    await user.type(screen.getByLabelText('Password'), 'password1');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sign-in was blocked. Reload this page and try again.',
+    );
+    expect(screen.queryByText('Forbidden')).toBeNull();
   });
 });
