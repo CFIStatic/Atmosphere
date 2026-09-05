@@ -2535,19 +2535,44 @@ const BACKEND_UNREACHABLE_MESSAGE = backendUnreachableMessage();
  * Empty-body 500s are the classic Vite-proxy-when-API-is-down signature.
  */
 const OPAQUE_API_ERROR = /^(forbidden|unauthorized|access denied|not allowed|blocked)$/i;
+const AUTH_API_PATH = /^\/api\/(?:auth(?:\/|$)|field-app\/(?:register|join)|field\/claim)/i;
+const CLOUDFLARE_CHALLENGE =
+  /just a moment|cf-browser-verification|challenge-platform|cdn-cgi\/challenge/i;
+
+export function isAuthApiPath(path: string): boolean {
+  return AUTH_API_PATH.test(path);
+}
 
 export function apiFailureMessage(
   status: number,
   body: Record<string, unknown>,
   rawText: string,
   fallbackPrefix = 'Request failed',
+  path = '',
 ): { message: string; code: string } {
   const explicit = typeof body.error === 'string' ? body.error.trim() : '';
   const code = typeof body.code === 'string' && body.code ? body.code : 'error';
+  const authPath = isAuthApiPath(path);
+
+  if (CLOUDFLARE_CHALLENGE.test(rawText)) {
+    return {
+      message: authPath
+        ? 'A security check interrupted sign-in. Reload this page and try again.'
+        : 'A security check interrupted this request. Reload the page and try again.',
+      code: 'security_check',
+    };
+  }
+
   if (explicit && !OPAQUE_API_ERROR.test(explicit)) return { message: explicit, code };
   if (explicit && OPAQUE_API_ERROR.test(explicit)) {
     if (status === 401) {
       return { message: 'Sign in again to continue.', code: code === 'error' ? 'unauthorized' : code };
+    }
+    if (authPath) {
+      return {
+        message: 'Sign-in was blocked. Reload this page and try again.',
+        code: code === 'error' || code === 'blocked' ? 'blocked' : code,
+      };
     }
     return {
       message: 'That could not be saved. Refresh and try again.',
@@ -2563,6 +2588,13 @@ export function apiFailureMessage(
     (status === 500 && emptyOrNonJson)
   ) {
     return { message: BACKEND_UNREACHABLE_MESSAGE, code: 'backend_unreachable' };
+  }
+
+  if (status === 403 && authPath) {
+    return {
+      message: 'Sign-in was blocked. Reload this page and try again.',
+      code: 'blocked',
+    };
   }
 
   return { message: `${fallbackPrefix} (${status})`, code };
@@ -2594,7 +2626,7 @@ async function request<T>(path: string, options: RequestInit = {}, retried = fal
   const body = parseApiJson(text);
 
   if (!res.ok) {
-    const { message, code } = apiFailureMessage(res.status, body, text);
+    const { message, code } = apiFailureMessage(res.status, body, text, 'Request failed', path);
     throw new ApiError(res.status, message, code);
   }
 

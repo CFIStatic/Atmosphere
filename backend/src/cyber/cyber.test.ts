@@ -4,7 +4,15 @@ import type { Request } from 'express';
 import {
   CyberStore,
 } from './store.js';
-import { detectThreats, aggregateScore, severityForScore, isUserContentApiPath } from './detector.js';
+import {
+  detectThreats,
+  aggregateScore,
+  severityForScore,
+  isUserContentApiPath,
+  isPublicAuthPath,
+  isUnblockableIp,
+} from './detector.js';
+import { inspectRequest } from './agent.js';
 import { isDecoyPath, DECOY_PATHS } from './signatures.js';
 import { buildDecoy, classifyDecoy } from './deception.js';
 import { ttlFor, blockIp, isIpBlocked, unblockIp } from './blocker.js';
@@ -46,6 +54,29 @@ describe('signatures: decoy paths', () => {
   it('treats job-file writes as user-content API paths', () => {
     assert.equal(isUserContentApiPath('/api/operations/shared/job-1'), true);
     assert.equal(isUserContentApiPath('/api/auth/login'), false);
+  });
+
+  it('treats workspace sign-in as a public auth path', () => {
+    for (const p of [
+      '/api/auth/login',
+      '/api/auth/signup',
+      '/api/auth/forgot-password',
+      '/api/auth/pin/unlock',
+      '/api/field-app/join',
+      '/api/field/claim/start',
+    ]) {
+      assert.equal(isPublicAuthPath(p), true, `${p} must stay reachable`);
+    }
+    assert.equal(isPublicAuthPath('/api/jobs'), false);
+    assert.equal(isPublicAuthPath('/api/admin'), false);
+  });
+
+  it('does not ban private or loopback hops', () => {
+    assert.equal(isUnblockableIp('127.0.0.1'), true);
+    assert.equal(isUnblockableIp('10.1.2.3'), true);
+    assert.equal(isUnblockableIp('172.16.4.8'), true);
+    assert.equal(isUnblockableIp('100.64.1.2'), true);
+    assert.equal(isUnblockableIp('203.0.113.10'), false);
   });
 
   it('does not treat real Atmosphere routes as decoys', () => {
@@ -158,6 +189,59 @@ describe('blocker: TTL and ban lifecycle', () => {
     assert.equal(isIpBlocked(ip), true);
     assert.equal(unblockIp(ip), true);
     assert.equal(isIpBlocked(ip), false);
+  });
+});
+
+function fakeRes() {
+  const headers = new Map<string, string>();
+  return {
+    statusCode: 200,
+    body: null as unknown,
+    getHeader(name: string) {
+      return headers.get(name.toLowerCase());
+    },
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value);
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body: unknown) {
+      this.body = body;
+      return this;
+    },
+  };
+}
+
+describe('agent: sign-in stays reachable', () => {
+  const banned = '203.0.113.77';
+
+  beforeEach(() => {
+    unblockIp(banned);
+  });
+
+  it('still inspects /api/auth/login after the IP is banned', async () => {
+    blockIp({ ip: banned, reason: 'honeypot', score: 90, severity: 'high', deceived: true });
+    const res = fakeRes();
+    const result = await inspectRequest(
+      fakeReq({ path: '/api/auth/login', method: 'POST', ip: banned, body: { email: 'a@b.c' } }),
+      res as never,
+    );
+    assert.equal(result.handled, false);
+    assert.notEqual(res.statusCode, 403);
+  });
+
+  it('still refuses a banned IP on a non-auth path', async () => {
+    blockIp({ ip: banned, reason: 'honeypot', score: 90, severity: 'high', deceived: true });
+    const res = fakeRes();
+    const result = await inspectRequest(
+      fakeReq({ path: '/api/jobs', method: 'GET', ip: banned }),
+      res as never,
+    );
+    assert.equal(result.handled, true);
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.body, { error: 'Forbidden', code: 'blocked' });
   });
 });
 

@@ -1,7 +1,14 @@
 import type { Request, Response } from 'express';
 import { isHealthProbePath } from '../bootFlags.js';
 import { config } from '../config.js';
-import { aggregateScore, clientIp, detectThreats, severityForScore } from './detector.js';
+import {
+  aggregateScore,
+  clientIp,
+  detectThreats,
+  isPublicAuthPath,
+  isUnblockableIp,
+  severityForScore,
+} from './detector.js';
 import { blockIp, isIpBlocked, noteBlockedHit } from './blocker.js';
 import { sendDecoy } from './deception.js';
 import { isDecoyPath } from './signatures.js';
@@ -14,10 +21,11 @@ import type { DefenseAction, ThreatEvent } from './types.js';
  *
  * Pipeline for every request when monitoring is on:
  *   1. Apply hardening headers.
- *   2. If the IP is blocked → refuse immediately (no real handler runs).
+ *   2. If the IP is blocked → refuse immediately (no real handler runs),
+ *      except sign-in / recovery and hops we must not ban (private / loopback).
  *   3. Score the request against defensive signatures.
  *   4. Honeypot / decoy paths → deceive (fake success), raise score, often block.
- *   5. High score on a real path → block and refuse.
+ *   5. High score on a real path → block and refuse (never on /api/auth/*).
  *   6. Otherwise observe and continue to the real app.
  */
 
@@ -44,11 +52,16 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
   });
 
   const ip = clientIp(req);
+  const path = req.path || '/';
+  const authPath = isPublicAuthPath(path);
+  const unblockable = isUnblockableIp(ip);
   const requestId = (req.headers['x-request-id'] as string | undefined) || cyberStore.nextRequestId();
   res.setHeader('X-Request-Id', requestId);
 
-  // Already banned — do not touch real handlers.
-  if (config.cyber.autoBlock && isIpBlocked(ip)) {
+  // Already banned — do not touch real handlers. Sign-in must still work:
+  // a shared office NAT or a leftover honeypot hit must not print Forbidden
+  // on /login. Private hops are the nginx front door, not a client.
+  if (config.cyber.autoBlock && isIpBlocked(ip) && !authPath && !unblockable) {
     noteBlockedHit(ip);
     const event = record({
       req,
@@ -66,7 +79,6 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
 
   const signals = detectThreats(req);
   const score = aggregateScore(signals);
-  const path = req.path || '/';
   const decoyHit = config.cyber.deception && isDecoyPath(path);
 
   if (decoyHit) {
@@ -74,7 +86,7 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
     let blocked = false;
     let action: DefenseAction = 'deceive';
 
-    if (config.cyber.autoBlock && score >= BLOCK_SCORE) {
+    if (config.cyber.autoBlock && score >= BLOCK_SCORE && !unblockable) {
       blockIp({
         ip,
         reason: signals.map((s) => s.reason).join(' ') || 'Honeypot hit',
@@ -134,7 +146,7 @@ export async function inspectRequest(req: Request, res: Response): Promise<Inspe
   let action: DefenseAction = 'observe';
   let blocked = false;
 
-  if (config.cyber.autoBlock && score >= BLOCK_SCORE) {
+  if (config.cyber.autoBlock && score >= BLOCK_SCORE && !authPath && !unblockable) {
     blockIp({
       ip,
       reason: signals.map((s) => s.reason).join(' '),

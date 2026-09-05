@@ -14,8 +14,33 @@ const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIO
 const USER_CONTENT_API =
   /^\/api\/(operations|jobs|evidence-portal|crm|pm|sales)(\/|$)/i;
 
+/** Sign-in and recovery — never refuse these, even if the IP is on the ban list. */
+const PUBLIC_AUTH_API =
+  /^\/api\/(?:auth(?:\/|$)|field-app\/(?:register|join|office\/preview)(?:\/|$)|field\/claim(?:\/|$))/i;
+
 export function isUserContentApiPath(path: string): boolean {
   return USER_CONTENT_API.test(path);
+}
+
+export function isPublicAuthPath(path: string): boolean {
+  return PUBLIC_AUTH_API.test(path.split('?')[0] || path);
+}
+
+/**
+ * Private, loopback, and link-local addresses are the office nginx hop or
+ * this process — banning them locks every browser behind the same front door.
+ */
+export function isUnblockableIp(ip: string): boolean {
+  const value = ip.replace(/^::ffff:/, '').trim().toLowerCase();
+  if (!value || value === 'unknown' || value === 'localhost') return true;
+  if (value === '127.0.0.1' || value === '::1') return true;
+  if (value.startsWith('10.') || value.startsWith('192.168.') || value.startsWith('169.254.')) {
+    return true;
+  }
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(value)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(value)) return true;
+  if (value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:')) return true;
+  return false;
 }
 
 /**
