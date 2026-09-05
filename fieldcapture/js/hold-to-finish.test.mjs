@@ -187,6 +187,32 @@ assert.match(
   /if \(state\.lastClip\) \{\s*setStatus\('The last day is still on this phone\.'/,
   'Home must not start a second day while the last clip is still local',
 );
+assert.match(
+  appSrc,
+  /clip\.jobId = state\.activeJobId/,
+  'stop must stamp the job the day was filmed on so a later Home tap cannot reroute the file',
+);
+assert.match(
+  appSrc,
+  /resolveActiveJobId\(clip\.jobId\)/,
+  'filing must use the clip job, not whatever is selected on Today',
+);
+assert.match(
+  appSrc,
+  /if \(state\.lastClip && state\.lastClip\.jobId === localId\)/,
+  'a local-to-office remap must keep an unfiled clip on that same job',
+);
+{
+  const openFrom = appSrc.indexOf('function openNewJobForm');
+  const openTo = appSrc.indexOf('function selectCreatedJob');
+  assert.ok(openFrom >= 0 && openTo > openFrom, 'openNewJobForm must exist');
+  const openSrc = appSrc.slice(openFrom, openTo);
+  assert.match(
+    openSrc,
+    /if \(state\.lastClip\)/,
+    '+ must not open a new job while the last clip is still on this phone',
+  );
+}
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
 assert.match(coreSrc, /putFileResumable/, 'large day films resume from the first missing part');
 assert.match(coreSrc, /proof\/upload-complete/);
@@ -278,12 +304,22 @@ assert.match(appSrc, /Core\.createTodayJob/);
   assert.ok(submitFrom >= 0 && submitTo > submitFrom, 'new-job submit must exist');
   const submitSrc = appSrc.slice(submitFrom, submitTo);
   assert.ok(
-    submitSrc.indexOf('navigator.mediaDevices.getUserMedia') < submitSrc.indexOf('Core.createTodayJob({'),
+    submitSrc.indexOf('navigator.mediaDevices.getUserMedia') < submitSrc.indexOf('syncPendingJobs()'),
     'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
   );
   assert.ok(
-    submitSrc.indexOf('finishLocal(localJob, stream)') < submitSrc.indexOf('Core.createTodayJob({'),
+    submitSrc.indexOf('finishLocal(localJob, stream)') < submitSrc.indexOf('syncPendingJobs()'),
     'recording starts on the local draft before the office POST',
+  );
+  assert.doesNotMatch(
+    submitSrc,
+    /Core\.createTodayJob\(\{/,
+    'new-job submit must POST through pendingSync, not a parallel createTodayJob',
+  );
+  assert.match(
+    submitSrc,
+    /if \(state\.finishing \|\| state\.lastClip\)/,
+    'Start recording must not draft a second job while the last clip is unfiled',
   );
 }
 assert.match(

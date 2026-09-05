@@ -304,6 +304,16 @@
   function openNewJobForm() {
     if (LIVE) return;
     if ($('#job-add') && $('#job-add').hidden) return;
+    if (state.finishing) {
+      setStatus('The last day is still uploading.', true);
+      return;
+    }
+    if (state.lastClip) {
+      setStatus('The last day is still on this phone.');
+      state.finishing = true;
+      uploadLastClip();
+      return;
+    }
     showNewJobError('');
     var name = $('#new-job-name');
     var note = $('#new-job-note');
@@ -336,6 +346,9 @@
       return j.id === localId ? listed : j;
     });
     if (state.activeJobId === localId) state.activeJobId = listed.id;
+    if (state.lastClip && state.lastClip.jobId === localId) {
+      state.lastClip.jobId = listed.id;
+    }
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
   }
@@ -377,12 +390,14 @@
     return pendingSync;
   }
 
-  function resolveActiveJobId() {
-    var id = state.activeJobId;
+  function resolveActiveJobId(jobId) {
+    var id = jobId || state.activeJobId;
     if (!id || !Core.isLocalJobId || !Core.isLocalJobId(id)) return Promise.resolve(id);
     return syncPendingJobs().then(function () {
-      if (state.activeJobId && !Core.isLocalJobId(state.activeJobId)) {
-        return state.activeJobId;
+      var resolved =
+        (jobId && state.lastClip && state.lastClip.jobId) || state.activeJobId;
+      if (resolved && !Core.isLocalJobId(resolved)) {
+        return resolved;
       }
       throw new Error('Waiting for signal…');
     });
@@ -437,6 +452,17 @@
         return;
       }
       if (btn && btn.disabled) return;
+      if (state.finishing || state.lastClip) {
+        show('s-home');
+        if (state.finishing) {
+          setStatus('The last day is still uploading.', true);
+          return;
+        }
+        setStatus('The last day is still on this phone.');
+        state.finishing = true;
+        uploadLastClip();
+        return;
+      }
       if (btn) btn.disabled = true;
 
       function finishLocal(job, stream) {
@@ -483,21 +509,9 @@
               };
           if (Core.upsertPendingJob) Core.upsertPendingJob(localJob);
           finishLocal(localJob, stream);
-          Core.createTodayJob({
-            apiBase: API_BASE,
-            accessToken: state.accessToken,
-            title: title,
-            situation: situation,
-          }).then(
-            function (job) {
-              if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, job);
-              remapLocalJob(localJob.id, job);
-              notifyOfficeLibraryChanged();
-            },
-            function () {
-              /* stay on the local draft; online + interval retry later */
-            },
-          );
+          /* Office POST goes through pendingSync — a parallel
+             createTodayJob here used to mint a second folder. */
+          syncPendingJobs();
         })
         .catch(function (err) {
           if (btn) btn.disabled = false;
@@ -914,10 +928,20 @@
     }
     if (state.finishing) {
       setStatus('The last day is still uploading.', true);
+      if (stream) {
+        stream.getTracks().forEach(function (t) {
+          t.stop();
+        });
+      }
       return;
     }
     if (state.lastClip) {
       setStatus('The last day is still on this phone.');
+      if (stream) {
+        stream.getTracks().forEach(function (t) {
+          t.stop();
+        });
+      }
       state.finishing = true;
       uploadLastClip();
       return;
@@ -967,6 +991,7 @@
     state.recorder
       .stop()
       .then(function (clip) {
+        clip.jobId = state.activeJobId;
         state.lastClip = clip;
         return uploadLastClip();
       })
@@ -987,7 +1012,7 @@
     var showDoor = screen === 's-door' || screen === 's-rec';
     if (showDoor) openDoorUploading();
     else setStatus('Filing with the office…');
-    return resolveActiveJobId()
+    return resolveActiveJobId(clip.jobId)
       .then(function (jobId) {
         return Core.uploadDayFilm({
           token: TOKEN || undefined,
