@@ -951,6 +951,7 @@ const SHARED_RECORDS: Record<string, any> = {
       { id: 'sc-4', party_id: 'pty-2', state: 'included', title: 'Tear off and replace roof — architectural shingle, 30yr', detail: null, amount: null, reason: null, revision: 4, decided_at: null, created_at: '2026-07-19T09:05:00Z' },
       { id: 'sc-5', party_id: 'pty-3', state: 'included', title: 'Rewire the two circuits in the affected bedrooms', detail: null, amount: null, reason: null, revision: 4, decided_at: null, created_at: '2026-08-01T09:05:00Z' },
       { id: 'sc-6', party_id: 'pty-2', state: 'approved', title: 'Ridge vent — replace full run', detail: null, amount: null, reason: null, revision: 3, decided_at: '2026-07-28T14:00:00Z', created_at: '2026-07-27T09:00:00Z' },
+      { id: 'sc-today', party_id: 'pty-2', state: 'included', title: 'Replace valley flashing on the north slope', detail: null, amount: null, reason: null, revision: 4, decided_at: null, created_at: new Date().toISOString() },
     ],
     money: { approved: 0, pending: 1240, unpricedApprovals: 1 },
     messages: [
@@ -1020,6 +1021,12 @@ const PROOF_DAYS: Record<string, any> = {
         transcriptError: null,
         aiSummary: 'The north slope is stripped to decking with underlayment and new shingles across two thirds of it.',
         heardOnMic: 'Homeowner asked us not to touch the skylights.',
+        receivedAt: '2026-08-05T20:51:00Z',
+        events: [
+          { atSeconds: 8, text: 'Camera finds the north slope' },
+          { atSeconds: 18, text: 'Tarp pulled from the ridge' },
+          { atSeconds: 39, text: 'Slope stripped; underlayment laid to the ridge' },
+        ],
       },
       {
         id: 'pf-1',
@@ -1034,6 +1041,22 @@ const PROOF_DAYS: Record<string, any> = {
         transcriptError: null,
         aiSummary: 'Tarp still on the north slope; skylights intact and passed without contact.',
         heardOnMic: null,
+      },
+      {
+        id: 'pf-today',
+        partyId: 'pty-2',
+        company: 'Delgado Roofing',
+        workDate: new Date().toISOString().slice(0, 10),
+        phase: 'after',
+        durationSeconds: 36,
+        analysisStatus: 'queued',
+        narrationStatus: 'queued',
+        transcriptStatus: 'queued',
+        transcriptError: null,
+        aiSummary: null,
+        heardOnMic: null,
+        receivedAt: new Date().toISOString(),
+        events: [],
       },
     ],
     days: [
@@ -1226,6 +1249,13 @@ const PROOF_QUESTIONS: Record<string, any[]> = {
       answer: 'On 2026-08-05. The after footage that day shows six new sheets in the north valley where the before showed dark, delaminated sheathing. The videos on file do not show decking work on any other day.',
       grounded_on: ['2026-08-05', '2026-08-04', '2026-08-01'],
       created_at: '2026-08-05T18:40:00Z',
+    },
+    {
+      id: 'q-today',
+      question: 'Did they finish the valley flashing?',
+      answer: null,
+      grounded_on: [],
+      created_at: new Date().toISOString(),
     },
   ],
 };
@@ -3681,7 +3711,7 @@ const routes: Array<[string, RegExp, Handler]> = [
               : aboutHomeowner
                 ? 'Yes. On the August 5 after clip, the mic picks up the homeowner asking the crew not to touch the skylights. That matches what they wrote on the file: “Please do not touch the skylights — we have a separate guy for those.”'
                 : aboutWork
-                  ? 'On August 5 Delgado Roofing stripped the north slope to decking and laid underlayment and new shingles across about two thirds of it. Six new decking sheets are visible in the valley. The south slope is not in the footage.'
+                  ? 'Yes. At 0:18, the tarp came off the north slope. That was 18 seconds into the recording. Underlayment is down across two thirds of the slope by 0:39.'
                   : 'This job file does not have that. The record covers the brief, scope, notes, and clips from 2026-08-01, 08-04 and 08-05.';
     const entry = { id: `q-${Date.now()}`, question: asked, answer, grounded_on: ['brief', 'scope', '2026-08-05:after', '2026-08-04:after'], created_at: new Date().toISOString() };
     (PROOF_QUESTIONS[m[1]] ??= []).unshift(entry);
