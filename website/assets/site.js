@@ -1,10 +1,10 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
-  // The bridge to the product. The deploy workflow stamps the hosted app's
-  // origin onto <html data-app-origin> (from the WEBSITE_APP_ORIGIN repo
-  // variable); when present, every sign-in / get-started CTA routes into the
-  // real app and the early-access stubs below stand down. Unstamped — local
-  // dev, or the app not hosted yet — the site keeps its designed surfaces.
+  // The bridge to the product. Pages bake data-app-origin
+  // (https://platform.atmosphereteam.com; overridable via APP_ORIGIN /
+  // WEBSITE_APP_ORIGIN). When present, every sign-in / get-started CTA
+  // routes into the real app. Unstamped — a page without the attribute —
+  // the site keeps its designed surfaces.
   var APP_ORIGIN = (document.documentElement.getAttribute('data-app-origin') || '')
     .replace(/\/+$/, '');
   if (APP_ORIGIN) {
@@ -20,13 +20,15 @@
       });
   }
 
-  // Highlight the nav group for the page being read. Platform-family pages
-  // light the Platform menu; company-family pages light Company.
-  var page = location.pathname.split('/').pop() || 'index.html';
+  // Highlight the nav group for the page being read. Product-family pages
+  // light the Product menu; company-family pages light Company.
+  // Clean URLs (/pricing) and *.html both map to the same group.
+  var rawPage = location.pathname.replace(/\/+$/, '').split('/').pop() || 'index.html';
+  var page = rawPage.indexOf('.') === -1 ? rawPage + '.html' : rawPage;
   var NAV_GROUP = {
-    'verification.html': 'platform', 'how-it-works.html': 'platform',
-    'platform.html': 'platform', 'sales.html': 'platform', 'operations.html': 'platform',
-    'field.html': 'platform', 'manager.html': 'platform',
+    'verification.html': 'product', 'how-it-works.html': 'product',
+    'platform.html': 'product', 'sales.html': 'product', 'operations.html': 'product',
+    'field.html': 'product', 'manager.html': 'product',
     'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',
     'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about',
     'investors.html': 'about'

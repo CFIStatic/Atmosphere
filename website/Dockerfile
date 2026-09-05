@@ -14,10 +14,10 @@ ENV PORT=8080
 # set by .github/workflows/deploy-website.yml). Never fall back to the public
 # https host: that hairpins /api out of the mesh and 502s the site's forms.
 ENV API_UPSTREAM=http://127.0.0.1:4000
-ENV APP_ORIGIN=https://atmosphere-web-production.up.railway.app
-# Live Corporate Website hostname (Settings → Networking). The
-# atmosphere-website-production.up.railway.app name was never generated.
-ENV SITE_ORIGIN=https://website-production-7e3f.up.railway.app
+ENV APP_ORIGIN=https://platform.atmosphereteam.com
+# Canonical public host. Railway's *.up.railway.app hostname is not the
+# sitemap / Open Graph origin — that is always atmosphereteam.com.
+ENV SITE_ORIGIN=https://atmosphereteam.com
 # Only substitute our knobs. Unanchored PORT matched Railway vars like RAILWAY_*PORT*.
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$
 
@@ -35,7 +35,10 @@ RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
   && rm -f /etc/nginx/conf.d/default.conf \
   && chmod +x /usr/local/bin/website-start.sh /docker-entrypoint.d/15-validate-website-env.envsh \
   && find /usr/share/nginx/html -name '*.html' -exec \
-      sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${APP_ORIGIN}\">|" {} + \
+      sed -i \
+        -e "s|data-app-origin=\"[^\"]*\"|data-app-origin=\"${APP_ORIGIN}\"|" \
+        -e "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${APP_ORIGIN}\">|" \
+        {} + \
   && sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${SITE_ORIGIN}|g" \
       /usr/share/nginx/html/sitemap.xml /usr/share/nginx/html/robots.txt
 

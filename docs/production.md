@@ -265,9 +265,17 @@ site:
    (`198.185.159.*`, `198.49.23.*`) and the `ext-sq.squarespace.com` CNAME.
    Put Railway's records in their place. Apex domains need an ALIAS/ANAME
    (or Railway's nameservers); `www` is a CNAME onto the Railway hostname.
-3. Wait for TLS to go **Active** on the Railway domain row. Then set
-   `SITE_ORIGIN` on the website service (and in `website/Dockerfile` if you
-   want it baked into sitemap/robots) to `https://atmosphereteam.com`.
+3. Wait for TLS to go **Active** on the Railway domain row. Sitemap, robots,
+   and Open Graph already bake `https://atmosphereteam.com` in `website/`.
+   `SITE_ORIGIN` / `APP_ORIGIN` on the website image default to
+   `https://atmosphereteam.com` and `https://platform.atmosphereteam.com`.
+
+4. **www → apex (manual if www never reaches Railway):** nginx 301s
+   `www.atmosphereteam.com` → `https://atmosphereteam.com` only when that
+   Host header hits this service. In Cloudflare (or whatever DNS hosts
+   the zone), either CNAME `www` onto the Railway website hostname, or
+   add a redirect rule `www.atmosphereteam.com` → `https://atmosphereteam.com`.
+   Do not leave www on the Squarespace parking page.
 
 GitHub Pages is optional and **not configured** on this repo. The Railway
 service is the production host.
