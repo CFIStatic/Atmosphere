@@ -16,11 +16,7 @@ import {
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
-import {
-  analysisEventsFromProofs,
-  seekTargetFromAnswer,
-  splitAnswerCites,
-} from '../lib/askSeek';
+import { analysisEventsFromProofs, seekTargetFromAnswer, splitAnswerCites } from '../lib/askSeek';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
@@ -129,7 +125,6 @@ export function JobAskPanel({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
-  const lastSought = useRef<string | null>(null);
   const { seek } = useVideoSeek();
   const record = file ? file.record : ownRecord;
   const proofs = file ? file.proofs : ownProofs;
@@ -169,20 +164,6 @@ export function JobAskPanel({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [turns, asking]);
-
-  useEffect(() => {
-    const last = [...turns].reverse().find((turn) => turn.role === 'assistant');
-    if (!last || last.id === lastSought.current) return;
-    const target = seekTargetFromAnswer({
-      answer: last.content,
-      events: analysisEvents,
-      groundedIds: last.groundedIds,
-      videos: proofs?.videos,
-    });
-    if (!target) return;
-    lastSought.current = last.id;
-    seek(target);
-  }, [turns, analysisEvents, proofs, seek]);
 
   const dossier = useMemo(
     () =>
@@ -252,6 +233,13 @@ export function JobAskPanel({
           at: res.question?.created_at ?? now,
         },
       ]);
+      const target = seekTargetFromAnswer({
+        answer: res.answer,
+        events: analysisEvents,
+        groundedIds: res.question?.grounded_on,
+        videos: proofs?.videos,
+      });
+      if (target) seek(target);
     } catch (err) {
       setTurns((prev) => prev.filter((turn) => turn.id !== pendingId));
       setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');

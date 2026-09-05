@@ -124,6 +124,7 @@ export function ProofOfWork({
   const { request: seekRequest } = useVideoSeek();
   const [seekProofId, setSeekProofId] = useState<string | null>(null);
   const [seekAt, setSeekAt] = useState<number | null>(null);
+  const [seekNonce, setSeekNonce] = useState(0);
 
   async function load(opts?: { silent?: boolean }) {
     if (initialData) {
@@ -188,6 +189,7 @@ export function ProofOfWork({
     if (!video) return;
     setSeekProofId(video.id);
     setSeekAt(seekRequest.atSeconds);
+    setSeekNonce((n) => n + 1);
     const day = data.days.find((item) => item.proofIds.includes(video.id));
     if (day) setOpenDay(`${day.partyId}|${day.workDate}`);
   }, [seekRequest, data]);
@@ -306,6 +308,7 @@ export function ProofOfWork({
           videoFetcher={videoFetcher}
           seekProofId={seekProofId}
           seekAt={seekAt}
+          seekNonce={seekNonce}
         />
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
@@ -583,6 +586,7 @@ export function ProofOfWork({
                           }
                           videoFetcher={videoFetcher}
                           seekAt={seekProofId === id ? seekAt : null}
+                          seekNonce={seekProofId === id ? seekNonce : 0}
                           autoOpen={seekProofId === id}
                         />
                       ))}
@@ -715,11 +719,13 @@ function VideoCatalog({
   videoFetcher,
   seekProofId,
   seekAt,
+  seekNonce,
 }: {
   videos: ProofVideoRecord[];
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   seekProofId?: string | null;
   seekAt?: number | null;
+  seekNonce?: number;
 }) {
   if (!videos.length) return null;
   return (
@@ -760,6 +766,7 @@ function VideoCatalog({
                 proofId={video.id}
                 videoFetcher={videoFetcher}
                 seekAt={seekProofId === video.id ? seekAt : null}
+                seekNonce={seekProofId === video.id ? seekNonce : 0}
                 autoOpen={seekProofId === video.id}
               />
             </div>
@@ -774,10 +781,12 @@ function MeasuredVideo({
   src,
   className,
   seekTo,
+  seekNonce = 0,
 }: {
   src: string;
   className?: string;
   seekTo?: number | null;
+  seekNonce?: number;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -798,7 +807,7 @@ function MeasuredVideo({
     if (el.readyState >= 1) apply();
     else el.addEventListener('loadedmetadata', apply, { once: true });
     return () => el.removeEventListener('loadedmetadata', apply);
-  }, [src, seekTo]);
+  }, [src, seekTo, seekNonce]);
   return (
     <video
       ref={ref}
@@ -821,11 +830,13 @@ function PlayClip({
   proofId,
   videoFetcher,
   seekAt,
+  seekNonce,
   autoOpen = false,
 }: {
   proofId: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   seekAt?: number | null;
+  seekNonce?: number;
   autoOpen?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -859,6 +870,7 @@ function PlayClip({
         <MeasuredVideo
           src={url}
           seekTo={seekAt}
+          seekNonce={seekNonce}
           className="block max-h-40 w-full rounded-lg bg-black"
         />
       </div>
@@ -895,12 +907,14 @@ function ProofVideo({
   label,
   videoFetcher,
   seekAt,
+  seekNonce,
   autoOpen = false,
 }: {
   proofId: string;
   label: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   seekAt?: number | null;
+  seekNonce?: number;
   autoOpen?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -946,7 +960,12 @@ function ProofVideo({
       </div>
 
       {url ? (
-        <MeasuredVideo src={url} seekTo={seekAt} className="block max-h-64 w-full bg-black" />
+        <MeasuredVideo
+          src={url}
+          seekTo={seekAt}
+          seekNonce={seekNonce}
+          className="block max-h-64 w-full bg-black"
+        />
       ) : (
         <button
           onClick={() => void open()}

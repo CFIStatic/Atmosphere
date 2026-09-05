@@ -196,9 +196,7 @@ describe('JobAskPanel', () => {
     );
 
     await user.click(await screen.findByRole('button', { name: 'What happened with the tarp?' }));
-    expect(
-      await screen.findByText(/the tarp came off/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(seeks.some((target) => target.atSeconds === 18 && target.proofId === 'p1')).toBe(true);
     });
@@ -209,6 +207,34 @@ describe('JobAskPanel', () => {
     await waitFor(() => {
       expect(seeks.filter((target) => target.atSeconds === 18).length).toBeGreaterThan(1);
     });
+  });
+
+  it('does not auto-seek when an existing Ask thread is loaded', async () => {
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-history',
+          question: 'What happened with the tarp?',
+          answer: 'Yes. At 0:18, the tarp came off. That was 18 seconds into the recording.',
+          grounded_on: ['2026-08-05:after'],
+          created_at: '2026-08-06T12:00:00Z',
+        },
+      ],
+    });
+    const seeks: AskSeekTarget[] = [];
+    render(
+      <VideoSeekProvider>
+        <SeekProbe onSeek={(target) => seeks.push(target)} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId('ask-cite').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(proofQuestions).toHaveBeenCalled();
+    });
+    expect(seeks).toEqual([]);
   });
 
   it('holds the typing indicator for 10× a short reply', async () => {

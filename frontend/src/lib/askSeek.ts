@@ -92,7 +92,7 @@ export function parseAnswerSeconds(answer: string): number[] {
   }
 
   for (const match of text.matchAll(
-    /(\d+)\s+hours?\s+and\s+(\d+)\s+minutes?(?:\s+and\s+(\d+)\s+seconds?)?(?:\s+into\s+the\s+recording)?/gi,
+    /(\d+)\s+hours?\s+and\s+(\d+)\s+minutes?(?:\s+and\s+(\d+)\s+seconds?)?\s+into\s+the\s+recording/gi,
   )) {
     take(match, Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0));
   }
@@ -104,7 +104,7 @@ export function parseAnswerSeconds(answer: string): number[] {
   }
 
   for (const match of text.matchAll(
-    /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\s+seconds?(?:\s+into\s+(?:the\s+)?(?:recording|after clip|before clip|clip|video|footage))?/gi,
+    /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\s+seconds?\s+into\s+(?:the\s+)?(?:recording|after clip|before clip|clip|video|footage)/gi,
   )) {
     take(match, wordNumber(match[1]!));
   }
@@ -133,7 +133,12 @@ export function snapToEventBoundary(
   return best;
 }
 
-function eventsFromUnknown(raw: unknown, proofId: string, workDate: string, phase: string): ClipSeekEvent[] {
+function eventsFromUnknown(
+  raw: unknown,
+  proofId: string,
+  workDate: string,
+  phase: string,
+): ClipSeekEvent[] {
   if (!Array.isArray(raw)) return [];
   const out: ClipSeekEvent[] = [];
   for (const item of raw) {
@@ -171,7 +176,9 @@ function findingsEvents(
 }
 
 /** Event-boundary timestamps already produced by Analysis for the clips on file. */
-export function analysisEventsFromProofs(proofs: ProofResponse | null | undefined): ClipSeekEvent[] {
+export function analysisEventsFromProofs(
+  proofs: ProofResponse | null | undefined,
+): ClipSeekEvent[] {
   const out: ClipSeekEvent[] = [];
   const seen = new Set<string>();
   const push = (event: ClipSeekEvent) => {
@@ -201,12 +208,22 @@ export function analysisEventsFromProofs(proofs: ProofResponse | null | undefine
       for (const event of findingsEvents(findings, afterId, day.workDate, 'after')) push(event);
     }
     if (day.reports?.after?.entries && afterId) {
-      for (const event of eventsFromUnknown(day.reports.after.entries, afterId, day.workDate, 'after')) {
+      for (const event of eventsFromUnknown(
+        day.reports.after.entries,
+        afterId,
+        day.workDate,
+        'after',
+      )) {
         push(event);
       }
     }
     if (day.reports?.before?.entries && beforeId && beforeId !== afterId) {
-      for (const event of eventsFromUnknown(day.reports.before.entries, beforeId, day.workDate, 'before')) {
+      for (const event of eventsFromUnknown(
+        day.reports.before.entries,
+        beforeId,
+        day.workDate,
+        'before',
+      )) {
         push(event);
       }
     }
@@ -226,14 +243,16 @@ export function eventsForGrounded(
       (id) =>
         id === event.proofId ||
         id === `${event.workDate}:${event.phase}` ||
-        id === `${event.workDate}:clip` ||
-        id.startsWith(`${event.workDate}:`),
+        id === `${event.workDate}:clip`,
     ),
   );
   if (matched.length) return matched;
   const fromVideos = (videos ?? []).filter((video) =>
     groundedIds.some(
-      (id) => id === video.id || id === `${video.workDate}:${video.phase}` || id === `${video.workDate}:clip`,
+      (id) =>
+        id === video.id ||
+        id === `${video.workDate}:${video.phase}` ||
+        id === `${video.workDate}:clip`,
     ),
   );
   if (!fromVideos.length) return events;
@@ -251,7 +270,8 @@ function pickClip(
   if (hit) return { proofId: hit.proofId, workDate: hit.workDate, phase: hit.phase };
   const video = (videos ?? []).find((item) =>
     groundedIds?.some(
-      (id) => id === item.id || id === `${item.workDate}:${item.phase}` || id === `${item.workDate}:clip`,
+      (id) =>
+        id === item.id || id === `${item.workDate}:${item.phase}` || id === `${item.workDate}:clip`,
     ),
   );
   if (video) return { proofId: video.id, workDate: video.workDate, phase: video.phase };
@@ -268,11 +288,15 @@ export function seekTargetFromAnswer(input: {
   const events = input.events ?? [];
   const scoped = eventsForGrounded(events, input.groundedIds, input.videos);
   const parsed = parseAnswerSeconds(input.answer);
-  const clip = pickClip(scoped, input.groundedIds, input.videos);
 
   if (parsed.length) {
+    const atSeconds = snapToEventBoundary(parsed[0]!, scoped);
+    const owner = scoped.find((event) => event.atSeconds === atSeconds);
+    const clip = owner
+      ? { proofId: owner.proofId, workDate: owner.workDate, phase: owner.phase }
+      : pickClip(scoped, input.groundedIds, input.videos);
     return {
-      atSeconds: snapToEventBoundary(parsed[0]!, scoped),
+      atSeconds,
       ...clip,
     };
   }
@@ -297,9 +321,9 @@ export function seekTargetFromAnswer(input: {
 const CITE_PATTERNS: RegExp[] = [
   /\bAt\s+(\d{1,2}:\d{2}(?::\d{2})?)\b/gi,
   /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g,
-  /(\d+)\s+hours?\s+and\s+(\d+)\s+minutes?(?:\s+and\s+(\d+)\s+seconds?)?(?:\s+into\s+the\s+recording)?/gi,
+  /(\d+)\s+hours?\s+and\s+(\d+)\s+minutes?(?:\s+and\s+(\d+)\s+seconds?)?\s+into\s+the\s+recording/gi,
   /(\d+)\s+minutes?(?:\s+and\s+(\d+)\s+seconds?)?\s+into\s+the\s+recording/gi,
-  /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\s+seconds?(?:\s+into\s+(?:the\s+)?(?:recording|after clip|before clip|clip|video|footage))?/gi,
+  /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\s+seconds?\s+into\s+(?:the\s+)?(?:recording|after clip|before clip|clip|video|footage)/gi,
 ];
 
 function citeSeconds(match: RegExpMatchArray): number | null {

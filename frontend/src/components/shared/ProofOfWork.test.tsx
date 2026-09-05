@@ -77,7 +77,10 @@ describe('ProofOfWork video collection', () => {
     proofQuestions.mockReset();
     jobEpisodes.mockReset();
     proofVideoUrl.mockResolvedValue({ url: 'https://storage.test/clip.mp4' });
-    askAboutProofs.mockResolvedValue({ answer: 'The subfloor is mentioned on the morning clip.', groundedOn: 2 });
+    askAboutProofs.mockResolvedValue({
+      answer: 'The subfloor is mentioned on the morning clip.',
+      groundedOn: 2,
+    });
     proofQuestions.mockResolvedValue({ questions: [] });
     jobEpisodes.mockResolvedValue({ episodes: [] });
   });
@@ -89,16 +92,18 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByText('Every video on this job')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
-    expect(screen.getByText(/On the mic: We have not started the subfloor yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/On the mic: We have not started the subfloor yet/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText((_, el) => el?.textContent === '42 seconds · Picture: read · Mic: heard'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText((_, el) => el?.textContent === '10 minutes · Picture: reading · Mic: skipped'),
+      screen.getByText(
+        (_, el) => el?.textContent === '10 minutes · Picture: reading · Mic: skipped',
+      ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText(/Ask the video collection/i),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Ask the video collection/i)).toBeInTheDocument();
   });
 
   it('loads a signed URL when Play is clicked', async () => {
@@ -121,7 +126,6 @@ describe('ProofOfWork video collection', () => {
       'https://signed.test/morning.mp4',
     );
   });
-
 
   it('polls for new videos while the job file is open', async () => {
     vi.useFakeTimers();
@@ -206,4 +210,39 @@ describe('ProofOfWork video collection', () => {
     expect(player).toHaveAttribute('data-seek', '18');
   });
 
+  it('re-seeks the same Analysis second after the playhead moves', async () => {
+    let fire: ((target: { atSeconds: number; proofId: string }) => void) | undefined;
+    function FireSeek() {
+      const { seek } = useVideoSeek();
+      useEffect(() => {
+        fire = seek;
+        seek({ atSeconds: 18, proofId: 'proof-morning' });
+      }, [seek]);
+      return null;
+    }
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <VideoSeekProvider>
+        <FireSeek />
+        <ProofOfWork
+          jobId="job-1"
+          heading="Videos and analysis"
+          initialData={catalog}
+          videoFetcher={videoFetcher}
+          showCollectionAsk={false}
+        />
+      </VideoSeekProvider>,
+    );
+
+    const player = (await screen.findByTestId('job-file-player')) as HTMLVideoElement;
+    Object.defineProperty(player, 'readyState', { configurable: true, get: () => 2 });
+    player.currentTime = 5;
+    expect(fire).toBeDefined();
+    act(() => {
+      fire!({ atSeconds: 18, proofId: 'proof-morning' });
+    });
+    await waitFor(() => {
+      expect(player.currentTime).toBe(18);
+    });
+  });
 });
