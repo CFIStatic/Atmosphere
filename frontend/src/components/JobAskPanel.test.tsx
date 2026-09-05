@@ -75,6 +75,7 @@ const proofs: ProofResponse = {
       events: [
         { atSeconds: 8, text: 'Camera finds the north slope' },
         { atSeconds: 18, text: 'Tarp pulled from the ridge' },
+        { atSeconds: 39, text: 'Slope stripped; underlayment laid to the ridge' },
       ],
     },
   ],
@@ -206,6 +207,37 @@ describe('JobAskPanel', () => {
     await user.click(cite);
     await waitFor(() => {
       expect(seeks.filter((target) => target.atSeconds === 18).length).toBeGreaterThan(1);
+    });
+  });
+
+  it('seeks the cited second on click, not only the first clock in the answer', async () => {
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-two',
+          question: 'What happened with the tarp?',
+          answer:
+            'Yes. At 0:18, the tarp came off. Underlayment is down across two thirds of the slope by 0:39.',
+          grounded_on: ['2026-08-05:after'],
+          created_at: '2026-08-06T12:00:00Z',
+        },
+      ],
+    });
+    const seeks: AskSeekTarget[] = [];
+    const user = userEvent.setup();
+    render(
+      <VideoSeekProvider>
+        <SeekProbe onSeek={(target) => seeks.push(target)} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+
+    const cites = await screen.findAllByTestId('ask-cite');
+    const late = cites.find((cite) => cite.getAttribute('data-at') === '39');
+    expect(late).toBeTruthy();
+    await user.click(late!);
+    await waitFor(() => {
+      expect(seeks.some((target) => target.atSeconds === 39 && target.proofId === 'p1')).toBe(true);
     });
   });
 

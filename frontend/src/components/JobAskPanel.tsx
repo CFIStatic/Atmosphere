@@ -16,7 +16,12 @@ import {
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
-import { analysisEventsFromProofs, seekTargetFromAnswer, splitAnswerCites } from '../lib/askSeek';
+import {
+  analysisEventsFromProofs,
+  eventsForGrounded,
+  seekTargetFromAnswer,
+  splitAnswerCites,
+} from '../lib/askSeek';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
@@ -188,6 +193,8 @@ export function JobAskPanel({
   });
 
   function seekCite(turn: JobFileTurn, atSeconds: number) {
+    const scoped = eventsForGrounded(analysisEvents, turn.groundedIds, proofs?.videos);
+    const owner = scoped.find((event) => event.atSeconds === atSeconds);
     const target = seekTargetFromAnswer({
       answer: turn.content,
       events: analysisEvents,
@@ -196,9 +203,9 @@ export function JobAskPanel({
     });
     seek({
       atSeconds,
-      proofId: target?.proofId,
-      workDate: target?.workDate,
-      phase: target?.phase,
+      proofId: owner?.proofId ?? target?.proofId,
+      workDate: owner?.workDate ?? target?.workDate,
+      phase: owner?.phase ?? target?.phase,
     });
   }
 

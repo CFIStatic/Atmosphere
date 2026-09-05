@@ -306,7 +306,11 @@ export function ProofOfWork({
         <VideoCatalog
           videos={data.videos ?? []}
           videoFetcher={videoFetcher}
-          seekProofId={seekProofId}
+          seekProofId={
+            seekProofId && data.days.some((day) => day.proofIds.includes(seekProofId))
+              ? null
+              : seekProofId
+          }
           seekAt={seekAt}
           seekNonce={seekNonce}
         />
@@ -797,6 +801,9 @@ function MeasuredVideo({
   useEffect(() => {
     const el = ref.current;
     if (!el || seekTo == null || !Number.isFinite(seekTo)) return;
+    if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+    }
     const apply = () => {
       try {
         el.currentTime = seekTo;

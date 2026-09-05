@@ -189,6 +189,8 @@ describe('ProofOfWork video collection', () => {
       return null;
     }
     const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
     render(
       <VideoSeekProvider>
         <FireSeek />
@@ -208,6 +210,9 @@ describe('ProofOfWork video collection', () => {
     const player = await screen.findByTestId('job-file-player');
     expect(player).toHaveAttribute('src', 'https://signed.test/morning.mp4');
     expect(player).toHaveAttribute('data-seek', '18');
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalled();
+    });
   });
 
   it('re-seeks the same Analysis second after the playhead moves', async () => {

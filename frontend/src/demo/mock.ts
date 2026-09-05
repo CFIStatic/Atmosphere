@@ -1261,11 +1261,10 @@ const PROOF_QUESTIONS: Record<string, any[]> = {
 };
 
 /**
- * A three-frame clip, drawn rather than filmed. Enough for the player to be
- * demonstrably a player; nobody's actual house ends up in the bundle.
+ * A 46-second clock, drawn rather than filmed. Enough for Ask cites to land
+ * on a real playhead (0:18, 0:39) without anyone's house in the bundle.
  */
-const DEMO_CLIP =
-  'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCAtIEguMjY0L01QRUctNCBBVkMgY29kZWM=';
+const DEMO_CLIP = '/demo-ask-seek.mp4';
 
 /**
  * The subcontractor's own view, through their job link. Same rows as the
