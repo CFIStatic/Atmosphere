@@ -1340,6 +1340,7 @@
   .jf-copy:hover { color: var(--ink); }
   .jf-note { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
   .jf-made { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--line); font-size: 12.5px; }
+  .jf-made code { display: block; margin-top: 4px; font-size: 11px; word-break: break-all; color: var(--ink-2); }
 
   /* ---------- row actions ---------- */
   td.uploader .cellrow {
@@ -3999,7 +4000,8 @@
       body.innerHTML =
         '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Atmosphere emails the same capture link for the web office and Field Capture.</p>' +
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
-        (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) + '</div>' : '') +
+        (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
+          (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
         '<form id="jf-invite-form">' +
           '<div class="row2">' +
             '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
@@ -4323,11 +4325,16 @@
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
       jobSheet.error = null;
-      jobSheet.made = {
-        note: res.body.emailed
-          ? 'Invite emailed to ' + email + '. The same link opens on the web office and Field Capture.'
-          : 'Added to the job, but Atmosphere could not send the email. Try again.'
-      };
+      jobSheet.made = res.body.emailed
+        ? {
+            note: 'Invite emailed to ' + email + '. The same link opens on the web office and Field Capture.'
+          }
+        : {
+            note: 'Added to the job, but Atmosphere could not send the email. Copy the Field Capture link below.',
+            path: res.body.fieldCapturePath
+              ? (res.body.fieldCapturePath.indexOf('http') === 0 ? res.body.fieldCapturePath : location.origin + res.body.fieldCapturePath)
+              : (res.body.sharePath ? location.origin + res.body.sharePath : '')
+          };
       paintJobFileSheet();
       render();
       toast(res.body.emailed ? 'Invite emailed to ' + email + '.' : company + ' added — email did not send.');

@@ -60,12 +60,12 @@ describe('Dashboard job-file add people', () => {
     expect(paintInvite).not.toBeNull();
     expect(paintInvite![0]).toContain('class="jf-made"');
     expect(paintInvite![0]).toContain('esc(jobSheet.made.note)');
-    expect(paintInvite![0]).not.toContain('jobSheet.made.path');
-    expect(paintInvite![0]).not.toContain('<code>');
+    expect(paintInvite![0]).toContain('jobSheet.made.path');
+    expect(paintInvite![0]).toContain('<code>');
     expect(paintInvite![0]).not.toContain('fieldCapturePath');
 
-    expect(verifierHtml).not.toContain('.jf-made code');
-    expect(verifierHtml).not.toContain('Copy the Field Capture link below');
+    expect(verifierHtml).toContain('.jf-made code');
+    expect(verifierHtml).toContain('Copy the Field Capture link below');
   });
 
   it('does not attach a capture link to the invite success state', () => {
@@ -73,10 +73,12 @@ describe('Dashboard job-file add people', () => {
     expect(submitInvite).not.toBeNull();
     expect(submitInvite![0]).toContain('Invite emailed to ');
     expect(submitInvite![0]).toContain('The same link opens on the web office and Field Capture.');
-    expect(submitInvite![0]).not.toContain('path:');
-    expect(submitInvite![0]).not.toContain('fieldCapturePath');
-    expect(submitInvite![0]).not.toContain('sharePath');
-    expect(submitInvite![0]).toContain('Atmosphere could not send the email. Try again.');
+    expect(submitInvite![0]).toContain('Copy the Field Capture link below');
+    expect(submitInvite![0]).not.toContain('Try again.');
+    expect(submitInvite![0]).toContain('res.body.emailed');
+    expect(submitInvite![0]).toContain('path:');
+    expect(submitInvite![0]).toContain('fieldCapturePath');
+    expect(submitInvite![0]).toContain('sharePath');
   });
 
   it('keeps the emailed note and hides the token URL after Email invite', async () => {
@@ -167,6 +169,95 @@ describe('Dashboard job-file add people', () => {
     expect(made?.textContent).not.toMatch(/fieldcapture\/index\.html\?token=/);
     expect(made?.querySelector('code')).toBeNull();
     expect(document.body.textContent).not.toContain(CAPTURE_URL);
+
+    dom.window.close();
+  });
+
+  it('shows the Field Capture link when the invite email does not send', async () => {
+    const parties: unknown[] = [];
+    const jobRecord = {
+      job: { id: JOB_ID, title: 'Mobil test one 1111', number: 9 },
+      parties: [
+        { id: 'p-fc', company: 'Field Capture', role: 'field_capture', email: 'jack@jettx.ai' },
+      ],
+    };
+    const dom = bootOrgVerifier(((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/auth/me')) {
+        return jsonResponse({
+          user: { name: 'Jack Smith', email: 'jack@jettx.ai', orgName: 'Jettx LLC' },
+        });
+      }
+      if (url.includes('/api/evidence-portal/library')) {
+        return jsonResponse({
+          jobs: [{ jobId: JOB_ID, jobName: 'Mobil test one 1111', jobNumber: 9 }],
+          items: [],
+        });
+      }
+      if (url.includes(`/api/operations/shared/${JOB_ID}/parties`) && init?.method === 'POST') {
+        parties.push(JSON.parse(String(init.body || '{}')));
+        jobRecord.parties = jobRecord.parties.concat([
+          {
+            id: 'p-jack',
+            company: 'Jack Smith',
+            role: 'subcontractor',
+            trade: 'drywall',
+            email: INVITE_EMAIL,
+          },
+        ]);
+        return jsonResponse({
+          emailed: false,
+          fieldCapturePath: CAPTURE_URL,
+          sharePath: '/shared/tok-demo',
+        });
+      }
+      if (url.includes(`/api/operations/shared/${JOB_ID}/proof`)) {
+        return jsonResponse({ days: [], counts: { days: 0 } });
+      }
+      if (url.includes(`/api/operations/shared/${JOB_ID}`)) {
+        return jsonResponse(jobRecord);
+      }
+      if (url.includes('/api/evidence-portal/shares')) {
+        return jsonResponse({ shares: [] });
+      }
+      return jsonResponse({});
+    }) as typeof fetch);
+
+    const { document } = dom.window;
+    await waitFor(document, `tr.jobrow[data-job="${JOB_ID}"]`);
+    const inviteBtn = document.querySelector(
+      `tr.jobrow[data-job="${JOB_ID}"] [data-job-act="invite"]`,
+    ) as HTMLButtonElement | null;
+    expect(inviteBtn).not.toBeNull();
+    inviteBtn!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const form = (await waitFor(document, '#jf-invite-form')) as HTMLFormElement;
+    const company = document.querySelector(
+      '#jf-invite-form input[name="company"]',
+    ) as HTMLInputElement;
+    const kind = document.querySelector('#jf-invite-form select[name="kind"]') as HTMLSelectElement;
+    const email = document.querySelector('#jf-invite-form input[name="email"]') as HTMLInputElement;
+    company.value = 'Jack Smith';
+    kind.value = 'trade:drywall';
+    email.value = INVITE_EMAIL;
+    Object.defineProperties(form, {
+      company: { configurable: true, get: () => company },
+      kind: { configurable: true, get: () => kind },
+      email: { configurable: true, get: () => email },
+    });
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    for (let i = 0; i < 40; i += 1) {
+      if (document.querySelector('.jf-made code')) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(parties).toHaveLength(1);
+    const made = document.querySelector('.jf-made');
+    expect(made?.textContent).toContain('Copy the Field Capture link below');
+    expect(made?.textContent).not.toContain('Try again.');
+    expect(made?.querySelector('code')?.textContent).toBe(CAPTURE_URL);
 
     dom.window.close();
   });
