@@ -243,8 +243,26 @@
     } catch (e) {
       /* private mode — stay signed in for this page only */
     }
-    if (!accessToken && Core.clearFieldLocalCache) {
-      Core.clearFieldLocalCache();
+    if (!accessToken) {
+      if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
+      abandonUnfiledWork();
+    }
+  }
+
+  function abandonUnfiledWork() {
+    clearFailRetry();
+    pendingSync = null;
+    state.lastClip = null;
+    state.finishing = false;
+    state.uploadResult = null;
+    state.recorder = null;
+    if (state.stopWatch) {
+      try {
+        state.stopWatch();
+      } catch (e) {
+        /* watch is best-effort */
+      }
+      state.stopWatch = null;
     }
   }
 

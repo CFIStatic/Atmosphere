@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=offline-calm-2/);
-assert.match(html, /js\/app\.js\?v=offline-calm-2/);
+assert.match(html, /js\/capture-core\.js\?v=offline-calm-3/);
+assert.match(html, /js\/app\.js\?v=offline-calm-3/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -401,9 +401,19 @@ assert.match(
 );
 assert.match(
   appSrc,
-  /!accessToken && Core\.clearFieldLocalCache/,
+  /!accessToken[\s\S]*?abandonUnfiledWork\(\)/,
   'sign-out must drop pending jobs and cached profile, not only the session tokens',
 );
+{
+  const from = appSrc.indexOf('function abandonUnfiledWork');
+  const to = appSrc.indexOf('/* ---------- home hydration ---------- */');
+  assert.ok(from >= 0 && to > from, 'abandonUnfiledWork must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /state\.lastClip = null/);
+  assert.match(src, /state\.finishing = false/);
+  assert.match(src, /clearFailRetry\(\)/);
+  assert.match(src, /pendingSync = null/);
+}
 assert.deepEqual(
   Core.filterJobs(
     [
