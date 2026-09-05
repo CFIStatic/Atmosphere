@@ -5448,28 +5448,54 @@
     return analysisLog(item).map(function (r) { return { at: r.at, text: r.text }; });
   }
 
+  var CHECK_WORDS = {
+    on_site: 'Filmed on site',
+    same_day: 'Filmed on the day claimed',
+    uploaded_promptly: 'Uploaded promptly',
+    long_enough: 'Long enough to show the work',
+    not_a_reupload: 'Not filed before',
+    ordered: 'Before filmed before the after'
+  };
+
+  function disputeCheckTitle(c) {
+    if (c.what && String(c.what).trim()) return String(c.what).trim();
+    var key = String(c.key || '').replace(/^(before|after)\./, '');
+    if (CHECK_WORDS[key]) return CHECK_WORDS[key];
+    if (key) return key.replace(/_/g, ' ');
+    return 'Integrity check';
+  }
+
+  function disputeNorm(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
   function surfaceClipDisputes(item) {
     var a = item.analysis || {};
     var events = clipDisputeEvents(item);
     var moments = [];
     (item.checks || []).forEach(function (c) {
       if (c.verdict !== 'fail') return;
+      var what = disputeCheckTitle(c);
       moments.push({
-        id: 'integrity:' + item.id + ':' + (c.what || c.key || 'check'),
+        id: 'integrity:' + item.id + ':' + (c.key || what),
         kind: 'integrity',
-        title: c.what || c.key || 'Integrity check',
+        title: what,
         detail: c.detail || '',
-        seek: seekForDispute(events, c.detail || c.what),
+        seek: seekForDispute(events, c.detail || what),
         proofId: item.id
       });
     });
     var excluded = excludedScopeLines(item);
+    var seenScope = {};
     excluded.forEach(function (line) {
       var verdict = (a.scope || []).filter(function (s) { return s.title === line.title; })[0];
       var visible = verdict && (verdict.verdict === 'appears_complete' || verdict.verdict === 'in_progress');
       var talked = events.some(function (e) { return disputeMentions(e.text, line.title); });
       var concerned = (a.concerns || []).some(function (c) { return disputeMentions(c, line.title); });
       if (!visible && !talked && !concerned) return;
+      var key = disputeNorm(line.title);
+      if (seenScope[key]) return;
+      seenScope[key] = true;
       moments.push({
         id: 'scope:' + item.id + ':' + line.title,
         kind: 'scope',
@@ -5481,12 +5507,16 @@
     });
     (a.concerns || []).forEach(function (c) {
       if (!/out of scope|outside (the )?(listed )?scope|not in scope/i.test(c)) return;
+      var matched = excluded.filter(function (line) { return disputeMentions(c, line.title); })[0];
+      var titleKey = disputeNorm(matched ? matched.title : c);
+      if (!titleKey || seenScope[titleKey]) return;
+      seenScope[titleKey] = true;
       moments.push({
-        id: 'scope:' + item.id + ':concern',
+        id: 'scope:' + item.id + ':' + titleKey,
         kind: 'scope',
-        title: 'Work outside the agreed scope',
+        title: matched ? 'Conflicts with excluded scope — ' + matched.title : 'Work outside the agreed scope',
         detail: c,
-        seek: seekForDispute(events, c),
+        seek: seekForDispute(events, matched ? matched.title : c),
         proofId: item.id
       });
     });

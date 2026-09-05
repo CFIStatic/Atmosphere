@@ -68,6 +68,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function isSceneViewNote');
     expect(verifierHtml).toContain('function jobOverviewParts');
     expect(verifierHtml).toContain('function surfaceClipDisputes');
+    expect(verifierHtml).toContain('function disputeCheckTitle');
     expect(verifierHtml).toContain('Show me the dispute');
     expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
     expect(verifierHtml).toContain('id="d-analysis-lead"');
@@ -403,6 +404,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('dispute-panel')?.hasAttribute('hidden')).toBe(false);
     const list = document.getElementById('dispute-list');
     expect(list?.textContent).toMatch(/skylight/i);
+    const skylightRows = Array.from(document.querySelectorAll('#dispute-list li')).filter((el) =>
+      /skylight/i.test(el.textContent || ''),
+    );
+    expect(skylightRows.length).toBe(1);
     const seekRow = document.querySelector('#dispute-list [data-at="41"]') as HTMLElement | null;
     expect(seekRow).not.toBeNull();
     seekRow!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
