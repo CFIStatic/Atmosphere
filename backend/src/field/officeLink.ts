@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
-import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { createUserClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { FIELD_APP_CREATE_ONBOARDING, FIELD_APP_ONBOARDING } from '../lib/validation.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { HttpError } from '../lib/errors.js';
@@ -58,7 +59,7 @@ export async function previewOfficeByJoinCode(
     throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
   }
 
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) {
     throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
   }
@@ -91,7 +92,7 @@ async function saveFieldUsageIntents(
   userId: string,
   usageIntents: readonly string[] = FIELD_APP_ONBOARDING.usageIntents,
 ) {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   const writer = admin ?? supabase;
   const { error } = await writer
     .from('org_members')
@@ -135,7 +136,7 @@ export async function linkFieldOffice(
     }
 
     if (current?.org_id && current.org_join_code?.toUpperCase() !== input.joinCode) {
-      const admin = createAdminClient();
+      const admin = unscopedAdminOrNull();
       if (!admin) {
         throw new HttpError(400, alreadyLinkedMessage(current.org_name || 'another office'), 'already_linked');
       }

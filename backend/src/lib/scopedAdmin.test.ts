@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { adminForJob, adminForOrg, scopeAdminQuery } from './scopedAdmin.js';
+import { adminForJob, adminForOrg, scopeAdminQuery, writerForOrg } from './scopedAdmin.js';
 
 function fakeBuilder() {
   const calls: Array<[string, string]> = [];
@@ -73,5 +73,19 @@ describe('adminForJob / adminForOrg', () => {
     const org = adminForOrg('org-9', admin as never);
     org.from('crm_jobs').select('id');
     assert.deepEqual(calls[1]?.eqs, [['org_id', 'org-9']]);
+  });
+});
+
+describe('writerForOrg', () => {
+  it('requires an org id before handing out the admin client', () => {
+    const admin = {
+      from(table: string) {
+        const filter = { eq() { return filter; } };
+        return { select: () => filter, update: () => filter, delete: () => filter, table };
+      },
+    };
+    const scoped = writerForOrg('org-7', admin as never);
+    assert.equal(scoped.scope.orgId, 'org-7');
+    assert.equal(scoped.raw, admin);
   });
 });

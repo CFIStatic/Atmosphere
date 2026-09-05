@@ -1,4 +1,4 @@
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import {
   passwordResetRedirectUrl,
@@ -20,7 +20,7 @@ function isUnknownUserMessage(message: string | undefined): boolean {
  * mail that was landing in the inbox (and redirecting to localhost:3000).
  */
 export async function sendPasswordReset(email: string): Promise<void> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) {
     console.warn(
       '[forgot-password] SUPABASE_SERVICE_ROLE_KEY is unset — Atmosphere cannot mint a reset link. No email sent.',

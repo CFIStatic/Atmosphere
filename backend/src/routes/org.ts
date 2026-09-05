@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { z } from 'zod';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
@@ -109,7 +109,7 @@ async function saveUsageIntents(
   userId: string,
   usageIntents: string[],
 ) {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   const writer = admin ?? supabase;
   const { error } = await writer
     .from('org_members')
@@ -159,7 +159,7 @@ async function loadMembership(
     // Unexpected RPC error — still try the table path / admin before failing.
   }
 
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   const reader = admin ?? supabase;
 
   const primary = await reader
@@ -443,7 +443,7 @@ orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: N
       throw new HttpError(decision.status, decision.message, decision.code);
     }
 
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     const writer = admin ?? supabase;
     const { data: removed, error: deleteError } = await writer
       .from('org_members')
@@ -615,7 +615,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     // can be handed over in person — and the reason is kept generic on purpose,
     // because "this address is on an erasure list" is itself a disclosure.
     let emailed = false;
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     let erased = false;
     if (admin) {
       const { data } = await admin.from('network_erasures').select('email').eq('email', email).maybeSingle();

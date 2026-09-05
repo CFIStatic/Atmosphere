@@ -58,6 +58,53 @@ export function requireAdmin(): SupabaseClient {
 }
 
 /**
+ * Platform-wide RPCs, Auth Admin API, storage signing, health probes.
+ * Not a substitute for writerForOrg / writerForJob on tenant data.
+ */
+export function unscopedAdmin(): SupabaseClient {
+  return requireAdmin();
+}
+
+export function unscopedAdminOrNull(): SupabaseClient | null {
+  return createAdminClient();
+}
+
+/**
+ * Service-role client pinned to one org, or the caller's JWT client when
+ * the service role is unset (local/preview). Callers must pass orgId —
+ * they cannot "just get the admin client".
+ */
+export function writerForOrg(
+  orgId: string,
+  fallback?: SupabaseClient | null,
+): ScopedAdmin {
+  const admin = createAdminClient() ?? fallback ?? null;
+  if (!admin) {
+    throw new HttpError(
+      503,
+      'Supabase is not configured on this server (SUPABASE_SERVICE_ROLE_KEY).',
+      'no_admin',
+    );
+  }
+  return adminForOrg(orgId, admin);
+}
+
+export function writerForJob(
+  opts: { orgId: string; jobId: string; partyId?: string },
+  fallback?: SupabaseClient | null,
+): ScopedAdmin {
+  const admin = createAdminClient() ?? fallback ?? null;
+  if (!admin) {
+    throw new HttpError(
+      503,
+      'Supabase is not configured on this server (SUPABASE_SERVICE_ROLE_KEY).',
+      'no_admin',
+    );
+  }
+  return adminForJob(opts, admin);
+}
+
+/**
  * Apply org / job / party filters to a PostgREST builder.
  * Tables without those columns will fail at query time — that is intentional.
  */

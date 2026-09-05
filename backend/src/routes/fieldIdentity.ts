@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { createAdminClient } from '../lib/supabase.js';
+import { adminForPartyToken, unscopedAdmin } from '../lib/scopedAdmin.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { HttpError } from '../lib/errors.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
@@ -66,9 +66,7 @@ const sessionLimiter = rateLimit({
 });
 
 function admin() {
-  const client = createAdminClient();
-  if (!client) throw new HttpError(503, 'Subcontractor sign-in is not configured.', 'no_admin');
-  return client;
+  return unscopedAdmin();
 }
 
 /* ------------------------------------------------------------------ *
@@ -100,17 +98,8 @@ fieldIdentityRouter.post(
         throw new HttpError(400, 'That does not look like a phone number or an email address.', 'bad_contact');
       }
 
+      const { party } = await adminForPartyToken(input.token);
       const db = admin();
-      const { data: party } = await db
-        .from('job_parties')
-        .select('id, org_id, job_id, company, contact_name, revoked_at')
-        .eq('access_token', input.token)
-        .maybeSingle();
-
-      if (!party) throw new HttpError(404, 'This link is not valid.', 'bad_token');
-      if ((party as any).revoked_at) {
-        throw new HttpError(403, 'Access to this job was withdrawn.', 'revoked');
-      }
 
       // A link already claimed by somebody else does not get quietly
       // re-claimed: whoever holds the token would silently take over the
@@ -225,14 +214,8 @@ fieldIdentityRouter.post(
       const contact = normalizeContact(input.contact);
       if (!contact) throw new HttpError(400, 'That contact is not valid.', 'bad_contact');
 
+      const { party } = await adminForPartyToken(input.token);
       const db = admin();
-      const { data: party } = await db
-        .from('job_parties')
-        .select('id, org_id, job_id, company, contact_name, revoked_at')
-        .eq('access_token', input.token)
-        .maybeSingle();
-      if (!party) throw new HttpError(404, 'This link is not valid.', 'bad_token');
-      if ((party as any).revoked_at) throw new HttpError(403, 'Access to this job was withdrawn.', 'revoked');
 
       const { data: row } = await db
         .from('field_identity_codes')

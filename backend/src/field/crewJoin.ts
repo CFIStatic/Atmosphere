@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Session, User } from '@supabase/supabase-js';
-import { createAdminClient, createAnonClient } from '../lib/supabase.js';
+import { createAnonClient } from '../lib/supabase.js';
+import { unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError, serviceUnavailable } from '../lib/errors.js';
 import { toOrgProductRole } from '../lib/productRoles.js';
 import { linkFieldOffice, serializeFieldOrg } from './officeLink.js';
@@ -49,14 +50,14 @@ type MemberRow = { user_id: string; role: string };
 type ProfileRow = { id: string; full_name: string | null; email: string | null };
 
 function adminOrThrow() {
-  const admin = createAdminClient();
-  if (!admin) {
+  try {
+    return unscopedAdmin();
+  } catch {
     throw serviceUnavailable(
       'Field Capture cannot join an office until the server has a service role key.',
       'admin_unavailable',
     );
   }
-  return admin;
 }
 
 export async function previewOfficePublic(
@@ -94,7 +95,7 @@ async function findCrewMember(
   orgId: string,
   name: string,
 ): Promise<{ userId: string; email: string | null } | null> {
-  const admin = adminOrThrow();
+  const admin = writerForOrg(orgId).raw;
   const { data: members, error: memberError } = await admin
     .from('org_members')
     .select('user_id, role')

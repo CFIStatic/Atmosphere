@@ -1,5 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { createAdminClient, createAnonClient } from '../lib/supabase.js';
+import { createAnonClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
 import {
@@ -128,7 +129,7 @@ async function rawSignIn(
  * returns the user row and does not deliver the link.
  */
 async function lookupUserIdByEmail(email: string): Promise<string | null> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return null;
 
   for (const type of ['magiclink', 'recovery'] as const) {
@@ -140,7 +141,7 @@ async function lookupUserIdByEmail(email: string): Promise<string | null> {
 }
 
 async function confirmEmail(email: string, userId?: string | null): Promise<boolean> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return false;
   const id = userId || (await lookupUserIdByEmail(email));
   if (!id) return false;
@@ -218,7 +219,7 @@ async function signupViaAdmin(
   email: string,
   password: string,
 ): Promise<PasswordAccountOk | null> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return null;
 
   const created = await admin.auth.admin.createUser({
@@ -267,7 +268,7 @@ export async function createPasswordAccount(
   const viaAdmin = await signupViaAdmin(email, password);
   if (viaAdmin) return viaAdmin;
 
-  if (!createAdminClient()) {
+  if (!unscopedAdminOrNull()) {
     console.warn(
       '[signup] SUPABASE_SERVICE_ROLE_KEY is unset — public Auth signup will hit email confirmation. Set the service role key so office sign-in works without a confirmation mail.',
     );

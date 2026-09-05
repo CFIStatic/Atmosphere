@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 
 /**
  * Unsubscribing, for somebody who is not signed in and never will be.
@@ -38,7 +38,7 @@ const limiter = rateLimit({
 });
 
 async function record(token: string): Promise<void> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return;
   await admin.rpc('record_unsubscribe', { p_token: token });
 }

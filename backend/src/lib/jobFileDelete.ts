@@ -1,4 +1,4 @@
-import { createAdminClient } from './supabase.js';
+import { unscopedAdminOrNull } from './scopedAdmin.js';
 import { repairMemoryJobFk } from './memoryLedger.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -41,7 +41,7 @@ export function jobLooksDeletedFromLibrary(summary: string | null | undefined): 
 
 /** Drop leftover CRM audit triggers. No-ops when the RPC is not applied yet. */
 export async function repairCrmAuditTriggers(): Promise<boolean> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return false;
   const { error } = await admin.rpc('repair_crm_audit_triggers');
   if (!error) return true;
@@ -53,7 +53,7 @@ export async function repairCrmAuditTriggers(): Promise<boolean> {
 
 /** Recreate public.crm_audit_log when the repair RPC has been applied. */
 export async function ensureCrmAuditLog(): Promise<boolean> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return false;
   const { error } = await admin.rpc('ensure_crm_audit_log');
   if (!error) return true;

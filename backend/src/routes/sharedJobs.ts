@@ -3,9 +3,8 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { adminForPartyToken, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
-import { adminForPartyToken } from '../lib/scopedAdmin.js';
 import {
   JOB_SHARE_COOKIE,
   clearShareCookie,
@@ -174,7 +173,7 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
       .limit(200);
     if (jobsError) throw new HttpError(500, jobsError.message, 'shared_failed');
 
-    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+    const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
     const jobRows = ((jobs ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
     if (!jobRows.length) {
       res.json({ jobs: [], counts: { jobs: 0, parties: 0, blockers: 0, awaiting: 0 } });
@@ -260,7 +259,7 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     const { orgId, supabase } = await requireOrgContext(req);
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
-    if (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, record.job.id)) {
+    if (await jobFileIsTombstoned(writerForJob({ orgId, jobId: record.job.id }, supabase).raw, orgId, record.job.id)) {
       throw new HttpError(404, 'No such job.', 'job_not_found');
     }
 
@@ -333,7 +332,7 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const { title } = jobTitleSchema.parse(req.body ?? {});
     const nextTitle = normalizeJobFileTitle(title);
-    const writer = createAdminClient() ?? supabase;
+    const writer = writerForOrg(orgId, supabase).raw;
 
     if (await jobFileIsTombstoned(writer, orgId, req.params.jobId)) {
       throw new HttpError(404, 'No such job.', 'job_not_found');
@@ -397,7 +396,7 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
     if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
     const alreadyHidden =
       Boolean(job.deleted_at) ||
-      (await jobFileIsTombstoned(createAdminClient() ?? supabase, orgId, job.id));
+      (await jobFileIsTombstoned(writerForJob({ orgId, jobId: job.id }, supabase).raw, orgId, job.id));
     if (alreadyHidden) {
       // Dashboard and Job Files must agree. A second delete is a success, not
       // "No such job", so the file leaves every list.
@@ -442,7 +441,7 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
     }
 
     const now = new Date().toISOString();
-    const writer = createAdminClient() ?? supabase;
+    const writer = writerForOrg(orgId, supabase).raw;
     let deletedTitle = job.title as string;
     let usedTombstone = false;
 
@@ -548,7 +547,7 @@ sharedJobsRouter.post(
     try {
       const { orgId, userId, supabase } = await requireOrgContext(req);
       const input = duplicateSchema.parse(req.body ?? {});
-      const writer = createAdminClient() ?? supabase;
+      const writer = writerForOrg(orgId, supabase).raw;
 
       const { data: source, error: sourceError } = await supabase
         .from('crm_jobs')
