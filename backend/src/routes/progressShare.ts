@@ -4,6 +4,12 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
+import {
+  PROGRESS_SHARE_COOKIE,
+  readShareCookie,
+  resolveShareToken,
+  setShareCookie,
+} from '../lib/shareSession.js';
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
@@ -28,6 +34,20 @@ const shareLimiter = rateLimit({
   message: { error: 'Too many requests.', code: 'rate_limited' },
 });
 progressShareRouter.use(shareLimiter);
+
+/** POST /api/progress-share/exchange — token → httpOnly cookie. Path tokens stay valid. */
+progressShareRouter.post('/exchange', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = z
+      .object({ token: z.string().trim().min(8).max(400) })
+      .parse(req.body ?? {}).token;
+    await progressShareForToken(token);
+    setShareCookie(res, PROGRESS_SHARE_COOKIE, token);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 const askLimiter = rateLimit({
   windowMs: 60_000,
@@ -60,6 +80,10 @@ async function progressShareForToken(token: string) {
   return { share: share as any, admin };
 }
 
+function tokenFromProgressRequest(req: Request): string {
+  return resolveShareToken(req.params.token, readShareCookie(req, PROGRESS_SHARE_COOKIE));
+}
+
 function progressFromRecord(scope: any[], proof: Awaited<ReturnType<typeof buildJobProofPayload>>) {
   const actionable = scope.filter((item) => item.state !== 'excluded');
   const scopeApproved = actionable.filter((item) => item.state === 'approved').length;
@@ -82,7 +106,7 @@ function progressFromRecord(scope: any[], proof: Awaited<ReturnType<typeof build
 /** GET /api/progress-share/:token — read-only job progress for third parties. */
 progressShareRouter.get('/:token', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { share, admin } = await progressShareForToken(req.params.token);
+    const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
 
     const [{ data: job }, { data: org }, { data: scopeRows }, { data: briefRows }, proof] =
       await Promise.all([
@@ -156,7 +180,7 @@ progressShareRouter.post(
   askLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await progressShareForToken(req.params.token);
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
       const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
       const result = await runProofAsk({
         supabase: admin,
@@ -188,7 +212,7 @@ progressShareRouter.get(
   '/:token/proof/:proofId/video',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await progressShareForToken(req.params.token);
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
 
       const { data: proof } = await admin
         .from('job_proofs')

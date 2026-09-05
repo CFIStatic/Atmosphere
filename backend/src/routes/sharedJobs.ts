@@ -5,6 +5,14 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
+import { adminForPartyToken } from '../lib/scopedAdmin.js';
+import {
+  JOB_SHARE_COOKIE,
+  clearShareCookie,
+  readShareCookie,
+  resolveShareToken,
+  setShareCookie,
+} from '../lib/shareSession.js';
 import {
   assessJob,
   clearToWork,
@@ -95,7 +103,8 @@ const shareLimiter = rateLimit({
 
 /** Put a (possibly slash-containing) token on req.params.token. */
 function attachShareToken(req: Request, _res: Response, next: NextFunction) {
-  const token = readJobShareToken(req.params as Record<string, string | undefined>);
+  const fromPath = readJobShareToken(req.params as Record<string, string | undefined>);
+  const token = resolveShareToken(fromPath, readShareCookie(req, JOB_SHARE_COOKIE));
   if (token) req.params.token = token;
   next();
 }
@@ -1035,29 +1044,78 @@ sharedJobsRouter.post(
  * belongs to, and why the token never leaves this function.
  */
 async function partyForToken(token: string) {
-  const admin = createAdminClient();
-  if (!admin) throw new HttpError(503, 'Shared access is not configured.', 'no_admin');
-
-  const { data } = await admin
-    .from('job_parties')
-    .select('id, org_id, job_id, company, trade, contact_name, role, invited_at, last_seen_at, revoked_at')
-    .eq('access_token', token)
-    .maybeSingle();
-
-  if (!data) throw new HttpError(404, 'This link is not valid.', 'bad_token');
-  if ((data as any).revoked_at) {
-    throw new HttpError(403, 'Access to this job was withdrawn.', 'revoked');
-  }
-
-  // Recorded rather than incidental: "they never opened it" is a fact the
-  // general contractor needs, and it is only knowable if this is written down.
-  await admin
-    .from('job_parties')
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq('id', (data as any).id);
-
-  return { party: data as any, admin };
+  const { party, admin } = await adminForPartyToken(token);
+  return { party: party as any, admin: admin.raw };
 }
+
+/**
+ * POST /api/job-share/exchange
+ * Body: { token }. Validates the invite token, then sets an httpOnly cookie
+ * so later calls can omit the token from the URL. Path tokens stay valid
+ * (Field Capture still uses them).
+ */
+jobShareRouter.post('/exchange', shareLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = z
+      .object({ token: z.string().trim().min(8).max(400) })
+      .parse(req.body ?? {}).token;
+    const { party } = await partyForToken(token);
+    setShareCookie(res, JOB_SHARE_COOKIE, token);
+    res.json({
+      ok: true,
+      you: { company: party.company, trade: party.trade, role: party.role },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** DELETE /api/job-share/session — drop the exchanged cookie. */
+jobShareRouter.delete('/session', shareLimiter, async (_req: Request, res: Response) => {
+  clearShareCookie(res, JOB_SHARE_COOKIE);
+  res.json({ ok: true });
+});
+
+/**
+ * GET /api/job-share/session — same payload as GET /:token, using the cookie.
+ * Registered before the greedy token capture so "session" is not a token.
+ */
+jobShareRouter.get('/session', shareLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = readShareCookie(req, JOB_SHARE_COOKIE);
+    if (!token) throw new HttpError(401, 'No job-share session.', 'no_share_session');
+    req.params.token = token;
+    const { party, admin } = await partyForToken(token);
+    const record = await loadRecord(admin, party.org_id, party.job_id);
+    if (!record.job) throw new HttpError(404, 'This job no longer exists.', 'job_not_found');
+    const currentRevision = record.briefs[0]?.revision ?? null;
+    const mine = record.acks
+      .filter((a) => a.party_id === party.id)
+      .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
+    res.json({
+      you: { company: party.company, trade: party.trade, role: party.role },
+      job: {
+        jobNumber: record.job.job_number,
+        title: record.job.title,
+        claimNumber: record.job.claim_number,
+        scheduledStart: record.job.scheduled_start,
+      },
+      brief: record.briefs[0] ?? null,
+      currentRevision,
+      acknowledgedRevision: mine,
+      ...clearToWork({
+        party,
+        scope: record.scope,
+        acknowledgedRevision: mine,
+        currentRevision,
+      }),
+      scope: scopeForParty(record.scope, party.id),
+      messages: record.messages.filter((m) => !m.party_id || m.party_id === party.id),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /api/job-share/:token/capture-guide?phase=before|after
