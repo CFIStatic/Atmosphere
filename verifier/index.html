@@ -2528,6 +2528,16 @@
     var n = Number(s);
     return isFinite(n) && n > 0 ? n : null;
   }
+  function eventClock(s) {
+    var n = Number(s);
+    if (!isFinite(n) || n < 0) return '—';
+    var total = Math.round(n);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var r = total % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+    return m + ':' + String(r).padStart(2, '0');
+  }
   function dur(s) {
     var known = knownDuration(s);
     if (known == null) return '—';
@@ -4925,7 +4935,7 @@
   function parseTimestampedEvents(text) {
     var src = String(text || '').trim();
     if (!src) return [];
-    var re = /\bAt\s+(\d+(?:\.\d+)?)(?:\s+seconds?)?\b[:,]?|\b\[((?:\d+:)+\d+)\]/gi;
+    var re = /\bAt\s+(\d+(?:\.\d+)?)(?:\s+seconds?)?\b[:,]?|\[((?:\d+:)+\d+)\]/gi;
     var stamps = [];
     var match;
     while ((match = re.exec(src))) {
@@ -5167,7 +5177,7 @@
       html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead.</p>';
       html += '<ul class="alog" id="alog">' + rows.map(function (r) {
         return '<li data-at="' + r.at + '" class="soon">' +
-          '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
+          '<span class="t">' + eventClock(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
       }).join('') + '</ul>';
     }
     if (heard || (a.conversationDetails && a.conversationDetails.length)) {

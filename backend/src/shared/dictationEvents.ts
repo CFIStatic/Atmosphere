@@ -80,7 +80,7 @@ export function parseTimestampedNarration(text: string): DictationEvent[] {
   const src = String(text || '').trim();
   if (!src) return [];
 
-  const re = /\bAt\s+(\d+(?:\.\d+)?)(?:\s+seconds?)?\b[:,]?|\b\[((?:\d+:)+\d+)\]/gi;
+  const re = /\bAt\s+(\d+(?:\.\d+)?)(?:\s+seconds?)?\b[:,]?|\[((?:\d+:)+\d+)\]/gi;
   const stamps: Array<{ at: number; end: number; index: number }> = [];
   let match: RegExpExecArray | null;
   while ((match = re.exec(src))) {
@@ -105,6 +105,17 @@ export function parseTimestampedNarration(text: string): DictationEvent[] {
   return dedupeEvents(events);
 }
 
+function hasTime(raw: Record<string, unknown>): boolean {
+  return (
+    raw.atSeconds != null ||
+    raw.at_seconds != null ||
+    raw.t_seconds != null ||
+    raw.tSeconds != null ||
+    raw.startSeconds != null ||
+    raw.at != null
+  );
+}
+
 function asEvent(
   raw: Record<string, unknown>,
   opts?: { frames?: number[]; durationSeconds?: number },
@@ -112,7 +123,7 @@ function asEvent(
   const text = cleanText(
     raw.text ?? raw.note ?? raw.summary ?? raw.description ?? raw.label,
   );
-  if (!text) return null;
+  if (!text || !hasTime(raw)) return null;
   const at = clampSeconds(
     raw.atSeconds ?? raw.at_seconds ?? raw.t_seconds ?? raw.tSeconds ?? raw.startSeconds ?? raw.at,
     opts?.frames,
