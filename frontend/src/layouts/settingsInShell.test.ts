@@ -19,7 +19,7 @@ describe('Settings on the office rail', () => {
 
   it('cache-busts the verifier iframe so an old chip HTML cannot keep initials', () => {
     const frame = readFileSync(resolve(here, '../components/VerifierFrame.tsx'), 'utf8');
-    expect(frame).toContain('/verifier/?embed=1&v=sync-upload-1');
+    expect(frame).toContain('/verifier/?embed=1&v=offline-calm-1');
     expect(frame).toContain('avatarUrl: profile?.avatarUrl');
     expect(frame).toContain('profile?.avatarUrl');
   });

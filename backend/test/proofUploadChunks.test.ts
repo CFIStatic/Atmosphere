@@ -63,7 +63,7 @@ test('backoff grows then caps so a dead tower is not hammered', () => {
   assert.equal(nextUploadBackoffMs(8), 5000);
 });
 
-test('a job with no clip yet is in progress on the office list', () => {
+test('a job with no clip yet is in_progress so the office can say waiting for first clip', () => {
   assert.equal(libraryJobCaptureStatus(false), 'in_progress');
   assert.equal(libraryJobCaptureStatus(true), 'recorded');
 });
