@@ -87,6 +87,15 @@ export function assertProofAssembleBudget(
   return next;
 }
 
+export function storageListEntryByteSize(entry: unknown): number | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const row = entry as { size?: unknown; metadata?: { size?: unknown; contentLength?: unknown } };
+  const raw = row.metadata?.size ?? row.metadata?.contentLength ?? row.size;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return Math.floor(raw);
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw);
+  return null;
+}
+
 /** Size of a storage download before it is copied onto the heap a second time. */
 export function storageObjectByteSize(data: unknown): number | null {
   if (Buffer.isBuffer(data)) return data.length;

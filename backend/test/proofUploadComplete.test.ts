@@ -4,8 +4,12 @@ import { completeChunkedProofUpload, createUploadUrl } from '../src/routes/proof
 
 function memoryAdmin(existing: Record<string, Buffer> = {}) {
   const objects = { ...existing };
+  let downloads = 0;
   return {
     objects,
+    get downloads() {
+      return downloads;
+    },
     storage: {
       from() {
         return {
@@ -13,7 +17,21 @@ function memoryAdmin(existing: Record<string, Buffer> = {}) {
             data: { signedUrl: `https://storage.test/upload/${path}`, token: `t-${path}` },
             error: null,
           }),
+          list: async (folder: string, opts?: { search?: string }) => {
+            const prefix = folder ? `${folder}/` : '';
+            const search = opts?.search || '';
+            const data = Object.keys(objects)
+              .filter((path) => path.startsWith(prefix))
+              .map((path) => path.slice(prefix.length))
+              .filter((name) => !name.includes('/') && (!search || name.includes(search)))
+              .map((name) => ({
+                name,
+                metadata: { size: objects[prefix + name]?.length ?? 0 },
+              }));
+            return { data, error: null };
+          },
           download: async (path: string) => {
+            downloads += 1;
             const data = objects[path];
             if (!data) return { data: null, error: { message: 'missing' } };
             return { data, error: null };
@@ -90,6 +108,31 @@ test('completeChunkedProofUpload refuses an oversized part before concatenating'
     /too large to assemble/i,
   );
   assert.equal(admin.objects[path], undefined);
+  assert.equal(admin.downloads, 1, 'second part must not be downloaded after the budget is spent');
+});
+
+test('completeChunkedProofUpload does not download a part whose listed size already blows the cap', async () => {
+  const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
+  const admin = memoryAdmin({
+    [`${path}.parts/0000`]: Buffer.alloc(8),
+    [`${path}.parts/0001`]: Buffer.alloc(8),
+  });
+  await assert.rejects(
+    () =>
+      completeChunkedProofUpload(
+        party,
+        admin,
+        {
+          workDate: '2026-09-05',
+          phase: 'after',
+          storagePath: path,
+          partCount: 2,
+        },
+        { maxBytes: 4 },
+      ),
+    /too large to assemble/i,
+  );
+  assert.equal(admin.downloads, 0);
 });
 
 test('completeChunkedProofUpload refuses to invent a missing slice', async () => {

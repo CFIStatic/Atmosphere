@@ -65,6 +65,7 @@ import {
   partByteRange,
   partObjectPath,
   planProofChunks,
+  storageListEntryByteSize,
   storageObjectByteSize,
 } from '../lib/proofUploadChunks.js';
 
@@ -236,6 +237,29 @@ const completeChunksSchema = z.object({
 });
 
 /**
+ * Metadata size of one storage object. Must run before `download()` so an
+ * oversized `.parts/` PUT cannot enter the BFF heap.
+ */
+export async function listedProofObjectBytes(
+  admin: any,
+  objectPath: string,
+): Promise<{ found: boolean; bytes: number | null }> {
+  const slash = objectPath.lastIndexOf('/');
+  const folder = slash >= 0 ? objectPath.slice(0, slash) : '';
+  const name = slash >= 0 ? objectPath.slice(slash + 1) : objectPath;
+  const { data, error } = await admin.storage.from(PROOF_BUCKET).list(folder, {
+    search: name,
+    limit: 50,
+  });
+  if (error) return { found: false, bytes: null };
+  const row = ((data ?? []) as unknown[]).find((entry) => {
+    return Boolean(entry && typeof entry === 'object' && (entry as { name?: string }).name === name);
+  });
+  if (!row) return { found: false, bytes: null };
+  return { found: true, bytes: storageListEntryByteSize(row) };
+}
+
+/**
  * Concatenate part objects the phone already PUT to storage. The day film
  * itself never entered this process — only the already-stored slices.
  */
@@ -254,6 +278,18 @@ export async function completeChunkedProofUpload(
   for (let i = 0; i < input.partCount; i += 1) {
     const partPath = partObjectPath(path, i);
     partPaths.push(partPath);
+    const listed = await listedProofObjectBytes(admin, partPath);
+    if (!listed.found) {
+      throw new HttpError(409, `Upload part ${i + 1} did not land. Retry that slice.`, 'upload_part_missing');
+    }
+    if (listed.bytes == null) {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
+    try {
+      assertProofAssembleBudget(received, listed.bytes, maxBytes);
+    } catch {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
     const { data, error } = await admin.storage.from(PROOF_BUCKET).download(partPath);
     if (error || !data) {
       throw new HttpError(409, `Upload part ${i + 1} did not land. Retry that slice.`, 'upload_part_missing');
@@ -269,6 +305,9 @@ export async function completeChunkedProofUpload(
     const bytes = Buffer.isBuffer(data)
       ? data
       : Buffer.from(await (data as Blob).arrayBuffer());
+    if (bytes.length > listed.bytes) {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
     try {
       received = assertProofAssembleBudget(received, bytes.length, maxBytes);
     } catch {

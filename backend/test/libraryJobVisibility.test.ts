@@ -21,6 +21,7 @@ test('Field Capture and job-share can stitch resumed upload parts', () => {
   assert.match(share, /proof\/upload-complete/);
   assert.match(proof, /export async function completeChunkedProofUpload/);
   assert.match(proof, /assertProofAssembleBudget/);
+  assert.match(proof, /listedProofObjectBytes/);
   assert.match(proof, /PROOF_ASSEMBLE_MAX_BYTES/);
   assert.match(proof, /byteSize: z\.number\(\)\.int\(\)\.positive\(\)/);
 });

@@ -11,6 +11,7 @@ import {
   partByteRange,
   partObjectPath,
   planProofChunks,
+  storageListEntryByteSize,
   storageObjectByteSize,
 } from '../src/lib/proofUploadChunks.js';
 
@@ -75,4 +76,6 @@ test('assemble budget rejects before the next part is kept', () => {
   assert.equal(storageObjectByteSize(Buffer.from('abcd')), 4);
   assert.equal(storageObjectByteSize({ size: 99 }), 99);
   assert.equal(storageObjectByteSize({}), null);
+  assert.equal(storageListEntryByteSize({ name: '0000', metadata: { size: 2048 } }), 2048);
+  assert.equal(storageListEntryByteSize({ name: '0000' }), null);
 });
