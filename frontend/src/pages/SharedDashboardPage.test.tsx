@@ -167,7 +167,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(ask.className).toMatch(/lg:w-\[min\(32rem,42%\)\]/);
     expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Overview/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(
       JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038'],
     ).toEqual(expect.any(Number));
