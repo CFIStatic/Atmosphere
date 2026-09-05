@@ -2,7 +2,7 @@ import type { SignupIntent } from '../../lib/authRedirect';
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
 
-export type SetupWizardStep = 1 | 2 | 3;
+export type SetupWizardStep = 1 | 2;
 export type OrgSetupIntent = SignupIntent;
 
 export interface SetupWizardCopy {
@@ -18,16 +18,11 @@ export interface SetupWizardCopy {
 export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
-    title: 'Create your account',
-    detail: 'Name, email, and a password. We never store your password in plain text.',
+    title: 'Account & workspace',
+    detail: 'Your login and company name — you become Global Admin.',
   },
   {
     step: 2 as const,
-    title: 'Your workspace',
-    detail: 'Name the company — you become Global Admin.',
-  },
-  {
-    step: 3 as const,
     title: 'Set up billing',
     detail: 'Add your payment method in Stripe — $599/mo platform fee.',
   },
@@ -36,16 +31,11 @@ export const SETUP_WIZARD_STEPS = [
 const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
-    title: 'Create your account',
-    detail: 'Use the email your Global Admin invited. We never store your password in plain text.',
+    title: 'Account & join code',
+    detail: 'Create a login with the invited email, then enter the join code.',
   },
   {
     step: 2 as const,
-    title: 'Enter your join code',
-    detail: 'The code from your invite email links this login to the team workspace.',
-  },
-  {
-    step: 3 as const,
     title: 'Set up billing',
     detail: 'Joiners skip this — only the Global Admin pays the bill.',
   },
@@ -55,7 +45,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
       heading: 'Join your team',
-      lede: 'Your Global Admin invited you — create a login, then enter the join code.',
+      lede: 'Your Global Admin invited you — create a login and enter the join code.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
@@ -74,16 +64,19 @@ export const SETUP_DEFAULTS = {
   usageIntents: ['field_work', 'exploring', 'billing'] as UsageIntent[],
 };
 
+/** Legacy billing URLs: 3 (old billing), 4 (old invite), 5 (older billing). */
+const LEGACY_BILLING_STEPS = new Set([3, 4, 5]);
+
 export function initialSetupStep(options: {
   user: boolean;
   membership: boolean;
   stepParam: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
-  // Legacy ?step=4 (old invite) and ?step=5 (old billing) both land on billing.
-  if (parsed === 4 || parsed === 5) return 3;
-  if (parsed >= 1 && parsed <= 3) return parsed as SetupWizardStep;
-  if (options.user && !options.membership) return 2;
+  if (LEGACY_BILLING_STEPS.has(parsed)) return 2;
+  // New billing is ?step=2. The old workspace URL was also ?step=2 — people
+  // who still need a company land on the combined account + workspace form.
+  if (parsed === 2) return options.membership ? 2 : 1;
   return 1;
 }
 

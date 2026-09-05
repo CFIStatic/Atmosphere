@@ -21,9 +21,9 @@ export function postAuthDestination(
     : (() => {
         const next = safeAuthRedirect(fallback);
         if (next && next !== '/onboarding' && !next.startsWith('/signup')) {
-          return `/signup?step=2&next=${encodeURIComponent(next)}`;
+          return `/signup?next=${encodeURIComponent(next)}`;
         }
-        return '/signup?step=2';
+        return '/signup';
       })();
   return dest;
 }

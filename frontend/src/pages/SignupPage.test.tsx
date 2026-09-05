@@ -71,22 +71,26 @@ describe('SignupPage', () => {
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
     apiMocks.getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
   });
 
-  it('starts on account details only — workspace and join code wait for step 2', () => {
+  it('puts account and company name on the first step — no company type', () => {
     renderSignup();
 
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to workspace' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Company name')).toBeNull();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
-    expect(screen.getByText('Your workspace')).toBeInTheDocument();
-    expect(screen.getByText('Set up billing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByText('Your workspace')).toBeNull();
+    expect(screen.queryByText('Create your account')).toBeNull();
     expect(screen.queryByText('Invite teammates')).toBeNull();
     expect(screen.queryByText('You are in')).toBeNull();
   });
@@ -95,23 +99,18 @@ describe('SignupPage', () => {
     const user = userEvent.setup();
     renderSignup();
 
-    await user.click(screen.getByRole('button', { name: 'Your workspace' }));
-    expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Company type')).toBeNull();
-    expect(screen.queryByLabelText('Your name')).toBeNull();
-
     await user.click(screen.getByRole('button', { name: 'Set up billing' }));
     expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
     expect(screen.getByText(/\/ month/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Create your account' }));
-    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
   });
 
-  it('keeps a signed-in customer on create-account instead of sending them to the dashboard', () => {
+  it('keeps a signed-in customer on company setup instead of sending them to the dashboard', () => {
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -124,10 +123,11 @@ describe('SignupPage', () => {
 
     renderSignup();
 
-    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
     expect(screen.getByText('jane@acme.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Account ready' })).toBeNull();
@@ -153,12 +153,19 @@ describe('SignupPage', () => {
         emailConfirmed: true,
       },
     });
+    authState.refreshMembership.mockResolvedValue(null);
+    apiMocks.createOrg.mockResolvedValue({
+      org: { id: 'org-2', name: 'New Person', joinCode: 'ABCD1234' },
+    });
 
     renderSignup();
     await user.type(screen.getByLabelText('Your name'), 'New Person');
     await user.type(screen.getByLabelText('Work email'), 'new@acme.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
+    fireEvent.change(screen.getByLabelText('Company name'), {
+      target: { value: 'New Person Co' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
       expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1');
@@ -188,15 +195,8 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2');
 
     expect(screen.queryByLabelText('Company type')).toBeNull();
-    expect(screen.getByLabelText('Company name')).toHaveValue('My workspace');
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
-
-    // Replace the suggested workspace name in one change so the suggest
-    // effect does not refill an emptied field mid-type.
-    fireEvent.change(screen.getByLabelText('Company name'), {
-      target: { value: 'A' },
-    });
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Acme Restoration' },
@@ -220,6 +220,7 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2&intent=join');
 
     expect(screen.getByLabelText('Join code')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
   });

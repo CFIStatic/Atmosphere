@@ -103,7 +103,7 @@ export function SetupBillingStep({
 
   if (loading || !status) {
     return (
-      <SetupStepCard step={3} title="Set up billing" subtitle="Loading your plan details…">
+      <SetupStepCard step={2} title="Set up billing" subtitle="Loading your plan details…">
         <div className="mt-10 grid place-items-center text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
         </div>
@@ -114,7 +114,7 @@ export function SetupBillingStep({
   if (!status.required || status.complete) {
     return (
       <SetupStepCard
-        step={3}
+        step={2}
         title="Billing ready"
         subtitle={
           status.complete
@@ -146,7 +146,7 @@ export function SetupBillingStep({
   const plan = status.plan;
 
   return (
-    <SetupStepCard step={3} title="Set up billing" subtitle="Add a payment method to activate the workspace.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Add a payment method to activate the workspace.">
       {error && (
         <div
           role="alert"

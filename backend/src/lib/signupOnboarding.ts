@@ -1,14 +1,14 @@
 /**
  * Signup billing contract.
  *
- * The website wizard is three steps: account, workspace, then Stripe.
+ * The website wizard is two steps: account + workspace, then Stripe.
  * There is no invite gate — teammates can be asked later from Settings.
  * These helpers keep the checkout return URL and the "may they enter the
  * product?" rule in one place so a UI change cannot silently send Stripe
  * back to a removed step, or keep a paid org blocked waiting for invites.
  */
 
-export const SIGNUP_BILLING_STEP = '3';
+export const SIGNUP_BILLING_STEP = '2';
 
 export function signupCheckoutReturnUrl(input: {
   base: string;
