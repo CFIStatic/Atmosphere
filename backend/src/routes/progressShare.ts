@@ -2,8 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { createAdminClient } from '../lib/supabase.js';
+import { adminForJob, requireAdmin } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import {
+  PROGRESS_SHARE_COOKIE,
+  readShareCookie,
+  resolveShareToken,
+  setShareCookie,
+} from '../lib/shareSession.js';
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
@@ -29,6 +35,26 @@ const shareLimiter = rateLimit({
 });
 progressShareRouter.use(shareLimiter);
 
+/** GET /api/progress-share/session — cookie only, so the token can leave the URL. */
+progressShareRouter.get('/session', async (req: Request, res: Response, next: NextFunction) => {
+  req.params.token = '';
+  return sendProgressGuest(req, res, next);
+});
+
+/** POST /api/progress-share/exchange — token → httpOnly cookie. Path tokens stay valid. */
+progressShareRouter.post('/exchange', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = z
+      .object({ token: z.string().trim().min(8).max(400) })
+      .parse(req.body ?? {}).token;
+    await progressShareForToken(token);
+    setShareCookie(res, PROGRESS_SHARE_COOKIE, token);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const askLimiter = rateLimit({
   windowMs: 60_000,
   limit: 20,
@@ -38,10 +64,9 @@ const askLimiter = rateLimit({
 });
 
 async function progressShareForToken(token: string) {
-  const admin = createAdminClient();
-  if (!admin) throw new HttpError(503, 'Sharing is not configured on this server.', 'no_admin');
+  const raw = requireAdmin();
 
-  const { data: share } = await admin
+  const { data: share } = await raw
     .from('verifier_shares')
     .select(
       'id, org_id, job_id, label, recipient_email, expires_at, revoked_at, open_count, share_kind',
@@ -57,7 +82,12 @@ async function progressShareForToken(token: string) {
     throw new HttpError(404, 'This link does not exist.', 'not_found');
   }
 
-  return { share: share as any, admin };
+  const scoped = adminForJob({ orgId: (share as any).org_id, jobId: (share as any).job_id }, raw);
+  return { share: share as any, admin: scoped.raw };
+}
+
+function tokenFromProgressRequest(req: Request): string {
+  return resolveShareToken(req.params.token, readShareCookie(req, PROGRESS_SHARE_COOKIE));
 }
 
 function progressFromRecord(scope: any[], proof: Awaited<ReturnType<typeof buildJobProofPayload>>) {
@@ -79,10 +109,11 @@ function progressFromRecord(scope: any[], proof: Awaited<ReturnType<typeof build
   };
 }
 
-/** GET /api/progress-share/:token — read-only job progress for third parties. */
-progressShareRouter.get('/:token', async (req: Request, res: Response, next: NextFunction) => {
+async function sendProgressGuest(req: Request, res: Response, next: NextFunction) {
   try {
-    const { share, admin } = await progressShareForToken(req.params.token);
+    const token = tokenFromProgressRequest(req);
+    if (!token) throw new HttpError(401, 'No progress-share session.', 'no_share_session');
+    const { share, admin } = await progressShareForToken(token);
 
     const [{ data: job }, { data: org }, { data: scopeRows }, { data: briefRows }, proof] =
       await Promise.all([
@@ -144,7 +175,10 @@ progressShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
   } catch (err) {
     next(err);
   }
-});
+}
+
+/** GET /api/progress-share/:token — read-only job progress for third parties. */
+progressShareRouter.get('/:token', sendProgressGuest);
 
 /**
  * POST /api/progress-share/:token/ask
@@ -156,7 +190,7 @@ progressShareRouter.post(
   askLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await progressShareForToken(req.params.token);
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
       const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
       const result = await runProofAsk({
         supabase: admin,
@@ -188,7 +222,7 @@ progressShareRouter.get(
   '/:token/proof/:proofId/video',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await progressShareForToken(req.params.token);
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
 
       const { data: proof } = await admin
         .from('job_proofs')

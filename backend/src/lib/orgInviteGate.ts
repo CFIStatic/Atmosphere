@@ -1,4 +1,4 @@
-import { createAdminClient } from './supabase.js';
+import { adminForOrg, unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 import { toOrgProductRole, type OrgProductRole } from './productRoles.js';
 
@@ -29,17 +29,10 @@ export async function requirePendingOrgInvite(input: {
     );
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    throw new HttpError(
-      503,
-      'Invites cannot be checked until the server has a service role key.',
-      'admin_unavailable',
-    );
-  }
+  const raw = unscopedAdmin();
 
   const code = input.joinCode.trim().toUpperCase();
-  const { data: org, error: orgError } = await admin
+  const { data: org, error: orgError } = await raw
     .from('orgs')
     .select('id')
     .eq('join_code', code)
@@ -49,10 +42,11 @@ export async function requirePendingOrgInvite(input: {
     throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
   }
 
-  const { data: invite, error: inviteError } = await admin
+  const scoped = adminForOrg(org.id as string, raw);
+  const { data: invite, error: inviteError } = await scoped.raw
     .from('org_invites')
     .select('id, role, email')
-    .eq('org_id', org.id)
+    .eq('org_id', scoped.scope.orgId)
     .eq('status', 'pending')
     .eq('email', email)
     .maybeSingle();

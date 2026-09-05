@@ -42,7 +42,8 @@ project before relying on durable catalog/twin reads across restarts.
 `MediaStorageDriver` (`backend/src/media/driver.ts`):
 
 - **supabase** — today’s hot path (signed upload/read on `job-proofs` / `MEDIA_HOT_BUCKET`)
-- **s3** — multipart-oriented stub for App Store / day-length uploads + archive bucket
+- **s3** — multipart-oriented stub (`s3.example.invalid`). A real driver is
+  deferred until existing Keys grow AWS/S3 credentials — do not invent secrets.
 - **memory** — unit tests only (`MEDIA_STORE=memory`)
 
 Proof upload and twin `videoRef` should converge on `media_objects.id` so intelligence (`/api/media/video/process`) only needs a signed read URL.

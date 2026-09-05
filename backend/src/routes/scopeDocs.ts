@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -81,12 +81,12 @@ async function performExtraction(admin: any, job: ExtractionJob): Promise<void> 
 
 const extractionQueue = new RetryQueue<ExtractionJob>({
   run: async (job) => {
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) throw new Error('Storage is not configured.');
     await performExtraction(admin, job);
   },
   onGaveUp: async (job, error) => {
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) return;
     await admin
       .from('scope_documents')
@@ -140,8 +140,7 @@ scopeDocsRouter.post(
         throw new HttpError(413, 'Documents are capped at 10 MB.', 'too_large');
       }
 
-      const admin = createAdminClient();
-      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+      const admin = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
 
       const { data: doc, error } = await admin
         .from('scope_documents')
@@ -225,8 +224,7 @@ scopeDocsRouter.post(
         .parse(req.body);
       const { supabase, orgId, userId } = await requireOrgContext(req);
 
-      const admin = createAdminClient();
-      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+      const admin = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
 
       const { data: doc } = await admin
         .from('scope_documents')

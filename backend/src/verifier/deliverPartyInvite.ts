@@ -2,7 +2,7 @@
 import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { partyInviteEmail } from './partyInviteEmail.js';
 
 /**
@@ -46,7 +46,7 @@ export async function deliverPartyInvite(input: {
     return { emailed: false, recipientHasAccount: false, attachedToAccount: false };
   }
 
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   let recipientHasAccount = false;
   let erased = false;
   let attachedToAccount = false;
@@ -66,7 +66,8 @@ export async function deliverPartyInvite(input: {
     erased = Boolean(erasure);
 
     if (identity) {
-      const { error } = await admin.from('job_party_claims').upsert(
+      const writer = writerForJob({ orgId: input.orgId, jobId: input.jobId }, admin).raw;
+      const { error } = await writer.from('job_party_claims').upsert(
         {
           org_id: input.orgId,
           party_id: input.partyId,

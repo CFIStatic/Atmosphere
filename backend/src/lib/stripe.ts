@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
-import { createAdminClient } from './supabase.js';
+import { unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 
 /**
@@ -58,15 +58,15 @@ export function stripeClient(): Stripe {
 
 /** Service-role client for webhook writes; RLS does not apply to these. */
 export function adminClient(): SupabaseClient {
-  const admin = createAdminClient();
-  if (!admin) {
+  try {
+    return unscopedAdmin();
+  } catch {
     throw new HttpError(
       503,
       'Payment processing requires SUPABASE_SERVICE_ROLE_KEY to be configured.',
       'service_role_unconfigured',
     );
   }
-  return admin;
 }
 
 /**

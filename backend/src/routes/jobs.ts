@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { createUserClient } from '../lib/supabase.js';
+import { writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import {
   listTombstonedJobIds,
   jobFileIsTombstoned,
@@ -139,7 +140,7 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
       (r) => !jobLooksDeletedFromLibrary(r.last_event as string | null),
     );
     if (orgId) {
-      const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+      const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
       rows = rows.filter((r: any) => !tombstoned.has(r.job_id as string));
     }
     const seen = new Set<string>();
@@ -239,7 +240,7 @@ jobsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) =
     const hidden =
       Boolean(job.deleted_at) ||
       (Boolean(job.org_id) &&
-        (await jobFileIsTombstoned(createAdminClient() ?? supabase, job.org_id, jobId)));
+        (await jobFileIsTombstoned(writerForJob({ orgId: job.org_id, jobId }, supabase).raw, job.org_id, jobId)));
     if (hidden) throw new HttpError(404, 'Job not found.', 'job_not_found');
 
     const [tasks, crew, logs, events] = await Promise.all([

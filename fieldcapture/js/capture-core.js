@@ -766,10 +766,10 @@
 
     var uploadPath = jobId
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof/upload-url'
-      : apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof/upload-url';
+      : jobShareUrl(apiBase, token, '/proof/upload-url');
     var filePath = jobId
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof'
-      : apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof';
+      : jobShareUrl(apiBase, token, '/proof');
     var authHeaders = accessToken ? { Authorization: 'Bearer ' + accessToken } : {};
 
     // Mint the signed URL first, then read the clip and PUT bytes together so
@@ -883,9 +883,33 @@
     });
   }
 
+  function jobShareUrl(apiBase, token, suffix) {
+    apiBase = (apiBase || '').replace(/\/$/, '');
+    suffix = suffix || '';
+    if (!token) return apiBase + '/api/job-share/session' + suffix;
+    return apiBase + '/api/job-share/' + encodeURIComponent(token) + suffix;
+  }
+
+  function exchangeShareToken(token, apiBase) {
+    apiBase = (apiBase || '').replace(/\/$/, '');
+    return fetch(apiBase + '/api/job-share/exchange', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token }),
+    })
+      .then(function (r) {
+        return r.ok;
+      })
+      .catch(function () {
+        return false;
+      });
+  }
+
   function loadShareJob(token, apiBase) {
     apiBase = (apiBase || '').replace(/\/$/, '');
-    return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token), {
+    return fetch(jobShareUrl(apiBase, token), {
+      credentials: 'include',
       headers: { Accept: 'application/json' },
     }).then(function (r) {
       return r.json().then(function (body) {
@@ -897,7 +921,8 @@
 
   function loadShareProofs(token, apiBase) {
     apiBase = (apiBase || '').replace(/\/$/, '');
-    return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof', {
+    return fetch(jobShareUrl(apiBase, token, '/proof'), {
+      credentials: 'include',
       headers: { Accept: 'application/json' },
     }).then(function (r) {
       return r.json().then(function (body) {
@@ -952,6 +977,8 @@
     placesResolve: placesResolve,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
+    jobShareUrl: jobShareUrl,
+    exchangeShareToken: exchangeShareToken,
     currentPosition: currentPosition,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

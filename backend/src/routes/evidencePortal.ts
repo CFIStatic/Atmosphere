@@ -5,7 +5,7 @@ import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
   ensureClipReadingOnce,
@@ -328,7 +328,7 @@ function itemForAsk(item: any, kick: ClipKick): any {
 let backfilling = false;
 async function backfillStills(proofIds: string[]): Promise<void> {
   if (backfilling) return;
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return;
   backfilling = true;
   try {
@@ -367,7 +367,7 @@ async function posterUrls(
   const out = new Map<string, string>();
   const proofIds = proofs.map((proof) => proof.id);
   if (!proofIds.length) return out;
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return out;
 
   try {
@@ -426,7 +426,7 @@ async function posterUrls(
 
 /** Signed URLs for the frames the model read. Ten minutes, like the video. */
 async function frameUrls(proofId: string) {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return [];
   const { data: frames } = await admin
     .from('job_proof_frames')
@@ -577,7 +577,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     if (jobsError) {
       console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
-      const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+      const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
       const liveJobRows = ((jobRows ?? []) as any[]).filter((j) => !tombstoned.has(j.id as string));
       items = items.filter((item: any) => !tombstoned.has(item.jobId as string));
       const addrByProperty = await propertyAddresses(
@@ -691,7 +691,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     }
     jobs = sortJobsForOpen(jobs, lastWorkDateByJob, todayKey());
 
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (admin) kickUnreadLibraryReads(admin, orgId, items);
 
     res.json({
@@ -733,7 +733,10 @@ evidencePortalRouter.get(
       if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
-      const admin = createAdminClient() ?? supabase;
+      const admin = writerForJob(
+        { orgId, jobId: (proof as any).job_id },
+        supabase,
+      ).raw;
       const item = await readClipForOpen(admin, orgId, items[0]);
 
       const [custody, frames] = await Promise.all([
@@ -775,7 +778,10 @@ evidencePortalRouter.post(
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = items[0];
-      const admin = createAdminClient() ?? supabase;
+      const admin = writerForJob(
+        { orgId, jobId: (proof as any).job_id },
+        supabase,
+      ).raw;
       const kick = await kickUnreadClip(admin, orgId, item);
       const fresh = (await reloadEvidenceItem(admin, orgId, req.params.proofId)) ?? item;
 
@@ -820,7 +826,7 @@ evidencePortalRouter.get(
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
 
-      const admin = createAdminClient();
+      const admin = unscopedAdminOrNull();
       if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
       const decision = downloadDecision({ isOrgMember: true, feeCents: 0, ledgerStatus: null });
@@ -913,7 +919,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       body.kind === 'progress'
         ? `/progress/${(share as any).access_token}`
         : `/verifier/shared/${(share as any).access_token}`;
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
 
     // Whether the pinned address already answers to an Atmosphere account
     // decides which instructions the email gives — and it is handed back so
@@ -1160,7 +1166,7 @@ evidencePortalRouter.post(
  * the entire design.
  */
 async function shareForToken(token: string, req: Request) {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) throw new HttpError(503, 'Sharing is not configured on this server.', 'no_admin');
 
   const { data: share } = await admin

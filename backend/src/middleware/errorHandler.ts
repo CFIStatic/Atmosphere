@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { captureException } from '../lib/sentry.js';
 
 /** 404 handler for unmatched routes. */
 export function notFound(_req: Request, res: Response): void {
@@ -52,6 +53,11 @@ export function errorHandler(
     path: req.path,
     method: req.method,
     err: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
+  });
+  void captureException(err, {
+    requestId: req.requestId,
+    path: req.path,
+    method: req.method,
   });
   res.status(500).json({
     error: 'Internal server error',

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, type JobScopeItem, type ProgressShareGuestView, type SharedJobRecord } from '../lib/api';
+import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
@@ -19,6 +20,17 @@ export function JobProgressGuestPage() {
   const openAsk = searchParams.get('ask') === '1';
   const [view, setView] = useState<ProgressShareGuestView | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void exchangeShareToken('progress', token).then((ok) => {
+      if (!ok || typeof window === 'undefined') return;
+      const next = guestPathAfterExchange('progress', window.location.search);
+      if (window.location.pathname + window.location.search !== next) {
+        window.history.replaceState(window.history.state, '', next);
+      }
+    });
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;

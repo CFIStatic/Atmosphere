@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
+import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
   verifyDay,
   verifyProof,
@@ -495,7 +496,12 @@ interface AnalysisJob {
 async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): Promise<DayAnalysisResult> {
   await admin
     .from('job_proofs')
-    .update({ analysis_status: 'running', analysis_attempts: attempt })
+    .update({
+      analysis_status: 'running',
+      analysis_attempts: attempt,
+      narration_lease_owner: leaseOwnerId(),
+      narration_lease_until: leaseUntilIso(),
+    })
     .eq('id', job.proofId);
 
   const result = await runDayAnalysis(
@@ -536,21 +542,20 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
 
 const analysisQueue = new RetryQueue<AnalysisJob>({
   run: async (job, attempt) => {
-    const admin = createAdminClient();
-    if (!admin) throw new Error('Storage is not configured.');
+    const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await performAnalysis(admin, job, attempt);
   },
   onGaveUp: async (job, error) => {
     // The write the old code never made. 'failed' is retryable and visible;
     // swallowing it made "the model was down" indistinguishable from "nobody
     // asked".
-    const admin = createAdminClient();
-    if (!admin) return;
+    const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await admin
       .from('job_proofs')
       .update({
         analysis_status: 'failed',
         analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+        narration_lease_until: null,
       })
       .eq('id', job.proofId);
   },
@@ -842,7 +847,14 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
 }
 
 async function runNarration(admin: any, job: NarrationJob): Promise<void> {
-  await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
+  await admin
+    .from('job_proofs')
+    .update({
+      narration_status: 'running',
+      narration_lease_owner: leaseOwnerId(),
+      narration_lease_until: leaseUntilIso(),
+    })
+    .eq('id', job.proofId);
 
   const write = async (patch: Record<string, unknown>) =>
     admin.from('job_proofs').update(patch).eq('id', job.proofId);
@@ -1165,18 +1177,17 @@ async function performLongFormAnalysis(
 
 const narrationQueue = new RetryQueue<NarrationJob>({
   run: async (job) => {
-    const admin = createAdminClient();
-    if (!admin) throw new Error('Storage is not configured.');
+    const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await performNarration(admin, job);
   },
   onGaveUp: async (job, error) => {
-    const admin = createAdminClient();
-    if (!admin) return;
+    const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await admin
       .from('job_proofs')
       .update({
         narration_status: 'failed',
         narration_error: formatVisionFailure(error),
+        narration_lease_until: null,
       })
       .eq('id', job.proofId);
   },
@@ -1590,7 +1601,7 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
       .limit(2000);
     if (error) throw new HttpError(500, error.message, 'pulse_failed');
 
-    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+    const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
     res.json(
       summarizeProofPulse(
         ((data ?? []) as any[])
@@ -2007,7 +2018,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       .maybeSingle();
     if (!proof) throw new HttpError(404, 'No such video.', 'not_found');
 
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
     const { data, error } = await admin.storage
@@ -2057,7 +2068,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       .maybeSingle();
     if (!party) throw new HttpError(404, 'No such company on this job.', 'party_not_found');
 
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
     const { data: filmRows } = await admin
@@ -2314,7 +2325,7 @@ export async function deleteEvidence(req: Request, res: Response, next: NextFunc
     // SELECT policies hide deleted_at rows. Postgres treats that as an implicit
     // WITH CHECK on UPDATE, so a user-JWT stamp fails with an RLS error.
     // Service role bypasses it; the caller is already an org member here.
-    const writer = createAdminClient() ?? supabase;
+    const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
     const { data, error } = await writer
       .from('job_proofs')
       .update({ deleted_at: now, deleted_by: userId })

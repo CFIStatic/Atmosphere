@@ -13,3 +13,8 @@
 -- To restore the full text here, run the query above and replace this file's
 -- contents verbatim (the md5 must match). Do not write new DDL under this
 -- version number.
+--
+-- Fresh / preview / DR databases: apply
+--   20260725180000_onboarding_schema_if_missing.sql
+-- which creates orgs, org_members, profiles, create_org, and join_org when
+-- they are absent. That file is idempotent on this production project.

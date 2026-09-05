@@ -20,6 +20,7 @@ export function jobSharePagePath(token: string, email?: string | null): string {
 
 export function jobShareApiPath(token: string, suffix = ''): string {
   const action = !suffix ? '' : suffix.startsWith('/') ? suffix : `/${suffix}`;
+  if (!token.trim()) return `${JOB_SHARE_API_PREFIX}/session${action}`;
   return `${JOB_SHARE_API_PREFIX}/${encodeURIComponent(token)}${action}`;
 }
 

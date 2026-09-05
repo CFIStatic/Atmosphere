@@ -20,7 +20,7 @@ test('clip delete does not open a browser confirm dialog', () => {
 
 test('deleteEvidence stamps deleted_at with the service-role client', () => {
   const fn = deleteEvidenceSrc.slice(deleteEvidenceSrc.indexOf('export async function deleteEvidence'));
-  assert.match(fn, /const writer = createAdminClient\(\) \?\? supabase/);
+  assert.match(fn, /const writer = writerForJob\(\{ orgId, jobId: req\.params\.jobId \}, supabase\)\.raw/);
   assert.match(fn, /\.update\(\{ deleted_at: now, deleted_by: userId \}\)/);
   assert.equal(fn.includes('await supabase\n      .from(\'job_proofs\')'), false);
 });

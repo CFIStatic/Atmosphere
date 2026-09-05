@@ -5,6 +5,7 @@ import { knownDurationSeconds } from '../lib/clipDuration';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { signupHref } from '../lib/authRedirect';
 import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
+import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
 import type { CaptureGuide } from '../lib/api';
 
@@ -63,6 +64,7 @@ interface ProofDay {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
   const body = await res.json().catch(() => ({}));
@@ -98,6 +100,17 @@ export function JobSharePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This link is not valid.');
     }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    void exchangeShareToken('job', token).then((ok) => {
+      if (!ok || typeof window === 'undefined') return;
+      const next = guestPathAfterExchange('job', window.location.search);
+      if (window.location.pathname + window.location.search !== next) {
+        window.history.replaceState(window.history.state, '', next);
+      }
+    });
   }, [token]);
 
   useEffect(() => {

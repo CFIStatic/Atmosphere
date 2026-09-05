@@ -12,6 +12,7 @@ import { RetryQueue } from '../../shared/retryQueue.js';
 import { PROCESSING_STAGES, type ProcessingStage, type StepStatus } from '../types.js';
 import { verificationConfig } from '../config.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
+import { expiredLeaseFilter, leaseOwnerId, leaseUntilIso } from '../lease.js';
 
 export interface PipelineContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,6 +90,50 @@ export class ProcessingOrchestrator {
 
   get pending(): number {
     return this.queue.pending;
+  }
+
+  /**
+   * Re-queue processing jobs that survived in Postgres across a restart.
+   * Rows stay `pending` / `running`; only the in-memory RetryQueue is lost.
+   */
+  async reclaimPending(
+    supabase: { from: (table: string) => any },
+    limit = 25,
+  ): Promise<number> {
+    const nowIso = new Date().toISOString();
+    let query = supabase
+      .from('video_processing_jobs')
+      .select('id, org_id, video_id, status')
+      .in('status', ['pending', 'running'])
+      .or(expiredLeaseFilter(nowIso))
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    let { data, error } = await query;
+    if (error && /lease_until|column/i.test(error.message)) {
+      ({ data, error } = await supabase
+        .from('video_processing_jobs')
+        .select('id, org_id, video_id, status')
+        .in('status', ['pending', 'running'])
+        .order('created_at', { ascending: true })
+        .limit(limit));
+    }
+    if (error) throw new Error(error.message);
+    let n = 0;
+    for (const row of (data ?? []) as Array<{
+      id: string;
+      org_id: string;
+      video_id: string;
+    }>) {
+      this.queue.enqueue({
+        key: row.id,
+        orgId: row.org_id,
+        videoId: row.video_id,
+        processingJobId: row.id,
+        supabase,
+      });
+      n += 1;
+    }
+    return n;
   }
 
   /**
@@ -198,6 +243,8 @@ export class ProcessingOrchestrator {
         attempt_count: attempt,
         started_at: row.started_at ?? new Date().toISOString(),
         last_error: null,
+        lease_owner: leaseOwnerId(),
+        lease_until: leaseUntilIso(),
       })
       .eq('id', job.processingJobId);
 
@@ -232,7 +279,7 @@ export class ProcessingOrchestrator {
 
       await job.supabase
         .from('video_processing_jobs')
-        .update({ current_stage: stage })
+        .update({ current_stage: stage, lease_until: leaseUntilIso() })
         .eq('id', job.processingJobId);
 
       await job.supabase
@@ -287,6 +334,8 @@ export class ProcessingOrchestrator {
         status: 'completed',
         completed_at: new Date().toISOString(),
         current_stage: 'finalize_report',
+        lease_owner: null,
+        lease_until: null,
       })
       .eq('id', job.processingJobId);
 

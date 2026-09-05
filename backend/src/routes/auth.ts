@@ -1,7 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config.js';
-import { createAnonClient, createUserClient, createAdminClient } from '../lib/supabase.js';
+import { createAnonClient, createUserClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   setSessionCookies,
   clearSessionCookies,
@@ -141,7 +142,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = internalStaffStartSchema.parse(req.body);
-    if (!createAdminClient()) {
+    if (!unscopedAdminOrNull()) {
       throw new HttpError(
         503,
         'Staff sign-in is not configured on this server.',
@@ -642,7 +643,7 @@ function deviceLabel(userAgent: string | undefined): string {
  * immediately redeems it, so no long-lived token is ever stored at rest.
  */
 async function mintSessionForUser(userId: string) {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) {
     throw new HttpError(503, 'PIN sign-in is not configured on this server.', 'pin_unavailable');
   }
@@ -690,7 +691,7 @@ async function mintSessionForUser(userId: string) {
 authRouter.get('/pin/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = parseDeviceCookie(req.cookies?.[config.device.cookieName] as string | undefined);
-    if (!parsed || !createAdminClient()) {
+    if (!parsed || !unscopedAdminOrNull()) {
       res.json({ enrolled: false });
       return;
     }
@@ -732,7 +733,7 @@ authRouter.post(
 
       // Refuse to enroll if unlock could never work — otherwise the user sets a
       // PIN, trusts it, and discovers at the next sign-in that it does nothing.
-      if (!createAdminClient()) {
+      if (!unscopedAdminOrNull()) {
         throw new HttpError(
           503,
           'PIN sign-in is not configured on this server.',

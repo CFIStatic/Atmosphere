@@ -99,9 +99,9 @@ describe('Dashboard clip delete', () => {
   it('lets the hide stamp survive job_proofs RLS', () => {
     expect(softDeleteRlsSql).toContain('deleted_at is null or deleted_by = auth.uid()');
     expect(softDeleteRlsSql).toContain('drop policy if exists job_proofs_select');
-    expect(deleteEvidenceSrc).toContain('createAdminClient() ?? supabase');
+    expect(deleteEvidenceSrc).toContain('writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw');
     expect(deleteEvidenceSrc).toMatch(
-      /export async function deleteEvidence[\s\S]*const writer = createAdminClient\(\) \?\? supabase/,
+      /export async function deleteEvidence[\s\S]*const writer = writerForJob/,
     );
   });
 

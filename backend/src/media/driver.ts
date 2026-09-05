@@ -8,7 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import type { MediaBackend, MediaObject } from './types.js';
 
@@ -93,7 +93,7 @@ export class SupabaseMediaStorage implements MediaStorageDriver {
 
   async createUpload(input: CreateUploadInput): Promise<CreatedUpload> {
     assertSafeKey(input.objectKey);
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) {
       throw new HttpError(503, 'Object storage is not configured.', 'storage_unconfigured');
     }
@@ -115,7 +115,7 @@ export class SupabaseMediaStorage implements MediaStorageDriver {
 
   async createSignedReadUrl(objectKey: string, ttlSeconds: number): Promise<string> {
     assertSafeKey(objectKey);
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (!admin) {
       throw new HttpError(503, 'Object storage is not configured.', 'storage_unconfigured');
     }
@@ -132,7 +132,11 @@ export class SupabaseMediaStorage implements MediaStorageDriver {
 /**
  * S3-shaped stub: returns a planned multipart layout so App Store / field
  * clients can integrate against the contract before credentials are wired.
- * Completing parts still requires a real AWS/S3-compatible deployment.
+ *
+ * TODO (A-grade): a real multipart driver needs AWS_ACCESS_KEY_ID /
+ * AWS_SECRET_ACCESS_KEY / S3_BUCKET (or an IAM role). Those are not in the
+ * existing env catalogue and must not be invented. Keep this stub until Keys
+ * grow those vars. Completing parts still requires a real S3-compatible host.
  */
 export class S3MediaStorageStub implements MediaStorageDriver {
   readonly backend = 's3' as const;

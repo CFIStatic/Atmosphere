@@ -257,6 +257,7 @@ export default function App() {
               `/*` keeps legacy base64 tokens that contain `/` on this page
               instead of the catch-all, which would dump a signed-in office
               user onto their jobs dashboard. */}
+          <Route path="/guest" element={<JobSharePage />} />
           <Route path="/shared/:token/*" element={<JobSharePage />} />
 
           {/* The same person, one level up. A sub who has proved they control
@@ -274,6 +275,7 @@ export default function App() {
           {/* Tokenized HomeOwner Report — no staff session required. */}
           <Route path="/report/:token" element={<HomeownerReportPage />} />
           {/* Read-only job file for homeowners, counsel, banks — no login. */}
+          <Route path="/progress-view" element={<JobProgressGuestPage />} />
           <Route path="/progress/:token" element={<JobProgressGuestPage />} />
 
           <Route

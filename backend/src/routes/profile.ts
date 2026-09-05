@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { createUserClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { updateProfileSchema, uploadAvatarSchema } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
@@ -77,7 +78,7 @@ async function upsertOwnProfile(
 
 async function removeStoredAvatar(userId: string, currentUrl: string | null) {
   if (!currentUrl || !isStoredAvatarObject(currentUrl)) return;
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return;
   const path = avatarPathFromUrl(currentUrl, userId);
   if (!path) return;
@@ -164,7 +165,7 @@ profileRouter.post('/avatar', async (req: Request, res: Response, next: NextFunc
     const previousUrl = (current.data as { avatar_url?: string | null } | null)?.avatar_url ?? null;
 
     let avatarUrl: string | null = null;
-    const admin = createAdminClient();
+    const admin = unscopedAdminOrNull();
     if (admin) {
       const path = avatarStoragePath(userId, sniffed);
       const { error: storeError } = await admin.storage.from(AVATAR_BUCKET).upload(path, bytes, {

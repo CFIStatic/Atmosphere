@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
@@ -289,7 +289,7 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         .filter(Boolean) as string[],
     );
 
-    const tombstoned = await listTombstonedJobIds(createAdminClient() ?? supabase, orgId);
+    const tombstoned = await listTombstonedJobIds(writerForOrg(orgId, supabase).raw, orgId);
     const inputs: TodayJobInput[] = ((jobs ?? []) as any[])
       .filter((j) => !tombstoned.has(j.id as string))
       .filter(
@@ -567,9 +567,11 @@ async function ensureFieldParty(
 }
 
 async function adminOrThrow() {
-  const admin = createAdminClient();
-  if (!admin) throw serviceUnavailable('Storage admin is not configured.', 'admin_unavailable');
-  return admin;
+  try {
+    return unscopedAdmin();
+  } catch {
+    throw serviceUnavailable('Storage admin is not configured.', 'admin_unavailable');
+  }
 }
 
 /** POST /api/field-app/jobs/:jobId/proof/upload-url */

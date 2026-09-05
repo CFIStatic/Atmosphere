@@ -6,7 +6,7 @@ import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { writerForOrg } from '../lib/scopedAdmin.js';
 import {
   deliverPartyInvite,
   fieldCaptureInvitePath,
@@ -679,7 +679,7 @@ async function createJobFileStepwise(
 ): Promise<CreatedJobFile> {
   // Prefer the service-role client for the write path when available so a
   // missing GRANT on job_* tables cannot strand a half-created job file.
-  const writer = createAdminClient() ?? supabase;
+  const writer = writerForOrg(orgId, supabase).raw;
   const jobTitle = jobTitleForIntake(input.title, site?.line ?? '');
 
   let propertyId: string | null = null;

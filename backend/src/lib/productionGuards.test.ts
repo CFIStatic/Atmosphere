@@ -20,6 +20,49 @@ describe('productionGuards module', () => {
   });
 });
 
+describe('mockDriverViolations', () => {
+  it('refuses ALLOW_MOCK_DRIVERS in production', async () => {
+    const { mockDriverViolations } = await import('./productionGuards.js');
+    const { allLeftoverSurfaces } = await import('./platformSurfaces.js');
+    const errors = mockDriverViolations({
+      allowMockDrivers: true,
+      xactimateDriver: 'mock',
+      crmSyncDriver: 'mock',
+      emailMarketingProvider: 'log',
+      surfaces: allLeftoverSurfaces(false),
+    });
+    assert.ok(errors.some((e) => /ALLOW_MOCK_DRIVERS/.test(e)));
+  });
+
+  it('allows mock leftover drivers when those surfaces are gated off', async () => {
+    const { mockDriverViolations } = await import('./productionGuards.js');
+    const { allLeftoverSurfaces } = await import('./platformSurfaces.js');
+    const errors = mockDriverViolations({
+      allowMockDrivers: false,
+      xactimateDriver: 'mock',
+      crmSyncDriver: 'mock',
+      emailMarketingProvider: 'log',
+      surfaces: allLeftoverSurfaces(false),
+    });
+    assert.deepEqual(errors, []);
+  });
+
+  it('fails when a leftover surface is enabled with a mock driver', async () => {
+    const { mockDriverViolations } = await import('./productionGuards.js');
+    const { allLeftoverSurfaces } = await import('./platformSurfaces.js');
+    const surfaces = allLeftoverSurfaces(false);
+    surfaces.estimator = true;
+    const errors = mockDriverViolations({
+      allowMockDrivers: false,
+      xactimateDriver: 'mock',
+      crmSyncDriver: 'mock',
+      emailMarketingProvider: 'log',
+      surfaces,
+    });
+    assert.ok(errors.some((e) => /ENABLE_ESTIMATOR/.test(e)));
+  });
+});
+
 describe('logger', () => {
   it('emits JSON lines', async () => {
     const { logger } = await import('./logger.js');

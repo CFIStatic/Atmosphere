@@ -2,8 +2,9 @@
 
 Atmosphere’s sold path is **intake → invite → Field Capture → Verifier →
 evidence share**. This document is the checklist to run that path safely.
-Sales, PM, estimator, and computer-use modules may stay in the tree; keep them
-off or mocked until they are staffed and monitored.
+Sales, PM, estimator, and computer-use modules may stay in the tree; they
+are **unmounted in production** unless an operator opts in (see
+[Leftover platform APIs](#leftover-platform-apis)).
 
 ## Railway auto-deploy
 
@@ -23,6 +24,8 @@ from its own workflow (GitHub Pages is an optional second host — see
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
 | Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 | Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
+
+Low-risk IaC notes (no live `.railway/railway.ts` graph): [`docs/railway-iac.md`](./railway-iac.md).
 
 **The repo-root `/railway.toml` is not in that table on purpose.** It is an
 inert fallback: `builder` only, no `dockerfilePath`, no `startCommand`, no
@@ -526,8 +529,80 @@ Strongly recommended:
 
 Escape hatches (explicit only):
 
-- `ALLOW_MOCK_DRIVERS=true` — silences warnings for mock Xactimate / CRM / email marketing
 - `ALLOW_S3_STUB=true` — permits `MEDIA_BACKEND=s3` stub (integration tests only)
+- `ALLOW_MOCK_DRIVERS=true` is **refused** in production. It used to be
+  synced onto Railway by `deploy-production.yml`; that is gone. Delete the
+  variable on the BFF service if a stale `true` remains, or the process
+  will not start. Mock leftover drivers are allowed only while those
+  surfaces stay gated off.
+
+Optional observability (no invented secrets):
+
+- `SENTRY_DSN` — when set, the BFF POSTs 5xx / unhandled errors to Sentry’s
+  store API (`backend/src/lib/sentry.ts`). Office: `VITE_SENTRY_DSN`.
+- `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE` — optional tags.
+
+## Leftover platform APIs
+
+The Express process still contains sales, PM, estimator, computer-use,
+prospecting, email marketing, finance, CRM, cyber, and related routers.
+Production must not serve them.
+
+Resolver: `backend/src/lib/platformSurfaces.ts` (used by `createApp` and
+`index.ts` schedulers).
+
+| Environment | Default | Re-enable |
+| --- | --- | --- |
+| `NODE_ENV=production` | every leftover surface **off** | `ENABLE_PLATFORM_APIS=true` (all) or `ENABLE_PLATFORM_APIS=sales,pm` (allowlist) or `ENABLE_SALES=true` (one surface) |
+| development / preview | every leftover surface **on** | `ENABLE_PLATFORM_APIS=false` to mimic production locally |
+
+Per-surface flags (`ENABLE_SALES`, `ENABLE_PM`, `ENABLE_ESTIMATOR`,
+`ENABLE_COMPUTER`, `ENABLE_PROSPECTING`, `ENABLE_EMAIL_MARKETING`,
+`ENABLE_FINANCE`, `ENABLE_PURCHASING`, `ENABLE_WEB_ACCESS`, `ENABLE_CRM`,
+`ENABLE_CRM_SYNC`, `ENABLE_CYBER`, `ENABLE_TECHNICIAN`, `ENABLE_AI`,
+`ENABLE_INTEGRATIONS`, `ENABLE_BACKUPS`, `ENABLE_LOCATIONS`) win over the
+master switch.
+
+A gated mount answers `404` with `code: platform_surface_disabled` instead
+of disappearing silently. `/api/unsubscribe` stays mounted (CAN-SPAM).
+Cyber **monitor** middleware stays; `/api/cyber` does not.
+
+Background leftovers follow the same flags: PM scheduler, mitigation
+capture agent, computer-use WebSocket, cyber scheduler, backup scheduler.
+
+`deploy-production.yml` Keys sync sets `ENABLE_PLATFORM_APIS=false` and
+**deletes** `ALLOW_MOCK_DRIVERS` on the Railway BFF so a previous `true`
+cannot survive.
+
+## Onboarding schema on a fresh database
+
+`20260725171936_commandx_onboarding_schema.sql` is a **no-op checksum
+placeholder** so git history matches the live Supabase project. Do not
+rewrite that version. Fresh / preview / DR environments apply
+
+`20260725180000_onboarding_schema_if_missing.sql`
+
+which creates `orgs`, `org_members`, `profiles`, `create_org`, and
+`join_org` when they are absent. The file is idempotent on production.
+
+## Guest share tokens
+
+Job-share and progress-share still accept `?token=` / path tokens (Field
+Capture depends on them). Browsers can `POST /api/job-share/exchange` or
+`POST /api/progress-share/exchange` to mint an httpOnly cookie
+(`atm_job_share` / `atm_progress_share`) so later calls omit the token
+from the URL. Path tokens remain valid.
+
+## Verification reclaim
+
+At boot the BFF re-queues `pending` / `running` `video_processing_jobs`
+into the in-memory worker (`backend/src/verification/reclaim.ts`). A
+30-second lease sweep then steals rows whose `lease_until` has passed,
+so a mid-job crash does not wait for the next process restart.
+
+Proof narration and transcript use the same pattern on `job_proofs`
+(`narration_lease_until` / `transcript_lease_until`). The analysis sweep
+runs every 30 seconds and skips rows whose lease is still held.
 
 Full catalogue: `backend/.env.example`.
 
@@ -602,8 +677,9 @@ when you want to drain traffic that cannot reach Auth. Prefer draining on
 - Access logs and errors are **JSON lines** (`requestId`, `path`, `status`,
   `durationMs`). Forward stdout to your aggregator.
 - Honor inbound `x-request-id` or accept the generated one on the response.
-- Product telemetry (`/api/telemetry`) is not a substitute for error tracking —
-  wire Sentry/OTel when you have a sink.
+- Product telemetry (`/api/telemetry`) is not a substitute for error tracking.
+  Set `SENTRY_DSN` (BFF) and `VITE_SENTRY_DSN` (office) when you have a
+  project — both are no-ops when unset. No SDK dependency.
 
 ## CI expectations
 
@@ -630,6 +706,9 @@ Lint is still noisy across the monorepo; `npm run verify` remains the local bar.
 
 - Merging the two migration trees into one (tracked as follow-up; inventory
   script prevents silent drift).
-- Durable workers for proof/verification queues (still in-process `RetryQueue`).
-- Real S3 multipart driver (stub only).
+- Leftover (sales/PM/estimator) `createAdminClient()` sites — those APIs are
+  gated off in production.
+- Real S3 multipart driver (stub only; no AWS credential env vars in Keys).
+- A separate worker process. Leases + in-process `RetryQueue` are the
+  outbox; they are not Kafka.
 - Counsel-reviewed privacy/terms copy on the marketing site.

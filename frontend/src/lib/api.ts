@@ -3407,9 +3407,29 @@ export const api = {
     }),
 
   progressShareGuest: (token: string) =>
-    request<ProgressShareGuestView>(`/api/progress-share/${encodeURIComponent(token)}`, {
-      method: 'GET',
+    request<ProgressShareGuestView>(
+      token.trim()
+        ? `/api/progress-share/${encodeURIComponent(token)}`
+        : '/api/progress-share/session',
+      {
+        method: 'GET',
+      },
+    ),
+
+  exchangeProgressShare: (token: string) =>
+    request<{ ok: boolean }>('/api/progress-share/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     }),
+
+  exchangeJobShare: (token: string) =>
+    request<{ ok: boolean; you?: { company: string | null; trade: string | null; role: string | null } }>(
+      '/api/job-share/exchange',
+      {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      },
+    ),
 
   progressShareVideo: (token: string, proofId: string) =>
     request<{ url: string; expiresInSeconds: number }>(

@@ -21,6 +21,19 @@
   var API_BASE = Core.resolveApiBase
     ? Core.resolveApiBase(params.get('api') || '')
     : (params.get('api') || '');
+  if (TOKEN && Core.exchangeShareToken) {
+    Core.exchangeShareToken(TOKEN, API_BASE).then(function (ok) {
+      if (!ok) return;
+      try {
+        var next = new URL(location.href);
+        next.searchParams.delete('token');
+        next.searchParams.delete('share');
+        history.replaceState({}, '', next.pathname + next.search + next.hash);
+      } catch (err) {
+        /* keep the path token if history is unavailable */
+      }
+    });
+  }
   var STORAGE_BASE = params.get('storage') || '';
   var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
@@ -490,32 +503,37 @@
     el.style.color = isErr ? 'var(--fail)' : 'var(--muted)';
   }
 
-  function bootLive() {
+  function paintLiveJob(payload) {
+    state.job = payload;
+    var title = (payload.job && payload.job.title) || 'Job';
+    var num = (payload.job && payload.job.jobNumber) || '';
+    var company = (payload.you && payload.you.company) || 'Crew';
+    paintFieldAccount({
+      name: company,
+      org: 'Field Capture',
+      account: false,
+    });
+    renderExpect([
+      {
+        name: (num ? num + ' · ' : '') + title,
+        addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
+        at: 'Today',
+        placed: true,
+        sharePath: TOKEN ? '/shared/' + TOKEN : '/guest',
+      },
+    ]);
+    showJobAdd(false);
+    setStatus('Ready — pick a job.');
+    when('#daybtn', function (btn) { btn.disabled = false; });
+  }
+
+  function bootLive(preloaded) {
     show('s-home');
     setStatus('Loading job…');
-    Core.loadShareJob(TOKEN, API_BASE)
+    var ready = preloaded ? Promise.resolve(preloaded) : Core.loadShareJob(TOKEN, API_BASE);
+    ready
       .then(function (payload) {
-        state.job = payload;
-        var title = (payload.job && payload.job.title) || 'Job';
-        var num = (payload.job && payload.job.jobNumber) || '';
-        var company = (payload.you && payload.you.company) || 'Crew';
-        paintFieldAccount({
-          name: company,
-          org: 'Field Capture',
-          account: false,
-        });
-        renderExpect([
-          {
-            name: (num ? num + ' · ' : '') + title,
-            addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
-            at: 'Today',
-            placed: true,
-            sharePath: '/shared/' + TOKEN,
-          },
-        ]);
-        showJobAdd(false);
-        setStatus('Ready — pick a job.');
-        when('#daybtn', function (btn) { btn.disabled = false; });
+        paintLiveJob(payload);
       })
       .catch(function (err) {
         setStatus(err.message || 'Could not open this link.', true);
@@ -523,6 +541,13 @@
         show('s-blocked');
         showBlockedMsg(err.message || 'This link is invalid or expired.');
       });
+  }
+
+  function enterLiveMode(preloaded) {
+    LIVE = true;
+    document.body.setAttribute('data-mode', 'live');
+    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
+    bootLive(preloaded);
   }
 
   function showBlockedMsg(message) {
@@ -1390,15 +1415,22 @@
   bindNewJob();
 
   if (LIVE) {
-    document.body.setAttribute('data-mode', 'live');
-    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
-    bootLive();
+    enterLiveMode();
   } else if (DEMO) {
     bootDemo();
   } else if (params.get('elevate') === '1') {
     /* Preview the connect → Today motion without a live session. */
     show('s-home');
     playElevate();
+  } else if (Core.loadShareJob) {
+    /* Token already left the URL after /exchange. A refresh still has the cookie. */
+    Core.loadShareJob('', API_BASE)
+      .then(function (payload) {
+        enterLiveMode(payload);
+      })
+      .catch(function () {
+        bootAccount();
+      });
   } else {
     bootAccount();
   }

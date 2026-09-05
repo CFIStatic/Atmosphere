@@ -60,6 +60,20 @@ describe('JobSharePage', () => {
     expect(screen.queryByRole('button', { name: /Film before you start/i })).not.toBeInTheDocument();
   });
 
+  it('POSTs a long-enough invite token to /exchange', async () => {
+    render(
+      <MemoryRouter initialEntries={['/shared/long-enough-token']}>
+        <Routes>
+          <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Meridian Ave' })).toBeInTheDocument();
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes('/api/job-share/exchange'))).toBe(true);
+  });
+
   it('still asks them to accept when they are not clear to work', async () => {
     vi.stubGlobal(
       'fetch',

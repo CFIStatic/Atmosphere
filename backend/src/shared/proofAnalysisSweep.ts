@@ -7,15 +7,16 @@
  * for every clip on file, however long it is.
  */
 
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { queueNarration } from '../routes/proofOfWork.js';
+import { leaseIsHeld, leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const SWEEP_LIMIT = 20;
 const FIRST_DELAY_MS = 3_000;
-const INTERVAL_MS = 5 * 60_000;
+const INTERVAL_MS = 30_000;
 
 let timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -78,13 +79,26 @@ export async function sweepUnanalyzedProofs(
 
   let narration = 0;
   let transcript = 0;
+  const owner = leaseOwnerId();
+  const until = leaseUntilIso();
   for (const row of rows) {
     const party = { org_id: row.org_id, job_id: row.job_id, id: row.party_id };
-    if (needsNarration(row.narration_status, row.narration_error)) {
+    if (
+      needsNarration(row.narration_status, row.narration_error) &&
+      !leaseIsHeld(row.narration_lease_until)
+    ) {
+      await admin
+        .from('job_proofs')
+        .update({ narration_lease_owner: owner, narration_lease_until: until })
+        .eq('id', row.id);
       await enqueueNarration(admin, party, row.id, row.phase, row.work_date);
       narration += 1;
     }
-    if (needsTranscript(row.transcript_status)) {
+    if (needsTranscript(row.transcript_status) && !leaseIsHeld(row.transcript_lease_until)) {
+      await admin
+        .from('job_proofs')
+        .update({ transcript_lease_owner: owner, transcript_lease_until: until })
+        .eq('id', row.id);
       await enqueueTranscript(admin, row.id);
       transcript += 1;
     }
@@ -94,7 +108,7 @@ export async function sweepUnanalyzedProofs(
 
 async function tick(): Promise<void> {
   if (running) return;
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return;
   running = true;
   try {
