@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  api,
-  ApiError,
-  CONTRACTOR_TYPE_LABELS,
-  CONTRACTOR_TYPE_ORDER,
-  type ContractorType,
-} from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -20,10 +14,7 @@ import {
   workspaceNameFrom,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
-import {
-  resolveVerifierSetup,
-  workTypeForContractorType,
-} from '../components/setup/verifierSetupOptions';
+import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 
@@ -61,7 +52,6 @@ export function SignupPage() {
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
-  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
   const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
 
   const [error, setError] = useState<string | null>(null);
@@ -148,8 +138,7 @@ export function SignupPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
-  const orgStepValid =
-    mode === 'join' ? joinCodeValid : orgName.trim().length >= 2 && Boolean(contractorType);
+  const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
 
   function enterApp() {
     queueRedirect(redirectTo);
@@ -179,7 +168,7 @@ export function SignupPage() {
         return;
       }
 
-      const { role: finalRole, usageIntents } = resolveVerifierSetup(
+      const { role: finalRole, usageIntents, workType, contractorType } = resolveVerifierSetup(
         mode === 'join' ? 'employee' : SETUP_DEFAULTS.role,
         SETUP_DEFAULTS.trade,
         mode !== 'join',
@@ -193,15 +182,10 @@ export function SignupPage() {
           usageIntents.length ? usageIntents : ['field_work', 'exploring'],
         );
       } else {
-        if (!contractorType) {
-          setError('Select a company type.');
-          goToStep(2);
-          return;
-        }
         await api.createOrg(
           orgName.trim(),
           finalRole,
-          workTypeForContractorType(contractorType),
+          workType,
           contractorType,
           usageIntents,
         );
@@ -408,25 +392,6 @@ export function SignupPage() {
                   autoFocus
                   className={inputClass}
                 />
-              </Field>
-              <Field label="Company type" htmlFor="org-contractor-type" className="mt-4">
-                <select
-                  id="org-contractor-type"
-                  value={contractorType ?? ''}
-                  onChange={(e) =>
-                    setContractorType((e.target.value || null) as ContractorType | null)
-                  }
-                  className={inputClass}
-                >
-                  <option value="" className="bg-paper-200/50">
-                    Select a company type
-                  </option>
-                  {CONTRACTOR_TYPE_ORDER.map((value) => (
-                    <option key={value} value={value} className="bg-paper-200/50">
-                      {CONTRACTOR_TYPE_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
                 <p className="mt-2 text-xs text-ink-500">
                   Were you invited by your office? Open the link in that email — only invited
                   people can join an existing workspace.

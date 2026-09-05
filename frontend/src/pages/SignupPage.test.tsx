@@ -98,7 +98,7 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Your workspace' }));
     expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Company name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Company type')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Your name')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Set up billing' }));
@@ -169,7 +169,7 @@ describe('SignupPage', () => {
     );
   });
 
-  it('requires a company type before a new workspace can be created', async () => {
+  it('creates a workspace from a company name without asking for company type', async () => {
     const user = userEvent.setup();
     authState.user = {
       id: 'user-1',
@@ -187,7 +187,7 @@ describe('SignupPage', () => {
 
     renderSignup('/signup?step=2');
 
-    expect(screen.getByLabelText('Company type')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
 
     // Replace the suggested workspace name in one change so the suggest
@@ -195,9 +195,6 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Acme Restoration' },
     });
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-
-    await user.selectOptions(screen.getByLabelText('Company type'), 'restoration');
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -206,8 +203,8 @@ describe('SignupPage', () => {
       expect(api.createOrg).toHaveBeenCalledWith(
         'Acme Restoration',
         'global_admin',
-        'mitigation',
-        'restoration',
+        'construction',
+        'other',
         ['field_work', 'exploring', 'billing'],
       );
     });
@@ -243,7 +240,6 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Meridian Services' },
     });
-    await user.selectOptions(screen.getByLabelText('Company type'), 'restoration');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {

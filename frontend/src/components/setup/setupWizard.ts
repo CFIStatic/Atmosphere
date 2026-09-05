@@ -24,7 +24,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 2 as const,
     title: 'Your workspace',
-    detail: 'Name the company and pick the company type — you become Global Admin.',
+    detail: 'Name the company — you become Global Admin.',
   },
   {
     step: 3 as const,
