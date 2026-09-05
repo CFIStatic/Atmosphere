@@ -60,7 +60,8 @@ describe('verifier clip Ask tab and live analysis', () => {
 
   it('shows what the AI saw on the Analysis tab without requiring playback', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
-    expect(verifierHtml).toContain('What the AI saw, in order');
+    expect(verifierHtml).toContain('Event analysis');
+    expect(verifierHtml).toContain('function parseTimestampedEvents');
     expect(verifierHtml).toContain('You do not have to watch the clip');
     expect(verifierHtml).toContain('function watchRemoteReading');
     expect(verifierHtml).toContain('data-full=');
@@ -283,6 +284,36 @@ describe('verifier clip Ask tab and live analysis', () => {
       .join('\n');
     expect(reply).toMatch(/^Yes/);
     expect(reply).toMatch(/vanity|insurance|cabinets/i);
+    dom.window.close();
+  });
+
+  it('lists event-boundary timestamps on Analysis and hides the At-0-seconds blob', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0905-O"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const summary = document.getElementById('d-job-summary');
+    const lead = document.getElementById('d-analysis-lead');
+    const alog = document.getElementById('alog');
+    expect(summary?.textContent).toMatch(/office setup|monitors/i);
+    expect(lead?.textContent).toMatch(/never an acceptance/i);
+    expect(document.getElementById('d-saw')).toBeNull();
+    const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
+    expect(notes.map((el) => el.getAttribute('data-at'))).toEqual(['0', '8', '18']);
+    expect(alog?.textContent).toMatch(/0:00/);
+    expect(alog?.textContent).toMatch(/0:08/);
+    expect(alog?.textContent).toMatch(/0:18/);
+    expect(alog?.textContent).toMatch(/spreadsheet/i);
+    expect(document.getElementById('d-panel')?.textContent).toMatch(/Event analysis/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds, the camera captures/i);
+
+    const second = notes[1] as HTMLElement;
+    second.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(second.getAttribute('data-at')).toBe('8');
     dom.window.close();
   });
 

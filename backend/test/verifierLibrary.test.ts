@@ -297,6 +297,54 @@ test('serialization: office dictation prefers narration_text over the day summar
   );
   assert.equal(item.analysis?.dictationStatus, 'done');
   assert.equal(item.analysis?.summary, 'Short headline.');
+  assert.equal((item.analysis as { dictationEntries?: Array<{ text?: string }> } | null)?.dictationEntries?.[0]?.text, 'Tear-off begins.');
+});
+
+test('serialization: timestamped narration_text becomes multiple dictationEntries', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-office-blob',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'walkthrough',
+      work_date: '2026-09-01',
+      captured_at: '2026-09-01T15:20:00Z',
+      received_at: '2026-09-01T15:21:00Z',
+      duration_seconds: '24',
+      byte_size: '4200000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'office',
+      state: 'checked',
+      checks: [],
+      ai_summary: 'Office desk with two monitors.',
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'gemini',
+      analysis_status: 'done',
+      narration_status: 'done',
+      narration_text:
+        'At 0 seconds, ceiling lights and a vent. At 8 seconds, two monitors and a webcam. At 18 seconds, a spreadsheet is in frame.',
+      narration: { entries: [], model: 'gemini' },
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Mobil test one 1111',
+    jobNumber: 1111,
+    company: 'Field Capture',
+    contactName: 'Marcus',
+    tier: 1,
+    dayHasAfter: false,
+  });
+
+  const entries = (item.analysis as { dictationEntries?: Array<{ atSeconds?: number; text?: string }> } | null)
+    ?.dictationEntries ?? [];
+  assert.deepEqual(
+    entries.map((e) => e.atSeconds),
+    [0, 8, 18],
+  );
+  assert.match(String(entries[1]?.text), /monitors/i);
 });
 
 test('serialization: leftover dictation is still Askable even if status never flipped to done', () => {

@@ -48,6 +48,39 @@ export const defaultRunner: CommandRunner = (bin, args) =>
   });
 
 /**
+ * Candidate spacing before diversity. Short clips need ~1s stills so a
+ * 24-second pan can keep scene-change frames; day films stay on the
+ * configured (usually 2-minute) interval.
+ */
+export function candidateIntervalForClip(
+  durationSeconds: number,
+  configuredIntervalSeconds: number,
+): number {
+  const duration = Math.max(0, Number(durationSeconds) || 0);
+  const configured = Math.max(1, Math.floor(Number(configuredIntervalSeconds) || 120));
+  if (duration > 0 && duration < 180) return 1;
+  if (duration > 0 && duration < 900) return Math.min(5, configured);
+  return configured;
+}
+
+/**
+ * A short filed clip with one device still at 0s cannot emit event-boundary
+ * timestamps. Re-extract when we do not yet have enough stills to see change.
+ */
+export function shortClipNeedsServerFrames(input: {
+  have: number;
+  durationSeconds: number;
+  longForm?: boolean;
+}): boolean {
+  if (input.longForm) return false;
+  const duration = Number(input.durationSeconds) || 0;
+  const have = Math.max(0, Math.floor(input.have));
+  if (duration < 8) return have === 0;
+  const minFrames = duration < 60 ? 4 : 6;
+  return have < minFrames;
+}
+
+/**
  * Candidate sample times — denser than the final keep budget so diversity
  * filtering has something to choose from.
  */

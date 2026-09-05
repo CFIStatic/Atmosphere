@@ -36,6 +36,7 @@ import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
 import { prepareVideoFrames } from '../shared/videoIntelligence.js';
+import { shortClipNeedsServerFrames } from '../shared/sparseExtract.js';
 import { probeMetadata } from '../verification/frames/extract.js';
 import {
   narrateProofVideo,
@@ -45,6 +46,7 @@ import {
 import {
   describeRecordingWithoutScope,
   descriptionFindings,
+  narrationFromDictation,
 } from '../shared/workerActivityAnalysis.js';
 import {
   actionLabels,
@@ -798,9 +800,13 @@ export async function ensureStillsAndDuration(
   const have = count ?? 0;
 
   // A workday always gets the server's spread — a handful of device stills
-  // does not cover eight hours. Anything else only needs filling when the
-  // device sent nothing.
-  const wanted = longForm || have === 0 || Boolean(opts?.force);
+  // does not cover eight hours. A short clip with one still at 0s also needs
+  // a server extract so Analysis can timestamp scene changes.
+  const wanted =
+    longForm ||
+    have === 0 ||
+    Boolean(opts?.force) ||
+    shortClipNeedsServerFrames({ have, durationSeconds, longForm });
   if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
     if (!opts?.force) stillsAttempted.add(proofId);
     try {
@@ -927,7 +933,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: narrationFromDictation(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,
@@ -972,7 +978,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: narrationFromDictation(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,
@@ -1077,7 +1083,7 @@ async function performLongFormAnalysis(
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: narrationFromDictation(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,

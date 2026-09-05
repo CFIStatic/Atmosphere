@@ -14,6 +14,7 @@
  */
 
 import { extractConversationDetails } from '../audio/conversationDetails.js';
+import { resolveDictationEntries } from '../shared/dictationEvents.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
@@ -322,7 +323,11 @@ export function serializeEvidence(input: {
             /** Spoken-style description for the office player — primary reading. */
             dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
             dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
-            dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            dictationEntries: resolveDictationEntries({
+              stored: proof.narration?.entries,
+              narrationText: dictation,
+              actions,
+            }),
             actions,
             materialChange,
             materialBecause: findings.materialBecause ?? null,
