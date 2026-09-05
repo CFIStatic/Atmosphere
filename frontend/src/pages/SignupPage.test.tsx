@@ -188,10 +188,16 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2');
 
     expect(screen.queryByLabelText('Company type')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.getByLabelText('Company name')).toHaveValue('My workspace');
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
 
     // Replace the suggested workspace name in one change so the suggest
     // effect does not refill an emptied field mid-type.
+    fireEvent.change(screen.getByLabelText('Company name'), {
+      target: { value: 'A' },
+    });
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Acme Restoration' },
     });
