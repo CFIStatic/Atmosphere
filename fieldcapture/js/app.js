@@ -521,16 +521,27 @@
         setStatus(err.message || 'Could not open this link.', true);
         when('#daybtn', function (btn) { btn.disabled = true; });
         show('s-blocked');
-        $('#blocked-msg').textContent = err.message || 'This link is invalid or expired.';
+        showBlockedMsg(err.message || 'This link is invalid or expired.');
       });
+  }
+
+  function showBlockedMsg(message) {
+    var el = $('#blocked-msg');
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
   }
 
   function bootBlocked() {
     show('s-blocked');
     showFieldAccount(false);
     showJobAdd(false);
-    $('#blocked-msg').textContent =
-      'Sign in once — Field Capture and the in-app Platform use the same account.';
+    showBlockedMsg('');
   }
 
   function showLoginError(message) {

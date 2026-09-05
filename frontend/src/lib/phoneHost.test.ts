@@ -107,4 +107,15 @@ describe('phone home-screen manifests', () => {
     expect(core).toContain('function localOfficeOrigin');
     expect(core).toContain('embed=field');
   });
+
+  it('does not show a shared-account note on the Field Capture sign-in screen', () => {
+    const htmlFromField = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(htmlFromField).toContain('Welcome back');
+    expect(htmlFromField).toContain('id="blocked-msg"');
+    expect(htmlFromField).not.toContain('Sign in once');
+    expect(htmlFromField).not.toMatch(/in-app Platform use the same account/);
+    expect(app).not.toMatch(/in-app Platform use the same account/);
+    expect(app).toContain('function showBlockedMsg');
+  });
 });
