@@ -4325,14 +4325,16 @@
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
       jobSheet.error = null;
-      jobSheet.made = {
-        note: res.body.emailed
-          ? 'Invite emailed to ' + email + '. The same link opens on the web office and Field Capture.'
-          : 'Added to the job, but Atmosphere could not send the email. Copy the Field Capture link below.',
-        path: res.body.fieldCapturePath
-          ? (res.body.fieldCapturePath.indexOf('http') === 0 ? res.body.fieldCapturePath : location.origin + res.body.fieldCapturePath)
-          : (res.body.sharePath ? location.origin + res.body.sharePath : '')
-      };
+      jobSheet.made = res.body.emailed
+        ? {
+            note: 'Invite emailed to ' + email + '. The same link opens on the web office and Field Capture.'
+          }
+        : {
+            note: 'Added to the job, but Atmosphere could not send the email. Copy the Field Capture link below.',
+            path: res.body.fieldCapturePath
+              ? (res.body.fieldCapturePath.indexOf('http') === 0 ? res.body.fieldCapturePath : location.origin + res.body.fieldCapturePath)
+              : (res.body.sharePath ? location.origin + res.body.sharePath : '')
+          };
       paintJobFileSheet();
       render();
       toast(res.body.emailed ? 'Invite emailed to ' + email + '.' : company + ' added — email did not send.');
