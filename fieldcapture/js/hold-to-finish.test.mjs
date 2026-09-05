@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=offline-calm/);
-assert.match(html, /js\/app\.js\?v=offline-calm/);
+assert.match(html, /js\/capture-core\.js\?v=offline-calm-2/);
+assert.match(html, /js\/app\.js\?v=offline-calm-2/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -364,6 +364,24 @@ assert.deepEqual(
 Core.markPendingJobSynced(draft.id, officeJob, memory);
 assert.equal(Core.readPendingJobs(memory).length, 0);
 assert.deepEqual(Core.mergeTodayJobs([officeJob], []).map((j) => j.id), ['job-1038']);
+Core.upsertPendingJob(draft, memory);
+Core.writeCachedJobs(
+  [{ id: 'job-1038', name: 'Meridian Ave', sharePath: '/share/secret-token' }],
+  memory,
+);
+assert.equal(Core.readCachedJobs(memory)[0].sharePath, undefined);
+assert.equal(typeof Core.clearFieldLocalCache, 'function');
+assert.equal(typeof Core.adoptFieldCache, 'function');
+assert.equal(typeof Core.fieldCacheMatchesSession, 'function');
+Core.adoptFieldCache('user-a', 'aaaaaaaaaaaaTOKENA', memory);
+assert.equal(Core.readPendingJobs(memory).length, 1);
+Core.adoptFieldCache('user-b', 'bbbbbbbbbbbbTOKENB', memory);
+assert.equal(Core.readPendingJobs(memory).length, 0, 'a new account must not inherit leftover drafts');
+assert.equal(Core.readCachedJobs(memory).length, 0);
+assert.equal(Core.fieldCacheMatchesSession('bbbbbbbbbbbbTOKENB', memory), true);
+assert.equal(Core.fieldCacheMatchesSession('aaaaaaaaaaaaTOKENA', memory), false);
+Core.clearFieldLocalCache(memory);
+assert.equal(Core.fieldCacheMatchesSession('bbbbbbbbbbbbTOKENB', memory), false);
 assert.equal(Core.isTransientNetworkError({ message: 'Failed to fetch' }), true);
 assert.equal(Core.isTransientNetworkError({ status: 503, message: 'Unavailable' }), true);
 assert.equal(Core.isTransientNetworkError({ status: 401, message: 'Unauthorized' }), false);
@@ -375,6 +393,16 @@ assert.match(
   appSrc,
   /isTransientNetworkError\(err\) && cachedMe/,
   'signed-in crew keep Today when the office API is unreachable',
+);
+assert.match(
+  appSrc,
+  /fieldCacheMatchesSession\(state\.accessToken\)/,
+  'offline Today must not hydrate another account\'s cache',
+);
+assert.match(
+  appSrc,
+  /!accessToken && Core\.clearFieldLocalCache/,
+  'sign-out must drop pending jobs and cached profile, not only the session tokens',
 );
 assert.deepEqual(
   Core.filterJobs(

@@ -243,6 +243,9 @@
     } catch (e) {
       /* private mode — stay signed in for this page only */
     }
+    if (!accessToken && Core.clearFieldLocalCache) {
+      Core.clearFieldLocalCache();
+    }
   }
 
   /* ---------- home hydration ---------- */
@@ -741,8 +744,11 @@
   }
 
   function bootAccountSession() {
-    var cachedMe = Core.readCachedMe ? Core.readCachedMe() : null;
-    var cachedJobs = Core.readCachedJobs ? Core.readCachedJobs() : [];
+    var cacheOk = Core.fieldCacheMatchesSession
+      ? Core.fieldCacheMatchesSession(state.accessToken)
+      : false;
+    var cachedMe = cacheOk && Core.readCachedMe ? Core.readCachedMe() : null;
+    var cachedJobs = cacheOk && Core.readCachedJobs ? Core.readCachedJobs() : [];
 
     function enterAndFlush(me, jobs) {
       enterAccountHome(me, jobs);
@@ -751,6 +757,9 @@
 
     return Core.loadFieldMe(API_BASE, state.accessToken).then(
       function (me) {
+        if (Core.adoptFieldCache) {
+          Core.adoptFieldCache(Core.cacheOwnerId ? Core.cacheOwnerId(me) : '', state.accessToken);
+        }
         if (Core.writeCachedMe) Core.writeCachedMe(me);
         return Core.loadTodayJobs(API_BASE, state.accessToken).then(
           function (jobs) {
@@ -1504,6 +1513,7 @@
 
     function signOutFieldAccount() {
       closeFieldAccountMenu();
+      if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
       writeStoredSession(null, null);
       state.account = false;
       state.jobs = [];

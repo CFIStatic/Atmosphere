@@ -1104,6 +1104,8 @@
   var FIELD_PENDING_JOBS_KEY = 'atm.field.pendingJobs';
   var FIELD_CACHED_JOBS_KEY = 'atm.field.cachedJobs';
   var FIELD_CACHED_ME_KEY = 'atm.field.cachedMe';
+  var FIELD_CACHE_OWNER_KEY = 'atm.field.cacheOwner';
+  var FIELD_CACHE_TOKEN_KEY = 'atm.field.cacheToken';
 
   function storageOf(store) {
     if (store) return store;
@@ -1134,6 +1136,76 @@
     } catch (e) {
       return false;
     }
+  }
+
+  function readStoreString(key, store) {
+    try {
+      return String((storageOf(store) && storageOf(store).getItem(key)) || '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function writeStoreString(key, value, store) {
+    try {
+      var s = storageOf(store);
+      if (!s) return false;
+      if (!value) s.removeItem(key);
+      else s.setItem(key, String(value));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function cacheOwnerId(me) {
+    var user = me && (me.user || me);
+    if (!user) return '';
+    return String(user.id || user.userId || user.email || '').trim();
+  }
+
+  function tokenHint(token) {
+    var t = String(token || '');
+    return t.length >= 12 ? t.slice(-12) : '';
+  }
+
+  function clearFieldLocalCache(store) {
+    writeJsonStore(FIELD_PENDING_JOBS_KEY, null, store);
+    writeJsonStore(FIELD_CACHED_JOBS_KEY, null, store);
+    writeJsonStore(FIELD_CACHED_ME_KEY, null, store);
+    writeStoreString(FIELD_CACHE_OWNER_KEY, '', store);
+    writeStoreString(FIELD_CACHE_TOKEN_KEY, '', store);
+  }
+
+  /** Drop leftover drafts if this phone just signed in as someone else. */
+  function adoptFieldCache(owner, token, store) {
+    var nextOwner = String(owner || '');
+    var nextHint = tokenHint(token);
+    var prevOwner = readStoreString(FIELD_CACHE_OWNER_KEY, store);
+    var prevHint = readStoreString(FIELD_CACHE_TOKEN_KEY, store);
+    if ((prevOwner && nextOwner && prevOwner !== nextOwner) || (prevHint && nextHint && prevHint !== nextHint)) {
+      clearFieldLocalCache(store);
+    }
+    writeStoreString(FIELD_CACHE_OWNER_KEY, nextOwner, store);
+    writeStoreString(FIELD_CACHE_TOKEN_KEY, nextHint, store);
+  }
+
+  function fieldCacheMatchesSession(token, store) {
+    var hint = tokenHint(token);
+    var stored = readStoreString(FIELD_CACHE_TOKEN_KEY, store);
+    return Boolean(hint && stored && hint === stored);
+  }
+
+  function sanitizeCachedJob(j) {
+    if (!j || typeof j !== 'object') return null;
+    var out = {};
+    Object.keys(j).forEach(function (key) {
+      if (key === 'sharePath' || key === 'shareUrl' || key === 'token' || key === 'accessToken') {
+        return;
+      }
+      out[key] = j[key];
+    });
+    return out;
   }
 
   /** Phone-only ids — not yet a Platform job file. */
@@ -1198,7 +1270,8 @@
   }
 
   function writeCachedJobs(jobs, store) {
-    writeJsonStore(FIELD_CACHED_JOBS_KEY, Array.isArray(jobs) ? jobs : [], store);
+    var clean = (Array.isArray(jobs) ? jobs : []).map(sanitizeCachedJob).filter(Boolean);
+    writeJsonStore(FIELD_CACHED_JOBS_KEY, clean, store);
     return readCachedJobs(store);
   }
 
@@ -1260,6 +1333,10 @@
     writeCachedJobs: writeCachedJobs,
     readCachedMe: readCachedMe,
     writeCachedMe: writeCachedMe,
+    cacheOwnerId: cacheOwnerId,
+    clearFieldLocalCache: clearFieldLocalCache,
+    adoptFieldCache: adoptFieldCache,
+    fieldCacheMatchesSession: fieldCacheMatchesSession,
     mergeTodayJobs: mergeTodayJobs,
     isTransientNetworkError: isTransientNetworkError,
     resolveFinishHold: resolveFinishHold,
