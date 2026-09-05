@@ -96,6 +96,27 @@ describe('Dashboard clip delete', () => {
     expect(verifierHtml).toMatch(/if \(act === 'delete'\)[\s\S]*deleteLibraryClip\(item\)/);
   });
 
+  it('keeps share, delete, save, and export on the clip menu without Property twin', async () => {
+    expect(verifierHtml).toContain('data-act="share"');
+    expect(verifierHtml).toContain('data-act="delete"');
+    expect(verifierHtml).toContain('data-act="save"');
+    expect(verifierHtml).toContain('data-act="export"');
+    expect(verifierHtml).not.toContain('data-act="twin"');
+    expect(verifierHtml).not.toContain('Property twin');
+    expect(verifierHtml).not.toContain("act === 'twin'");
+
+    const { dom } = bootVerifier();
+    await waitForRow(dom.window.document, 'EV-1038-0805-A');
+    const row = dom.window.document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement;
+    const kebab = row.querySelector('.kebab') as HTMLButtonElement;
+    kebab.dispatchEvent(new kebab.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));
+    const labels = Array.from(dom.window.document.querySelectorAll('#rowmenu button')).map((b) =>
+      (b.textContent || '').replace(/\s+/g, ' ').trim(),
+    );
+    expect(labels).toEqual(['Share', 'Delete', 'Save', 'Export']);
+    dom.window.close();
+  });
+
   it('lets the hide stamp survive job_proofs RLS', () => {
     expect(softDeleteRlsSql).toContain('deleted_at is null or deleted_by = auth.uid()');
     expect(softDeleteRlsSql).toContain('drop policy if exists job_proofs_select');
