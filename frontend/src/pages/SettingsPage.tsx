@@ -618,14 +618,6 @@ function LinkedAccountsCard() {
   }, []);
 
   async function removeMember(member: OrgMember) {
-    const name = displayName(member.fullName, member.email);
-    if (
-      !window.confirm(
-        `Remove ${name} from this workspace? They lose access until you invite them again.`,
-      )
-    ) {
-      return;
-    }
     setRemovingId(member.userId);
     setRemoveError(null);
     try {

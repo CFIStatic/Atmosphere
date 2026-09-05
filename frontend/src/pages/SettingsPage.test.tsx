@@ -203,9 +203,9 @@ describe('Settings organization', () => {
     ).toBeNull();
   });
 
-  it('unlinks a teammate after they confirm', async () => {
+  it('unlinks a teammate as soon as remove is clicked', async () => {
     apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirm = vi.spyOn(window, 'confirm');
     renderSettings('/settings?section=organization');
 
     await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
@@ -213,24 +213,9 @@ describe('Settings organization', () => {
       screen.getByRole('button', { name: 'Remove El Presidente from this workspace' }),
     );
 
-    expect(confirm).toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
     expect(apiMocks.removeMember).toHaveBeenCalledWith('user-2');
     await waitFor(() => expect(screen.queryByText('El Presidente')).toBeNull());
-    confirm.mockRestore();
-  });
-
-  it('leaves the teammate in place when the confirm is cancelled', async () => {
-    apiMocks.getMembers.mockResolvedValue({ members: LINKED_ACCOUNTS });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    renderSettings('/settings?section=organization');
-
-    await waitFor(() => expect(screen.getByText('El Presidente')).toBeInTheDocument());
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Remove El Presidente from this workspace' }),
-    );
-
-    expect(apiMocks.removeMember).not.toHaveBeenCalled();
-    expect(screen.getByText('El Presidente')).toBeInTheDocument();
     confirm.mockRestore();
   });
 
