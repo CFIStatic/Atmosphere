@@ -15,6 +15,7 @@
 
 import { extractConversationDetails } from '../audio/conversationDetails.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
+import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
@@ -301,6 +302,12 @@ export function serializeEvidence(input: {
         ? null
         : { lat: proof.lat, lon: proof.lon, accuracyM: proof.accuracy_m },
     hash: proof.content_hash,
+    filmedBy: {
+      partyId: proof.party_id ?? null,
+      company: input.company ?? null,
+      person: input.contactName ?? null,
+    },
+    device: parseDeviceMetadata(proof.device_metadata ?? proof.device),
     state: proof.state,
     tier: input.tier ?? 1,
     integrity,

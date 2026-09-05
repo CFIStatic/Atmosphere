@@ -60,6 +60,19 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
+import { resolveDictationEntries } from '../shared/dictationEvents.js';
+import {
+  disputesForProof,
+  surfaceDisputes,
+  type DisputeClip,
+  type DisputeMoment,
+  type DisputeScopeLine,
+} from '../shared/disputeSurfacing.js';
+import {
+  buildClipCustodyExport,
+  buildJobCustodyExport,
+  parseDeviceMetadata,
+} from '../shared/custodyExport.js';
 import {
   PROOF_ASSEMBLE_MAX_BYTES,
   assertProofAssembleBudget,
@@ -89,12 +102,12 @@ import {
 export const PROOF_BUCKET = 'job-proofs';
 
 const PROOF_SELECT =
-  'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
+  'id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, actions, ' +
   'transcript_status, transcript_text, transcript_error, transcribed_at, ' +
-  'decided_at, decided_note, created_at';
+  'decided_at, decided_note, created_at, device_metadata';
 
 /** Event-boundary timestamps already stored on the Analysis reading. */
 function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: string }> {
@@ -387,6 +400,17 @@ const recordSchema = z.object({
     .array(z.object({ atSeconds: z.number().min(0), base64: z.string().min(100).max(4_000_000) }))
     .max(12)
     .optional(),
+  /** Phone / app identity, when the device sends it. */
+  device: z
+    .object({
+      make: z.string().trim().max(80).optional(),
+      model: z.string().trim().max(80).optional(),
+      os: z.string().trim().max(80).optional(),
+      appVersion: z.string().trim().max(40).optional(),
+      deviceId: z.string().trim().max(120).optional(),
+      label: z.string().trim().max(200).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -448,6 +472,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     accuracy_m: input.accuracyM ?? null,
     state: 'checked',
     checks,
+    device_metadata: parseDeviceMetadata(input.device) ?? {},
   };
   const { data: existingVisible } = await admin
     .from('job_proofs')
@@ -1702,23 +1727,82 @@ function proofReport(row: any) {
 
 /* ---- The general contractor's side --------------------------------------- */
 
+function findingsOf(row: any): Record<string, any> {
+  return row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+}
+
+function disputeClipFromRow(
+  row: any,
+  company: Map<string, string>,
+  _person: Map<string, string | null>,
+): DisputeClip {
+  const findings = findingsOf(row);
+  const actions = Array.isArray(row.actions)
+    ? row.actions
+    : Array.isArray(findings.actions)
+      ? findings.actions
+      : [];
+  return {
+    id: row.id,
+    partyId: row.party_id,
+    company: company.get(row.party_id) ?? null,
+    workDate: String(row.work_date ?? ''),
+    phase: String(row.phase ?? ''),
+    checks: Array.isArray(row.checks) ? row.checks : [],
+    materialChange: row.ai_material_change ?? findings.materialChange ?? null,
+    concerns: Array.isArray(findings.concerns) ? findings.concerns : [],
+    scopeVerdicts: Array.isArray(findings.scopeVerdicts) ? findings.scopeVerdicts : [],
+    events: resolveDictationEntries({
+      stored: row.narration?.entries,
+      narrationText: row.narration_text ?? null,
+      summary: row.ai_summary ?? findings.summary ?? null,
+      actions,
+    }),
+    summary: row.ai_summary ?? findings.summary ?? null,
+  };
+}
+
 /** Assemble proof-of-work days for one job — shared by org routes and progress shares. */
 export async function buildJobProofPayload(supabase: any, orgId: string, jobId: string) {
-  const [{ data: proofRows }, { data: partyRows }, site] = await Promise.all([
-    supabase
-      .from('job_proofs')
-      .select(PROOF_SELECT)
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .is('deleted_at', null)
-      .order('work_date', { ascending: false })
-      .limit(200),
-    supabase.from('job_parties').select('id, company, trade').eq('job_id', jobId),
-    siteLocation(supabase, orgId, jobId),
-  ]);
+  const [{ data: proofRows }, { data: partyRows }, { data: scopeRows }, { data: jobRow }, site] =
+    await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select(PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(200),
+      supabase.from('job_parties').select('id, company, trade, contact_name').eq('job_id', jobId),
+      supabase
+        .from('job_scope_items')
+        .select('title, state, reason')
+        .eq('job_id', jobId)
+        .limit(200),
+      supabase.from('crm_jobs').select('id, title, job_number').eq('id', jobId).maybeSingle(),
+      siteLocation(supabase, orgId, jobId),
+    ]);
 
   const rows = (proofRows ?? []) as any[];
   const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
+  const person = new Map(
+    ((partyRows ?? []) as any[]).map((p) => [p.id, (p.contact_name as string | null) ?? null]),
+  );
+  const scope: DisputeScopeLine[] = ((scopeRows ?? []) as any[]).map((s) => ({
+    title: String(s.title ?? ''),
+    state: String(s.state ?? ''),
+    reason: s.reason ?? null,
+  }));
+  const disputes: DisputeMoment[] = surfaceDisputes({
+    clips: rows.map((row) => disputeClipFromRow(row, company, person)),
+    scope,
+  });
+  const jobMeta = {
+    id: jobId,
+    number: (jobRow as any)?.job_number ?? null,
+    name: (jobRow as any)?.title ?? null,
+  };
 
   // Grouped by party and day, because a day is what gets paid.
   const grouped = new Map<string, any[]>();
@@ -1775,31 +1859,55 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
 
   days.sort((a, b) => b.workDate.localeCompare(a.workDate));
 
-  const videos = rows.map((row) => ({
-    id: row.id,
-    partyId: row.party_id,
-    company: company.get(row.party_id) ?? 'Company',
-    workDate: row.work_date,
-    phase: row.phase,
-    durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
-    analysisStatus: row.analysis_status ?? null,
-    narrationStatus: row.narration_status ?? null,
-    transcriptStatus: row.transcript_status ?? null,
-    transcriptError: row.transcript_error ?? null,
-    aiSummary: row.ai_summary ?? row.narration_text ?? null,
-    heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
-    receivedAt: row.received_at ?? row.created_at ?? null,
-    events: catalogEventsFromRow(row),
-  }));
+  const videos = rows.map((row) => {
+    const findings = findingsOf(row);
+    const actions = Array.isArray(row.actions)
+      ? row.actions
+      : Array.isArray(findings.actions)
+        ? findings.actions
+        : [];
+    const dictationEntries = resolveDictationEntries({
+      stored: row.narration?.entries,
+      narrationText: row.narration_text ?? null,
+      summary: row.ai_summary ?? findings.summary ?? null,
+      actions,
+    });
+    return {
+      id: row.id,
+      partyId: row.party_id,
+      company: company.get(row.party_id) ?? 'Company',
+      person: person.get(row.party_id) ?? null,
+      workDate: row.work_date,
+      phase: row.phase,
+      durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+      capturedAt: row.captured_at ?? null,
+      receivedAt: row.received_at ?? row.created_at ?? null,
+      contentHash: row.content_hash ?? null,
+      device: parseDeviceMetadata(row.device_metadata),
+      checks: Array.isArray(row.checks) ? row.checks : [],
+      analysisStatus: row.analysis_status ?? null,
+      narrationStatus: row.narration_status ?? null,
+      transcriptStatus: row.transcript_status ?? null,
+      transcriptError: row.transcript_error ?? null,
+      aiSummary: row.ai_summary ?? row.narration_text ?? null,
+      heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
+      events: catalogEventsFromRow(row),
+      dictationEntries,
+      disputes: disputesForProof(disputes, row.id),
+    };
+  });
 
   return {
+    job: jobMeta,
     days,
     videos,
+    disputes,
     counts: {
       days: days.length,
       videos: videos.length,
       payable: days.filter((d) => d.payable && !d.accepted).length,
       contradicted: days.filter((d) => d.contradicted).length,
+      disputes: disputes.length,
       analysing: days.filter(
         (d) => d.analysisStatus === 'queued' || d.analysisStatus === 'running',
       ).length,
@@ -2486,6 +2594,172 @@ export async function evidenceCustody(req: Request, res: Response, next: NextFun
       .limit(200);
     if (error) throw new HttpError(500, error.message, 'custody_failed');
     res.json({ entries: data ?? [] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function loadJobMeta(supabase: any, orgId: string, jobId: string) {
+  const { data } = await supabase
+    .from('crm_jobs')
+    .select('id, title, job_number')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle();
+  return {
+    id: jobId,
+    number: (data as any)?.job_number ?? null,
+    name: (data as any)?.title ?? null,
+  };
+}
+
+async function loadPartyMap(supabase: any, jobId: string) {
+  const { data } = await supabase
+    .from('job_parties')
+    .select('id, company, contact_name')
+    .eq('job_id', jobId);
+  return new Map(
+    ((data ?? []) as any[]).map((p) => [
+      p.id as string,
+      { company: (p.company as string | null) ?? null, person: (p.contact_name as string | null) ?? null },
+    ]),
+  );
+}
+
+async function loadAccessForProofs(supabase: any, orgId: string, proofIds: string[]) {
+  const byProof = new Map<string, any[]>();
+  if (!proofIds.length) return byProof;
+  const { data } = await supabase
+    .from('job_evidence_access')
+    .select('proof_id, action, actor_label, actor_role, detail, occurred_at')
+    .eq('org_id', orgId)
+    .in('proof_id', proofIds)
+    .order('occurred_at', { ascending: true })
+    .limit(2000);
+  for (const row of (data ?? []) as any[]) {
+    if (!row.proof_id) continue;
+    const list = byProof.get(row.proof_id) ?? [];
+    list.push(row);
+    byProof.set(row.proof_id, list);
+  }
+  return byProof;
+}
+
+function clipExportFromRow(
+  row: any,
+  job: { id: string; number: number | null; name: string | null },
+  party: { company: string | null; person: string | null } | undefined,
+  chain: any[],
+) {
+  return buildClipCustodyExport({
+    job,
+    proof: {
+      id: row.id,
+      phase: row.phase,
+      workDate: row.work_date,
+      partyId: row.party_id,
+      company: party?.company ?? null,
+      person: party?.person ?? null,
+      capturedAt: row.captured_at,
+      receivedAt: row.received_at,
+      contentHash: row.content_hash,
+      checks: row.checks,
+      device_metadata: row.device_metadata,
+      lat: row.lat,
+      lon: row.lon,
+      accuracyM: row.accuracy_m,
+      durationSeconds: row.duration_seconds,
+      byteSize: row.byte_size,
+    },
+    chainOfCustody: chain,
+  });
+}
+
+/** GET /api/operations/shared/:jobId/disputes */
+export async function jobDisputes(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    res.json({
+      schema: 'atmosphere.job_disputes.v1',
+      jobId: req.params.jobId,
+      disputes: payload.disputes ?? [],
+      count: (payload.disputes ?? []).length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/operations/shared/:jobId/evidence/:proofId/custody-export
+ * Structured custody metadata for one clip — JSON, not chrome.
+ */
+export async function evidenceCustodyExport(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const proofId = req.params.proofId;
+    const [{ data: proof, error }, job, parties] = await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select(PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId)
+        .eq('id', proofId)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      loadJobMeta(supabase, orgId, req.params.jobId),
+      loadPartyMap(supabase, req.params.jobId),
+    ]);
+    if (error) throw new HttpError(500, error.message, 'custody_export_failed');
+    if (!proof) throw new HttpError(404, 'That clip is not on this job.', 'proof_missing');
+    const access = await loadAccessForProofs(supabase, orgId, [proofId]);
+    const record = clipExportFromRow(
+      proof,
+      job,
+      parties.get((proof as any).party_id),
+      access.get(proofId) ?? [],
+    );
+    res.json(record);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/operations/shared/:jobId/custody-export
+ * Every clip on the job file, one JSON document.
+ */
+export async function jobCustodyExport(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const [{ data: proofs, error }, job, parties] = await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select(PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(200),
+      loadJobMeta(supabase, orgId, req.params.jobId),
+      loadPartyMap(supabase, req.params.jobId),
+    ]);
+    if (error) throw new HttpError(500, error.message, 'custody_export_failed');
+    const rows = (proofs ?? []) as any[];
+    const access = await loadAccessForProofs(
+      supabase,
+      orgId,
+      rows.map((r) => r.id),
+    );
+    res.json(
+      buildJobCustodyExport({
+        job,
+        clips: rows.map((row) =>
+          clipExportFromRow(row, job, parties.get(row.party_id), access.get(row.id) ?? []),
+        ),
+      }),
+    );
   } catch (err) {
     next(err);
   }

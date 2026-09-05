@@ -41,6 +41,9 @@ import {
   liveObserve,
   jobEvidence,
   evidenceCustody,
+  evidenceCustodyExport,
+  jobCustodyExport,
+  jobDisputes,
   setEvidenceHold,
   deleteEvidence,
   recordAccess,
@@ -1320,6 +1323,8 @@ sharedJobsRouter.get(
 sharedJobsRouter.get('/proofs/pulse', proofsPulse);
 sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
+sharedJobsRouter.get('/shared/:jobId/disputes', jobDisputes);
+sharedJobsRouter.get('/shared/:jobId/custody-export', jobCustodyExport);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
@@ -1329,6 +1334,7 @@ sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 // Evidence, in the shape a records system uses: a list, a custody log per file,
 // and a hold that outranks retention.
 sharedJobsRouter.get('/shared/:jobId/evidence', jobEvidence);
+sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody-export', evidenceCustodyExport);
 sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
 sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
 sharedJobsRouter.delete('/shared/:jobId/evidence/:proofId', deleteEvidence);
