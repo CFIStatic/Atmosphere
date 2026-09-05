@@ -128,7 +128,7 @@ export function VerifierFrame({
   }, [logout, navigate, postSession, postToFrame]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=profile-3';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=sync-upload-1';
 
   return (
     <div className={className} style={style}>
