@@ -67,6 +67,7 @@ import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 import { forbidden } from './lib/errors.js';
+import { resolveLeftoverSurfaces, type LeftoverSurfaceFlags } from './lib/platformSurfaces.js';
 import {
   isAtmosphereCustomAppOrigin,
   isAtmosphereCustomFieldCaptureOrigin,
@@ -103,7 +104,29 @@ function isAllowedFrontendOrigin(origin: string): boolean {
   return Boolean(alt && config.frontendOrigins.includes(alt));
 }
 
-export function createApp(): Express {
+function disabledSurface(name: string): express.Router {
+  const router = express.Router();
+  router.use((_req, res) => {
+    res.status(404).json({
+      error: `${name} is not enabled on this server.`,
+      code: 'platform_surface_disabled',
+    });
+  });
+  return router;
+}
+
+function mountMaybe(
+  app: Express,
+  enabled: boolean,
+  prefix: string,
+  router: express.Router,
+  label: string,
+): void {
+  app.use(prefix, enabled ? router : disabledSurface(label));
+}
+
+export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags }): Express {
+  const leftover = options?.leftoverSurfaces ?? resolveLeftoverSurfaces();
   const app = express();
 
   // Wire the second agent to the first. Web Access does not import the verifier
@@ -219,8 +242,10 @@ export function createApp(): Express {
   // is still watched for path/UA probes.
   app.use(cyberMonitor);
 
-  // Routes.
-  app.use('/api/cyber', cyberRouter);
+  // Routes. Leftover platform products stay in the tree but are unmounted
+  // (404 + platform_surface_disabled) in production unless ENABLE_* is set.
+  // See backend/src/lib/platformSurfaces.ts and docs/production.md.
+  mountMaybe(app, leftover.cyber, '/api/cyber', cyberRouter, 'Cyber Defense');
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
@@ -228,13 +253,13 @@ export function createApp(): Express {
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
-  app.use('/api/mitigation', mitigationRouter);
-  app.use('/api/xactimate', xactimateRouter);
-  app.use('/api/symbility', symbilityRouter);
-  app.use('/api/crm-sync', crmSyncRouter);
+  mountMaybe(app, leftover.estimator, '/api/mitigation', mitigationRouter, 'Mitigation estimator');
+  mountMaybe(app, leftover.estimator, '/api/xactimate', xactimateRouter, 'Xactimate');
+  mountMaybe(app, leftover.estimator, '/api/symbility', symbilityRouter, 'Symbility');
+  mountMaybe(app, leftover.crmSync, '/api/crm-sync', crmSyncRouter, 'CRM sync');
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
-  app.use('/api/technician', technicianRouter);
+  mountMaybe(app, leftover.technician, '/api/technician', technicianRouter, 'Technician assistant');
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);
   app.use('/api/metering', meteringRouter);
@@ -243,16 +268,16 @@ export function createApp(): Express {
   // call. Co-mounting them would run requireAuth twice on every metered call.
   // Neither takes a route-level json() — the chooser above already parsed the
   // body, so one here would never run.
-  app.use('/api/ai', aiRouter);
-  app.use('/api/model', modelGatewayRouter);
+  mountMaybe(app, leftover.ai, '/api/ai', aiRouter, 'Learning layer');
+  mountMaybe(app, leftover.ai, '/api/model', modelGatewayRouter, 'Model gateway');
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
-  app.use('/api/pm', pmRouter);
+  mountMaybe(app, leftover.pm, '/api/pm', pmRouter, 'Project Manager');
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
-  app.use('/api/purchasing', purchasingRouter);
+  mountMaybe(app, leftover.purchasing, '/api/purchasing', purchasingRouter, 'Purchasing');
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);
   // Video work-verification pipeline (extends proof-of-work; async stages).
@@ -268,7 +293,7 @@ export function createApp(): Express {
   app.use('/api/job-share', jobShareRouter);
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);
-  app.use('/api/finance', financeRouter);
+  mountMaybe(app, leftover.finance, '/api/finance', financeRouter, 'Finance');
   // Also outside auth, and for a sharper version of the same reason: this is
   // where a subcontractor turns a pile of per-job links from several general
   // contractors into one list. They hold a session of their own, not a seat
@@ -283,33 +308,38 @@ export function createApp(): Express {
   app.use('/api/media/catalog', mediaCatalogRouter);
   // App Store Field Capture: RoomPlan/ARKit/LiDAR rooms + video → property twin.
   app.use('/api/geometry', geometryRouter);
-  app.use('/api/web-access', webAccessRouter);
-  app.use('/api/connectors', connectorsRouter);
+  mountMaybe(app, leftover.webAccess, '/api/web-access', webAccessRouter, 'Web Access');
+  mountMaybe(app, leftover.integrations, '/api/connectors', connectorsRouter, 'Connectors');
   app.use('/api/verifier', verifierRouter);
   // Before crmRouter, not after. crmRouter registers a generic GET
   // /accounts/:id, so mounted second this router would never be reached —
   // /accounts/duplicates would be read as an account whose id is "duplicates".
   // Express falls through to crmRouter for anything this one does not handle.
-  app.use('/api/crm/accounts', crmAccountsRouter);
-  app.use('/api/crm', crmRouter);
-  app.use('/api/prospecting', prospectingRouter);
+  mountMaybe(app, leftover.crm, '/api/crm/accounts', crmAccountsRouter, 'CRM accounts');
+  mountMaybe(app, leftover.crm, '/api/crm', crmRouter, 'CRM');
+  mountMaybe(app, leftover.prospecting, '/api/prospecting', prospectingRouter, 'Prospecting');
   // Campaigns and territories share a router: a campaign is usually worked one
   // territory at a time, and splitting them would put one join across two files.
-  app.use('/api/sales', campaignsRouter);
+  mountMaybe(app, leftover.sales, '/api/sales', campaignsRouter, 'Sales');
   // Same namespace, separate file: delivery visibility has nothing to do with
   // campaigns beyond both being things a salesperson opens.
-  app.use('/api/sales', salesWorkRouter);
-  app.use('/api/locations', locationsRouter);
+  if (leftover.sales) {
+    app.use('/api/sales', salesWorkRouter);
+  }
+  mountMaybe(app, leftover.locations, '/api/locations', locationsRouter, 'Live locations');
   // Deliberately outside every auth middleware: the person clicking is a
   // recipient who never had an account, and an unsubscribe link that requires
-  // signing in is not one.
+  // signing in is not one. Kept mounted even when email marketing is gated —
+  // an old mail still has to work (CAN-SPAM).
   app.use('/api/unsubscribe', unsubscribeRouter);
-  app.use('/api/backups', backupRouter);
-  app.use('/api/integrations', integrationsRouter);
-  app.use('/api/computer', computerRouter);
-  app.use('/api/estimator', estimatorRouter);
-  app.use('/api/sales', salesRouter);
-  app.use('/api/email-marketing', emailMarketingRouter);
+  mountMaybe(app, leftover.backups, '/api/backups', backupRouter, 'Backups');
+  mountMaybe(app, leftover.integrations, '/api/integrations', integrationsRouter, 'Integrations');
+  mountMaybe(app, leftover.computer, '/api/computer', computerRouter, 'Computer use');
+  mountMaybe(app, leftover.estimator, '/api/estimator', estimatorRouter, 'Estimator');
+  if (leftover.sales) {
+    app.use('/api/sales', salesRouter);
+  }
+  mountMaybe(app, leftover.emailMarketing, '/api/email-marketing', emailMarketingRouter, 'Email marketing');
   app.use('/api/careers', careersRouter);
   app.use('/api/contact', contactRouter);
 
