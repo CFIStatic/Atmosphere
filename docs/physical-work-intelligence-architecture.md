@@ -10,7 +10,7 @@ Atmosphere is an **Express BFF + Vite React + Supabase** application (not Next.j
 | Domain | `crm_jobs`, `crm_properties`, `job_parties`, `job_locations`, `work_episodes` |
 | Proof media | `job_proofs` + frames, private `job-proofs` bucket, signed URLs |
 | Verification (this branch) | Durable pipeline under `backend/src/verification/`: FFmpeg frames, quality/dedup, scenes, visual observations, temporal candidates, **LLM verifier**, timeline, workflow graph, human exception review |
-| Workers | In-process `RetryQueue` + DB job/step status (not Redis). Heavy media work is designed for a separate worker host |
+| Workers | Postgres outbox (`video_processing_jobs` / `job_proofs`) + SKIP LOCKED claims. Default in-process; optional `WORKER_ROLE=queue` replica |
 | AI | Provider registry + Gemini/Anthropic adapters; Zod-validated outputs |
 | Deploy | Node BFF; Supabase Postgres/Auth/Storage |
 

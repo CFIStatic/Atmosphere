@@ -3,16 +3,24 @@
  *
  * Each video gets a processing job with one row per stage. Stages are
  * idempotent: a completed step with an output digest is not re-run unless
- * forced. The in-process RetryQueue drains work; DB status survives restarts
- * so a dashboard can re-kick failed jobs.
+ * forced. The outbox is `video_processing_jobs`. A same-process RetryQueue
+ * still kicks work immediately; a DurableOutboxWorker (or boot reclaim)
+ * claims expired leases after a restart so the in-memory queue is not
+ * the source of truth.
  */
 
 import { createHash } from 'node:crypto';
 import { RetryQueue } from '../../shared/retryQueue.js';
+import {
+  claimNextVideoProcessingJob,
+  listClaimableVideoProcessingJobs,
+  tryClaimVideoProcessingJobById,
+} from '../../shared/outboxClaim.js';
+import { shouldRunSoldPathWorkers } from '../../bootFlags.js';
 import { PROCESSING_STAGES, type ProcessingStage, type StepStatus } from '../types.js';
 import { verificationConfig } from '../config.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
-import { expiredLeaseFilter, leaseOwnerId, leaseUntilIso } from '../lease.js';
+import { leaseOwnerId, leaseUntilIso } from '../lease.js';
 
 export interface PipelineContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -94,46 +102,82 @@ export class ProcessingOrchestrator {
 
   /**
    * Re-queue processing jobs that survived in Postgres across a restart.
+   * Prefers SKIP LOCKED claim; falls back to listing expired leases.
    * Rows stay `pending` / `running`; only the in-memory RetryQueue is lost.
    */
   async reclaimPending(
-    supabase: { from: (table: string) => any },
+    supabase: { from: (table: string) => any; rpc?: (name: string, args: Record<string, unknown>) => any },
     limit = 25,
   ): Promise<number> {
-    const nowIso = new Date().toISOString();
-    let query = supabase
-      .from('video_processing_jobs')
-      .select('id, org_id, video_id, status')
-      .in('status', ['pending', 'running'])
-      .or(expiredLeaseFilter(nowIso))
-      .order('created_at', { ascending: true })
-      .limit(limit);
-    let { data, error } = await query;
-    if (error && /lease_until|column/i.test(error.message)) {
-      ({ data, error } = await supabase
-        .from('video_processing_jobs')
-        .select('id, org_id, video_id, status')
-        .in('status', ['pending', 'running'])
-        .order('created_at', { ascending: true })
-        .limit(limit));
-    }
-    if (error) throw new Error(error.message);
     let n = 0;
-    for (const row of (data ?? []) as Array<{
-      id: string;
-      org_id: string;
-      video_id: string;
-    }>) {
-      this.queue.enqueue({
-        key: row.id,
-        orgId: row.org_id,
-        videoId: row.video_id,
-        processingJobId: row.id,
-        supabase,
-      });
+    if (typeof supabase.rpc === 'function') {
+      for (let i = 0; i < limit; i += 1) {
+        const claimed = await claimNextVideoProcessingJob(supabase);
+        if (!claimed?.id) break;
+        const enqueued = this.enqueueClaimed(supabase, {
+          id: claimed.id,
+          org_id: claimed.org_id,
+          video_id: claimed.video_id,
+        });
+        if (enqueued) n += 1;
+        else break;
+      }
+      if (n > 0) return n;
+    }
+    const rows = await listClaimableVideoProcessingJobs(supabase, limit);
+    for (const row of rows) {
+      this.enqueueClaimed(supabase, row);
       n += 1;
     }
     return n;
+  }
+
+  /**
+   * Claim one free outbox row (if any) and run it in this process.
+   * Used after a restart — no prior in-memory enqueue needed.
+   */
+  async claimAndRun(
+    supabase: { from: (table: string) => any; rpc?: (name: string, args: Record<string, unknown>) => any },
+  ): Promise<boolean> {
+    const claimed = await claimNextVideoProcessingJob(supabase);
+    if (!claimed?.id) return false;
+    await this.executeClaimed(
+      supabase,
+      { id: claimed.id, org_id: claimed.org_id, video_id: claimed.video_id },
+      Number(claimed.attempt_count ?? 0) + 1,
+    );
+    return true;
+  }
+
+  /** Run a row this worker already claimed from the outbox. */
+  async executeClaimed(
+    supabase: { from: (table: string) => any },
+    row: { id: unknown; org_id?: unknown; video_id?: unknown },
+    attempt = 1,
+  ): Promise<void> {
+    await this.runJob(
+      {
+        key: String(row.id),
+        orgId: String(row.org_id ?? ''),
+        videoId: String(row.video_id ?? ''),
+        processingJobId: String(row.id),
+        supabase,
+      },
+      attempt,
+    );
+  }
+
+  private enqueueClaimed(
+    supabase: { from: (table: string) => any },
+    row: { id: unknown; org_id?: unknown; video_id?: unknown },
+  ): boolean {
+    return this.queue.enqueue({
+      key: String(row.id),
+      orgId: String(row.org_id ?? ''),
+      videoId: String(row.video_id ?? ''),
+      processingJobId: String(row.id),
+      supabase,
+    });
   }
 
   /**
@@ -162,13 +206,7 @@ export class ProcessingOrchestrator {
       .maybeSingle();
 
     if (existing && !opts.force) {
-      const enqueued = this.queue.enqueue({
-        key: existing.id,
-        orgId: opts.orgId,
-        videoId: opts.videoId,
-        processingJobId: existing.id,
-        supabase: opts.supabase,
-      });
+      const enqueued = this.kick(opts.supabase, existing.id, opts.orgId, opts.videoId);
       return { processingJobId: existing.id, created: false, enqueued };
     }
 
@@ -214,15 +252,29 @@ export class ProcessingOrchestrator {
       payload: { idempotencyKey },
     });
 
-    const enqueued = this.queue.enqueue({
-      key: job.id,
-      orgId: opts.orgId,
-      videoId: opts.videoId,
-      processingJobId: job.id,
-      supabase: opts.supabase,
-    });
+    const enqueued = this.kick(opts.supabase, job.id, opts.orgId, opts.videoId);
 
     return { processingJobId: job.id, created: true, enqueued };
+  }
+
+  /**
+   * Same-process kick. HTTP-only replicas persist the outbox row and leave
+   * claiming to a WORKER_ROLE=queue process.
+   */
+  private kick(
+    supabase: QueuePayload['supabase'],
+    processingJobId: string,
+    orgId: string,
+    videoId: string,
+  ): boolean {
+    if (!shouldRunSoldPathWorkers()) return false;
+    return this.queue.enqueue({
+      key: processingJobId,
+      orgId,
+      videoId,
+      processingJobId,
+      supabase,
+    });
   }
 
   private async runJob(job: QueuePayload, attempt: number): Promise<void> {
@@ -235,6 +287,9 @@ export class ProcessingOrchestrator {
     if (!row) throw new Error('Processing job not found');
     if (row.status === 'cancelled' || row.cancelled_at) return;
     if (row.status === 'completed') return;
+
+    const claim = await tryClaimVideoProcessingJobById(job.supabase, job.processingJobId);
+    if (claim === 'held') return;
 
     await job.supabase
       .from('video_processing_jobs')

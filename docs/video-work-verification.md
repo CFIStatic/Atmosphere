@@ -176,7 +176,10 @@ See `backend/.env.example` section **Video work verification**. Important:
 1. Apply the SQL migration to the Supabase project.
 2. Confirm `job-proofs` (or configured bucket) is **private**; RLS policies from the migration are enabled.
 3. Set server-only secrets on the BFF host (Vercel serverless is a poor fit for FFmpeg + long jobs — prefer a Node service / worker with FFmpeg installed).
-4. The current orchestrator uses an in-process `RetryQueue` with **durable DB status**. For multi-instance production, run a single worker process that polls `video_processing_jobs` where `status in ('pending','failed')`, or swap the queue for SQS/Cloud Tasks while keeping the same step table.
+4. The orchestrator writes `video_processing_jobs` as the outbox and claims
+   via `claim_video_processing_job` (SKIP LOCKED). Default: one BFF
+   (`WORKER_ROLE=all`). For a split, set `WORKER_ROLE=http` on the API
+   replica and `WORKER_ROLE=queue` on a second replica of the same image.
 5. Keep model API keys server-side only. Never expose raw media publicly.
 
 ## Tests
@@ -196,7 +199,8 @@ See `backend/.env.example` section **Video work verification**. Important:
 ## Remaining production risks
 
 1. **FFmpeg on serverless** — extract frames on a worker VM/container, not a 10s Vercel function.
-2. **In-process queue** — restart-safe via DB status, but needs a poller or external queue for HA.
+2. **Queue HA** — leases + SKIP LOCKED claims survive a restart. Split
+   API/worker with `WORKER_ROLE` only if one process cannot keep up.
 3. **Heuristic luminance sampler** — replace with a real JPEG decoder (`sharp`) for production blur/brightness fidelity.
 4. **Embedding similarity** — schema supports `frame_embeddings`; cosine path is ready, but embedding generation is not wired to a model yet (phash carries dedup today).
 5. **CRM lat/lon column names** — existing proof on-site check may still read `lat`/`lon` vs `latitude`/`longitude`; unrelated but affects metadata quality inputs.

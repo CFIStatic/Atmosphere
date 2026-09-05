@@ -37,6 +37,27 @@ export function listenHost(env: NodeJS.Dict<string> = process.env): string {
   return raw;
 }
 
+/**
+ * How this process participates in sold-path queue work.
+ *
+ *   all   — default. HTTP + durable worker (one Railway service).
+ *   http  — API only. Writes outbox rows; does not claim or run them.
+ *   queue — worker + health. Same image; set WORKER_ROLE=queue on a
+ *           second Railway service if you split API from processing.
+ */
+export type WorkerRole = 'all' | 'http' | 'queue';
+
+export function resolveWorkerRole(env: NodeJS.Dict<string> = process.env): WorkerRole {
+  const raw = (env.WORKER_ROLE ?? env.ATMOSPHERE_WORKER_ROLE ?? 'all').trim().toLowerCase();
+  if (raw === 'http' || raw === 'api') return 'http';
+  if (raw === 'queue' || raw === 'worker') return 'queue';
+  return 'all';
+}
+
+export function shouldRunSoldPathWorkers(role: WorkerRole = resolveWorkerRole()): boolean {
+  return role !== 'http';
+}
+
 export function isHealthProbePath(path: string): boolean {
   return (
     path === '/' ||

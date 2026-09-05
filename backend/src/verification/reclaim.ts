@@ -3,7 +3,9 @@
  * in-memory RetryQueue was lost (process restart or mid-job crash).
  *
  * Boot runs this once. startVerificationLeaseSweep repeats it so a live
- * replica can steal rows whose lease_until has passed.
+ * replica can steal rows whose lease_until has passed. Prefer the durable
+ * outbox worker (`soldPathOutbox.ts`) which claims via SKIP LOCKED; this
+ * sweep stays as the safety net when the RPC is missing.
  */
 
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';

@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:worker": "WORKER_ROLE=queue node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "analytics:grant": "tsx src/scripts/grantAnalyticsAccess.ts",
     "analytics:seed": "tsx src/scripts/seedAnalyticsDemo.ts",
