@@ -49,3 +49,18 @@ ENABLE_PLATFORM_APIS=false npm run dev --prefix backend
 ```
 
 See `docs/production.md` § Leftover platform APIs.
+
+## Sold-path worker (same image)
+
+The BFF already drains verification/proof outbox rows in-process
+(`WORKER_ROLE=all`, the default). A second Railway service is optional:
+
+| Variable | Service |
+| --- | --- |
+| unset / `WORKER_ROLE=all` | Current `Atmosphere APIs` — HTTP + worker |
+| `WORKER_ROLE=http` | API-only replica (writes outbox rows) |
+| `WORKER_ROLE=queue` | Worker replica — same Dockerfile / start, probe `/api/health` |
+
+Do not invent a new queue service type. Copy the BFF service, change
+`WORKER_ROLE`, keep the health check. See `docs/production.md`
+§ Verification / proof worker.

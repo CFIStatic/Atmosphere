@@ -5,6 +5,8 @@ import {
   listenHost,
   resolveBackupsEnabled,
   resolveComputerUseEnabled,
+  resolveWorkerRole,
+  shouldRunSoldPathWorkers,
 } from './bootFlags.js';
 
 describe('resolveComputerUseEnabled', () => {
@@ -75,6 +77,23 @@ describe('listenHost', () => {
 
   it('honours an explicit non-loopback HOST', () => {
     assert.equal(listenHost({ HOST: '::' }), '::');
+  });
+});
+
+describe('resolveWorkerRole', () => {
+  it('defaults to all so one Railway service still processes work', () => {
+    assert.equal(resolveWorkerRole({}), 'all');
+    assert.equal(resolveWorkerRole({ WORKER_ROLE: 'ALL' }), 'all');
+    assert.equal(shouldRunSoldPathWorkers('all'), true);
+  });
+
+  it('splits http vs queue for a dedicated worker replica', () => {
+    assert.equal(resolveWorkerRole({ WORKER_ROLE: 'http' }), 'http');
+    assert.equal(resolveWorkerRole({ WORKER_ROLE: 'api' }), 'http');
+    assert.equal(resolveWorkerRole({ WORKER_ROLE: 'queue' }), 'queue');
+    assert.equal(resolveWorkerRole({ ATMOSPHERE_WORKER_ROLE: 'worker' }), 'queue');
+    assert.equal(shouldRunSoldPathWorkers('http'), false);
+    assert.equal(shouldRunSoldPathWorkers('queue'), true);
   });
 });
 

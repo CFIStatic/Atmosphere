@@ -26,6 +26,7 @@ import {
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
@@ -663,8 +664,8 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     .update({
       analysis_status: 'running',
       analysis_attempts: attempt,
-      narration_lease_owner: leaseOwnerId(),
-      narration_lease_until: leaseUntilIso(),
+      analysis_lease_owner: leaseOwnerId(),
+      analysis_lease_until: leaseUntilIso(),
     })
     .eq('id', job.proofId);
 
@@ -680,14 +681,23 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     // dashboard has to answer without somebody grepping server logs.
     await admin
       .from('job_proofs')
-      .update({ analysis_status: 'skipped', analysis_error: result.reason })
+      .update({
+        analysis_status: 'skipped',
+        analysis_error: result.reason,
+        analysis_lease_until: null,
+      })
       .eq('id', job.proofId);
     return result;
   }
 
   await admin
     .from('job_proofs')
-    .update({ analysis_status: 'done', analysis_error: null, analysed_at: new Date().toISOString() })
+    .update({
+      analysis_status: 'done',
+      analysis_error: null,
+      analysed_at: new Date().toISOString(),
+      analysis_lease_until: null,
+    })
     .eq('id', job.proofId);
 
   // The read goes into the chain of custody like any other access — the model
@@ -719,7 +729,7 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
       .update({
         analysis_status: 'failed',
         analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
-        narration_lease_until: null,
+        analysis_lease_until: null,
       })
       .eq('id', job.proofId);
   },
@@ -749,17 +759,29 @@ async function queueDayAnalysis(
 
   for (const film of films) {
     await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', film.id);
-    analysisQueue.enqueue({
-      key: film.id,
-      orgId: party.org_id,
-      jobId: party.job_id,
-      partyId: party.id,
-      workDate,
-      trade: party.trade ?? null,
-      proofId: film.id,
-    });
+    if (shouldRunSoldPathWorkers()) {
+      analysisQueue.enqueue({
+        key: film.id,
+        orgId: party.org_id,
+        jobId: party.job_id,
+        partyId: party.id,
+        workDate,
+        trade: party.trade ?? null,
+        proofId: film.id,
+      });
+    }
   }
   return 'queued';
+}
+
+/** Reclaim / worker entry — one proof's day analysis, same path as upload. */
+export async function queueProofAnalysis(
+  admin: any,
+  party: any,
+  workDate: string,
+  proofId?: string,
+): Promise<'queued' | 'waiting'> {
+  return queueDayAnalysis(admin, party, workDate, proofId);
 }
 
 /* ---- Per-video narration -------------------------------------------------- */
@@ -1363,15 +1385,17 @@ const narrationQueue = new RetryQueue<NarrationJob>({
 
 export async function queueNarration(admin: any, party: any, proofId: string, phase: string, workDate: string) {
   await admin.from('job_proofs').update({ narration_status: 'queued' }).eq('id', proofId);
-  narrationQueue.enqueue({
-    key: `narr:${proofId}`,
-    proofId,
-    orgId: party.org_id,
-    jobId: party.job_id,
-    partyId: party.id,
-    phase,
-    workDate,
-  });
+  if (shouldRunSoldPathWorkers()) {
+    narrationQueue.enqueue({
+      key: `narr:${proofId}`,
+      proofId,
+      orgId: party.org_id,
+      jobId: party.job_id,
+      partyId: party.id,
+      phase,
+      workDate,
+    });
+  }
 }
 
 /**
