@@ -81,7 +81,8 @@ final class AtmosphereClient: ObservableObject {
         let body = PasswordLoginBody(email: email, password: password)
         if usesBFF {
             do {
-                return try await post(path: "/api/auth/login", body: body, authed: false)
+                let res: AuthResponse = try await post(path: "/api/auth/login", body: body, authed: false)
+                return res
             } catch {
                 if Self.isUnreachable(error) {
                     return try await loginViaSupabase(email: email, password: password)
@@ -117,7 +118,8 @@ final class AtmosphereClient: ObservableObject {
         )
         if usesBFF {
             do {
-                return try await post(path: "/api/field-app/register", body: body, authed: false)
+                let res: AuthResponse = try await post(path: "/api/field-app/register", body: body, authed: false)
+                return res
             } catch {
                 if Self.isUnreachable(error) {
                     return try await registerViaSupabase(
@@ -180,7 +182,8 @@ final class AtmosphereClient: ObservableObject {
     /// Crew connect: name + office invite code. No email or password.
     func joinCrew(fullName: String, joinCode: String) async throws -> AuthResponse {
         let body = JoinCrewBody(fullName: fullName, joinCode: joinCode)
-        return try await post(path: "/api/field-app/join", body: body, authed: false)
+        let res: AuthResponse = try await post(path: "/api/field-app/join", body: body, authed: false)
+        return res
     }
 
     func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
@@ -211,11 +214,12 @@ final class AtmosphereClient: ObservableObject {
     func refresh(refreshToken: String) async throws -> AuthResponse {
         if usesBFF {
             do {
-                return try await post(
+                let res: AuthResponse = try await post(
                     path: "/api/auth/refresh",
                     body: RefreshBody(refreshToken: refreshToken),
                     authed: false
                 )
+                return res
             } catch {
                 if Self.isUnreachable(error) {
                     return try await refreshViaSupabase(refreshToken: refreshToken)
@@ -263,7 +267,8 @@ final class AtmosphereClient: ObservableObject {
     func fieldMe() async throws -> FieldMe {
         if usesBFF {
             do {
-                return try await get(path: "/api/field-app/me")
+                let res: FieldMe = try await get(path: "/api/field-app/me")
+                return res
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
@@ -306,10 +311,11 @@ final class AtmosphereClient: ObservableObject {
         }
         if usesBFF {
             do {
-                return try await post(
+                let res: ProofUploadUrlResponse = try await post(
                     path: "/api/field-app/jobs/\(jobId)/proof/upload-url",
                     body: Body(workDate: workDate, phase: phase, extension: fileExtension)
                 )
+                return res
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
@@ -372,7 +378,8 @@ final class AtmosphereClient: ObservableObject {
     func completeJobProof(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
         if usesBFF {
             do {
-                return try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
+                let res: ProofRecordResponse = try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
+                return res
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
@@ -402,7 +409,7 @@ final class AtmosphereClient: ObservableObject {
         label: String?,
         videoRef: String?
     ) async throws -> GeometrySessionResponse {
-        try await post(
+        let res: GeometrySessionResponse = try await post(
             path: "/api/geometry/sessions",
             body: OpenGeometrySessionBody(
                 lidarAvailable: lidarAvailable,
@@ -410,6 +417,7 @@ final class AtmosphereClient: ObservableObject {
                 videoRef: videoRef
             )
         )
+        return res
     }
 
     struct IngestBody: Encodable {
@@ -574,7 +582,7 @@ final class AtmosphereClient: ObservableObject {
         joinCode: String?,
         orgName: String?
     ) async throws -> AuthResponse {
-        let result = try await post(
+        let result: AuthResponse = try await post(
             path: "/api/auth/signup",
             body: PasswordLoginBody(email: email, password: password),
             authed: false
