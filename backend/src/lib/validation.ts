@@ -227,9 +227,9 @@ const usageIntentsSchema = z
   });
 
 /**
- * Website signup asks for a company name (or a join code) and, when creating,
- * a company type. Creating an org makes the caller Global Admin (bill payer);
- * joining with a code makes them an Employee.
+ * Website signup asks for a company name (or a join code). Creating an org
+ * makes the caller Global Admin (bill payer); joining with a code makes them
+ * an Employee. Contractor type defaults to "other" until set elsewhere.
  */
 export const WEBSITE_SIGNUP_CREATE_ONBOARDING = {
   role: 'global_admin',

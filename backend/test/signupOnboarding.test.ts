@@ -15,7 +15,7 @@ import {
 } from '../src/lib/validation.js';
 
 /**
- * Pins the three-step signup backend: create org, then Stripe, then the app.
+ * Pins the two-step signup backend: create org, then Stripe, then the app.
  * No invite step is required to finish.
  */
 
@@ -27,7 +27,7 @@ test('Stripe returns to the billing step, not a removed invite step', () => {
   });
   const parsed = new URL(url);
   assert.equal(parsed.searchParams.get('step'), SIGNUP_BILLING_STEP);
-  assert.equal(parsed.searchParams.get('step'), '3');
+  assert.equal(parsed.searchParams.get('step'), '2');
   assert.equal(parsed.searchParams.get('checkout'), 'success');
   assert.equal(parsed.searchParams.get('next'), '/jobs');
   assert.equal(parsed.searchParams.get('invite'), null);
@@ -38,7 +38,7 @@ test('cancelled checkout also returns to billing', () => {
     base: 'http://localhost:5174/signup',
     kind: 'cancelled',
   });
-  assert.match(url, /[?&]step=3(?:&|$)/);
+  assert.match(url, /[?&]step=2(?:&|$)/);
   assert.match(url, /[?&]checkout=cancelled(?:&|$)/);
 });
 

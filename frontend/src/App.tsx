@@ -75,7 +75,7 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate
-        to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
+        to={`/signup?next=${encodeURIComponent(returnPath)}`}
         replace
       />
     );
@@ -135,7 +135,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate
-        to={`/signup?step=3&next=${encodeURIComponent(returnPath)}`}
+        to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
         replace
       />
     );

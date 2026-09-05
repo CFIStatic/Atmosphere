@@ -70,23 +70,29 @@ describe('SignupPage', () => {
     authState.refreshMembership.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
-    apiMocks.getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    apiMocks.getBillingOnboarding
+      .mockReset()
+      .mockResolvedValue({ required: false, complete: true });
+    apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
   });
 
-  it('starts on account details only — workspace and join code wait for step 2', () => {
+  it('puts account and company name on the first step — no company type', () => {
     renderSignup();
 
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to workspace' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Company name')).toBeNull();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
-    expect(screen.getByText('Your workspace')).toBeInTheDocument();
-    expect(screen.getByText('Set up billing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByText('Your workspace')).toBeNull();
+    expect(screen.queryByText('Create your account')).toBeNull();
     expect(screen.queryByText('Invite teammates')).toBeNull();
     expect(screen.queryByText('You are in')).toBeNull();
   });
@@ -95,23 +101,18 @@ describe('SignupPage', () => {
     const user = userEvent.setup();
     renderSignup();
 
-    await user.click(screen.getByRole('button', { name: 'Your workspace' }));
-    expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Company type')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Your name')).toBeNull();
-
     await user.click(screen.getByRole('button', { name: 'Set up billing' }));
     expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
     expect(screen.getByText(/\/ month/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Create your account' }));
-    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
   });
 
-  it('keeps a signed-in customer on create-account instead of sending them to the dashboard', () => {
+  it('keeps a signed-in customer on company setup instead of sending them to the dashboard', () => {
     authState.user = {
       id: 'user-1',
       email: 'jane@acme.com',
@@ -124,10 +125,11 @@ describe('SignupPage', () => {
 
     renderSignup();
 
-    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
     expect(screen.getByText('jane@acme.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Account ready' })).toBeNull();
@@ -153,12 +155,19 @@ describe('SignupPage', () => {
         emailConfirmed: true,
       },
     });
+    authState.refreshMembership.mockResolvedValue(null);
+    apiMocks.createOrg.mockResolvedValue({
+      org: { id: 'org-2', name: 'New Person', joinCode: 'ABCD1234' },
+    });
 
     renderSignup();
     await user.type(screen.getByLabelText('Your name'), 'New Person');
     await user.type(screen.getByLabelText('Work email'), 'new@acme.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
+    fireEvent.change(screen.getByLabelText('Company name'), {
+      target: { value: 'New Person Co' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
       expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1');
@@ -169,7 +178,7 @@ describe('SignupPage', () => {
     );
   });
 
-  it('requires a company type before a new workspace can be created', async () => {
+  it('creates a workspace from a company name without asking for company type', async () => {
     const user = userEvent.setup();
     authState.user = {
       id: 'user-1',
@@ -187,17 +196,13 @@ describe('SignupPage', () => {
 
     renderSignup('/signup?step=2');
 
-    expect(screen.getByLabelText('Company type')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.queryByLabelText('Company type')).toBeNull();
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
 
-    // Replace the suggested workspace name in one change so the suggest
-    // effect does not refill an emptied field mid-type.
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Acme Restoration' },
     });
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-
-    await user.selectOptions(screen.getByLabelText('Company type'), 'restoration');
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -206,8 +211,8 @@ describe('SignupPage', () => {
       expect(api.createOrg).toHaveBeenCalledWith(
         'Acme Restoration',
         'global_admin',
-        'mitigation',
-        'restoration',
+        'construction',
+        'other',
         ['field_work', 'exploring', 'billing'],
       );
     });
@@ -217,8 +222,45 @@ describe('SignupPage', () => {
     renderSignup('/signup?step=2&intent=join');
 
     expect(screen.getByLabelText('Join code')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
+  });
+
+  it('keeps suggesting the company name while the person types theirs', async () => {
+    const user = userEvent.setup();
+    renderSignup();
+
+    await user.type(screen.getByLabelText('Your name'), 'John Smith');
+    expect(screen.getByLabelText('Company name')).toHaveValue('John Smith');
+  });
+
+  it('opens billing — not the account form — after a Stripe checkout return', () => {
+    renderSignup('/signup?step=2&checkout=success');
+
+    expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your name')).toBeNull();
+    expect(screen.queryByLabelText('Company name')).toBeNull();
+  });
+
+  it('auto-enters after a paid Stripe return once billing is complete', async () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalled();
+    });
+    expect(screen.queryByLabelText('Your name')).toBeNull();
   });
 
   it('enters the app after workspace setup without starting a product tour', async () => {
@@ -243,7 +285,6 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'Meridian Services' },
     });
-    await user.selectOptions(screen.getByLabelText('Company type'), 'restoration');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {

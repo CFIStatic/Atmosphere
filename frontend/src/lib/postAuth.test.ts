@@ -11,7 +11,7 @@ describe('postAuthDestination', () => {
   });
 
   it('preserves the intended destination through signup setup', () => {
-    expect(postAuthDestination(null, '/usage')).toBe('/signup?step=2&next=%2Fusage');
+    expect(postAuthDestination(null, '/usage')).toBe('/signup?next=%2Fusage');
   });
 
   it('keeps the Field Capture phone embed after sign-in', () => {

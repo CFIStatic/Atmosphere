@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  api,
-  ApiError,
-  CONTRACTOR_TYPE_LABELS,
-  CONTRACTOR_TYPE_ORDER,
-  type ContractorType,
-} from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -20,10 +14,7 @@ import {
   workspaceNameFrom,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
-import {
-  resolveVerifierSetup,
-  workTypeForContractorType,
-} from '../components/setup/verifierSetupOptions';
+import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 
@@ -43,11 +34,16 @@ export function SignupPage() {
     PLATFORM_HOME[getPlatform()],
   );
 
+  const checkoutOutcome = searchParams.get('checkout');
+  const checkoutParam =
+    checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
+
   const [step, setStep] = useState<SetupWizardStep>(() =>
     initialSetupStep({
       user: Boolean(user),
       membership: Boolean(membership),
       stepParam: searchParams.get('step'),
+      checkout: checkoutParam,
     }),
   );
   const orgIntent = parseSignupIntent(searchParams.get('intent'));
@@ -56,20 +52,18 @@ export function SignupPage() {
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [accountSubmitting, setAccountSubmitting] = useState(false);
-  const [accountNotice, setAccountNotice] = useState<string | null>(null);
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
-  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
+  const [orgNameEdited, setOrgNameEdited] = useState(false);
   const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
 
   const [error, setError] = useState<string | null>(null);
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const checkoutOutcome = searchParams.get('checkout');
-  const checkoutParam =
-    checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
+  const existingSession = Boolean(user) && !membership;
+  const creatingNewAccount = !existingSession;
 
   const goToStep = useCallback(
     (next: SetupWizardStep) => {
@@ -96,17 +90,9 @@ export function SignupPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (accountSubmitting) return;
-    if (!loading && user && !membership && step === 1) {
-      goToStep(2);
-    }
-  }, [loading, user, membership, step, accountSubmitting, goToStep]);
-
-  useEffect(() => {
-    if (step !== 2 || mode !== 'create' || orgName.trim()) return;
-    const suggested = workspaceNameFrom(fullName, email);
-    if (suggested) setOrgName(suggested);
-  }, [step, mode, fullName, email, orgName]);
+    if (mode !== 'create' || orgNameEdited) return;
+    setOrgName(workspaceNameFrom(fullName, email || user?.email || ''));
+  }, [mode, fullName, email, user?.email, orgNameEdited]);
 
   useEffect(() => {
     if (loading || !user || !membership) return;
@@ -118,8 +104,14 @@ export function SignupPage() {
         if (cancelled) return;
         const needsBilling = status.required && !status.complete;
         const stepParam = searchParams.get('step');
-        if (needsBilling && (stepParam === '3' || stepParam === '4' || stepParam === '5' || checkoutParam)) {
-          setStep(3);
+        // Paid checkout returns still need the billing step so SetupBillingStep
+        // can auto-enter — do not wait for an incomplete payment.
+        if (
+          checkoutParam ||
+          (needsBilling &&
+            (stepParam === '2' || stepParam === '3' || stepParam === '4' || stepParam === '5'))
+        ) {
+          setStep(2);
         }
       } catch {
         /* stay on the current step */
@@ -140,7 +132,16 @@ export function SignupPage() {
   }
 
   if (isFieldEmbedMarked()) {
-    return <Navigate to={withFieldEmbed(redirectTo === '/signup' || redirectTo.startsWith('/signup') ? '/verifier-library' : redirectTo)} replace />;
+    return (
+      <Navigate
+        to={withFieldEmbed(
+          redirectTo === '/signup' || redirectTo.startsWith('/signup')
+            ? '/verifier-library'
+            : redirectTo,
+        )}
+        replace
+      />
+    );
   }
 
   const signInHref = loginHref(redirectTo);
@@ -148,8 +149,9 @@ export function SignupPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
-  const orgStepValid =
-    mode === 'join' ? joinCodeValid : orgName.trim().length >= 2 && Boolean(contractorType);
+  const workspaceValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
+  const accountValid = creatingNewAccount ? nameValid && emailValid && passwordValid : true;
+  const formValid = accountValid && workspaceValid;
 
   function enterApp() {
     queueRedirect(redirectTo);
@@ -160,99 +162,87 @@ export function SignupPage() {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
       if (needsBilling) {
-        goToStep(3);
+        goToStep(2);
         return;
       }
       enterApp();
     } catch {
-      goToStep(3);
+      goToStep(2);
     }
   }
 
   async function completeWorkspace() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const already = await refreshMembership();
-      if (already?.org) {
-        await continueAfterWorkspace();
-        return;
-      }
-
-      const { role: finalRole, usageIntents } = resolveVerifierSetup(
-        mode === 'join' ? 'employee' : SETUP_DEFAULTS.role,
-        SETUP_DEFAULTS.trade,
-        mode !== 'join',
-      );
-
-      if (mode === 'join') {
-        await api.joinOrg(
-          joinCode.trim().toUpperCase(),
-          'employee',
-          SETUP_DEFAULTS.workType,
-          usageIntents.length ? usageIntents : ['field_work', 'exploring'],
-        );
-      } else {
-        if (!contractorType) {
-          setError('Select a company type.');
-          goToStep(2);
-          return;
-        }
-        await api.createOrg(
-          orgName.trim(),
-          finalRole,
-          workTypeForContractorType(contractorType),
-          contractorType,
-          usageIntents,
-        );
-      }
-
-      await refreshMembership();
+    const already = await refreshMembership();
+    if (already?.org) {
       await continueAfterWorkspace();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
-      goToStep(2);
-    } finally {
-      setSubmitting(false);
+      return;
     }
+
+    const {
+      role: finalRole,
+      usageIntents,
+      workType,
+      contractorType,
+    } = resolveVerifierSetup(
+      mode === 'join' ? 'employee' : SETUP_DEFAULTS.role,
+      SETUP_DEFAULTS.trade,
+      mode !== 'join',
+    );
+
+    if (mode === 'join') {
+      await api.joinOrg(
+        joinCode.trim().toUpperCase(),
+        'employee',
+        SETUP_DEFAULTS.workType,
+        usageIntents.length ? usageIntents : ['field_work', 'exploring'],
+      );
+    } else {
+      await api.createOrg(orgName.trim(), finalRole, workType, contractorType, usageIntents);
+    }
+
+    await refreshMembership();
+    await continueAfterWorkspace();
   }
 
-  async function handleAccountSubmit(e: FormEvent) {
+  async function handleSetupSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setAccountNotice(null);
-    if (!nameValid || !emailValid || !passwordValid || accountSubmitting) return;
+    if (!formValid || submitting) return;
 
-    setAccountSubmitting(true);
+    setSubmitting(true);
     try {
-      if (user) {
-        await logout();
-      }
-      const res = await signup(email.trim(), password);
-      if (res.needsEmailConfirmation) {
-        if (res.user?.emailConfirmed) {
-          setError('An account with this email already exists. Sign in instead.');
+      if (creatingNewAccount) {
+        if (user) {
+          await logout();
+        }
+        const res = await signup(email.trim(), password);
+        if (res.needsEmailConfirmation) {
+          if (res.user?.emailConfirmed) {
+            setError('An account with this email already exists. Sign in instead.');
+            return;
+          }
+          setAccountNotice(
+            res.message ?? 'Account created. Check your email to confirm before continuing.',
+          );
+          setPassword('');
           return;
         }
-        setAccountNotice(
-          res.message ?? 'Account created. Check your email to confirm before continuing.',
-        );
-        setPassword('');
-        return;
+        if (fullName.trim()) {
+          await api.updateProfile(fullName.trim());
+          await refreshMembership();
+        }
+        if (res.membership?.org) {
+          await continueAfterWorkspace();
+          return;
+        }
       }
-      if (fullName.trim()) {
-        await api.updateProfile(fullName.trim());
-        await refreshMembership();
-      }
-      if (res.membership?.org) {
-        await continueAfterWorkspace();
-        return;
-      }
-      goToStep(2);
+      await completeWorkspace();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      goToStep(1);
     } finally {
-      setAccountSubmitting(false);
+      setSubmitting(false);
     }
   }
 
@@ -277,13 +267,20 @@ export function SignupPage() {
         <SetupStepCard
           step={1}
           intent={orgIntent}
-          title="Create your account"
-          subtitle="Name, email, and a password — then the workspace on the next screen."
+          title={mode === 'join' ? 'Account & join code' : 'Account & workspace'}
+          subtitle={
+            mode === 'join'
+              ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
+              : 'You are creating this company as Global Admin. Invite Employees afterward from Settings.'
+          }
         >
-          {user?.email && !accountSubmitting && (
+          {user?.email && !submitting && (
             <p className="mt-6 text-sm text-ink-600">
-              You&apos;re signed in as <span className="font-medium text-ink-900">{user.email}</span>.
-              Creating a new account will switch you to that login, or{' '}
+              You&apos;re signed in as{' '}
+              <span className="font-medium text-ink-900">{user.email}</span>.
+              {existingSession
+                ? ' Name the company below to finish setup, or '
+                : ' Creating a new account will switch you to that login, or '}
               <button
                 type="button"
                 onClick={() => logout()}
@@ -321,169 +318,110 @@ export function SignupPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleAccountSubmit} noValidate className="mt-6 space-y-4">
-            <Field label="Your name" htmlFor="signup-name">
-              <input
-                id="signup-name"
-                type="text"
-                autoComplete="name"
-                required
-                minLength={2}
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="First and last name"
-                className={inputClass}
-              />
-            </Field>
+          <form onSubmit={handleSetupSubmit} noValidate className="mt-6 space-y-4">
+            {creatingNewAccount && (
+              <>
+                <Field label="Your name" htmlFor="signup-name">
+                  <input
+                    id="signup-name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    minLength={2}
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="First and last name"
+                    className={inputClass}
+                  />
+                </Field>
 
-            <Field label="Work email" htmlFor="signup-email">
-              <input
-                id="signup-email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                className={inputClass}
-              />
-            </Field>
+                <Field label="Work email" htmlFor="signup-email">
+                  <input
+                    id="signup-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className={inputClass}
+                  />
+                </Field>
 
-            <Field label="Password" htmlFor="signup-password" hint="Min. 8 characters">
-              <div className="relative">
+                <Field label="Password" htmlFor="signup-password" hint="Min. 8 characters">
+                  <div className="relative">
+                    <input
+                      id="signup-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Choose a strong password"
+                      className={`${inputClass} pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((s) => !s)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600"
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                </Field>
+              </>
+            )}
+
+            {mode === 'create' ? (
+              <Field label="Company name" htmlFor="org-name">
                 <input
-                  id="signup-password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Choose a strong password"
-                  className={`${inputClass} pr-11`}
+                  id="org-name"
+                  value={orgName}
+                  onChange={(e) => {
+                    setOrgNameEdited(true);
+                    setOrgName(e.target.value);
+                  }}
+                  placeholder="e.g. Meridian Services"
+                  className={inputClass}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600"
-                >
-                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
-              </div>
-            </Field>
+                <p className="mt-2 text-xs text-ink-500">
+                  Were you invited by your office? Open the link in that email — only invited people
+                  can join an existing workspace.
+                </p>
+              </Field>
+            ) : (
+              <Field label="Join code" htmlFor="join-code">
+                <input
+                  id="join-code"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. 8F3A9C2B"
+                  autoCapitalize="characters"
+                  className={`${inputClass} font-mono tracking-widest`}
+                />
+                <p className="mt-2 text-xs text-ink-500">
+                  Starting a new company as Global Admin?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setMode('create')}
+                    className="font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    Name a workspace
+                  </button>
+                </p>
+              </Field>
+            )}
 
-            <PrimaryButton
-              type="submit"
-              disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting}
-              loading={accountSubmitting}
-            >
-              {accountSubmitting ? 'Creating account…' : 'Continue to workspace'}
+            <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
+              {submitting ? 'Setting up…' : 'Continue'}
             </PrimaryButton>
           </form>
         </SetupStepCard>
       )}
 
-      {step === 2 && (
-        <SetupStepCard
-          step={2}
-          intent={orgIntent}
-          title={mode === 'join' ? 'Enter your join code' : 'Your workspace'}
-          subtitle={
-            mode === 'join'
-              ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
-              : 'You are creating this company as Global Admin. Invite Employees afterward from Settings.'
-          }
-        >
-          {error && <Alert>{error}</Alert>}
-
-          {mode === 'create' ? (
-            <>
-              <Field label="Company name" htmlFor="org-name" className="mt-5">
-                <input
-                  id="org-name"
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="e.g. Meridian Services"
-                  autoFocus
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Company type" htmlFor="org-contractor-type" className="mt-4">
-                <select
-                  id="org-contractor-type"
-                  value={contractorType ?? ''}
-                  onChange={(e) =>
-                    setContractorType((e.target.value || null) as ContractorType | null)
-                  }
-                  className={inputClass}
-                >
-                  <option value="" className="bg-paper-200/50">
-                    Select a company type
-                  </option>
-                  {CONTRACTOR_TYPE_ORDER.map((value) => (
-                    <option key={value} value={value} className="bg-paper-200/50">
-                      {CONTRACTOR_TYPE_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs text-ink-500">
-                  Were you invited by your office? Open the link in that email — only invited
-                  people can join an existing workspace.
-                </p>
-              </Field>
-            </>
-          ) : (
-            <Field label="Join code" htmlFor="join-code" className="mt-5">
-              <input
-                id="join-code"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="e.g. 8F3A9C2B"
-                autoFocus
-                autoCapitalize="characters"
-                className={`${inputClass} font-mono tracking-widest`}
-              />
-              <p className="mt-2 text-xs text-ink-500">
-                Starting a new company as Global Admin?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode('create')}
-                  className="font-medium text-brand-600 hover:text-brand-700"
-                >
-                  Name a workspace
-                </button>
-              </p>
-            </Field>
-          )}
-
-          <div className="mt-6 flex items-center justify-between gap-3">
-            {user ? (
-              <button
-                type="button"
-                onClick={() => goToStep(1)}
-                className="text-sm font-medium text-ink-600 hover:text-ink-900"
-              >
-                Back
-              </button>
-            ) : (
-              <span />
-            )}
-            <PrimaryButton
-              disabled={!orgStepValid || submitting}
-              loading={submitting}
-              onClick={() => {
-                setError(null);
-                void completeWorkspace();
-              }}
-            >
-              {submitting ? 'Setting up…' : 'Continue'}
-            </PrimaryButton>
-          </div>
-        </SetupStepCard>
-      )}
-
-      {step === 3 && membership && (
+      {step === 2 && membership && (
         <SetupBillingStep
           redirectTo={redirectTo}
           checkoutOutcome={checkoutParam}
@@ -492,9 +430,9 @@ export function SignupPage() {
         />
       )}
 
-      {step === 3 && !membership && (
+      {step === 2 && !membership && (
         <SetupStepCard
-          step={3}
+          step={2}
           intent={orgIntent}
           title="Set up billing"
           subtitle="Add a payment method to activate the workspace."
@@ -509,7 +447,7 @@ export function SignupPage() {
             </p>
           </div>
           <div className="mt-7 flex justify-end">
-            <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
+            <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>
           </div>
         </SetupStepCard>
       )}
