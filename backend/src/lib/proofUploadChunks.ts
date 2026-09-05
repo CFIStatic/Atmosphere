@@ -69,6 +69,36 @@ export function nextUploadBackoffMs(attempt: number): number {
   return Math.min(5000, 400 * 2 ** n);
 }
 
+/**
+ * Running total while stitching parts. Rejects before the next slice is
+ * kept so a minted `.parts/` object cannot grow the BFF heap past the cap.
+ */
+export function assertProofAssembleBudget(
+  received: number,
+  incoming: number,
+  maxBytes = PROOF_ASSEMBLE_MAX_BYTES,
+): number {
+  const have = Math.max(0, Math.floor(Number(received) || 0));
+  const add = Math.max(0, Math.floor(Number(incoming) || 0));
+  const next = have + add;
+  if (!Number.isFinite(next) || next > maxBytes) {
+    throw Object.assign(new Error('Assembled upload is too large.'), { code: 'upload_too_large' });
+  }
+  return next;
+}
+
+/** Size of a storage download before it is copied onto the heap a second time. */
+export function storageObjectByteSize(data: unknown): number | null {
+  if (Buffer.isBuffer(data)) return data.length;
+  if (data && typeof (data as { size?: unknown }).size === 'number') {
+    return Math.max(0, Math.floor((data as { size: number }).size));
+  }
+  if (data && typeof (data as { byteLength?: unknown }).byteLength === 'number') {
+    return Math.max(0, Math.floor((data as { byteLength: number }).byteLength));
+  }
+  return null;
+}
+
 export function missingPartIndexes(have: Iterable<number>, chunkCount: number): number[] {
   const seen = new Set<number>();
   for (const i of have) {

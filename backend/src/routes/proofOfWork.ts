@@ -60,9 +60,12 @@ import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
 import {
+  PROOF_ASSEMBLE_MAX_BYTES,
+  assertProofAssembleBudget,
   partByteRange,
   partObjectPath,
   planProofChunks,
+  storageObjectByteSize,
 } from '../lib/proofUploadChunks.js';
 
 /**
@@ -240,11 +243,14 @@ export async function completeChunkedProofUpload(
   party: any,
   admin: any,
   body: unknown,
+  options?: { maxBytes?: number },
 ): Promise<{ path: string; byteSize: number }> {
   const input = completeChunksSchema.parse(body ?? {});
   const path = assertOwnedProofStoragePath(party, input);
+  const maxBytes = options?.maxBytes ?? PROOF_ASSEMBLE_MAX_BYTES;
   const buffers: Buffer[] = [];
   const partPaths: string[] = [];
+  let received = 0;
   for (let i = 0; i < input.partCount; i += 1) {
     const partPath = partObjectPath(path, i);
     partPaths.push(partPath);
@@ -252,9 +258,22 @@ export async function completeChunkedProofUpload(
     if (error || !data) {
       throw new HttpError(409, `Upload part ${i + 1} did not land. Retry that slice.`, 'upload_part_missing');
     }
+    const hinted = storageObjectByteSize(data);
+    if (hinted != null) {
+      try {
+        assertProofAssembleBudget(received, hinted, maxBytes);
+      } catch {
+        throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+      }
+    }
     const bytes = Buffer.isBuffer(data)
       ? data
       : Buffer.from(await (data as Blob).arrayBuffer());
+    try {
+      received = assertProofAssembleBudget(received, bytes.length, maxBytes);
+    } catch {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
     buffers.push(bytes);
   }
   const assembled = Buffer.concat(buffers);

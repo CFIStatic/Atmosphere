@@ -68,6 +68,30 @@ test('completeChunkedProofUpload concatenates landed parts onto the final path',
   assert.equal(admin.objects[`${path}.parts/0000`], undefined);
 });
 
+test('completeChunkedProofUpload refuses an oversized part before concatenating', async () => {
+  const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
+  const admin = memoryAdmin({
+    [`${path}.parts/0000`]: Buffer.from('AAA'),
+    [`${path}.parts/0001`]: Buffer.from('BBBBBB'),
+  });
+  await assert.rejects(
+    () =>
+      completeChunkedProofUpload(
+        party,
+        admin,
+        {
+          workDate: '2026-09-05',
+          phase: 'after',
+          storagePath: path,
+          partCount: 2,
+        },
+        { maxBytes: 5 },
+      ),
+    /too large to assemble/i,
+  );
+  assert.equal(admin.objects[path], undefined);
+});
+
 test('completeChunkedProofUpload refuses to invent a missing slice', async () => {
   const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
   const admin = memoryAdmin({

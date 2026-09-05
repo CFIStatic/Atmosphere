@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   PROOF_ASSEMBLE_MAX_BYTES,
   PROOF_CHUNK_SIZE,
+  assertProofAssembleBudget,
   chooseProofChunkSize,
   libraryJobCaptureStatus,
   missingPartIndexes,
@@ -10,6 +11,7 @@ import {
   partByteRange,
   partObjectPath,
   planProofChunks,
+  storageObjectByteSize,
 } from '../src/lib/proofUploadChunks.js';
 
 test('small clips stay a single PUT so a 20-second take is one round trip', () => {
@@ -63,4 +65,14 @@ test('backoff grows then caps so a dead tower is not hammered', () => {
 test('a job with no clip yet is in progress on the office list', () => {
   assert.equal(libraryJobCaptureStatus(false), 'in_progress');
   assert.equal(libraryJobCaptureStatus(true), 'recorded');
+});
+
+test('assemble budget rejects before the next part is kept', () => {
+  assert.equal(assertProofAssembleBudget(0, 100, 512), 100);
+  assert.equal(assertProofAssembleBudget(400, 112, 512), 512);
+  assert.throws(() => assertProofAssembleBudget(400, 113, 512), /too large/);
+  assert.throws(() => assertProofAssembleBudget(0, PROOF_ASSEMBLE_MAX_BYTES + 1));
+  assert.equal(storageObjectByteSize(Buffer.from('abcd')), 4);
+  assert.equal(storageObjectByteSize({ size: 99 }), 99);
+  assert.equal(storageObjectByteSize({}), null);
 });
