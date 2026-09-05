@@ -34,11 +34,16 @@ export function SignupPage() {
     PLATFORM_HOME[getPlatform()],
   );
 
+  const checkoutOutcome = searchParams.get('checkout');
+  const checkoutParam =
+    checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
+
   const [step, setStep] = useState<SetupWizardStep>(() =>
     initialSetupStep({
       user: Boolean(user),
       membership: Boolean(membership),
       stepParam: searchParams.get('step'),
+      checkout: checkoutParam,
     }),
   );
   const orgIntent = parseSignupIntent(searchParams.get('intent'));
@@ -50,15 +55,12 @@ export function SignupPage() {
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
+  const [orgNameEdited, setOrgNameEdited] = useState(false);
   const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
 
   const [error, setError] = useState<string | null>(null);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const checkoutOutcome = searchParams.get('checkout');
-  const checkoutParam =
-    checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
   const existingSession = Boolean(user) && !membership;
   const creatingNewAccount = !existingSession;
@@ -88,16 +90,9 @@ export function SignupPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (mode !== 'create') return;
-    const suggested = workspaceNameFrom(fullName, email || user?.email || '');
-    const fromEmail = workspaceNameFrom('', email || user?.email || '');
-    setOrgName((current) => {
-      if (!current.trim() || current === 'My workspace' || current === fromEmail) {
-        return suggested;
-      }
-      return current;
-    });
-  }, [mode, fullName, email, user?.email]);
+    if (mode !== 'create' || orgNameEdited) return;
+    setOrgName(workspaceNameFrom(fullName, email || user?.email || ''));
+  }, [mode, fullName, email, user?.email, orgNameEdited]);
 
   useEffect(() => {
     if (loading || !user || !membership) return;
@@ -109,13 +104,12 @@ export function SignupPage() {
         if (cancelled) return;
         const needsBilling = status.required && !status.complete;
         const stepParam = searchParams.get('step');
+        // Paid checkout returns still need the billing step so SetupBillingStep
+        // can auto-enter — do not wait for an incomplete payment.
         if (
-          needsBilling &&
-          (stepParam === '2' ||
-            stepParam === '3' ||
-            stepParam === '4' ||
-            stepParam === '5' ||
-            checkoutParam)
+          checkoutParam ||
+          (needsBilling &&
+            (stepParam === '2' || stepParam === '3' || stepParam === '4' || stepParam === '5'))
         ) {
           setStep(2);
         }
@@ -138,7 +132,16 @@ export function SignupPage() {
   }
 
   if (isFieldEmbedMarked()) {
-    return <Navigate to={withFieldEmbed(redirectTo === '/signup' || redirectTo.startsWith('/signup') ? '/verifier-library' : redirectTo)} replace />;
+    return (
+      <Navigate
+        to={withFieldEmbed(
+          redirectTo === '/signup' || redirectTo.startsWith('/signup')
+            ? '/verifier-library'
+            : redirectTo,
+        )}
+        replace
+      />
+    );
   }
 
   const signInHref = loginHref(redirectTo);
@@ -175,7 +178,12 @@ export function SignupPage() {
       return;
     }
 
-    const { role: finalRole, usageIntents, workType, contractorType } = resolveVerifierSetup(
+    const {
+      role: finalRole,
+      usageIntents,
+      workType,
+      contractorType,
+    } = resolveVerifierSetup(
       mode === 'join' ? 'employee' : SETUP_DEFAULTS.role,
       SETUP_DEFAULTS.trade,
       mode !== 'join',
@@ -189,13 +197,7 @@ export function SignupPage() {
         usageIntents.length ? usageIntents : ['field_work', 'exploring'],
       );
     } else {
-      await api.createOrg(
-        orgName.trim(),
-        finalRole,
-        workType,
-        contractorType,
-        usageIntents,
-      );
+      await api.createOrg(orgName.trim(), finalRole, workType, contractorType, usageIntents);
     }
 
     await refreshMembership();
@@ -274,7 +276,8 @@ export function SignupPage() {
         >
           {user?.email && !submitting && (
             <p className="mt-6 text-sm text-ink-600">
-              You&apos;re signed in as <span className="font-medium text-ink-900">{user.email}</span>.
+              You&apos;re signed in as{' '}
+              <span className="font-medium text-ink-900">{user.email}</span>.
               {existingSession
                 ? ' Name the company below to finish setup, or '
                 : ' Creating a new account will switch you to that login, or '}
@@ -376,13 +379,16 @@ export function SignupPage() {
                 <input
                   id="org-name"
                   value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
+                  onChange={(e) => {
+                    setOrgNameEdited(true);
+                    setOrgName(e.target.value);
+                  }}
                   placeholder="e.g. Meridian Services"
                   className={inputClass}
                 />
                 <p className="mt-2 text-xs text-ink-500">
-                  Were you invited by your office? Open the link in that email — only invited
-                  people can join an existing workspace.
+                  Were you invited by your office? Open the link in that email — only invited people
+                  can join an existing workspace.
                 </p>
               </Field>
             ) : (

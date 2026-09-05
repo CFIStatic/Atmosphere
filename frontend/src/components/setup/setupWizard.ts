@@ -71,8 +71,12 @@ export function initialSetupStep(options: {
   user: boolean;
   membership: boolean;
   stepParam: string | null;
+  checkout?: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
+  // Stripe always returns to billing. Do this before the membership check —
+  // on a full-page return the session is still loading and membership is empty.
+  if (options.checkout === 'success' || options.checkout === 'cancelled') return 2;
   if (LEGACY_BILLING_STEPS.has(parsed)) return 2;
   // New billing is ?step=2. The old workspace URL was also ?step=2 — people
   // who still need a company land on the combined account + workspace form.

@@ -70,7 +70,9 @@ describe('SignupPage', () => {
     authState.refreshMembership.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
-    apiMocks.getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    apiMocks.getBillingOnboarding
+      .mockReset()
+      .mockResolvedValue({ required: false, complete: true });
     apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
@@ -223,6 +225,42 @@ describe('SignupPage', () => {
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
+  });
+
+  it('keeps suggesting the company name while the person types theirs', async () => {
+    const user = userEvent.setup();
+    renderSignup();
+
+    await user.type(screen.getByLabelText('Your name'), 'John Smith');
+    expect(screen.getByLabelText('Company name')).toHaveValue('John Smith');
+  });
+
+  it('opens billing — not the account form — after a Stripe checkout return', () => {
+    renderSignup('/signup?step=2&checkout=success');
+
+    expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your name')).toBeNull();
+    expect(screen.queryByLabelText('Company name')).toBeNull();
+  });
+
+  it('auto-enters after a paid Stripe return once billing is complete', async () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalled();
+    });
+    expect(screen.queryByLabelText('Your name')).toBeNull();
   });
 
   it('enters the app after workspace setup without starting a product tour', async () => {

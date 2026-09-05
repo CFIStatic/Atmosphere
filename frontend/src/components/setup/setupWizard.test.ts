@@ -38,6 +38,25 @@ describe('initialSetupStep', () => {
     expect(initialSetupStep({ user: true, membership: true, stepParam: '4' })).toBe(2);
     expect(initialSetupStep({ user: true, membership: true, stepParam: '3' })).toBe(2);
   });
+
+  it('treats a Stripe checkout return as billing even before membership is known', () => {
+    expect(
+      initialSetupStep({
+        user: false,
+        membership: false,
+        stepParam: '2',
+        checkout: 'success',
+      }),
+    ).toBe(2);
+    expect(
+      initialSetupStep({
+        user: false,
+        membership: false,
+        stepParam: '2',
+        checkout: 'cancelled',
+      }),
+    ).toBe(2);
+  });
 });
 
 describe('workspaceNameFrom', () => {
