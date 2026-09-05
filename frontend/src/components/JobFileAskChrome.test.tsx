@@ -75,4 +75,81 @@ describe('JobFileAskChrome source', () => {
     );
     expect(chromeSrc).not.toContain('className="flex min-h-0 flex-1 flex-col outline-none"');
   });
+
+  it('strips Overview-labeled backs so File/Ask cannot sit under that row', () => {
+    expect(chromeSrc).toContain('function isOverviewBack');
+    expect(chromeSrc).toContain('data-job-file-chrome="no-overview-back"');
+    expect(chromeSrc).toContain('shownBack');
+  });
+});
+
+describe('JobFileAskChrome forbids Overview back', () => {
+  it('does not paint an Overview button or link on the phone File/Ask chrome', () => {
+    render(
+      <JobFileAskChrome
+        jobId="job-1"
+        back={
+          <button type="button" onClick={() => undefined}>
+            Overview
+          </button>
+        }
+      >
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute(
+      'data-job-file-chrome',
+      'no-overview-back',
+    );
+  });
+
+  it('does not paint an Overview back that navigates to /field', () => {
+    render(
+      <JobFileAskChrome jobId="job-1" back={<a href="/field">Overview</a>}>
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+
+    expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
+  });
+
+  it('still paints a Job Files back when a caller needs that destination', () => {
+    render(
+      <JobFileAskChrome jobId="job-1" back={<a href="/jobs">Job Files</a>}>
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+
+    expect(screen.getByTestId('job-file-back')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Job Files' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
+  });
+
+  it('strips Overview on desktop so the job title sits flush under the header', () => {
+    usePhoneShell.mockReturnValue(false);
+    render(
+      <JobFileAskChrome
+        jobId="job-1"
+        back={
+          <button type="button" onClick={() => undefined}>
+            Overview
+          </button>
+        }
+      >
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+
+    expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
+    expect(screen.getByText('File body')).toBeInTheDocument();
+  });
 });
