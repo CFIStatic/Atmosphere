@@ -40,3 +40,20 @@ export function parseDeviceMetadata(raw: unknown): DeviceIdentity | null {
   if (!make && !model && !os && !appVersion && !deviceId && !label) return null;
   return { make, model, os, appVersion, deviceId, label };
 }
+
+/**
+ * Progress-share guests already receive the job file and recordings. Hardware
+ * / app identifiers are office custody facts — they do not leave the org on
+ * a token-only link.
+ */
+export function redactProofDeviceIdentity<
+  T extends { videos?: Array<{ device?: DeviceIdentity | null }> },
+>(proof: T): T {
+  if (!proof.videos?.length) return proof;
+  return {
+    ...proof,
+    videos: proof.videos.map((video) =>
+      video.device == null ? video : { ...video, device: null },
+    ),
+  };
+}

@@ -9,6 +9,7 @@ import {
   isClipCustodyExport,
   parseDeviceMetadata,
 } from '../src/shared/custodyExport.js';
+import { redactProofDeviceIdentity } from '../src/shared/deviceIdentity.js';
 
 test('clip custody export names who filmed, when, the job, device, and integrity', () => {
   const record = buildClipCustodyExport({
@@ -80,6 +81,31 @@ test('missing device and hash stay null — unknown is not invented', () => {
   assert.equal(record.clip.integrity.verdict, 'unknown');
   assert.equal(record.clip.filmedBy.person, null);
   assert.equal(isClipCustodyExport(record), true);
+});
+
+test('progress-share redaction drops clip device identity, including deviceId', () => {
+  const proof = redactProofDeviceIdentity({
+    videos: [
+      {
+        id: 'pf-4',
+        company: 'Delgado Roofing',
+        device: {
+          make: 'Apple',
+          model: 'iPhone 15',
+          os: 'iOS 18.5',
+          appVersion: '2.4',
+          deviceId: 'dev-88',
+          label: 'Apple · iPhone 15',
+        },
+      },
+      { id: 'pf-5', company: 'Delgado Roofing', device: null },
+    ],
+  });
+  assert.equal(proof.videos[0]!.device, null);
+  assert.equal(proof.videos[1]!.device, null);
+  assert.equal(proof.videos[0]!.id, 'pf-4');
+  assert.ok(!JSON.stringify(proof).includes('dev-88'));
+  assert.ok(!JSON.stringify(proof).includes('iPhone 15'));
 });
 
 test('a demo device string still exports as identity', () => {
