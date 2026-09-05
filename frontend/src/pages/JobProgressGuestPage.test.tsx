@@ -161,6 +161,9 @@ describe('JobProgressGuestPage', () => {
     expect(
       await screen.findByText('The north slope is stripped to decking.'),
     ).toBeInTheDocument();
+    expect(screen.queryByText('Already done')).toBeNull();
+    expect(screen.queryByText('Still ahead')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Happening now' })).toBeNull();
     expect(screen.queryByText(/sign in/i)).toBeNull();
     expect(screen.queryByText(/create.*account/i)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
