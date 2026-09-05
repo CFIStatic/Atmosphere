@@ -681,6 +681,33 @@ when you want to drain traffic that cannot reach Auth. Prefer draining on
   Set `SENTRY_DSN` (BFF) and `VITE_SENTRY_DSN` (office) when you have a
   project — both are no-ops when unset. No SDK dependency.
 
+## Office console cache (phones still showing removed chrome)
+
+Hashed `/assets/index-*.js` is immutable for a year. That is correct —
+the bug is almost always a **cached `index.html`** (Safari, PWA “Add to
+Home Screen”, or Field Capture’s Platform iframe) that still names the
+old hash.
+
+nginx already sends `Cache-Control: no-store` for `/`, `/index.html`,
+`/manifest.webmanifest`, `/verifier/`, and `/fieldcapture/`. After a
+chrome-only deploy, still tell the person on the phone:
+
+1. In Safari (not the home-screen icon): open
+   `https://platform.atmosphereteam.com/`, pull to refresh, then
+   **Settings → Safari → Clear History and Website Data** if the old
+   row is still there.
+2. If they launched Platform from the home-screen icon, delete that icon
+   and add it again after the refresh — iOS standalone apps keep the
+   last start-URL document.
+3. If they are inside Field Capture → Platform, the iframe URL includes
+   `v=no-overview-back-2`. Force-quit Field Capture and reopen it so the
+   frame loads that query.
+
+Confirm the live document: View Source on
+`https://platform.atmosphereteam.com/` should show
+`<meta name="atmosphere-build" content="no-overview-back-2">` and a
+script tag that is **not** `index-HIDXuWRt.js`.
+
 ## CI expectations
 
 `.github/workflows/ci.yml` runs:

@@ -163,6 +163,8 @@ describe('JobProgressGuestPage', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/sign in/i)).toBeNull();
     expect(screen.queryByText(/create.*account/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
   });
 
