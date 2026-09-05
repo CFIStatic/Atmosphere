@@ -7,11 +7,13 @@ import { isJobFilePath } from './jobFilePath';
 const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../App.tsx'), 'utf8');
 
 describe('office rail routes', () => {
-  it('keeps Overview, Start a job, Dashboard, and Job Files inside the permanent office shell', () => {
+  it('keeps Start a job, Dashboard, and Job Files inside the permanent office shell', () => {
     const start = appSrc.indexOf('<OperationsShell');
     const end = appSrc.indexOf('path="/technician"');
     const shell = appSrc.slice(start, end);
     expect(shell).toContain('path="/field"');
+    expect(shell).toContain("to=\"/verifier-library\"");
+    expect(shell).not.toContain('PlatformHomePage');
     expect(shell).not.toContain('WorkerDashboardPage');
     expect(shell).toContain('path="/intake"');
     expect(shell).toContain('path="/verifier-library"');

@@ -97,7 +97,7 @@ export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   operations: '/verifier-library',
-  field: '/field',
+  field: '/verifier-library',
 };
 
 /** The Work Verification dashboard — logo clicks always return here. */

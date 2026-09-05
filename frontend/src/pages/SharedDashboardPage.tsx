@@ -291,11 +291,11 @@ export function SharedDashboardPage() {
   const back = (
     <button
       type="button"
-      onClick={() => navigate('/field')}
+      onClick={() => navigate('/verifier-library')}
       className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-ink-500 transition hover:text-ink-800 lg:mb-4"
     >
       <ChevronLeftIcon width={16} height={16} />
-      Overview
+      Dashboard
     </button>
   );
 

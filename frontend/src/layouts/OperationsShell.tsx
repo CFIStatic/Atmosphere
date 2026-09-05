@@ -11,7 +11,7 @@ import { JobFilesSearchContext } from './jobFilesSearch';
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; Overview, Start a job, Dashboard, Job Files, and Settings
+ * the screen; Start a job, Dashboard, Job Files, and Settings
  * render beside the same anchored rail. The account chip (name, org, avatar)
  * lives in the top-right of these React pages because the verifier top bar is
  * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
