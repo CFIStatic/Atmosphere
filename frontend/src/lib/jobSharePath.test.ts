@@ -53,4 +53,9 @@ describe('jobShareApiPath', () => {
       `/api/job-share/${encodeURIComponent(SLASH_TOKEN)}/proof`,
     );
   });
+
+  it('uses /session when the token has already left the URL', () => {
+    expect(jobShareApiPath('')).toBe('/api/job-share/session');
+    expect(jobShareApiPath('   ')).toBe('/api/job-share/session');
+  });
 });

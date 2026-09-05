@@ -58,6 +58,8 @@ describe('JobSharePage', () => {
     expect(screen.getByText("What's happening")).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Start film' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Film before you start/i })).not.toBeInTheDocument();
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes('/api/job-share/exchange'))).toBe(true);
   });
 
   it('still asks them to accept when they are not clear to work', async () => {

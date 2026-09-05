@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgressShareGuestView } from '../lib/api';
 
 const progressShareGuest = vi.fn();
@@ -137,6 +137,14 @@ describe('JobProgressGuestPage', () => {
     progressShareVideo.mockReset();
     progressShareAsk.mockReset();
     progressShareGuest.mockResolvedValue(view);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('shows the job file, do-nots, and every recording without asking for an account', async () => {

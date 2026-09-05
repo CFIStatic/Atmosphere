@@ -58,11 +58,17 @@ export function readShareCookie(
  * Prefer an explicit path/body token (Field Capture, emailed links). Fall
  * back to the httpOnly cookie after a browser has exchanged.
  */
+/**
+ * `/api/job-share/session/proof` captures token="session" on the greedy
+ * action pattern. That sentinel means "use the cookie", not a real invite.
+ */
+export const SHARE_SESSION_SENTINEL = 'session';
+
 export function resolveShareToken(
   explicit: string | undefined,
   cookie: string,
 ): string {
   const fromPath = (explicit ?? '').trim();
-  if (fromPath) return fromPath;
+  if (fromPath && fromPath !== SHARE_SESSION_SENTINEL) return fromPath;
   return cookie;
 }

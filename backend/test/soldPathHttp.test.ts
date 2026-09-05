@@ -165,6 +165,22 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     assert.equal(exchange.status, 400);
     assert.equal(exchange.body.code, 'validation_error');
 
+    const progressExchange = await json(url, '/api/progress-share/exchange', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(progressExchange.status, 400);
+    assert.equal(progressExchange.body.code, 'validation_error');
+
+    const session = await json(url, '/api/job-share/session');
+    assert.equal(session.status, 401);
+    assert.equal(session.body.code, 'no_share_session');
+
+    const progressSession = await json(url, '/api/progress-share/session');
+    assert.equal(progressSession.status, 401);
+    assert.equal(progressSession.body.code, 'no_share_session');
+
     const share = await json(url, '/api/job-share/not-a-real-token-xx');
     assert.ok(share.status === 404 || share.status === 503, `job-share got ${share.status}`);
     assert.ok(

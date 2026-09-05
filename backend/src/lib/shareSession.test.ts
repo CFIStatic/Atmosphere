@@ -12,6 +12,10 @@ describe('resolveShareToken', () => {
     assert.equal(resolveShareToken(undefined, 'cookie-token'), 'cookie-token');
   });
 
+  it('treats the /session sentinel as cookie-only', () => {
+    assert.equal(resolveShareToken('session', 'cookie-token'), 'cookie-token');
+  });
+
   it('returns empty when neither is set', () => {
     assert.equal(resolveShareToken(undefined, ''), '');
   });
