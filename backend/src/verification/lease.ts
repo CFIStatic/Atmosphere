@@ -4,7 +4,9 @@
  * video_processing_jobs already survive a restart; the in-memory RetryQueue
  * does not. A mid-job crash left status=running until the next boot reclaim.
  * These helpers stamp lease_until so a live process can steal expired work
- * every few seconds — no extra broker.
+ * every few seconds. The durable worker (`shared/durableOutbox.ts`) uses
+ * them as the CAS clock; `claim_video_processing_job` is the SKIP LOCKED
+ * form of the same rule.
  */
 
 export const VERIFICATION_LEASE_MS = 90_000;

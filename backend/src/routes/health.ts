@@ -4,6 +4,7 @@ import { askProviderLabel } from '../lib/askModel.js';
 import { visionProviderLabel } from '../lib/visionProvider.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { resolveWorkerRole, shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { smtpConfigured } from '../lib/smtpTransport.js';
 import { systemMailConfigured } from '../lib/systemMail.js';
 
@@ -25,7 +26,14 @@ healthRouter.get('/', (_req: Request, res: Response) => {
 
 /** Liveness probe — no auth, no dependencies. */
 healthRouter.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', service: 'atmosphere-backend', time: new Date().toISOString() });
+  const workerRole = resolveWorkerRole();
+  res.json({
+    status: 'ok',
+    service: 'atmosphere-backend',
+    time: new Date().toISOString(),
+    workerRole,
+    soldPathWorkers: shouldRunSoldPathWorkers(workerRole),
+  });
 });
 
 type CheckResult = { ok: boolean; detail?: string; skipped?: boolean };

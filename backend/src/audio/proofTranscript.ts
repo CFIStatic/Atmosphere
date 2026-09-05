@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { transcriptionEnabled, transcribeAudio } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 
 const PROOF_BUCKET = 'job-proofs';
@@ -283,7 +284,9 @@ const transcriptQueue = new RetryQueue<TranscriptJob>({
 export async function queueProofTranscript(admin: any, proofId: string): Promise<void> {
   try {
     await admin.from('job_proofs').update({ transcript_status: 'queued' }).eq('id', proofId);
-    transcriptQueue.enqueue({ key: `mic:${proofId}`, proofId });
+    if (shouldRunSoldPathWorkers()) {
+      transcriptQueue.enqueue({ key: `mic:${proofId}`, proofId });
+    }
   } catch {
     /* never fail the upload */
   }

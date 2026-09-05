@@ -1,9 +1,10 @@
 import { createApp } from './app.js';
-import { listenHost } from './bootFlags.js';
+import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
 import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
+import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import {
   startCaptureAgent,
@@ -31,6 +32,8 @@ try {
 initSentry();
 
 const leftover = resolveLeftoverSurfaces();
+const workerRole = resolveWorkerRole();
+const runSoldPathWorkers = shouldRunSoldPathWorkers(workerRole);
 const app = createApp({ leftoverSurfaces: leftover });
 
 const host = listenHost();
@@ -48,6 +51,7 @@ const server = app.listen(config.port, host, () => {
     leftoverSurfaces: leftoverSurfaceSummary(leftover),
     ask: askProviderLabel(),
     vision: visionProviderLabel(),
+    workerRole,
     mode: config.isProduction ? 'production' : 'development',
   });
 
@@ -55,17 +59,19 @@ const server = app.listen(config.port, host, () => {
   // ENABLE_PLATFORM_APIS / ENABLE_<SURFACE> is set — see platformSurfaces.ts.
   if (leftover.pm) startScheduler();
 
-  // Filed videos that never got a reading — including clips uploaded before
-  // the analysis queues existed — get vision + speech so Ask has a record.
-  startProofAnalysisSweep();
+  // Sold-path outbox. Default (WORKER_ROLE=all) runs in this process.
+  // WORKER_ROLE=http skips claiming so a dedicated queue replica can drain.
+  if (runSoldPathWorkers) {
+    startProofAnalysisSweep();
+    startVerificationLeaseSweep();
+    startSoldPathOutboxWorkers();
+  }
 
   if (leftover.estimator) startCaptureAgent();
 
   if (leftover.backups) startBackupScheduler();
 
   if (leftover.cyber) startCyberScheduler();
-
-  startVerificationLeaseSweep();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -83,6 +89,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopScheduler();
     stopVerificationLeaseSweep();
     stopProofAnalysisSweep();
+    stopSoldPathOutboxWorkers();
     stopCaptureAgent();
     stopBackupScheduler();
     stopCyberScheduler();

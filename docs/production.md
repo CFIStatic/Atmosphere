@@ -593,16 +593,36 @@ Capture depends on them). Browsers can `POST /api/job-share/exchange` or
 (`atm_job_share` / `atm_progress_share`) so later calls omit the token
 from the URL. Path tokens remain valid.
 
-## Verification reclaim
+## Verification / proof worker (durable outbox)
 
-At boot the BFF re-queues `pending` / `running` `video_processing_jobs`
-into the in-memory worker (`backend/src/verification/reclaim.ts`). A
-30-second lease sweep then steals rows whose `lease_until` has passed,
-so a mid-job crash does not wait for the next process restart.
+The sold-path queues are the existing Postgres rows — not a new broker.
 
-Proof narration and transcript use the same pattern on `job_proofs`
-(`narration_lease_until` / `transcript_lease_until`). The analysis sweep
-runs every 30 seconds and skips rows whose lease is still held.
+| Outbox | Claim |
+| --- | --- |
+| `video_processing_jobs` | `claim_video_processing_job` (SKIP LOCKED) |
+| `job_proofs` narration / transcript / analysis | `claim_job_proof_work` |
+
+A process restart drops the in-memory `RetryQueue`. Rows stay
+`pending` / `queued` / `running` with a lease. The next worker claims
+expired leases and finishes the job (stages already marked completed
+are not re-run).
+
+**Default (one Railway service):** `WORKER_ROLE=all` (or unset). The BFF
+listens for HTTP and runs the outbox workers in-process. Same image,
+same health check (`/api/health`).
+
+**Optional dedicated worker:** duplicate the BFF service.
+
+1. API replica: `WORKER_ROLE=http` — writes outbox rows, does not claim.
+2. Worker replica: `WORKER_ROLE=queue` (or `npm run start:worker`) —
+   claims and runs. Still listens on `PORT` so Railway can probe
+   `/api/health`.
+
+Apply `20260905220000_durable_processing_claim.sql` (one migration tree
+only). Older DBs without the RPCs fall back to a PostgREST CAS update,
+then to the Wave 2 lease sweep.
+
+`GET /api/health` reports `workerRole` and `soldPathWorkers`.
 
 Full catalogue: `backend/.env.example`.
 
@@ -736,6 +756,7 @@ Lint is still noisy across the monorepo; `npm run verify` remains the local bar.
 - Leftover (sales/PM/estimator) `createAdminClient()` sites — those APIs are
   gated off in production.
 - Real S3 multipart driver (stub only; no AWS credential env vars in Keys).
-- A separate worker process. Leases + in-process `RetryQueue` are the
-  outbox; they are not Kafka.
+- Kafka / SQS. The outbox is still `video_processing_jobs` + `job_proofs`
+  with SKIP LOCKED claims. A dedicated `WORKER_ROLE=queue` replica is
+  optional; one BFF service is enough.
 - Counsel-reviewed privacy/terms copy on the marketing site.
