@@ -1480,19 +1480,27 @@
   .alog { list-style: none; margin: 0; padding: 0; }
   .alog li {
     display: grid; grid-template-columns: 52px 1fr; gap: 10px;
-    padding: 10px 8px 10px 10px; border-radius: 8px; cursor: pointer;
+    padding: 11px 8px 11px 10px; border-radius: 8px; cursor: pointer;
     border-bottom: 1px solid var(--line-soft);
-    font-size: 13px; line-height: 1.45; color: var(--ink-2);
+    font-size: 13.5px; line-height: 1.5; color: var(--ink);
   }
   .alog li:last-child { border-bottom: 0; }
-  .alog li.soon { display: grid; opacity: .48; }
+  .alog li:hover { background: var(--line-soft); }
+  .alog li.soon { display: grid; opacity: 1; }
   .alog li.seen { color: var(--ink); opacity: 1; }
   .alog li.on {
     display: grid; background: var(--accent-soft); color: var(--ink);
     box-shadow: inset 3px 0 0 var(--accent);
   }
-  .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
+  .alog .t { font-family: var(--mono); font-size: 12px; color: var(--faint); padding-top: 2px; font-variant-numeric: tabular-nums; }
   .alog li.on .t { color: var(--accent); font-weight: 700; }
+  .alog-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+  .alog-chip {
+    display: inline-block; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase;
+    font-weight: 700; color: var(--faint); background: var(--line-soft);
+    padding: 2px 6px; border-radius: 999px; line-height: 1.2;
+  }
+  .alog li.on .alog-chip { background: var(--panel); }
   .alog li.writing [data-full]::after {
     content: ''; display: inline-block; width: 6px; height: 12px; margin-left: 3px;
     background: var(--accent); vertical-align: text-bottom;
@@ -1513,7 +1521,7 @@
   .saw-k:first-child { margin-top: 0; }
   .job-summary { margin: 0 0 2px; }
   .job-summary p {
-    margin: 0 0 12px; font-size: 14px; line-height: 1.55; color: var(--ink);
+    margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: var(--ink);
   }
   .job-summary p:last-child { margin-bottom: 0; }
   .job-summary .clip-day {
@@ -1521,9 +1529,38 @@
     color: var(--faint); font-weight: 750; margin-bottom: 4px;
   }
   .analysis-lead {
-    margin: 12px 0 14px; padding-top: 11px;
-    border-top: 1px solid var(--line-soft);
+    margin: 18px 0 0; padding-top: 0; border-top: 0;
+    font-size: 11px; color: var(--faint); line-height: 1.5;
   }
+  .analysis-status {
+    margin-top: 14px; padding: 14px 14px 12px; border-radius: 10px;
+    background: var(--line-soft); color: var(--ink-2);
+  }
+  .analysis-status[data-status="failed"] { background: var(--fail-soft); }
+  .analysis-status-title {
+    margin: 0 0 4px; font-size: 13.5px; font-weight: 650; color: var(--ink);
+  }
+  .analysis-status[data-status="failed"] .analysis-status-title { color: var(--fail); }
+  .analysis-status .alog-wait { margin: 0; }
+  .analysis-skel { display: grid; gap: 8px; margin-bottom: 10px; }
+  .analysis-skel span {
+    display: block; height: 10px; border-radius: 6px;
+    background: linear-gradient(90deg, #e7e2d8 0%, #f6f3ec 50%, #e7e2d8 100%);
+    background-size: 200% 100%;
+    animation: analysis-skel 1.2s ease-in-out infinite;
+  }
+  .analysis-skel span:nth-child(1) { width: 88%; }
+  .analysis-skel span:nth-child(2) { width: 72%; }
+  .analysis-skel span:nth-child(3) { width: 64%; }
+  @keyframes analysis-skel {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  [data-theme="dark"] .analysis-skel span {
+    background: linear-gradient(90deg, #2a2724 0%, #3a3530 50%, #2a2724 100%);
+    background-size: 200% 100%;
+  }
+  .analysis-empty { margin: 12px 0 0; }
 
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
@@ -1977,7 +2014,8 @@
     cedar: { key: 'cedar', name: 'Cedar Ridge — storm damage, roof tarp + rebuild', number: 1038, address: '4118 Cedar Ridge Dr, Austin TX' },
     meridian: { key: 'meridian', name: 'Meridian Ave — water loss, Class 3', number: 1041, address: '1841 Meridian Ave, Austin TX' },
     camden: { key: 'camden', name: 'Camden Court — HOA clubhouse rebuild', number: 1044, address: '900 Camden Ct, Round Rock TX' },
-    mobil: { key: 'mobil', name: 'Mobil test one 1111', number: 1111, address: '' }
+    mobil: { key: 'mobil', name: 'Mobil test one 1111', number: 1111, address: '' },
+    deskblob: { key: 'deskblob', name: 'Desk walkthrough 1112', number: 1112, address: '' }
   };
 
   function ev(o) { return o; }
@@ -2455,10 +2493,9 @@
       analysis: {
         state: 'done',
         materialChange: null,
-        summary: 'The video shows an office setup featuring multiple computer monitors and a laptop on a desk. The screens display a mix of work spreadsheets, a Windows desktop background, and a video broadcast. No manual construction or field trade work is depicted in the captured view.',
+        summary: 'An office desk with two monitors and a laptop. Screens show spreadsheets, a Windows desktop, and a broadcast. No field trade work is in frame.',
         dictation: 'At 0 seconds, the camera captures fluorescent ceiling lights and a circular air vent. At 8 seconds, it pans down to two monitors and a webcam. At 18 seconds, a spreadsheet is readable on the right screen.',
         dictationEntries: [
-          { atSeconds: 0, text: 'Ceiling lights and a circular air vent fill the frame.', type: 'camera' },
           { atSeconds: 8, text: 'Two monitors and a webcam come into view on the desk.', type: 'scene' },
           { atSeconds: 18, text: 'A spreadsheet is readable on the right-hand screen.', type: 'activity' }
         ],
@@ -2473,6 +2510,50 @@
       ],
       before: { wet: 0, cut: 0, gear: 0, seconds: 24 },
       after: { wet: 0, cut: 0, gear: 0, seconds: 24 }
+    }),
+    ev({
+      id: 'EV-1112-0905-Z', job: 'deskblob', company: 'Field Capture', person: 'Marcus',
+      phase: 'walkthrough', workDate: '2026-09-01', capturedAt: '2026-09-01T16:04:00', uploadedAt: '2026-09-01T16:05:00',
+      duration: 22, bytes: 3_800_000, device: 'Pixel · Atmosphere Field Capture',
+      gps: null, hash: HASHES[10], tier: 1, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: null,
+        summary: 'An office desk with two monitors and a laptop.',
+        dictation: 'At 0 seconds, the camera captures fluorescent ceiling lights, two monitors, and a spreadsheet in one long look.',
+        dictationEntries: [
+          { atSeconds: 0, text: 'At 0 seconds, the camera captures fluorescent ceiling lights, two monitors, and a spreadsheet in one long look.', type: 'scene' }
+        ],
+        actions: [],
+        changes: [],
+        scope: [],
+        couldNotTell: []
+      },
+      custody: [
+        { action: 'uploaded', by: 'Marcus, Field Capture', role: 'subcontractor', at: '2026-09-01T16:05', detail: 'walkthrough · 2026-09-01' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-09-01T16:06', detail: 'Legacy 0s blob · filtered on read' }
+      ],
+      before: { wet: 0, cut: 0, gear: 0, seconds: 22 },
+      after: { wet: 0, cut: 0, gear: 0, seconds: 22 }
+    }),
+    ev({
+      id: 'EV-1044-0731-F', job: 'camden', company: 'Vantage Drywall', person: 'Luis Marte',
+      phase: 'after', workDate: '2026-07-31', capturedAt: '2026-07-31T17:12:00', uploadedAt: '2026-07-31T17:18:00',
+      duration: 54, bytes: 28_100_000, device: 'iPhone 13 · Atmosphere 2.3',
+      gps: { lat: 30.5082, lon: -97.6790, accuracy: 10, distanceFt: 58 },
+      hash: HASHES[6], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '58 ft from the recorded property centre.' }
+      ],
+      analysis: { state: 'failed', reason: 'The reading of this clip failed after retries.' },
+      custody: [
+        { action: 'uploaded', by: 'Luis Marte, Vantage Drywall', role: 'subcontractor', at: '2026-07-31T17:18', detail: 'after · 2026-07-31' }
+      ],
+      before: { wet: 0.08, cut: 0.4, gear: 1, seconds: 54 },
+      after: { wet: 0.05, cut: 0.2, gear: 0, seconds: 54 }
     })
   ];
 
@@ -4933,6 +5014,85 @@
     return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
   }
 
+  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, camera: 1, work: 1, other: 1 };
+  var FILLER_LEAD = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?(?:\s+on)?|starts?|begins?|depicts?|features?)\s+(?:that\s+)?/i;
+  var TIMESTAMP_LEAD = /^(?:at\s+\d+(?:\.\d+)?(?:\s+seconds?)?|\[(?:\d+:)+\d+\])\s*[:,.\-–—]?\s*/i;
+  var GENERIC_DUMP = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?|starts?|begins?|depicts?|features?)\b/i;
+
+  function polishEventCopy(text, maxSentences) {
+    var t = String(text || '').trim().replace(/\s+/g, ' ');
+    var i;
+    for (i = 0; i < 3; i++) {
+      var next = t.replace(TIMESTAMP_LEAD, '').replace(FILLER_LEAD, '').trim();
+      if (next === t) break;
+      t = next;
+    }
+    t = t.replace(/^[:,.\-–—\s]+/, '').trim();
+    if (!t) return '';
+    var sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, maxSentences || 2);
+    t = sentences.join(' ').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+  }
+
+  function isNearZero(at) {
+    return isFinite(at) && Number(at) <= 0.51;
+  }
+
+  function tokenizeCompare(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function (w) {
+      return w.length > 2;
+    });
+  }
+
+  function textOverlap(a, b) {
+    var left = tokenizeCompare(a);
+    var right = tokenizeCompare(b);
+    if (!left.length || !right.length) return 0;
+    var set = {};
+    left.forEach(function (w) { set[w] = 1; });
+    var hit = 0;
+    right.forEach(function (w) { if (set[w]) hit += 1; });
+    return hit / Math.max(left.length, right.length);
+  }
+
+  function restatesSummary(text, summary) {
+    var s = String(summary || '').trim().toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    var t = String(text || '').trim().toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s || !t) return false;
+    if (t === s) return true;
+    if (t.length >= 24 && (s.indexOf(t) !== -1 || t.indexOf(s.slice(0, Math.min(s.length, 80))) !== -1)) return true;
+    return textOverlap(s, t) >= 0.72;
+  }
+
+  function looksLikeWholeClipDump(text) {
+    if (GENERIC_DUMP.test(text)) return true;
+    if (text.length > 180) return true;
+    if (/\b(?:fill the frame|in one long look|in (?:the )?captured view)\b/i.test(text)) return true;
+    return text.split(/(?<=[.!?])\s+/).filter(Boolean).length >= 3;
+  }
+
+  function displayEvents(rows, summary) {
+    var polished = [];
+    (rows || []).forEach(function (row) {
+      var text = polishEventCopy(row.text, 2);
+      if (!text || GENERIC_DUMP.test(text)) return;
+      polished.push({
+        at: Math.max(0, Number(row.at) || 0),
+        text: text,
+        kind: row.kind || 'note',
+        type: EVENT_TYPES[row.type] ? row.type : (EVENT_TYPES[row.kind] ? row.kind : null)
+      });
+    });
+    if (polished.length === 1 && isNearZero(polished[0].at) &&
+        (looksLikeWholeClipDump(polished[0].text) || restatesSummary(polished[0].text, summary))) {
+      return [];
+    }
+    return polished.filter(function (row) {
+      if (!isNearZero(row.at)) return true;
+      return !restatesSummary(row.text, summary);
+    });
+  }
+
   function parseTimestampedEvents(text) {
     var src = String(text || '').trim();
     if (!src) return [];
@@ -4968,14 +5128,13 @@
 
   function clipOverviewText(clip) {
     var a = clip.analysis || {};
-    var summary = String(a.summary || '').trim();
+    var summary = polishEventCopy(String(a.summary || '').trim(), 4);
     var dictation = String(a.dictation || '').trim();
     if (summary && !looksTimestamped(summary)) return summary;
     if (dictation && !looksTimestamped(dictation)) {
-      var sentences = dictation.split(/(?<=[.!?])\s+/).filter(Boolean);
-      return sentences.slice(0, 3).join(' ');
+      return polishEventCopy(dictation, 4);
     }
-    if (dictation) return untimedLead(dictation);
+    if (dictation) return polishEventCopy(untimedLead(dictation), 4);
     return '';
   }
 
@@ -5018,23 +5177,23 @@
     var a = item.analysis || {};
     var rows = [];
     var seen = {};
-    function add(at, text, kind) {
+    function add(at, text, kind, type) {
       var t = String(text || '').trim();
       if (!t || isSceneViewNote(t)) return;
       var key = at + '|' + t;
       if (seen[key]) return;
       seen[key] = true;
-      rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note' });
+      rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note', type: type || null });
     }
     (a.dictationEntries || []).forEach(function (e) {
-      add(e.atSeconds, e.text || e.note || e.summary, 'read');
+      add(e.atSeconds, e.text || e.note || e.summary, 'read', e.type);
     });
     (a.actions || []).forEach(function (act) {
       if (String(act.action || '').toLowerCase() === 'watch') return;
       var verb = String(act.action || '').replace(/_/g, ' ');
       var room = String(act.room || '').trim();
       var body = act.description || ((verb ? verb + ' — ' : '') + (act.object || ''));
-      add(act.atSeconds, (room && body.toLowerCase().indexOf(room.toLowerCase()) === -1 ? room + ': ' : '') + body, 'action');
+      add(act.atSeconds, (room && body.toLowerCase().indexOf(room.toLowerCase()) === -1 ? room + ': ' : '') + body, 'action', 'work');
     });
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
@@ -5044,21 +5203,15 @@
       if (!m) return;
       var parts = m[1].split(':').map(Number);
       var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-      add(at, m[2], 'heard');
+      add(at, m[2], 'heard', 'speech');
     });
     if (!rows.length) {
       parseTimestampedEvents(String(a.dictation || a.summary || '')).forEach(function (e) {
         add(e.at, e.text, 'read');
       });
     }
-    if (rows.length < 6 && a.changes && a.changes.length) {
-      var d = item.duration || 120;
-      a.changes.forEach(function (c, i) {
-        add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
-      });
-    }
     rows.sort(function (x, y) { return x.at - y.at; });
-    return rows;
+    return displayEvents(rows, a.summary || clipOverviewText(item));
   }
 
   function currentPlayhead() {
@@ -5096,7 +5249,7 @@
       if (li.getAttribute('data-written') || li.classList.contains('writing')) return;
       fillNote(li);
     });
-    if (empty) empty.hidden = false;
+    if (empty) empty.hidden = true;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
@@ -5138,31 +5291,53 @@
     setFrame(best);
   }
 
+  function renderAnalysisStatus(item, a) {
+    var state = a.state || 'none';
+    var failed = state === 'failed';
+    var pending = state === 'queued' || state === 'skipped' || state === 'none' || !state;
+    var title = failed ? 'Reading failed' : state === 'queued' ? 'Reading this clip' : 'No reading yet';
+    var wait = a.reason || item.analysisError ||
+      (failed
+        ? 'The reading failed after retries. The footage itself is unaffected.'
+        : state === 'skipped'
+          ? 'This clip could not be read. Open it again to retry, or check that a vision model key is on the server.'
+          : 'What the model sees will land here when the reading finishes.');
+    var html = '<div class="analysis-status" data-status="' + (failed ? 'failed' : 'pending') + '">';
+    if (pending && !failed) {
+      html += '<div class="analysis-skel" aria-hidden="true"><span></span><span></span><span></span></div>';
+    }
+    html += '<p class="analysis-status-title">' + esc(title) + '</p>';
+    html += '<p class="footnote alog-wait">' + esc(wait) + '</p></div>';
+    return html;
+  }
+
+  function renderEventRow(r) {
+    var chip = r.type
+      ? '<span class="alog-chip">' + esc(r.type) + '</span>'
+      : '';
+    return '<li data-at="' + r.at + '">' +
+      '<span class="t">' + eventClock(r.at) + '</span>' +
+      '<span class="alog-body">' + chip +
+      '<span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></span></li>';
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
     var overviewParts = jobOverviewParts(item);
     var overviewHtml = renderJobSummary(item);
-    var saw = String(a.dictation || '').trim();
-    if (!saw) saw = String(a.summary || '').trim();
+    var saw = polishEventCopy(String(a.dictation || '').trim(), 4);
     var heard = String(a.transcript || '').trim();
     var html = overviewHtml;
-    if (!rows.length && !saw && !heard) {
-      var wait = a.reason || item.analysisError ||
-        (a.state === 'failed'
-          ? 'The dictation failed after retries. The footage itself is unaffected.'
-          : a.state === 'skipped'
-            ? 'This clip could not be read. Open it again to retry, or check that a vision model key is on the server.'
-            : 'The assistant is reading this clip. What it sees will land here when the reading finishes.');
-      html += '<p class="footnote alog-wait">' + esc(wait) + '</p>';
+    var pending = a.state === 'queued' || a.state === 'failed' || a.state === 'skipped' || a.state === 'none' || !a.state;
+    if (pending && !rows.length && !saw && !heard) {
+      html += renderAnalysisStatus(item, a);
       return html;
     }
     if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
-    if (saw && looksTimestamped(saw) && rows.length) saw = '';
-    html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
-    if (saw) {
-      html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
-    }
+    if (looksTimestamped(String(a.dictation || ''))) saw = '';
+    if (saw && restatesSummary(saw, a.summary || (overviewParts[0] && overviewParts[0].text))) saw = '';
+    if (saw && rows.length && String(a.summary || '').trim()) saw = '';
     if (a.scope && a.scope.length) {
       html += '<p class="saw-k">Against the scope</p><ul class="scopelist">';
       a.scope.forEach(function (s) {
@@ -5174,12 +5349,14 @@
       html += '</ul>';
     }
     if (rows.length) {
-      html += '<p class="saw-k">Event analysis</p>';
-      html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead.</p>';
-      html += '<ul class="alog" id="alog">' + rows.map(function (r) {
-        return '<li data-at="' + r.at + '" class="soon">' +
-          '<span class="t">' + eventClock(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
-      }).join('') + '</ul>';
+      html += '<p class="saw-k">Events</p>';
+      html += '<p class="footnote alog-wait" id="alog-empty" hidden>Times seek the playhead.</p>';
+      html += '<ul class="alog" id="alog">' + rows.map(renderEventRow).join('') + '</ul>';
+    } else if (!pending && !heard && !(a.conversationDetails && a.conversationDetails.length)) {
+      html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list. The summary is the reading.</p>';
+    }
+    if (saw) {
+      html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
     }
     if (heard || (a.conversationDetails && a.conversationDetails.length)) {
       html += '<p class="saw-k">Heard on the mic</p>';
@@ -5194,6 +5371,9 @@
       html += '<p class="saw-k">What it could not tell</p>';
       html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
         a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+    }
+    if (!pending) {
+      html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
     }
     return html;
   }

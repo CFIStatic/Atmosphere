@@ -30,6 +30,7 @@ import {
   eventsFromActions,
   parseDictationEvents,
   parseTimestampedNarration,
+  sanitizeDictationEvents,
   type DictationEvent,
 } from './dictationEvents.js';
 
@@ -195,9 +196,10 @@ export async function dictatePreparedFrames(
     'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
     'Name the room or area when you can see it. If you cannot tell, omit it.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
-    'summary is 2–4 sentences that would answer "what is happening in this video". Do not start summary with a timestamp.',
-    'events is the Analysis list: one short sentence per meaningful change, each tied to a time.',
+    'summary is 2–4 sentences that would answer "what is happening in this video". Do not start summary with a timestamp. Do not restate the event list. Do not begin with "The video shows" or "The camera captures".',
+    'events is the Analysis list: one or two present-tense sentences per meaningful change, each tied to a time. No filler ("The video shows", "At N seconds").',
     'Emit an event when something meaningfully changes — scene change, new object or activity, speech topic shift, camera move to a new subject, work step starts or stops. Quiet stretches may have few or no events.',
+    'Do NOT emit a mandatory event at t=0. An unchanged opening still belongs in summary, not as a catch-all 0-second event. Only emit t=0 when something actually happens at the open.',
     'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only.',
     't_seconds should match a provided frame timestamp. Never invent off-camera work.',
     'type is optional: scene, activity, speech, camera, work, other.',
@@ -205,7 +207,7 @@ export async function dictatePreparedFrames(
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp.',
     'Reply with JSON only: {"narration":"...","summary":"...","events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'actions may be an empty array. events may be empty only when nothing changes and the stills show one unchanging view.',
+    'actions may be an empty array. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary.',
   ].join(' ');
 
   const userText = [
@@ -410,12 +412,16 @@ function eventsFromParsed(
   narration: string,
   actions: VisionAction[],
   frames?: number[],
+  summary?: string | null,
 ): DictationEvent[] {
   const fromModel = parseDictationEvents(data.events ?? data.entries, { frames });
-  if (fromModel.length) return fromModel;
-  const fromText = parseTimestampedNarration(narration);
-  if (fromText.length) return fromText;
-  return eventsFromActions(actions);
+  const raw = fromModel.length
+    ? fromModel
+    : (() => {
+        const fromText = parseTimestampedNarration(narration);
+        return fromText.length ? fromText : eventsFromActions(actions);
+      })();
+  return sanitizeDictationEvents(raw, { summary: summary || narration });
 }
 
 /** Exported for tests — dictation JSON must stay parseable without a live model. */
@@ -432,7 +438,7 @@ export function parseDictationPayload(
       narration: trimmed,
       summary: null,
       actions: [],
-      events: parseTimestampedNarration(trimmed),
+      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed), { summary: trimmed }),
     };
   }
   try {
@@ -444,12 +450,13 @@ export function parseDictationPayload(
       entries?: unknown;
     };
     const narration = String(data.narration ?? '').trim();
+    const summary = String(data.summary ?? '').trim() || null;
     const actions = parseVisionActions(data.actions, { frames, model: model ?? null });
     return {
       narration,
-      summary: String(data.summary ?? '').trim() || null,
+      summary,
       actions,
-      events: eventsFromParsed(data, narration, actions, frames),
+      events: eventsFromParsed(data, narration, actions, frames, summary),
     };
   } catch {
     const trimmed = text.trim();
@@ -457,7 +464,7 @@ export function parseDictationPayload(
       narration: trimmed,
       summary: null,
       actions: [],
-      events: parseTimestampedNarration(trimmed),
+      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed), { summary: trimmed }),
     };
   }
 }

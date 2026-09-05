@@ -152,6 +152,29 @@ test('parseDictationPayload reads event-boundary events from the model JSON', ()
   assert.match(parsed.events[2]!.text, /spreadsheet/i);
 });
 
+test('parseDictationPayload drops a lone t=0 catch-all that restates the summary', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration:
+        'At 0 seconds, the camera captures fluorescent lights, two monitors, and a spreadsheet in one long look.',
+      summary: 'An office desk with two monitors and a spreadsheet.',
+      events: [
+        {
+          t_seconds: 0,
+          description:
+            'The video shows fluorescent lights, two monitors, and a spreadsheet in one long look.',
+          type: 'scene',
+        },
+      ],
+      actions: [],
+    }),
+    [0],
+    'gemini-test',
+  );
+  assert.equal(parsed.events.length, 0);
+  assert.match(String(parsed.summary), /office desk/i);
+});
+
 test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
   const prevGoogle = process.env.GOOGLE_API_KEY;
   const prevGemini = process.env.GEMINI_API_KEY;
@@ -199,6 +222,7 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
     assert.match(result.model, /gemini/i);
     assert.match(requestBody, /event-boundary timestamps only/i);
     assert.match(requestBody, /not every 5 seconds/i);
+    assert.match(requestBody, /do not emit a mandatory event at t=0/i);
     assert.equal(result.events.length, 1);
     assert.equal(result.events[0]!.atSeconds, 8);
   } finally {

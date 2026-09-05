@@ -326,6 +326,7 @@ export function serializeEvidence(input: {
             dictationEntries: resolveDictationEntries({
               stored: proof.narration?.entries,
               narrationText: dictation,
+              summary: proof.ai_summary ?? findings.summary ?? null,
               actions,
             }),
             actions,

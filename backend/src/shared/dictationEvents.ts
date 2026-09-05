@@ -71,10 +71,116 @@ function clockToSeconds(raw: string): number | null {
   return null;
 }
 
+const FILLER_LEAD =
+  /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?(?:\s+on)?|starts?|begins?|depicts?|features?)\s+(?:that\s+)?/i;
+
+const TIMESTAMP_LEAD = /^(?:at\s+\d+(?:\.\d+)?(?:\s+seconds?)?|\[(?:\d+:)+\d+\])\s*[:,.\-–—]?\s*/i;
+
+const GENERIC_DUMP =
+  /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?|starts?|begins?|depicts?|features?)\b/i;
+
+function tokenizeCompare(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+}
+
+function textOverlap(a: string, b: string): number {
+  const left = new Set(tokenizeCompare(a));
+  const right = tokenizeCompare(b);
+  if (!left.size || !right.length) return 0;
+  let hit = 0;
+  for (const word of right) if (left.has(word)) hit += 1;
+  return hit / Math.max(left.size, right.length);
+}
+
+/** Strip "The video shows…" / "At 0 seconds," so the timeline reads as notes. */
+export function polishEventText(value: string, maxSentences = 2): string {
+  let text = value.trim().replace(/\s+/g, ' ');
+  for (let i = 0; i < 3; i += 1) {
+    const next = text.replace(TIMESTAMP_LEAD, '').replace(FILLER_LEAD, '').trim();
+    if (next === text) break;
+    text = next;
+  }
+  text = text.replace(/^[:,.\-–—\s]+/, '').trim();
+  if (!text) return '';
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, maxSentences);
+  text = sentences.join(' ').trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}
+
+export function polishSummaryText(value: string, maxSentences = 4): string {
+  return polishEventText(value, maxSentences);
+}
+
+function isNearZero(at: number): boolean {
+  return Number.isFinite(at) && at <= 0.51;
+}
+
+function isGenericDump(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (GENERIC_DUMP.test(t)) return true;
+  if (/^at\s+0+(?:\.\d+)?(?:\s+seconds?)?\b/i.test(t)) return true;
+  return false;
+}
+
+function restatesSummary(text: string, summary?: string | null): boolean {
+  const s = String(summary || '').trim();
+  if (!s) return false;
+  const event = text.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const head = s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!event || !head) return false;
+  if (event === head) return true;
+  if (event.length >= 24 && (head.includes(event) || event.includes(head.slice(0, Math.min(head.length, 80))))) {
+    return true;
+  }
+  return textOverlap(s, text) >= 0.72;
+}
+
+function looksLikeWholeClipDump(text: string): boolean {
+  if (isGenericDump(text)) return true;
+  if (text.length > 180) return true;
+  if (/\b(?:fill the frame|in one long look|in (?:the )?captured view)\b/i.test(text)) return true;
+  return text.split(/(?<=[.!?])\s+/).filter(Boolean).length >= 3;
+}
+
+/**
+ * Drop the embarrassing lone-0s / generic opening dump. A real timeline can
+ * still start at 0:00 when something actually happens there.
+ */
+export function sanitizeDictationEvents(
+  events: DictationEvent[],
+  opts?: { summary?: string | null },
+): DictationEvent[] {
+  const polished: DictationEvent[] = [];
+  for (const event of events) {
+    const text = polishEventText(event.text);
+    if (!text || isGenericDump(text)) continue;
+    polished.push({ ...event, text });
+  }
+  if (!polished.length) return [];
+
+  const only = polished.length === 1 ? polished[0]! : null;
+  if (only && isNearZero(only.atSeconds)) {
+    if (looksLikeWholeClipDump(only.text) || restatesSummary(only.text, opts?.summary)) {
+      return [];
+    }
+  }
+
+  return polished.filter((event) => {
+    if (!isNearZero(event.atSeconds)) return true;
+    if (restatesSummary(event.text, opts?.summary)) return false;
+    return true;
+  });
+}
+
 /**
  * Split a prose dictation that already carries times ("At 12 seconds…",
  * "[0:08] …") into event rows. A single "At 0 seconds, …" paragraph stays
- * one row — this does not invent a cadence.
+ * one row here — sanitizeDictationEvents decides whether it is displayable.
  */
 export function parseTimestampedNarration(text: string): DictationEvent[] {
   const src = String(text || '').trim();
@@ -187,6 +293,7 @@ function dedupeEvents(events: DictationEvent[]): DictationEvent[] {
 export function resolveDictationEntries(input: {
   stored?: unknown;
   narrationText?: string | null;
+  summary?: string | null;
   actions?: Array<{ atSeconds?: number; description?: string; action?: string }>;
   frames?: number[];
   durationSeconds?: number;
@@ -195,10 +302,15 @@ export function resolveDictationEntries(input: {
     frames: input.frames,
     durationSeconds: input.durationSeconds,
   });
-  if (stored.length) return stored;
-  const fromText = parseTimestampedNarration(input.narrationText ?? '');
-  if (fromText.length) return fromText;
-  return eventsFromActions(input.actions ?? []);
+  const raw = stored.length
+    ? stored
+    : (() => {
+        const fromText = parseTimestampedNarration(input.narrationText ?? '');
+        return fromText.length ? fromText : eventsFromActions(input.actions ?? []);
+      })();
+  return sanitizeDictationEvents(raw, {
+    summary: input.summary ?? input.narrationText,
+  });
 }
 
 export function narrationEntriesFromEvents(events: DictationEvent[]): Array<{
