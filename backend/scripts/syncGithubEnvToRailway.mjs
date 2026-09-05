@@ -14,7 +14,8 @@ const KEYS = [
   'MEDIA_BACKEND',
   'COMPUTER_USE_ENABLED',
   'BACKUP_ENABLED',
-  'ALLOW_MOCK_DRIVERS',
+  'ENABLE_PLATFORM_APIS',
+  'SENTRY_DSN',
   'HOST',
   'PORT',
   'FRONTEND_ORIGIN',
@@ -106,6 +107,19 @@ for (const name of KEYS) {
   const args = ['variable', 'set', name, '--stdin', '--skip-deploys'];
   if (service) args.push('--service', service);
   railway(args, value);
+}
+
+// Production used to ship ALLOW_MOCK_DRIVERS=true. A leftover true on the
+// service would now abort boot (productionGuards). Delete it if present.
+{
+  const args = ['variable', 'delete', 'ALLOW_MOCK_DRIVERS', '--skip-deploys'];
+  if (service) args.push('--service', service);
+  const result = spawnSync('railway', args, { stdio: 'inherit', encoding: 'utf8' });
+  if (result.status === 0) {
+    console.log('Railway: deleted ALLOW_MOCK_DRIVERS');
+  } else {
+    console.log('Railway: ALLOW_MOCK_DRIVERS already unset (or delete skipped).');
+  }
 }
 
 console.log('Railway variables synced from GitHub Keys.');
