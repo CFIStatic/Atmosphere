@@ -125,6 +125,31 @@ test('parseDictationPayload extracts narration and a grounded action log', () =>
   assert.equal(parsed.actions[0]!.action, 'remove');
   assert.equal(parsed.actions[0]!.atSeconds, 12);
   assert.equal(parsed.actions[0]!.model, 'claude-test');
+  assert.equal(parsed.events.length, 1);
+  assert.equal(parsed.events[0]!.atSeconds, 12);
+});
+
+test('parseDictationPayload reads event-boundary events from the model JSON', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'The camera starts on the ceiling, then pans to the monitors.',
+      summary: 'An office desk with two screens.',
+      events: [
+        { t_seconds: 0, description: 'Ceiling lights and a vent.', type: 'camera' },
+        { t_seconds: 8, description: 'Two monitors and a webcam.', type: 'scene' },
+        { t_seconds: 18, description: 'Spreadsheet on the right screen.', type: 'activity' },
+      ],
+      actions: [],
+    }),
+    [0, 8, 18],
+    'gemini-test',
+  );
+  assert.equal(parsed.summary, 'An office desk with two screens.');
+  assert.deepEqual(
+    parsed.events.map((e) => e.atSeconds),
+    [0, 8, 18],
+  );
+  assert.match(parsed.events[2]!.text, /spreadsheet/i);
 });
 
 test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
@@ -135,8 +160,10 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
   delete process.env.GEMINI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(
+  let requestBody = '';
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = String(init?.body ?? '');
+    return new Response(
       JSON.stringify({
         candidates: [
           {
@@ -147,6 +174,9 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
                     narration: 'A person sits at a desk watching a news clip on the monitor.',
                     summary: 'Desk and a news broadcast.',
                     actions: [],
+                    events: [
+                      { t_seconds: 8, description: 'Desk and a news broadcast on the monitor.', type: 'scene' },
+                    ],
                   }),
                 },
               ],
@@ -155,7 +185,8 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
         ],
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )) as typeof fetch;
+    );
+  }) as typeof fetch;
   try {
     const result = await dictatePreparedFrames({
       id: 'clip-1',
@@ -166,6 +197,10 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
     });
     assert.match(result.narrationText, /desk/i);
     assert.match(result.model, /gemini/i);
+    assert.match(requestBody, /event-boundary timestamps only/i);
+    assert.match(requestBody, /not every 5 seconds/i);
+    assert.equal(result.events.length, 1);
+    assert.equal(result.events[0]!.atSeconds, 8);
   } finally {
     globalThis.fetch = originalFetch;
     if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;

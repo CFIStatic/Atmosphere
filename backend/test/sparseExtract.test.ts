@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  candidateIntervalForClip,
   extractSparseFramesFromUrl,
   longFormBudget,
   planSparseTimestamps,
+  shortClipNeedsServerFrames,
 } from '../src/shared/sparseExtract.js';
 import { segmentFrames } from '../src/shared/longAnalyst.js';
 
@@ -59,6 +61,26 @@ test('a diversity-kept day (≤180 distinct frames) windows into a bounded read'
 test('zero or negative duration yields no timestamps', () => {
   assert.deepEqual(planSparseTimestamps(0, { intervalSeconds: 600, maxFrames: 180 }), []);
   assert.deepEqual(planSparseTimestamps(-10, { intervalSeconds: 600, maxFrames: 180 }), []);
+});
+
+test('short clips use 1-second candidates so scene changes can be kept', () => {
+  assert.equal(candidateIntervalForClip(24, 120), 1);
+  assert.equal(candidateIntervalForClip(90, 120), 1);
+  assert.equal(candidateIntervalForClip(400, 120), 5);
+  assert.equal(candidateIntervalForClip(3600, 120), 120);
+  const stamps = planSparseTimestamps(24, {
+    intervalSeconds: candidateIntervalForClip(24, 120),
+    maxFrames: 180,
+  });
+  assert.ok(stamps.length >= 8, `expected dense 24s samples, got ${stamps.length}`);
+});
+
+test('a short clip with one device still needs a server extract', () => {
+  assert.equal(shortClipNeedsServerFrames({ have: 1, durationSeconds: 24 }), true);
+  assert.equal(shortClipNeedsServerFrames({ have: 4, durationSeconds: 24 }), false);
+  assert.equal(shortClipNeedsServerFrames({ have: 3, durationSeconds: 180 }), true);
+  assert.equal(shortClipNeedsServerFrames({ have: 1, durationSeconds: 24, longForm: true }), false);
+  assert.equal(shortClipNeedsServerFrames({ have: 1, durationSeconds: 4 }), false);
 });
 
 test('short clips still get at least one sparse timestamp under a 60s preferred interval', () => {

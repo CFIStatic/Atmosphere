@@ -2441,6 +2441,37 @@
       ],
       before: { wet: 0.2, cut: 0.15, gear: 1, seconds: 412 },
       after: { wet: 0.2, cut: 0.15, gear: 1, seconds: 412 }
+    }),
+    ev({
+      id: 'EV-1038-0905-O', job: 'cedar', company: 'Field Capture', person: 'Marcus',
+      phase: 'walkthrough', workDate: '2026-09-01', capturedAt: '2026-09-01T15:20:00', uploadedAt: '2026-09-01T15:21:00',
+      duration: 24, bytes: 4_200_000, device: 'Pixel · Atmosphere Field Capture',
+      gps: null, hash: HASHES[11], tier: 1, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '24 s office desk clip.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: null,
+        summary: 'The video shows an office setup featuring multiple computer monitors and a laptop on a desk. The screens display a mix of work spreadsheets, a Windows desktop background, and a video broadcast. No manual construction or field trade work is depicted in the captured view.',
+        dictation: 'At 0 seconds, the camera captures fluorescent ceiling lights and a circular air vent. At 8 seconds, it pans down to two monitors and a webcam. At 18 seconds, a spreadsheet is readable on the right screen.',
+        dictationEntries: [
+          { atSeconds: 0, text: 'Ceiling lights and a circular air vent fill the frame.', type: 'camera' },
+          { atSeconds: 8, text: 'Two monitors and a webcam come into view on the desk.', type: 'scene' },
+          { atSeconds: 18, text: 'A spreadsheet is readable on the right-hand screen.', type: 'activity' }
+        ],
+        actions: [],
+        changes: [],
+        scope: [],
+        couldNotTell: []
+      },
+      custody: [
+        { action: 'uploaded', by: 'Marcus, Field Capture', role: 'subcontractor', at: '2026-09-01T15:21', detail: 'walkthrough · 2026-09-01' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-09-01T15:22', detail: 'Event-boundary reading · 3 moments' }
+      ],
+      before: { wet: 0, cut: 0, gear: 0, seconds: 24 },
+      after: { wet: 0, cut: 0, gear: 0, seconds: 24 }
     })
   ];
 
@@ -4891,6 +4922,31 @@
     return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
   }
 
+  function parseTimestampedEvents(text) {
+    var src = String(text || '').trim();
+    if (!src) return [];
+    var re = /\bAt\s+(\d+(?:\.\d+)?)(?:\s+seconds?)?\b[:,]?|\b\[((?:\d+:)+\d+)\]/gi;
+    var stamps = [];
+    var match;
+    while ((match = re.exec(src))) {
+      var at = match[1] != null ? Number(match[1]) : null;
+      if (at == null && match[2]) {
+        var parts = match[2].split(':').map(Number);
+        at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+      }
+      if (at == null || !isFinite(at) || at < 0) continue;
+      stamps.push({ at: at, end: match.index + match[0].length, index: match.index });
+    }
+    if (!stamps.length) return [];
+    var out = [];
+    for (var i = 0; i < stamps.length; i++) {
+      var body = src.slice(stamps[i].end, stamps[i + 1] ? stamps[i + 1].index : src.length)
+        .replace(/^[:,.\s-]+/, '').trim();
+      if (body) out.push({ at: stamps[i].at, text: body });
+    }
+    return out;
+  }
+
   function untimedLead(text) {
     var t = String(text || '').trim()
       .replace(/^(at\s+\d+\s+seconds?,?\s*)/i, '')
@@ -4979,6 +5035,11 @@
       var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
       add(at, m[2], 'heard');
     });
+    if (!rows.length) {
+      parseTimestampedEvents(String(a.dictation || a.summary || '')).forEach(function (e) {
+        add(e.at, e.text, 'read');
+      });
+    }
     if (rows.length < 6 && a.changes && a.changes.length) {
       var d = item.duration || 120;
       a.changes.forEach(function (c, i) {
@@ -5086,6 +5147,7 @@
       return html;
     }
     if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
+    if (saw && looksTimestamped(saw) && rows.length) saw = '';
     html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
     if (saw) {
       html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
@@ -5101,7 +5163,7 @@
       html += '</ul>';
     }
     if (rows.length) {
-      html += '<p class="saw-k">What the AI saw, in order</p>';
+      html += '<p class="saw-k">Event analysis</p>';
       html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead.</p>';
       html += '<ul class="alog" id="alog">' + rows.map(function (r) {
         return '<li data-at="' + r.at + '" class="soon">' +

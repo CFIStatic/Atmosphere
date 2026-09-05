@@ -21,10 +21,17 @@ import { anthropicClient } from '../lib/anthropic.js';
 import { googleVisionApiKeys, isVisionConfigured } from '../lib/visionProvider.js';
 import { verificationConfig } from '../verification/config.js';
 import {
+  candidateIntervalForClip,
   extractSparseFramesFromUrl,
   type CommandRunner,
 } from './sparseExtract.js';
 import { parseVisionActions, type VisionAction } from './proofActions.js';
+import {
+  eventsFromActions,
+  parseDictationEvents,
+  parseTimestampedNarration,
+  type DictationEvent,
+} from './dictationEvents.js';
 
 export type VideoSourceKind =
   | 'proof_of_work'
@@ -69,6 +76,8 @@ export type VideoDictationResult = {
   model: string;
   frameCount: number;
   actions: VisionAction[];
+  /** Event-boundary beats for the Analysis list (not a fixed cadence). */
+  events: DictationEvent[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -134,9 +143,11 @@ export async function prepareVideoFrames(
     url: ref.url,
     durationSeconds: safeDuration,
     maxFrames,
-    candidateIntervalSeconds:
+    candidateIntervalSeconds: candidateIntervalForClip(
+      safeDuration,
       config.verification.sparseCandidateIntervalSeconds ||
-      config.verification.sparseFrameIntervalSeconds,
+        config.verification.sparseFrameIntervalSeconds,
+    ),
     hammingThreshold: config.verification.sparseDiversityHamming,
     coverageIntervalSeconds: config.verification.sparseCoverageIntervalSeconds,
     ffmpegPath: config.verification.ffmpegPath,
@@ -184,12 +195,17 @@ export async function dictatePreparedFrames(
     'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
     'Name the room or area when you can see it. If you cannot tell, omit it.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
-    'If the clip is long, summarize with time cues when timestamps are given.',
+    'summary is 2–4 sentences that would answer "what is happening in this video". Do not start summary with a timestamp.',
+    'events is the Analysis list: one short sentence per meaningful change, each tied to a time.',
+    'Emit an event when something meaningfully changes — scene change, new object or activity, speech topic shift, camera move to a new subject, work step starts or stops. Quiet stretches may have few or no events.',
+    'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only.',
+    't_seconds should match a provided frame timestamp. Never invent off-camera work.',
+    'type is optional: scene, activity, speech, camera, work, other.',
     'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count.',
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
-    'atSeconds MUST match a provided frame timestamp. Never invent off-camera work.',
-    'Reply with JSON only: {"narration":"...","summary":"...","actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'summary is 2–4 sentences that would answer "what is happening in this video". actions may be an empty array.',
+    'atSeconds MUST match a provided frame timestamp.',
+    'Reply with JSON only: {"narration":"...","summary":"...","events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
+    'actions may be an empty array. events may be empty only when nothing changes and the stills show one unchanging view.',
   ].join(' ');
 
   const userText = [
@@ -227,7 +243,7 @@ export async function dictatePreparedFrames(
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 2500,
+    max_tokens: 3200,
     system,
     messages: [
       {
@@ -272,6 +288,7 @@ export async function dictatePreparedFrames(
     model: response.model,
     frameCount: frames.length,
     actions: parsed.actions,
+    events: parsed.events,
   };
 }
 
@@ -311,7 +328,7 @@ async function dictateWithGemini(input: {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0,
-        maxOutputTokens: 2500,
+        maxOutputTokens: 3200,
       },
     }),
     });
@@ -353,6 +370,7 @@ async function dictateWithGemini(input: {
     model,
     frameCount: input.frames.length,
     actions: parsed.actions,
+    events: parsed.events,
   };
 }
 
@@ -387,30 +405,59 @@ export function pickEvenlySpaced<T>(items: T[], max: number): T[] {
   return out;
 }
 
+function eventsFromParsed(
+  data: { events?: unknown; entries?: unknown },
+  narration: string,
+  actions: VisionAction[],
+  frames?: number[],
+): DictationEvent[] {
+  const fromModel = parseDictationEvents(data.events ?? data.entries, { frames });
+  if (fromModel.length) return fromModel;
+  const fromText = parseTimestampedNarration(narration);
+  if (fromText.length) return fromText;
+  return eventsFromActions(actions);
+}
+
 /** Exported for tests — dictation JSON must stay parseable without a live model. */
 export function parseDictationPayload(
   text: string,
   frames?: number[],
   model?: string | null,
-): { narration: string; summary: string | null; actions: VisionAction[] } {
+): { narration: string; summary: string | null; actions: VisionAction[]; events: DictationEvent[] } {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) {
     const trimmed = text.trim();
-    return { narration: trimmed, summary: null, actions: [] };
+    return {
+      narration: trimmed,
+      summary: null,
+      actions: [],
+      events: parseTimestampedNarration(trimmed),
+    };
   }
   try {
     const data = JSON.parse(text.slice(start, end + 1)) as {
       narration?: unknown;
       summary?: unknown;
       actions?: unknown;
+      events?: unknown;
+      entries?: unknown;
     };
+    const narration = String(data.narration ?? '').trim();
+    const actions = parseVisionActions(data.actions, { frames, model: model ?? null });
     return {
-      narration: String(data.narration ?? '').trim(),
+      narration,
       summary: String(data.summary ?? '').trim() || null,
-      actions: parseVisionActions(data.actions, { frames, model: model ?? null }),
+      actions,
+      events: eventsFromParsed(data, narration, actions, frames),
     };
   } catch {
-    return { narration: text.trim(), summary: null, actions: [] };
+    const trimmed = text.trim();
+    return {
+      narration: trimmed,
+      summary: null,
+      actions: [],
+      events: parseTimestampedNarration(trimmed),
+    };
   }
 }

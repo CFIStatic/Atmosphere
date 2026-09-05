@@ -9,6 +9,7 @@
  * Money, hours, and payability stay out of the model prompt either way.
  */
 
+import { narrationEntriesFromEvents } from './dictationEvents.js';
 import { dictatePreparedFrames, type PreparedVideoFrames, type VideoDictationResult } from './videoIntelligence.js';
 
 export function scopeContextNote(scopeTitles: string[]): string {
@@ -72,6 +73,18 @@ export async function describeRecordingWithoutScope(input: {
 }
 
 export function descriptionFindings(dictation: VideoDictationResult): Record<string, unknown> {
+  const events = dictation.events ?? [];
+  const timeline = events.length
+    ? events.map((event) => ({
+        atSeconds: event.atSeconds,
+        action: event.type ?? null,
+        summary: event.text,
+      }))
+    : dictation.actions.map((action) => ({
+        atSeconds: action.atSeconds,
+        action: action.action,
+        summary: action.description,
+      }));
   return {
     kind: 'day_film',
     longForm: true,
@@ -84,13 +97,23 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
     cannotTell: [],
     scopeVerdicts: [],
     concerns: [],
-    timeline: dictation.actions.map((action) => ({
-      atSeconds: action.atSeconds,
-      action: action.action,
-      summary: action.description,
-    })),
+    timeline,
     windowsTotal: 0,
     windowsRead: 0,
     actions: dictation.actions,
+    events,
+  };
+}
+
+/** Persist shape the Analysis tab already consumes as dictationEntries. */
+export function narrationFromDictation(dictation: VideoDictationResult): {
+  entries: Array<{ atSeconds: number; text: string; type: string | null }>;
+  coverage: [];
+  model: string;
+} {
+  return {
+    entries: narrationEntriesFromEvents(dictation.events ?? []),
+    coverage: [],
+    model: dictation.model,
   };
 }

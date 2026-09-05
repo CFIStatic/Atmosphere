@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   descriptionFindings,
+  narrationFromDictation,
   preparedFromProofFrames,
   scopeContextNote,
 } from '../src/shared/workerActivityAnalysis.js';
@@ -41,9 +42,28 @@ test('descriptionFindings marks analysis as description-only (no scope cross-ref
     model: 'test-model',
     frameCount: 8,
     actions: [],
+    events: [],
   });
   assert.equal(findings.scopeCrossRef, false);
   assert.equal(findings.kind, 'day_film');
   assert.deepEqual(findings.scopeVerdicts, []);
   assert.equal(findings.summary, 'Worker removed wet drywall along the south wall.');
+});
+
+test('narrationFromDictation stores event-boundary entries for the Analysis tab', () => {
+  const bag = narrationFromDictation({
+    narrationText: 'Ceiling, then monitors.',
+    narrationSummary: 'Office desk.',
+    model: 'test-model',
+    frameCount: 3,
+    actions: [],
+    events: [
+      { atSeconds: 0, text: 'Ceiling lights.', type: 'camera' },
+      { atSeconds: 8, text: 'Two monitors.', type: 'scene' },
+    ],
+  });
+  assert.equal(bag.model, 'test-model');
+  assert.equal(bag.entries.length, 2);
+  assert.equal(bag.entries[1]!.atSeconds, 8);
+  assert.equal(bag.entries[1]!.text, 'Two monitors.');
 });

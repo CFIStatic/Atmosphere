@@ -115,6 +115,7 @@ mediaVideoRouter.post(
           narrationSummary: dictation.narrationSummary,
           model: dictation.model,
           frameCount: dictation.frameCount,
+          events: dictation.events,
         },
       });
     } catch (err) {
