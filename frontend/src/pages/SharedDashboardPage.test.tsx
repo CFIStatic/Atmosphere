@@ -169,6 +169,12 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute(
+      'data-job-file-chrome',
+      'no-overview-back',
+    );
     expect(
       JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038'],
     ).toEqual(expect.any(Number));
@@ -190,6 +196,12 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute(
+      'data-job-file-chrome',
+      'no-overview-back',
+    );
     expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('hidden');

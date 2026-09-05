@@ -2,11 +2,16 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { initFieldEmbed } from './lib/fieldEmbed';
+import { OFFICE_HTML_BUILD } from './lib/officeHtmlBuild';
 import { initPreferences } from './lib/preferences';
 import { consumeRecoveryRedirect } from './lib/recoveryLink';
 import { initOfficeSentry } from './lib/sentry';
 import { initPlatform } from './lib/usePlatform';
 import './index.css';
+
+// Keep the stamp in the entry chunk so a chrome-only bump changes the
+// hashed /assets/index-*.js name. Do not remove.
+void OFFICE_HTML_BUILD;
 
 // Applied before the first paint so a "reduce motion" user never sees the
 // animation they asked us to suppress.

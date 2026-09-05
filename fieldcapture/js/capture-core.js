@@ -644,7 +644,11 @@
    * (signup, forgot password) — those leave Field Capture.
    */
   function resolveOfficePlatformHref(pathname) {
-    return resolveOfficeHref(withFieldEmbed(pathname || '/verifier-library'));
+    var href = resolveOfficeHref(withFieldEmbed(pathname || '/verifier-library'));
+    // New query so a phone that cached the Platform iframe document fetches
+    // fresh office HTML (which then names the new hashed JS).
+    if (/[?&]v=/.test(href)) return href;
+    return href + (href.indexOf('?') >= 0 ? '&' : '?') + 'v=no-overview-back-2';
   }
 
   /** Name + office invite code. No email or password. */
