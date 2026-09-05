@@ -92,6 +92,39 @@ export class ProcessingOrchestrator {
   }
 
   /**
+   * Re-queue processing jobs that survived in Postgres across a restart.
+   * Rows stay `pending` / `running`; only the in-memory RetryQueue is lost.
+   */
+  async reclaimPending(
+    supabase: { from: (table: string) => any },
+    limit = 25,
+  ): Promise<number> {
+    const { data, error } = await supabase
+      .from('video_processing_jobs')
+      .select('id, org_id, video_id, status')
+      .in('status', ['pending', 'running'])
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+    let n = 0;
+    for (const row of (data ?? []) as Array<{
+      id: string;
+      org_id: string;
+      video_id: string;
+    }>) {
+      this.queue.enqueue({
+        key: row.id,
+        orgId: row.org_id,
+        videoId: row.video_id,
+        processingJobId: row.id,
+        supabase,
+      });
+      n += 1;
+    }
+    return n;
+  }
+
+  /**
    * Create (or reuse) a durable job + step rows, then enqueue execution.
    * Returns the processing job id. Idempotent on (org, idempotencyKey).
    */
