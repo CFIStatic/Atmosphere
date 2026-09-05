@@ -11,6 +11,7 @@
  * included line, is.
  */
 
+import { labelForCheck } from '../verifier/library.js';
 import { resolveDictationEntries, type DictationEvent } from './dictationEvents.js';
 
 export const DISPUTE_SCHEMA = 'atmosphere.job_disputes.v1' as const;
@@ -148,7 +149,7 @@ function integrityDisputes(clip: DisputeClip, events: DictationEvent[]): Dispute
   const out: DisputeMoment[] = [];
   for (const check of clip.checks ?? []) {
     if (check.verdict !== 'fail') continue;
-    const what = check.what || check.key || 'integrity check';
+    const what = check.what || (check.key ? labelForCheck(check.key) : 'integrity check');
     out.push({
       id: clipId(clip, 'integrity', check.key || what),
       kind: 'integrity',
@@ -214,7 +215,7 @@ function scopeDisputes(
       continue;
     }
     const matched = excluded.find((line) => mentionsTitle(text, line.title));
-    const key = `concern:${norm(matched?.title || text).slice(0, 48)}`;
+    const key = matched ? norm(matched.title) : `concern:${norm(text).slice(0, 48)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
@@ -234,13 +235,13 @@ function scopeDisputes(
 
 function clipConflicts(clips: DisputeClip[]): DisputeMoment[] {
   const after = clips.filter((c) => isAfterish(c.phase));
-  const byTitle = new Map<string, Array<{ clip: DisputeClip; verdict: string; because?: string | null }>>();
+  const byTitle = new Map<string, Array<{ clip: DisputeClip; title: string; verdict: string; because?: string | null }>>();
   for (const clip of after) {
     for (const v of clip.scopeVerdicts ?? []) {
       if (!v.title || v.verdict === 'not_visible') continue;
       const key = norm(v.title);
       const list = byTitle.get(key) ?? [];
-      list.push({ clip, verdict: v.verdict, because: v.because });
+      list.push({ clip, title: v.title, verdict: v.verdict, because: v.because });
       byTitle.set(key, list);
     }
   }
@@ -255,25 +256,23 @@ function clipConflicts(clips: DisputeClip[]): DisputeMoment[] {
     const later = [...unfinished].sort((a, b) => a.clip.workDate.localeCompare(b.clip.workDate)).at(-1)!;
     const earlier = complete.find((r) => r.clip.id !== later.clip.id) ?? complete[0]!;
     const events = eventsForClip(later.clip);
+    const line = later.title;
     out.push({
-      id: `clip:${[...ids].sort().join(',')}:${norm(later.clip.scopeVerdicts?.find((v) => v.verdict === 'in_progress')?.title || 'line')}`,
+      id: `clip:${[...ids].sort().join(',')}:${norm(line)}`,
       kind: 'clip',
       severity: 'high',
-      title: `Clips disagree — ${later.clip.scopeVerdicts?.find((v) => norm(v.title) && v.verdict === 'in_progress')?.title ?? 'scope line'}`,
+      title: `Clips disagree — ${line}`,
       detail:
         later.because?.trim() ||
         `${earlier.clip.workDate} reads finished; ${later.clip.workDate} still shows the line under way.`,
       proofId: later.clip.id,
-      seekSeconds: seekSecondsFor(events, later.clip.scopeVerdicts?.find((v) => v.verdict === 'in_progress')?.title),
+      seekSeconds: seekSecondsFor(events, line),
       workDate: later.clip.workDate,
       partyId: later.clip.partyId ?? null,
       company: later.clip.company ?? null,
       phase: later.clip.phase,
       relatedProofIds: [...ids],
-      scopeTitle:
-        later.clip.scopeVerdicts?.find((v) => v.verdict === 'in_progress')?.title ??
-        earlier.clip.scopeVerdicts?.[0]?.title ??
-        null,
+      scopeTitle: line,
     });
   }
 

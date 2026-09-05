@@ -109,6 +109,51 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByPlaceholderText(/Ask the video collection/i)).toBeInTheDocument();
   });
 
+  it('opens the named clip on a dispute tap and seeks once metadata is ready', async () => {
+    const user = userEvent.setup();
+    const withDispute: ProofResponse = {
+      ...catalog,
+      disputes: [
+        {
+          id: 'integrity:proof-morning:on_site',
+          kind: 'integrity',
+          severity: 'high',
+          title: 'Filmed on site',
+          detail: 'Filmed 2.14 miles from the site — a different address.',
+          proofId: 'proof-morning',
+          seekSeconds: 41,
+          workDate: '2026-08-20',
+          partyId: 'party-1',
+          company: 'Acme Drywall',
+          phase: 'before',
+          relatedProofIds: ['proof-morning'],
+          scopeTitle: null,
+        },
+      ],
+    };
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <ProofOfWork
+        jobId="job-1"
+        heading="Videos and analysis"
+        initialData={withDispute}
+        videoFetcher={videoFetcher}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Show me the dispute/i }));
+    await user.click(screen.getByText('Filmed on site'));
+
+    await waitFor(() => expect(videoFetcher).toHaveBeenCalledWith('proof-morning'));
+    const video = (await screen.findByTestId('job-file-player')) as HTMLVideoElement;
+    expect(video.getAttribute('src')).toBe('https://signed.test/morning.mp4');
+    expect(video).toHaveAttribute('data-seek', '41');
+    Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 });
+    video.dispatchEvent(new Event('loadedmetadata'));
+    video.dispatchEvent(new Event('seeked'));
+    expect(video.currentTime).toBe(41);
+  });
+
   it('loads a signed URL when Play is clicked', async () => {
     const user = userEvent.setup();
     const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });

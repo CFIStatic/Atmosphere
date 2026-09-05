@@ -50,6 +50,24 @@ test('off-site integrity fail is a high dispute with a real seek, not 0:00', () 
   assert.notEqual(moments[0]!.seekSeconds, 0);
 });
 
+test('stored checks without what use the custody label, not the raw key', () => {
+  const moments = surfaceDisputes({
+    scope,
+    clips: [
+      clip({
+        id: 'reupload',
+        checks: [
+          { key: 'not_a_reupload', verdict: 'fail', detail: 'Same file was filed on another day.' },
+          { key: 'on_site', verdict: 'fail', detail: 'Filmed 2.14 miles from the site.' },
+        ],
+      }),
+    ],
+  });
+  const titles = moments.filter((m) => m.kind === 'integrity').map((m) => m.title);
+  assert.deepEqual(titles, ['Not filed before', 'Filmed on site']);
+  assert.ok(!titles.some((t) => t === 'not_a_reupload' || t === 'on_site'));
+});
+
 test('excluded scope visible in events is the dispute GCs tap for', () => {
   const moments = surfaceDisputes({
     scope,
@@ -68,7 +86,7 @@ test('excluded scope visible in events is the dispute GCs tap for', () => {
     ],
   });
   const scopeHits = moments.filter((m) => m.kind === 'scope');
-  assert.ok(scopeHits.length >= 1, JSON.stringify(moments, null, 2));
+  assert.equal(scopeHits.length, 1, JSON.stringify(moments, null, 2));
   assert.equal(scopeHits[0]!.severity, 'high');
   assert.match(scopeHits[0]!.title, /skylights/i);
   assert.equal(scopeHits[0]!.seekSeconds, 41);
@@ -99,6 +117,42 @@ test('two after clips that disagree on an included line surface as a clip confli
   assert.equal(clash!.proofId, 'thu');
   assert.equal(clash!.seekSeconds, 19);
   assert.match(clash!.title, /disagree|tarp/i);
+});
+
+test('two after clips that disagree on two lines emit both conflicts', () => {
+  const moments = surfaceDisputes({
+    scope,
+    clips: [
+      clip({
+        id: 'tue',
+        workDate: '2026-08-05',
+        scopeVerdicts: [
+          { title: 'Remove temporary tarp', verdict: 'appears_complete' },
+          { title: 'Install synthetic underlayment', verdict: 'appears_complete' },
+        ],
+      }),
+      clip({
+        id: 'thu',
+        workDate: '2026-08-07',
+        scopeVerdicts: [
+          { title: 'Remove temporary tarp', verdict: 'in_progress', because: 'Tarp is back.' },
+          { title: 'Install synthetic underlayment', verdict: 'in_progress', because: 'Felt still showing.' },
+        ],
+        events: [
+          { atSeconds: 19, text: 'Temporary tarp is back on the north slope.' },
+          { atSeconds: 33, text: 'Synthetic underlayment only covers half the deck.' },
+        ],
+      }),
+    ],
+  });
+  const clashes = moments.filter((m) => m.kind === 'clip');
+  assert.equal(clashes.length, 2, JSON.stringify(clashes, null, 2));
+  const titles = clashes.map((m) => m.title).sort();
+  assert.match(titles[0]!, /underlayment/i);
+  assert.match(titles[1]!, /tarp/i);
+  assert.equal(new Set(clashes.map((m) => m.id)).size, 2);
+  assert.equal(clashes.find((m) => /tarp/i.test(m.title))!.scopeTitle, 'Remove temporary tarp');
+  assert.equal(clashes.find((m) => /underlayment/i.test(m.title))!.scopeTitle, 'Install synthetic underlayment');
 });
 
 test('a before clip saying not_visible is not a dispute', () => {
