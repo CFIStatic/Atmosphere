@@ -32,7 +32,7 @@ import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
-import { labelsForProof } from '../verifier/library.js';
+import { labelForCheck, labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
@@ -1748,7 +1748,10 @@ function disputeClipFromRow(
     company: company.get(row.party_id) ?? null,
     workDate: String(row.work_date ?? ''),
     phase: String(row.phase ?? ''),
-    checks: Array.isArray(row.checks) ? row.checks : [],
+    checks: (Array.isArray(row.checks) ? row.checks : []).map((c: { key?: string; what?: string }) => ({
+      ...c,
+      what: c.what?.trim() || (c.key ? labelForCheck(String(c.key).replace(/^(before|after)\./, '')) : undefined),
+    })),
     materialChange: row.ai_material_change ?? findings.materialChange ?? null,
     concerns: Array.isArray(findings.concerns) ? findings.concerns : [],
     scopeVerdicts: Array.isArray(findings.scopeVerdicts) ? findings.scopeVerdicts : [],
