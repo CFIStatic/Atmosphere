@@ -14,6 +14,9 @@ import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
+import { ShowDispute } from '../analysis/ShowDispute';
+import { EventTimeline } from '../analysis/EventTimeline';
+import { CustodyExportButton } from '../analysis/CustodyExportButton';
 
 /**
  * Proof of work.
@@ -125,6 +128,12 @@ export function ProofOfWork({
   const [seekProofId, setSeekProofId] = useState<string | null>(null);
   const [seekAt, setSeekAt] = useState<number | null>(null);
   const [seekNonce, setSeekNonce] = useState(0);
+
+  function applyClipSeek(proofId: string, seconds: number | null | undefined) {
+    setSeekProofId(proofId);
+    if (seconds != null) setSeekAt(seconds);
+    setSeekNonce((n) => n + 1);
+  }
 
   async function load(opts?: { silent?: boolean }) {
     if (initialData) {
@@ -274,6 +283,22 @@ export function ProofOfWork({
         collection. The checks say whether the footage is of this job.
       </p>
 
+      {data && (data.videos?.length || data.days.length) > 0 && (
+        <div className="mt-3 space-y-2">
+          <ShowDispute
+            disputes={data.disputes ?? []}
+            onSeek={(moment) => {
+              if (moment.proofId) {
+                const day = data.days.find((d) => d.proofIds.includes(moment.proofId!));
+                if (day) setOpenDay(`${day.partyId}|${day.workDate}`);
+                applyClipSeek(moment.proofId, moment.seekSeconds);
+              }
+            }}
+          />
+          {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
+        </div>
+      )}
+
       {/* Stated up front, not buried. Without a site location the strongest
           check cannot run at all, and every day will read as unproven. */}
       {data && !data.siteKnown && data.counts.days > 0 && (
@@ -304,6 +329,7 @@ export function ProofOfWork({
       ) : (
         <>
         <VideoCatalog
+          jobId={jobId}
           videos={data.videos ?? []}
           videoFetcher={videoFetcher}
           seekProofId={
@@ -313,6 +339,7 @@ export function ProofOfWork({
           }
           seekAt={seekAt}
           seekNonce={seekNonce}
+          onSeek={applyClipSeek}
         />
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
@@ -461,47 +488,22 @@ export function ProofOfWork({
                             ))}
                           </ul>
                         ) : null}
-                        {(day.reports?.before || day.reports?.after) && (
+                        {day.proofIds.some((id) =>
+                          (data.videos ?? []).some((v) => v.id === id && (v.dictationEntries?.length ?? 0) > 0),
+                        ) && (
                           <div className="mt-2 space-y-2">
-                            {(['before', 'after'] as const).map((half) => {
-                              const report = day.reports?.[half];
-                              if (!report) return null;
+                            {day.proofIds.map((id) => {
+                              const video = (data.videos ?? []).find((v) => v.id === id);
+                              if (!video?.dictationEntries?.length) return null;
                               return (
-                                <div key={half} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
+                                <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
                                   <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
-                                    {half} video — narrated report
+                                    {video.phase} — events
                                   </p>
-                                  {report.status === 'done' && report.text ? (
-                                    <>
-                                      <p className="mt-1 text-[11.5px] leading-snug text-ink-700">
-                                        {report.text}
-                                      </p>
-                                      {report.coverage.length > 0 && (
-                                        <p className="mt-1 text-[10.5px] text-ink-500">
-                                          Covered {report.coverage.filter((c) => c.seen).length} of{' '}
-                                          {report.coverage.length} shot-list steps
-                                          {report.coverage.some((c) => !c.seen) &&
-                                            ` — missing: ${report.coverage
-                                              .filter((c) => !c.seen)
-                                              .map((c) => c.label.toLowerCase())
-                                              .slice(0, 2)
-                                              .join('; ')}${
-                                              report.coverage.filter((c) => !c.seen).length > 2 ? '…' : ''
-                                            }`}
-                                        </p>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <p className="mt-1 text-[11px] text-ink-500">
-                                      {report.status === 'queued' || report.status === 'running'
-                                        ? 'Being written — the model is reading the clip now.'
-                                        : report.status === 'failed'
-                                          ? `Failed: ${report.error ?? 'the model reply was not usable.'}`
-                                          : report.status === 'skipped'
-                                            ? (report.error ?? 'Skipped.')
-                                            : 'Not narrated.'}
-                                    </p>
-                                  )}
+                                  <EventTimeline
+                                    events={video.dictationEntries}
+                                    onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                  />
                                 </div>
                               );
                             })}
@@ -719,17 +721,21 @@ function statusWord(status: string | null, done: string): string {
 }
 
 function VideoCatalog({
+  jobId,
   videos,
   videoFetcher,
   seekProofId,
   seekAt,
   seekNonce,
+  onSeek,
 }: {
+  jobId?: string;
   videos: ProofVideoRecord[];
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   seekProofId?: string | null;
   seekAt?: number | null;
   seekNonce?: number;
+  onSeek?: (proofId: string, seconds: number) => void;
 }) {
   if (!videos.length) return null;
   return (
@@ -738,7 +744,15 @@ function VideoCatalog({
         Every video on this job
       </p>
       <ul>
-        {videos.map((video) => (
+        {videos.map((video) => {
+          const timeline =
+            video.dictationEntries?.length
+              ? video.dictationEntries
+              : (video.events ?? []).map((event) => ({
+                  atSeconds: event.atSeconds,
+                  text: event.text ?? '',
+                }));
+          return (
           <li key={video.id} className="border-b border-line/70 px-3 py-2 last:border-b-0">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
@@ -759,23 +773,34 @@ function VideoCatalog({
                   {' · '}
                   Mic: {statusWord(video.transcriptStatus, 'heard')}
                 </p>
-                {video.aiSummary && (
+                {timeline.length > 0 ? (
+                  <div className="mt-1.5">
+                    <EventTimeline
+                      events={timeline}
+                      onSeek={(seconds) => onSeek?.(video.id, seconds)}
+                    />
+                  </div>
+                ) : video.aiSummary ? (
                   <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
-                )}
+                ) : null}
                 {video.heardOnMic && (
                   <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
                 )}
               </div>
-              <PlayClip
-                proofId={video.id}
-                videoFetcher={videoFetcher}
-                seekAt={seekProofId === video.id ? seekAt : null}
-                seekNonce={seekProofId === video.id ? seekNonce : 0}
-                autoOpen={seekProofId === video.id}
-              />
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <PlayClip
+                  proofId={video.id}
+                  videoFetcher={videoFetcher}
+                  seekAt={seekProofId === video.id ? seekAt : null}
+                  seekNonce={seekProofId === video.id ? seekNonce : 0}
+                  autoOpen={seekProofId === video.id}
+                />
+                {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
+              </div>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
@@ -795,11 +820,6 @@ function MeasuredVideo({
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    return bindMeasuredDuration(el);
-  }, [src]);
-  useEffect(() => {
-    const el = ref.current;
     if (!el || seekTo == null || !Number.isFinite(seekTo)) return;
     if (typeof el.scrollIntoView === 'function') {
       el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
@@ -815,6 +835,11 @@ function MeasuredVideo({
     else el.addEventListener('loadedmetadata', apply, { once: true });
     return () => el.removeEventListener('loadedmetadata', apply);
   }, [src, seekTo, seekNonce]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return bindMeasuredDuration(el);
+  }, [src]);
   return (
     <video
       ref={ref}
@@ -850,13 +875,6 @@ function PlayClip({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (!autoOpen || url || loading || failed) return;
-    void open();
-    // open() is stable for this proof
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpen, proofId]);
-
   async function open() {
     setLoading(true);
     try {
@@ -870,6 +888,12 @@ function PlayClip({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!autoOpen || url || loading || failed) return;
+    void open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen, proofId]);
 
   if (url) {
     return (
@@ -900,14 +924,8 @@ function PlayClip({
 /**
  * The footage itself.
  *
- * Loaded on demand rather than on render: a job with three weeks of days would
- * otherwise mint sixty signed URLs to show two. The URL is short-lived by
- * design — these are the insides of somebody's house, and a link that works
- * forever is one that will end up forwarded.
- *
- * The poster is deliberately absent. A still frame chosen by the browser is
- * usually black, and a black rectangle reads as a broken video rather than one
- * that has not been asked for yet.
+ * Loaded on demand rather than on render: a job with thirty clips must not
+ * mint thirty signed URLs just to list them.
  */
 function ProofVideo({
   proofId,
@@ -928,12 +946,6 @@ function ProofVideo({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (!autoOpen || url || loading || failed) return;
-    void open();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpen, proofId]);
-
   async function open() {
     setLoading(true);
     try {
@@ -947,6 +959,12 @@ function ProofVideo({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!autoOpen || url || loading || failed) return;
+    void open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen, proofId]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-paper-100">

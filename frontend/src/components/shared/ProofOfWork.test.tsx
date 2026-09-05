@@ -21,6 +21,8 @@ vi.mock('../../lib/api', () => ({
     episodePhysicalWork: vi.fn(),
     decideProofDay: vi.fn(),
     reanalyseProofDay: vi.fn(),
+    jobCustodyExport: vi.fn(),
+    evidenceCustodyExport: vi.fn(),
   },
 }));
 
@@ -89,6 +91,7 @@ describe('ProofOfWork video collection', () => {
     render(<ProofOfWork jobId="job-1" heading="Videos and analysis" initialData={catalog} />);
 
     expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
     expect(screen.getByText('Every video on this job')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
