@@ -152,6 +152,27 @@ test('parseDictationPayload reads event-boundary events from the model JSON', ()
   assert.match(parsed.events[2]!.text, /spreadsheet/i);
 });
 
+test('parseDictationPayload keeps a 0:00 beat extracted from timestamped prose', () => {
+  const prose =
+    'At 0 seconds, Tarp unclipped and rolled; harnesses on. At 48 seconds, underlayment rows mid-slope.';
+  const fromBlob = parseDictationPayload(prose);
+  assert.equal(fromBlob.events.length, 2);
+  assert.equal(fromBlob.events[0]!.atSeconds, 0);
+  assert.match(fromBlob.events[0]!.text, /tarp unclipped/i);
+
+  const fromJson = parseDictationPayload(
+    JSON.stringify({
+      narration: 'Tarp unclipped and rolled; harnesses on. Then underlayment rows mid-slope.',
+      events: [
+        { t_seconds: 0, description: 'Tarp unclipped and rolled; harnesses on.', type: 'work' },
+        { t_seconds: 48, description: 'Underlayment rows mid-slope.', type: 'work' },
+      ],
+    }),
+  );
+  assert.equal(fromJson.events.length, 2);
+  assert.equal(fromJson.events[0]!.atSeconds, 0);
+});
+
 test('parseDictationPayload drops a lone t=0 catch-all that restates the summary', () => {
   const parsed = parseDictationPayload(
     JSON.stringify({

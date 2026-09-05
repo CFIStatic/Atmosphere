@@ -134,7 +134,9 @@ function restatesSummary(text: string, summary?: string | null): boolean {
   const head = s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!event || !head) return false;
   if (event === head) return true;
-  if (event.length >= 24 && (head.includes(event) || event.includes(head.slice(0, Math.min(head.length, 80))))) {
+  // Containment of the event in `summary` is not enough: callers often pass
+  // the source narration blob, which already includes every extracted beat.
+  if (event.length >= 24 && event.includes(head.slice(0, Math.min(head.length, 80)))) {
     return true;
   }
   return textOverlap(s, text) >= 0.72;
@@ -309,7 +311,7 @@ export function resolveDictationEntries(input: {
         return fromText.length ? fromText : eventsFromActions(input.actions ?? []);
       })();
   return sanitizeDictationEvents(raw, {
-    summary: input.summary ?? input.narrationText,
+    summary: input.summary,
   });
 }
 

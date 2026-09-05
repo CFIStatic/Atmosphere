@@ -421,7 +421,7 @@ function eventsFromParsed(
         const fromText = parseTimestampedNarration(narration);
         return fromText.length ? fromText : eventsFromActions(actions);
       })();
-  return sanitizeDictationEvents(raw, { summary: summary || narration });
+  return sanitizeDictationEvents(raw, { summary });
 }
 
 /** Exported for tests — dictation JSON must stay parseable without a live model. */
@@ -438,7 +438,7 @@ export function parseDictationPayload(
       narration: trimmed,
       summary: null,
       actions: [],
-      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed), { summary: trimmed }),
+      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
     };
   }
   try {
@@ -464,7 +464,7 @@ export function parseDictationPayload(
       narration: trimmed,
       summary: null,
       actions: [],
-      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed), { summary: trimmed }),
+      events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
     };
   }
 }

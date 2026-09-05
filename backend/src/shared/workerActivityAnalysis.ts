@@ -114,7 +114,7 @@ export function narrationFromDictation(dictation: VideoDictationResult): {
   return {
     entries: narrationEntriesFromEvents(
       sanitizeDictationEvents(dictation.events ?? [], {
-        summary: dictation.narrationSummary ?? dictation.narrationText,
+        summary: dictation.narrationSummary,
       }),
     ),
     coverage: [],

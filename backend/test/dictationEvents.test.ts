@@ -63,6 +63,15 @@ test('resolveDictationEntries prefers stored rows, then prose, then actions', ()
   });
   assert.equal(fromText.length, 2);
 
+  const realisticOpen = resolveDictationEntries({
+    stored: [],
+    narrationText:
+      'At 0 seconds, Tarp unclipped and rolled; harnesses on. At 48 seconds, underlayment rows mid-slope.',
+  });
+  assert.equal(realisticOpen.length, 2);
+  assert.equal(realisticOpen[0]!.atSeconds, 0);
+  assert.match(realisticOpen[0]!.text, /tarp unclipped/i);
+
   const fromActions = resolveDictationEntries({
     stored: [],
     narrationText: 'A person sits at a desk watching a news clip.',
