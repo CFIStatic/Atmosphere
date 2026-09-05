@@ -4,10 +4,10 @@ Atmosphere already deploys from **per-service `railway.toml` / `railway.json`**
 copied over the inert repo-root `railway.toml` by GitHub Actions. That is the
 supported IaC surface today.
 
-Do **not** apply a live `.railway/railway.ts` project graph from this repo
-yet. Railway’s TypeScript project API is still moving; a wrong graph would
-recreate services or rewrite variables. Revisit after **2026-12-01** if the
-dashboard still has to be the source of truth for service topology.
+Do **not** apply a live Railway TypeScript project graph from this repo.
+`.railway/graph.example.ts` is a typed inventory only (`RAILWAY_GRAPH_MUST_NOT_APPLY`).
+CI must not import it. Railway’s project-graph API is still moving; a wrong
+graph would recreate services or rewrite variables. Revisit after **2026-12-01**.
 
 ## What is already in git
 

@@ -596,9 +596,13 @@ from the URL. Path tokens remain valid.
 ## Verification reclaim
 
 At boot the BFF re-queues `pending` / `running` `video_processing_jobs`
-into the in-memory worker (`backend/src/verification/reclaim.ts`). The
-proof-analysis sweep already does the same for narration. This is not a
-durable outbox — a second process does not steal work.
+into the in-memory worker (`backend/src/verification/reclaim.ts`). A
+30-second lease sweep then steals rows whose `lease_until` has passed,
+so a mid-job crash does not wait for the next process restart.
+
+Proof narration and transcript use the same pattern on `job_proofs`
+(`narration_lease_until` / `transcript_lease_until`). The analysis sweep
+runs every 30 seconds and skips rows whose lease is still held.
 
 Full catalogue: `backend/.env.example`.
 
@@ -702,8 +706,9 @@ Lint is still noisy across the monorepo; `npm run verify` remains the local bar.
 
 - Merging the two migration trees into one (tracked as follow-up; inventory
   script prevents silent drift).
-- Durable workers / outbox for proof/verification queues (boot reclaim
-  re-queues Postgres `pending`/`running` rows into the in-process
-  `RetryQueue`; a mid-job crash still needs a later reclaim).
-- Real S3 multipart driver (stub only).
+- Leftover (sales/PM/estimator) `createAdminClient()` sites — those APIs are
+  gated off in production.
+- Real S3 multipart driver (stub only; no AWS credential env vars in Keys).
+- A separate worker process. Leases + in-process `RetryQueue` are the
+  outbox; they are not Kafka.
 - Counsel-reviewed privacy/terms copy on the marketing site.
