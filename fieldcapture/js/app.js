@@ -250,7 +250,9 @@
   function jobMetaLine(j) {
     var bits = [];
     if (j.addr) bits.push(escapeHtml(j.addr));
-    if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
+    if (j.pending || (Core.isLocalJobId && Core.isLocalJobId(j.id))) {
+      bits.push('<span class="pendingpin">On this phone</span>');
+    } else if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
     else if (j.placed === false) bits.push('<span class="warnpin">Location not placed</span>');
     return bits.join(' · ') || 'Open job';
   }
@@ -258,11 +260,15 @@
   function toListedJob(j) {
     return {
       id: j.id,
+      title: j.title || j.name || '',
       name: (j.number ? j.number + ' · ' : '') + (j.name || 'Job'),
       addr: j.address || j.addr || '',
       at: j.at || 'Today',
       placed: j.placed !== false,
       filmed: Boolean(j.filmed),
+      pending: Boolean(j.pending) || (Core.isLocalJobId && Core.isLocalJobId(j.id)),
+      situation: j.situation || '',
+      createdAt: j.createdAt || '',
       sharePath: j.sharePath || '',
     };
   }
@@ -319,9 +325,76 @@
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus('Ready — start the day.');
-    if (listed.id && String(listed.id).indexOf('new-') !== 0) {
+    if (listed.id && !(Core.isLocalJobId && Core.isLocalJobId(listed.id))) {
       notifyOfficeLibraryChanged();
     }
+  }
+
+  function remapLocalJob(localId, serverJob) {
+    var listed = toListedJob(serverJob);
+    state.jobs = (state.jobs || []).map(function (j) {
+      return j.id === localId ? listed : j;
+    });
+    if (state.activeJobId === localId) state.activeJobId = listed.id;
+    renderExpect(state.jobs);
+    when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
+  }
+
+  var pendingSync = null;
+
+  function syncPendingJobs() {
+    if (DEMO || LIVE || !state.account || !state.accessToken || !Core.createTodayJob) {
+      return Promise.resolve();
+    }
+    if (pendingSync) return pendingSync;
+    var queue = (Core.readPendingJobs ? Core.readPendingJobs() : []).filter(function (j) {
+      return j && Core.isLocalJobId(j.id) && !j.serverId;
+    });
+    if (!queue.length) return Promise.resolve();
+    pendingSync = queue
+      .reduce(function (chain, localJob) {
+        return chain.then(function () {
+          return Core.createTodayJob({
+            apiBase: API_BASE,
+            accessToken: state.accessToken,
+            title: localJob.title || localJob.name,
+            situation: localJob.situation || '',
+          }).then(function (serverJob) {
+            if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, serverJob);
+            remapLocalJob(localJob.id, serverJob);
+            notifyOfficeLibraryChanged();
+          });
+        });
+      }, Promise.resolve())
+      .then(
+        function () {
+          pendingSync = null;
+        },
+        function () {
+          pendingSync = null;
+        },
+      );
+    return pendingSync;
+  }
+
+  function resolveActiveJobId() {
+    var id = state.activeJobId;
+    if (!id || !Core.isLocalJobId || !Core.isLocalJobId(id)) return Promise.resolve(id);
+    return syncPendingJobs().then(function () {
+      if (state.activeJobId && !Core.isLocalJobId(state.activeJobId)) {
+        return state.activeJobId;
+      }
+      throw new Error('Waiting for signal…');
+    });
+  }
+
+  function flushFieldWork() {
+    return syncPendingJobs().then(function () {
+      if (state.lastClip && !state.finishing) {
+        state.finishing = true;
+        return uploadLastClip();
+      }
+    });
   }
 
   function startRecordingForNewJob(stream) {
@@ -384,7 +457,8 @@
 
       /* Ask for camera/mic in this tap. A POST-then-getUserMedia gap is
          why iPhone Safari refuses the prompt and a second tap files
-         another job. Keep the stream and only create the job after. */
+         another job. Keep the stream, persist a local draft, and start
+         recording even if the office POST is offline. */
       var media =
         navigator.mediaDevices && navigator.mediaDevices.getUserMedia
           ? navigator.mediaDevices.getUserMedia({
@@ -395,29 +469,39 @@
 
       media
         .then(function (stream) {
-          return Core.createTodayJob({
+          /* Persist locally and start recording now. The office POST
+             retries in the background — zero connectivity must not
+             block the camera. */
+          var localJob = Core.draftFieldJob
+            ? Core.draftFieldJob({ title: title, situation: situation })
+            : {
+                id: 'local-' + Date.now(),
+                name: title,
+                title: title,
+                situation: situation,
+                pending: true,
+              };
+          if (Core.upsertPendingJob) Core.upsertPendingJob(localJob);
+          finishLocal(localJob, stream);
+          Core.createTodayJob({
             apiBase: API_BASE,
             accessToken: state.accessToken,
             title: title,
             situation: situation,
           }).then(
             function (job) {
-              return { job: job, stream: stream };
+              if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, job);
+              remapLocalJob(localJob.id, job);
+              notifyOfficeLibraryChanged();
             },
-            function (err) {
-              stream.getTracks().forEach(function (t) {
-                t.stop();
-              });
-              throw err;
+            function () {
+              /* stay on the local draft; online + interval retry later */
             },
           );
         })
-        .then(function (result) {
-          finishLocal(result.job, result.stream);
-        })
         .catch(function (err) {
           if (btn) btn.disabled = false;
-          showNewJobError(err.message || 'Could not create that job.');
+          showNewJobError(err.message || 'Could not start recording.');
         });
     });
   }
@@ -617,7 +701,9 @@
 
   function enterAccountHome(me, jobs) {
     state.account = true;
-    state.jobs = (jobs || []).map(toListedJob);
+    var pending = Core.readPendingJobs ? Core.readPendingJobs() : [];
+    var merged = Core.mergeTodayJobs ? Core.mergeTodayJobs(jobs || [], pending) : (jobs || []);
+    state.jobs = merged.map(toListedJob);
     if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
       state.activeJobId = state.jobs[0] ? state.jobs[0].id : null;
     }
@@ -641,11 +727,39 @@
   }
 
   function bootAccountSession() {
-    return Core.loadFieldMe(API_BASE, state.accessToken).then(function (me) {
-      return Core.loadTodayJobs(API_BASE, state.accessToken).then(function (jobs) {
-        enterAccountHome(me, jobs);
-      });
-    });
+    var cachedMe = Core.readCachedMe ? Core.readCachedMe() : null;
+    var cachedJobs = Core.readCachedJobs ? Core.readCachedJobs() : [];
+
+    function enterAndFlush(me, jobs) {
+      enterAccountHome(me, jobs);
+      syncPendingJobs();
+    }
+
+    return Core.loadFieldMe(API_BASE, state.accessToken).then(
+      function (me) {
+        if (Core.writeCachedMe) Core.writeCachedMe(me);
+        return Core.loadTodayJobs(API_BASE, state.accessToken).then(
+          function (jobs) {
+            if (Core.writeCachedJobs) Core.writeCachedJobs(jobs);
+            enterAndFlush(me, jobs);
+          },
+          function (err) {
+            if (Core.isTransientNetworkError && Core.isTransientNetworkError(err)) {
+              enterAndFlush(me, cachedJobs);
+              return;
+            }
+            throw err;
+          },
+        );
+      },
+      function (err) {
+        if (Core.isTransientNetworkError && Core.isTransientNetworkError(err) && cachedMe) {
+          enterAndFlush(cachedMe, cachedJobs);
+          return;
+        }
+        throw err;
+      },
+    );
   }
 
   function bootAccount() {
@@ -802,6 +916,12 @@
       setStatus('The last day is still uploading.', true);
       return;
     }
+    if (state.lastClip) {
+      setStatus('The last day is still on this phone.');
+      state.finishing = true;
+      uploadLastClip();
+      return;
+    }
     state.finishing = false;
     // Fresh recording — do not file the last clip's fix if watch has not fired yet.
     state.site = null;
@@ -863,46 +983,59 @@
     if (!clip || !clip.blob) {
       return Promise.reject(new Error('Nothing to upload. Record the day again.'));
     }
-    openDoorUploading();
-    return Core.uploadDayFilm({
-      token: TOKEN || undefined,
-      jobId: state.account ? state.activeJobId : undefined,
-      accessToken: state.account ? state.accessToken : undefined,
-      apiBase: API_BASE,
-      storageBase: STORAGE_BASE,
-      blob: clip.blob,
-      mimeType: clip.mimeType,
-      knownSite: state.site || null,
-      durationSeconds: clip.durationSeconds,
-      onStep: function (step) {
-        var stepEl = $('#upload-step');
-        if (stepEl) {
-          stepEl.textContent = step;
-          stepEl.style.color = '';
-        }
-      },
-      onProgress: function (ratio) {
-        var bar = $('#upload-bar');
-        var pct = $('#upload-pct');
-        var pctVal = Math.round((ratio || 0) * 100);
-        if (bar) bar.style.width = pctVal + '%';
-        if (pct) pct.textContent = pctVal + '%';
-      },
-    }).then(
+    var screen = document.body.getAttribute('data-screen') || '';
+    var showDoor = screen === 's-door' || screen === 's-rec';
+    if (showDoor) openDoorUploading();
+    else setStatus('Filing with the office…');
+    return resolveActiveJobId()
+      .then(function (jobId) {
+        return Core.uploadDayFilm({
+          token: TOKEN || undefined,
+          jobId: state.account ? jobId : undefined,
+          accessToken: state.account ? state.accessToken : undefined,
+          apiBase: API_BASE,
+          storageBase: STORAGE_BASE,
+          blob: clip.blob,
+          mimeType: clip.mimeType,
+          knownSite: state.site || null,
+          durationSeconds: clip.durationSeconds,
+          onStep: function (step) {
+            var stepEl = $('#upload-step');
+            if (stepEl) {
+              stepEl.textContent = step;
+              stepEl.style.color = '';
+            }
+          },
+          onProgress: function (ratio) {
+            var bar = $('#upload-bar');
+            var pct = $('#upload-pct');
+            var pctVal = Math.round((ratio || 0) * 100);
+            if (bar) bar.style.width = pctVal + '%';
+            if (pct) pct.textContent = pctVal + '%';
+          },
+        });
+      })
+      .then(
       function (result) {
         state.uploadResult = result;
         if (state.lastClip === clip) state.lastClip = null;
-        renderDoorLive(result);
+        if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
+          renderDoorLive(result);
+        } else {
+          setStatus('Filed with the office.');
+          state.finishing = false;
+        }
         notifyOfficeLibraryChanged();
         return result;
       },
       function (err) {
-        var stepEl = $('#upload-step');
-        if (stepEl) {
-          stepEl.textContent = err.message || 'Upload failed.';
-          stepEl.style.color = 'var(--fail)';
+        if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
+          renderDoorFailed(err);
+        } else {
+          setStatus('Still on this phone — filing with the office.');
+          state.finishing = false;
+          if (state.lastClip) scheduleFailRetry();
         }
-        renderDoorFailed(err);
       },
     );
   }
@@ -957,11 +1090,6 @@
   function showHomeAction() {
     var done = $('#donebtn');
     if (done) done.classList.add('on');
-  }
-
-  function showRetryAction() {
-    var retry = $('#retrybtn');
-    if (retry) retry.classList.add('on');
   }
 
   function renderDoorLive(result) {
@@ -1026,15 +1154,23 @@
   function renderDoorFailed(err) {
     show('s-door');
     setDoorSub(state.lastClip ? 'Still on this phone.' : 'Recording was not saved.');
-    $('#ledger').innerHTML =
-      '<div class="lrow on"><span>Upload paused</span><em>' +
-      escapeHtml(state.lastClip ? 'Retrying automatically' : err.message || 'Record again') +
-      '</em><span class="ok">!</span></div>';
+    var step = (err && err.message) || 'Retrying…';
+    if (state.lastClip && step !== 'Waiting for signal…') step = 'Retrying…';
+    var stepEl = $('#upload-step');
+    if (stepEl) {
+      stepEl.textContent = step;
+      stepEl.style.color = '';
+    } else {
+      $('#ledger').innerHTML =
+        '<div class="lrow on"><span>Uploading</span><em id="upload-step">' +
+        escapeHtml(step) +
+        '</em><span class="ok" id="upload-pct"></span></div>' +
+        '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>';
+    }
     $('#daytl').innerHTML = '';
     $('#doneline').classList.remove('on');
     hideDoorActions();
     if (state.lastClip) {
-      showRetryAction();
       scheduleFailRetry();
     }
     showHomeAction();
@@ -1434,15 +1570,16 @@
   })();
   $('#donebtn').addEventListener('click', function () {
     /* Leave even if reading/uploading is still running — do not trap the crew.
-       Keep lastClip and finishing while the PUT is in flight so a later
-       failure can still offer Retry, and a second day cannot race this upload. */
-    if (!state.finishing) {
-      state.lastClip = null;
-    }
+       Never drop lastClip here. The day stays on this phone until filing
+       succeeds, including after a paused upload or a trip Home mid-PUT. */
     state.recorder = null;
     hideDoorActions();
     show('s-home');
-    setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    if (state.lastClip) {
+      setStatus('Still on this phone — filing with the office.');
+    } else {
+      setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    }
   });
   when('#retrybtn', function (btn) {
     btn.addEventListener('click', function () {
@@ -1457,6 +1594,22 @@
 
   bindJobSearch();
   bindNewJob();
+  (function bindOfflineSync() {
+    if (typeof window === 'undefined' || window.__fieldOfflineSyncBound) return;
+    window.__fieldOfflineSyncBound = true;
+    window.addEventListener('online', function () {
+      flushFieldWork();
+    });
+    window.setInterval(function () {
+      var pending = Core.readPendingJobs ? Core.readPendingJobs() : [];
+      var hasDraft = pending.some(function (j) {
+        return j && Core.isLocalJobId && Core.isLocalJobId(j.id);
+      });
+      if (hasDraft || (state.lastClip && !state.finishing)) {
+        flushFieldWork();
+      }
+    }, 15000);
+  })();
 
   if (LIVE) {
     enterLiveMode();

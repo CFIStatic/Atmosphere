@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=no-overview-back-2/);
-assert.match(html, /js\/app\.js\?v=no-overview-back-2/);
+assert.match(html, /js\/capture-core\.js\?v=offline-calm/);
+assert.match(html, /js\/app\.js\?v=offline-calm/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -149,18 +149,29 @@ assert.match(html, /\.door-actions \{[\s\S]*?flex: 0 0 auto/, 'home button stays
 assert.match(html, /\.donebtn\.on/);
 assert.match(appSrc, /function uploadLastClip/);
 assert.match(appSrc, /showHomeAction/);
-assert.match(appSrc, /showRetryAction/);
+assert.match(appSrc, /scheduleFailRetry/);
 assert.match(
   appSrc,
   /function openDoorUploading\([\s\S]*?showHomeAction\(\)/,
   'Back to Home Screen must appear as soon as recording ends, including while uploading',
 );
 assert.match(appSrc, /state\.lastClip/, 'keep the day film on device until upload succeeds');
-assert.match(
-  appSrc,
-  /if \(!state\.finishing\) \{\s*state\.lastClip = null;/,
-  'Home must not drop lastClip while an upload is still in flight',
-);
+{
+  const doneFrom = appSrc.indexOf("$('#donebtn')");
+  const doneTo = appSrc.indexOf("when('#retrybtn'");
+  assert.ok(doneFrom >= 0 && doneTo > doneFrom, 'Home lives on the door done button');
+  const doneHandler = appSrc.slice(doneFrom, doneTo);
+  assert.doesNotMatch(
+    doneHandler,
+    /state\.lastClip = null/,
+    'Home must not drop lastClip while upload is in flight or paused',
+  );
+  assert.match(
+    doneHandler,
+    /Still on this phone/,
+    'Home during an unfiled clip keeps a calm on-phone status',
+  );
+}
 assert.match(
   appSrc,
   /if \(state\.lastClip === clip\) state\.lastClip = null;/,
@@ -170,6 +181,11 @@ assert.match(
   appSrc,
   /if \(state\.finishing\) \{\s*setStatus\('The last day is still uploading\.'/,
   'a second day must not start while the previous PUT is still running',
+);
+assert.match(
+  appSrc,
+  /if \(state\.lastClip\) \{\s*setStatus\('The last day is still on this phone\.'/,
+  'Home must not start a second day while the last clip is still local',
 );
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
 assert.match(coreSrc, /putFileResumable/, 'large day films resume from the first missing part');
@@ -219,6 +235,11 @@ assert.match(html, /id="door-sub"/);
 assert.doesNotMatch(html, /Your part is done/);
 assert.doesNotMatch(html, /Your day, as the office will read it/);
 assert.doesNotMatch(appSrc, /Fix signal and tap Retry upload/);
+assert.doesNotMatch(appSrc, /Upload paused/);
+assert.doesNotMatch(appSrc, /showRetryAction\(\)/, 'failed filing stays on the progress line — no Retry drama');
+assert.match(appSrc, /Waiting for signal/);
+assert.match(appSrc, /function flushFieldWork/);
+assert.match(appSrc, /addEventListener\('online'/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
 assert.match(appSrc, /resolveOfficeHref\('\/forgot-password'\)/);
@@ -251,10 +272,20 @@ assert.match(appSrc, /bindJobSearch/);
 assert.match(appSrc, /bindNewJob/);
 assert.match(appSrc, /Core\.filterJobs/);
 assert.match(appSrc, /Core\.createTodayJob/);
-assert.ok(
-  appSrc.indexOf('navigator.mediaDevices.getUserMedia') < appSrc.indexOf('Core.createTodayJob({'),
-  'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
-);
+{
+  const submitFrom = appSrc.indexOf("form.addEventListener('submit'");
+  const submitTo = appSrc.indexOf('function renderExpect');
+  assert.ok(submitFrom >= 0 && submitTo > submitFrom, 'new-job submit must exist');
+  const submitSrc = appSrc.slice(submitFrom, submitTo);
+  assert.ok(
+    submitSrc.indexOf('navigator.mediaDevices.getUserMedia') < submitSrc.indexOf('Core.createTodayJob({'),
+    'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
+  );
+  assert.ok(
+    submitSrc.indexOf('finishLocal(localJob, stream)') < submitSrc.indexOf('Core.createTodayJob({'),
+    'recording starts on the local draft before the office POST',
+  );
+}
 assert.match(
   appSrc,
   /function finishLocal\(job, stream\) \{\s*selectCreatedJob\(job\);\s*startRecordingForNewJob\(stream\);/,
@@ -264,6 +295,51 @@ assert.match(coreSrc, /opts\.stream/, 'recordDayFilm must reuse the stream from 
 assert.match(coreSrc, /function createTodayJob/);
 assert.match(coreSrc, /\/api\/field-app\/jobs/);
 assert.equal(typeof Core.createTodayJob, 'function');
+assert.equal(typeof Core.draftFieldJob, 'function');
+assert.equal(typeof Core.isLocalJobId, 'function');
+assert.equal(typeof Core.mergeTodayJobs, 'function');
+assert.equal(typeof Core.isTransientNetworkError, 'function');
+assert.equal(Core.isLocalJobId('local-123'), true);
+assert.equal(Core.isLocalJobId('new-1'), true);
+assert.equal(Core.isLocalJobId('job-real'), false);
+
+const draft = Core.draftFieldJob({ title: 'Camden Court', situation: 'Roof' });
+assert.equal(Core.isLocalJobId(draft.id), true);
+assert.equal(draft.name, 'Camden Court');
+assert.equal(draft.title, 'Camden Court');
+assert.equal(draft.situation, 'Roof');
+assert.equal(draft.pending, true);
+assert.ok(draft.createdAt);
+
+const memory = {
+  data: {},
+  getItem(key) { return Object.prototype.hasOwnProperty.call(this.data, key) ? this.data[key] : null; },
+  setItem(key, value) { this.data[key] = String(value); },
+  removeItem(key) { delete this.data[key]; },
+};
+Core.upsertPendingJob(draft, memory);
+assert.equal(Core.readPendingJobs(memory).length, 1);
+assert.equal(Core.readPendingJobs(memory)[0].id, draft.id);
+const officeJob = { id: 'job-1038', name: 'Meridian Ave' };
+assert.deepEqual(
+  Core.mergeTodayJobs([officeJob], [draft]).map((j) => j.id),
+  [draft.id, 'job-1038'],
+);
+Core.markPendingJobSynced(draft.id, officeJob, memory);
+assert.equal(Core.readPendingJobs(memory).length, 0);
+assert.deepEqual(Core.mergeTodayJobs([officeJob], []).map((j) => j.id), ['job-1038']);
+assert.equal(Core.isTransientNetworkError({ message: 'Failed to fetch' }), true);
+assert.equal(Core.isTransientNetworkError({ status: 503, message: 'Unavailable' }), true);
+assert.equal(Core.isTransientNetworkError({ status: 401, message: 'Unauthorized' }), false);
+assert.match(appSrc, /Core\.draftFieldJob/);
+assert.match(appSrc, /Core\.upsertPendingJob/);
+assert.match(appSrc, /function syncPendingJobs/);
+assert.match(appSrc, /function resolveActiveJobId/);
+assert.match(
+  appSrc,
+  /isTransientNetworkError\(err\) && cachedMe/,
+  'signed-in crew keep Today when the office API is unreachable',
+);
 assert.deepEqual(
   Core.filterJobs(
     [

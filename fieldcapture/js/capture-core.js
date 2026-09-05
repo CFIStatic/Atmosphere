@@ -1101,9 +1101,167 @@
     });
   }
 
+  var FIELD_PENDING_JOBS_KEY = 'atm.field.pendingJobs';
+  var FIELD_CACHED_JOBS_KEY = 'atm.field.cachedJobs';
+  var FIELD_CACHED_ME_KEY = 'atm.field.cachedMe';
+
+  function storageOf(store) {
+    if (store) return store;
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function readJsonStore(key, store) {
+    try {
+      var raw = storageOf(store) && storageOf(store).getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeJsonStore(key, value, store) {
+    try {
+      var s = storageOf(store);
+      if (!s) return false;
+      if (value == null) s.removeItem(key);
+      else s.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Phone-only ids — not yet a Platform job file. */
+  function isLocalJobId(id) {
+    var s = String(id || '');
+    return s.indexOf('local-') === 0 || s.indexOf('new-') === 0;
+  }
+
+  /**
+   * Name a job on the phone with zero connectivity. Recording can start
+   * against this draft; the office POST happens when signal returns.
+   */
+  function draftFieldJob(opts) {
+    opts = opts || {};
+    var title = String(opts.title || opts.name || '').trim();
+    var now = Date.now();
+    var rand = Math.random().toString(36).slice(2, 8);
+    return {
+      id: 'local-' + now + '-' + rand,
+      title: title,
+      name: title || 'Job',
+      situation: String(opts.situation || '').trim(),
+      address: '',
+      at: 'Today',
+      placed: true,
+      filmed: false,
+      pending: true,
+      createdAt: new Date(now).toISOString(),
+    };
+  }
+
+  function readPendingJobs(store) {
+    var raw = readJsonStore(FIELD_PENDING_JOBS_KEY, store);
+    return Array.isArray(raw) ? raw.filter(Boolean) : [];
+  }
+
+  function writePendingJobs(jobs, store) {
+    writeJsonStore(FIELD_PENDING_JOBS_KEY, Array.isArray(jobs) ? jobs : [], store);
+    return readPendingJobs(store);
+  }
+
+  function upsertPendingJob(job, store) {
+    if (!job || !job.id) return readPendingJobs(store);
+    var next = readPendingJobs(store).filter(function (j) {
+      return j.id !== job.id;
+    });
+    next.unshift(job);
+    return writePendingJobs(next, store);
+  }
+
+  function markPendingJobSynced(localId, serverJob, store) {
+    var pending = readPendingJobs(store).filter(function (j) {
+      return j.id !== localId;
+    });
+    writePendingJobs(pending, store);
+    return serverJob || null;
+  }
+
+  function readCachedJobs(store) {
+    var raw = readJsonStore(FIELD_CACHED_JOBS_KEY, store);
+    return Array.isArray(raw) ? raw.filter(Boolean) : [];
+  }
+
+  function writeCachedJobs(jobs, store) {
+    writeJsonStore(FIELD_CACHED_JOBS_KEY, Array.isArray(jobs) ? jobs : [], store);
+    return readCachedJobs(store);
+  }
+
+  function readCachedMe(store) {
+    var raw = readJsonStore(FIELD_CACHED_ME_KEY, store);
+    return raw && typeof raw === 'object' ? raw : null;
+  }
+
+  function writeCachedMe(me, store) {
+    writeJsonStore(FIELD_CACHED_ME_KEY, me || null, store);
+    return readCachedMe(store);
+  }
+
+  /** Local drafts stay visible even when the office list is empty or stale. */
+  function mergeTodayJobs(serverJobs, pendingJobs) {
+    var server = Array.isArray(serverJobs) ? serverJobs.filter(Boolean) : [];
+    var pending = Array.isArray(pendingJobs) ? pendingJobs.filter(Boolean) : [];
+    var serverIds = {};
+    server.forEach(function (j) {
+      if (j && j.id) serverIds[String(j.id)] = true;
+      if (j && j.serverId) serverIds[String(j.serverId)] = true;
+    });
+    var extras = pending.filter(function (j) {
+      if (!j) return false;
+      if (j.serverId && serverIds[String(j.serverId)]) return false;
+      if (j.id && serverIds[String(j.id)]) return false;
+      return isLocalJobId(j.id) || j.pending;
+    });
+    return extras.concat(server);
+  }
+
+  function isTransientNetworkError(err) {
+    if (!err) return false;
+    var status = err.status;
+    if (status === 502 || status === 503 || status === 504) return true;
+    if (typeof status === 'number' && status >= 400 && status < 500) return false;
+    var msg = String(err.message || err.name || '').toLowerCase();
+    return (
+      status == null ||
+      status === 0 ||
+      msg.indexOf('failed to fetch') >= 0 ||
+      msg.indexOf('network') >= 0 ||
+      msg.indexOf('offline') >= 0 ||
+      msg.indexOf('load failed') >= 0 ||
+      msg.indexOf('internet') >= 0
+    );
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     filterJobs: filterJobs,
+    isLocalJobId: isLocalJobId,
+    draftFieldJob: draftFieldJob,
+    readPendingJobs: readPendingJobs,
+    writePendingJobs: writePendingJobs,
+    upsertPendingJob: upsertPendingJob,
+    markPendingJobSynced: markPendingJobSynced,
+    readCachedJobs: readCachedJobs,
+    writeCachedJobs: writeCachedJobs,
+    readCachedMe: readCachedMe,
+    writeCachedMe: writeCachedMe,
+    mergeTodayJobs: mergeTodayJobs,
+    isTransientNetworkError: isTransientNetworkError,
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
     todayISO: todayISO,
