@@ -1,6 +1,8 @@
-import { act, render, screen } from '@testing-library/react';
+import { useEffect } from 'react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { VideoSeekProvider, useVideoSeek } from '../../lib/videoSeek';
 import type { ProofResponse } from '../../lib/api';
 
 const proofVideoUrl = vi.fn();
@@ -172,6 +174,36 @@ describe('ProofOfWork video collection', () => {
     expect(jobProofs.mock.calls.length).toBeGreaterThan(callsAfterMount);
     expect(screen.getByText(/New video filed on this job/i)).toBeInTheDocument();
     vi.useRealTimers();
+  });
+
+  it('opens the cited clip and seeks to the Analysis second', async () => {
+    function FireSeek() {
+      const { seek } = useVideoSeek();
+      useEffect(() => {
+        seek({ atSeconds: 18, proofId: 'proof-morning' });
+      }, [seek]);
+      return null;
+    }
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <VideoSeekProvider>
+        <FireSeek />
+        <ProofOfWork
+          jobId="job-1"
+          heading="Videos and analysis"
+          initialData={catalog}
+          videoFetcher={videoFetcher}
+          showCollectionAsk={false}
+        />
+      </VideoSeekProvider>,
+    );
+
+    await waitFor(() => {
+      expect(videoFetcher).toHaveBeenCalledWith('proof-morning');
+    });
+    const player = await screen.findByTestId('job-file-player');
+    expect(player).toHaveAttribute('src', 'https://signed.test/morning.mp4');
+    expect(player).toHaveAttribute('data-seek', '18');
   });
 
 });

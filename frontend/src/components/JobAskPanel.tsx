@@ -16,6 +16,12 @@ import {
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
+import {
+  analysisEventsFromProofs,
+  seekTargetFromAnswer,
+  splitAnswerCites,
+} from '../lib/askSeek';
+import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
 /** 10× a ~400ms instant reply so the typing dots do not flash and vanish. */
@@ -27,6 +33,38 @@ export async function waitOutAskHold(startedAt: number, holdMs = ASK_MIN_TYPING_
   await new Promise<void>((resolve) => {
     setTimeout(resolve, remaining);
   });
+}
+
+function AskAnswerBody({
+  text,
+  events,
+  onSeek,
+}: {
+  text: string;
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  const parts = splitAnswerCites(text, events);
+  return (
+    <p className="whitespace-pre-wrap leading-relaxed">
+      {parts.map((part, index) =>
+        part.kind === 'cite' && part.atSeconds != null ? (
+          <button
+            key={`${part.atSeconds}-${index}`}
+            type="button"
+            data-testid="ask-cite"
+            data-at={String(part.atSeconds)}
+            onClick={() => onSeek(part.atSeconds!)}
+            className="font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800"
+          >
+            {part.text}
+          </button>
+        ) : (
+          <span key={`t-${index}`}>{part.text}</span>
+        ),
+      )}
+    </p>
+  );
 }
 
 function SendIcon() {
@@ -91,6 +129,8 @@ export function JobAskPanel({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+  const lastSought = useRef<string | null>(null);
+  const { seek } = useVideoSeek();
   const record = file ? file.record : ownRecord;
   const proofs = file ? file.proofs : ownProofs;
   const preloaded = file !== undefined;
@@ -122,11 +162,27 @@ export function JobAskPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- record/proofs are the preloaded snapshot
   }, [jobId, preloaded]);
 
+  const analysisEvents = useMemo(() => analysisEventsFromProofs(proofs), [proofs]);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [turns, asking]);
+
+  useEffect(() => {
+    const last = [...turns].reverse().find((turn) => turn.role === 'assistant');
+    if (!last || last.id === lastSought.current) return;
+    const target = seekTargetFromAnswer({
+      answer: last.content,
+      events: analysisEvents,
+      groundedIds: last.groundedIds,
+      videos: proofs?.videos,
+    });
+    if (!target) return;
+    lastSought.current = last.id;
+    seek(target);
+  }, [turns, analysisEvents, proofs, seek]);
 
   const dossier = useMemo(
     () =>
@@ -149,6 +205,21 @@ export function JobAskPanel({
     hasMic: hasMicOnFile(proofs),
     hasNotes: (record?.messages.length ?? 0) > 0,
   });
+
+  function seekCite(turn: JobFileTurn, atSeconds: number) {
+    const target = seekTargetFromAnswer({
+      answer: turn.content,
+      events: analysisEvents,
+      groundedIds: turn.groundedIds,
+      videos: proofs?.videos,
+    });
+    seek({
+      atSeconds,
+      proofId: target?.proofId,
+      workDate: target?.workDate,
+      phase: target?.phase,
+    });
+  }
 
   async function ask(textRaw: string) {
     const text = textRaw.trim();
@@ -176,6 +247,7 @@ export function JobAskPanel({
           role: 'assistant',
           content: res.answer,
           groundedOn: res.groundedOn,
+          groundedIds: res.question?.grounded_on,
           model: res.model ?? res.question?.model,
           at: res.question?.created_at ?? now,
         },
@@ -262,7 +334,26 @@ export function JobAskPanel({
                       : 'max-w-[85%] rounded-2xl bg-paper-0 px-3.5 py-2 text-sm text-ink-800 shadow-card'
                   }
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
+                  {turn.role === 'assistant' ? (
+                    <AskAnswerBody
+                      text={turn.content}
+                      events={analysisEvents
+                        .filter((event) =>
+                          !turn.groundedIds?.length
+                            ? true
+                            : turn.groundedIds.some(
+                                (id) =>
+                                  id === event.proofId ||
+                                  id === `${event.workDate}:${event.phase}` ||
+                                  id === `${event.workDate}:clip`,
+                              ),
+                        )
+                        .map((event) => event.atSeconds)}
+                      onSeek={(atSeconds) => seekCite(turn, atSeconds)}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
+                  )}
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
                     <p className="mt-1.5 text-[11px] text-ink-400">
                       {turn.model ? `Live model · ${turn.model}` : 'From this job file'}

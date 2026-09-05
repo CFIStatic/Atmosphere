@@ -9,6 +9,8 @@ import {
   type WorkEpisodeListItem,
 } from '../../lib/api';
 import { bindMeasuredDuration, formatClipLength } from '../../lib/clipDuration';
+import { useVideoSeek } from '../../lib/videoSeek';
+import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
@@ -73,18 +75,40 @@ function label(key: string): string {
   return which ? `${which}: ${words[bare] ?? bare}` : (words[bare] ?? bare);
 }
 
+function matchSeekVideo(
+  videos: ProofVideoRecord[],
+  request: AskSeekTarget,
+): ProofVideoRecord | undefined {
+  if (request.proofId) {
+    const exact = videos.find((video) => video.id === request.proofId);
+    if (exact) return exact;
+  }
+  if (request.workDate) {
+    const onDay = videos.filter((video) => video.workDate === request.workDate);
+    if (request.phase) {
+      const phase = onDay.find((video) => video.phase === request.phase);
+      if (phase) return phase;
+    }
+    if (onDay[0]) return onDay[0];
+  }
+  return videos[0];
+}
+
 export function ProofOfWork({
   jobId,
   heading = 'Proof of work',
   readOnly = false,
   initialData,
   videoFetcher,
+  showCollectionAsk = true,
 }: {
   jobId?: string;
   heading?: string;
   readOnly?: boolean;
   initialData?: ProofResponse;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  /** Office job file already pins Ask — hide the second collection form. */
+  showCollectionAsk?: boolean;
 }) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -97,6 +121,9 @@ export function ProofOfWork({
   const [records, setRecords] = useState<Record<string, PhysicalWorkRecord>>({});
   const [freshNotice, setFreshNotice] = useState<string | null>(null);
   const knownVideoCount = useRef<number | null>(null);
+  const { request: seekRequest } = useVideoSeek();
+  const [seekProofId, setSeekProofId] = useState<string | null>(null);
+  const [seekAt, setSeekAt] = useState<number | null>(null);
 
   async function load(opts?: { silent?: boolean }) {
     if (initialData) {
@@ -154,6 +181,16 @@ export function ProofOfWork({
     enabled: Boolean(jobId) && !initialData,
     intervalMs: 12_000,
   });
+
+  useEffect(() => {
+    if (!seekRequest || !data?.videos?.length) return;
+    const video = matchSeekVideo(data.videos, seekRequest);
+    if (!video) return;
+    setSeekProofId(video.id);
+    setSeekAt(seekRequest.atSeconds);
+    const day = data.days.find((item) => item.proofIds.includes(video.id));
+    if (day) setOpenDay(`${day.partyId}|${day.workDate}`);
+  }, [seekRequest, data]);
 
   useEffect(() => {
     if (!openDay) return;
@@ -264,7 +301,12 @@ export function ProofOfWork({
         </p>
       ) : (
         <>
-        <VideoCatalog videos={data.videos ?? []} videoFetcher={videoFetcher} />
+        <VideoCatalog
+          videos={data.videos ?? []}
+          videoFetcher={videoFetcher}
+          seekProofId={seekProofId}
+          seekAt={seekAt}
+        />
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
             const on = openDay === `${day.partyId}|${day.workDate}`;
@@ -540,6 +582,8 @@ export function ProofOfWork({
                               : `Video ${i + 1}`
                           }
                           videoFetcher={videoFetcher}
+                          seekAt={seekProofId === id ? seekAt : null}
+                          autoOpen={seekProofId === id}
                         />
                       ))}
                     </div>
@@ -609,7 +653,7 @@ export function ProofOfWork({
 
       {/* Asking the record. Forty jobs and eighty videos a day is nobody's
           afternoon; a question against the summaries is. */}
-      {!readOnly && data && (data.days.length > 0 || (data.videos?.length ?? 0) > 0) && (
+      {!readOnly && showCollectionAsk && data && (data.days.length > 0 || (data.videos?.length ?? 0) > 0) && (
         <div className="mt-4 border-t border-line pt-3">
           <form onSubmit={ask} className="flex gap-2">
             <input
@@ -669,9 +713,13 @@ function statusWord(status: string | null, done: string): string {
 function VideoCatalog({
   videos,
   videoFetcher,
+  seekProofId,
+  seekAt,
 }: {
   videos: ProofVideoRecord[];
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  seekProofId?: string | null;
+  seekAt?: number | null;
 }) {
   if (!videos.length) return null;
   return (
@@ -708,7 +756,12 @@ function VideoCatalog({
                   <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
                 )}
               </div>
-              <PlayClip proofId={video.id} videoFetcher={videoFetcher} />
+              <PlayClip
+                proofId={video.id}
+                videoFetcher={videoFetcher}
+                seekAt={seekProofId === video.id ? seekAt : null}
+                autoOpen={seekProofId === video.id}
+              />
             </div>
           </li>
         ))}
@@ -720,9 +773,11 @@ function VideoCatalog({
 function MeasuredVideo({
   src,
   className,
+  seekTo,
 }: {
   src: string;
   className?: string;
+  seekTo?: number | null;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -730,7 +785,32 @@ function MeasuredVideo({
     if (!el) return;
     return bindMeasuredDuration(el);
   }, [src]);
-  return <video ref={ref} src={src} controls playsInline preload="metadata" className={className} />;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || seekTo == null || !Number.isFinite(seekTo)) return;
+    const apply = () => {
+      try {
+        el.currentTime = seekTo;
+      } catch {
+        /* playhead is decorative until the browser can seek */
+      }
+    };
+    if (el.readyState >= 1) apply();
+    else el.addEventListener('loadedmetadata', apply, { once: true });
+    return () => el.removeEventListener('loadedmetadata', apply);
+  }, [src, seekTo]);
+  return (
+    <video
+      ref={ref}
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+      data-testid="job-file-player"
+      data-seek={seekTo == null ? undefined : String(seekTo)}
+      className={className}
+    />
+  );
 }
 
 /**
@@ -740,13 +820,24 @@ function MeasuredVideo({
 function PlayClip({
   proofId,
   videoFetcher,
+  seekAt,
+  autoOpen = false,
 }: {
   proofId: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  seekAt?: number | null;
+  autoOpen?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!autoOpen || url || loading || failed) return;
+    void open();
+    // open() is stable for this proof
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen, proofId]);
 
   async function open() {
     setLoading(true);
@@ -765,7 +856,11 @@ function PlayClip({
   if (url) {
     return (
       <div className="basis-full sm:basis-64">
-        <MeasuredVideo src={url} className="block max-h-40 w-full rounded-lg bg-black" />
+        <MeasuredVideo
+          src={url}
+          seekTo={seekAt}
+          className="block max-h-40 w-full rounded-lg bg-black"
+        />
       </div>
     );
   }
@@ -799,14 +894,24 @@ function ProofVideo({
   proofId,
   label,
   videoFetcher,
+  seekAt,
+  autoOpen = false,
 }: {
   proofId: string;
   label: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  seekAt?: number | null;
+  autoOpen?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!autoOpen || url || loading || failed) return;
+    void open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen, proofId]);
 
   async function open() {
     setLoading(true);
@@ -841,7 +946,7 @@ function ProofVideo({
       </div>
 
       {url ? (
-        <MeasuredVideo src={url} className="block max-h-64 w-full bg-black" />
+        <MeasuredVideo src={url} seekTo={seekAt} className="block max-h-64 w-full bg-black" />
       ) : (
         <button
           onClick={() => void open()}

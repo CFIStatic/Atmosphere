@@ -43,6 +43,7 @@ export interface JobFileTurn {
   role: 'user' | 'assistant';
   content: string;
   groundedOn?: number;
+  groundedIds?: string[];
   model?: string | null;
   at: string;
 }
@@ -280,6 +281,7 @@ export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
           role: 'assistant',
           content: question.answer,
           groundedOn: question.grounded_on?.length,
+          groundedIds: question.grounded_on,
           model: question.model,
           at: question.created_at,
         });

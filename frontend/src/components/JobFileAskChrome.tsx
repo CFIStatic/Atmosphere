@@ -1,6 +1,7 @@
 import { isValidElement, useEffect, useState, type ReactNode } from 'react';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 import { usePhoneShell } from '../lib/usePhoneShell';
+import { VideoSeekProvider } from '../lib/videoSeek';
 import { TabPanel, Tabs } from '../design/Tabs';
 import { JobAskPanel, type JobAskFn } from './JobAskPanel';
 import type { ProofQuestion } from '../lib/api';
@@ -73,6 +74,7 @@ export function JobFileAskChrome({
   }, [jobId, initialPane]);
 
   return (
+    <VideoSeekProvider>
     <div
       className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden"
       data-testid="job-file"
@@ -136,5 +138,6 @@ export function JobFileAskChrome({
       )}
       {extra}
     </div>
+    </VideoSeekProvider>
   );
 }
