@@ -907,7 +907,7 @@
   <div class="screen" id="s-door">
     <div class="door">
       <h2>Checked at the door</h2>
-      <p class="sub">Before anyone watches it, your day is checked as evidence. You see the same checks the office sees.</p>
+      <p class="sub" id="door-sub">Filing this day with the office.</p>
       <div class="ledger" id="ledger">
         <div class="lrow" id="l1"><span>Filmed on site</span><em id="l1-d"></em><span class="ok">✓</span></div>
         <div class="lrow" id="l2"><span>Filmed live — not from your gallery</span><span class="ok">✓</span></div>
@@ -915,14 +915,11 @@
         <div class="lrow" id="l4"><span>Split across</span><em id="l4-d"></em><span class="ok">→</span></div>
       </div>
 
-      <h3 style="margin-top:22px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:750">
-        Your day, as the office will read it
-      </h3>
       <div class="tl" id="daytl"></div>
 
       <div class="doneline" id="doneline">
-        Your part is done.
-        <small id="doneline-copy">You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
+        Uploaded.
+        <small id="doneline-copy">The office can open it now.</small>
       </div>
     </div>
     <div class="door-actions" id="door-actions">
@@ -967,7 +964,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=clip-length"></script>
-<script src="js/app.js?v=clip-length"></script>
+<script src="js/capture-core.js?v=sync-upload"></script>
+<script src="js/app.js?v=sync-upload"></script>
 </body>
 </html>

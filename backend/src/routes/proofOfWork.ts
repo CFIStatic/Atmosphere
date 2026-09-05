@@ -59,6 +59,15 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
+import {
+  PROOF_ASSEMBLE_MAX_BYTES,
+  assertProofAssembleBudget,
+  partByteRange,
+  partObjectPath,
+  planProofChunks,
+  storageListEntryByteSize,
+  storageObjectByteSize,
+} from '../lib/proofUploadChunks.js';
 
 /**
  * Proof of work: the endpoints.
@@ -142,31 +151,184 @@ async function siteLocation(supabase: any, orgId: string, jobId: string) {
  * POST /api/job-share/:token/proof/upload-url
  * A short-lived signed URL to put the video straight into storage.
  */
-export async function createUploadUrl(
-  party: any,
-  admin: any,
-  body: unknown,
-): Promise<{ path: string; token: string; uploadUrl: string }> {
-  const input = z
-    .object({
-      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      phase: z.enum(['before', 'after']),
-      extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
-    })
-    .parse(body ?? {});
-
-  // Path carries the job and party so a leaked signed URL cannot be aimed at
-  // another job's folder. recordProof refuses any other storagePath.
-  const path = proofObjectPath(party, input);
-
+async function mintSignedUpload(admin: any, path: string) {
   const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
   });
   if (error || !(data as { signedUrl?: string } | null)?.signedUrl) {
     throw new HttpError(500, error?.message ?? 'Could not mint upload URL', 'upload_url_failed');
   }
-  const signed = data as { signedUrl: string; token: string };
-  return { path, token: signed.token, uploadUrl: signed.signedUrl };
+  return data as { signedUrl: string; token: string };
+}
+
+export type ProofUploadPart = {
+  index: number;
+  start: number;
+  end: number;
+  path: string;
+  token: string;
+  uploadUrl: string;
+};
+
+export async function createUploadUrl(
+  party: any,
+  admin: any,
+  body: unknown,
+): Promise<{
+  path: string;
+  token: string;
+  uploadUrl: string;
+  chunkSize: number;
+  parts?: ProofUploadPart[];
+}> {
+  const input = z
+    .object({
+      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      phase: z.enum(['before', 'after']),
+      extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
+      byteSize: z.number().int().positive().max(8 * 1024 * 1024 * 1024).optional(),
+    })
+    .parse(body ?? {});
+
+  // Path carries the job and party so a leaked signed URL cannot be aimed at
+  // another job's folder. recordProof refuses any other storagePath.
+  const path = proofObjectPath(party, input);
+  const signed = await mintSignedUpload(admin, path);
+  const plan = planProofChunks(input.byteSize ?? 0);
+  const slot: {
+    path: string;
+    token: string;
+    uploadUrl: string;
+    chunkSize: number;
+    parts?: ProofUploadPart[];
+  } = {
+    path,
+    token: signed.token,
+    uploadUrl: signed.signedUrl,
+    chunkSize: plan.chunkSize,
+  };
+
+  if (plan.multipart && input.byteSize) {
+    const parts: ProofUploadPart[] = [];
+    for (let i = 0; i < plan.chunkCount; i += 1) {
+      const range = partByteRange(plan.byteSize, plan.chunkSize, i);
+      const partPath = partObjectPath(path, i);
+      const part = await mintSignedUpload(admin, partPath);
+      parts.push({
+        index: i,
+        start: range.start,
+        end: range.end,
+        path: partPath,
+        token: part.token,
+        uploadUrl: part.signedUrl,
+      });
+    }
+    slot.parts = parts;
+  }
+
+  return slot;
+}
+
+const completeChunksSchema = z.object({
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  phase: z.enum(['before', 'after']),
+  storagePath: z.string().min(1).max(500),
+  partCount: z.number().int().min(2).max(128),
+});
+
+/**
+ * Metadata size of one storage object. Must run before `download()` so an
+ * oversized `.parts/` PUT cannot enter the BFF heap.
+ */
+export async function listedProofObjectBytes(
+  admin: any,
+  objectPath: string,
+): Promise<{ found: boolean; bytes: number | null }> {
+  const slash = objectPath.lastIndexOf('/');
+  const folder = slash >= 0 ? objectPath.slice(0, slash) : '';
+  const name = slash >= 0 ? objectPath.slice(slash + 1) : objectPath;
+  const { data, error } = await admin.storage.from(PROOF_BUCKET).list(folder, {
+    search: name,
+    limit: 50,
+  });
+  if (error) return { found: false, bytes: null };
+  const row = ((data ?? []) as unknown[]).find((entry) => {
+    return Boolean(entry && typeof entry === 'object' && (entry as { name?: string }).name === name);
+  });
+  if (!row) return { found: false, bytes: null };
+  return { found: true, bytes: storageListEntryByteSize(row) };
+}
+
+/**
+ * Concatenate part objects the phone already PUT to storage. The day film
+ * itself never entered this process — only the already-stored slices.
+ */
+export async function completeChunkedProofUpload(
+  party: any,
+  admin: any,
+  body: unknown,
+  options?: { maxBytes?: number },
+): Promise<{ path: string; byteSize: number }> {
+  const input = completeChunksSchema.parse(body ?? {});
+  const path = assertOwnedProofStoragePath(party, input);
+  const maxBytes = options?.maxBytes ?? PROOF_ASSEMBLE_MAX_BYTES;
+  const buffers: Buffer[] = [];
+  const partPaths: string[] = [];
+  let received = 0;
+  for (let i = 0; i < input.partCount; i += 1) {
+    const partPath = partObjectPath(path, i);
+    partPaths.push(partPath);
+    const listed = await listedProofObjectBytes(admin, partPath);
+    if (!listed.found) {
+      throw new HttpError(409, `Upload part ${i + 1} did not land. Retry that slice.`, 'upload_part_missing');
+    }
+    if (listed.bytes == null) {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
+    try {
+      assertProofAssembleBudget(received, listed.bytes, maxBytes);
+    } catch {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
+    const { data, error } = await admin.storage.from(PROOF_BUCKET).download(partPath);
+    if (error || !data) {
+      throw new HttpError(409, `Upload part ${i + 1} did not land. Retry that slice.`, 'upload_part_missing');
+    }
+    const hinted = storageObjectByteSize(data);
+    if (hinted != null) {
+      try {
+        assertProofAssembleBudget(received, hinted, maxBytes);
+      } catch {
+        throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+      }
+    }
+    const bytes = Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(await (data as Blob).arrayBuffer());
+    if (bytes.length > listed.bytes) {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
+    try {
+      received = assertProofAssembleBudget(received, bytes.length, maxBytes);
+    } catch {
+      throw new HttpError(413, 'That day film is too large to assemble here.', 'upload_too_large');
+    }
+    buffers.push(bytes);
+  }
+  const assembled = Buffer.concat(buffers);
+  const { error: upErr } = await admin.storage.from(PROOF_BUCKET).upload(path, assembled, {
+    contentType: 'application/octet-stream',
+    upsert: true,
+  });
+  if (upErr) {
+    throw new HttpError(500, upErr.message, 'upload_assemble_failed');
+  }
+  try {
+    await admin.storage.from(PROOF_BUCKET).remove(partPaths);
+  } catch {
+    /* leftover parts are overwritten on the next attempt */
+  }
+  return { path, byteSize: assembled.length };
 }
 
 const recordSchema = z.object({

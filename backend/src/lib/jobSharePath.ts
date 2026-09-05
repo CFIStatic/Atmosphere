@@ -20,6 +20,7 @@ export const JOB_SHARE_API_PREFIX = '/api/job-share';
 
 export const JOB_SHARE_ACTIONS = [
   '/proof/upload-url',
+  '/proof/upload-complete',
   '/capture-guide',
   '/proof',
   '/accept',

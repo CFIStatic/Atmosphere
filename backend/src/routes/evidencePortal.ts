@@ -40,6 +40,7 @@ import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
+import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -696,7 +697,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
 
     res.json({
       items,
-      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person }) => ({
+      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person, createdAt }) => ({
         jobId,
         jobName,
         jobNumber,
@@ -704,6 +705,8 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         claimNumber,
         company,
         person,
+        createdAt: createdAt ?? null,
+        captureStatus: libraryJobCaptureStatus(lastWorkDateByJob.has(jobId)),
       })),
       counts: {
         total: items.length,
