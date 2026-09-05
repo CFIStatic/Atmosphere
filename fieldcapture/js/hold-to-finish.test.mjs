@@ -105,10 +105,13 @@ assert.match(html, /id="platform-frame"/);
 assert.match(html, /max-width: 480px/, 'the web frame stays phone-width');
 assert.match(
   html,
-  /id="platform-link"[^>]*href="https:\/\/platform\.atmosphereteam\.com\/verifier-library\?embed=field"/,
+  /id="platform-link"[^>]*href="https:\/\/platform\.atmosphereteam\.com\/verifier-library\?embed=field&amp;v=no-overview-back-2"/,
   'standalone Field Capture must not use /field — that path is this same app',
 );
-assert.equal(Core.resolveOfficePlatformHref('/verifier-library'), '/verifier-library?embed=field');
+assert.equal(
+  Core.resolveOfficePlatformHref('/verifier-library'),
+  '/verifier-library?embed=field&v=no-overview-back-2',
+);
 assert.equal(Core.withFieldEmbed('/verifier-library'), '/verifier-library?embed=field');
 assert.equal(
   Core.localOfficeOrigin('?office=http://127.0.0.1:5174'),
@@ -135,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=sync-upload/);
-assert.match(html, /js\/app\.js\?v=sync-upload/);
+assert.match(html, /js\/capture-core\.js\?v=no-overview-back-2/);
+assert.match(html, /js\/app\.js\?v=no-overview-back-2/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');

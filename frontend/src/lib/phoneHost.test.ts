@@ -108,6 +108,8 @@ describe('phone home-screen manifests', () => {
     expect(core).toContain('function resolveOfficeHref');
     expect(core).toContain('function localOfficeOrigin');
     expect(core).toContain('embed=field');
+    expect(core).toContain('v=no-overview-back-2');
+    expect(htmlFromField).toContain('v=no-overview-back-2');
   });
 
   it('does not show a shared-account note on the Field Capture sign-in screen', () => {

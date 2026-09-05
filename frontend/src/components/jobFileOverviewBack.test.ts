@@ -74,6 +74,25 @@ describe('job file chrome has no Overview back', () => {
     expect(hits).toEqual([]);
   });
 
+  it('does not paint an Overview back inside Field Capture itself', () => {
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(html).toContain('No back button');
+    expect(html).not.toMatch(/>\s*Overview\s*</);
+    expect(html).not.toContain('ChevronLeft');
+    expect(app).not.toMatch(/>\s*Overview\s*</);
+    expect(app).not.toContain("navigate('/field')");
+  });
+
+  it('stamps a new office HTML/JS build so phones drop a cached index hash', () => {
+    const html = readFileSync(resolve(repoRoot, 'frontend/index.html'), 'utf8');
+    const stamp = read('../lib/officeHtmlBuild.ts');
+    const main = read('../main.tsx');
+    expect(stamp).toContain("export const OFFICE_HTML_BUILD = 'no-overview-back-2'");
+    expect(html).toContain('name="atmosphere-build" content="no-overview-back-2"');
+    expect(main).toContain('OFFICE_HTML_BUILD');
+  });
+
   it('only JobDetailPage among JobFileAskChrome callers passes back', () => {
     const callers = walk(frontendSrc).filter((file) => {
       if (file.endsWith('JobFileAskChrome.tsx') || file.endsWith('.test.tsx') || file.endsWith('.test.ts')) {

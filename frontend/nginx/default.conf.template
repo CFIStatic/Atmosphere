@@ -92,7 +92,21 @@ server {
   }
 
   location /fieldcapture/ {
+    add_header Cache-Control "no-store";
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
     try_files $uri $uri/ /fieldcapture/index.html;
+  }
+
+  # Direct /index.html and the PWA start URL must never keep a stale script
+  # tag that still names an old /assets/index-*.js (the hashed files
+  # themselves stay immutable below).
+  location = /index.html {
+    add_header Cache-Control "no-store";
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+  }
+
+  location = /manifest.webmanifest {
+    add_header Cache-Control "no-store";
   }
 
   location / {
