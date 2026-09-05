@@ -21,6 +21,9 @@ describe('ProcessingOrchestrator.reclaimPending', () => {
             in() {
               return this;
             },
+            or() {
+              return this;
+            },
             order() {
               return this;
             },

@@ -1,15 +1,20 @@
 /**
- * After a process restart, video_processing_jobs rows are still pending in
- * Postgres but the in-memory RetryQueue is empty. Reclaim them once at boot.
- * The proof-analysis sweep already does the same for narration / transcript.
+ * Reclaim verification work that is still pending in Postgres after the
+ * in-memory RetryQueue was lost (process restart or mid-job crash).
+ *
+ * Boot runs this once. startVerificationLeaseSweep repeats it so a live
+ * replica can steal rows whose lease_until has passed.
  */
 
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { logger } from '../lib/logger.js';
 import { getVerificationOrchestrator } from './factory.js';
+import { VERIFICATION_RECLAIM_INTERVAL_MS } from './lease.js';
+
+let timer: ReturnType<typeof setInterval> | null = null;
 
 export async function reclaimPendingVerificationJobs(): Promise<number> {
-  const admin = createAdminClient();
+  const admin = unscopedAdminOrNull();
   if (!admin) return 0;
   try {
     const n = await getVerificationOrchestrator().reclaimPending(admin);
@@ -20,5 +25,21 @@ export async function reclaimPendingVerificationJobs(): Promise<number> {
       detail: err instanceof Error ? err.message : String(err),
     });
     return 0;
+  }
+}
+
+export function startVerificationLeaseSweep(): void {
+  if (timer) return;
+  void reclaimPendingVerificationJobs();
+  timer = setInterval(() => {
+    void reclaimPendingVerificationJobs();
+  }, VERIFICATION_RECLAIM_INTERVAL_MS);
+  timer.unref?.();
+}
+
+export function stopVerificationLeaseSweep(): void {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
   }
 }

@@ -14,7 +14,7 @@ import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { leftoverSurfaceSummary, resolveLeftoverSurfaces } from './lib/platformSurfaces.js';
 import { initSentry } from './lib/sentry.js';
-import { reclaimPendingVerificationJobs } from './verification/reclaim.js';
+import { startVerificationLeaseSweep, stopVerificationLeaseSweep } from './verification/reclaim.js';
 import { askProviderLabel } from './lib/askModel.js';
 import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
@@ -65,7 +65,7 @@ const server = app.listen(config.port, host, () => {
 
   if (leftover.cyber) startCyberScheduler();
 
-  void reclaimPendingVerificationJobs();
+  startVerificationLeaseSweep();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -81,6 +81,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     logger.info('shutdown', { signal });
     // Subsystems that hold resources the process should not simply drop.
     stopScheduler();
+    stopVerificationLeaseSweep();
     stopProofAnalysisSweep();
     stopCaptureAgent();
     stopBackupScheduler();

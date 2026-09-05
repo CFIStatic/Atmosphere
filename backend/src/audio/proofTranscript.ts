@@ -12,9 +12,10 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAdminClient } from '../lib/supabase.js';
+import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
 import { transcriptionEnabled, transcribeAudio } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 
 const PROOF_BUCKET = 'job-proofs';
 
@@ -166,7 +167,14 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     return;
   }
 
-  await admin.from('job_proofs').update({ transcript_status: 'running' }).eq('id', proofId);
+  await admin
+    .from('job_proofs')
+    .update({
+      transcript_status: 'running',
+      transcript_lease_owner: leaseOwnerId(),
+      transcript_lease_until: leaseUntilIso(),
+    })
+    .eq('id', proofId);
 
   const { data: proof, error } = await admin
     .from('job_proofs')
@@ -222,6 +230,7 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
         transcript_status: 'skipped',
         transcript_error: 'No usable audio track on this clip.',
         transcript_text: null,
+        transcript_lease_until: null,
       })
       .eq('id', proofId);
     return;
@@ -234,24 +243,38 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
       transcript_text: parts.join('\n').slice(0, MAX_TRANSCRIPT_CHARS),
       transcript_error: null,
       transcribed_at: new Date().toISOString(),
+      transcript_lease_until: null,
     })
     .eq('id', proofId);
 }
 
+async function adminForProof(proofId: string) {
+  const raw = unscopedAdminOrNull();
+  if (!raw) return null;
+  const { data } = await raw
+    .from('job_proofs')
+    .select('org_id, job_id')
+    .eq('id', proofId)
+    .maybeSingle();
+  if (!data?.org_id || !data?.job_id) return raw;
+  return writerForJob({ orgId: data.org_id as string, jobId: data.job_id as string }, raw).raw;
+}
+
 const transcriptQueue = new RetryQueue<TranscriptJob>({
   run: async (job) => {
-    const admin = createAdminClient();
+    const admin = await adminForProof(job.proofId);
     if (!admin) throw new Error('Storage is not configured.');
     await transcribeProofVideo(admin, job.proofId);
   },
   onGaveUp: async (job, error) => {
-    const admin = createAdminClient();
+    const admin = await adminForProof(job.proofId);
     if (!admin) return;
     await admin
       .from('job_proofs')
       .update({
         transcript_status: 'failed',
         transcript_error: error instanceof Error ? error.message : 'Transcription failed.',
+        transcript_lease_until: null,
       })
       .eq('id', job.proofId);
   },
