@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-app-origin="https://platform.atmosphereteam.com">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,7 +10,9 @@
   <meta property="og:description" content="Atmosphere — Work Verification for service contractors. Field Capture films daily work on site; the Evidence Platform checks, reads, and holds it in a chain of custody you can hand to a customer or partner." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
-  <meta property="og:image" content="/assets/og.png" />
+  <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
+  <link rel="canonical" href="https://atmosphereteam.com/" />
+  <meta property="og:url" content="https://atmosphereteam.com/" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css?v=20260825-logo" />
@@ -26,7 +28,7 @@
     </a>
     <div class="nav-links">
       <div class="nav-item">
-        <a href="how-it-works.html" data-nav="platform">Product <span class="caret" aria-hidden="true"></span></a>
+        <a href="how-it-works.html" data-nav="product">Product <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
           <a href="how-it-works.html">How it works <span>The full pipeline — film to share</span></a>
           <a href="field.html">Field Capture <span>Film and check work on site</span></a>
@@ -183,147 +185,6 @@
   </div>
 </section>
 
-<!-- Later product (Estimator). Hidden while the Work Verification Platform is the sole focus. -->
-<section class="section" id="unbilled" hidden>
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Recovered, not estimated</div>
-      <h2>Money already earned, put back on the invoice</h2>
-      <p>
-        Work performed but never billed is the quietest leak in the trade — the labor's
-        paid, the line item never lands. Every estimate Atmosphere builds is read back
-        against the job's own record, and what was missed goes on the bill.
-      </p>
-    </div>
-
-    <!--
-      PUBLIC CLAIM — REAL NUMBERS ONLY.
-
-      The counter reads these four attributes and nothing else. They are the
-      running totals of recovery findings from the audit ledger: the same
-      figures a customer can replay run by run. Fill them in from the ledger
-      before launch, never round them up, and update the as-of date whenever
-      the totals move.
-
-      While `data-recovered` is 0 the section renders a visible placeholder
-      instead of a total, so an unfilled counter can never read as a claim.
-    -->
-    <div class="recovery"
-         id="recovery"
-         data-recovered="0"
-         data-jobs="0"
-         data-largest="0"
-         data-asof="">
-      <div class="recovery-main">
-        <div class="eyebrow mono">Recovered for customers to date</div>
-        <div class="odometer" id="rec-total" aria-live="polite">$0</div>
-        <p class="recovery-sub">
-          Found by the Estimator reading work back against the record, and confirmed by
-          a second agent before it reached an invoice.
-          <span class="mono recovery-asof" id="rec-asof"></span>
-        </p>
-        <div class="recovery-stats">
-          <div class="rstat">
-            <div class="rstat-n mono" id="rec-jobs">0</div>
-            <div class="rstat-l mono">Jobs read back</div>
-          </div>
-          <div class="rstat">
-            <div class="rstat-n mono" id="rec-avg">$0</div>
-            <div class="rstat-l mono">Average per job</div>
-          </div>
-          <div class="rstat">
-            <div class="rstat-n mono" id="rec-largest">$0</div>
-            <div class="rstat-l mono">Largest single find</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="recovery-cta">
-        <div class="eyebrow mono">Your turn</div>
-        <p class="recovery-pitch">
-          Every job you have already closed carries its own record. Point the Estimator
-          at the next one and see what it reads back.
-        </p>
-        <a class="btn btn-lg" href="signup.html">Go get it — create your organization</a>
-        <p class="recovery-fine mono">$599/month · Field Capture + Evidence Platform · plus usage</p>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    (function () {
-      var el = document.getElementById('recovery');
-      if (!el) return;
-
-      var total = Number(el.dataset.recovered) || 0;
-      var jobs = Number(el.dataset.jobs) || 0;
-      var largest = Number(el.dataset.largest) || 0;
-      var avg = jobs > 0 ? Math.round(total / jobs) : 0;
-
-      function usd(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
-
-      var asof = document.getElementById('rec-asof');
-      if (asof && el.dataset.asof) asof.textContent = 'as of ' + el.dataset.asof;
-
-      // No totals filled in yet: say so plainly rather than animate a zero,
-      // which would read as "we have recovered nothing".
-      if (total <= 0) {
-        el.classList.add('recovery-unset');
-        document.getElementById('rec-total').textContent = 'Not published yet';
-        document.getElementById('rec-jobs').textContent = '—';
-        document.getElementById('rec-avg').textContent = '—';
-        document.getElementById('rec-largest').textContent = '—';
-        return;
-      }
-
-      // The count-up is decoration; the figures are set immediately for anyone
-      // who asked for less motion, and for anything that never runs the timer.
-      function settle() {
-        document.getElementById('rec-total').textContent = usd(total);
-        document.getElementById('rec-jobs').textContent = jobs.toLocaleString('en-US');
-        document.getElementById('rec-avg').textContent = usd(avg);
-        document.getElementById('rec-largest').textContent = usd(largest);
-      }
-
-      var still = !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (still || !('IntersectionObserver' in window) || !window.requestAnimationFrame) {
-        settle();
-        return;
-      }
-
-      var ran = false;
-      function run() {
-        if (ran) return;
-        ran = true;
-        var start = null;
-        var ms = 1100;
-        function frame(now) {
-          if (start === null) start = now;
-          var p = Math.min(1, (now - start) / ms);
-          // Ease out: the number decelerates into its real value rather than
-          // stopping dead, which is what makes it read as a total and not a tally.
-          var e = 1 - Math.pow(1 - p, 3);
-          document.getElementById('rec-total').textContent = usd(total * e);
-          document.getElementById('rec-jobs').textContent =
-            Math.ceil(jobs * e).toLocaleString('en-US');
-          document.getElementById('rec-avg').textContent = usd(avg * e);
-          document.getElementById('rec-largest').textContent = usd(largest * e);
-          if (p < 1) window.requestAnimationFrame(frame);
-          else settle();
-        }
-        window.requestAnimationFrame(frame);
-      }
-
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) { run(); io.disconnect(); }
-        });
-      }, { rootMargin: '0px 0px -20% 0px' });
-      io.observe(el);
-    })();
-  </script>
-</section>
-
 <section class="section" id="platform-overview">
   <div class="wrap">
     <div class="section-head">
@@ -342,7 +203,7 @@
         <div class="tag mono">01 · On site</div>
         <h3>Field Capture</h3>
         <p class="plat-line">Film the job</p>
-        <p>Record, speak, and let the camera name what it sees — built for gloved hands and loud rooms.</p>
+        <p>Film before-and-after clips against the shot list, then upload them to the Evidence Platform — built for gloved hands and loud rooms.</p>
         <span class="plat-go">Explore&nbsp;→</span>
       </a>
       <a class="feature plat-card" href="verification.html">

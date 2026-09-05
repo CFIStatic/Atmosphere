@@ -72,11 +72,15 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Stamp absolute URLs with the Pages origin
+      - name: Keep canonical atmosphereteam.com URLs
         run: |
-          base="${{ steps.pages.outputs.base_url }}"
-          sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${base}|g" website/sitemap.xml website/robots.txt
-          sed -i "s|content=\"/assets/og.png\"|content=\"${base}/assets/og.png\"|g" website/*.html
+          # Sitemap, robots, and og:image are already absolute on the
+          # public host. Fill any leftover placeholder only — never rewrite
+          # them to the GitHub Pages origin.
+          sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|https://atmosphereteam.com|g" \
+            website/sitemap.xml website/robots.txt
+          sed -i "s|content=\"/assets/og.png\"|content=\"https://atmosphereteam.com/assets/og.png\"|g" \
+            website/*.html
 
       # The careers and contact forms post to the backend. On a static host
       # that is a different origin — set the WEBSITE_API_ORIGIN repository
@@ -89,14 +93,14 @@ jobs:
           sed -i "s|data-api=\"\"|data-api=\"${{ vars.WEBSITE_API_ORIGIN }}\"|" \
             website/careers.html website/contact.html
 
-      # The bridge from marketing to product. Set the WEBSITE_APP_ORIGIN
-      # repository variable to the hosted app's https origin and every
-      # sign-in / get-started CTA on the site routes into the real app
-      # (site.js reads the stamp and rewrites the auth surfaces).
+      # Default auth origin is baked as https://platform.atmosphereteam.com.
+      # Set WEBSITE_APP_ORIGIN to override (staging, a different host).
       - name: Connect auth surfaces to the hosted app
-        if: vars.WEBSITE_APP_ORIGIN != ''
         run: |
-          sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${{ vars.WEBSITE_APP_ORIGIN }}\">|" \
+          origin="${{ vars.WEBSITE_APP_ORIGIN || 'https://platform.atmosphereteam.com' }}"
+          sed -i \
+            -e "s|data-app-origin=\"[^\"]*\"|data-app-origin=\"${origin}\"|" \
+            -e "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${origin}\">|" \
             website/*.html
 
       - uses: actions/upload-pages-artifact@v3
