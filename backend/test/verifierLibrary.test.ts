@@ -347,6 +347,58 @@ test('serialization: timestamped narration_text becomes multiple dictationEntrie
   assert.match(String(entries[1]?.text), /monitors/i);
 });
 
+test('serialization: a lone 0-second blob is not sent to the Analysis list', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-office-zero',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'walkthrough',
+      work_date: '2026-09-01',
+      captured_at: '2026-09-01T15:20:00Z',
+      received_at: '2026-09-01T15:21:00Z',
+      duration_seconds: '24',
+      byte_size: '4200000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'office-zero',
+      state: 'checked',
+      checks: [],
+      ai_summary: 'An office desk with two monitors and a laptop.',
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'gemini',
+      analysis_status: 'done',
+      narration_status: 'done',
+      narration_text:
+        'At 0 seconds, the camera captures fluorescent ceiling lights, two monitors, and a spreadsheet in one long look.',
+      narration: {
+        entries: [
+          {
+            atSeconds: 0,
+            text: 'At 0 seconds, the camera captures fluorescent ceiling lights, two monitors, and a spreadsheet in one long look.',
+          },
+        ],
+        model: 'gemini',
+      },
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Mobil test one 1111',
+    jobNumber: 1111,
+    company: 'Field Capture',
+    contactName: 'Marcus',
+    tier: 1,
+    dayHasAfter: false,
+  });
+
+  const entries = (item.analysis as { dictationEntries?: Array<{ atSeconds?: number; text?: string }> } | null)
+    ?.dictationEntries ?? [];
+  assert.equal(entries.length, 0);
+  assert.match(String(item.analysis?.summary), /office desk/i);
+});
+
 test('serialization: leftover dictation is still Askable even if status never flipped to done', () => {
   const item = serializeEvidence({
     proof: {

@@ -60,9 +60,8 @@ describe('verifier clip Ask tab and live analysis', () => {
 
   it('shows what the AI saw on the Analysis tab without requiring playback', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
-    expect(verifierHtml).toContain('Event analysis');
     expect(verifierHtml).toContain('function parseTimestampedEvents');
-    expect(verifierHtml).toContain('You do not have to watch the clip');
+    expect(verifierHtml).toContain('function displayEvents');
     expect(verifierHtml).toContain('function watchRemoteReading');
     expect(verifierHtml).toContain('data-full=');
     expect(verifierHtml).not.toContain('<h4>AI analysis</h4>');
@@ -70,7 +69,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function jobOverviewParts');
     expect(verifierHtml).toContain('id="d-job-summary"');
     expect(verifierHtml).toContain('id="d-analysis-lead"');
-    expect(verifierHtml.indexOf('id="d-analysis-lead"')).toBeLessThan(verifierHtml.indexOf('id="d-saw"'));
+    expect(verifierHtml).toContain('analysis-skel');
+    expect(verifierHtml).toContain('saw-k">Events');
   });
 
   it('answers clip questions from the reading of that clip', () => {
@@ -100,8 +100,8 @@ describe('verifier clip Ask tab and live analysis', () => {
       (el) => (el.textContent || '').trim(),
     );
     expect(tabLabels).toEqual(['Analysis', 'Ask', 'Details']);
-    expect(document.getElementById('d-saw')).not.toBeNull();
-    expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog-pill')).toBeNull();
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis/i);
     expect(document.getElementById('alog')).not.toBeNull();
@@ -139,7 +139,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    expect(document.getElementById('d-saw')?.textContent).toMatch(/bathroom/i);
+    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/bathroom/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/bathroom/i);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
     askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -204,7 +205,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(panel).not.toMatch(
       /Viewing an office desk setup with multiple active computer screens/i,
     );
-    expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog')?.textContent).toMatch(/tarp gone/i);
     dom.window.close();
   });
@@ -220,21 +221,18 @@ describe('verifier clip Ask tab and live analysis', () => {
 
     const summary = document.getElementById('d-job-summary');
     const lead = document.getElementById('d-analysis-lead');
-    const saw = document.getElementById('d-saw');
     const alog = document.getElementById('alog');
     expect(summary).not.toBeNull();
     expect(lead).not.toBeNull();
-    expect(saw).not.toBeNull();
     expect(alog).not.toBeNull();
-    expect(summary!.compareDocumentPosition(lead!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(lead!.compareDocumentPosition(saw!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(saw!.compareDocumentPosition(alog!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary!.compareDocumentPosition(alog!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(alog!.compareDocumentPosition(lead!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(summary!.textContent).toMatch(/north slope/i);
     expect(summary!.textContent).toMatch(/garage panel/i);
     expect(lead!.textContent).toMatch(/never an acceptance/i);
-    expect(saw!.textContent).toMatch(/Looking at the after clip/i);
     expect(alog!.textContent).toMatch(/tarp gone/i);
-    expect(document.querySelector('#d-panel > .footnote:last-child')).toBeNull();
+    expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
     dom.window.close();
   });
 
@@ -249,6 +247,8 @@ describe('verifier clip Ask tab and live analysis', () => {
 
     expect(document.getElementById('alog-pill')).toBeNull();
     expect(document.querySelector('.alog-wait')?.textContent).toMatch(/Queued for analysis/i);
+    expect(document.querySelector('.analysis-skel')).not.toBeNull();
+    expect(document.querySelector('.analysis-status')?.getAttribute('data-status')).toBe('pending');
     expect(document.getElementById('d-saw')).toBeNull();
     expect(document.getElementById('d-analysis-lead')).toBeNull();
     expect(document.getElementById('d-job-summary')?.textContent).toMatch(/board is hung|single wall/i);
@@ -299,21 +299,62 @@ describe('verifier clip Ask tab and live analysis', () => {
     const summary = document.getElementById('d-job-summary');
     const lead = document.getElementById('d-analysis-lead');
     const alog = document.getElementById('alog');
-    expect(summary?.textContent).toMatch(/office setup|monitors/i);
+    expect(summary?.textContent).toMatch(/office desk|monitors/i);
+    expect(summary?.textContent).not.toMatch(/The video shows/i);
     expect(lead?.textContent).toMatch(/never an acceptance/i);
     expect(document.getElementById('d-saw')).toBeNull();
     const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
-    expect(notes.map((el) => el.getAttribute('data-at'))).toEqual(['0', '8', '18']);
-    expect(alog?.textContent).toMatch(/0:00/);
+    expect(notes.map((el) => el.getAttribute('data-at'))).toEqual(['8', '18']);
+    expect(alog?.textContent).not.toMatch(/0:00/);
     expect(alog?.textContent).toMatch(/0:08/);
     expect(alog?.textContent).toMatch(/0:18/);
     expect(alog?.textContent).toMatch(/spreadsheet/i);
-    expect(document.getElementById('d-panel')?.textContent).toMatch(/Event analysis/i);
+    expect(alog?.textContent).toMatch(/scene|activity/i);
+    expect(
+      Array.from(document.querySelectorAll('#d-panel .saw-k')).some((el) => el.textContent === 'Events'),
+    ).toBe(true);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds, the camera captures/i);
 
     const second = notes[1] as HTMLElement;
     second.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-    expect(second.getAttribute('data-at')).toBe('8');
+    expect(second.getAttribute('data-at')).toBe('18');
+    dom.window.close();
+  });
+
+  it('hides a lone 0-second analysis blob and keeps the job summary', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1112-0905-Z"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/office desk/i);
+    expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.getElementById('alog')).toBeNull();
+    expect(document.getElementById('alog-empty')?.textContent).toMatch(/No distinct moments/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/0:00/);
+    expect(document.getElementById('d-analysis-lead')?.textContent).toMatch(/never an acceptance/i);
+    dom.window.close();
+  });
+
+  it('shows a failed Analysis state as a status, not a broken empty panel', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1044-0731-F"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.querySelector('.analysis-status')?.getAttribute('data-status')).toBe('failed');
+    expect(document.querySelector('.analysis-status-title')?.textContent).toMatch(/Reading failed/i);
+    expect(document.querySelector('.alog-wait')?.textContent).toMatch(/failed after retries/i);
+    expect(document.getElementById('alog')).toBeNull();
+    expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds/i);
     dom.window.close();
   });
 

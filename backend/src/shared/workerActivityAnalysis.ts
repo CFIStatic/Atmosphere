@@ -9,7 +9,7 @@
  * Money, hours, and payability stay out of the model prompt either way.
  */
 
-import { narrationEntriesFromEvents } from './dictationEvents.js';
+import { narrationEntriesFromEvents, sanitizeDictationEvents } from './dictationEvents.js';
 import { dictatePreparedFrames, type PreparedVideoFrames, type VideoDictationResult } from './videoIntelligence.js';
 
 export function scopeContextNote(scopeTitles: string[]): string {
@@ -112,7 +112,11 @@ export function narrationFromDictation(dictation: VideoDictationResult): {
   model: string;
 } {
   return {
-    entries: narrationEntriesFromEvents(dictation.events ?? []),
+    entries: narrationEntriesFromEvents(
+      sanitizeDictationEvents(dictation.events ?? [], {
+        summary: dictation.narrationSummary,
+      }),
+    ),
     coverage: [],
     model: dictation.model,
   };
