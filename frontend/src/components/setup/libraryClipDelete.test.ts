@@ -107,6 +107,8 @@ describe('Dashboard clip delete', () => {
 
   it('tells the office shell so Overview can drop the clip', () => {
     expect(verifierFrame).toContain("data.atmosphere === 'library-changed'");
+    expect(verifierFrame).toContain("data.atmosphere === 'reload-library'");
+    expect(verifierFrame).toContain("atmosphere: 'reload-library'");
     expect(verifierFrame).toContain('notifyLibraryChanged');
   });
 

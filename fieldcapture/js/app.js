@@ -219,12 +219,8 @@
     demoStream: null,
   };
 
-  var DONELINE_OK =
-    'You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.';
-  var DONELINE_FAIL =
-    'The recording is still on this phone. Fix signal and tap Retry upload — or go back to Home Screen and ask the office for help.';
-  var DONELINE_FAIL_NO_CLIP =
-    'The recording was not saved on this phone. Go back to Home Screen and start the day again — or ask the office for help.';
+  var DONELINE_OK = 'The office can open it now.';
+  var failRetryTimer = null;
 
   function readStoredSession() {
     try {
@@ -323,6 +319,9 @@
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus('Ready — start the day.');
+    if (listed.id && String(listed.id).indexOf('new-') !== 0) {
+      notifyOfficeLibraryChanged();
+    }
   }
 
   function startRecordingForNewJob(stream) {
@@ -894,6 +893,7 @@
         state.uploadResult = result;
         if (state.lastClip === clip) state.lastClip = null;
         renderDoorLive(result);
+        notifyOfficeLibraryChanged();
         return result;
       },
       function (err) {
@@ -907,8 +907,32 @@
     );
   }
 
+  function setDoorSub(text) {
+    var sub = $('#door-sub');
+    if (sub) sub.textContent = text || '';
+  }
+
+  function clearFailRetry() {
+    if (failRetryTimer) {
+      clearTimeout(failRetryTimer);
+      failRetryTimer = null;
+    }
+  }
+
+  function scheduleFailRetry() {
+    clearFailRetry();
+    if (!state.lastClip) return;
+    failRetryTimer = setTimeout(function () {
+      failRetryTimer = null;
+      if (!state.lastClip || state.finishing) return;
+      state.finishing = true;
+      uploadLastClip();
+    }, 8000);
+  }
+
   function openDoorUploading() {
     show('s-door');
+    setDoorSub('Filing this day with the office.');
     $('#ledger').innerHTML =
       '<div class="lrow on"><span>Uploading</span><em id="upload-step">Starting…</em><span class="ok" id="upload-pct">0%</span></div>' +
       '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>';
@@ -916,6 +940,7 @@
     $('#doneline').classList.remove('on');
     var copy = $('#doneline-copy');
     if (copy) copy.textContent = DONELINE_OK;
+    clearFailRetry();
     /* Home stays available while reading/uploading — crews must never be
        stuck on the door if the phone stalls mid-step. Retry waits for fail. */
     hideDoorActions();
@@ -985,13 +1010,11 @@
     $('#ledger').innerHTML = rows.join('');
     var jobName =
       state.job && state.job.job ? state.job.job.title : 'Job';
+    setDoorSub('Filed with the office.');
     $('#daytl').innerHTML =
       '<div class="tlrow"><b>' +
       escapeHtml(jobName) +
-      '</b><span>Day film filed as today’s after proof. Office Verifier will show video, audio, and AI dictation when analysis finishes.</span>' +
-      '<span class="mono">proof ' +
-      escapeHtml((result.proof && result.proof.id) || 'filed') +
-      '</span></div>';
+      '</b><span>The office can watch it now.</span></div>';
     var copy = $('#doneline-copy');
     if (copy) copy.textContent = DONELINE_OK;
     $('#doneline').classList.add('on');
@@ -1002,19 +1025,18 @@
 
   function renderDoorFailed(err) {
     show('s-door');
+    setDoorSub(state.lastClip ? 'Still on this phone.' : 'Recording was not saved.');
     $('#ledger').innerHTML =
-      '<div class="lrow on"><span>Upload failed</span><em>' +
-      escapeHtml(err.message || 'Try again') +
-      '</em><span class="ok">!</span></div>' +
-      '<div class="lrow on"><span>Recording</span><em>' +
-      (state.lastClip ? 'kept on this phone — tap Retry upload' : 'not saved — record again') +
-      '</em><span class="ok">→</span></div>';
+      '<div class="lrow on"><span>Upload paused</span><em>' +
+      escapeHtml(state.lastClip ? 'Retrying automatically' : err.message || 'Record again') +
+      '</em><span class="ok">!</span></div>';
     $('#daytl').innerHTML = '';
-    var copy = $('#doneline-copy');
-    if (copy) copy.textContent = state.lastClip ? DONELINE_FAIL : DONELINE_FAIL_NO_CLIP;
-    $('#doneline').classList.add('on');
+    $('#doneline').classList.remove('on');
     hideDoorActions();
-    if (state.lastClip) showRetryAction();
+    if (state.lastClip) {
+      showRetryAction();
+      scheduleFailRetry();
+    }
     showHomeAction();
     state.finishing = false;
   }
@@ -1181,6 +1203,7 @@
   }
 
   var warmPlatformFrame = function () {};
+  var notifyOfficeLibraryChanged = function () {};
 
   /* ---------- wire ---------- */
 
@@ -1296,10 +1319,26 @@
       setPlatformFrame('/verifier-library');
     };
 
+    var pendingLibraryNotify = false;
+
+    notifyOfficeLibraryChanged = function () {
+      if (!frame) return;
+      var href = frame.getAttribute('src') || '';
+      if (!href || href === 'about:blank') {
+        pendingLibraryNotify = true;
+        warmPlatformFrame();
+        return;
+      }
+      var target = officeFrameOrigin(href);
+      if (!target || !frame.contentWindow) return;
+      frame.contentWindow.postMessage({ atmosphere: 'library-changed' }, target);
+    };
+
     function openPlatformInFrame(pathname) {
       setPlatformFrame(pathname || '/verifier-library');
       show('s-platform');
       postFieldSession();
+      notifyOfficeLibraryChanged();
     }
 
     function signOutFieldAccount() {
@@ -1351,6 +1390,10 @@
       frame.addEventListener('load', function () {
         postFieldSession();
         postFieldTheme();
+        if (pendingLibraryNotify) {
+          pendingLibraryNotify = false;
+          notifyOfficeLibraryChanged();
+        }
       });
     }
     window.addEventListener('message', function (event) {
@@ -1404,6 +1447,7 @@
   when('#retrybtn', function (btn) {
     btn.addEventListener('click', function () {
       if (!state.lastClip || state.finishing) return;
+      clearFailRetry();
       state.finishing = true;
       uploadLastClip().catch(function () {
         /* renderDoorFailed already painted the door */

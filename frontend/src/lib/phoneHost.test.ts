@@ -93,6 +93,8 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain('request-field-session');
     expect(app).toContain('field-session-missing');
     expect(app).toContain('warmPlatformFrame');
+    expect(app).toContain('notifyOfficeLibraryChanged');
+    expect(app).toContain("atmosphere: 'library-changed'");
     expect(app).toContain('applyOfficeTheme');
     expect(app).toContain("atmosphere: 'theme'");
     expect(app).toContain('paintFieldAccount');
