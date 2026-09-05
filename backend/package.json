@@ -39,8 +39,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
-    "@supabase/supabase-js": "^2.45.4",
+    "@anthropic-ai/sdk": "^0.123.0",
+    "@supabase/supabase-js": "^2.114.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -48,11 +48,11 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
-    "nodemailer": "^9.0.3",
-    "playwright": "^1.56.1",
+    "nodemailer": "^9.1.1",
+    "playwright": "^1.62.1",
     "qrcode": "^1.5.4",
-    "stripe": "^22.3.2",
-    "ws": "^8.21.1",
+    "stripe": "^22.6.1",
+    "ws": "^8.21.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -64,11 +64,11 @@
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.1",
-    "eslint": "^10.8.0",
-    "globals": "^17.7.0",
-    "tsx": "^4.19.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.12.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.4",
-    "typescript-eslint": "^8.65.0",
-    "vitest": "^4.1.10"
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^4.1.11"
   }
 }
