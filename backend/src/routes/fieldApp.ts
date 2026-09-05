@@ -18,7 +18,7 @@ import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwo
 import { linkFieldOffice } from '../field/officeLink.js';
 import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
-import { createUploadUrl, recordProof } from './proofOfWork.js';
+import { completeChunkedProofUpload, createUploadUrl, recordProof } from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
@@ -603,6 +603,41 @@ fieldAppRouter.post(
         access_token: party.access_token,
       };
       res.json(await createUploadUrl(partyRow, admin, req.body));
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
+
+/** POST /api/field-app/jobs/:jobId/proof/upload-complete — stitch resumed parts. */
+fieldAppRouter.post(
+  '/jobs/:jobId/proof/upload-complete',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        req.params.jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const admin = await adminOrThrow();
+      const partyRow = {
+        id: party.id,
+        org_id: orgId,
+        job_id: req.params.jobId,
+        company: party.company,
+        access_token: party.access_token,
+      };
+      res.json(await completeChunkedProofUpload(partyRow, admin, req.body));
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);

@@ -3344,7 +3344,7 @@
   }
 
   function jobRecordingStatus(items) {
-    if (!items.length) return { cls: 'red', text: 'No recording' };
+    if (!items.length) return { cls: 'yellow', text: 'In progress' };
     if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Recording' };
     return { cls: 'green', text: 'Recorded' };
   }
@@ -3606,6 +3606,11 @@
     var recordedDay = '—';
     var recordedInstant = '';
     var daySrc = '';
+    if (!latestRecorded && job.createdAt) {
+      daySrc = String(job.createdAt).slice(0, 10);
+      recordedDay = daySrc ? dayLabel(daySrc) : '—';
+      recordedInstant = job.createdAt;
+    }
     if (latestRecorded) {
       daySrc = latestRecorded.workDate ||
         (latestRecorded.capturedAt && String(latestRecorded.capturedAt).slice(0, 10)) ||
@@ -6080,7 +6085,7 @@
     if (menuMeta) menuMeta.textContent = u.orgName || '';
     if (typeof officeAccessToken === 'function' && typeof loadOrgLibrary === 'function') {
       var token = officeAccessToken();
-      if (!SHARE_TOKEN && !libraryLoaded && token && token !== lastLibraryToken) {
+      if (!SHARE_TOKEN && token && (!libraryLoaded || token !== lastLibraryToken)) {
         lastLibraryToken = token;
         libraryAttempts = 0;
         loadOrgLibrary();
@@ -6192,6 +6197,9 @@
       setPhoneDrawer(!!d.phoneDrawer);
     }
     if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
+    if (d && (d.atmosphere === 'reload-library' || d.atmosphere === 'library-changed')) {
+      if (typeof loadOrgLibrary === 'function' && !SHARE_TOKEN) loadOrgLibrary({ silent: true });
+    }
   });
 
   var appFrame = document.getElementById('app-frame');
@@ -6523,7 +6531,9 @@
         address: j.address || '',
         claimNumber: j.claimNumber || '',
         company: j.company || '',
-        person: j.person || ''
+        person: j.person || '',
+        createdAt: j.createdAt || '',
+        captureStatus: j.captureStatus || ''
       };
     });
     (payload.items || []).forEach(function (raw) {
@@ -6535,7 +6545,9 @@
           address: raw.address || '',
           claimNumber: raw.claimNumber || '',
           company: raw.company || '',
-          person: raw.person || ''
+          person: raw.person || '',
+          createdAt: raw.createdAt || raw.uploadedAt || '',
+          captureStatus: raw.captureStatus || ''
         };
       }
     });
@@ -6545,45 +6557,67 @@
   var libraryLoaded = false;
   var libraryAttempts = 0;
   var lastLibraryToken = null;
+  var libraryRefreshing = false;
+  var libraryWatchTimer = null;
 
-  function loadOrgLibrary() {
+  function loadOrgLibrary(opts) {
+    var silent = Boolean(opts && opts.silent);
     var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
+    if (libraryRefreshing && silent) return Promise.resolve();
+    libraryRefreshing = true;
     return apiFetch('/api/evidence-portal/library')
       .then(function (r) {
         if (r.status === 401 || r.status === 403) {
+          libraryRefreshing = false;
           if (wantDemo) { boot(); return null; }
           // Field Capture iframe cookies often fail (SameSite). Retry while
           // the parent handshake writes the Bearer token into sessionStorage.
-          if (libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
+          if (!silent && libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
             libraryAttempts += 1;
             setTimeout(loadOrgLibrary, 400);
             return null;
           }
-          ORG_MODE = false;
-          EVIDENCE = [];
-          JOBS = {};
-          boot();
+          if (!silent) {
+            ORG_MODE = false;
+            EVIDENCE = [];
+            JOBS = {};
+            boot();
+          }
           return null;
         }
         if (!r.ok) throw new Error('no library');
         return r.json();
       })
       .then(function (payload) {
+        libraryRefreshing = false;
         if (!payload) return;
         libraryLoaded = true;
         applyOrgLibrary(payload);
         boot();
+        startLibraryWatch();
       })
       .catch(function () {
+        libraryRefreshing = false;
         if (wantDemo) boot();
-        else if (libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
+        else if (!silent && libraryAttempts < 10 && (EMBEDDED || !officeAccessToken())) {
           libraryAttempts += 1;
           setTimeout(loadOrgLibrary, 400);
-        } else {
+        } else if (!silent) {
           EVIDENCE = [];
           boot();
         }
       });
+  }
+
+  function startLibraryWatch() {
+    if (SHARE_TOKEN || libraryWatchTimer) return;
+    libraryWatchTimer = setInterval(function () {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      loadOrgLibrary({ silent: true });
+    }, 10000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') loadOrgLibrary({ silent: true });
+    });
   }
 
   if (SHARE_TOKEN) {

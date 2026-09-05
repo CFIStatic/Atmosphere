@@ -103,6 +103,9 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('function apiFetch');
     expect(verifierHtml).toContain("apiFetch('/api/evidence-portal/library'");
     expect(verifierHtml).toContain('Email invite');
+    expect(verifierHtml).toContain('function startLibraryWatch');
+    expect(verifierHtml).toContain("atmosphere === 'reload-library'");
+    expect(verifierHtml).toContain("createdAt: j.createdAt || ''");
   });
 
   it('keeps the Videos filters on every office page, not only Dashboard', () => {

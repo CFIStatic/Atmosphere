@@ -118,16 +118,17 @@ export function VerifierFrame({
         setThemePreference(data.preference);
         return;
       }
-      if (data.atmosphere === 'library-changed') {
+      if (data.atmosphere === 'library-changed' || data.atmosphere === 'reload-library') {
         notifyLibraryChanged();
+        postToFrame({ atmosphere: 'reload-library' });
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [logout, navigate, postSession]);
+  }, [logout, navigate, postSession, postToFrame]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=profile-3';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=sync-upload-1';
 
   return (
     <div className={className} style={style}>

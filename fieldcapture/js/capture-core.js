@@ -740,6 +740,30 @@
     });
   }
 
+  var PROOF_UPLOAD_ATTEMPTS = 8;
+
+  function nextUploadBackoffMs(attempt) {
+    var n = Math.max(0, Math.floor(Number(attempt) || 0));
+    return Math.min(5000, 400 * Math.pow(2, n));
+  }
+
+  function waitMs(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function slotPutUrl(slot, storageBase) {
+    if (slot && slot.uploadUrl) return slot.uploadUrl;
+    return (
+      (storageBase || '') +
+      '/storage/v1/object/upload/sign/job-proofs/' +
+      slot.path +
+      '?token=' +
+      encodeURIComponent(slot.token)
+    );
+  }
+
   /**
    * Upload day film.
    *
@@ -767,41 +791,65 @@
     var uploadPath = jobId
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof/upload-url'
       : jobShareUrl(apiBase, token, '/proof/upload-url');
+    var completePath = jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof/upload-complete'
+      : jobShareUrl(apiBase, token, '/proof/upload-complete');
     var filePath = jobId
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof'
       : jobShareUrl(apiBase, token, '/proof');
     var authHeaders = accessToken ? { Authorization: 'Bearer ' + accessToken } : {};
 
+    function mintSlot() {
+      return apiJson(uploadPath, {
+        method: 'POST',
+        accessToken: accessToken,
+        headers: authHeaders,
+        body: {
+          workDate: todayISO(),
+          phase: 'after',
+          extension: ext,
+          byteSize: file.size,
+        },
+      });
+    }
+
     // Mint the signed URL first, then read the clip and PUT bytes together so
     // hash/GPS/frames do not delay the storage transfer on truck signal.
-    onStep('Getting somewhere to put it…');
-    return apiJson(uploadPath, {
-      method: 'POST',
-      accessToken: accessToken,
-      headers: authHeaders,
-      body: {
-        workDate: todayISO(),
-        phase: 'after',
-        extension: ext,
-      },
-    }).then(function (slot) {
-      onStep('Reading and uploading…');
-      var putUrl =
-        slot.uploadUrl ||
-        (storageBase || '') +
-          '/storage/v1/object/upload/sign/job-proofs/' +
-          slot.path +
-          '?token=' +
-          encodeURIComponent(slot.token);
-
+    onStep('Uploading…');
+    return mintSlot().then(function (slot) {
       var factsP = readCapture(file, { knownSite: knownSite });
-      var putP = putBytesWithRetry(putUrl, file, mimeType, onStep, onProgress, 3);
+      var putP = putFileResumable({
+        slot: slot,
+        file: file,
+        mimeType: mimeType,
+        storageBase: storageBase,
+        onStep: onStep,
+        onProgress: onProgress,
+        remint: mintSlot,
+        complete: function (current) {
+          if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
+          return apiJson(completePath, {
+            method: 'POST',
+            accessToken: accessToken,
+            headers: authHeaders,
+            body: {
+              workDate: todayISO(),
+              phase: 'after',
+              storagePath: current.path,
+              partCount: current.parts.length,
+            },
+          }).then(function () {
+            return current;
+          });
+        },
+      });
 
       return Promise.all([factsP, putP]).then(function (parts) {
         var facts = parts[0];
+        var used = parts[1] && parts[1].slot ? parts[1].slot : slot;
         var duration = knownDurationSeconds(facts.durationSeconds, opts.durationSeconds);
         if (duration != null) facts.durationSeconds = duration;
-        onStep('Filing it with the office…');
+        onStep('Uploaded');
         onProgress(1);
         return apiJson(filePath, {
           method: 'POST',
@@ -810,7 +858,7 @@
           body: {
             workDate: todayISO(),
             phase: 'after',
-            storagePath: slot.path,
+            storagePath: used.path,
             byteSize: file.size,
             durationSeconds: knownDurationSeconds(facts.durationSeconds) || undefined,
             contentHash: facts.contentHash || undefined,
@@ -832,30 +880,133 @@
     });
   }
 
-  /**
-   * PUT the day film to signed storage with byte progress. Truck signal drops
-   * mid-upload, so retry a few times before asking the crew to try again.
-   */
-  function putBytesWithRetry(putUrl, file, mimeType, onStep, onProgress, attemptsLeft) {
-    return putBytesOnce(putUrl, file, mimeType, onProgress).then(
-      function (put) {
-        if (put && put.ok) return put;
-        if (attemptsLeft <= 1) {
-          throw new Error('The upload did not go through. Try again on better signal.');
-        }
-        onStep('Upload interrupted — retrying…');
-        onProgress(0);
-        return putBytesWithRetry(putUrl, file, mimeType, onStep, onProgress, attemptsLeft - 1);
-      },
+  function putFileResumable(opts) {
+    var slot = opts.slot;
+    var parts = slot.parts && slot.parts.length > 1 ? slot.parts : null;
+    if (parts) {
+      return putPartsWithResume(opts, 0).then(function (current) {
+        return opts.complete(current).then(function () {
+          return { slot: current };
+        });
+      });
+    }
+    return putBytesWithRetry(
+      slotPutUrl(slot, opts.storageBase),
+      opts.file,
+      opts.mimeType,
+      opts.onStep,
+      opts.onProgress,
+      PROOF_UPLOAD_ATTEMPTS,
       function () {
-        if (attemptsLeft <= 1) {
-          throw new Error('The upload did not go through. Try again on better signal.');
-        }
-        onStep('Upload interrupted — retrying…');
-        onProgress(0);
-        return putBytesWithRetry(putUrl, file, mimeType, onStep, onProgress, attemptsLeft - 1);
+        return opts.remint().then(function (next) {
+          slot = next;
+          return slotPutUrl(next, opts.storageBase);
+        });
       },
-    );
+    ).then(function () {
+      return { slot: slot };
+    });
+  }
+
+  function putPartsWithResume(opts, startIndex) {
+    var slot = opts.slot;
+    var parts = slot.parts || [];
+    var file = opts.file;
+    var i = startIndex || 0;
+
+    function putRemaining() {
+      if (i >= parts.length) return Promise.resolve(slot);
+      var part = parts[i];
+      var blob = file.slice(part.start, part.end + 1);
+      var base = part.start / file.size;
+      var span = (part.end + 1 - part.start) / file.size;
+      opts.onStep('Uploading…');
+      return putBytesWithRetry(
+        part.uploadUrl,
+        blob,
+        opts.mimeType,
+        opts.onStep,
+        function (ratio) {
+          opts.onProgress(Math.max(0, Math.min(1, base + span * (ratio || 0))));
+        },
+        PROOF_UPLOAD_ATTEMPTS,
+      ).then(
+        function () {
+          i += 1;
+          opts.onProgress((part.end + 1) / file.size);
+          return putRemaining();
+        },
+        function (err) {
+          return opts.remint().then(function (next) {
+            slot = next;
+            parts = next.parts && next.parts.length > 1 ? next.parts : [];
+            if (!parts.length) {
+              return putBytesWithRetry(
+                slotPutUrl(next, opts.storageBase),
+                file,
+                opts.mimeType,
+                opts.onStep,
+                opts.onProgress,
+                PROOF_UPLOAD_ATTEMPTS,
+              ).then(function () {
+                return next;
+              });
+            }
+            return putPartsWithResume({
+              slot: next,
+              file: opts.file,
+              mimeType: opts.mimeType,
+              storageBase: opts.storageBase,
+              onStep: opts.onStep,
+              onProgress: opts.onProgress,
+              remint: opts.remint,
+              complete: opts.complete,
+            }, i);
+          }).then(function (current) {
+            if (current && current.path) slot = current;
+            return slot;
+          }, function () {
+            throw err;
+          });
+        },
+      );
+    }
+
+    return putRemaining();
+  }
+
+  /**
+   * PUT bytes to signed storage with progress. Truck signal drops mid-upload,
+   * so retry with backoff and a fresh URL before asking the crew to tap Retry.
+   */
+  function putBytesWithRetry(putUrl, file, mimeType, onStep, onProgress, attemptsLeft, remint) {
+    var left = attemptsLeft == null ? PROOF_UPLOAD_ATTEMPTS : attemptsLeft;
+    var attempt = 0;
+    function once(url) {
+      return putBytesOnce(url, file, mimeType, onProgress).then(
+        function (put) {
+          if (put && put.ok) return put;
+          return retry(url);
+        },
+        function () {
+          return retry(url);
+        },
+      );
+    }
+    function retry(url) {
+      if (left <= 1) {
+        throw new Error('Upload did not go through.');
+      }
+      left -= 1;
+      onStep('Retrying…');
+      return waitMs(nextUploadBackoffMs(attempt++)).then(function () {
+        if (typeof remint !== 'function') return once(url);
+        return Promise.resolve(remint()).then(function (nextUrl) {
+          return once(nextUrl || url);
+        });
+      });
+    }
+    return once(putUrl);
   }
 
   function putBytesOnce(putUrl, file, mimeType, onProgress) {
@@ -958,6 +1109,8 @@
     extractFrames: extractFrames,
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
+    nextUploadBackoffMs: nextUploadBackoffMs,
+    PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
     linkOffice: linkOffice,

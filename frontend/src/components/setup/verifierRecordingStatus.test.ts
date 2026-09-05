@@ -59,6 +59,14 @@ describe('verifier dashboard recording status', () => {
     expect(jobRecordingStatus([filming])).toEqual({ cls: 'yellow', text: 'Recording' });
   });
 
+  it('labels a job file with no clips In progress so Field Capture work is visible immediately', () => {
+    const { jobRecordingStatus } = extractRecordingStatusFns();
+    expect(jobRecordingStatus([])).toEqual({ cls: 'yellow', text: 'In progress' });
+    expect(verifierHtml).toContain('createdAt: j.createdAt || \'\'');
+    expect(verifierHtml).toContain("function startLibraryWatch");
+    expect(verifierHtml).toContain("atmosphere === 'reload-library'");
+  });
+
   it('treats a queued analysis as uploaded, not as an active recording', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));

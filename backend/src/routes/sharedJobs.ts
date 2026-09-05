@@ -27,6 +27,7 @@ import {
   fieldCaptureInvitePath,
 } from '../verifier/deliverPartyInvite.js';
 import {
+  completeChunkedProofUpload,
   createUploadUrl,
   recordProof,
   listPartyProofs,
@@ -1350,6 +1351,20 @@ jobShareRouter.post(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       res.json(await createUploadUrl(party, admin, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+jobShareRouter.post(
+  jobShareActionPattern('/proof/upload-complete'),
+  shareLimiter,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      res.json(await completeChunkedProofUpload(party, admin, req.body));
     } catch (err) {
       next(err);
     }
