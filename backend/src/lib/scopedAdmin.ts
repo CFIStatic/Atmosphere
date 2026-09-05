@@ -24,10 +24,25 @@ export type AdminScope = {
   partyId?: string;
 };
 
+/** Filter builder after select / update / delete — the place `.eq` exists. */
+export type FilterBuilder = {
+  eq: (column: string, value: string) => FilterBuilder;
+};
+
+/**
+ * Table handle that applies org/job/party filters on every read/write
+ * except insert (inserts have no `.eq`; use `raw` and set the columns).
+ */
+export type ScopedTable = {
+  select: (...args: unknown[]) => FilterBuilder;
+  update: (...args: unknown[]) => FilterBuilder;
+  delete: (...args: unknown[]) => FilterBuilder;
+};
+
 export type ScopedAdmin = {
   raw: SupabaseClient;
   scope: AdminScope;
-  from: (table: string) => ReturnType<SupabaseClient['from']>;
+  from: (table: string) => ScopedTable;
 };
 
 export function requireAdmin(): SupabaseClient {
@@ -56,13 +71,26 @@ export function scopeAdminQuery<T extends { eq: (column: string, value: string) 
   return next;
 }
 
+function scopedFrom(admin: SupabaseClient, scope: AdminScope, table: string): ScopedTable {
+  const q = admin.from(table) as unknown as {
+    select: (...args: unknown[]) => FilterBuilder;
+    update: (...args: unknown[]) => FilterBuilder;
+    delete: (...args: unknown[]) => FilterBuilder;
+  };
+  return {
+    select: (...args: unknown[]) => scopeAdminQuery(q.select(...args), scope),
+    update: (...args: unknown[]) => scopeAdminQuery(q.update(...args), scope),
+    delete: () => scopeAdminQuery(q.delete(), scope),
+  };
+}
+
 export function adminForOrg(orgId: string, admin: SupabaseClient = requireAdmin()): ScopedAdmin {
   const scope: AdminScope = { orgId };
   return {
     raw: admin,
     scope,
     from(table: string) {
-      return scopeAdminQuery(admin.from(table), scope);
+      return scopedFrom(admin, scope, table);
     },
   };
 }
@@ -80,7 +108,7 @@ export function adminForJob(
     raw: admin,
     scope,
     from(table: string) {
-      return scopeAdminQuery(admin.from(table), scope);
+      return scopedFrom(admin, scope, table);
     },
   };
 }

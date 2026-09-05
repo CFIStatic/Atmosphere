@@ -33,19 +33,29 @@ describe('scopeAdminQuery', () => {
 });
 
 describe('adminForJob / adminForOrg', () => {
-  it('from() applies the scope before the caller can forget', () => {
+  it('from().select() applies the scope before the caller can forget', () => {
     const calls: Array<{ table: string; eqs: Array<[string, string]> }> = [];
     const admin = {
       from(table: string) {
         const eqs: Array<[string, string]> = [];
-        const builder = {
+        const filter = {
           eq(column: string, value: string) {
             eqs.push([column, value]);
-            return builder;
+            return filter;
           },
         };
         calls.push({ table, eqs });
-        return builder;
+        return {
+          select() {
+            return filter;
+          },
+          update() {
+            return filter;
+          },
+          delete() {
+            return filter;
+          },
+        };
       },
     };
 
@@ -53,7 +63,7 @@ describe('adminForJob / adminForOrg', () => {
       { orgId: 'org-1', jobId: 'job-2' },
       admin as never,
     );
-    scoped.from('job_proofs');
+    scoped.from('job_proofs').select('id');
     assert.equal(calls[0]?.table, 'job_proofs');
     assert.deepEqual(calls[0]?.eqs, [
       ['org_id', 'org-1'],
@@ -61,7 +71,7 @@ describe('adminForJob / adminForOrg', () => {
     ]);
 
     const org = adminForOrg('org-9', admin as never);
-    org.from('crm_jobs');
+    org.from('crm_jobs').select('id');
     assert.deepEqual(calls[1]?.eqs, [['org_id', 'org-9']]);
   });
 });
