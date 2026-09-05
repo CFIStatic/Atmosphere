@@ -8,6 +8,8 @@ const sharedJob = vi.fn();
 const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
 const deleteJobFile = vi.fn();
+const jobProofs = vi.fn();
+const proofQuestions = vi.fn();
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -52,6 +54,8 @@ vi.mock('../lib/api', () => ({
     renameJobFile: (...args: unknown[]) => renameJobFile(...args),
     duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
     deleteJobFile: (...args: unknown[]) => deleteJobFile(...args),
+    jobProofs: (...args: unknown[]) => jobProofs(...args),
+    proofQuestions: (...args: unknown[]) => proofQuestions(...args),
   },
 }));
 
@@ -96,7 +100,16 @@ describe('SharedDashboardPage job file identity', () => {
     renameJobFile.mockReset();
     duplicateJobFile.mockReset();
     deleteJobFile.mockReset();
+    jobProofs.mockReset();
+    proofQuestions.mockReset();
     deleteJobFile.mockResolvedValue({ ok: true, deletedAt: '2026-08-31T00:00:00Z', jobId: 'job-1038' });
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [],
+      counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+      siteKnown: true,
+    });
+    proofQuestions.mockResolvedValue({ questions: [] });
     sharedJobs.mockResolvedValue({
       jobs: [summary],
       counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 },
@@ -175,9 +188,76 @@ describe('SharedDashboardPage job file identity', () => {
       'data-job-file-chrome',
       'no-overview-back',
     );
+    expect(screen.queryByText('What is happening on site')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-today')).not.toBeInTheDocument();
     expect(
       JSON.parse(localStorage.getItem('atmosphere.jobFileOpenedAt') ?? '{}')['job-1038'],
     ).toEqual(expect.any(Number));
+  });
+
+  it('shows the changed-today strip when clips, scope, or Ask landed today', async () => {
+    sharedJob.mockResolvedValue({
+      ...record,
+      scope: [
+        {
+          id: 'sc-new',
+          party_id: null,
+          state: 'included',
+          title: 'Replace valley flashing',
+          detail: null,
+          amount: null,
+          reason: null,
+          revision: 1,
+          decided_at: null,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [
+        {
+          id: 'p-today',
+          partyId: 'pty-1',
+          company: 'Delgado Roofing',
+          workDate: new Date().toISOString().slice(0, 10),
+          phase: 'after',
+          durationSeconds: 40,
+          analysisStatus: 'done',
+          narrationStatus: 'done',
+          transcriptStatus: 'done',
+          transcriptError: null,
+          aiSummary: 'New flashing.',
+          heardOnMic: null,
+          receivedAt: new Date().toISOString(),
+        },
+      ],
+      counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0 },
+      siteKnown: true,
+    });
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-open',
+          question: 'Did they finish the valley?',
+          answer: null,
+          grounded_on: [],
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    const strip = await screen.findByTestId('job-file-today');
+    expect(strip).toHaveTextContent('What changed today');
+    expect(strip).toHaveTextContent('1 new clip');
+    expect(strip).toHaveTextContent('1 new scope line');
+    expect(strip).toHaveTextContent('1 unanswered Ask');
   });
 
   it('uses File and Ask tabs on a phone so chat is not buried under the file', async () => {
