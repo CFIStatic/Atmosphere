@@ -35,7 +35,7 @@ enum ApiConfig {
         let raw = (env?.isEmpty == false ? env : nil)
             ?? (plist?.isEmpty == false ? plist : nil)
             ?? productionBffURL.absoluteString
-        guard let raw, let url = URL(string: stripTrailingSlash(raw)),
+        guard let url = URL(string: stripTrailingSlash(raw)),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty
