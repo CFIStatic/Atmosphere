@@ -12,6 +12,9 @@ import {
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
 import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
+import { leftoverSurfaceSummary, resolveLeftoverSurfaces } from './lib/platformSurfaces.js';
+import { initSentry } from './lib/sentry.js';
+import { reclaimPendingVerificationJobs } from './verification/reclaim.js';
 import { askProviderLabel } from './lib/askModel.js';
 import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
@@ -25,7 +28,10 @@ try {
   throw err;
 }
 
-const app = createApp();
+initSentry();
+
+const leftover = resolveLeftoverSurfaces();
+const app = createApp({ leftoverSurfaces: leftover });
 
 const host = listenHost();
 const server = app.listen(config.port, host, () => {
@@ -36,39 +42,36 @@ const server = app.listen(config.port, host, () => {
     origins: config.frontendOrigins,
     xactimateDriver: config.xactimate.driver,
     mediaBackend: config.media.backend,
-    computerUse: config.computerUse.enabled,
-    captureAgent: config.estimator.captureAgent.enabled,
-    cyber: config.cyber.enabled,
+    computerUse: leftover.computer && config.computerUse.enabled,
+    captureAgent: leftover.estimator && config.estimator.captureAgent.enabled,
+    cyber: leftover.cyber && config.cyber.enabled,
+    leftoverSurfaces: leftoverSurfaceSummary(leftover),
     ask: askProviderLabel(),
     vision: visionProviderLabel(),
     mode: config.isProduction ? 'production' : 'development',
   });
 
-  // Opt-in background automation. No-ops unless PM_SCHEDULER_ENABLED is set and
-  // a service-role key is configured — see backend/src/pm/scheduler.ts for why
-  // it takes two decisions rather than one.
-  startScheduler();
+  // Opt-in leftover automation. Production keeps these off unless
+  // ENABLE_PLATFORM_APIS / ENABLE_<SURFACE> is set — see platformSurfaces.ts.
+  if (leftover.pm) startScheduler();
 
   // Filed videos that never got a reading — including clips uploaded before
   // the analysis queues existed — get vision + speech so Ask has a record.
   startProofAnalysisSweep();
 
-  // Mitigation capture agent — on by default. Pulls MICA Dash / Outlook and
-  // rewrites open estimates without a human sync click.
-  startCaptureAgent();
+  if (leftover.estimator) startCaptureAgent();
 
-  // Started after the listener so a backup can never delay readiness.
-  startBackupScheduler();
+  if (leftover.backups) startBackupScheduler();
 
-  // Rotates honeypot credentials and re-audits hardening on a timer. Safe to
-  // start without the service role — the agent keeps state in-process.
-  startCyberScheduler();
+  if (leftover.cyber) startCyberScheduler();
+
+  void reclaimPendingVerificationJobs();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
 // the deployment's TLS and hostname instead of needing a second exposed
 // service. The hub only claims the upgrade for its own path.
-if (config.computerUse.enabled) {
+if (leftover.computer && config.computerUse.enabled) {
   agentHub.attach(server);
 }
 
