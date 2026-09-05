@@ -12,7 +12,7 @@ import {
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
-import { ChevronLeftIcon, ShareIcon } from '../components/icons';
+import { ShareIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import {
   buildJobFileDossier,
@@ -218,21 +218,10 @@ export function JobDetailPage() {
     </>
   );
 
-  const back = (
-    <Link
-      to="/jobs"
-      className="mb-2 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800 lg:mb-4"
-    >
-      <ChevronLeftIcon width={16} height={16} />
-      Job Files
-    </Link>
-  );
-
   return (
     <JobFileAskChrome
       jobId={job.id}
       file={file}
-      back={back}
       extra={
         shareOpen ? (
           <ShareJobProgressPanel

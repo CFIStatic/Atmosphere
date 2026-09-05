@@ -129,6 +129,7 @@ export function JobProgressDashboard({
   initialProof,
   videoFetcher,
   showProofOfWork = true,
+  showIdentity = true,
   alwaysShowRecordings = false,
   metrics: metricsOverride,
 }: {
@@ -139,6 +140,8 @@ export function JobProgressDashboard({
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   /** When false, the parent already mounts the video catalog (office job file). */
   showProofOfWork?: boolean;
+  /** Office job file already titles the page — skip the second identity block. */
+  showIdentity?: boolean;
   /** Homeowner / guest shares always show every recording, not a collapsed history. */
   alwaysShowRecordings?: boolean;
   /** Guest shares supply pre-computed metrics instead of scope rows. */
@@ -251,19 +254,21 @@ export function JobProgressDashboard({
   return (
     <div className="space-y-4">
       <section className="rounded-xl glass-card p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-xl font-semibold text-ink-900 sm:text-2xl">
-              {record.job.jobNumber !== null && (
-                <span className="tabular-nums text-ink-500">#{record.job.jobNumber} </span>
-              )}
-              {record.job.title}
-            </h2>
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-500">
-              {siteAddress && <span>{siteAddress}</span>}
+        {showIdentity && (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold text-ink-900 sm:text-2xl">
+                {record.job.jobNumber !== null && (
+                  <span className="tabular-nums text-ink-500">#{record.job.jobNumber} </span>
+                )}
+                {record.job.title}
+              </h2>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-500">
+                {siteAddress && <span>{siteAddress}</span>}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {loading ? (
           <div className="mt-6 flex items-center gap-2 text-sm text-ink-600">
