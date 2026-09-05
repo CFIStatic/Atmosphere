@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=offline-calm-3/);
-assert.match(html, /js\/app\.js\?v=offline-calm-3/);
+assert.match(html, /js\/capture-core\.js\?v=offline-calm-4/);
+assert.match(html, /js\/app\.js\?v=offline-calm-4/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -189,7 +189,7 @@ assert.match(
 );
 assert.match(
   appSrc,
-  /clip\.jobId = state\.activeJobId/,
+  /var boundJobId = state\.activeJobId;[\s\S]*?clip\.jobId = boundJobId/,
   'stop must stamp the job the day was filmed on so a later Home tap cannot reroute the file',
 );
 assert.match(
@@ -409,11 +409,94 @@ assert.match(
   const to = appSrc.indexOf('/* ---------- home hydration ---------- */');
   assert.ok(from >= 0 && to > from, 'abandonUnfiledWork must exist');
   const src = appSrc.slice(from, to);
+  assert.match(src, /sessionGen \+= 1/, 'sign-out must invalidate in-flight sync and upload');
   assert.match(src, /state\.lastClip = null/);
   assert.match(src, /state\.finishing = false/);
   assert.match(src, /clearFailRetry\(\)/);
   assert.match(src, /pendingSync = null/);
 }
+{
+  const from = appSrc.indexOf('function captureSession');
+  const to = appSrc.indexOf('function startRecordingForNewJob');
+  assert.ok(from >= 0 && to > from, 'sync/upload must bind to the session that started them');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /function sessionStillOpen/);
+  assert.match(
+    src,
+    /accessToken: bound\.accessToken/,
+    'pending-job POST must use the captured token, not the live session',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?Core\.createTodayJob/,
+    'sign-out must stop the next pending-job POST',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?remapLocalJob/,
+    'a late office create must not remap into the next account',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
+    'resolveActiveJobId must not fall back to the next account\'s activeJobId',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?uploadLastClip\(\)/,
+    'flush after sign-out must not upload the previous clip',
+  );
+  assert.match(
+    src,
+    /if \(pendingSync === work\) pendingSync = null/,
+    'a signed-out sync must not clear the next session\'s in-flight lock',
+  );
+}
+{
+  const from = appSrc.indexOf('function uploadLastClip');
+  const to = appSrc.indexOf('function setDoorSub');
+  assert.ok(from >= 0 && to > from, 'uploadLastClip must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /var bound = captureSession\(\)/);
+  assert.match(
+    src,
+    /accessToken: boundAccount \? bound\.accessToken : undefined/,
+    'day-film PUT must use the captured token, not the live session',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
+    'sign-out mid-upload must not call uploadDayFilm',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return result;/,
+    'a late upload must not notify the next account\'s library',
+  );
+}
+{
+  const from = appSrc.indexOf('function finishLiveDay');
+  const to = appSrc.indexOf('function uploadLastClip');
+  assert.ok(from >= 0 && to > from, 'finishLiveDay must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /var bound = captureSession\(\)/);
+  assert.match(src, /var boundJobId = state\.activeJobId/);
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?clip\.jobId = boundJobId/,
+    'a late recorder.stop must not attach the previous clip to the next account',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?renderDoorFailed/,
+    'a late finish error must not paint the door for the next account',
+  );
+}
+assert.match(
+  appSrc,
+  /if \(!sessionStillOpen\(bound\)\) \{[\s\S]*?upsertPendingJob/,
+  'sign-out during getUserMedia must not persist a draft into the next account',
+);
 assert.deepEqual(
   Core.filterJobs(
     [

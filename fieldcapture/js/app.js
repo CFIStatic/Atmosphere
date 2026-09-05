@@ -250,6 +250,7 @@
   }
 
   function abandonUnfiledWork() {
+    sessionGen += 1;
     clearFailRetry();
     pendingSync = null;
     state.lastClip = null;
@@ -375,46 +376,69 @@
   }
 
   var pendingSync = null;
+  var sessionGen = 0;
+
+  function captureSession() {
+    return {
+      gen: sessionGen,
+      accessToken: state.accessToken || null,
+    };
+  }
+
+  function sessionStillOpen(bound) {
+    return Boolean(
+      bound &&
+        bound.gen === sessionGen &&
+        bound.accessToken === (state.accessToken || null),
+    );
+  }
 
   function syncPendingJobs() {
     if (DEMO || LIVE || !state.account || !state.accessToken || !Core.createTodayJob) {
       return Promise.resolve();
     }
     if (pendingSync) return pendingSync;
+    var bound = captureSession();
     var queue = (Core.readPendingJobs ? Core.readPendingJobs() : []).filter(function (j) {
       return j && Core.isLocalJobId(j.id) && !j.serverId;
     });
     if (!queue.length) return Promise.resolve();
-    pendingSync = queue
-      .reduce(function (chain, localJob) {
-        return chain.then(function () {
-          return Core.createTodayJob({
-            apiBase: API_BASE,
-            accessToken: state.accessToken,
-            title: localJob.title || localJob.name,
-            situation: localJob.situation || '',
-          }).then(function (serverJob) {
-            if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, serverJob);
-            remapLocalJob(localJob.id, serverJob);
-            notifyOfficeLibraryChanged();
-          });
+    var work = queue.reduce(function (chain, localJob) {
+      return chain.then(function () {
+        if (!sessionStillOpen(bound)) return;
+        return Core.createTodayJob({
+          apiBase: API_BASE,
+          accessToken: bound.accessToken,
+          title: localJob.title || localJob.name,
+          situation: localJob.situation || '',
+        }).then(function (serverJob) {
+          if (!sessionStillOpen(bound)) return;
+          if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, serverJob);
+          remapLocalJob(localJob.id, serverJob);
+          notifyOfficeLibraryChanged();
         });
-      }, Promise.resolve())
-      .then(
-        function () {
-          pendingSync = null;
-        },
-        function () {
-          pendingSync = null;
-        },
-      );
+      });
+    }, Promise.resolve());
+    pendingSync = work;
+    work.then(
+      function () {
+        if (pendingSync === work) pendingSync = null;
+      },
+      function () {
+        if (pendingSync === work) pendingSync = null;
+      },
+    );
     return pendingSync;
   }
 
   function resolveActiveJobId(jobId) {
+    var bound = captureSession();
     var id = jobId || state.activeJobId;
     if (!id || !Core.isLocalJobId || !Core.isLocalJobId(id)) return Promise.resolve(id);
     return syncPendingJobs().then(function () {
+      if (!sessionStillOpen(bound)) {
+        throw new Error('Session ended.');
+      }
       var resolved =
         (jobId && state.lastClip && state.lastClip.jobId) || state.activeJobId;
       if (resolved && !Core.isLocalJobId(resolved)) {
@@ -425,7 +449,9 @@
   }
 
   function flushFieldWork() {
+    var bound = captureSession();
     return syncPendingJobs().then(function () {
+      if (!sessionStillOpen(bound)) return;
       if (state.lastClip && !state.finishing) {
         state.finishing = true;
         return uploadLastClip();
@@ -485,6 +511,7 @@
         return;
       }
       if (btn) btn.disabled = true;
+      var bound = captureSession();
 
       function finishLocal(job, stream) {
         selectCreatedJob(job);
@@ -516,6 +543,14 @@
 
       media
         .then(function (stream) {
+          if (!sessionStillOpen(bound)) {
+            if (stream && stream.getTracks) {
+              stream.getTracks().forEach(function (t) {
+                t.stop();
+              });
+            }
+            return;
+          }
           /* Persist locally and start recording now. The office POST
              retries in the background — zero connectivity must not
              block the camera. */
@@ -1010,6 +1045,8 @@
 
   function finishLiveDay() {
     if (!state.recorder || state.finishing) return;
+    var bound = captureSession();
+    var boundJobId = state.activeJobId;
     state.finishing = true;
     if (state.stopWatch) state.stopWatch();
     state.stopWatch = null;
@@ -1018,11 +1055,13 @@
     state.recorder
       .stop()
       .then(function (clip) {
-        clip.jobId = state.activeJobId;
+        if (!sessionStillOpen(bound)) return;
+        clip.jobId = boundJobId;
         state.lastClip = clip;
         return uploadLastClip();
       })
       .catch(function (err) {
+        if (!sessionStillOpen(bound)) return;
         openDoorUploading();
         $('#upload-step').textContent = err.message || 'Upload failed.';
         $('#upload-step').style.color = 'var(--fail)';
@@ -1032,6 +1071,8 @@
 
   function uploadLastClip() {
     var clip = state.lastClip;
+    var bound = captureSession();
+    var boundAccount = Boolean(state.account);
     if (!clip || !clip.blob) {
       return Promise.reject(new Error('Nothing to upload. Record the day again.'));
     }
@@ -1041,10 +1082,13 @@
     else setStatus('Filing with the office…');
     return resolveActiveJobId(clip.jobId)
       .then(function (jobId) {
+        if (!sessionStillOpen(bound)) {
+          throw new Error('Session ended.');
+        }
         return Core.uploadDayFilm({
           token: TOKEN || undefined,
-          jobId: state.account ? jobId : undefined,
-          accessToken: state.account ? state.accessToken : undefined,
+          jobId: boundAccount ? jobId : undefined,
+          accessToken: boundAccount ? bound.accessToken : undefined,
           apiBase: API_BASE,
           storageBase: STORAGE_BASE,
           blob: clip.blob,
@@ -1052,6 +1096,7 @@
           knownSite: state.site || null,
           durationSeconds: clip.durationSeconds,
           onStep: function (step) {
+            if (!sessionStillOpen(bound)) return;
             var stepEl = $('#upload-step');
             if (stepEl) {
               stepEl.textContent = step;
@@ -1059,6 +1104,7 @@
             }
           },
           onProgress: function (ratio) {
+            if (!sessionStillOpen(bound)) return;
             var bar = $('#upload-bar');
             var pct = $('#upload-pct');
             var pctVal = Math.round((ratio || 0) * 100);
@@ -1069,6 +1115,7 @@
       })
       .then(
       function (result) {
+        if (!sessionStillOpen(bound)) return result;
         state.uploadResult = result;
         if (state.lastClip === clip) state.lastClip = null;
         if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
@@ -1081,6 +1128,7 @@
         return result;
       },
       function (err) {
+        if (!sessionStillOpen(bound)) return;
         if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
           renderDoorFailed(err);
         } else {
