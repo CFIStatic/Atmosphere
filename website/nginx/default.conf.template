@@ -13,6 +13,13 @@ server {
   root /usr/share/nginx/html;
   index index.html;
 
+  # www → apex when this service receives the Host header.
+  # Cloudflare/DNS must still point www at this Railway service (or issue
+  # its own 301). This rule only fires if www traffic reaches nginx.
+  if ($host = www.atmosphereteam.com) {
+    return 301 https://atmosphereteam.com$request_uri;
+  }
+
   # Platform probes must never proxy to the BFF. A hung API_UPSTREAM is what
   # turned GitHub Autodeploy into "Deployment failed during network process".
   location = /health {
@@ -70,8 +77,10 @@ server {
     proxy_pass $api_upstream$request_uri;
   }
 
+  # Extensionless URLs: /pricing → pricing.html. Existing *.html links
+  # still resolve via the .html location above (try_files $uri).
   location / {
     add_header Cache-Control "no-store";
-    try_files $uri $uri/ =404;
+    try_files $uri $uri.html $uri/ =404;
   }
 }

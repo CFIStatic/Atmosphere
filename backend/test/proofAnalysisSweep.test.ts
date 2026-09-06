@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { needsNarration, needsTranscript, sweepUnanalyzedProofs } from '../src/shared/proofAnalysisSweep.js';
+import {
+  needsAnalysisReclaim,
+  needsNarration,
+  needsTranscript,
+  sweepUnanalyzedProofs,
+} from '../src/shared/proofAnalysisSweep.js';
 
 test('needsNarration and needsTranscript treat idle and missing as unread', () => {
   assert.equal(needsNarration(null), true);
@@ -11,9 +16,13 @@ test('needsNarration and needsTranscript treat idle and missing as unread', () =
   assert.equal(needsNarration('failed', 'The model reply was not usable.'), true);
   assert.equal(needsNarration('queued'), true);
   assert.equal(needsNarration('running'), true);
-  assert.equal(needsTranscript('queued'), false);
+  assert.equal(needsTranscript('queued'), true);
   assert.equal(needsTranscript('failed'), true);
   assert.equal(needsTranscript(undefined), true);
+  assert.equal(needsAnalysisReclaim('queued'), true);
+  assert.equal(needsAnalysisReclaim('running'), true);
+  assert.equal(needsAnalysisReclaim(null), false);
+  assert.equal(needsAnalysisReclaim('done'), false);
 });
 
 test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', async () => {
@@ -68,7 +77,11 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
     },
   };
 
-  const queued: { narration: string[]; transcript: string[] } = { narration: [], transcript: [] };
+  const queued: { narration: string[]; transcript: string[]; analysis: string[] } = {
+    narration: [],
+    transcript: [],
+    analysis: [],
+  };
   const result = await sweepUnanalyzedProofs(admin, {
     limit: 10,
     queueNarrationFn: async (_admin, _party, proofId) => {
@@ -77,9 +90,13 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
     queueTranscriptFn: async (_admin, proofId) => {
       queued.transcript.push(proofId);
     },
+    queueAnalysisFn: async (_admin, _party, _workDate, proofId) => {
+      if (proofId) queued.analysis.push(proofId);
+    },
   });
   assert.equal(result.narration, 1);
   assert.equal(result.transcript, 1);
+  assert.equal(result.analysis, 0);
   assert.deepEqual(queued.narration, ['old-1']);
   assert.deepEqual(queued.transcript, ['old-1']);
 });

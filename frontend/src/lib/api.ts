@@ -753,6 +753,12 @@ export interface ProofDay {
   proofIds: string[];
 }
 
+/** One Analysis event-boundary on a filed clip. */
+export interface ProofVideoEvent {
+  atSeconds: number;
+  text?: string;
+}
+
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
   id: string;
@@ -767,6 +773,10 @@ export interface ProofVideoRecord {
   transcriptError: string | null;
   aiSummary: string | null;
   heardOnMic: string | null;
+  /** When the file landed — used by the job-file today strip. */
+  receivedAt?: string | null;
+  /** Event-boundary timestamps from Analysis. */
+  events?: ProofVideoEvent[];
 }
 
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';

@@ -18,7 +18,10 @@ describe('Railway corporate-website image', () => {
     expect(dockerfile).toContain(
       'COPY website/nginx/15-validate-website-env.envsh /docker-entrypoint.d/15-validate-website-env.envsh',
     );
-    expect(dockerfile).toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
+    expect(dockerfile).toContain('SITE_ORIGIN=https://atmosphereteam.com');
+    expect(dockerfile).toContain('APP_ORIGIN=https://platform.atmosphereteam.com');
+    expect(dockerfile).not.toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
+    expect(dockerfile).not.toContain('APP_ORIGIN=https://atmosphere-web-production.up.railway.app');
     expect(dockerfile).not.toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
 
     const start = read('website/nginx/website-start.sh');
@@ -35,6 +38,9 @@ describe('Railway corporate-website image', () => {
     expect(nginx).toContain('location = /api/health');
     expect(nginx).toContain('proxy_connect_timeout 5s');
     expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
+    expect(nginx).toContain('try_files $uri $uri.html $uri/ =404');
+    expect(nginx).toContain('if ($host = www.atmosphereteam.com)');
+    expect(nginx).toContain('return 301 https://atmosphereteam.com$request_uri');
   });
 
   /**
