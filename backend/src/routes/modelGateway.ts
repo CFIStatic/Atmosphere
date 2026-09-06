@@ -199,6 +199,17 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       metadata: { feature: input.feature ?? null },
     });
 
+    const { data: actualQuote } = await supabase.rpc('quote_usage', {
+      p_model_id: message.model ?? params.model,
+      p_input_tokens: usage.inputTokens,
+      p_output_tokens: usage.outputTokens,
+      p_cache_write_5m_tokens: usage.cacheWrite5mTokens,
+      p_cache_write_1h_tokens: usage.cacheWrite1hTokens,
+      p_cache_read_tokens: usage.cacheReadTokens,
+      p_is_batch: false,
+    });
+    const providerCostNanos = toNanos((actualQuote as { cost_nanos?: unknown } | null)?.cost_nanos ?? 0);
+
     recordTokenUsageAsync(supabase, {
       orgId: req.orgId!,
       requestId: `model:${requestId}`,
@@ -209,7 +220,8 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cacheTokens: usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens,
-      priceNanos: toNanos(charged.price_nanos),
+      costNanos: providerCostNanos > 0 ? providerCostNanos : undefined,
+      priceNanos: providerCostNanos > 0 ? undefined : toNanos(charged.price_nanos),
       metadata: { feature: input.feature ?? null },
     });
 

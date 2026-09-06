@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { billableNanosFromCost } from '../src/metering/customerMarkup.js';
 import { estimateCostUsd, recordAiCost } from '../src/verification/cost/tracker.js';
 import { estimatedUsdToNanos } from '../src/metering/tokenUsage.js';
 
@@ -52,7 +53,10 @@ test('recordAiCost writes the actor and estimated spend onto both ledgers', asyn
   assert.equal(rpcs[0]?.name, 'record_token_usage');
   assert.equal(rpcs[0]?.params.p_user_id, 'user-jack');
   assert.equal(rpcs[0]?.params.p_feature, 'video_analysis');
-  assert.ok(Number(rpcs[0]?.params.p_price_nanos) > 0);
+  const costNanos = estimatedUsdToNanos(estimateCostUsd('google', 8000, 1200));
+  assert.equal(Number(rpcs[0]?.params.p_cost_nanos), costNanos);
+  assert.equal(Number(rpcs[0]?.params.p_price_nanos), billableNanosFromCost(costNanos));
+  assert.equal(Number(rpcs[0]?.params.p_price_nanos), costNanos * 10);
 });
 
 test('recordAiCost resolves a job owner when no userId is passed', async () => {

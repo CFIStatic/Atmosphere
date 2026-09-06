@@ -123,6 +123,7 @@ describe('TokenUsageSection', () => {
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
     expect(screen.getByText('288k')).toBeInTheDocument();
     expect(screen.getByText('$18.40')).toBeInTheDocument();
+    expect(screen.getByText('Usage billed to this organization')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
@@ -140,7 +141,8 @@ describe('TokenUsageSection', () => {
       totals: totals({
         events: 2,
         totalTokens: 9768,
-        priceNanos: 1_280_000,
+        // Billable 10× of a $1.28 provider-cost window.
+        priceNanos: 12_800_000_000,
       }),
       byEmployee: [
         {
@@ -149,7 +151,7 @@ describe('TokenUsageSection', () => {
           email: 'jack@jettx.ai',
           role: 'global_admin',
           roleLabel: 'Global Admin',
-          ...totals({ totalTokens: 9768, priceNanos: 1_280_000 }),
+          ...totals({ totalTokens: 9768, priceNanos: 12_800_000_000 }),
           byFeature: {
             video_analysis: totals({ totalTokens: 9200 }),
             chat: emptyTokenTotals(),
@@ -163,7 +165,9 @@ describe('TokenUsageSection', () => {
     render(<TokenUsageSection />);
     expect(await screen.findByText('Jack Cyganiak')).toBeInTheDocument();
     expect(screen.getByText(/uploader, job owner, or signed-in teammate/i)).toBeInTheDocument();
-    expect(screen.getAllByText('$0.00128').length).toBeGreaterThan(0);
+    expect(screen.getByText(/spend is the usage billed to this org/i)).toBeInTheDocument();
+    expect(screen.getAllByText('$12.80').length).toBeGreaterThan(0);
+    expect(screen.queryByText('$1.28')).not.toBeInTheDocument();
     expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
   });
 

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { resolveBackupsEnabled, resolveComputerUseEnabled } from './bootFlags.js';
+import { usageCustomerMarkup } from './metering/customerMarkup.js';
 
 /**
  * Centralised, validated configuration for the Atmosphere backend.
@@ -342,6 +343,12 @@ export const config = {
     allowClientMetering:
       process.env.ALLOW_CLIENT_METERING === 'true' ||
       (process.env.ALLOW_CLIENT_METERING === undefined && !isProduction),
+
+    // Token-usage customer markup. Provider COGS stays on cost_nanos;
+    // price_nanos (Settings → Billing → Token spend) is cost × this factor.
+    // Default 10× (~90% gross margin). Does not touch the $599 seat / Stripe
+    // subscription. Override with USAGE_CUSTOMER_MARKUP or TOKEN_BILLABLE_MARKUP.
+    usageCustomerMarkup: usageCustomerMarkup(),
 
     // Which payment processor settles credit purchases.
     //
