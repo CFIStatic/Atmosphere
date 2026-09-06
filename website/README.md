@@ -12,6 +12,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
+| `hardware.html`   | Field Capture Chest Mount — $49 hands-free phone kit |
 | `platform.html`   | Redirect → home (legacy four-platform page) |
 | `sales.html`      | Redirect → home (legacy) |
 | `operations.html` | Redirect → home (legacy) |
@@ -119,6 +120,11 @@ python3 website/build-preview.py preview.html
 ```
 
 ## SEO & sharing
+
+`hardware.html` is a product page for the Field Capture Chest Mount ($49).
+The Buy button defaults to `mailto:hello@atmosphereteam.com`. To send it to
+Stripe later, paste a Payment Link (`https://buy.stripe.com/...`) into the
+page's `CHECKOUT_URL`, `data-checkout-url`, or `window.ATMOSPHERE_HARDWARE_CHECKOUT_URL`.
 
 Every public page carries Open Graph / Twitter meta, a canonical URL, and
 `og:url` on `https://atmosphereteam.com/...`. The share card is

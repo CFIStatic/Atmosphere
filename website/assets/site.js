@@ -28,7 +28,7 @@
   var NAV_GROUP = {
     'verification.html': 'product', 'how-it-works.html': 'product',
     'platform.html': 'product', 'sales.html': 'product', 'operations.html': 'product',
-    'field.html': 'product', 'manager.html': 'product',
+    'field.html': 'product', 'hardware.html': 'product', 'manager.html': 'product',
     'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',
     'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about',
     'investors.html': 'about'
@@ -334,4 +334,12 @@
     teamSize: 'ct-team', workType: 'ct-work',
     message: 'ct-message', website: 'ct-website'
   }, "Sent — a person replies, usually within one business day.");
+
+  // Optional prefill from /contact?note=… or ?message=… (hardware questions, etc.)
+  var contactNote = new URLSearchParams(location.search).get('note')
+    || new URLSearchParams(location.search).get('message');
+  var contactMessage = document.getElementById('ct-message');
+  if (contactNote && contactMessage && !contactMessage.value) {
+    contactMessage.value = contactNote;
+  }
 })();

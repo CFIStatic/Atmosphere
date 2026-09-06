@@ -18,6 +18,7 @@ PAGES = [
     ('verification', 'verification.html'),
     ('how-it-works', 'how-it-works.html'),
     ('field', 'field.html'),
+    ('hardware', 'hardware.html'),
     ('security', 'security.html'),
     ('pricing', 'pricing.html'),
     ('docs', 'docs.html'),
@@ -106,7 +107,7 @@ out = f'''<title>Atmosphere — AI for Service Contractors</title>
       if (el) el.hidden = (name !== r);
     }});
     var NAV_GROUP = {{ verification: 'platform', 'how-it-works': 'platform', platform: 'platform', sales: 'platform', operations: 'platform',
-      field: 'platform', manager: 'platform', security: 'resources', pricing: 'pricing',
+      field: 'platform', hardware: 'platform', manager: 'platform', security: 'resources', pricing: 'pricing',
       docs: 'resources', about: 'about', careers: 'about', contact: 'about',
       investors: 'about' }};
     var g = NAV_GROUP[r] || (r.indexOf('doc-') === 0 ? 'resources' : null);
