@@ -4,6 +4,8 @@ import { classifyTokenFeature } from '../src/metering/tokenFeatures.js';
 import {
   aggregateTokenUsage,
   eachUtcDay,
+  estimatedUsdToNanos,
+  quoteMeasuredUsagePriceNanos,
   resolveTokenUsageWindow,
   type TokenUsageEventRow,
 } from '../src/metering/tokenUsage.js';
@@ -145,4 +147,97 @@ test('aggregateTokenUsage totals the org, each feature, each employee, and each 
   assert.equal(report.byEmployee[1]?.roleLabel, 'Employee');
 
   assert.equal(report.recent[0]?.id, 'e3');
+});
+
+test('aggregateTokenUsage attributes video analysis to the job owner, not Unattributed', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'video-1',
+      feature: 'video_analysis',
+      userId: 'user-jack',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      inputTokens: 8000,
+      outputTokens: 1200,
+      totalTokens: 9200,
+      priceNanos: estimatedUsdToNanos(0.00128),
+    }),
+    event({
+      id: 'ask-1',
+      feature: 'ask',
+      userId: 'user-jack',
+      createdAt: '2026-09-01T11:00:00.000Z',
+      inputTokens: 400,
+      outputTokens: 168,
+      totalTokens: 568,
+      priceNanos: 12_400_000,
+    }),
+  ];
+
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-09-01T00:00:00.000Z', end: '2026-09-02T00:00:00.000Z' },
+    [{ userId: 'user-jack', fullName: 'Jack Cyganiak', email: 'jack@jettx.ai', role: 'global_admin' }],
+  );
+
+  assert.equal(report.byEmployee.length, 1);
+  assert.equal(report.byEmployee[0]?.name, 'Jack Cyganiak');
+  assert.equal(report.byEmployee[0]?.byFeature.video_analysis.totalTokens, 9200);
+  assert.equal(report.byEmployee[0]?.byFeature.ask.totalTokens, 568);
+  assert.ok(report.byEmployee[0]!.priceNanos > 0);
+  assert.equal(report.byEmployee.some((row) => row.userId === null), false);
+});
+
+test('aggregateTokenUsage keeps a System row only when no actor exists', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'anon-1',
+      feature: 'video_analysis',
+      userId: null,
+      createdAt: '2026-09-01T10:00:00.000Z',
+      totalTokens: 100,
+      priceNanos: 0,
+    }),
+  ];
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-09-01T00:00:00.000Z', end: '2026-09-02T00:00:00.000Z' },
+    [],
+  );
+  assert.equal(report.byEmployee[0]?.name, 'Unattributed');
+  assert.equal(report.byEmployee[0]?.roleLabel, 'System');
+  assert.equal(report.byEmployee[0]?.userId, null);
+});
+
+test('quoteMeasuredUsagePriceNanos uses the rate-card quote and stays 0 when unknown', async () => {
+  const priced = await quoteMeasuredUsagePriceNanos(
+    {
+      rpc: async () => ({ data: { price_nanos: '18400000' }, error: null }),
+    } as any,
+    'claude-sonnet',
+    {
+      inputTokens: 400,
+      outputTokens: 168,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 568,
+    },
+  );
+  assert.equal(priced, 18_400_000);
+
+  const unknown = await quoteMeasuredUsagePriceNanos(
+    {
+      rpc: async () => ({ data: null, error: { message: 'unknown_model' } }),
+    } as any,
+    'mystery-model',
+    {
+      inputTokens: 10,
+      outputTokens: 4,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 14,
+    },
+  );
+  assert.equal(unknown, 0);
 });

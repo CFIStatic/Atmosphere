@@ -131,6 +131,40 @@ describe('TokenUsageSection', () => {
     expect(screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org')).toBeInTheDocument();
     expect(screen.getAllByText('Ask').length).toBeGreaterThan(0);
     expect(screen.getByText('claude-sonnet')).toBeInTheDocument();
+    expect(screen.getByText('$12.20')).toBeInTheDocument();
+  });
+
+  it('shows precise spend and does not treat attributed video as System', async () => {
+    getTokenUsage.mockResolvedValue({
+      ...report,
+      totals: totals({
+        events: 2,
+        totalTokens: 9768,
+        priceNanos: 1_280_000,
+      }),
+      byEmployee: [
+        {
+          userId: 'u-jack',
+          name: 'Jack Cyganiak',
+          email: 'jack@jettx.ai',
+          role: 'global_admin',
+          roleLabel: 'Global Admin',
+          ...totals({ totalTokens: 9768, priceNanos: 1_280_000 }),
+          byFeature: {
+            video_analysis: totals({ totalTokens: 9200 }),
+            chat: emptyTokenTotals(),
+            ask: totals({ totalTokens: 568 }),
+            other: emptyTokenTotals(),
+          },
+        },
+      ],
+    });
+
+    render(<TokenUsageSection />);
+    expect(await screen.findByText('Jack Cyganiak')).toBeInTheDocument();
+    expect(screen.getByText(/uploader, job owner, or signed-in teammate/i)).toBeInTheDocument();
+    expect(screen.getAllByText('$0.00128').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
   });
 
   it('reloads when the window changes', async () => {

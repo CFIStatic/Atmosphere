@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheTokensOf, type MeasuredUsage } from '../lib/anthropic.js';
+import { toNanos } from '../lib/money.js';
 import { labelForMemberRole } from '../lib/productRoles.js';
 import { usdToNanos } from './costEngine.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
@@ -328,6 +329,34 @@ export function recordTokenUsageAsync(
   });
 }
 
+/**
+ * Price measured tokens from the customer rate card (`quote_usage`).
+ * Returns 0 when the model is unknown — we never invent a rate.
+ */
+export async function quoteMeasuredUsagePriceNanos(
+  client: SupabaseClient,
+  modelId: string | null | undefined,
+  usage: MeasuredUsage,
+): Promise<number> {
+  if (!modelId?.trim()) return 0;
+  try {
+    const { data, error } = await client.rpc('quote_usage', {
+      p_model_id: modelId,
+      p_input_tokens: usage.inputTokens,
+      p_output_tokens: usage.outputTokens,
+      p_cache_write_5m_tokens: usage.cacheWrite5mTokens,
+      p_cache_write_1h_tokens: usage.cacheWrite1hTokens,
+      p_cache_read_tokens: usage.cacheReadTokens,
+      p_is_batch: false,
+    });
+    if (error || !data) return 0;
+    const nanos = toNanos((data as { price_nanos?: unknown }).price_nanos ?? 0);
+    return nanos > 0 ? nanos : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Record provider-measured usage on the customer token ledger. */
 export function recordMeasuredTokenUsage(
   client: SupabaseClient,
@@ -345,18 +374,30 @@ export function recordMeasuredTokenUsage(
 ): void {
   const usage = input.usage;
   if (!usage || usage.totalTokens <= 0) return;
-  recordTokenUsageAsync(client, {
-    orgId: input.orgId,
-    requestId: input.requestId,
-    feature: input.feature,
-    source: input.source ?? input.feature,
-    userId: input.userId ?? null,
-    jobId: input.jobId ?? null,
-    modelId: input.modelId ?? null,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cacheTokens: cacheTokensOf(usage),
-    priceNanos: input.priceNanos ?? 0,
+  void (async () => {
+    const quoted =
+      input.priceNanos != null && input.priceNanos > 0
+        ? input.priceNanos
+        : await quoteMeasuredUsagePriceNanos(client, input.modelId, usage);
+    await recordTokenUsage(client, {
+      orgId: input.orgId,
+      requestId: input.requestId,
+      feature: input.feature,
+      source: input.source ?? input.feature,
+      userId: input.userId ?? null,
+      jobId: input.jobId ?? null,
+      modelId: input.modelId ?? null,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheTokens: cacheTokensOf(usage),
+      priceNanos: quoted,
+    });
+  })().catch((err) => {
+    console.error('[metering] failed to record measured token usage', {
+      orgId: input.orgId,
+      requestId: input.requestId,
+      err,
+    });
   });
 }
 

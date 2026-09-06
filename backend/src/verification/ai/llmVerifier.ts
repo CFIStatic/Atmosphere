@@ -597,6 +597,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           videoId: ctx.videoId,
           jobId: ctx.jobId,
           analysisRunId: primaryRunId,
+          userId: ctx.attributedUserId,
           idempotencyKey: `video_analysis:${primaryRunId}:verify`,
           provider: verification.provider,
           modelName: verification.modelName,
@@ -662,6 +663,19 @@ export function createLlmVerifyEvidenceHandler(opts: {
           output_tokens: esc.usage.outputTokens,
           estimated_cost_usd: esc.usage.estimatedCostUsd,
           latency_ms: esc.usage.latencyMs,
+        });
+        await recordAiCost(ctx.supabase, {
+          orgId: ctx.orgId,
+          videoId: ctx.videoId,
+          jobId: ctx.jobId,
+          analysisRunId: escId,
+          userId: ctx.attributedUserId,
+          idempotencyKey: `video_analysis:${escId}:escalate`,
+          provider: esc.provider,
+          modelName: esc.modelName,
+          inputTokens: esc.usage.inputTokens,
+          outputTokens: esc.usage.outputTokens,
+          estimatedCostUsd: esc.usage.estimatedCostUsd,
         });
         finalRunId = escId;
         finalDecision = esc.parsed;

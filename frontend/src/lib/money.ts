@@ -32,7 +32,7 @@ export function formatUsdCompact(nanos: number): string {
   if (Math.abs(dollars) >= 1000) {
     return `$${(dollars / 1000).toFixed(dollars >= 10000 ? 0 : 1)}k`;
   }
-  return formatUsd(nanos);
+  return formatUsd(nanos, { precise: true });
 }
 
 export const formatCents = (cents: number): string =>
