@@ -2702,16 +2702,19 @@
     else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
     return parts.join(' ');
   }
-  function bindVideoDuration(video) {
+  function bindVideoDuration(video, known) {
     var measured = function () {
       return knownDuration(video.duration);
     };
     var onPause = function () { discover(); };
     var discover = function () {
       if (measured() != null) return;
+      // Filed clips already carry a measured length. Do not scan the file
+      // on a visible player — a dummy seek flashes the last frame.
+      if (knownDuration(known) != null) return;
       // Visible player with native controls. A dummy seek during Play
       // flashes the last frame and restarts the clip.
-      if (!video.paused) {
+      if (!video.paused || (video.dataset && video.dataset.playingSoon === '1')) {
         video.addEventListener('pause', onPause, { once: true });
         return;
       }
@@ -4640,7 +4643,28 @@
    */
   function paintPreviewPoster(item, waiting) {
     var poster = thumbFor(item);
-    $('#d-frame').innerHTML =
+    var host = $('#d-frame');
+    var stage = host && host.querySelector('.preview-stage');
+    // Same still is already on screen (open → detail hydrate). Do not
+    // rebuild the node — that flashes the play button and reloads the JPEG.
+    if (stage && stage.getAttribute('data-preview-state') === 'poster' && document.getElementById('d-yt-play')) {
+      var img = stage.querySelector('.preview-still');
+      if (img && poster && img.getAttribute('src') !== poster) img.src = poster;
+      var durEl = stage.querySelector('.yt-dur');
+      if (durEl) durEl.textContent = dur(item.duration);
+      var wait = document.getElementById('d-wait');
+      if (waiting && !wait) {
+        var pill = document.createElement('div');
+        pill.className = 'preview-wait';
+        pill.id = 'd-wait';
+        pill.textContent = 'Opening the clip on file…';
+        stage.appendChild(pill);
+      } else if (!waiting && wait) {
+        wait.remove();
+      }
+      return;
+    }
+    host.innerHTML =
       '<div class="preview-stage" data-preview-state="poster">' +
         '<img class="preview-still" alt="Screenshot from this video" src="' + esc(poster) + '" />' +
         '<button type="button" class="yt-play" id="d-yt-play" aria-label="Play">' +
@@ -4681,7 +4705,7 @@
     setPlayerTime('full clip · ' + durLabel(item.duration));
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
-    bindVideoDuration(vid);
+    bindVideoDuration(vid, item.duration);
     vid.addEventListener('timeupdate', function () {
       syncAnalysisLog(vid.currentTime);
       if (!progressRaf) paintLiveProgress();
@@ -4709,18 +4733,36 @@
     });
     vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
     vid.addEventListener('error', function () {
-      paintPreviewPoster(item, false);
-      var wait = document.getElementById('d-wait');
-      if (!wait) {
-        var host = $('#d-frame .preview-stage');
-        if (host) {
-          var pill = document.createElement('div');
-          pill.className = 'preview-wait';
-          pill.textContent = 'Could not play this file — showing the screenshot on file.';
-          host.appendChild(pill);
-        }
+      if (item._videoRetrying) {
+        showPreviewPlayError(item);
+        return;
       }
+      item._videoRetrying = true;
+      refreshVideoUrl(item).then(function (url) {
+        if (!url || !state.open || state.open.id !== item.id) {
+          showPreviewPlayError(item);
+          return;
+        }
+        paintPreviewVideo(item);
+        var next = previewVideo();
+        if (next) {
+          if (next.dataset) next.dataset.playingSoon = '1';
+          next.play().catch(function () {});
+        }
+      });
     });
+  }
+
+  function showPreviewPlayError(item) {
+    paintPreviewPoster(item, false);
+    if (document.getElementById('d-wait')) return;
+    var host = $('#d-frame .preview-stage');
+    if (!host) return;
+    var pill = document.createElement('div');
+    pill.className = 'preview-wait';
+    pill.id = 'd-wait';
+    pill.textContent = 'Could not play this file — showing the screenshot on file.';
+    host.appendChild(pill);
   }
 
   function captureVideoScreenshot(url, duration, cb) {
@@ -4789,6 +4831,7 @@
       paintPreviewVideo(item);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
+        if (vid.dataset) vid.dataset.playingSoon = '1';
         if (startAt != null) {
           try { vid.currentTime = startAt; } catch (err) {}
           var length = clipLength(item, vid);
@@ -4841,7 +4884,9 @@
 
     // Keep the YouTube screenshot on screen. The file plays when asked.
     paintPreviewPoster(item, false);
-    if (item._videoUrl) {
+    // A signed still from the list is already the right frame. Recapturing
+    // it from the file flashes the poster and fights CORS on signed URLs.
+    if (item._videoUrl && (!item.poster || String(item.poster).indexOf('data:') === 0)) {
       captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
         if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
       });
@@ -6715,21 +6760,47 @@
     }, 4000);
   }
 
+  function videoApiUrl(item) {
+    if (!item || !item._remote) return null;
+    if (ORG_MODE) return '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video';
+    if (SHARE_TOKEN) {
+      return '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) +
+        '/evidence/' + encodeURIComponent(item.id) + '/video';
+    }
+    return null;
+  }
+
+  function refreshVideoUrl(item) {
+    var url = videoApiUrl(item);
+    if (!url) return Promise.resolve(null);
+    return apiFetch(url)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (payload) {
+        var next = payload && payload.url ? payload.url : null;
+        if (next) {
+          item._videoUrl = next;
+          item._videoRetrying = false;
+        }
+        return next;
+      })
+      .catch(function () { return null; });
+  }
+
   function fetchRemoteDetail(item) {
     var detailUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
-    var videoUrl = ORG_MODE
-      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
-      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
+    var videoUrl = videoApiUrl(item);
     return Promise.all([
       apiFetch(detailUrl).then(function (r) {
         if (!r.ok) throw new Error('detail');
         return r.json();
       }),
-      apiFetch(videoUrl)
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; })
+      videoUrl
+        ? apiFetch(videoUrl)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; })
+        : Promise.resolve(null)
     ])
       .then(function (parts) {
         var payload = parts[0];
@@ -6800,12 +6871,77 @@
       '</div>';
   }
 
+  /**
+   * Signed poster tokens rotate on every library poll. Comparing the path
+   * (not the query) is what lets a silent refresh keep the same <img>
+   * instead of flashing every thumbnail every ten seconds.
+   */
+  function posterIdentity(url) {
+    if (typeof url !== 'string' || !url) return '';
+    if (url.indexOf('data:') === 0) return url.slice(0, 80);
+    try {
+      var parsed = new URL(url, location.href);
+      return parsed.origin + parsed.pathname;
+    } catch (err) {
+      return String(url).split('?')[0];
+    }
+  }
+
+  function preferStablePoster(prev, next) {
+    if (!next) return prev || null;
+    if (!prev) return next;
+    if (posterIdentity(prev) === posterIdentity(next)) return prev;
+    return next;
+  }
+
+  function librarySignature() {
+    var jobs = Object.keys(JOBS).sort().map(function (k) {
+      var j = JOBS[k] || {};
+      return [k, j.name, j.number, j.captureStatus, j.createdAt, j.person, j.address].join('\t');
+    }).join('\n');
+    var items = EVIDENCE.map(function (e) {
+      var status = clipStatus(e);
+      return [
+        e.id, e.job, e.jobName, e.duration, e.uploadedAt, e.capturedAt,
+        e.person, e.company, e.phase, e.workDate,
+        e.analysis && e.analysis.state,
+        status.cls, status.text,
+        posterIdentity(e.poster)
+      ].join('\t');
+    }).join('\n');
+    return jobs + '\n--\n' + items;
+  }
+
+  var CLIENT_MEDIA_KEYS = {
+    _videoUrl: true,
+    _loaded: true,
+    _frames: true,
+    _remoteFrames: true,
+    _watchReading: true,
+    _videoRetrying: true
+  };
+
+  /** Keep the live object so an open preview and its timers stay attached. */
+  function keepClientMedia(prev, next) {
+    if (!prev) return next;
+    Object.keys(next).forEach(function (k) {
+      if (CLIENT_MEDIA_KEYS[k]) return;
+      if (k === 'custody' && prev.custody && prev.custody.length) return;
+      if (k === 'poster') {
+        prev.poster = preferStablePoster(prev.poster, next.poster);
+        return;
+      }
+      prev[k] = next[k];
+    });
+    return prev;
+  }
+
   function applyOrgLibrary(payload) {
     ORG_MODE = true;
-    JOBS = {};
+    var nextJobs = {};
     (payload.jobs || []).forEach(function (j) {
       if (!j || !j.jobId) return;
-      JOBS[j.jobId] = {
+      nextJobs[j.jobId] = {
         key: j.jobId,
         name: j.jobName || 'Job',
         number: j.jobNumber != null ? j.jobNumber : null,
@@ -6818,8 +6954,8 @@
       };
     });
     (payload.items || []).forEach(function (raw) {
-      if (raw.jobId && !JOBS[raw.jobId]) {
-        JOBS[raw.jobId] = {
+      if (raw.jobId && !nextJobs[raw.jobId]) {
+        nextJobs[raw.jobId] = {
           key: raw.jobId,
           name: raw.jobName || 'Job',
           number: raw.jobNumber != null ? raw.jobNumber : null,
@@ -6832,7 +6968,19 @@
         };
       }
     });
-    EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+    var prevById = {};
+    EVIDENCE.forEach(function (e) { prevById[e.id] = e; });
+    JOBS = nextJobs;
+    EVIDENCE = (payload.items || []).map(function (raw) {
+      return keepClientMedia(prevById[raw.id], mapRemoteItem(raw, raw.jobId));
+    });
+    if (state.open) {
+      var live = null;
+      for (var i = 0; i < EVIDENCE.length; i++) {
+        if (EVIDENCE[i].id === state.open.id) { live = EVIDENCE[i]; break; }
+      }
+      if (live) state.open = live;
+    }
   }
 
   var libraryLoaded = false;
@@ -6872,9 +7020,14 @@
       .then(function (payload) {
         libraryRefreshing = false;
         if (!payload) return;
+        var first = !libraryLoaded;
+        var before = librarySignature();
         libraryLoaded = true;
         applyOrgLibrary(payload);
-        boot();
+        // A silent poll that only rotated signed tokens must not wipe the
+        // table — that reloads every thumbnail and reads as the videos
+        // glitching out.
+        if (first || !silent || before !== librarySignature()) boot();
         startLibraryWatch();
       })
       .catch(function () {
