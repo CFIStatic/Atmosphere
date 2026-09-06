@@ -60,7 +60,7 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
-import { resolveDictationEntries } from '../shared/dictationEvents.js';
+import { resolveDictationEntries, sanitizeDictationEvents } from '../shared/dictationEvents.js';
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
   disputesForProof,
@@ -119,9 +119,11 @@ function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: strin
     ...(Array.isArray(findings.timeline) ? findings.timeline : []),
     ...(Array.isArray(findings.actions) ? findings.actions : []),
     ...(Array.isArray(narration.entries) ? narration.entries : []),
-    ...speechEventsFromTranscript(row?.transcript_text, {
-      durationSeconds: Number(row?.duration_seconds) || undefined,
-    }),
+    ...sanitizeDictationEvents(
+      speechEventsFromTranscript(row?.transcript_text, {
+        durationSeconds: Number(row?.duration_seconds) || undefined,
+      }),
+    ),
   ];
   const seen = new Set<string>();
   const events: Array<{ atSeconds: number; text?: string }> = [];

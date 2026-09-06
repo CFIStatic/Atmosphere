@@ -57,6 +57,22 @@ test('a 10-minute Whisper dump stamped [0:00] is not a junk 0:00 SAID blob', () 
   assert.ok(!events.some((event) => event.atSeconds === 0 && event.text.length > 180));
 });
 
+test('a [0:00] Whisper dump with no duration is omitted, not pinned to 0:00', () => {
+  const dump =
+    '[0:00] ' +
+    'The crew is walking the north slope with the camera rolling, naming vents and flashing, ' +
+    'and talking over the wind about underlayment rows and bagged debris at the driveway. '.repeat(8) +
+    'Homeowner: I do not want you to replace the cabinets unless insurance approves it. ' +
+    'That was the agreement on the claim.';
+  assert.deepEqual(speechEventsFromTranscript(dump), []);
+  assert.deepEqual(speechEventsFromTranscript(dump, { durationSeconds: null }), []);
+  const resolved = resolveDictationEntries({
+    transcript: dump,
+    summary: 'Walkthrough on the north slope.',
+  });
+  assert.equal(resolved.filter((event) => event.type === 'said').length, 0);
+});
+
 test('unstamped talk with a known duration still gets seek times, not one 0:00 blob', () => {
   const unstamped =
     'Homeowner: The leak started behind the vanity in the bathroom. ' +

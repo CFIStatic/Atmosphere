@@ -161,6 +161,9 @@ function timeForHit(
   if (span && hit.hayLen > 0 && hit.segment.text.length > STAMPED_LINE_CHARS) {
     return roundTime(base + (hit.index / hit.hayLen) * span);
   }
+  // A lone [0:00] stamp with no next clock and no duration is a Whisper dump,
+  // not a seekable moment. Unstamped talk already returns null in that case.
+  if (span == null && base === 0) return null;
   return roundTime(base);
 }
 
