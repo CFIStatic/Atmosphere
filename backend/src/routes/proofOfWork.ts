@@ -61,6 +61,7 @@ import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
+import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
   disputesForProof,
   surfaceDisputes,
@@ -118,8 +119,11 @@ function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: strin
     ...(Array.isArray(findings.timeline) ? findings.timeline : []),
     ...(Array.isArray(findings.actions) ? findings.actions : []),
     ...(Array.isArray(narration.entries) ? narration.entries : []),
+    ...speechEventsFromTranscript(row?.transcript_text, {
+      durationSeconds: Number(row?.duration_seconds) || undefined,
+    }),
   ];
-  const seen = new Set<number>();
+  const seen = new Set<string>();
   const events: Array<{ atSeconds: number; text?: string }> = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
@@ -130,11 +134,13 @@ function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: strin
         (item as any).startSeconds ??
         (item as any).at,
     );
-    if (!Number.isFinite(at) || at < 0 || seen.has(at)) continue;
-    seen.add(at);
+    if (!Number.isFinite(at) || at < 0) continue;
     const text = String(
       (item as any).text ?? (item as any).description ?? (item as any).summary ?? (item as any).note ?? '',
     ).trim();
+    const key = `${at}|${text.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     events.push({ atSeconds: at, text: text || undefined });
   }
   return events.sort((a, b) => a.atSeconds - b.atSeconds);
@@ -1760,6 +1766,8 @@ function disputeClipFromRow(
       narrationText: row.narration_text ?? null,
       summary: row.ai_summary ?? findings.summary ?? null,
       actions,
+      durationSeconds: Number(row.duration_seconds) || undefined,
+      transcript: typeof row.transcript_text === 'string' ? row.transcript_text : null,
     }),
     summary: row.ai_summary ?? findings.summary ?? null,
   };
@@ -1874,6 +1882,8 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       narrationText: row.narration_text ?? null,
       summary: row.ai_summary ?? findings.summary ?? null,
       actions,
+      durationSeconds: Number(row.duration_seconds) || undefined,
+      transcript: typeof row.transcript_text === 'string' ? row.transcript_text : null,
     });
     return {
       id: row.id,

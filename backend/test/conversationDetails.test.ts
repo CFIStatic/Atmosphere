@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractConversationDetails, roomsMentionedIn } from '../src/audio/conversationDetails.js';
+import { extractConversationDetails, hasConversation, roomsMentionedIn } from '../src/audio/conversationDetails.js';
 
 const talk =
   'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it. ' +
@@ -26,4 +26,10 @@ test('extractConversationDetails is empty when nobody spoke', () => {
   const details = extractConversationDetails('   ');
   assert.equal(details.summary, null);
   assert.deepEqual(details.details, []);
+  assert.equal(hasConversation(details), false);
+});
+
+test('hasConversation is true when the mic captured agreements or rooms', () => {
+  assert.equal(hasConversation(extractConversationDetails(talk)), true);
+  assert.equal(hasConversation(extractConversationDetails('okay. yeah. mm hmm. thanks.')), false);
 });

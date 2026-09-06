@@ -23,6 +23,24 @@ describe('EventTimeline', () => {
     expect(onSeek).toHaveBeenCalledWith(18);
   });
 
+  it('interleaves SAID with vision on one timeline', () => {
+    render(
+      <EventTimeline
+        events={[
+          { atSeconds: 8, text: 'Hallway in frame.', type: 'scene' },
+          { atSeconds: 18, text: 'I do not want you to replace the cabinets unless insurance approves it.', type: 'said' },
+          { atSeconds: 48, text: 'Bathroom doorway.', type: 'camera' },
+        ]}
+      />,
+    );
+    const text = screen.getByTestId('event-timeline').textContent || '';
+    expect(text).toMatch(/scene/i);
+    expect(text).toMatch(/said/i);
+    expect(text.indexOf('0:08')).toBeLessThan(text.indexOf('0:18'));
+    expect(text.indexOf('0:18')).toBeLessThan(text.indexOf('0:48'));
+    expect(text).not.toMatch(/0:00/);
+  });
+
   it('keeps failed and pending states quiet', () => {
     const { rerender } = render(<EventTimeline events={[]} status="pending" />);
     expect(screen.getByText(/Reading this clip/i)).toBeInTheDocument();

@@ -48,7 +48,7 @@ const AGREEMENT =
 const CONCERN =
   /\b(don't|do not|worried|concern|mold|leak|smell|refused|declined|not in scope|out of scope|extra|charge)\b/i;
 
-function sentences(text: string): string[] {
+export function conversationSentences(text: string): string[] {
   return text
     .replace(/\[(?:\d+:)+\d+\]/g, ' ')
     .split(/(?<=[.!?])\s+|\n+/)
@@ -80,7 +80,7 @@ export function extractConversationDetails(transcript: string | null | undefined
     return { summary: null, details: [], agreements: [], concerns: [], roomsMentioned: [] };
   }
 
-  const lines = sentences(raw);
+  const lines = conversationSentences(raw);
   const details = unique(lines.filter((line) => DETAIL.test(line)));
   const agreements = unique(lines.filter((line) => AGREEMENT.test(line)));
   const concerns = unique(lines.filter((line) => CONCERN.test(line)));
@@ -98,4 +98,14 @@ export function extractConversationDetails(transcript: string | null | undefined
     concerns,
     roomsMentioned,
   };
+}
+
+/** Real talk worth a timeline row — not an empty, skipped, or noise-only mic. */
+export function hasConversation(details: ConversationDetails): boolean {
+  return (
+    details.details.length > 0 ||
+    details.agreements.length > 0 ||
+    details.concerns.length > 0 ||
+    details.roomsMentioned.length > 0
+  );
 }

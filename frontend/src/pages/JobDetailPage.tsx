@@ -161,7 +161,8 @@ export function JobDetailPage() {
               <div>
                 <h2 className="text-base font-semibold text-ink-900">Analysis</h2>
                 <p className="mt-0.5 text-xs text-ink-500">
-                  Event timeline from the clips on this file. Tap a time to mark it; open Videos to play.
+                  Vision events plus, when people were talking, what was said. Silent clips stay
+                  vision-only. Tap a time to mark it; open Videos to play.
                 </p>
               </div>
               <CustodyExportButton jobId={job.id} label="Export custody JSON" />

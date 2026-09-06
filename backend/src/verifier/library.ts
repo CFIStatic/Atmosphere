@@ -335,6 +335,8 @@ export function serializeEvidence(input: {
               narrationText: dictation,
               summary: proof.ai_summary ?? findings.summary ?? null,
               actions,
+              durationSeconds: Number(proof.duration_seconds) || undefined,
+              transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
             }),
             actions,
             materialChange,
