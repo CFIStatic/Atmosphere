@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -138,6 +139,36 @@ describe('Railway corporate-website image', () => {
 
     const field = read('website/field.html');
     expect(field).toContain('href="hardware.html"');
+  });
+
+  it('keeps Buy disabled until a Stripe checkout URL is set', () => {
+    const html = read('website/hardware.html');
+    const js = read('website/assets/site.js');
+    const stubMatchMedia = (win: { matchMedia: (q: string) => { matches: boolean } }) => {
+      win.matchMedia = () => ({ matches: false });
+    };
+
+    const off = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
+    stubMatchMedia(off.window);
+    off.window.eval(js);
+    const offBuy = off.window.document.getElementById('hardware-buy');
+    expect(offBuy?.textContent).toBe('Checkout coming online');
+    expect(offBuy?.getAttribute('aria-disabled')).toBe('true');
+    expect(offBuy?.getAttribute('href')).toBeNull();
+    expect(offBuy?.classList.contains('is-disabled')).toBe(true);
+    const note = off.window.document.querySelector('.hw-buy-note');
+    expect(note?.hidden).toBe(false);
+
+    const on = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
+    stubMatchMedia(on.window);
+    on.window.ATMOSPHERE_HARDWARE_CHECKOUT_URL = 'https://example.com/checkout-session';
+    on.window.eval(js);
+    const onBuy = on.window.document.getElementById('hardware-buy');
+    expect(onBuy?.textContent).toBe('Buy — $49');
+    expect(onBuy?.getAttribute('href')).toBe('https://example.com/checkout-session');
+    expect(onBuy?.getAttribute('aria-disabled')).toBeNull();
+    expect(onBuy?.classList.contains('is-disabled')).toBe(false);
+    expect(on.window.document.querySelector('.hw-buy-note')?.hidden).toBe(true);
   });
 
   it('does not treat in-window Railway probe retries as a finished failure', () => {
