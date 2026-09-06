@@ -12,6 +12,7 @@ import {
 } from '../lib/shareSession.js';
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
+import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 
 /**
@@ -134,7 +135,7 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
           .eq('job_id', share.job_id)
           .order('revision', { ascending: false })
           .limit(1),
-        buildJobProofPayload(admin, share.org_id, share.job_id),
+        buildJobProofPayload(admin, share.org_id, share.job_id).then(redactProofDeviceIdentity),
       ]);
 
     await admin

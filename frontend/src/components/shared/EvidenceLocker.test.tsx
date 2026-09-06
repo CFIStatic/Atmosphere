@@ -9,6 +9,8 @@ vi.mock('../../lib/api', () => ({
   api: {
     jobEvidence: (...args: unknown[]) => jobEvidence(...args),
     evidenceCustody: (...args: unknown[]) => evidenceCustody(...args),
+    evidenceCustodyExport: vi.fn(),
+    jobCustodyExport: vi.fn(),
   },
 }));
 

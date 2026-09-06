@@ -151,9 +151,30 @@ const proofs: ProofResponse = {
       transcriptError: null,
       aiSummary: 'The north slope is stripped to decking.',
       heardOnMic: 'Homeowner asked us not to touch the skylights.',
+      dictationEntries: [
+        { atSeconds: 12, text: 'Opens on the north slope — tarp gone, deck exposed.', type: 'scene' },
+        { atSeconds: 41, text: 'Hands on the skylight flashing; tools in frame.', type: 'work' },
+      ],
     },
   ],
-  counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0 },
+  disputes: [
+    {
+      id: 'scope:p1:skylights',
+      kind: 'scope',
+      severity: 'high',
+      title: 'Conflicts with excluded scope — Do not touch the skylights',
+      detail: 'Hands on the skylight flashing; tools in frame.',
+      proofId: 'p1',
+      seekSeconds: 41,
+      workDate: '2026-08-05',
+      partyId: 'pty-2',
+      company: 'Delgado Roofing',
+      phase: 'after',
+      relatedProofIds: ['p1'],
+      scopeTitle: 'Do not touch the skylights',
+    },
+  ],
+  counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0, disputes: 1 },
   siteKnown: true,
 };
 
@@ -192,6 +213,10 @@ describe('JobDetailPage', () => {
     expect(screen.getByText('Clips on file')).toBeInTheDocument();
     expect(screen.getByText('Heard on mic')).toBeInTheDocument();
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
+    expect(screen.getByTestId('event-timeline').textContent).toMatch(/0:12/);
+    expect(screen.getByTestId('event-timeline').textContent).toMatch(/skylight/i);
     expect(
       screen.getByText('Delgado Roofing accepted revision 3; the job is on 4'),
     ).toBeInTheDocument();

@@ -1562,6 +1562,23 @@
   }
   .analysis-empty { margin: 12px 0 0; }
 
+  .dispute-ctl { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 10px; }
+  .dispute-ctl > button {
+    width: 100%; display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; background: none; border: 0; padding: 10px 12px; cursor: pointer;
+    font: inherit; color: var(--ink); text-align: left;
+  }
+  .dispute-ctl > button strong { font-size: 13.5px; font-weight: 700; }
+  .dispute-ctl .count { font-size: 11.5px; color: var(--faint); font-weight: 650; }
+  .dispute-ctl .count.has { color: var(--unknown); }
+  .dispute-list { list-style: none; margin: 0; padding: 8px 12px 12px; border-top: 1px solid var(--line-soft); }
+  .dispute-list li { padding: 8px 4px; border-radius: 8px; cursor: pointer; }
+  .dispute-list li:hover { background: var(--line-soft); }
+  .dispute-k { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
+  .dispute-t { display: block; margin-top: 2px; font-size: 13px; font-weight: 650; }
+  .dispute-d { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+  .dispute-empty { margin: 0; padding: 10px 12px 12px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line-soft); }
+
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
   .ask-empty { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
@@ -2175,6 +2192,9 @@
         materialChange: 'unclear',
         materialBecause: 'The two clips do not appear to show the same building, so a comparison would not mean anything.',
         summary: 'A roof slope with intact shingles and no visible storm damage. The structure, roof pitch and surrounding trees do not match the other footage filed against this job.',
+        dictationEntries: [
+          { atSeconds: 8, text: 'Street trees and a different roof pitch come into frame.', type: 'scene' }
+        ],
         changes: [],
         scope: [
           { title: 'Remove temporary tarp', verdict: 'not_visible' },
@@ -2191,6 +2211,41 @@
       ],
       before: { wet: 0, cut: 0, gear: 0, seconds: 74 },
       after: { wet: 0, cut: 0, gear: 0, seconds: 74 }
+    }),
+    ev({
+      id: 'EV-1038-0808-X', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'after', workDate: '2026-08-08', capturedAt: '2026-08-08T16:10:00', uploadedAt: '2026-08-08T16:14:00',
+      duration: 63, bytes: 38_200_000, device: 'iPhone 15 · Atmosphere 2.4',
+      gps: { lat: 30.4413, lon: -97.7218, accuracy: 7, distanceFt: 41 },
+      hash: HASHES[5], tier: 1, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '41 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 16:10, received 16:14.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '1 min 3 s.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'minor',
+        summary: 'A pass along the north slope. Hands work the skylight flashing — that line is excluded.',
+        dictation: 'Walking the eave. At 41 seconds the crew has tools on the skylight flashing.',
+        dictationEntries: [
+          { atSeconds: 12, text: 'Walking the eave; underlayment already down.', type: 'scene' },
+          { atSeconds: 41, text: 'Hands on the skylight flashing; tools in frame.', type: 'work' }
+        ],
+        concerns: ['Crew appears to work the skylights, which are out of scope.'],
+        scope: [
+          { title: 'Install synthetic underlayment', verdict: 'appears_complete' },
+          { title: 'DO NOT touch the skylights', verdict: 'in_progress', because: 'Tools on the flashing.' }
+        ],
+        couldNotTell: []
+      },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-08T16:14', detail: 'after · 2026-08-08' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-08T16:18', detail: 'Frames read against excluded skylight line' }
+      ],
+      before: { wet: 0.1, cut: 0.6, gear: 1, seconds: 63 },
+      after: { wet: 0.08, cut: 0.55, gear: 1, seconds: 63 }
     }),
     ev({
       id: 'EV-1038-0801-A', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
@@ -3944,32 +3999,50 @@
     }
 
     if (act === 'export') {
+      var jobMeta = JOBS[item.job] || {};
       var record = {
+        schema: 'atmosphere.clip_custody.v1',
         exportedAt: new Date().toISOString(),
-        id: item.id,
-        job: (JOBS[item.job] || { name: item.jobName || 'Job' }).name,
-        phase: item.phase,
-        workDate: item.workDate,
-        capturedAt: item.capturedAt || null,
-        uploadedAt: item.uploadedAt || null,
-        durationSeconds: item.duration || null,
-        sha256: item.hash || null,
-        tier: item.tier || null,
-        integrity: integrityOf(item),
-        checks: item.checks || [],
-        analysis: item.analysis || null,
-        custody: item.custody || [],
-        note: 'Metadata export. The video file itself is obtained through the download flow, which settles the fee and enters the chain of custody.'
+        job: {
+          id: item.jobId || item.job || null,
+          number: jobMeta.number || item.jobNumber || null,
+          name: jobMeta.name || item.jobName || 'Job'
+        },
+        clip: {
+          id: item.id,
+          phase: item.phase,
+          workDate: item.workDate || null,
+          filmedBy: { partyId: item.partyId || null, company: item.company || null, person: item.person || null },
+          filmedAt: item.capturedAt || null,
+          receivedAt: item.uploadedAt || null,
+          device: item.device
+            ? { make: null, model: null, os: null, appVersion: null, deviceId: null, label: item.device }
+            : null,
+          integrity: {
+            algorithm: 'sha256',
+            contentHash: item.hash || null,
+            verdict: integrityOf(item),
+            checks: (item.checks || []).map(function (c) {
+              return { key: c.key || null, verdict: c.verdict, what: c.what || c.key || 'check', detail: c.detail || '' };
+            })
+          },
+          location: item.gps ? { lat: item.gps.lat, lon: item.gps.lon, accuracyM: item.gps.accuracy || null } : null,
+          durationSeconds: item.duration || null,
+          byteSize: item.bytes || null
+        },
+        chainOfCustody: (item.custody || []).map(function (c) {
+          return { action: c.action, by: c.by, role: c.role || null, detail: c.detail || null, at: c.at };
+        })
       };
       var blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'evidence-' + item.id + '.json';
+      a.download = 'custody-' + item.id + '.json';
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
-      toast('Record exported: metadata, checks, analysis, custody. The video itself goes through the download flow.');
+      toast('Custody export: who filmed, when, job, device, integrity. The video itself goes through the download flow.');
       return;
     }
 
@@ -5333,56 +5406,209 @@
       '<span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></span></li>';
   }
 
+  function disputeTokens(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(function (w) {
+      return w.length > 2 && !/^(the|and|for|not|do|don)$/.test(w);
+    });
+  }
+
+  function disputeMentions(hay, title) {
+    var n = String(hay || '').toLowerCase();
+    var t = String(title || '').toLowerCase();
+    if (!n || !t) return false;
+    if (n.indexOf(t) !== -1) return true;
+    var tokens = disputeTokens(title);
+    if (!tokens.length) return false;
+    var hits = tokens.filter(function (tok) {
+      if (n.indexOf(tok) !== -1) return true;
+      var stem = tok.charAt(tok.length - 1) === 's' ? tok.slice(0, -1) : tok + 's';
+      return tok.length >= 5 && n.indexOf(stem) !== -1;
+    }).length;
+    return hits >= Math.min(2, Math.ceil(tokens.length * 0.5)) || (tokens.length === 1 && hits === 1);
+  }
+
+  function seekForDispute(events, needle) {
+    if (!events || !events.length) return null;
+    if (needle) {
+      var hit = events.filter(function (e) { return disputeMentions(e.text, needle) && e.at > 0.51; })[0];
+      if (hit) return hit.at;
+    }
+    var first = events.filter(function (e) { return e.at > 0.51; })[0];
+    return first ? first.at : null;
+  }
+
+  function excludedScopeLines(item) {
+    var lines = [];
+    var seen = {};
+    EVIDENCE.filter(function (e) { return e.job === item.job; }).forEach(function (clip) {
+      ((clip.analysis && clip.analysis.scope) || []).forEach(function (s) {
+        if (!s.title || seen[s.title]) return;
+        if (!/^do not\b|excluded/i.test(s.title)) return;
+        seen[s.title] = true;
+        lines.push({ title: s.title, state: 'excluded' });
+      });
+    });
+    return lines;
+  }
+
+  function clipDisputeEvents(item) {
+    return analysisLog(item).map(function (r) { return { at: r.at, text: r.text }; });
+  }
+
+  var CHECK_WORDS = {
+    on_site: 'Filmed on site',
+    same_day: 'Filmed on the day claimed',
+    uploaded_promptly: 'Uploaded promptly',
+    long_enough: 'Long enough to show the work',
+    not_a_reupload: 'Not filed before',
+    ordered: 'Before filmed before the after'
+  };
+
+  function disputeCheckTitle(c) {
+    if (c.what && String(c.what).trim()) return String(c.what).trim();
+    var key = String(c.key || '').replace(/^(before|after)\./, '');
+    if (CHECK_WORDS[key]) return CHECK_WORDS[key];
+    if (key) return key.replace(/_/g, ' ');
+    return 'Integrity check';
+  }
+
+  function disputeNorm(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function surfaceClipDisputes(item) {
+    var a = item.analysis || {};
+    var events = clipDisputeEvents(item);
+    var moments = [];
+    (item.checks || []).forEach(function (c) {
+      if (c.verdict !== 'fail') return;
+      var what = disputeCheckTitle(c);
+      moments.push({
+        id: 'integrity:' + item.id + ':' + (c.key || what),
+        kind: 'integrity',
+        title: what,
+        detail: c.detail || '',
+        seek: seekForDispute(events, c.detail || what),
+        proofId: item.id
+      });
+    });
+    var excluded = excludedScopeLines(item);
+    var seenScope = {};
+    excluded.forEach(function (line) {
+      var verdict = (a.scope || []).filter(function (s) { return s.title === line.title; })[0];
+      var visible = verdict && (verdict.verdict === 'appears_complete' || verdict.verdict === 'in_progress');
+      var talked = events.some(function (e) { return disputeMentions(e.text, line.title); });
+      var concerned = (a.concerns || []).some(function (c) { return disputeMentions(c, line.title); });
+      if (!visible && !talked && !concerned) return;
+      var key = disputeNorm(line.title);
+      if (seenScope[key]) return;
+      seenScope[key] = true;
+      moments.push({
+        id: 'scope:' + item.id + ':' + line.title,
+        kind: 'scope',
+        title: 'Conflicts with excluded scope — ' + line.title,
+        detail: (verdict && verdict.because) || (a.concerns || [])[0] || line.title,
+        seek: seekForDispute(events, line.title),
+        proofId: item.id
+      });
+    });
+    (a.concerns || []).forEach(function (c) {
+      if (!/out of scope|outside (the )?(listed )?scope|not in scope/i.test(c)) return;
+      var matched = excluded.filter(function (line) { return disputeMentions(c, line.title); })[0];
+      var titleKey = disputeNorm(matched ? matched.title : c);
+      if (!titleKey || seenScope[titleKey]) return;
+      seenScope[titleKey] = true;
+      moments.push({
+        id: 'scope:' + item.id + ':' + titleKey,
+        kind: 'scope',
+        title: matched ? 'Conflicts with excluded scope — ' + matched.title : 'Work outside the agreed scope',
+        detail: c,
+        seek: seekForDispute(events, matched ? matched.title : c),
+        proofId: item.id
+      });
+    });
+    if (a.materialChange === 'none') {
+      moments.push({
+        id: 'clip:' + item.id + ':none',
+        kind: 'clip',
+        title: 'Claimed day, no visible change',
+        detail: 'The after footage looks like the before.',
+        seek: seekForDispute(events),
+        proofId: item.id
+      });
+    }
+    var afterish = /after|workday|walkthrough|pre-conceal/i.test(item.phase || '');
+    if (afterish) {
+      (a.scope || []).forEach(function (s) {
+        if (s.verdict !== 'in_progress' && s.verdict !== 'appears_complete') return;
+        EVIDENCE.filter(function (e) {
+          return e.job === item.job && e.id !== item.id && /after|workday|walkthrough/i.test(e.phase || '');
+        }).forEach(function (other) {
+          var ov = ((other.analysis && other.analysis.scope) || []).filter(function (x) { return x.title === s.title; })[0];
+          if (!ov) return;
+          if (s.verdict === ov.verdict) return;
+          if (s.verdict !== 'in_progress' && ov.verdict !== 'in_progress') return;
+          if (s.verdict !== 'appears_complete' && ov.verdict !== 'appears_complete') return;
+          moments.push({
+            id: 'clip:' + [item.id, other.id].sort().join(',') + ':' + s.title,
+            kind: 'clip',
+            title: 'Clips disagree — ' + s.title,
+            detail: s.because || ov.because || 'Two after clips read this line differently.',
+            seek: seekForDispute(events, s.title),
+            proofId: item.id
+          });
+        });
+      });
+    }
+    var seen = {};
+    return moments.filter(function (m) {
+      if (seen[m.id]) return false;
+      seen[m.id] = true;
+      return true;
+    });
+  }
+
+  function renderDisputeControl(item) {
+    var moments = surfaceClipDisputes(item);
+    var html = '<div class="dispute-ctl" id="dispute-ctl">';
+    html += '<button type="button" id="dispute-toggle" aria-expanded="false">';
+    html += '<strong>Show me the dispute</strong>';
+    html += '<span class="count' + (moments.length ? ' has' : '') + '">' +
+      (moments.length ? moments.length + ' moment' + (moments.length === 1 ? '' : 's') : 'None on this clip') +
+      '</span></button>';
+    html += '<div id="dispute-panel" hidden>';
+    if (!moments.length) {
+      html += '<p class="dispute-empty">Nothing on this clip conflicts with the scope or with another clip.</p>';
+    } else {
+      html += '<ul class="dispute-list" id="dispute-list">';
+      moments.forEach(function (m) {
+        html += '<li' + (m.seek != null ? ' data-at="' + m.seek + '"' : '') + '>';
+        html += '<span class="dispute-k">' + esc(m.kind === 'integrity' ? 'Integrity' : m.kind === 'scope' ? 'Scope' : 'Clips disagree') +
+          (m.seek != null ? ' · ' + eventClock(m.seek) : '') + '</span>';
+        html += '<span class="dispute-t">' + esc(m.title) + '</span>';
+        html += '<span class="dispute-d">' + esc(m.detail) + '</span></li>';
+      });
+      html += '</ul>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var overviewParts = jobOverviewParts(item);
-    var overviewHtml = renderJobSummary(item);
-    var saw = polishEventCopy(String(a.dictation || '').trim(), 4);
-    var heard = String(a.transcript || '').trim();
-    var html = overviewHtml;
     var pending = a.state === 'queued' || a.state === 'failed' || a.state === 'skipped' || a.state === 'none' || !a.state;
-    if (pending && !rows.length && !saw && !heard) {
+    var html = renderDisputeControl(item);
+    if (pending && !rows.length) {
       html += renderAnalysisStatus(item, a);
       return html;
-    }
-    if (saw && overviewParts.length === 1 && saw === overviewParts[0].text) saw = '';
-    if (looksTimestamped(String(a.dictation || ''))) saw = '';
-    if (saw && restatesSummary(saw, a.summary || (overviewParts[0] && overviewParts[0].text))) saw = '';
-    if (saw && rows.length && String(a.summary || '').trim()) saw = '';
-    if (a.scope && a.scope.length) {
-      html += '<p class="saw-k">Against the scope</p><ul class="scopelist">';
-      a.scope.forEach(function (s) {
-        var w = VERDICT_WORD[s.verdict] || ['neutral', s.verdict];
-        html += '<li><span class="label">' + esc(s.title) +
-          (s.because ? '<span style="display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:1px">' + esc(s.because) + '</span>' : '') +
-          '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
-      });
-      html += '</ul>';
     }
     if (rows.length) {
       html += '<p class="saw-k">Events</p>';
       html += '<p class="footnote alog-wait" id="alog-empty" hidden>Times seek the playhead.</p>';
       html += '<ul class="alog" id="alog">' + rows.map(renderEventRow).join('') + '</ul>';
-    } else if (!pending && !heard && !(a.conversationDetails && a.conversationDetails.length)) {
-      html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list. The summary is the reading.</p>';
-    }
-    if (saw) {
-      html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
-    }
-    if (heard || (a.conversationDetails && a.conversationDetails.length)) {
-      html += '<p class="saw-k">Heard on the mic</p>';
-      if (a.conversationDetails && a.conversationDetails.length) {
-        html += '<ul style="margin:0 0 10px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55">' +
-          a.conversationDetails.slice(0, 8).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
-      } else {
-        html += '<div class="saw-block" style="background:var(--line-soft)"><p>' + esc(heard.slice(0, 1200)) + '</p></div>';
-      }
-    }
-    if (a.couldNotTell && a.couldNotTell.length) {
-      html += '<p class="saw-k">What it could not tell</p>';
-      html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
-        a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+    } else if (!pending) {
+      html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list.</p>';
     }
     if (!pending) {
       html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
@@ -5679,9 +5905,19 @@
 
     if (tab === 'integrity') {
       el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #dispute-list [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
+      var toggle = document.getElementById('dispute-toggle');
+      var panel = document.getElementById('dispute-panel');
+      if (toggle && panel) {
+        toggle.addEventListener('click', function () {
+          var on = panel.hasAttribute('hidden');
+          if (on) panel.removeAttribute('hidden');
+          else panel.setAttribute('hidden', '');
+          toggle.setAttribute('aria-expanded', String(on));
+        });
+      }
       var goto = el.querySelector('[data-goto]');
       if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
       syncAnalysisLog(currentPlayhead());
@@ -6347,7 +6583,11 @@
       bytes: raw.byteSize,
       // A signed still out of the clip itself, minted with the list.
       poster: raw.posterUrl || null,
-      device: null,
+      device: raw.device && raw.device.label
+        ? raw.device.label
+        : raw.device
+          ? [raw.device.make, raw.device.model, raw.device.appVersion].filter(Boolean).join(' · ') || null
+          : null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
       labels: Array.isArray(raw.labels) ? raw.labels : [],

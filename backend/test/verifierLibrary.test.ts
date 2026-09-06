@@ -300,6 +300,43 @@ test('serialization: office dictation prefers narration_text over the day summar
   assert.equal((item.analysis as { dictationEntries?: Array<{ text?: string }> } | null)?.dictationEntries?.[0]?.text, 'Tear-off begins.');
 });
 
+test('serialization: filmedBy and device identity ride with the clip', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-device',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-05',
+      captured_at: '2026-08-05T18:00:00Z',
+      received_at: '2026-08-05T18:04:00Z',
+      duration_seconds: '40',
+      byte_size: '1000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'abc',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'On site.' }],
+      ai_summary: null,
+      ai_findings: {},
+      analysis_status: 'done',
+      narration_status: 'done',
+      narration_text: 'Deck exposed.',
+      narration: { entries: [{ atSeconds: 8, text: 'Deck exposed.' }] },
+      device_metadata: { make: 'Apple', model: 'iPhone 15', appVersion: '2.4' },
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+  });
+  assert.equal((item as { filmedBy?: { person?: string } }).filmedBy?.person, 'Hector Delgado');
+  assert.equal((item as { device?: { model?: string } }).device?.model, 'iPhone 15');
+});
+
 test('serialization: timestamped narration_text becomes multiple dictationEntries', () => {
   const item = serializeEvidence({
     proof: {

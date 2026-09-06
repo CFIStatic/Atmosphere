@@ -22,6 +22,9 @@ import {
   type JobFileBeat,
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
+import { ShowDispute } from '../components/analysis/ShowDispute';
+import { EventTimeline } from '../components/analysis/EventTimeline';
+import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 
 /**
  * The job file.
@@ -150,6 +153,48 @@ export function JobDetailPage() {
           <div className="mt-4">
             <ErrorNote message={error} />
           </div>
+        )}
+
+        {proofs && ((proofs.videos?.length ?? 0) > 0 || (proofs.disputes?.length ?? 0) > 0) && (
+          <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-analysis">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-ink-900">Analysis</h2>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  Event timeline from the clips on this file. Tap a time to mark it; open Videos to play.
+                </p>
+              </div>
+              <CustodyExportButton jobId={job.id} label="Export custody JSON" />
+            </div>
+            <div className="mt-3">
+              <ShowDispute disputes={proofs.disputes ?? []} />
+            </div>
+            <ol className="mt-4 space-y-4">
+              {(proofs.videos ?? []).map((video) => {
+                const pending =
+                  video.analysisStatus === 'queued' ||
+                  video.analysisStatus === 'running' ||
+                  video.narrationStatus === 'queued' ||
+                  video.narrationStatus === 'running';
+                const failed = video.analysisStatus === 'failed' || video.narrationStatus === 'failed';
+                return (
+                  <li key={video.id}>
+                    <p className="text-[11px] font-medium text-ink-500">
+                      {video.workDate}
+                      <span className="ml-1.5 font-normal text-ink-400">
+                        {video.company}
+                        {video.phase ? ` · ${video.phase}` : ''}
+                      </span>
+                    </p>
+                    <EventTimeline
+                      events={video.dictationEntries ?? []}
+                      status={failed ? 'failed' : pending && !video.dictationEntries?.length ? 'pending' : null}
+                    />
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
         )}
 
         {blockers.length > 0 && (

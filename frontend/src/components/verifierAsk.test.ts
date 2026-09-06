@@ -67,7 +67,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).not.toContain('<h4>AI analysis</h4>');
     expect(verifierHtml).toContain('function isSceneViewNote');
     expect(verifierHtml).toContain('function jobOverviewParts');
-    expect(verifierHtml).toContain('id="d-job-summary"');
+    expect(verifierHtml).toContain('function surfaceClipDisputes');
+    expect(verifierHtml).toContain('function disputeCheckTitle');
+    expect(verifierHtml).toContain('Show me the dispute');
+    expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
     expect(verifierHtml).toContain('id="d-analysis-lead"');
     expect(verifierHtml).toContain('analysis-skel');
     expect(verifierHtml).toContain('saw-k">Events');
@@ -100,7 +103,7 @@ describe('verifier clip Ask tab and live analysis', () => {
       (el) => (el.textContent || '').trim(),
     );
     expect(tabLabels).toEqual(['Analysis', 'Ask', 'Details']);
-    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
     expect(document.getElementById('alog')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog-pill')).toBeNull();
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis/i);
@@ -139,7 +142,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/bathroom/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
     expect(document.getElementById('alog')?.textContent).toMatch(/bathroom/i);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
@@ -205,12 +208,12 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(panel).not.toMatch(
       /Viewing an office desk setup with multiple active computer screens/i,
     );
-    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/tarp/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
     expect(document.getElementById('alog')?.textContent).toMatch(/tarp gone/i);
     dom.window.close();
   });
 
-  it('puts the job summary above the disclaimer, then the timestamped clip reading', async () => {
+  it('keeps Analysis as a timeline: events, then a quiet disclaimer — no essay wall', async () => {
     const dom = bootVerifier();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
@@ -219,20 +222,19 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    const summary = document.getElementById('d-job-summary');
     const lead = document.getElementById('d-analysis-lead');
     const alog = document.getElementById('alog');
-    expect(summary).not.toBeNull();
+    expect(document.getElementById('d-job-summary')).toBeNull();
+    expect(document.getElementById('d-saw')).toBeNull();
     expect(lead).not.toBeNull();
     expect(alog).not.toBeNull();
-    expect(summary!.compareDocumentPosition(alog!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(alog!.compareDocumentPosition(lead!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(summary!.textContent).toMatch(/north slope/i);
-    expect(summary!.textContent).toMatch(/garage panel/i);
     expect(lead!.textContent).toMatch(/never an acceptance/i);
     expect(alog!.textContent).toMatch(/tarp gone/i);
-    expect(document.getElementById('d-saw')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Against the scope/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Heard on the mic/i);
     expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
+    expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/Show me the dispute/i);
     dom.window.close();
   });
 
@@ -251,7 +253,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.querySelector('.analysis-status')?.getAttribute('data-status')).toBe('pending');
     expect(document.getElementById('d-saw')).toBeNull();
     expect(document.getElementById('d-analysis-lead')).toBeNull();
-    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/board is hung|single wall/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
+    expect(document.getElementById('dispute-toggle')).not.toBeNull();
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis|Paused/i);
     dom.window.close();
   });
@@ -265,7 +268,6 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    expect(document.body.textContent).toMatch(/Heard on the mic/);
     expect(document.body.textContent).toMatch(/insurance/i);
     expect(document.body.textContent).toMatch(/vanity/i);
 
@@ -296,11 +298,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    const summary = document.getElementById('d-job-summary');
     const lead = document.getElementById('d-analysis-lead');
     const alog = document.getElementById('alog');
-    expect(summary?.textContent).toMatch(/office desk|monitors/i);
-    expect(summary?.textContent).not.toMatch(/The video shows/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
     expect(lead?.textContent).toMatch(/never an acceptance/i);
     expect(document.getElementById('d-saw')).toBeNull();
     const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
@@ -330,7 +330,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    expect(document.getElementById('d-job-summary')?.textContent).toMatch(/office desk/i);
+    expect(document.getElementById('d-job-summary')).toBeNull();
     expect(document.getElementById('d-saw')).toBeNull();
     expect(document.getElementById('alog')).toBeNull();
     expect(document.getElementById('alog-empty')?.textContent).toMatch(/No distinct moments/i);
@@ -385,5 +385,43 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.querySelector('[data-tab="custody"]')).toBeNull();
     expect(document.querySelector('[data-tab="ask"]')?.nextElementSibling).toBe(detailsTab);
     dom.window.close();
+  });
+
+  it('surfaces excluded-scope work on Show me the dispute and seeks the event', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0808-X"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const toggle = document.getElementById('dispute-toggle') as HTMLButtonElement | null;
+    expect(toggle).not.toBeNull();
+    expect(toggle!.textContent).toMatch(/Show me the dispute/i);
+    expect(document.getElementById('dispute-panel')?.hasAttribute('hidden')).toBe(true);
+    toggle!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(document.getElementById('dispute-panel')?.hasAttribute('hidden')).toBe(false);
+    const list = document.getElementById('dispute-list');
+    expect(list?.textContent).toMatch(/skylight/i);
+    const skylightRows = Array.from(document.querySelectorAll('#dispute-list li')).filter((el) =>
+      /skylight/i.test(el.textContent || ''),
+    );
+    expect(skylightRows.length).toBe(1);
+    const seekRow = document.querySelector('#dispute-list [data-at="41"]') as HTMLElement | null;
+    expect(seekRow).not.toBeNull();
+    seekRow!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(seekRow!.getAttribute('data-at')).toBe('41');
+    expect(document.getElementById('d-job-summary')).toBeNull();
+    dom.window.close();
+  });
+
+  it('exports clip custody as versioned JSON with filmedBy, time, job, device, integrity', () => {
+    expect(verifierHtml).toContain("schema: 'atmosphere.clip_custody.v1'");
+    expect(verifierHtml).toContain('filmedBy');
+    expect(verifierHtml).toContain("algorithm: 'sha256'");
+    expect(verifierHtml).toContain('contentHash');
+    expect(verifierHtml).toContain('chainOfCustody');
+    expect(verifierHtml).toContain("a.download = 'custody-' + item.id + '.json'");
   });
 });

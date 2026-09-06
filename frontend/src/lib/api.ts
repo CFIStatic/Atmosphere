@@ -759,24 +759,61 @@ export interface ProofVideoEvent {
   text?: string;
 }
 
+export interface DictationEventEntry {
+  atSeconds: number;
+  text: string;
+  type?: string | null;
+}
+
+export interface DeviceIdentity {
+  make: string | null;
+  model: string | null;
+  os: string | null;
+  appVersion: string | null;
+  deviceId: string | null;
+  label: string | null;
+}
+
+export interface DisputeMoment {
+  id: string;
+  kind: 'scope' | 'clip' | 'integrity';
+  severity: 'high' | 'medium';
+  title: string;
+  detail: string;
+  proofId: string | null;
+  seekSeconds: number | null;
+  workDate: string | null;
+  partyId: string | null;
+  company: string | null;
+  phase: string | null;
+  relatedProofIds: string[];
+  scopeTitle: string | null;
+}
+
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
   id: string;
   partyId: string;
   company: string;
+  person?: string | null;
   workDate: string;
   phase: 'before' | 'after' | string;
   durationSeconds: number | null;
+  capturedAt?: string | null;
+  receivedAt?: string | null;
+  contentHash?: string | null;
+  device?: DeviceIdentity | null;
+  checks?: ProofCheck[];
   analysisStatus: string | null;
   narrationStatus: string | null;
   transcriptStatus: string | null;
   transcriptError: string | null;
   aiSummary: string | null;
   heardOnMic: string | null;
-  /** When the file landed — used by the job-file today strip. */
-  receivedAt?: string | null;
-  /** Event-boundary timestamps from Analysis. */
+  /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
+  dictationEntries?: DictationEventEntry[];
+  disputes?: DisputeMoment[];
 }
 
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
@@ -821,18 +858,59 @@ export interface ScopeVerdict {
 }
 
 export interface ProofResponse {
+  job?: { id: string; number: number | null; name: string | null };
   days: ProofDay[];
   videos?: ProofVideoRecord[];
+  disputes?: DisputeMoment[];
   counts: {
     days: number;
     videos?: number;
     payable: number;
     contradicted: number;
+    disputes?: number;
     awaitingAfter: number;
     analysing?: number;
   };
   /** False when the job has no coordinates, so the on-site check cannot run. */
   siteKnown: boolean;
+}
+
+export interface ClipCustodyExport {
+  schema: 'atmosphere.clip_custody.v1';
+  exportedAt: string;
+  job: { id: string; number: number | null; name: string | null };
+  clip: {
+    id: string;
+    phase: string;
+    workDate: string | null;
+    filmedBy: { partyId: string | null; company: string | null; person: string | null };
+    filmedAt: string | null;
+    receivedAt: string | null;
+    device: DeviceIdentity | null;
+    integrity: {
+      algorithm: 'sha256';
+      contentHash: string | null;
+      verdict: 'pass' | 'fail' | 'unknown';
+      checks: Array<{ key: string | null; verdict: string; what: string; detail: string }>;
+    };
+    location: { lat: number; lon: number; accuracyM: number | null } | null;
+    durationSeconds: number | null;
+    byteSize: number | null;
+  };
+  chainOfCustody: Array<{
+    action: string;
+    by: string;
+    role: string | null;
+    detail: string | null;
+    at: string;
+  }>;
+}
+
+export interface JobCustodyExport {
+  schema: 'atmosphere.job_custody.v1';
+  exportedAt: string;
+  job: { id: string; number: number | null; name: string | null };
+  clips: ClipCustodyExport[];
 }
 
 export interface ProofQuestion {
@@ -3348,6 +3426,21 @@ export const api = {
       `/api/operations/shared/${jobId}/evidence/${proofId}/custody`,
       { method: 'GET' },
     ),
+
+  jobDisputes: (jobId: string) =>
+    request<{ schema: string; jobId: string; disputes: DisputeMoment[]; count: number }>(
+      `/api/operations/shared/${jobId}/disputes`,
+      { method: 'GET' },
+    ),
+
+  evidenceCustodyExport: (jobId: string, proofId: string) =>
+    request<ClipCustodyExport>(
+      `/api/operations/shared/${jobId}/evidence/${proofId}/custody-export`,
+      { method: 'GET' },
+    ),
+
+  jobCustodyExport: (jobId: string) =>
+    request<JobCustodyExport>(`/api/operations/shared/${jobId}/custody-export`, { method: 'GET' }),
 
   setEvidenceHold: (jobId: string, proofId: string, input: { hold: boolean; reason?: string }) =>
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
