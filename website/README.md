@@ -122,9 +122,23 @@ python3 website/build-preview.py preview.html
 ## SEO & sharing
 
 `hardware.html` is a product page for the Field Capture Chest Mount ($49).
-The Buy button defaults to `mailto:hello@atmosphereteam.com`. To send it to
-Stripe later, paste a Payment Link (`https://buy.stripe.com/...`) into the
-page's `CHECKOUT_URL`, `data-checkout-url`, or `window.ATMOSPHERE_HARDWARE_CHECKOUT_URL`.
+The primary CTA is **Buy — $49**. It goes to Stripe when a Payment Link or
+Checkout Session URL is set; otherwise it shows a disabled
+“Checkout coming online” state (mailto is support-only, never checkout).
+
+To go live, create a Stripe Payment Link:
+
+1. Product name: **Field Capture Chest Mount**
+2. Price: **$49 USD**
+3. Enable **shipping address collection**
+4. Paste the URL (`https://buy.stripe.com/...`) into the page’s
+   `CHECKOUT_URL`, a Buy button’s `data-checkout-url`, or
+   `window.ATMOSPHERE_HARDWARE_CHECKOUT_URL`
+
+No redesign is required — one URL turns the existing button live.
+A printable setup card lives at `hardware-setup-card.html` and
+`assets/field-capture-setup-card.pdf` (digital guide is emailed after
+purchase; we do not currently ship a printed card).
 
 Every public page carries Open Graph / Twitter meta, a canonical URL, and
 `og:url` on `https://atmosphereteam.com/...`. The share card is

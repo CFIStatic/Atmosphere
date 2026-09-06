@@ -18,9 +18,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/site.css?v=20260906-hw" />
+  <link rel="stylesheet" href="assets/site.css?v=20260906-hw2" />
   <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark')p=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',p);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Product","name":"Field Capture Chest Mount","description":"A foldable MOLLE chest phone panel Atmosphere sells and ships as a Field Capture accessory so crews can film job proof hands-free.","brand":{"@type":"Brand","name":"Atmosphere"},"offers":{"@type":"Offer","price":"49.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"https://atmosphereteam.com/hardware"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long does shipping take?","acceptedAnswer":{"@type":"Answer","text":"Orders typically ship in 2–5 business days. We email when the kit is on its way."}},{"@type":"Question","name":"What phones fit?","acceptedAnswer":{"@type":"Answer","text":"The panel holds most modern smartphones roughly 4.7 to 6.7 inches, with or without a typical protective case. Bungee and silicone retention keep the phone in place."}},{"@type":"Question","name":"What is the return policy?","acceptedAnswer":{"@type":"Answer","text":"Contact Atmosphere and we will handle returns and fit questions. A person replies, usually within one business day."}},{"@type":"Question","name":"Does the mount include Field Capture software?","acceptedAnswer":{"@type":"Answer","text":"No. This is optional hardware. Field Capture and the Evidence Platform ship with the Work Verification subscription."}}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Product","name":"Field Capture Chest Mount","description":"A foldable MOLLE chest phone panel Atmosphere sells and ships as a Field Capture accessory so crews can film job proof hands-free. Kit: foldable chest panel, retention straps/bungee, and a digital setup guide emailed after purchase.","brand":{"@type":"Brand","name":"Atmosphere"},"offers":{"@type":"Offer","price":"49.00","priceCurrency":"USD","availability":"https://schema.org/InStock","url":"https://atmosphereteam.com/hardware","shippingDetails":{"@type":"OfferShippingDetails","deliveryTime":{"@type":"ShippingDeliveryTime","handlingTime":{"@type":"QuantitativeValue","minValue":2,"maxValue":5,"unitCode":"d"}}}}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is in the box?","acceptedAnswer":{"@type":"Answer","text":"A foldable MOLLE chest phone mount panel, retention straps/bungee, and a digital setup guide emailed after purchase (printable card available)."}},{"@type":"Question","name":"How long does shipping take?","acceptedAnswer":{"@type":"Answer","text":"Orders typically ship in 2–5 business days. We email when the kit is on its way."}},{"@type":"Question","name":"What phones fit?","acceptedAnswer":{"@type":"Answer","text":"The panel holds most modern smartphones roughly 4.7 to 6.7 inches, with or without a typical protective case. Bungee and silicone retention keep the phone in place."}},{"@type":"Question","name":"What is the return policy?","acceptedAnswer":{"@type":"Answer","text":"Contact Atmosphere and we will handle returns and fit questions. A person replies, usually within one business day."}},{"@type":"Question","name":"Does the mount include Field Capture software?","acceptedAnswer":{"@type":"Answer","text":"No. This is optional hardware. Field Capture and the Evidence Platform ship with the Work Verification subscription."}}]}]}</script>
 </head>
 <body>
 
@@ -98,57 +98,216 @@
 <!-- page:start -->
 <main>
 
-<section class="hero">
+<section class="hero" id="buy">
   <div class="wrap hero-grid">
     <div>
       <div class="eyebrow mono fade-up">Field Capture accessory · kit we sell and ship</div>
       <h1 class="fade-up d1">Field Capture Chest Mount</h1>
       <p class="lede fade-up d2">
         A foldable MOLLE chest panel that holds the phone so you can film the
-        job without holding the job in one hand. Clip it to a vest or chest
-        harness, set the angle, and let Field Capture take the proof.
+        job without holding the job in one hand. Atmosphere sells and ships
+        this accessory for Field Capture hands-free recording — clip it to a
+        vest, set the angle, and let the phone take the proof.
       </p>
       <div class="hw-price-row fade-up d2">
         <span class="hw-price">$49</span>
         <span class="hw-ship mono">USD · ships in 2–5 business days</span>
       </div>
-      <div class="hero-ctas fade-up d3">
-        <!-- Paste a Stripe Payment Link (https://buy.stripe.com/...) into CHECKOUT_URL, data-checkout-url, or window.ATMOSPHERE_HARDWARE_CHECKOUT_URL. Empty uses mailto. -->
-        <a class="btn btn-lg" id="hardware-buy" data-checkout-url="" href="mailto:hello@atmosphereteam.com?subject=Order%3A%20Field%20Capture%20Chest%20Mount&amp;body=I%20would%20like%20to%20order%20the%20Field%20Capture%20Chest%20Mount%20(%2449).%0A%0AQuantity%3A%201%0AShip-to%20name%3A%0AShip-to%20address%3A%0APhone%20(optional)%3A%0A">Buy — $49</a>
-        <a class="btn-quiet" href="contact.html?note=I%20have%20a%20question%20about%20the%20Field%20Capture%20Chest%20Mount.">Questions? Contact us</a>
+      <div class="hw-fit mono fade-up d2">Fits phones <strong>~4.7–6.7&quot;</strong> with a typical case</div>
+      <div class="hw-ctas fade-up d3">
+        <div class="hero-ctas">
+          <!-- Live when a Stripe Payment Link is pasted into CHECKOUT_URL, data-checkout-url, or window.ATMOSPHERE_HARDWARE_CHECKOUT_URL. Empty = disabled “Checkout coming online”. -->
+          <a class="btn btn-lg js-hardware-buy" id="hardware-buy" data-checkout-url="" href="#buy">Buy — $49</a>
+          <a class="btn-quiet" href="contact.html?note=I%20have%20a%20question%20about%20the%20Field%20Capture%20Chest%20Mount.">Questions? Contact us</a>
+        </div>
+        <p class="hw-buy-note" hidden>
+          Checkout coming online. Until Buy is live,
+          <a href="contact.html?note=I%20have%20a%20question%20about%20the%20Field%20Capture%20Chest%20Mount.">contact us</a>.
+        </p>
+        <p class="hw-support"><a href="mailto:hello@atmosphereteam.com?subject=Field%20Capture%20Chest%20Mount">Support</a></p>
       </div>
     </div>
 
     <div class="hw-stage" aria-hidden="false">
-      <svg class="hw-svg" viewBox="0 0 360 420" role="img" aria-labelledby="hw-fig-title hw-fig-desc">
+      <svg class="hw-svg" viewBox="0 0 400 460" role="img" aria-labelledby="hw-fig-title hw-fig-desc">
         <title id="hw-fig-title">Field Capture Chest Mount</title>
-        <desc id="hw-fig-desc">Illustration of a foldable MOLLE chest panel holding a phone.</desc>
-        <rect class="hw-svg-ground" x="24" y="28" width="312" height="364" rx="22"/>
-        <path class="hw-svg-vest" d="M86 58h188c8 0 14 6 14 14v38c0 62-28 118-108 150-80-32-108-88-108-150V72c0-8 6-14 14-14z"/>
-        <rect class="hw-svg-panel" x="118" y="96" width="124" height="168" rx="10"/>
-        <g class="hw-svg-molle" fill="none">
-          <path d="M130 118h100M130 138h100M130 158h100M130 178h100M130 198h100M130 218h100"/>
+        <desc id="hw-fig-desc">Product illustration: a foldable MOLLE chest panel on a vest, holding a phone with bungee retention.</desc>
+        <rect class="hw-svg-ground" x="18" y="18" width="364" height="424" rx="24"/>
+        <ellipse class="hw-svg-glow" cx="200" cy="210" rx="132" ry="150"/>
+        <ellipse class="hw-svg-shadow" cx="200" cy="412" rx="92" ry="10"/>
+        <path class="hw-svg-vest" d="M92 72h216c10 0 16 8 16 18v42c0 78-36 148-124 188-88-40-124-110-124-188V90c0-10 6-18 16-18z"/>
+        <path class="hw-svg-vest-inner" d="M122 118h156c6 0 10 5 10 11v28c0 58-28 108-88 136-60-28-88-78-88-136v-28c0-6 4-11 10-11z"/>
+        <g class="hw-svg-molle-slots">
+          <rect class="hw-svg-slot" x="136" y="132" width="28" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="172" y="132" width="28" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="208" y="132" width="28" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="244" y="132" width="20" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="136" y="150" width="28" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="172" y="150" width="28" height="7" rx="2"/>
+          <rect class="hw-svg-slot" x="208" y="150" width="28" height="7" rx="2"/>
         </g>
-        <path class="hw-svg-flap" d="M128 92l52-36 52 36"/>
-        <rect class="hw-svg-phone" x="142" y="128" width="76" height="132" rx="12"/>
-        <rect class="hw-svg-screen" x="150" y="144" width="60" height="92" rx="4"/>
-        <rect class="hw-svg-bar" x="150" y="242" width="60" height="8" rx="1"/>
-        <path class="hw-svg-bungee" d="M148 168c22 10 42 10 64 0M148 200c22 10 42 10 64 0"/>
-        <circle class="hw-svg-lens" cx="180" cy="138" r="3.2"/>
+        <path class="hw-svg-strap" d="M118 96c18-22 46-34 82-34s64 12 82 34"/>
+        <rect class="hw-svg-panel-edge" x="132" y="168" width="136" height="196" rx="14"/>
+        <rect class="hw-svg-panel" x="138" y="164" width="124" height="188" rx="12"/>
+        <path class="hw-svg-stitch" d="M148 176h104M148 340h104"/>
+        <g class="hw-svg-molle" fill="none">
+          <path d="M152 186h96M152 204h96M152 222h96"/>
+        </g>
+        <rect class="hw-svg-phone" x="158" y="198" width="84" height="138" rx="14"/>
+        <rect class="hw-svg-island" x="186" y="206" width="28" height="7" rx="3.5"/>
+        <rect class="hw-svg-screen" x="166" y="218" width="68" height="96" rx="6"/>
+        <rect class="hw-svg-bar" x="166" y="320" width="68" height="8" rx="1"/>
+        <path class="hw-svg-bungee" d="M164 236c24 12 48 12 72 0M164 274c24 12 48 12 72 0"/>
+        <circle class="hw-svg-lens" cx="200" cy="210" r="2.4"/>
       </svg>
-      <p class="hw-caption mono">CHEST PANEL · PHONE ON THE RECORD</p>
+      <p class="hw-caption mono">CHEST PANEL + PHONE · HANDS-FREE RECORD</p>
     </div>
   </div>
 </section>
 
 <nav class="subnav mono" aria-label="On this page">
   <div class="subnav-inner">
-    <a href="#why">WHY</a>
+    <a href="#box">IN THE BOX</a>
+    <a href="#views">VIEWS</a>
     <a href="#specs">SPECS</a>
-    <a href="#included">INCLUDED</a>
     <a href="#faq">FAQ</a>
   </div>
 </nav>
+
+<section class="section" id="box">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">What's in the box</div>
+      <h2>What physically ships</h2>
+      <p>
+        Atmosphere packs and ships this as a Field Capture accessory. We
+        source the foldable chest panel and send it as our kit — we are not
+        claiming to manufacture the hardware.
+      </p>
+    </div>
+    <div class="hw-box">
+      <div class="hw-box-card">
+        <span class="kbd mono">01</span>
+        <h3>Foldable MOLLE chest phone mount</h3>
+        <p>One nylon-and-plastic panel with a foldable viewing plane. Weave it onto a vest or chest harness — MOLLE / PALS on the back.</p>
+      </div>
+      <div class="hw-box-card">
+        <span class="kbd mono">02</span>
+        <h3>Retention straps / bungee</h3>
+        <p>Bungee cords and a silicone cradle hold a phone about <strong>4.7–6.7&quot;</strong>, with or without a typical protective case.</p>
+      </div>
+      <div class="hw-box-card">
+        <span class="kbd mono">03</span>
+        <h3>Digital setup guide</h3>
+        <p>
+          A setup guide is <strong>emailed after purchase</strong> — we do not
+          currently ship a printed card. It points at the
+          <a href="doc-field.html">Field Capture docs</a>.
+          <a href="hardware-setup-card.html">Print the card</a>
+          (or <a href="assets/field-capture-setup-card.pdf">download the PDF</a>)
+          if you want one in the kit.
+        </p>
+      </div>
+    </div>
+    <p class="hw-fulfill">We ship in Atmosphere packaging from our stock — not an Amazon package.</p>
+  </div>
+</section>
+
+<section class="section" id="views">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">How it sits</div>
+      <h2>Closed, open, on the vest</h2>
+      <p>
+        Same panel in three states — folded for the bag, opened with the
+        phone seated, and woven onto a chest rig.
+      </p>
+    </div>
+    <div class="hw-views">
+      <figure class="hw-view">
+        <svg viewBox="0 0 220 240" role="img" aria-labelledby="hw-closed-title">
+          <title id="hw-closed-title">Closed panel</title>
+          <rect class="hw-svg-ground" x="8" y="10" width="204" height="220" rx="16"/>
+          <rect class="hw-svg-panel-edge" x="58" y="38" width="104" height="164" rx="12"/>
+          <rect class="hw-svg-panel" x="64" y="34" width="92" height="158" rx="10"/>
+          <path class="hw-svg-stitch" d="M74 48h72M74 178h72"/>
+          <g class="hw-svg-molle" fill="none">
+            <path d="M76 64h68M76 84h68M76 104h68M76 124h68M76 144h68"/>
+          </g>
+          <path class="hw-svg-flap" d="M70 38h80l-8 22H78z"/>
+        </svg>
+        <h3>Closed</h3>
+        <p>Panel folded flat. MOLLE slots on the face, ready for a bag or the vest.</p>
+      </figure>
+      <figure class="hw-view">
+        <svg viewBox="0 0 220 240" role="img" aria-labelledby="hw-open-title">
+          <title id="hw-open-title">Open panel with phone</title>
+          <rect class="hw-svg-ground" x="8" y="10" width="204" height="220" rx="16"/>
+          <rect class="hw-svg-panel-edge" x="52" y="36" width="116" height="172" rx="12"/>
+          <rect class="hw-svg-panel" x="58" y="32" width="104" height="164" rx="10"/>
+          <rect class="hw-svg-phone" x="76" y="56" width="68" height="116" rx="12"/>
+          <rect class="hw-svg-island" x="96" y="64" width="28" height="6" rx="3"/>
+          <rect class="hw-svg-screen" x="82" y="74" width="56" height="80" rx="5"/>
+          <rect class="hw-svg-bar" x="82" y="158" width="56" height="7" rx="1"/>
+          <path class="hw-svg-bungee" d="M80 88c20 10 40 10 60 0M80 120c20 10 40 10 60 0"/>
+        </svg>
+        <h3>Open</h3>
+        <p>Phone seated in the cradle, bungee across the body, screen tipped toward you.</p>
+      </figure>
+      <figure class="hw-view">
+        <svg viewBox="0 0 220 240" role="img" aria-labelledby="hw-vest-title">
+          <title id="hw-vest-title">Panel on a vest</title>
+          <rect class="hw-svg-ground" x="8" y="10" width="204" height="220" rx="16"/>
+          <path class="hw-svg-vest" d="M48 36h124c8 0 12 6 12 14v28c0 54-24 100-74 126-50-26-74-72-74-126V50c0-8 4-14 12-14z"/>
+          <path class="hw-svg-strap" d="M62 52c14-16 32-24 48-24s34 8 48 24"/>
+          <rect class="hw-svg-slot" x="72" y="58" width="18" height="5" rx="1.5"/>
+          <rect class="hw-svg-slot" x="96" y="58" width="18" height="5" rx="1.5"/>
+          <rect class="hw-svg-slot" x="120" y="58" width="18" height="5" rx="1.5"/>
+          <rect class="hw-svg-panel" x="78" y="78" width="64" height="96" rx="8"/>
+          <rect class="hw-svg-phone" x="88" y="90" width="44" height="72" rx="8"/>
+          <rect class="hw-svg-screen" x="93" y="100" width="34" height="48" rx="3"/>
+          <path class="hw-svg-bungee" d="M90 112c12 6 24 6 36 0"/>
+        </svg>
+        <h3>On vest</h3>
+        <p>Woven onto the chest rig you already wear. Camera at walk-through height.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="specs">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Specs</div>
+      <h2>Size, ship, and returns</h2>
+      <p>
+        A sourced foldable chest phone panel, sold as a Field Capture
+        accessory. Built to stay on a vest, not on a desk.
+      </p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">The kit</div>
+        <h3>What you are buying</h3>
+        <p>
+          Atmosphere sells and ships this mount so Field Capture can run
+          hands-free. It does not include Work Verification software, and we
+          do not claim Atmosphere mills the nylon.
+        </p>
+      </div>
+      <div class="spec hw-spec-wide mono" aria-label="Chest mount specifications">
+        <div class="spec-row"><span class="spec-key">Price</span><span class="spec-val">$49 USD</span></div>
+        <div class="spec-row"><span class="spec-key">Phone fit</span><span class="spec-val">About 4.7–6.7&nbsp;in</span></div>
+        <div class="spec-row"><span class="spec-key">Retention</span><span class="spec-val">Bungee · silicone cradle</span></div>
+        <div class="spec-row"><span class="spec-key">Attach</span><span class="spec-val">MOLLE / PALS webbing</span></div>
+        <div class="spec-row"><span class="spec-key">Build</span><span class="spec-val">Nylon · plastic · light</span></div>
+        <div class="spec-row"><span class="spec-key">Panel</span><span class="spec-val">Foldable viewing plane</span></div>
+        <div class="spec-row"><span class="spec-key">Ships</span><span class="spec-val">2–5 business days</span></div>
+        <div class="spec-row"><span class="spec-key">Returns</span><span class="spec-val">Via <a href="contact.html?note=I%20need%20help%20with%20a%20Field%20Capture%20Chest%20Mount%20return.">contact</a></span></div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="section" id="why">
   <div class="wrap">
@@ -191,99 +350,6 @@
   </div>
 </section>
 
-<section class="section" id="specs">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Specs</div>
-      <h2>What the panel actually does</h2>
-      <p>
-        Original Atmosphere wording for a foldable chest phone panel — built
-        to stay on a vest, not on a desk.
-      </p>
-    </div>
-    <div class="split">
-      <div>
-        <div class="tag mono">Hold</div>
-        <h3>Phone stays put through the walk-through</h3>
-        <p>
-          Bungee cords and a silicone cradle keep the phone on the panel.
-          Sized for most smartphones between about 4.7 and 6.7 inches, with
-          or without a typical protective case.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Retention specification">
-        <div class="spec-row"><span class="spec-key">Retention</span><span class="spec-val">Bungee · silicone cradle</span></div>
-        <div class="spec-row"><span class="spec-key">Phone size</span><span class="spec-val">About 4.7–6.7&nbsp;in</span></div>
-      </div>
-    </div>
-    <div class="split">
-      <div>
-        <div class="tag mono">Mount</div>
-        <h3>Clips to MOLLE you already have</h3>
-        <p>
-          The back is MOLLE / PALS compatible — weave it onto a chest harness
-          or vest. Lightweight nylon and plastic, so it does not fight the
-          rest of the kit on a hot roof.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Mount specification">
-        <div class="spec-row"><span class="spec-key">Attach</span><span class="spec-val">MOLLE / PALS webbing</span></div>
-        <div class="spec-row"><span class="spec-key">Build</span><span class="spec-val">Nylon · plastic · light</span></div>
-      </div>
-    </div>
-    <div class="split">
-      <div>
-        <div class="tag mono">Angle</div>
-        <h3>Fold for recording or for the map</h3>
-        <p>
-          The viewing panel folds so you can tip the screen toward your eyes
-          for navigation, then flatten it for a stable chest-height recording
-          angle. No extra arm. No table.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Panel specification">
-        <div class="spec-row"><span class="spec-key">Panel</span><span class="spec-val">Foldable viewing plane</span></div>
-        <div class="spec-row"><span class="spec-key">Use</span><span class="spec-val">Record · glance · fold away</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="included">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">What's included</div>
-      <h2>The kit we put in the box</h2>
-      <p>
-        Atmosphere packs and ships this as a Field Capture accessory. We source
-        the foldable chest panel and send it as our kit — we are not claiming
-        to mill the nylon ourselves.
-      </p>
-    </div>
-    <div class="sec-grid">
-      <div class="sec-card">
-        <span class="kbd mono">01</span>
-        <h3>Chest mount</h3>
-        <p>One foldable MOLLE phone panel with bungee and silicone retention, ready for a vest or chest harness.</p>
-      </div>
-      <div class="sec-card">
-        <span class="kbd mono">02</span>
-        <h3>Setup card</h3>
-        <p>
-          A printed card in the box with a QR code to the
-          <a href="doc-field.html">Field Capture docs</a> — how crews film the
-          shot list, not a hardware manual we invented.
-        </p>
-      </div>
-      <div class="sec-card">
-        <span class="kbd mono">03</span>
-        <h3>Shipped by us</h3>
-        <p>Atmosphere takes the order, packs the kit, and ships in about 2–5 business days. Questions go to the same humans on the contact page.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section class="section" id="faq">
   <div class="wrap">
     <div class="section-head">
@@ -291,6 +357,16 @@
       <h2>The ones that decide the order</h2>
     </div>
     <div class="faq">
+      <details>
+        <summary>What's in the box?</summary>
+        <p>
+          (1) the foldable MOLLE chest phone mount, (2) retention straps /
+          bungee, and (3) a <strong>digital setup guide emailed after
+          purchase</strong>. We do not currently pack a printed card — print
+          <a href="hardware-setup-card.html">the setup card</a> if you want one
+          with the kit.
+        </p>
+      </details>
       <details>
         <summary>How long does shipping take?</summary>
         <p>
@@ -330,7 +406,7 @@
         <p>
           Atmosphere sells this as a Field Capture accessory. We source a
           foldable MOLLE chest phone panel, brand the kit, and ship it. We do
-          not claim Atmosphere mills the hardware.
+          not claim Atmosphere manufactures the hardware.
         </p>
       </details>
     </div>
@@ -345,8 +421,8 @@
         <p>Work Verification is Field Capture on site plus the Evidence Platform in the office. The Chest Mount is the optional kit that keeps both hands free.</p>
       </div>
       <div class="cta-actions">
-        <a class="btn btn-lg" href="field.html">Field Capture</a>
-        <a class="btn-quiet" href="how-it-works.html">How it works&nbsp;→</a>
+        <a class="btn btn-lg js-hardware-buy" data-checkout-url="" href="#buy">Buy — $49</a>
+        <a class="btn-quiet" href="field.html">Field Capture&nbsp;→</a>
       </div>
     </div>
   </div>
@@ -401,37 +477,23 @@
 </footer>
 
 <script>
-/* Checkout for the Field Capture Chest Mount.
-   Paste a Stripe Payment Link (https://buy.stripe.com/...) into CHECKOUT_URL
-   below, onto the Buy button's data-checkout-url, or set
-   window.ATMOSPHERE_HARDWARE_CHECKOUT_URL. Leave empty to keep mailto. */
+/* Stripe checkout for the Field Capture Chest Mount ($49).
+   1. In Stripe, create a Payment Link:
+        Product: Field Capture Chest Mount
+        Price: $49 USD
+        Enable shipping address collection
+   2. Paste the Payment Link (https://buy.stripe.com/...) or a Checkout
+      Session URL into CHECKOUT_URL below, onto a Buy button's
+      data-checkout-url, or set window.ATMOSPHERE_HARDWARE_CHECKOUT_URL.
+   Until a URL is set, Buy stays disabled (“Checkout coming online”).
+   Mailto is support-only — never the purchase path. */
 (function () {
   var CHECKOUT_URL = '';
-  var MAILTO = 'mailto:hello@atmosphereteam.com?subject=' +
-    encodeURIComponent('Order: Field Capture Chest Mount') +
-    '&body=' + encodeURIComponent(
-      'I would like to order the Field Capture Chest Mount ($49).\n\n' +
-      'Quantity: 1\nShip-to name:\nShip-to address:\nPhone (optional):\n'
-    );
-
-  function isHttpCheckout(url) {
-    return typeof url === 'string' && /^https:\/\//i.test(url.trim());
+  if (CHECKOUT_URL && !window.ATMOSPHERE_HARDWARE_CHECKOUT_URL) {
+    window.ATMOSPHERE_HARDWARE_CHECKOUT_URL = CHECKOUT_URL;
   }
-
-  function resolveCheckout() {
-    var fromWindow = (typeof window.ATMOSPHERE_HARDWARE_CHECKOUT_URL === 'string')
-      ? window.ATMOSPHERE_HARDWARE_CHECKOUT_URL.trim() : '';
-    var fromConst = (CHECKOUT_URL || '').trim();
-    var btn = document.getElementById('hardware-buy');
-    var fromData = btn ? (btn.getAttribute('data-checkout-url') || '').trim() : '';
-    var url = fromWindow || fromConst || fromData;
-    return isHttpCheckout(url) ? url : MAILTO;
-  }
-
-  var buy = document.getElementById('hardware-buy');
-  if (buy) buy.setAttribute('href', resolveCheckout());
 })();
 </script>
-<script src="assets/site.js?v=20260906-hw"></script>
+<script src="assets/site.js?v=20260906-hw2"></script>
 </body>
 </html>
