@@ -43,24 +43,6 @@ from (
       c.user_id
     ) as user_id
   from public.token_usage_events e2
-  left join public.verification_videos v
-    on v.org_id = e2.org_id
-    and (
-      (
-        (e2.metadata->>'videoId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-        and v.id = (e2.metadata->>'videoId')::uuid
-      )
-      or (
-        e2.job_id is not null
-        and v.job_id = e2.job_id
-      )
-    )
-  left join public.job_parties p
-    on p.id = v.party_id
-    and p.org_id = e2.org_id
-  left join public.crm_jobs j
-    on j.id = coalesce(e2.job_id, v.job_id)
-    and j.org_id = e2.org_id
   left join public.verification_ai_costs c
     on c.org_id = e2.org_id
     and (
@@ -70,6 +52,21 @@ from (
       )
       or e2.request_id = 'verification:' || c.id::text
     )
+  left join public.verification_videos v
+    on v.org_id = e2.org_id
+    and v.id = coalesce(
+      case
+        when (e2.metadata->>'videoId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        then (e2.metadata->>'videoId')::uuid
+      end,
+      c.video_id
+    )
+  left join public.job_parties p
+    on p.id = v.party_id
+    and p.org_id = e2.org_id
+  left join public.crm_jobs j
+    on j.id = coalesce(e2.job_id, v.job_id)
+    and j.org_id = e2.org_id
   where e2.user_id is null
     and e2.feature = 'video_analysis'
     and e2.created_at >= now() - interval '90 days'
