@@ -25,21 +25,30 @@ comment on column public.token_usage_events.price_nanos is
 comment on table public.token_usage_events is
   'Customer-visible token meter. cost_nanos is provider COGS; price_nanos is the org billable (default 10×).';
 
--- Historical price_nanos was the cost estimate. Copy it into cost_nanos, then
--- set billable = cost × 10 only for rows that had a known positive cost.
-update public.token_usage_events
-set cost_nanos = price_nanos
-where cost_nanos = 0
-  and price_nanos > 0;
+-- Historical price_nanos meant different things by feature:
+--   video_analysis — provider COGS (estimateCostUsd / verification_ai_costs)
+--   ask/chat/other — quote_usage / record_usage sell price
+--                    (cost × model_costs.markup, default 2)
+-- Recover true COGS, then set billable = cost × 10. $0 rows stay $0.
+update public.token_usage_events e
+set cost_nanos = case
+  when e.feature = 'video_analysis' then e.price_nanos
+  else round(
+    e.price_nanos / coalesce(nullif((
+      select c.markup from private.model_costs c where c.model_id = e.model_id
+    ), 0), 2.0)
+  )::bigint
+end
+where e.cost_nanos = 0
+  and e.price_nanos > 0;
 
 update public.token_usage_events
 set price_nanos = round(cost_nanos * 10)::bigint
 where cost_nanos > 0
-  and price_nanos = cost_nanos;
+  and price_nanos <> round(cost_nanos * 10)::bigint;
 
--- quote_usage keeps returning cost_nanos so the Ask/chat write path can store
--- true COGS and apply the customer markup in application code. Express
--- /api/usage/quote and model count-tokens must not forward cost_nanos.
+-- Customer-facing quote. Same maths as private.price_usage, but cost_nanos
+-- is stripped so provider COGS and model_costs.markup stay off PostgREST.
 create or replace function public.quote_usage(
   p_model_id              text,
   p_input_tokens          bigint default 0,
@@ -58,13 +67,19 @@ as $$
   select private.price_usage(
     p_model_id, p_input_tokens, p_output_tokens,
     p_cache_write_5m_tokens, p_cache_write_1h_tokens, p_cache_read_tokens, p_is_batch
-  );
+  ) - 'cost_nanos';
 $$;
 
 comment on function public.quote_usage is
-  'Price a call. Returns cost_nanos (COGS) and price_nanos (model_costs.markup). HTTP APIs must not expose cost_nanos; the token ledger applies USAGE_CUSTOMER_MARKUP on cost.';
+  'Price a call. Returns price_nanos (model_costs.markup). cost_nanos is stripped so margin is never exposed via PostgREST.';
 
--- record_token_usage — persist both COGS and billable
+-- Replace the August 31 recorder. CREATE OR REPLACE cannot change the
+-- argument list; leaving the old signature would make COMMENT ON FUNCTION
+-- fail and leave an overload that still accepts PUBLIC execute.
+drop function if exists public.record_token_usage(
+  uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz
+);
+
 create or replace function public.record_token_usage(
   p_org           uuid,
   p_request_id    text,
@@ -153,5 +168,14 @@ begin
 end;
 $$;
 
-comment on function public.record_token_usage is
+comment on function public.record_token_usage(
+  uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz, bigint
+) is
   'Append one token-usage event with cost_nanos (COGS) and price_nanos (billable). Idempotent on (org, request_id). Does not debit credits.';
+
+revoke all on function public.record_token_usage(
+  uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz, bigint
+) from public, anon;
+grant execute on function public.record_token_usage(
+  uuid, text, text, text, uuid, uuid, text, bigint, bigint, bigint, bigint, jsonb, timestamptz, bigint
+) to authenticated, service_role;
