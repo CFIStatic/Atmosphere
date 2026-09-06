@@ -236,9 +236,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Against the scope/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Heard on the mic/i);
     expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
-    expect(document.getElementById('dispute-toggle')).toBeNull();
+    expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/Show me the dispute/i);
+    expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/1 moment/);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
-    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);
     dom.window.close();
   });
 
