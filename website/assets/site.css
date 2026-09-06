@@ -117,12 +117,19 @@ a { color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .nav-inner { display: flex; align-items: center; gap: 32px; height: var(--nav-h); }
+/* Lockup tokens match frontend/src/components/Logo.tsx `md` (sidebar):
+   28px bars, 21px Inter Bold, 12px gap, tracking-tight. The site already
+   asked for Inter but never loaded it, so the wordmark rendered in a
+   thinner system face and inherited body line-height 1.6 — both made the
+   header mark look smaller than Platform. */
 .wordmark {
   display: flex; align-items: center; gap: 12px;
-  font-weight: 700; font-size: 21px; letter-spacing: -0.02em;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700; font-size: 21px; letter-spacing: -0.025em;
+  line-height: 1;
   text-decoration: none; margin-right: auto;
 }
-.wordmark svg { display: block; width: 28px; height: 28px; }
+.wordmark svg { display: block; flex: none; width: 28px; height: 28px; }
 /* Logo mark: four atmosphere bars fading toward the ground, one orange base.
    Bars are ink at rising opacity, so the one asset matches both brand
    lockups — light-to-dark on paper, dark-to-light on a dark ground. */
