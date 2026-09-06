@@ -100,6 +100,29 @@ describe('Railway corporate-website image', () => {
     expect(json.deploy.healthcheckTimeout).toBe(120);
   });
 
+  it('lists the Field Capture Chest Mount product page in the sitemap', () => {
+    const sitemap = read('website/sitemap.xml');
+    expect(sitemap).toContain('https://atmosphereteam.com/hardware');
+    expect(sitemap).not.toContain('hardware.html');
+
+    const page = read('website/hardware.html');
+    expect(page).toContain('Field Capture Chest Mount');
+    expect(page).toContain('Buy — $49');
+    expect(page).toContain('mailto:hello@atmosphereteam.com');
+    expect(page).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
+    expect(page).toMatch(/https:\/\/atmosphereteam\.com\/hardware/);
+    expect(page.toLowerCase()).not.toContain('amazon');
+    expect(page.toLowerCase()).not.toContain('asin');
+    expect(page).not.toContain('let-me-be');
+    expect(page).not.toMatch(/href=["']https:\/\/buy\.stripe\.com\//);
+
+    const preview = read('website/build-preview.py');
+    expect(preview).toContain("('hardware', 'hardware.html')");
+
+    const field = read('website/field.html');
+    expect(field).toContain('href="hardware.html"');
+  });
+
   it('does not treat in-window Railway probe retries as a finished failure', () => {
     const up = read('backend/scripts/railwayUp.sh');
     expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');

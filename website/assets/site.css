@@ -1000,3 +1000,37 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 48px; }
 .doc-pager a:hover { color: var(--ink); }
 .doc-pager .dir { display: block; font-size: 11px; letter-spacing: .08em; color: var(--ink-faint); margin-bottom: 3px; }
 .doc-pager .next { text-align: right; margin-left: auto; }
+
+/* ---------- Hardware product (chest mount) ---------- */
+.hw-price-row {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin: -8px 0 28px;
+}
+.hw-price {
+  font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hw-ship { font-size: 12px; letter-spacing: .06em; color: var(--ink-faint); }
+.hw-stage {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: var(--shadow-lift); padding: 28px 28px 20px; text-align: center;
+}
+.hw-svg { width: min(100%, 360px); height: auto; display: block; margin: 0 auto; }
+.hw-svg-ground { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+.hw-svg-vest { fill: color-mix(in srgb, var(--ink) 8%, var(--card)); stroke: var(--line-strong); stroke-width: 1.4; }
+.hw-svg-panel { fill: var(--card); stroke: var(--ink-soft); stroke-width: 1.6; }
+.hw-svg-molle { stroke: var(--line-strong); stroke-width: 3.2; stroke-linecap: round; }
+.hw-svg-flap { fill: none; stroke: var(--ink-faint); stroke-width: 1.8; stroke-linejoin: round; }
+.hw-svg-phone { fill: var(--ink); }
+.hw-svg-screen { fill: var(--card); opacity: .92; }
+.hw-svg-bar { fill: #F2670C; }
+.hw-svg-bungee { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; }
+.hw-svg-lens { fill: var(--ink-faint); }
+.hw-caption {
+  margin: 16px 0 0; font-size: 11px; letter-spacing: .1em; color: var(--ink-faint);
+}
+.sec-card a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+}
+.sec-card a:hover { color: var(--ink); border-color: var(--accent); }
