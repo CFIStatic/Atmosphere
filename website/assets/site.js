@@ -343,3 +343,55 @@
     contactMessage.value = contactNote;
   }
 })();
+
+// Field Capture Chest Mount checkout. A Stripe Payment Link or Checkout
+// Session URL in CHECKOUT_URL / data-checkout-url /
+// window.ATMOSPHERE_HARDWARE_CHECKOUT_URL turns Buy — $49 live. Empty
+// keeps a disabled “Checkout coming online” state — mailto is never
+// the purchase path.
+(function () {
+  var buttons = document.querySelectorAll('#hardware-buy, .js-hardware-buy');
+  if (!buttons.length) return;
+
+  function isHttpCheckout(url) {
+    return typeof url === 'string' && /^https:\/\//i.test(url.trim());
+  }
+
+  function resolveCheckout() {
+    var fromWindow = (typeof window.ATMOSPHERE_HARDWARE_CHECKOUT_URL === 'string')
+      ? window.ATMOSPHERE_HARDWARE_CHECKOUT_URL.trim() : '';
+    var fromData = '';
+    buttons.forEach(function (btn) {
+      if (fromData) return;
+      fromData = (btn.getAttribute('data-checkout-url') || '').trim();
+    });
+    var url = fromWindow || fromData;
+    return isHttpCheckout(url) ? url.trim() : '';
+  }
+
+  function setDisabled(btn) {
+    btn.classList.add('is-disabled');
+    btn.setAttribute('aria-disabled', 'true');
+    btn.setAttribute('role', 'button');
+    btn.removeAttribute('href');
+    btn.textContent = 'Checkout coming online';
+  }
+
+  function setLive(btn, url) {
+    btn.classList.remove('is-disabled');
+    btn.removeAttribute('aria-disabled');
+    btn.removeAttribute('role');
+    btn.setAttribute('href', url);
+    btn.textContent = 'Buy — $49';
+  }
+
+  var url = resolveCheckout();
+  buttons.forEach(function (btn) {
+    if (url) setLive(btn, url);
+    else setDisabled(btn);
+  });
+
+  document.querySelectorAll('.hw-buy-note').forEach(function (note) {
+    note.hidden = !!url;
+  });
+})();

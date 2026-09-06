@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Printable Field Capture Chest Mount setup card — QR to Field Capture docs." />
+  <meta name="robots" content="noindex" />
+  <title>Field Capture Chest Mount setup card · Atmosphere</title>
+  <link rel="canonical" href="https://atmosphereteam.com/hardware-setup-card" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --ink:#1C1917; --soft:#57534E; --faint:#78716C; --line:#E3DED4; --accent:#D2500A; --paper:#FBFAF7; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: #EFECE6; color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      max-width: 520px; margin: 0 auto; padding: 18px 16px 8px;
+      font-size: 13.5px;
+    }
+    .toolbar a { color: var(--soft); text-decoration: none; }
+    .toolbar a:hover { color: var(--ink); }
+    .toolbar button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+      font: 600 13.5px Inter, sans-serif; padding: 8px 14px; cursor: pointer;
+    }
+    .card {
+      width: min(100% - 32px, 480px);
+      margin: 12px auto 40px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 8px 24px rgba(28,25,23,.08);
+    }
+    .mark { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -.02em; }
+    .mark svg { display: block; }
+    .eyebrow { margin: 22px 0 6px; font-size: 11px; letter-spacing: .1em; color: var(--faint); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: -.03em; line-height: 1.15; }
+    .lede { margin: 0 0 22px; color: var(--soft); font-size: 14.5px; line-height: 1.55; }
+    .grid { display: grid; grid-template-columns: 148px 1fr; gap: 22px; align-items: start; }
+    .qr {
+      background: #fff; border: 1px solid var(--line); border-radius: 12px;
+      padding: 10px; text-align: center;
+    }
+    .qr img { width: 128px; height: 128px; display: block; margin: 0 auto; }
+    .qr p { margin: 8px 0 0; font-size: 10.5px; letter-spacing: .06em; color: var(--faint); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    ol { margin: 0; padding-left: 18px; color: var(--soft); font-size: 14px; line-height: 1.55; }
+    ol li { margin: 0 0 8px; }
+    ol li:last-child { margin-bottom: 0; }
+    .foot {
+      margin: 22px 0 0; padding-top: 14px; border-top: 1px solid var(--line);
+      font-size: 12.5px; color: var(--faint);
+    }
+    .foot strong { color: var(--ink); font-weight: 600; }
+    @media print {
+      @page { size: 5in 7in; margin: .28in; }
+      body { background: #fff; }
+      .toolbar { display: none; }
+      .card {
+        width: auto; margin: 0; border: 0; border-radius: 0;
+        box-shadow: none; padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <a href="hardware.html">← Chest Mount</a>
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <article class="card">
+    <div class="mark" aria-label="Atmosphere">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+        <rect width="22" height="2.8" fill="#A8A29E"/>
+        <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+        <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+        <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+        <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+      </svg>
+      Atmosphere
+    </div>
+    <div class="eyebrow">FIELD CAPTURE · SETUP</div>
+    <h1>Chest Mount setup card</h1>
+    <p class="lede">
+      Digital guide for the foldable MOLLE chest phone panel. Scan the QR
+      for Field Capture docs — how crews film the shot list.
+    </p>
+    <div class="grid">
+      <div class="qr">
+        <img src="assets/field-capture-docs-qr.svg" width="128" height="128" alt="QR code to Field Capture documentation" />
+        <p>ATMOSPHERETEAM.COM/DOC-FIELD</p>
+      </div>
+      <ol>
+        <li>Weave the panel onto a vest or chest harness (MOLLE / PALS).</li>
+        <li>Seat a phone about 4.7–6.7&quot; in the cradle; pull the bungee across.</li>
+        <li>Open Field Capture and walk the job’s shot list hands-free.</li>
+        <li>Questions or returns: atmosphereteam.com/contact</li>
+      </ol>
+    </div>
+    <p class="foot">
+      Atmosphere sells and ships this accessory — we do not manufacture the
+      panel. <strong>Fits phones ~4.7–6.7&quot;.</strong>
+      Ships in 2–5 business days.
+    </p>
+  </article>
+</body>
+</html>

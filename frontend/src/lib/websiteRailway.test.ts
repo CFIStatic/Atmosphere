@@ -108,16 +108,33 @@ describe('Railway corporate-website image', () => {
     const page = read('website/hardware.html');
     expect(page).toContain('Field Capture Chest Mount');
     expect(page).toContain('Buy — $49');
+    expect(page).toContain('What\'s in the box');
+    expect(page).toContain('4.7–6.7');
+    expect(page).toContain('digital setup guide');
+    expect(page).toContain('emailed after purchase');
+    expect(page).toContain('Checkout coming online');
     expect(page).toContain('mailto:hello@atmosphereteam.com');
     expect(page).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
     expect(page).toMatch(/https:\/\/atmosphereteam\.com\/hardware/);
-    expect(page.toLowerCase()).not.toContain('amazon');
+    expect(page).toContain('not an Amazon package');
+    expect(page.toLowerCase()).not.toContain('amazon.com');
     expect(page.toLowerCase()).not.toContain('asin');
     expect(page).not.toContain('let-me-be');
     expect(page).not.toMatch(/href=["']https:\/\/buy\.stripe\.com\//);
+    expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
+
+    const js = read('website/assets/site.js');
+    expect(js).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
+    expect(js).toContain('Checkout coming online');
+    expect(js).toContain('Buy — $49');
 
     const preview = read('website/build-preview.py');
     expect(preview).toContain("('hardware', 'hardware.html')");
+
+    const card = read('website/hardware-setup-card.html');
+    expect(card).toContain('doc-field');
+    expect(card).toContain('field-capture-docs-qr.svg');
+    expect(read('website/assets/field-capture-setup-card.pdf').startsWith('%PDF')).toBe(true);
 
     const field = read('website/field.html');
     expect(field).toContain('href="hardware.html"');
