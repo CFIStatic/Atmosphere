@@ -21,6 +21,7 @@ import { PROCESSING_STAGES, type ProcessingStage, type StepStatus } from '../typ
 import { verificationConfig } from '../config.js';
 import { appendAuditEvent } from '../audit/auditLog.js';
 import { leaseOwnerId, leaseUntilIso } from '../lease.js';
+import { resolveUsageActor } from '../../metering/usageAttribution.js';
 
 export interface PipelineContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +31,8 @@ export interface PipelineContext {
   jobId: string;
   /** Capture party when the video came from a job invite; null for office uploads. */
   partyId: string | null;
+  /** Org seat that caused this analysis (uploader, party inviter, or job owner). */
+  attributedUserId: string | null;
   processingJobId: string;
   attempt: number;
   config: Record<string, unknown>;
@@ -280,7 +283,7 @@ export class ProcessingOrchestrator {
   private async runJob(job: QueuePayload, attempt: number): Promise<void> {
     const { data: row, error } = await job.supabase
       .from('video_processing_jobs')
-      .select('*, verification_videos!inner(job_id, party_id, status)')
+      .select('*, verification_videos!inner(job_id, party_id, status, uploader_id)')
       .eq('id', job.processingJobId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -308,14 +311,31 @@ export class ProcessingOrchestrator {
       .update({ status: 'processing' })
       .eq('id', job.videoId);
 
-    const videoMeta = (row as { verification_videos?: { job_id?: string; party_id?: string | null } })
-      .verification_videos;
+    const videoMeta = (
+      row as {
+        verification_videos?: {
+          job_id?: string;
+          party_id?: string | null;
+          uploader_id?: string | null;
+        };
+      }
+    ).verification_videos;
+    const jobId = (row as { job_id?: string }).job_id ?? videoMeta?.job_id ?? '';
+    const partyId = videoMeta?.party_id ?? null;
+    const attributedUserId = await resolveUsageActor(job.supabase, {
+      orgId: job.orgId,
+      videoId: job.videoId,
+      jobId,
+      partyId,
+      uploaderId: videoMeta?.uploader_id ?? null,
+    });
     const ctxBase: Omit<PipelineContext, 'attempt'> = {
       supabase: job.supabase,
       orgId: job.orgId,
       videoId: job.videoId,
-      jobId: (row as { job_id?: string }).job_id ?? videoMeta?.job_id ?? '',
-      partyId: videoMeta?.party_id ?? null,
+      jobId,
+      partyId,
+      attributedUserId,
       processingJobId: job.processingJobId,
       config: (row.config ?? {}) as Record<string, unknown>,
     };

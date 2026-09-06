@@ -3,6 +3,7 @@ import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
+import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
@@ -575,8 +576,14 @@ export async function recordProof(party: any, admin: any, body: unknown) {
 async function enqueueVerificationFromProof(admin: any, party: any, proof: any): Promise<void> {
   const { linkProofAsVerificationVideo, getVerificationOrchestrator, pipelineIdempotencyKey } =
     await import('../verification/index.js');
+  const uploaderId = await resolveUsageActor(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    partyId: party.id,
+    userId: typeof party.created_by === 'string' ? party.created_by : null,
+  });
   const videoId = await linkProofAsVerificationVideo(
-    { supabase: admin, orgId: party.org_id, uploaderId: null },
+    { supabase: admin, orgId: party.org_id, uploaderId },
     {
       id: proof.id,
       jobId: party.job_id,

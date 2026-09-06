@@ -4,7 +4,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { verificationConfig } from '../config.js';
-import { estimatedUsdToNanos, recordTokenUsageAsync } from '../../metering/tokenUsage.js';
+import { estimatedUsdToNanos, recordTokenUsage } from '../../metering/tokenUsage.js';
+import { resolveUsageActor } from '../../metering/usageAttribution.js';
 
 export function estimateCostUsd(
   provider: string,
@@ -44,12 +45,20 @@ export async function recordAiCost(
     estimatedCostUsd: number;
   },
 ): Promise<void> {
+  const userId =
+    opts.userId ??
+    (await resolveUsageActor(supabase, {
+      orgId: opts.orgId,
+      videoId: opts.videoId,
+      jobId: opts.jobId,
+    }));
+
   await supabase.from('verification_ai_costs').insert({
     org_id: opts.orgId,
     video_id: opts.videoId ?? null,
     job_id: opts.jobId ?? null,
     analysis_run_id: opts.analysisRunId ?? null,
-    user_id: opts.userId ?? null,
+    user_id: userId,
     provider: opts.provider,
     model_name: opts.modelName,
     input_tokens: opts.inputTokens,
@@ -58,23 +67,31 @@ export async function recordAiCost(
     period_month: monthStart(),
   });
 
-  recordTokenUsageAsync(supabase, {
-    orgId: opts.orgId,
-    requestId: opts.idempotencyKey ?? `video_analysis:${opts.analysisRunId ?? randomUUID()}`,
-    feature: 'video_analysis',
-    source: 'video_analysis',
-    userId: opts.userId ?? null,
-    jobId: opts.jobId ?? null,
-    modelId: opts.modelName,
-    inputTokens: opts.inputTokens,
-    outputTokens: opts.outputTokens,
-    priceNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
-    metadata: {
-      provider: opts.provider,
-      videoId: opts.videoId ?? null,
-      analysisRunId: opts.analysisRunId ?? null,
-    },
-  });
+  try {
+    await recordTokenUsage(supabase, {
+      orgId: opts.orgId,
+      requestId: opts.idempotencyKey ?? `video_analysis:${opts.analysisRunId ?? randomUUID()}`,
+      feature: 'video_analysis',
+      source: 'video_analysis',
+      userId,
+      jobId: opts.jobId ?? null,
+      modelId: opts.modelName,
+      inputTokens: opts.inputTokens,
+      outputTokens: opts.outputTokens,
+      priceNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
+      metadata: {
+        provider: opts.provider,
+        videoId: opts.videoId ?? null,
+        analysisRunId: opts.analysisRunId ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[metering] failed to record video analysis token usage', {
+      orgId: opts.orgId,
+      requestId: opts.idempotencyKey,
+      err,
+    });
+  }
 }
 
 export async function monthSpendUsd(
