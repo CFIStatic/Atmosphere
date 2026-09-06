@@ -375,13 +375,14 @@ test('serialization: timestamped narration_text becomes multiple dictationEntrie
     dayHasAfter: false,
   });
 
-  const entries = (item.analysis as { dictationEntries?: Array<{ atSeconds?: number; text?: string }> } | null)
+  const entries = (item.analysis as { dictationEntries?: Array<{ atSeconds?: number; text?: string; type?: string }> } | null)
     ?.dictationEntries ?? [];
   assert.deepEqual(
     entries.map((e) => e.atSeconds),
     [0, 8, 18],
   );
   assert.match(String(entries[1]?.text), /monitors/i);
+  assert.equal(entries.filter((e) => e.type === 'said').length, 0);
 });
 
 test('serialization: a lone 0-second blob is not sent to the Analysis list', () => {
@@ -519,6 +520,11 @@ test('serialization: a talk clip with only a transcript is Askable', () => {
   const rooms = (item.analysis as { conversationRooms?: string[] } | null)?.conversationRooms ?? [];
   assert.ok(rooms.includes('bathroom'));
   assert.ok(rooms.includes('hallway'));
+  const said = (item.analysis as { dictationEntries?: Array<{ atSeconds?: number; text?: string; type?: string }> } | null)
+    ?.dictationEntries ?? [];
+  assert.ok(said.some((event) => event.type === 'said' && /insurance|cabinets|hallway/i.test(String(event.text))));
+  assert.ok(said.every((event) => event.type !== 'said' || (Number(event.atSeconds) >= 0 && Number.isFinite(event.atSeconds))));
+  assert.ok(!said.some((event) => event.type === 'said' && event.atSeconds === 0 && String(event.text).length > 180));
 });
 
 test('serialization: structured actions from the vision log ride with dictation', () => {

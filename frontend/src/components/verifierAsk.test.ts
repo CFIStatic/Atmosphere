@@ -70,6 +70,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function surfaceClipDisputes');
     expect(verifierHtml).toContain('function disputeCheckTitle');
     expect(verifierHtml).toContain('Show me the dispute');
+    expect(verifierHtml).not.toContain('None on this clip');
+    expect(verifierHtml).not.toContain('Nothing on this clip conflicts');
     expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
     expect(verifierHtml).toContain('id="d-analysis-lead"');
     expect(verifierHtml).toContain('analysis-skel');
@@ -235,6 +237,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Heard on the mic/i);
     expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
     expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/Show me the dispute/i);
+    expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/1 moment/);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
     dom.window.close();
   });
 
@@ -254,7 +258,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-saw')).toBeNull();
     expect(document.getElementById('d-analysis-lead')).toBeNull();
     expect(document.getElementById('d-job-summary')).toBeNull();
-    expect(document.getElementById('dispute-toggle')).not.toBeNull();
+    expect(document.getElementById('dispute-toggle')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis|Paused/i);
     dom.window.close();
   });
@@ -270,6 +276,15 @@ describe('verifier clip Ask tab and live analysis', () => {
 
     expect(document.body.textContent).toMatch(/insurance/i);
     expect(document.body.textContent).toMatch(/vanity/i);
+    const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
+    const times = notes.map((el) => Number(el.getAttribute('data-at')));
+    expect(times).toContain(18);
+    expect(times).toContain(96);
+    expect(times).toContain(250);
+    expect(times.every((at) => at > 0)).toBe(true);
+    expect(document.getElementById('alog')?.textContent).toMatch(/said/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/insurance|cabinets|agreement/i);
+    expect(document.getElementById('alog')?.textContent).not.toMatch(/0:00/);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
     askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -310,6 +325,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(alog?.textContent).toMatch(/0:18/);
     expect(alog?.textContent).toMatch(/spreadsheet/i);
     expect(alog?.textContent).toMatch(/scene|activity/i);
+    expect(alog?.textContent).not.toMatch(/said/i);
     expect(
       Array.from(document.querySelectorAll('#d-panel .saw-k')).some((el) => el.textContent === 'Events'),
     ).toBe(true);
@@ -337,6 +353,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/0:00/);
     expect(document.getElementById('d-analysis-lead')?.textContent).toMatch(/never an acceptance/i);
+    expect(document.getElementById('dispute-toggle')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);
     dom.window.close();
   });
 

@@ -84,7 +84,9 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain("parts.push(r === 1 ? '1 second' : r + ' seconds')");
     expect(verifierHtml).toContain("parts.push(m === 1 ? '1 minute' : m + ' minutes')");
     expect(verifierHtml).toContain('currentTime = Number.MAX_SAFE_INTEGER');
-    expect(verifierHtml).toContain('if (!video.paused) return');
+    expect(verifierHtml).toContain("if (!video.paused || (video.dataset && video.dataset.playingSoon === '1'))");
+    expect(verifierHtml).toContain('if (knownDuration(known) != null) return');
+    expect(verifierHtml).toContain('bindVideoDuration(vid, item.duration)');
     expect(verifierHtml).toContain('video.currentTime = origin');
   });
 

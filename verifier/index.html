@@ -1577,7 +1577,6 @@
   .dispute-k { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
   .dispute-t { display: block; margin-top: 2px; font-size: 13px; font-weight: 650; }
   .dispute-d { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
-  .dispute-empty { margin: 0; padding: 10px 12px 12px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line-soft); }
 
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
@@ -2501,8 +2500,11 @@
         summary: 'Walkthrough with the homeowner. No demolition in frame. The conversation covers the bathroom leak, the vanity mirror, and what insurance will and will not pay.',
         dictation: 'The contractor walks the hallway with the homeowner. They stop in the bathroom doorway. No tools come out. The talk is the record: the leak, the mirror, and the claim.',
         dictationEntries: [
-          { atSeconds: 18, text: 'Hallway: contractor and homeowner standing at the bathroom door.' },
-          { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.' }
+          { atSeconds: 18, text: 'Hallway: contractor and homeowner standing at the bathroom door.', type: 'scene' },
+          { atSeconds: 18, text: 'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.', type: 'said' },
+          { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.', type: 'scene' },
+          { atSeconds: 96, text: 'Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.', type: 'said' },
+          { atSeconds: 250, text: 'Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.', type: 'said' }
         ],
         transcript:
           '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
@@ -2700,16 +2702,19 @@
     else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
     return parts.join(' ');
   }
-  function bindVideoDuration(video) {
+  function bindVideoDuration(video, known) {
     var measured = function () {
       return knownDuration(video.duration);
     };
     var onPause = function () { discover(); };
     var discover = function () {
       if (measured() != null) return;
+      // Filed clips already carry a measured length. Do not scan the file
+      // on a visible player — a dummy seek flashes the last frame.
+      if (knownDuration(known) != null) return;
       // Visible player with native controls. A dummy seek during Play
       // flashes the last frame and restarts the clip.
-      if (!video.paused) {
+      if (!video.paused || (video.dataset && video.dataset.playingSoon === '1')) {
         video.addEventListener('pause', onPause, { once: true });
         return;
       }
@@ -4628,7 +4633,7 @@
     if (btn) btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
-      startPreviewPlayback(item);
+      startPreviewPlayback(state.open || item);
     });
   }
 
@@ -4638,8 +4643,32 @@
    */
   function paintPreviewPoster(item, waiting) {
     var poster = thumbFor(item);
-    $('#d-frame').innerHTML =
-      '<div class="preview-stage" data-preview-state="poster">' +
+    var host = $('#d-frame');
+    var stage = host && host.querySelector('.preview-stage');
+    // Same still is already on screen (open → detail hydrate). Do not
+    // rebuild the node — that flashes the play button and reloads the JPEG.
+    // The id check is what keeps Play wired to this clip after glance-and-close.
+    if (stage && stage.getAttribute('data-preview-state') === 'poster' &&
+        stage.getAttribute('data-preview-id') === String(item.id) &&
+        document.getElementById('d-yt-play')) {
+      var img = stage.querySelector('.preview-still');
+      if (img && poster && img.getAttribute('src') !== poster) img.src = poster;
+      var durEl = stage.querySelector('.yt-dur');
+      if (durEl) durEl.textContent = dur(item.duration);
+      var wait = document.getElementById('d-wait');
+      if (waiting && !wait) {
+        var pill = document.createElement('div');
+        pill.className = 'preview-wait';
+        pill.id = 'd-wait';
+        pill.textContent = 'Opening the clip on file…';
+        stage.appendChild(pill);
+      } else if (!waiting && wait) {
+        wait.remove();
+      }
+      return;
+    }
+    host.innerHTML =
+      '<div class="preview-stage" data-preview-state="poster" data-preview-id="' + esc(item.id) + '">' +
         '<img class="preview-still" alt="Screenshot from this video" src="' + esc(poster) + '" />' +
         '<button type="button" class="yt-play" id="d-yt-play" aria-label="Play">' +
           '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' +
@@ -4660,7 +4689,7 @@
     state.frame = 0;
     stopPlay();
     fillPreviewChrome(item);
-    paintPreviewPoster(item, item._remote && !item._loaded && !item._videoUrl);
+    paintPreviewPoster(item, item._remote && !item._videoUrl);
     renderDictation(item);
     renderAnalysis(item);
     setTab(tab || 'integrity');
@@ -4679,7 +4708,7 @@
     setPlayerTime('full clip · ' + durLabel(item.duration));
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
-    bindVideoDuration(vid);
+    bindVideoDuration(vid, item.duration);
     vid.addEventListener('timeupdate', function () {
       syncAnalysisLog(vid.currentTime);
       if (!progressRaf) paintLiveProgress();
@@ -4707,18 +4736,43 @@
     });
     vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
     vid.addEventListener('error', function () {
-      paintPreviewPoster(item, false);
-      var wait = document.getElementById('d-wait');
-      if (!wait) {
-        var host = $('#d-frame .preview-stage');
-        if (host) {
-          var pill = document.createElement('div');
-          pill.className = 'preview-wait';
-          pill.textContent = 'Could not play this file — showing the screenshot on file.';
-          host.appendChild(pill);
-        }
+      if (item._videoRetrying) {
+        item._videoRetrying = false;
+        if (state.open && state.open.id === item.id) showPreviewPlayError(item);
+        return;
       }
+      item._videoRetrying = true;
+      refreshVideoUrl(item).then(function (url) {
+        if (!state.open || state.open.id !== item.id) {
+          item._videoRetrying = false;
+          return;
+        }
+        if (!url) {
+          item._videoRetrying = false;
+          showPreviewPlayError(item);
+          return;
+        }
+        paintPreviewVideo(item);
+        var next = previewVideo();
+        if (next) {
+          if (next.dataset) next.dataset.playingSoon = '1';
+          next.play().catch(function () {});
+        }
+      });
     });
+  }
+
+  function showPreviewPlayError(item) {
+    if (!state.open || state.open.id !== item.id) return;
+    paintPreviewPoster(item, false);
+    if (document.getElementById('d-wait')) return;
+    var host = $('#d-frame .preview-stage');
+    if (!host) return;
+    var pill = document.createElement('div');
+    pill.className = 'preview-wait';
+    pill.id = 'd-wait';
+    pill.textContent = 'Could not play this file — showing the screenshot on file.';
+    host.appendChild(pill);
   }
 
   function captureVideoScreenshot(url, duration, cb) {
@@ -4783,10 +4837,12 @@
     if (!item) return;
     var startAt = pendingSeek;
     stopPlay();
+    item._videoRetrying = false;
     if (item._videoUrl) {
       paintPreviewVideo(item);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
+        if (vid.dataset) vid.dataset.playingSoon = '1';
         if (startAt != null) {
           try { vid.currentTime = startAt; } catch (err) {}
           var length = clipLength(item, vid);
@@ -4803,6 +4859,17 @@
       }
       return;
     }
+    if (item._remote) {
+      refreshVideoUrl(item).then(function (url) {
+        if (!state.open || state.open.id !== item.id) return;
+        if (!url) {
+          showPreviewPlayError(item);
+          return;
+        }
+        startPreviewPlayback(item);
+      });
+      return;
+    }
     ensureFrames(item);
     if (startAt != null) seekTo(startAt);
     else setFrame(0);
@@ -4815,7 +4882,7 @@
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
-    if (item._remote && !item._loaded) {
+    if (item._remote && (!item._loaded || !item._videoUrl)) {
       fetchRemoteDetail(item).then(function () {
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
         watchRemoteReading(item);
@@ -4839,7 +4906,9 @@
 
     // Keep the YouTube screenshot on screen. The file plays when asked.
     paintPreviewPoster(item, false);
-    if (item._videoUrl) {
+    // A signed still from the list is already the right frame. Recapturing
+    // it from the file flashes the poster and fights CORS on signed URLs.
+    if (item._videoUrl && (!item.poster || String(item.poster).indexOf('data:') === 0)) {
       captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
         if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
       });
@@ -5099,7 +5168,7 @@
     return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
   }
 
-  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, camera: 1, work: 1, other: 1 };
+  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, said: 1, camera: 1, work: 1, other: 1 };
   var FILLER_LEAD = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?(?:\s+on)?|starts?|begins?|depicts?|features?)\s+(?:that\s+)?/i;
   var TIMESTAMP_LEAD = /^(?:at\s+\d+(?:\.\d+)?(?:\s+seconds?)?|\[(?:\d+:)+\d+\])\s*[:,.\-–—]?\s*/i;
   var GENERIC_DUMP = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?|starts?|begins?|depicts?|features?)\b/i;
@@ -5255,8 +5324,49 @@
   }
 
   var ANALYSIS_DISCLAIMER =
-    'This is what the model could see in the frames and, when the mic was on, what was said — rooms, agreements, concerns. ' +
-    'It does not infer off-camera work, and it is never an acceptance.';
+    'This is what the model could see in the frames and, when people were talking, what was said — rooms, agreements, concerns — on the same timeline. ' +
+    'Silent clips stay vision-only. It does not infer off-camera work, and it is never an acceptance.';
+
+  function clockFromStamp(raw) {
+    var parts = String(raw || '').split(':').map(Number);
+    if (parts.some(function (n) { return !isFinite(n); })) return null;
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return null;
+  }
+
+  function addSpeechMoments(a, add) {
+    if ((a.dictationEntries || []).some(function (e) { return e.type === 'said' || e.type === 'speech'; })) {
+      return;
+    }
+    var details = (a.conversationDetails || [])
+      .map(function (line) { return String(line || '').trim(); })
+      .filter(function (line) { return line && line.length <= 240; });
+    var stamps = [];
+    String(a.transcript || '').split(/\n+/).forEach(function (line) {
+      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+      if (!m) return;
+      var at = clockFromStamp(m[1]);
+      var body = String(m[2] || '').trim();
+      if (at == null || !body || body.length > 240) return;
+      stamps.push({ at: at, text: body });
+    });
+    if (!details.length && !stamps.length) return;
+    details.forEach(function (line) {
+      var at = null;
+      var needle = line.toLowerCase().slice(0, 40);
+      for (var i = 0; i < stamps.length; i++) {
+        var hay = stamps[i].text.toLowerCase();
+        if ((needle && hay.indexOf(needle) !== -1) || hay.indexOf(line.toLowerCase()) !== -1 ||
+            line.toLowerCase().indexOf(hay.slice(0, 40)) !== -1) {
+          at = stamps[i].at;
+          break;
+        }
+      }
+      if (at == null) return;
+      add(at, line, 'heard', 'said');
+    });
+  }
 
   function analysisLog(item) {
     var a = item.analysis || {};
@@ -5283,13 +5393,7 @@
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
     });
-    String(a.transcript || '').split(/\n+/).forEach(function (line) {
-      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
-      if (!m) return;
-      var parts = m[1].split(':').map(Number);
-      var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-      add(at, m[2], 'heard', 'speech');
-    });
+    addSpeechMoments(a, add);
     if (!rows.length) {
       parseTimestampedEvents(String(a.dictation || a.summary || '')).forEach(function (e) {
         add(e.at, e.text, 'read');
@@ -5570,26 +5674,23 @@
 
   function renderDisputeControl(item) {
     var moments = surfaceClipDisputes(item);
+    if (!moments.length) return '';
     var html = '<div class="dispute-ctl" id="dispute-ctl">';
     html += '<button type="button" id="dispute-toggle" aria-expanded="false">';
     html += '<strong>Show me the dispute</strong>';
-    html += '<span class="count' + (moments.length ? ' has' : '') + '">' +
-      (moments.length ? moments.length + ' moment' + (moments.length === 1 ? '' : 's') : 'None on this clip') +
+    html += '<span class="count has">' +
+      moments.length + ' moment' + (moments.length === 1 ? '' : 's') +
       '</span></button>';
     html += '<div id="dispute-panel" hidden>';
-    if (!moments.length) {
-      html += '<p class="dispute-empty">Nothing on this clip conflicts with the scope or with another clip.</p>';
-    } else {
-      html += '<ul class="dispute-list" id="dispute-list">';
-      moments.forEach(function (m) {
-        html += '<li' + (m.seek != null ? ' data-at="' + m.seek + '"' : '') + '>';
-        html += '<span class="dispute-k">' + esc(m.kind === 'integrity' ? 'Integrity' : m.kind === 'scope' ? 'Scope' : 'Clips disagree') +
-          (m.seek != null ? ' · ' + eventClock(m.seek) : '') + '</span>';
-        html += '<span class="dispute-t">' + esc(m.title) + '</span>';
-        html += '<span class="dispute-d">' + esc(m.detail) + '</span></li>';
-      });
-      html += '</ul>';
-    }
+    html += '<ul class="dispute-list" id="dispute-list">';
+    moments.forEach(function (m) {
+      html += '<li' + (m.seek != null ? ' data-at="' + m.seek + '"' : '') + '>';
+      html += '<span class="dispute-k">' + esc(m.kind === 'integrity' ? 'Integrity' : m.kind === 'scope' ? 'Scope' : 'Clips disagree') +
+        (m.seek != null ? ' · ' + eventClock(m.seek) : '') + '</span>';
+      html += '<span class="dispute-t">' + esc(m.title) + '</span>';
+      html += '<span class="dispute-d">' + esc(m.detail) + '</span></li>';
+    });
+    html += '</ul>';
     html += '</div></div>';
     return html;
   }
@@ -5770,7 +5871,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when people were talking, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
@@ -6681,21 +6782,48 @@
     }, 4000);
   }
 
+  function videoApiUrl(item) {
+    if (!item || !item._remote) return null;
+    if (ORG_MODE) return '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video';
+    if (SHARE_TOKEN) {
+      return '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) +
+        '/evidence/' + encodeURIComponent(item.id) + '/video';
+    }
+    return null;
+  }
+
+  function refreshVideoUrl(item) {
+    var url = videoApiUrl(item);
+    if (!url) return Promise.resolve(null);
+    return apiFetch(url)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (payload) {
+        var next = payload && payload.url ? payload.url : null;
+        if (next) item._videoUrl = next;
+        else item._videoRetrying = false;
+        return next;
+      })
+      .catch(function () {
+        item._videoRetrying = false;
+        return null;
+      });
+  }
+
   function fetchRemoteDetail(item) {
     var detailUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
-    var videoUrl = ORG_MODE
-      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
-      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
+    var videoUrl = videoApiUrl(item);
     return Promise.all([
       apiFetch(detailUrl).then(function (r) {
         if (!r.ok) throw new Error('detail');
         return r.json();
       }),
-      apiFetch(videoUrl)
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; })
+      videoUrl
+        ? apiFetch(videoUrl)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; })
+        : Promise.resolve(null)
     ])
       .then(function (parts) {
         var payload = parts[0];
@@ -6766,12 +6894,81 @@
       '</div>';
   }
 
+  /**
+   * Signed poster tokens rotate on every library poll. Comparing the path
+   * (not the query) is what lets a silent refresh keep the same <img>
+   * instead of flashing every thumbnail every ten seconds.
+   */
+  function posterIdentity(url) {
+    if (typeof url !== 'string' || !url) return '';
+    if (url.indexOf('data:') === 0) return url.slice(0, 80);
+    try {
+      var parsed = new URL(url, location.href);
+      return parsed.origin + parsed.pathname;
+    } catch (err) {
+      return String(url).split('?')[0];
+    }
+  }
+
+  function preferStablePoster(prev, next) {
+    // Reminted tokens share a path. Store the fresh URL so a later
+    // table rebuild does not request an expired signature. A silent
+    // poll skips boot() and leaves the on-screen <img> alone.
+    if (!next) return prev || null;
+    return next;
+  }
+
+  function librarySignature() {
+    var jobs = Object.keys(JOBS).sort().map(function (k) {
+      var j = JOBS[k] || {};
+      return [k, j.name, j.number, j.captureStatus, j.createdAt, j.person, j.address].join('\t');
+    }).join('\n');
+    var items = EVIDENCE.map(function (e) {
+      var status = clipStatus(e);
+      return [
+        e.id, e.job, e.jobName, e.duration, e.uploadedAt, e.capturedAt,
+        e.person, e.company, e.phase, e.workDate,
+        e.analysis && e.analysis.state,
+        status.cls, status.text,
+        posterIdentity(e.poster)
+      ].join('\t');
+    }).join('\n');
+    return jobs + '\n--\n' + items;
+  }
+
+  var CLIENT_MEDIA_KEYS = {
+    _videoUrl: true,
+    _loaded: true,
+    _frames: true,
+    _remoteFrames: true,
+    _watchReading: true,
+    _videoRetrying: true
+  };
+
+  /** Keep the live object so an open preview and its timers stay attached. */
+  function keepClientMedia(prev, next) {
+    if (!prev) return next;
+    Object.keys(next).forEach(function (k) {
+      if (CLIENT_MEDIA_KEYS[k]) return;
+      if (k === 'custody' && prev.custody && prev.custody.length) return;
+      if (k === 'poster') {
+        prev.poster = preferStablePoster(prev.poster, next.poster);
+        return;
+      }
+      prev[k] = next[k];
+    });
+    // A failed first mint must not freeze this object — the next open
+    // has to be allowed to ask for the file again.
+    if (prev._loaded && !prev._videoUrl) prev._loaded = false;
+    return prev;
+  }
+
   function applyOrgLibrary(payload) {
     ORG_MODE = true;
-    JOBS = {};
+    var nextJobs = {};
     (payload.jobs || []).forEach(function (j) {
       if (!j || !j.jobId) return;
-      JOBS[j.jobId] = {
+      nextJobs[j.jobId] = {
         key: j.jobId,
         name: j.jobName || 'Job',
         number: j.jobNumber != null ? j.jobNumber : null,
@@ -6784,8 +6981,8 @@
       };
     });
     (payload.items || []).forEach(function (raw) {
-      if (raw.jobId && !JOBS[raw.jobId]) {
-        JOBS[raw.jobId] = {
+      if (raw.jobId && !nextJobs[raw.jobId]) {
+        nextJobs[raw.jobId] = {
           key: raw.jobId,
           name: raw.jobName || 'Job',
           number: raw.jobNumber != null ? raw.jobNumber : null,
@@ -6798,7 +6995,19 @@
         };
       }
     });
-    EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+    var prevById = {};
+    EVIDENCE.forEach(function (e) { prevById[e.id] = e; });
+    JOBS = nextJobs;
+    EVIDENCE = (payload.items || []).map(function (raw) {
+      return keepClientMedia(prevById[raw.id], mapRemoteItem(raw, raw.jobId));
+    });
+    if (state.open) {
+      var live = null;
+      for (var i = 0; i < EVIDENCE.length; i++) {
+        if (EVIDENCE[i].id === state.open.id) { live = EVIDENCE[i]; break; }
+      }
+      if (live) state.open = live;
+    }
   }
 
   var libraryLoaded = false;
@@ -6838,9 +7047,14 @@
       .then(function (payload) {
         libraryRefreshing = false;
         if (!payload) return;
+        var first = !libraryLoaded;
+        var before = librarySignature();
         libraryLoaded = true;
         applyOrgLibrary(payload);
-        boot();
+        // A silent poll that only rotated signed tokens must not wipe the
+        // table — that reloads every thumbnail and reads as the videos
+        // glitching out.
+        if (first || !silent || before !== librarySignature()) boot();
         startLibraryWatch();
       })
       .catch(function () {

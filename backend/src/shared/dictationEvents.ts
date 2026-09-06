@@ -3,11 +3,14 @@
  *
  * The office Analysis tab lists what is happening at specific moments.
  * Those moments are event-driven (scene change, new activity, speech shift,
- * camera move, work step start/stop) — never a fixed cadence.
+ * camera move, work step start/stop, and — when people are talking — SAID
+ * rows from the mic) — never a fixed cadence.
  *
  * Persistence shape matches the existing `job_proofs.narration.entries`
  * rows the verifier already renders as `dictationEntries`.
  */
+
+import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 
 export const MAX_DICTATION_EVENTS = 48;
 
@@ -15,6 +18,7 @@ export const DICTATION_EVENT_TYPES = [
   'scene',
   'activity',
   'speech',
+  'said',
   'camera',
   'work',
   'other',
@@ -299,6 +303,7 @@ export function resolveDictationEntries(input: {
   actions?: Array<{ atSeconds?: number; description?: string; action?: string }>;
   frames?: number[];
   durationSeconds?: number;
+  transcript?: string | null;
 }): DictationEvent[] {
   const stored = parseDictationEvents(input.stored, {
     frames: input.frames,
@@ -310,9 +315,16 @@ export function resolveDictationEntries(input: {
         const fromText = parseTimestampedNarration(input.narrationText ?? '');
         return fromText.length ? fromText : eventsFromActions(input.actions ?? []);
       })();
-  return sanitizeDictationEvents(raw, {
+  const vision = sanitizeDictationEvents(raw, {
     summary: input.summary,
   });
+  const speech = sanitizeDictationEvents(
+    speechEventsFromTranscript(input.transcript, {
+      durationSeconds: input.durationSeconds,
+    }),
+    { summary: input.summary },
+  );
+  return dedupeEvents([...vision, ...speech]).slice(0, MAX_DICTATION_EVENTS);
 }
 
 export function narrationEntriesFromEvents(events: DictationEvent[]): Array<{
