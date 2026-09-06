@@ -60,7 +60,10 @@ export function formatClipClock(seconds: number | null | undefined): string {
  * end forces the element to scan the file so the native player shows 0:10
  * or 50:00 instead of 0:00 / Infinity.
  */
-export function bindMeasuredDuration(video: HTMLVideoElement): () => void {
+export function bindMeasuredDuration(
+  video: HTMLVideoElement,
+  knownSeconds?: number | null,
+): () => void {
   let cancelled = false;
 
   const measured = () =>
@@ -70,6 +73,7 @@ export function bindMeasuredDuration(video: HTMLVideoElement): () => void {
 
   const discover = () => {
     if (cancelled || measured() != null) return;
+    if (isKnownDuration(knownSeconds)) return;
     // Visible players with native controls. A dummy seek during Play
     // flashes the last frame and restarts the clip.
     if (!video.paused) {

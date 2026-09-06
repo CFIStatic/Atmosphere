@@ -133,4 +133,10 @@ describe('bindMeasuredDuration', () => {
     bindMeasuredDuration(video);
     expect(video.currentTime).toBe(0);
   });
+
+  it('skips the dummy seek when the filed clip already has a measured length', () => {
+    const video = fakeVideo({ duration: Number.POSITIVE_INFINITY, readyState: 1 });
+    bindMeasuredDuration(video, 33);
+    expect(video.currentTime).toBe(0);
+  });
 });
