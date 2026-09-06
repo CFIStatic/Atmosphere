@@ -39,10 +39,10 @@ describe('ShowDispute', () => {
     expect(onSeek).toHaveBeenCalledWith(moments[0]);
   });
 
-  it('says none when the file is clean', async () => {
-    const user = userEvent.setup();
-    render(<ShowDispute disputes={[]} />);
-    await user.click(screen.getByRole('button', { name: /Show me the dispute/i }));
-    expect(screen.getByText(/Nothing on this file conflicts/i)).toBeInTheDocument();
+  it('renders nothing when the file is clean', () => {
+    const { container } = render(<ShowDispute disputes={[]} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole('button', { name: /Show me the dispute/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/None on this (clip|file)/i)).not.toBeInTheDocument();
   });
 });

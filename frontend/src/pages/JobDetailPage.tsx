@@ -167,9 +167,11 @@ export function JobDetailPage() {
               </div>
               <CustodyExportButton jobId={job.id} label="Export custody JSON" />
             </div>
-            <div className="mt-3">
-              <ShowDispute disputes={proofs.disputes ?? []} />
-            </div>
+            {(proofs.disputes?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <ShowDispute disputes={proofs.disputes ?? []} />
+              </div>
+            )}
             <ol className="mt-4 space-y-4">
               {(proofs.videos ?? []).map((video) => {
                 const pending =

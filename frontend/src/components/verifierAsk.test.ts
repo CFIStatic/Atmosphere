@@ -70,6 +70,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function surfaceClipDisputes');
     expect(verifierHtml).toContain('function disputeCheckTitle');
     expect(verifierHtml).toContain('Show me the dispute');
+    expect(verifierHtml).not.toContain('None on this clip');
+    expect(verifierHtml).not.toContain('Nothing on this clip conflicts');
     expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
     expect(verifierHtml).toContain('id="d-analysis-lead"');
     expect(verifierHtml).toContain('analysis-skel');
@@ -235,6 +237,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Heard on the mic/i);
     expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
     expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/Show me the dispute/i);
+    expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/1 moment/);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
     dom.window.close();
   });
 
@@ -254,7 +258,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-saw')).toBeNull();
     expect(document.getElementById('d-analysis-lead')).toBeNull();
     expect(document.getElementById('d-job-summary')).toBeNull();
-    expect(document.getElementById('dispute-toggle')).not.toBeNull();
+    expect(document.getElementById('dispute-toggle')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/AI analysis|Paused/i);
     dom.window.close();
   });
@@ -347,6 +353,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/0:00/);
     expect(document.getElementById('d-analysis-lead')?.textContent).toMatch(/never an acceptance/i);
+    expect(document.getElementById('dispute-toggle')).toBeNull();
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
+    expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);
     dom.window.close();
   });
 
