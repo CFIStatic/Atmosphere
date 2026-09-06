@@ -91,7 +91,8 @@ describe('ProofOfWork video collection', () => {
     render(<ProofOfWork jobId="job-1" heading="Videos and analysis" initialData={catalog} />);
 
     expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Show me the dispute/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/None on this (clip|file)/i)).not.toBeInTheDocument();
     expect(screen.getByText('Every video on this job')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();

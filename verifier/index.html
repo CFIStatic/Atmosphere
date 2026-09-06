@@ -1577,7 +1577,6 @@
   .dispute-k { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
   .dispute-t { display: block; margin-top: 2px; font-size: 13px; font-weight: 650; }
   .dispute-d { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
-  .dispute-empty { margin: 0; padding: 10px 12px 12px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line-soft); }
 
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
@@ -5608,26 +5607,23 @@
 
   function renderDisputeControl(item) {
     var moments = surfaceClipDisputes(item);
+    if (!moments.length) return '';
     var html = '<div class="dispute-ctl" id="dispute-ctl">';
     html += '<button type="button" id="dispute-toggle" aria-expanded="false">';
     html += '<strong>Show me the dispute</strong>';
-    html += '<span class="count' + (moments.length ? ' has' : '') + '">' +
-      (moments.length ? moments.length + ' moment' + (moments.length === 1 ? '' : 's') : 'None on this clip') +
+    html += '<span class="count has">' +
+      moments.length + ' moment' + (moments.length === 1 ? '' : 's') +
       '</span></button>';
     html += '<div id="dispute-panel" hidden>';
-    if (!moments.length) {
-      html += '<p class="dispute-empty">Nothing on this clip conflicts with the scope or with another clip.</p>';
-    } else {
-      html += '<ul class="dispute-list" id="dispute-list">';
-      moments.forEach(function (m) {
-        html += '<li' + (m.seek != null ? ' data-at="' + m.seek + '"' : '') + '>';
-        html += '<span class="dispute-k">' + esc(m.kind === 'integrity' ? 'Integrity' : m.kind === 'scope' ? 'Scope' : 'Clips disagree') +
-          (m.seek != null ? ' · ' + eventClock(m.seek) : '') + '</span>';
-        html += '<span class="dispute-t">' + esc(m.title) + '</span>';
-        html += '<span class="dispute-d">' + esc(m.detail) + '</span></li>';
-      });
-      html += '</ul>';
-    }
+    html += '<ul class="dispute-list" id="dispute-list">';
+    moments.forEach(function (m) {
+      html += '<li' + (m.seek != null ? ' data-at="' + m.seek + '"' : '') + '>';
+      html += '<span class="dispute-k">' + esc(m.kind === 'integrity' ? 'Integrity' : m.kind === 'scope' ? 'Scope' : 'Clips disagree') +
+        (m.seek != null ? ' · ' + eventClock(m.seek) : '') + '</span>';
+      html += '<span class="dispute-t">' + esc(m.title) + '</span>';
+      html += '<span class="dispute-d">' + esc(m.detail) + '</span></li>';
+    });
+    html += '</ul>';
     html += '</div></div>';
     return html;
   }
