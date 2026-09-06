@@ -4633,7 +4633,7 @@
     if (btn) btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
-      startPreviewPlayback(item);
+      startPreviewPlayback(state.open || item);
     });
   }
 
@@ -4647,7 +4647,10 @@
     var stage = host && host.querySelector('.preview-stage');
     // Same still is already on screen (open → detail hydrate). Do not
     // rebuild the node — that flashes the play button and reloads the JPEG.
-    if (stage && stage.getAttribute('data-preview-state') === 'poster' && document.getElementById('d-yt-play')) {
+    // The id check is what keeps Play wired to this clip after glance-and-close.
+    if (stage && stage.getAttribute('data-preview-state') === 'poster' &&
+        stage.getAttribute('data-preview-id') === String(item.id) &&
+        document.getElementById('d-yt-play')) {
       var img = stage.querySelector('.preview-still');
       if (img && poster && img.getAttribute('src') !== poster) img.src = poster;
       var durEl = stage.querySelector('.yt-dur');
@@ -4665,7 +4668,7 @@
       return;
     }
     host.innerHTML =
-      '<div class="preview-stage" data-preview-state="poster">' +
+      '<div class="preview-stage" data-preview-state="poster" data-preview-id="' + esc(item.id) + '">' +
         '<img class="preview-still" alt="Screenshot from this video" src="' + esc(poster) + '" />' +
         '<button type="button" class="yt-play" id="d-yt-play" aria-label="Play">' +
           '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' +
@@ -4686,7 +4689,7 @@
     state.frame = 0;
     stopPlay();
     fillPreviewChrome(item);
-    paintPreviewPoster(item, item._remote && !item._loaded && !item._videoUrl);
+    paintPreviewPoster(item, item._remote && !item._videoUrl);
     renderDictation(item);
     renderAnalysis(item);
     setTab(tab || 'integrity');
@@ -4734,12 +4737,18 @@
     vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
     vid.addEventListener('error', function () {
       if (item._videoRetrying) {
-        showPreviewPlayError(item);
+        item._videoRetrying = false;
+        if (state.open && state.open.id === item.id) showPreviewPlayError(item);
         return;
       }
       item._videoRetrying = true;
       refreshVideoUrl(item).then(function (url) {
-        if (!url || !state.open || state.open.id !== item.id) {
+        if (!state.open || state.open.id !== item.id) {
+          item._videoRetrying = false;
+          return;
+        }
+        if (!url) {
+          item._videoRetrying = false;
           showPreviewPlayError(item);
           return;
         }
@@ -4754,6 +4763,7 @@
   }
 
   function showPreviewPlayError(item) {
+    if (!state.open || state.open.id !== item.id) return;
     paintPreviewPoster(item, false);
     if (document.getElementById('d-wait')) return;
     var host = $('#d-frame .preview-stage');
@@ -4827,6 +4837,7 @@
     if (!item) return;
     var startAt = pendingSeek;
     stopPlay();
+    item._videoRetrying = false;
     if (item._videoUrl) {
       paintPreviewVideo(item);
       var vid = $('#d-frame').querySelector('video');
@@ -4848,6 +4859,17 @@
       }
       return;
     }
+    if (item._remote) {
+      refreshVideoUrl(item).then(function (url) {
+        if (!state.open || state.open.id !== item.id) return;
+        if (!url) {
+          showPreviewPlayError(item);
+          return;
+        }
+        startPreviewPlayback(item);
+      });
+      return;
+    }
     ensureFrames(item);
     if (startAt != null) seekTo(startAt);
     else setFrame(0);
@@ -4860,7 +4882,7 @@
     // Show the still the list already has immediately. Custody and the
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
-    if (item._remote && !item._loaded) {
+    if (item._remote && (!item._loaded || !item._videoUrl)) {
       fetchRemoteDetail(item).then(function () {
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
         watchRemoteReading(item);
@@ -6777,13 +6799,14 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (payload) {
         var next = payload && payload.url ? payload.url : null;
-        if (next) {
-          item._videoUrl = next;
-          item._videoRetrying = false;
-        }
+        if (next) item._videoUrl = next;
+        else item._videoRetrying = false;
         return next;
       })
-      .catch(function () { return null; });
+      .catch(function () {
+        item._videoRetrying = false;
+        return null;
+      });
   }
 
   function fetchRemoteDetail(item) {
@@ -6888,9 +6911,10 @@
   }
 
   function preferStablePoster(prev, next) {
+    // Reminted tokens share a path. Store the fresh URL so a later
+    // table rebuild does not request an expired signature. A silent
+    // poll skips boot() and leaves the on-screen <img> alone.
     if (!next) return prev || null;
-    if (!prev) return next;
-    if (posterIdentity(prev) === posterIdentity(next)) return prev;
     return next;
   }
 
@@ -6933,6 +6957,9 @@
       }
       prev[k] = next[k];
     });
+    // A failed first mint must not freeze this object — the next open
+    // has to be allowed to ask for the file again.
+    if (prev._loaded && !prev._videoUrl) prev._loaded = false;
     return prev;
   }
 

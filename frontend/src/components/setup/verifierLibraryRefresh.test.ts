@@ -219,10 +219,13 @@ describe('verifier library refresh does not glitch video previews', () => {
       }
       if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}/video`)) {
         return Promise.resolve(
-          new globalThis.Response(JSON.stringify({ url: 'https://storage.test/von-mour.webm?sig=live' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
+          new globalThis.Response(
+            JSON.stringify({ url: 'https://storage.test/von-mour.webm?sig=live' }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
         );
       }
       if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}`)) {
@@ -267,6 +270,294 @@ describe('verifier library refresh does not glitch video previews', () => {
     expect(still).not.toBeNull();
     expect(still).toBe(playing);
     expect(still!.getAttribute('src')).toContain('sig=live');
+    dom.window.close();
+  });
+
+  it('wires Play to the newly opened clip after glance-and-close', async () => {
+    const fetchImpl = ((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/evidence-portal/library')) {
+        return Promise.resolve(
+          new globalThis.Response(JSON.stringify(libraryPayload('tok-1')), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}/video`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ url: 'https://storage.test/von-mour.webm?sig=a' }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_B}/video`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ url: 'https://storage.test/mobil.webm?sig=b' }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ item: libraryPayload('tok-1').items[0], frames: [], custody: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_B}`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ item: libraryPayload('tok-1').items[1], frames: [], custody: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    }) as typeof fetch;
+
+    const dom = bootOrgVerifier(fetchImpl);
+    await waitForClip(dom.window.document, CLIP_A);
+    await waitForClip(dom.window.document, CLIP_B);
+
+    const rowA = dom.window.document.querySelector(`tr[data-id="${CLIP_A}"]`) as HTMLElement;
+    rowA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(
+      dom.window.document.querySelector('#d-frame .preview-stage')?.getAttribute('data-preview-id'),
+    ).toBe(CLIP_A);
+    dom.window.document
+      .getElementById('d-close')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const rowB = dom.window.document.querySelector(`tr[data-id="${CLIP_B}"]`) as HTMLElement;
+    rowB.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(
+      dom.window.document.querySelector('#d-frame .preview-stage')?.getAttribute('data-preview-id'),
+    ).toBe(CLIP_B);
+
+    dom.window.document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const playing = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(playing).not.toBeNull();
+    expect(playing!.getAttribute('src')).toContain('mobil.webm');
+    expect(playing!.getAttribute('src')).not.toContain('von-mour.webm');
+    dom.window.close();
+  });
+
+  it('rebuilds list stills from reminted poster URLs after a later signature change', async () => {
+    let token = 'tok-1';
+    let extra: unknown[] = [];
+    const fetchImpl = ((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/evidence-portal/library')) {
+        return Promise.resolve(
+          new globalThis.Response(JSON.stringify(libraryPayload(token, extra)), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    }) as typeof fetch;
+
+    const dom = bootOrgVerifier(fetchImpl);
+    await waitForClip(dom.window.document, CLIP_A);
+
+    token = 'tok-2';
+    extra = [
+      {
+        id: 'clip-new',
+        jobId: 'job-von',
+        jobName: 'Von mour test',
+        phase: 'after',
+        workDate: '2026-09-06',
+        capturedAt: '2026-09-06T12:00:00Z',
+        uploadedAt: '2026-09-06T12:00:00Z',
+        durationSeconds: 12,
+        person: 'Jack Cyganiak',
+        company: 'Field Capture',
+        posterUrl: 'https://storage.test/proofs/new.jpg?token=tok-2',
+        analysisState: 'none',
+      },
+    ];
+    dom.window.postMessage({ atmosphere: 'reload-library' }, '*');
+    await waitForClip(dom.window.document, 'clip-new');
+
+    const rebuiltA = dom.window.document.querySelector(
+      `tr[data-id="${CLIP_A}"] img.shot`,
+    ) as HTMLImageElement | null;
+    expect(rebuiltA).not.toBeNull();
+    expect(rebuiltA!.getAttribute('src')).toContain('token=tok-2');
+    dom.window.close();
+  });
+
+  it('remints a failed first video URL when the clip is opened again', async () => {
+    let videoCalls = 0;
+    const fetchImpl = ((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/evidence-portal/library')) {
+        return Promise.resolve(
+          new globalThis.Response(JSON.stringify(libraryPayload('tok-1')), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}/video`)) {
+        videoCalls += 1;
+        if (videoCalls === 1) {
+          return Promise.resolve(new globalThis.Response('nope', { status: 500 }));
+        }
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ url: 'https://storage.test/von-mour.webm?sig=retry' }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ item: libraryPayload('tok-1').items[0], frames: [], custody: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    }) as typeof fetch;
+
+    const dom = bootOrgVerifier(fetchImpl);
+    await waitForClip(dom.window.document, CLIP_A);
+    const row = dom.window.document.querySelector(`tr[data-id="${CLIP_A}"]`) as HTMLElement;
+    row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(videoCalls).toBe(1);
+
+    dom.window.document
+      .getElementById('d-close')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(videoCalls).toBe(2);
+
+    dom.window.document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const playing = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(playing).not.toBeNull();
+    expect(playing!.getAttribute('src')).toContain('sig=retry');
+    dom.window.close();
+  });
+
+  it('remints a signed file once on play error and does not loop or paint after close', async () => {
+    let videoCalls = 0;
+    let releaseRemint: ((value: unknown) => void) | null = null;
+    const fetchImpl = ((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/evidence-portal/library')) {
+        return Promise.resolve(
+          new globalThis.Response(JSON.stringify(libraryPayload('tok-1')), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}/video`)) {
+        videoCalls += 1;
+        const body = JSON.stringify({
+          url: `https://storage.test/von-mour.webm?sig=r${videoCalls}`,
+        });
+        if (videoCalls === 2) {
+          return new Promise((resolve) => {
+            releaseRemint = () =>
+              resolve(
+                new globalThis.Response(body, {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' },
+                }),
+              );
+          });
+        }
+        return Promise.resolve(
+          new globalThis.Response(body, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (url.includes(`/api/evidence-portal/evidence/${CLIP_A}`)) {
+        return Promise.resolve(
+          new globalThis.Response(
+            JSON.stringify({ item: libraryPayload('tok-1').items[0], frames: [], custody: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    }) as typeof fetch;
+
+    const dom = bootOrgVerifier(fetchImpl);
+    await waitForClip(dom.window.document, CLIP_A);
+    const row = dom.window.document.querySelector(`tr[data-id="${CLIP_A}"]`) as HTMLElement;
+    row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(videoCalls).toBe(1);
+
+    dom.window.document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const video = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+
+    video!.dispatchEvent(new dom.window.Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(videoCalls).toBe(2);
+    expect(releaseRemint).not.toBeNull();
+
+    dom.window.document
+      .getElementById('d-close')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    releaseRemint!(null);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(videoCalls).toBe(2);
+    expect(dom.window.document.getElementById('detail')?.getAttribute('data-open')).toBe('0');
+    expect(dom.window.document.getElementById('d-wait')).toBeNull();
+
+    row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    dom.window.document
+      .getElementById('d-yt-play')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const playing = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(playing).not.toBeNull();
+    playing!.dispatchEvent(new dom.window.Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const reminted = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(reminted).not.toBeNull();
+    reminted!.dispatchEvent(new dom.window.Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(dom.window.document.querySelector('#d-frame video')).toBeNull();
+    expect(dom.window.document.getElementById('d-wait')?.textContent).toMatch(/Could not play/);
+    expect(videoCalls).toBe(3);
     dom.window.close();
   });
 });
