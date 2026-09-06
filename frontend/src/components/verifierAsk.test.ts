@@ -270,6 +270,15 @@ describe('verifier clip Ask tab and live analysis', () => {
 
     expect(document.body.textContent).toMatch(/insurance/i);
     expect(document.body.textContent).toMatch(/vanity/i);
+    const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
+    const times = notes.map((el) => Number(el.getAttribute('data-at')));
+    expect(times).toContain(18);
+    expect(times).toContain(96);
+    expect(times).toContain(250);
+    expect(times.every((at) => at > 0)).toBe(true);
+    expect(document.getElementById('alog')?.textContent).toMatch(/said/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/insurance|cabinets|agreement/i);
+    expect(document.getElementById('alog')?.textContent).not.toMatch(/0:00/);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
     askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -310,6 +319,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(alog?.textContent).toMatch(/0:18/);
     expect(alog?.textContent).toMatch(/spreadsheet/i);
     expect(alog?.textContent).toMatch(/scene|activity/i);
+    expect(alog?.textContent).not.toMatch(/said/i);
     expect(
       Array.from(document.querySelectorAll('#d-panel .saw-k')).some((el) => el.textContent === 'Events'),
     ).toBe(true);

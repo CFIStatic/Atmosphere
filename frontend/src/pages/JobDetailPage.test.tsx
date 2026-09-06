@@ -153,6 +153,7 @@ const proofs: ProofResponse = {
       heardOnMic: 'Homeowner asked us not to touch the skylights.',
       dictationEntries: [
         { atSeconds: 12, text: 'Opens on the north slope — tarp gone, deck exposed.', type: 'scene' },
+        { atSeconds: 28, text: 'Please do not touch the skylights. That was the agreement.', type: 'said' },
         { atSeconds: 41, text: 'Hands on the skylight flashing; tools in frame.', type: 'work' },
       ],
     },
@@ -216,6 +217,8 @@ describe('JobDetailPage', () => {
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
     expect(screen.getByTestId('event-timeline').textContent).toMatch(/0:12/);
+    expect(screen.getByTestId('event-timeline').textContent).toMatch(/0:28/);
+    expect(screen.getByTestId('event-timeline').textContent).toMatch(/said/i);
     expect(screen.getByTestId('event-timeline').textContent).toMatch(/skylight/i);
     expect(
       screen.getByText('Delgado Roofing accepted revision 3; the job is on 4'),

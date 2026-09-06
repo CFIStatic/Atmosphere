@@ -2501,8 +2501,11 @@
         summary: 'Walkthrough with the homeowner. No demolition in frame. The conversation covers the bathroom leak, the vanity mirror, and what insurance will and will not pay.',
         dictation: 'The contractor walks the hallway with the homeowner. They stop in the bathroom doorway. No tools come out. The talk is the record: the leak, the mirror, and the claim.',
         dictationEntries: [
-          { atSeconds: 18, text: 'Hallway: contractor and homeowner standing at the bathroom door.' },
-          { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.' }
+          { atSeconds: 18, text: 'Hallway: contractor and homeowner standing at the bathroom door.', type: 'scene' },
+          { atSeconds: 18, text: 'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.', type: 'said' },
+          { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.', type: 'scene' },
+          { atSeconds: 96, text: 'Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.', type: 'said' },
+          { atSeconds: 250, text: 'Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.', type: 'said' }
         ],
         transcript:
           '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
@@ -5099,7 +5102,7 @@
     return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
   }
 
-  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, camera: 1, work: 1, other: 1 };
+  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, said: 1, camera: 1, work: 1, other: 1 };
   var FILLER_LEAD = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?(?:\s+on)?|starts?|begins?|depicts?|features?)\s+(?:that\s+)?/i;
   var TIMESTAMP_LEAD = /^(?:at\s+\d+(?:\.\d+)?(?:\s+seconds?)?|\[(?:\d+:)+\d+\])\s*[:,.\-–—]?\s*/i;
   var GENERIC_DUMP = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?|starts?|begins?|depicts?|features?)\b/i;
@@ -5255,8 +5258,49 @@
   }
 
   var ANALYSIS_DISCLAIMER =
-    'This is what the model could see in the frames and, when the mic was on, what was said — rooms, agreements, concerns. ' +
-    'It does not infer off-camera work, and it is never an acceptance.';
+    'This is what the model could see in the frames and, when people were talking, what was said — rooms, agreements, concerns — on the same timeline. ' +
+    'Silent clips stay vision-only. It does not infer off-camera work, and it is never an acceptance.';
+
+  function clockFromStamp(raw) {
+    var parts = String(raw || '').split(':').map(Number);
+    if (parts.some(function (n) { return !isFinite(n); })) return null;
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return null;
+  }
+
+  function addSpeechMoments(a, add) {
+    if ((a.dictationEntries || []).some(function (e) { return e.type === 'said' || e.type === 'speech'; })) {
+      return;
+    }
+    var details = (a.conversationDetails || [])
+      .map(function (line) { return String(line || '').trim(); })
+      .filter(function (line) { return line && line.length <= 240; });
+    var stamps = [];
+    String(a.transcript || '').split(/\n+/).forEach(function (line) {
+      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+      if (!m) return;
+      var at = clockFromStamp(m[1]);
+      var body = String(m[2] || '').trim();
+      if (at == null || !body || body.length > 240) return;
+      stamps.push({ at: at, text: body });
+    });
+    if (!details.length && !stamps.length) return;
+    details.forEach(function (line) {
+      var at = null;
+      var needle = line.toLowerCase().slice(0, 40);
+      for (var i = 0; i < stamps.length; i++) {
+        var hay = stamps[i].text.toLowerCase();
+        if ((needle && hay.indexOf(needle) !== -1) || hay.indexOf(line.toLowerCase()) !== -1 ||
+            line.toLowerCase().indexOf(hay.slice(0, 40)) !== -1) {
+          at = stamps[i].at;
+          break;
+        }
+      }
+      if (at == null) return;
+      add(at, line, 'heard', 'said');
+    });
+  }
 
   function analysisLog(item) {
     var a = item.analysis || {};
@@ -5283,13 +5327,7 @@
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
     });
-    String(a.transcript || '').split(/\n+/).forEach(function (line) {
-      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
-      if (!m) return;
-      var parts = m[1].split(':').map(Number);
-      var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-      add(at, m[2], 'heard', 'speech');
-    });
+    addSpeechMoments(a, add);
     if (!rows.length) {
       parseTimestampedEvents(String(a.dictation || a.summary || '')).forEach(function (e) {
         add(e.at, e.text, 'read');
@@ -5770,7 +5808,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Analysis reading — what the AI saw on screen and, when people were talking, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
