@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AskSeekTarget } from '../lib/askSeek';
+import { VideoSeekProvider, useVideoSeek } from '../lib/videoSeek';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 
 const sharedJob = vi.fn();
@@ -69,6 +72,11 @@ const proofs: ProofResponse = {
       transcriptError: null,
       aiSummary: 'The tarp is gone from the north slope.',
       heardOnMic: 'Homeowner asked us not to touch the skylights.',
+      events: [
+        { atSeconds: 8, text: 'Camera finds the north slope' },
+        { atSeconds: 18, text: 'Tarp pulled from the ridge' },
+        { atSeconds: 39, text: 'Slope stripped; underlayment laid to the ridge' },
+      ],
     },
   ],
   counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0 },
@@ -97,6 +105,14 @@ describe('JobAskPanel', () => {
       },
     });
   });
+
+  function SeekProbe({ onSeek }: { onSeek: (target: AskSeekTarget) => void }) {
+    const { request } = useVideoSeek();
+    useEffect(() => {
+      if (request) onSeek(request);
+    }, [onSeek, request]);
+    return null;
+  }
 
   it('asks from inside the job profile', async () => {
     const user = userEvent.setup();
@@ -156,6 +172,101 @@ describe('JobAskPanel', () => {
     expect(await screen.findByText('From the guest file.')).toBeInTheDocument();
     expect(await screen.findByText('From this job file')).toBeInTheDocument();
     expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
+  });
+
+  it('seeks the player to the Analysis second when an answer cites a moment', async () => {
+    askAboutProofs.mockResolvedValue({
+      answer: 'Yes. At 0:18, the tarp came off. That was 18 seconds into the recording.',
+      groundedOn: 1,
+      model: 'gemini-3.6-flash',
+      question: {
+        id: 'q-tarp',
+        question: 'What happened with the tarp?',
+        answer: 'Yes. At 0:18, the tarp came off. That was 18 seconds into the recording.',
+        grounded_on: ['2026-08-05:after'],
+        created_at: '2026-08-06T12:00:00Z',
+      },
+    });
+    const seeks: AskSeekTarget[] = [];
+    const user = userEvent.setup();
+    render(
+      <VideoSeekProvider>
+        <SeekProbe onSeek={(target) => seeks.push(target)} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'What happened with the tarp?' }));
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(seeks.some((target) => target.atSeconds === 18 && target.proofId === 'p1')).toBe(true);
+    });
+
+    const cite = screen.getAllByTestId('ask-cite')[0];
+    expect(cite).toHaveAttribute('data-at', '18');
+    await user.click(cite);
+    await waitFor(() => {
+      expect(seeks.filter((target) => target.atSeconds === 18).length).toBeGreaterThan(1);
+    });
+  });
+
+  it('seeks the cited second on click, not only the first clock in the answer', async () => {
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-two',
+          question: 'What happened with the tarp?',
+          answer:
+            'Yes. At 0:18, the tarp came off. Underlayment is down across two thirds of the slope by 0:39.',
+          grounded_on: ['2026-08-05:after'],
+          created_at: '2026-08-06T12:00:00Z',
+        },
+      ],
+    });
+    const seeks: AskSeekTarget[] = [];
+    const user = userEvent.setup();
+    render(
+      <VideoSeekProvider>
+        <SeekProbe onSeek={(target) => seeks.push(target)} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+
+    const cites = await screen.findAllByTestId('ask-cite');
+    const late = cites.find((cite) => cite.getAttribute('data-at') === '39');
+    expect(late).toBeTruthy();
+    await user.click(late!);
+    await waitFor(() => {
+      expect(seeks.some((target) => target.atSeconds === 39 && target.proofId === 'p1')).toBe(true);
+    });
+  });
+
+  it('does not auto-seek when an existing Ask thread is loaded', async () => {
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-history',
+          question: 'What happened with the tarp?',
+          answer: 'Yes. At 0:18, the tarp came off. That was 18 seconds into the recording.',
+          grounded_on: ['2026-08-05:after'],
+          created_at: '2026-08-06T12:00:00Z',
+        },
+      ],
+    });
+    const seeks: AskSeekTarget[] = [];
+    render(
+      <VideoSeekProvider>
+        <SeekProbe onSeek={(target) => seeks.push(target)} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId('ask-cite').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(proofQuestions).toHaveBeenCalled();
+    });
+    expect(seeks).toEqual([]);
   });
 
   it('holds the typing indicator for 10× a short reply', async () => {

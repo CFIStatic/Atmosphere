@@ -18,6 +18,7 @@ import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
+import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
@@ -293,7 +294,6 @@ export function SharedDashboardPage() {
     <>
       <PageHeader
         title={record?.job.title ?? 'Job'}
-        description="What is happening on site, what has already been done, and what is still ahead."
         action={
           record ? (
             <JobFileActions
@@ -328,6 +328,8 @@ export function SharedDashboardPage() {
           ) : undefined
         }
       />
+
+      {record && <JobFileTodayStrip jobId={record.job.id} record={record} />}
 
       {justApproved && record && (
         <div
@@ -397,6 +399,7 @@ export function SharedDashboardPage() {
               jobId={record.job.id}
               record={record}
               showProofOfWork={false}
+              showIdentity={false}
               initialProof={
                 justApproved
                   ? {
@@ -410,7 +413,7 @@ export function SharedDashboardPage() {
             />
 
             <div className="mt-4 space-y-4">
-              <ProofOfWork jobId={record.job.id} heading="Videos and analysis" />
+              <ProofOfWork jobId={record.job.id} heading="Videos and analysis" showCollectionAsk={false} />
               <EvidenceLocker jobId={record.job.id} />
             </div>
 

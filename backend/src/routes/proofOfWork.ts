@@ -96,6 +96,37 @@ const PROOF_SELECT =
   'transcript_status, transcript_text, transcript_error, transcribed_at, ' +
   'decided_at, decided_note, created_at';
 
+/** Event-boundary timestamps already stored on the Analysis reading. */
+function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: string }> {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const narration = row?.narration && typeof row.narration === 'object' ? row.narration : {};
+  const raw = [
+    ...(Array.isArray(findings.events) ? findings.events : []),
+    ...(Array.isArray(findings.timeline) ? findings.timeline : []),
+    ...(Array.isArray(findings.actions) ? findings.actions : []),
+    ...(Array.isArray(narration.entries) ? narration.entries : []),
+  ];
+  const seen = new Set<number>();
+  const events: Array<{ atSeconds: number; text?: string }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const at = Number(
+      (item as any).atSeconds ??
+        (item as any).at_seconds ??
+        (item as any).t_seconds ??
+        (item as any).startSeconds ??
+        (item as any).at,
+    );
+    if (!Number.isFinite(at) || at < 0 || seen.has(at)) continue;
+    seen.add(at);
+    const text = String(
+      (item as any).text ?? (item as any).description ?? (item as any).summary ?? (item as any).note ?? '',
+    ).trim();
+    events.push({ atSeconds: at, text: text || undefined });
+  }
+  return events.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+
 /** The row shape the verifier wants. */
 function asUpload(row: any): ProofUpload {
   return {
@@ -1757,6 +1788,8 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
     transcriptError: row.transcript_error ?? null,
     aiSummary: row.ai_summary ?? row.narration_text ?? null,
     heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
+    receivedAt: row.received_at ?? row.created_at ?? null,
+    events: catalogEventsFromRow(row),
   }));
 
   return {
