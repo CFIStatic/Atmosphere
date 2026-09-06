@@ -58,7 +58,8 @@ try {
   await page.screenshot({ path: `${OUT}/03-job-progress.png` });
 
   const body = await page.locator('body').innerText();
-  const hasEmptyLibrary = /No clips yet/i.test(body) && !/Job created/i.test(body);
+  const hasEmptyLibrary =
+    /No clips yet|Waiting for first clip/i.test(body) && !/Job created/i.test(body);
   if (hasEmptyLibrary) {
     throw new Error('Landed on empty video library instead of the job record');
   }

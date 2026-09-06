@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const verifierHtml = readFileSync(
@@ -18,7 +19,10 @@ function extractRecordingStatusFns() {
     `${verifierHtml.slice(start, end)}; return { clipInstant, isActiveRecording, jobRecordingStatus, clipStatus };`,
   )() as {
     isActiveRecording: (e: unknown) => boolean;
-    jobRecordingStatus: (items: unknown[]) => { cls: string; text: string };
+    jobRecordingStatus: (
+      items: unknown[],
+      job?: { captureStatus?: string },
+    ) => { cls: string; text: string };
     clipStatus: (e: unknown) => { cls: string; text: string };
   };
 }
@@ -59,9 +63,18 @@ describe('verifier dashboard recording status', () => {
     expect(jobRecordingStatus([filming])).toEqual({ cls: 'yellow', text: 'Recording' });
   });
 
-  it('labels a job file with no clips In progress so Field Capture work is visible immediately', () => {
+  it('labels a job file with no clips Waiting for first clip, not a dead No recording state', () => {
     const { jobRecordingStatus } = extractRecordingStatusFns();
-    expect(jobRecordingStatus([])).toEqual({ cls: 'yellow', text: 'In progress' });
+    expect(jobRecordingStatus([])).toEqual({ cls: 'yellow', text: 'Waiting for first clip' });
+    expect(jobRecordingStatus([], { captureStatus: 'in_progress' })).toEqual({
+      cls: 'yellow',
+      text: 'Waiting for first clip',
+    });
+    expect(verifierHtml).toContain("text: job && job.captureStatus === 'recorded' ? 'Recorded' : 'Waiting for first clip'");
+    expect(verifierHtml).toContain('Waiting for first clip');
+    expect(verifierHtml).toContain('This job is open. The first clip shows up here when Field Capture files it.');
+    expect(verifierHtml).not.toContain('No recording');
+    expect(verifierHtml).not.toContain("text: 'In progress'");
     expect(verifierHtml).toContain('createdAt: j.createdAt || \'\'');
     expect(verifierHtml).toContain("function startLibraryWatch");
     expect(verifierHtml).toContain("atmosphere === 'reload-library'");
@@ -79,5 +92,64 @@ describe('verifier dashboard recording status', () => {
 
     expect(isActiveRecording(queued)).toBe(false);
     expect(clipStatus(queued)).toEqual({ cls: 'green', text: 'Recorded' });
+  });
+
+  it('paints an in_progress job folder as Waiting for first clip on All videos', async () => {
+    const library = {
+      jobs: [
+        {
+          jobId: 'job-wait',
+          jobName: 'Roof tear-off — 14th St',
+          createdAt: '2026-09-05T18:00:00Z',
+          captureStatus: 'in_progress',
+        },
+      ],
+      items: [],
+    };
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
+        window.fetch = ((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/api/evidence-portal/library')) {
+            return Promise.resolve(
+              new globalThis.Response(JSON.stringify(library), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            );
+          }
+          return Promise.reject(new Error(`unexpected fetch ${url}`));
+        }) as typeof fetch;
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+      },
+    });
+
+    const document = dom.window.document;
+    for (let i = 0; i < 40; i += 1) {
+      if (document.querySelector('tr.jobrow[data-job="job-wait"]')) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const row = document.querySelector('tr.jobrow[data-job="job-wait"]');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain('Roof tear-off — 14th St');
+    expect(row?.textContent).toContain('Waiting for first clip');
+    expect(row?.textContent).not.toMatch(/No recording/);
+    expect(row?.querySelector('.chip.red, .chip.fail')).toBeNull();
+    expect(row?.querySelector('.chip.yellow')?.textContent).toMatch(/Waiting for first clip/);
+    dom.window.close();
   });
 });

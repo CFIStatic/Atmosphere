@@ -122,7 +122,7 @@ export function missingPartIndexes(have: Iterable<number>, chunkCount: number): 
 
 export type LibraryJobCaptureStatus = 'recorded' | 'in_progress';
 
-/** A job file with no clip yet is in progress — not an empty/failed folder. */
+/** A job file with no clip yet is in_progress — office copy is "Waiting for first clip". */
 export function libraryJobCaptureStatus(hasClip: boolean): LibraryJobCaptureStatus {
   return hasClip ? 'recorded' : 'in_progress';
 }

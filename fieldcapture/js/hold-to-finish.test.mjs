@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=no-overview-back-2/);
-assert.match(html, /js\/app\.js\?v=no-overview-back-2/);
+assert.match(html, /js\/capture-core\.js\?v=offline-calm-4/);
+assert.match(html, /js\/app\.js\?v=offline-calm-4/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -149,18 +149,29 @@ assert.match(html, /\.door-actions \{[\s\S]*?flex: 0 0 auto/, 'home button stays
 assert.match(html, /\.donebtn\.on/);
 assert.match(appSrc, /function uploadLastClip/);
 assert.match(appSrc, /showHomeAction/);
-assert.match(appSrc, /showRetryAction/);
+assert.match(appSrc, /scheduleFailRetry/);
 assert.match(
   appSrc,
   /function openDoorUploading\([\s\S]*?showHomeAction\(\)/,
   'Back to Home Screen must appear as soon as recording ends, including while uploading',
 );
 assert.match(appSrc, /state\.lastClip/, 'keep the day film on device until upload succeeds');
-assert.match(
-  appSrc,
-  /if \(!state\.finishing\) \{\s*state\.lastClip = null;/,
-  'Home must not drop lastClip while an upload is still in flight',
-);
+{
+  const doneFrom = appSrc.indexOf("$('#donebtn')");
+  const doneTo = appSrc.indexOf("when('#retrybtn'");
+  assert.ok(doneFrom >= 0 && doneTo > doneFrom, 'Home lives on the door done button');
+  const doneHandler = appSrc.slice(doneFrom, doneTo);
+  assert.doesNotMatch(
+    doneHandler,
+    /state\.lastClip = null/,
+    'Home must not drop lastClip while upload is in flight or paused',
+  );
+  assert.match(
+    doneHandler,
+    /Still on this phone/,
+    'Home during an unfiled clip keeps a calm on-phone status',
+  );
+}
 assert.match(
   appSrc,
   /if \(state\.lastClip === clip\) state\.lastClip = null;/,
@@ -171,6 +182,37 @@ assert.match(
   /if \(state\.finishing\) \{\s*setStatus\('The last day is still uploading\.'/,
   'a second day must not start while the previous PUT is still running',
 );
+assert.match(
+  appSrc,
+  /if \(state\.lastClip\) \{\s*setStatus\('The last day is still on this phone\.'/,
+  'Home must not start a second day while the last clip is still local',
+);
+assert.match(
+  appSrc,
+  /var boundJobId = state\.activeJobId;[\s\S]*?clip\.jobId = boundJobId/,
+  'stop must stamp the job the day was filmed on so a later Home tap cannot reroute the file',
+);
+assert.match(
+  appSrc,
+  /resolveActiveJobId\(clip\.jobId\)/,
+  'filing must use the clip job, not whatever is selected on Today',
+);
+assert.match(
+  appSrc,
+  /if \(state\.lastClip && state\.lastClip\.jobId === localId\)/,
+  'a local-to-office remap must keep an unfiled clip on that same job',
+);
+{
+  const openFrom = appSrc.indexOf('function openNewJobForm');
+  const openTo = appSrc.indexOf('function selectCreatedJob');
+  assert.ok(openFrom >= 0 && openTo > openFrom, 'openNewJobForm must exist');
+  const openSrc = appSrc.slice(openFrom, openTo);
+  assert.match(
+    openSrc,
+    /if \(state\.lastClip\)/,
+    '+ must not open a new job while the last clip is still on this phone',
+  );
+}
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
 assert.match(coreSrc, /putFileResumable/, 'large day films resume from the first missing part');
 assert.match(coreSrc, /proof\/upload-complete/);
@@ -219,6 +261,11 @@ assert.match(html, /id="door-sub"/);
 assert.doesNotMatch(html, /Your part is done/);
 assert.doesNotMatch(html, /Your day, as the office will read it/);
 assert.doesNotMatch(appSrc, /Fix signal and tap Retry upload/);
+assert.doesNotMatch(appSrc, /Upload paused/);
+assert.doesNotMatch(appSrc, /showRetryAction\(\)/, 'failed filing stays on the progress line — no Retry drama');
+assert.match(appSrc, /Waiting for signal/);
+assert.match(appSrc, /function flushFieldWork/);
+assert.match(appSrc, /addEventListener\('online'/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
 assert.match(appSrc, /resolveOfficeHref\('\/forgot-password'\)/);
@@ -251,10 +298,30 @@ assert.match(appSrc, /bindJobSearch/);
 assert.match(appSrc, /bindNewJob/);
 assert.match(appSrc, /Core\.filterJobs/);
 assert.match(appSrc, /Core\.createTodayJob/);
-assert.ok(
-  appSrc.indexOf('navigator.mediaDevices.getUserMedia') < appSrc.indexOf('Core.createTodayJob({'),
-  'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
-);
+{
+  const submitFrom = appSrc.indexOf("form.addEventListener('submit'");
+  const submitTo = appSrc.indexOf('function renderExpect');
+  assert.ok(submitFrom >= 0 && submitTo > submitFrom, 'new-job submit must exist');
+  const submitSrc = appSrc.slice(submitFrom, submitTo);
+  assert.ok(
+    submitSrc.indexOf('navigator.mediaDevices.getUserMedia') < submitSrc.indexOf('syncPendingJobs()'),
+    'Start recording must call getUserMedia before the job POST so iPhone Safari still has a user gesture',
+  );
+  assert.ok(
+    submitSrc.indexOf('finishLocal(localJob, stream)') < submitSrc.indexOf('syncPendingJobs()'),
+    'recording starts on the local draft before the office POST',
+  );
+  assert.doesNotMatch(
+    submitSrc,
+    /Core\.createTodayJob\(\{/,
+    'new-job submit must POST through pendingSync, not a parallel createTodayJob',
+  );
+  assert.match(
+    submitSrc,
+    /if \(state\.finishing \|\| state\.lastClip\)/,
+    'Start recording must not draft a second job while the last clip is unfiled',
+  );
+}
 assert.match(
   appSrc,
   /function finishLocal\(job, stream\) \{\s*selectCreatedJob\(job\);\s*startRecordingForNewJob\(stream\);/,
@@ -264,6 +331,172 @@ assert.match(coreSrc, /opts\.stream/, 'recordDayFilm must reuse the stream from 
 assert.match(coreSrc, /function createTodayJob/);
 assert.match(coreSrc, /\/api\/field-app\/jobs/);
 assert.equal(typeof Core.createTodayJob, 'function');
+assert.equal(typeof Core.draftFieldJob, 'function');
+assert.equal(typeof Core.isLocalJobId, 'function');
+assert.equal(typeof Core.mergeTodayJobs, 'function');
+assert.equal(typeof Core.isTransientNetworkError, 'function');
+assert.equal(Core.isLocalJobId('local-123'), true);
+assert.equal(Core.isLocalJobId('new-1'), true);
+assert.equal(Core.isLocalJobId('job-real'), false);
+
+const draft = Core.draftFieldJob({ title: 'Camden Court', situation: 'Roof' });
+assert.equal(Core.isLocalJobId(draft.id), true);
+assert.equal(draft.name, 'Camden Court');
+assert.equal(draft.title, 'Camden Court');
+assert.equal(draft.situation, 'Roof');
+assert.equal(draft.pending, true);
+assert.ok(draft.createdAt);
+
+const memory = {
+  data: {},
+  getItem(key) { return Object.prototype.hasOwnProperty.call(this.data, key) ? this.data[key] : null; },
+  setItem(key, value) { this.data[key] = String(value); },
+  removeItem(key) { delete this.data[key]; },
+};
+Core.upsertPendingJob(draft, memory);
+assert.equal(Core.readPendingJobs(memory).length, 1);
+assert.equal(Core.readPendingJobs(memory)[0].id, draft.id);
+const officeJob = { id: 'job-1038', name: 'Meridian Ave' };
+assert.deepEqual(
+  Core.mergeTodayJobs([officeJob], [draft]).map((j) => j.id),
+  [draft.id, 'job-1038'],
+);
+Core.markPendingJobSynced(draft.id, officeJob, memory);
+assert.equal(Core.readPendingJobs(memory).length, 0);
+assert.deepEqual(Core.mergeTodayJobs([officeJob], []).map((j) => j.id), ['job-1038']);
+Core.upsertPendingJob(draft, memory);
+Core.writeCachedJobs(
+  [{ id: 'job-1038', name: 'Meridian Ave', sharePath: '/share/secret-token' }],
+  memory,
+);
+assert.equal(Core.readCachedJobs(memory)[0].sharePath, undefined);
+assert.equal(typeof Core.clearFieldLocalCache, 'function');
+assert.equal(typeof Core.adoptFieldCache, 'function');
+assert.equal(typeof Core.fieldCacheMatchesSession, 'function');
+Core.adoptFieldCache('user-a', 'aaaaaaaaaaaaTOKENA', memory);
+assert.equal(Core.readPendingJobs(memory).length, 1);
+Core.adoptFieldCache('user-b', 'bbbbbbbbbbbbTOKENB', memory);
+assert.equal(Core.readPendingJobs(memory).length, 0, 'a new account must not inherit leftover drafts');
+assert.equal(Core.readCachedJobs(memory).length, 0);
+assert.equal(Core.fieldCacheMatchesSession('bbbbbbbbbbbbTOKENB', memory), true);
+assert.equal(Core.fieldCacheMatchesSession('aaaaaaaaaaaaTOKENA', memory), false);
+Core.clearFieldLocalCache(memory);
+assert.equal(Core.fieldCacheMatchesSession('bbbbbbbbbbbbTOKENB', memory), false);
+assert.equal(Core.isTransientNetworkError({ message: 'Failed to fetch' }), true);
+assert.equal(Core.isTransientNetworkError({ status: 503, message: 'Unavailable' }), true);
+assert.equal(Core.isTransientNetworkError({ status: 401, message: 'Unauthorized' }), false);
+assert.match(appSrc, /Core\.draftFieldJob/);
+assert.match(appSrc, /Core\.upsertPendingJob/);
+assert.match(appSrc, /function syncPendingJobs/);
+assert.match(appSrc, /function resolveActiveJobId/);
+assert.match(
+  appSrc,
+  /isTransientNetworkError\(err\) && cachedMe/,
+  'signed-in crew keep Today when the office API is unreachable',
+);
+assert.match(
+  appSrc,
+  /fieldCacheMatchesSession\(state\.accessToken\)/,
+  'offline Today must not hydrate another account\'s cache',
+);
+assert.match(
+  appSrc,
+  /!accessToken[\s\S]*?abandonUnfiledWork\(\)/,
+  'sign-out must drop pending jobs and cached profile, not only the session tokens',
+);
+{
+  const from = appSrc.indexOf('function abandonUnfiledWork');
+  const to = appSrc.indexOf('/* ---------- home hydration ---------- */');
+  assert.ok(from >= 0 && to > from, 'abandonUnfiledWork must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /sessionGen \+= 1/, 'sign-out must invalidate in-flight sync and upload');
+  assert.match(src, /state\.lastClip = null/);
+  assert.match(src, /state\.finishing = false/);
+  assert.match(src, /clearFailRetry\(\)/);
+  assert.match(src, /pendingSync = null/);
+}
+{
+  const from = appSrc.indexOf('function captureSession');
+  const to = appSrc.indexOf('function startRecordingForNewJob');
+  assert.ok(from >= 0 && to > from, 'sync/upload must bind to the session that started them');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /function sessionStillOpen/);
+  assert.match(
+    src,
+    /accessToken: bound\.accessToken/,
+    'pending-job POST must use the captured token, not the live session',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?Core\.createTodayJob/,
+    'sign-out must stop the next pending-job POST',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?remapLocalJob/,
+    'a late office create must not remap into the next account',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
+    'resolveActiveJobId must not fall back to the next account\'s activeJobId',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?uploadLastClip\(\)/,
+    'flush after sign-out must not upload the previous clip',
+  );
+  assert.match(
+    src,
+    /if \(pendingSync === work\) pendingSync = null/,
+    'a signed-out sync must not clear the next session\'s in-flight lock',
+  );
+}
+{
+  const from = appSrc.indexOf('function uploadLastClip');
+  const to = appSrc.indexOf('function setDoorSub');
+  assert.ok(from >= 0 && to > from, 'uploadLastClip must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /var bound = captureSession\(\)/);
+  assert.match(
+    src,
+    /accessToken: boundAccount \? bound\.accessToken : undefined/,
+    'day-film PUT must use the captured token, not the live session',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
+    'sign-out mid-upload must not call uploadDayFilm',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return result;/,
+    'a late upload must not notify the next account\'s library',
+  );
+}
+{
+  const from = appSrc.indexOf('function finishLiveDay');
+  const to = appSrc.indexOf('function uploadLastClip');
+  assert.ok(from >= 0 && to > from, 'finishLiveDay must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /var bound = captureSession\(\)/);
+  assert.match(src, /var boundJobId = state\.activeJobId/);
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?clip\.jobId = boundJobId/,
+    'a late recorder.stop must not attach the previous clip to the next account',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?renderDoorFailed/,
+    'a late finish error must not paint the door for the next account',
+  );
+}
+assert.match(
+  appSrc,
+  /if \(!sessionStillOpen\(bound\)\) \{[\s\S]*?upsertPendingJob/,
+  'sign-out during getUserMedia must not persist a draft into the next account',
+);
 assert.deepEqual(
   Core.filterJobs(
     [

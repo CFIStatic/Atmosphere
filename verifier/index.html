@@ -1772,8 +1772,8 @@
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" hidden>
-        <p class="empty-title" id="empty-title">No clips yet</p>
-        <p class="empty-body" id="empty-body">When Field Capture uploads a video, it shows up here.</p>
+        <p class="empty-title" id="empty-title">Waiting for first clip</p>
+        <p class="empty-body" id="empty-body">This job is open. The first clip shows up here when Field Capture files it.</p>
       </div>
     </div>
   </main>
@@ -3343,8 +3343,15 @@
     return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
   }
 
-  function jobRecordingStatus(items) {
-    if (!items.length) return { cls: 'yellow', text: 'In progress' };
+  function jobRecordingStatus(items, job) {
+    if (!items.length) {
+      /* captureStatus in_progress (and any empty folder) is waiting —
+         never a red dead-folder state. */
+      return {
+        cls: 'yellow',
+        text: job && job.captureStatus === 'recorded' ? 'Recorded' : 'Waiting for first clip',
+      };
+    }
     if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Recording' };
     return { cls: 'green', text: 'Recorded' };
   }
@@ -3600,7 +3607,7 @@
    */
   function jobRow(key, items, collapsed) {
     var job = JOBS[key] || { name: (items[0] && items[0].jobName) || 'Job', number: null };
-    var status = jobRecordingStatus(items);
+    var status = jobRecordingStatus(items, job);
     var latestRecorded = latestClip(items, ['capturedAt', 'workDate', 'uploadedAt']);
     var latestUpload = latestClip(items, ['uploadedAt', 'capturedAt']);
     var recordedDay = '—';
@@ -3680,8 +3687,8 @@
           if (emptyTitle) emptyTitle.textContent = 'No jobs yet';
           if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
         } else if (!EVIDENCE.length) {
-          if (emptyTitle) emptyTitle.textContent = 'No clips yet';
-          if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a video, it shows up here.';
+          if (emptyTitle) emptyTitle.textContent = 'Waiting for first clip';
+          if (emptyBody) emptyBody.textContent = 'This job is open. The first clip shows up here when Field Capture files it.';
         } else {
           if (emptyTitle) emptyTitle.textContent = 'No matches';
           if (emptyBody) emptyBody.textContent = 'Try clearing search or picking another view.';
