@@ -41,6 +41,14 @@ applied when Stripe confirms payment. Returning to a success URL proves nothing.
 Customer Settings reads `GET /api/billing/workspace`, not the seat/credit
 `billing_overview`.
 
+Token usage on that same page is metered separately from the $599
+subscription. `token_usage_events.cost_nanos` is the provider/COGS estimate;
+`price_nanos` (Token spend) is the customer charge at
+`USAGE_CUSTOMER_MARKUP` / `TOKEN_BILLABLE_MARKUP` (default **10×**, ~90%
+gross margin). Historical rows that only stored cost were backfilled to
+billable = cost × 10 when cost was > 0; $0 rows were left alone. Do not
+apply this multiplier to seat or Stripe subscription prices.
+
 Checkout sessions use Stripe idempotency keys so a double-click reuses the
 session instead of opening a second charge.
 

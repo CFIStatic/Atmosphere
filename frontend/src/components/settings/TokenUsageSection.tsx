@@ -99,7 +99,7 @@ export function TokenUsageSection() {
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi label="Tokens used" value={formatTokens(totals.totalTokens)} hint={`${totals.events.toLocaleString()} metered calls`} />
-          <Kpi label="Token spend" value={formatUsd(totals.priceNanos, { precise: true })} hint="Priced from the model rate card" />
+          <Kpi label="Token spend" value={formatUsd(totals.priceNanos, { precise: true })} hint="Usage billed to this organization" />
           <Kpi
             label="Input / output"
             value={`${formatTokens(totals.inputTokens)} / ${formatTokens(totals.outputTokens)}`}
@@ -176,7 +176,7 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">By employee</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Every seat on this organization. Unattributed rows are usage we could not tie to an uploader, job owner, or signed-in teammate.
+          Every seat on this organization. Spend is the usage billed to this org. Unattributed rows are usage we could not tie to an uploader, job owner, or signed-in teammate.
         </p>
         {employees.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">

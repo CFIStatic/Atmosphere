@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyTokenFeature } from '../src/metering/tokenFeatures.js';
+import { billableNanosFromCost } from '../src/metering/customerMarkup.js';
 import {
   aggregateTokenUsage,
   eachUtcDay,
   estimatedUsdToNanos,
-  quoteMeasuredUsagePriceNanos,
+  quoteMeasuredUsageCostNanos,
+  recordMeasuredTokenUsageAsync,
+  recordTokenUsage,
   resolveTokenUsageWindow,
   type TokenUsageEventRow,
 } from '../src/metering/tokenUsage.js';
@@ -70,6 +73,7 @@ function event(partial: Partial<TokenUsageEventRow> & Pick<TokenUsageEventRow, '
     outputTokens: 20,
     cacheTokens: 0,
     totalTokens: 120,
+    costNanos: 100_000,
     priceNanos: 1_000_000,
     ...partial,
   };
@@ -208,24 +212,39 @@ test('aggregateTokenUsage keeps a System row only when no actor exists', () => {
   assert.equal(report.byEmployee[0]?.userId, null);
 });
 
-test('quoteMeasuredUsagePriceNanos uses the rate-card quote and stays 0 when unknown', async () => {
-  const priced = await quoteMeasuredUsagePriceNanos(
+const askUsage = {
+  inputTokens: 400,
+  outputTokens: 168,
+  cacheWrite5mTokens: 0,
+  cacheWrite1hTokens: 0,
+  cacheReadTokens: 0,
+  totalTokens: 568,
+};
+
+test('quoteMeasuredUsageCostNanos prefers COGS over the marked-up rate-card price', async () => {
+  const cost = await quoteMeasuredUsageCostNanos(
+    {
+      rpc: async () => ({ data: { cost_nanos: '9200000', price_nanos: '18400000' }, error: null }),
+    } as any,
+    'claude-sonnet',
+    askUsage,
+  );
+  assert.equal(cost, 9_200_000);
+});
+
+test('quoteMeasuredUsageCostNanos falls back to price_nanos when cost is absent', async () => {
+  const cost = await quoteMeasuredUsageCostNanos(
     {
       rpc: async () => ({ data: { price_nanos: '18400000' }, error: null }),
     } as any,
     'claude-sonnet',
-    {
-      inputTokens: 400,
-      outputTokens: 168,
-      cacheWrite5mTokens: 0,
-      cacheWrite1hTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 568,
-    },
+    askUsage,
   );
-  assert.equal(priced, 18_400_000);
+  assert.equal(cost, 18_400_000);
+});
 
-  const unknown = await quoteMeasuredUsagePriceNanos(
+test('quoteMeasuredUsageCostNanos stays 0 when the model is unknown', async () => {
+  const unknown = await quoteMeasuredUsageCostNanos(
     {
       rpc: async () => ({ data: null, error: { message: 'unknown_model' } }),
     } as any,
@@ -240,4 +259,78 @@ test('quoteMeasuredUsagePriceNanos uses the rate-card quote and stays 0 when unk
     },
   );
   assert.equal(unknown, 0);
+});
+
+test('recordTokenUsage writes provider cost and 10× billable', async () => {
+  const rpcs: Array<{ name: string; params: Record<string, unknown> }> = [];
+  const client = {
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      rpcs.push({ name, params });
+      return { data: { eventId: 'evt-ask', duplicate: false }, error: null };
+    },
+  } as any;
+
+  await recordTokenUsage(client, {
+    orgId: 'org-1',
+    requestId: 'ask-1',
+    feature: 'ask',
+    costNanos: 9_200_000,
+  });
+
+  assert.equal(rpcs[0]?.name, 'record_token_usage');
+  assert.equal(rpcs[0]?.params.p_cost_nanos, 9_200_000);
+  assert.equal(rpcs[0]?.params.p_price_nanos, 92_000_000);
+  assert.equal((rpcs[0]?.params.p_metadata as { customerMarkup?: number }).customerMarkup, 10);
+});
+
+test('recordMeasuredTokenUsageAsync quotes Ask COGS and stores 10× billable', async () => {
+  const rpcs: Array<{ name: string; params: Record<string, unknown> }> = [];
+  const client = {
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      rpcs.push({ name, params });
+      if (name === 'quote_usage') {
+        return { data: { cost_nanos: '9200000', price_nanos: '18400000' }, error: null };
+      }
+      return { data: { eventId: 'evt-ask', duplicate: false }, error: null };
+    },
+  } as any;
+
+  await recordMeasuredTokenUsageAsync(client, {
+    orgId: 'org-1',
+    requestId: 'ask:job-1',
+    feature: 'ask',
+    source: 'proof_ask',
+    modelId: 'claude-sonnet',
+    usage: askUsage,
+  });
+
+  const quote = rpcs.find((row) => row.name === 'quote_usage');
+  const record = rpcs.find((row) => row.name === 'record_token_usage');
+  assert.ok(quote);
+  assert.equal(record?.params.p_cost_nanos, 9_200_000);
+  assert.equal(record?.params.p_price_nanos, billableNanosFromCost(9_200_000));
+  assert.equal(record?.params.p_price_nanos, 92_000_000);
+  assert.equal(record?.params.p_feature, 'ask');
+});
+
+test('aggregateTokenUsage Spend KPI is the billable price_nanos, not COGS', () => {
+  const cost = estimatedUsdToNanos(0.00128);
+  const billable = billableNanosFromCost(cost);
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'video-billable',
+      feature: 'video_analysis',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      costNanos: cost,
+      priceNanos: billable,
+    }),
+  ];
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-09-01T00:00:00.000Z', end: '2026-09-02T00:00:00.000Z' },
+    [{ userId: 'user-1', fullName: 'Elena Ortiz', email: 'elena@example.com', role: 'global_admin' }],
+  );
+  assert.equal(report.totals.priceNanos, billable);
+  assert.equal(report.byEmployee[0]?.priceNanos, billable);
+  assert.notEqual(report.totals.priceNanos, cost);
 });

@@ -78,7 +78,7 @@ export async function recordAiCost(
       modelId: opts.modelName,
       inputTokens: opts.inputTokens,
       outputTokens: opts.outputTokens,
-      priceNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
+      costNanos: estimatedUsdToNanos(opts.estimatedCostUsd),
       metadata: {
         provider: opts.provider,
         videoId: opts.videoId ?? null,

@@ -5,6 +5,9 @@
  * row via `record_token_usage`. Aggregation for Settings → Billing lives here
  * so the API never scans raw events in the browser and never leaks cost basis
  * that is not already on the customer's bill.
+ *
+ * `cost_nanos` is provider COGS. `price_nanos` is the org billable
+ * (cost × USAGE_CUSTOMER_MARKUP, default 10). Spend KPIs read price_nanos.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -12,6 +15,10 @@ import { cacheTokensOf, type MeasuredUsage } from '../lib/anthropic.js';
 import { toNanos } from '../lib/money.js';
 import { labelForMemberRole } from '../lib/productRoles.js';
 import { usdToNanos } from './costEngine.js';
+import {
+  resolveTokenLedgerAmounts,
+  usageCustomerMarkup,
+} from './customerMarkup.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
 
 export interface TokenUsageInput {
@@ -25,6 +32,9 @@ export interface TokenUsageInput {
   inputTokens?: number;
   outputTokens?: number;
   cacheTokens?: number;
+  /** Provider/COGS nanodollars. Billable is computed when priceNanos is omitted. */
+  costNanos?: number;
+  /** Customer/billable nanodollars. Defaults to cost × USAGE_CUSTOMER_MARKUP. */
   priceNanos?: number;
   metadata?: Record<string, unknown>;
   at?: string;
@@ -43,6 +53,7 @@ export interface TokenUsageEventRow {
   outputTokens: number;
   cacheTokens: number;
   totalTokens: number;
+  costNanos: number;
   priceNanos: number;
   createdAt: string;
 }
@@ -285,6 +296,14 @@ export function aggregateTokenUsage(
 }
 
 function toRpcParams(input: TokenUsageInput) {
+  const { costNanos, priceNanos } = resolveTokenLedgerAmounts({
+    costNanos: input.costNanos,
+    priceNanos: input.priceNanos,
+  });
+  const metadata = {
+    ...(input.metadata ?? {}),
+    customerMarkup: usageCustomerMarkup(),
+  };
   return {
     p_org: input.orgId,
     p_request_id: input.requestId,
@@ -296,8 +315,9 @@ function toRpcParams(input: TokenUsageInput) {
     p_input_tokens: input.inputTokens ?? 0,
     p_output_tokens: input.outputTokens ?? 0,
     p_cache_tokens: input.cacheTokens ?? 0,
-    p_price_nanos: input.priceNanos ?? 0,
-    p_metadata: input.metadata ?? {},
+    p_cost_nanos: costNanos,
+    p_price_nanos: priceNanos,
+    p_metadata: metadata,
     p_at: input.at ?? null,
   };
 }
@@ -330,10 +350,13 @@ export function recordTokenUsageAsync(
 }
 
 /**
- * Price measured tokens from the customer rate card (`quote_usage`).
- * Returns 0 when the model is unknown — we never invent a rate.
+ * Provider-cost estimate for measured tokens via `quote_usage`.
+ *
+ * Prefers `cost_nanos` (true COGS). Falls back to `price_nanos` when an older
+ * quote_usage still strips cost — that value is then treated as cost and
+ * marked up by the customer multiplier. Returns 0 when the model is unknown.
  */
-export async function quoteMeasuredUsagePriceNanos(
+export async function quoteMeasuredUsageCostNanos(
   client: SupabaseClient,
   modelId: string | null | undefined,
   usage: MeasuredUsage,
@@ -350,11 +373,23 @@ export async function quoteMeasuredUsagePriceNanos(
       p_is_batch: false,
     });
     if (error || !data) return 0;
-    const nanos = toNanos((data as { price_nanos?: unknown }).price_nanos ?? 0);
-    return nanos > 0 ? nanos : 0;
+    const row = data as { cost_nanos?: unknown; price_nanos?: unknown };
+    const cost = toNanos(row.cost_nanos ?? 0);
+    if (cost > 0) return cost;
+    const fallback = toNanos(row.price_nanos ?? 0);
+    return fallback > 0 ? fallback : 0;
   } catch {
     return 0;
   }
+}
+
+/** @deprecated Use quoteMeasuredUsageCostNanos — name kept for existing tests. */
+export async function quoteMeasuredUsagePriceNanos(
+  client: SupabaseClient,
+  modelId: string | null | undefined,
+  usage: MeasuredUsage,
+): Promise<number> {
+  return quoteMeasuredUsageCostNanos(client, modelId, usage);
 }
 
 /** Record provider-measured usage on the customer token ledger. */
@@ -369,35 +404,58 @@ export function recordMeasuredTokenUsage(
     jobId?: string | null;
     modelId?: string | null;
     usage: MeasuredUsage | null | undefined;
+    /** Provider/COGS. When omitted, quoted from the rate card. */
+    costNanos?: number;
+    /** Legacy alias: treated as COGS when costNanos is omitted. */
     priceNanos?: number;
   },
 ): void {
   const usage = input.usage;
   if (!usage || usage.totalTokens <= 0) return;
-  void (async () => {
-    const quoted =
-      input.priceNanos != null && input.priceNanos > 0
-        ? input.priceNanos
-        : await quoteMeasuredUsagePriceNanos(client, input.modelId, usage);
-    await recordTokenUsage(client, {
-      orgId: input.orgId,
-      requestId: input.requestId,
-      feature: input.feature,
-      source: input.source ?? input.feature,
-      userId: input.userId ?? null,
-      jobId: input.jobId ?? null,
-      modelId: input.modelId ?? null,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cacheTokens: cacheTokensOf(usage),
-      priceNanos: quoted,
-    });
-  })().catch((err) => {
+  void recordMeasuredTokenUsageAsync(client, { ...input, usage }).catch((err) => {
     console.error('[metering] failed to record measured token usage', {
       orgId: input.orgId,
       requestId: input.requestId,
       err,
     });
+  });
+}
+
+/** Awaitable Ask/chat write path — billable = round(cost × markup). */
+export async function recordMeasuredTokenUsageAsync(
+  client: SupabaseClient,
+  input: {
+    orgId: string;
+    requestId: string;
+    feature: string;
+    source?: string;
+    userId?: string | null;
+    jobId?: string | null;
+    modelId?: string | null;
+    usage: MeasuredUsage;
+    costNanos?: number;
+    priceNanos?: number;
+  },
+): Promise<{ eventId: string; duplicate: boolean } | null> {
+  const usage = input.usage;
+  const quotedCost =
+    input.costNanos != null && input.costNanos > 0
+      ? input.costNanos
+      : input.priceNanos != null && input.priceNanos > 0
+        ? input.priceNanos
+        : await quoteMeasuredUsageCostNanos(client, input.modelId, usage);
+  return recordTokenUsage(client, {
+    orgId: input.orgId,
+    requestId: input.requestId,
+    feature: input.feature,
+    source: input.source ?? input.feature,
+    userId: input.userId ?? null,
+    jobId: input.jobId ?? null,
+    modelId: input.modelId ?? null,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheTokens: cacheTokensOf(usage),
+    costNanos: quotedCost,
   });
 }
 
@@ -416,6 +474,7 @@ function parseEventRow(raw: Record<string, unknown>): TokenUsageEventRow {
     outputTokens: Number(raw.output_tokens ?? 0),
     cacheTokens: Number(raw.cache_tokens ?? 0),
     totalTokens: Number(raw.total_tokens ?? 0),
+    costNanos: Number(raw.cost_nanos ?? 0),
     priceNanos: Number(raw.price_nanos ?? 0),
     createdAt: String(raw.created_at),
   };
