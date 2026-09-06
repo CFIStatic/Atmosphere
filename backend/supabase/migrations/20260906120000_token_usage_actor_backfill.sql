@@ -5,6 +5,10 @@
 -- Write-path attribution is the source of truth going forward. This backfill
 -- is scoped to the last 90 days and only fills user_id / price_nanos when we
 -- can join a real owner. Truly anonymous rows stay Unattributed.
+--
+-- Join verification_videos only by the event's own video (metadata.videoId or
+-- the matched cost row's video_id). Never by job_id — a job can have many
+-- clips, and a wrong uploader would be permanent.
 
 update public.verification_ai_costs c
 set user_id = attributed.user_id
@@ -36,11 +40,11 @@ from (
   select distinct on (e2.id)
     e2.id,
     coalesce(
+      c.user_id,
       v.uploader_id,
       p.created_by,
       j.owner_id,
-      j.created_by,
-      c.user_id
+      j.created_by
     ) as user_id
   from public.token_usage_events e2
   left join public.verification_ai_costs c
