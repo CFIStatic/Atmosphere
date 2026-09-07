@@ -515,4 +515,31 @@ assert.doesNotMatch(appSrc, /hrefAttr/);
 assert.match(appSrc, /role="option"/, 'assigned jobs are tappable options, not links');
 assert.match(appSrc, /function jobMetaLine/, 'job cards show metadata, not a URL');
 
+assert.equal(typeof Core.buildFieldCaptureSupportUrl, 'function');
+assert.equal(Core.CONTACT_PUBLIC_URL, 'https://atmosphereteam.com/contact.html');
+assert.match(Core.FIELD_CAPTURE_SUPPORT_NOTE, /Field Capture/);
+assert.doesNotMatch(Core.FIELD_CAPTURE_SUPPORT_NOTE, /Platform/);
+{
+  const url = Core.buildFieldCaptureSupportUrl({
+    email: 'jack@jettx.ai',
+    name: 'Jack Cyganiak',
+    orgName: 'Jettx LLC',
+    orgId: 'org-1',
+    path: '/fieldcapture/',
+  });
+  const params = new URL(url).searchParams;
+  assert.equal(params.get('email'), 'jack@jettx.ai');
+  assert.equal(params.get('company'), 'Jettx LLC');
+  assert.match(params.get('note') || '', /Atmosphere Field Capture/);
+  assert.match(params.get('note') || '', /Organization: Jettx LLC \(org-1\)/);
+}
+assert.equal(
+  Core.fieldCaptureSupportPath({ pathname: '/fieldcapture/', search: '?token=secret', hash: '' }),
+  '/fieldcapture/',
+);
+assert.match(html, /id="fc-menu-support"/);
+assert.match(html, /contact\.html/);
+assert.match(appSrc, /buildFieldCaptureSupportUrl/);
+assert.match(appSrc, /refreshFieldSupportLink/);
+
 console.log('hold-to-finish OK');

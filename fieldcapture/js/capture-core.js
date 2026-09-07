@@ -1334,6 +1334,65 @@
     );
   }
 
+  /** Same marketing contact form Platform Support and /hardware Support open. */
+  var CONTACT_PUBLIC_URL = 'https://atmosphereteam.com/contact.html';
+  var FIELD_CAPTURE_SUPPORT_NOTE = 'I need help with Atmosphere Field Capture.';
+  var SUPPORT_SECRET_PARAMS = ['token', 'share', 'access_token', 'refresh_token', 'code'];
+
+  function compactSupportLine(label, value) {
+    var trimmed = value == null ? '' : String(value).trim();
+    return trimmed ? label + ': ' + trimmed : null;
+  }
+
+  function fieldCaptureSupportPath(loc) {
+    loc = loc || (typeof location !== 'undefined' ? location : null);
+    if (!loc) return '/';
+    var path = String(loc.pathname || '/') || '/';
+    var search = String(loc.search || '');
+    if (search && search.charAt(0) === '?') {
+      try {
+        var params = new URLSearchParams(search);
+        SUPPORT_SECRET_PARAMS.forEach(function (key) {
+          params.delete(key);
+        });
+        var kept = params.toString();
+        search = kept ? '?' + kept : '';
+      } catch (err) {
+        search = '';
+      }
+    }
+    var hash = String(loc.hash || '');
+    return path + search + hash;
+  }
+
+  /** Prefill note for the shared contact form, with Field Capture context. */
+  function buildFieldCaptureSupportNote(ctx) {
+    ctx = ctx || {};
+    var orgName = ctx.orgName == null ? '' : String(ctx.orgName).trim();
+    var orgId = ctx.orgId == null ? '' : String(ctx.orgId).trim();
+    var org = orgName && orgId ? orgName + ' (' + orgId + ')' : orgName || (orgId ? '(' + orgId + ')' : null);
+    var details = [
+      compactSupportLine('Organization', org),
+      compactSupportLine('Page', ctx.path),
+      compactSupportLine('Email', ctx.email),
+    ].filter(Boolean);
+    if (details.length === 0) return FIELD_CAPTURE_SUPPORT_NOTE;
+    return FIELD_CAPTURE_SUPPORT_NOTE + '\n\n' + details.join('\n');
+  }
+
+  function buildFieldCaptureSupportUrl(ctx) {
+    ctx = ctx || {};
+    var url = new URL(CONTACT_PUBLIC_URL);
+    url.searchParams.set('note', buildFieldCaptureSupportNote(ctx));
+    var email = ctx.email == null ? '' : String(ctx.email).trim();
+    var name = ctx.name == null ? '' : String(ctx.name).trim();
+    var company = ctx.orgName == null ? '' : String(ctx.orgName).trim();
+    if (email) url.searchParams.set('email', email);
+    if (name) url.searchParams.set('name', name);
+    if (company) url.searchParams.set('company', company);
+    return url.toString();
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     filterJobs: filterJobs,
@@ -1353,6 +1412,11 @@
     fieldCacheMatchesSession: fieldCacheMatchesSession,
     mergeTodayJobs: mergeTodayJobs,
     isTransientNetworkError: isTransientNetworkError,
+    CONTACT_PUBLIC_URL: CONTACT_PUBLIC_URL,
+    FIELD_CAPTURE_SUPPORT_NOTE: FIELD_CAPTURE_SUPPORT_NOTE,
+    fieldCaptureSupportPath: fieldCaptureSupportPath,
+    buildFieldCaptureSupportNote: buildFieldCaptureSupportNote,
+    buildFieldCaptureSupportUrl: buildFieldCaptureSupportUrl,
     resolveFinishHold: resolveFinishHold,
     bindLivePreview: bindLivePreview,
     todayISO: todayISO,
