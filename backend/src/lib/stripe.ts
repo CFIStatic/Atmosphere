@@ -279,6 +279,61 @@ export function extraSeatQuantityFromSubscription(sub: {
   }, 0);
 }
 
+export function subscriptionHasWorkVerification(sub: {
+  metadata?: { onboarding?: string } | null;
+  items?: { data?: Array<{ price?: { id?: string } | string | null }> };
+}): boolean {
+  if (sub.metadata?.onboarding === 'true') return true;
+  return (sub.items?.data ?? []).some((item) => {
+    const priceId = subscriptionItemPriceId(item);
+    return isWorkVerificationPriceId(priceId) || isConfiguredOnboardingPrice(priceId);
+  });
+}
+
+/** Extra-seat Checkout can open a second subscription. Do not treat it as Work Verification. */
+export function isExtraSeatOnlySubscription(sub: {
+  metadata?: { onboarding?: string; kind?: string; extra_fc_seats?: string } | null;
+  items?: { data?: Array<{ price?: { id?: string } | string | null }> };
+}): boolean {
+  if (subscriptionHasWorkVerification(sub)) return false;
+  if (sub.metadata?.kind === FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE) return true;
+  const items = sub.items?.data ?? [];
+  if (items.length === 0) return Boolean(sub.metadata?.extra_fc_seats);
+  const hasExtra = items.some((item) => isExtraSeatPriceId(subscriptionItemPriceId(item)));
+  return hasExtra;
+}
+
+export function shouldCancelOrgBillingForDeletedSubscription(input: {
+  deletedSubscriptionId: string;
+  storedSubscriptionId?: string | null;
+  subscription: {
+    metadata?: { onboarding?: string; kind?: string; extra_fc_seats?: string } | null;
+    items?: { data?: Array<{ price?: { id?: string } | string | null }> };
+  };
+}): boolean {
+  if (isExtraSeatOnlySubscription(input.subscription)) return false;
+  if (input.storedSubscriptionId && input.storedSubscriptionId !== input.deletedSubscriptionId) {
+    return false;
+  }
+  return true;
+}
+
+export async function findActiveWorkVerificationSubscriptionId(
+  customerId: string,
+): Promise<string | null> {
+  const listed = await stripeClient().subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 20,
+  });
+  for (const sub of listed.data) {
+    if (sub.status === 'canceled' || sub.status === 'incomplete_expired') continue;
+    if (isExtraSeatOnlySubscription(sub)) continue;
+    if (subscriptionHasWorkVerification(sub)) return sub.id;
+  }
+  return null;
+}
+
 export async function syncExtraFcSeatsFromCustomer(
   admin: SupabaseClient,
   orgId: string,

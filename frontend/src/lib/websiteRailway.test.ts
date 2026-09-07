@@ -123,6 +123,13 @@ describe('Railway corporate-website image', () => {
     expect(page).not.toContain('let-me-be');
     expect(page).toContain('https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01');
     expect(page).not.toContain('5kQ7sD47B54p7O9391fYY00');
+    const ld = page.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    expect(ld?.[1]).toBeTruthy();
+    const graph = JSON.parse(ld![1] as string) as {
+      '@graph': Array<{ offers?: { price?: string; availability?: string } }>;
+    };
+    expect(graph['@graph'][0]?.offers?.price).toBe('49.99');
+    expect(graph['@graph'][0]?.offers?.availability).toBe('https://schema.org/InStock');
     expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
 
     const js = read('website/assets/site.js');

@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import { config } from '../config.js';
 import { nanosToCents } from './money.js';
-import { isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
+import { adminClient, isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
 
 export const SAME_DAY_USAGE_KIND = 'same_day_usage';
 
@@ -162,6 +162,14 @@ async function listCustomerInvoices(
   return invoices;
 }
 
+function usageAdminClient(fallback: SupabaseClient): SupabaseClient {
+  try {
+    return adminClient();
+  } catch {
+    return fallback;
+  }
+}
+
 async function billableNanosForDay(
   supabase: SupabaseClient,
   orgId: string,
@@ -170,7 +178,8 @@ async function billableNanosForDay(
   const start = `${day}T00:00:00.000Z`;
   const end = new Date(`${day}T00:00:00.000Z`);
   end.setUTCDate(end.getUTCDate() + 1);
-  const { data, error } = await supabase
+  const client = usageAdminClient(supabase);
+  const { data, error } = await client
     .from('token_usage_events')
     .select('price_nanos')
     .eq('org_id', orgId)
@@ -193,7 +202,7 @@ export async function invoiceSameDayUsage(
     return { invoiceId: null, skipped: 'stripe_unconfigured', amountCents: 0 };
   }
 
-  const { data: billing, error } = await supabase
+  const { data: billing, error } = await usageAdminClient(supabase)
     .from('org_billing')
     .select('stripe_customer_id, status')
     .eq('org_id', orgId)

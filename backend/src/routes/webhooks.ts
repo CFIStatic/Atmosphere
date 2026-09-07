@@ -10,6 +10,7 @@ import {
   isConfiguredOnboardingPrice,
   isExtraSeatPriceId,
   mapSubscriptionStatus,
+  shouldCancelOrgBillingForDeletedSubscription,
   meteringPlanForPrice,
   planForPrice,
   resolveOrgId,
@@ -311,9 +312,27 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
     await resolveOrgId(admin, sub.metadata, sub.customer as string | null),
     `subscription ${sub.id}`,
   );
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  const { data: billing } = await admin
+    .from('org_billing')
+    .select('stripe_subscription_id')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (
+    !shouldCancelOrgBillingForDeletedSubscription({
+      deletedSubscriptionId: sub.id,
+      storedSubscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+      subscription: sub,
+    })
+  ) {
+    await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
+    return;
+  }
 
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
+  await persistExtraFcSeats(admin, orgId, 0);
 }
 
 /**

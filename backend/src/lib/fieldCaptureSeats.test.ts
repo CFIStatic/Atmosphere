@@ -6,9 +6,12 @@ import {
   INCLUDED_FC_SEATS,
 } from './stripeCatalog.js';
 import {
+  entitledFcSeatCounts,
   fcSeatLimitError,
   isFieldCaptureSeat,
   isFieldCaptureSeatRole,
+  isWorkVerificationEntitled,
+  persistExtraFcSeats,
   summarizeFcSeats,
 } from './fieldCaptureSeats.js';
 
@@ -66,11 +69,44 @@ describe('Field Capture seat allowance', () => {
     assert.equal(summarizeFcSeats(4, 2).remaining, 1);
   });
 
+  it('drops extra and included seats when Work Verification is canceled', () => {
+    assert.equal(isWorkVerificationEntitled('active'), true);
+    assert.equal(isWorkVerificationEntitled('past_due'), true);
+    assert.equal(isWorkVerificationEntitled('canceled'), false);
+    assert.equal(isWorkVerificationEntitled(null), true);
+    assert.deepEqual(entitledFcSeatCounts(2, 'active'), { extra: 2, included: 3 });
+    assert.deepEqual(entitledFcSeatCounts(4, 'canceled'), { extra: 0, included: 0 });
+    assert.equal(summarizeFcSeats(1, 0, 0).allowed, 0);
+    assert.equal(summarizeFcSeats(1, 0, 0).remaining, 0);
+  });
+
   it('builds an upgrade-path error for the 4th account', () => {
     const err = fcSeatLimitError(3, 3);
     assert.equal(err.status, 402);
     assert.equal(err.code, 'fc_seat_limit');
     assert.match(err.message, /3 Field Capture accounts/);
     assert.match(err.message, /\$100/);
+  });
+
+  it('refuses a silent extra-seat persist when no org_billing row is updated', async () => {
+    const admin = {
+      from() {
+        return {
+          update() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          async select() {
+            return { data: [], error: null };
+          },
+        };
+      },
+    };
+    await assert.rejects(
+      () => persistExtraFcSeats(admin as never, 'org-1', 1),
+      /org_billing row was not updated/,
+    );
   });
 });

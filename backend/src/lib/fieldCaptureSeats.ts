@@ -54,6 +54,23 @@ export interface FieldCaptureSeatUsage {
   remaining: number;
 }
 
+export function isWorkVerificationEntitled(status: string | null | undefined): boolean {
+  if (!status) return true;
+  return status === 'active' || status === 'trialing' || status === 'past_due';
+}
+
+/** Extra seats and the 3 included seats only apply while Work Verification is live. */
+export function entitledFcSeatCounts(
+  storedExtra: number,
+  status: string | null | undefined,
+): { extra: number; included: number } {
+  if (!isWorkVerificationEntitled(status)) {
+    return { extra: 0, included: 0 };
+  }
+  const extra = Number.isFinite(storedExtra) ? Math.max(0, Math.floor(storedExtra)) : 0;
+  return { extra, included: INCLUDED_FC_SEATS };
+}
+
 export function summarizeFcSeats(used: number, extra: number, included: number = INCLUDED_FC_SEATS): FieldCaptureSeatUsage {
   const allowed = allowedFcSeats(extra, included);
   const taken = Math.max(0, Math.floor(used));
@@ -113,29 +130,46 @@ export async function countFieldCaptureSeats(
   return used;
 }
 
-export async function readExtraFcSeats(supabase: SupabaseClient, orgId: string): Promise<number> {
+export async function readOrgBillingSeatState(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<{ extra: number; status: string | null }> {
   const { data, error } = await supabase
     .from('org_billing')
-    .select('extra_fc_seats')
+    .select('extra_fc_seats, status')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error && /extra_fc_seats|column .* does not exist/i.test(error.message)) {
-    return 0;
+    const { data: billing } = await supabase
+      .from('org_billing')
+      .select('status')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    return { extra: 0, status: (billing?.status as string | undefined) ?? null };
   }
   if (error) throw error;
-  const raw = (data as { extra_fc_seats?: number | null } | null)?.extra_fc_seats;
-  return Number.isFinite(raw) ? Math.max(0, Math.floor(Number(raw))) : 0;
+  const raw = (data as { extra_fc_seats?: number | null; status?: string | null } | null)?.extra_fc_seats;
+  return {
+    extra: Number.isFinite(raw) ? Math.max(0, Math.floor(Number(raw))) : 0,
+    status: (data as { status?: string | null } | null)?.status ?? null,
+  };
+}
+
+export async function readExtraFcSeats(supabase: SupabaseClient, orgId: string): Promise<number> {
+  const { extra } = await readOrgBillingSeatState(supabase, orgId);
+  return extra;
 }
 
 export async function loadFieldCaptureSeatUsage(
   supabase: SupabaseClient,
   orgId: string,
 ): Promise<FieldCaptureSeatUsage> {
-  const [used, extra] = await Promise.all([
+  const [used, billing] = await Promise.all([
     countFieldCaptureSeats(supabase, orgId),
-    readExtraFcSeats(supabase, orgId),
+    readOrgBillingSeatState(supabase, orgId),
   ]);
-  return summarizeFcSeats(used, extra);
+  const entitled = entitledFcSeatCounts(billing.extra, billing.status);
+  return summarizeFcSeats(used, entitled.extra, entitled.included);
 }
 
 /** Throws `fc_seat_limit` when adding one more Field Capture account would exceed the allowance. */
@@ -156,13 +190,17 @@ export async function persistExtraFcSeats(
   extraSeats: number,
 ): Promise<void> {
   const extra = Math.max(0, Math.floor(extraSeats));
-  const { error } = await admin
+  const { data, error } = await admin
     .from('org_billing')
     .update({ extra_fc_seats: extra })
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .select('org_id');
   if (error && /extra_fc_seats|column .* does not exist/i.test(error.message)) {
     console.warn('[billing] extra_fc_seats column is missing — apply the Field Capture seats migration');
     return;
   }
   if (error) throw new Error(`extra Field Capture seat sync failed: ${error.message}`);
+  if (!data?.length) {
+    throw new Error('extra Field Capture seat sync failed: org_billing row was not updated');
+  }
 }
