@@ -30,6 +30,11 @@ export const ES: MessageCatalog = {
   'nav.switchToDark': 'Cambiar a modo oscuro',
   'nav.signOutConfirm': '¿Cerrar sesión en Atmosphere?',
   'nav.themeModeHint': 'Modo {current}. Clic para {next}.',
+  'nav.videos': 'Vídeos',
+  'nav.allVideos': 'Todos los vídeos',
+  'nav.classified': 'Clasificados',
+  'nav.awaitingAnalysis': 'Pendiente de análisis',
+  'nav.needsReview': 'Requiere revisión',
 
   'settings.title': 'Ajustes',
   'settings.sectionsAria': 'Secciones de ajustes',

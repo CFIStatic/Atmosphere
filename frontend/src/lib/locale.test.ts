@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { translate } from './i18n';
+import { translate, verifierChromeStrings } from './i18n';
 import {
   applyDocumentLocale,
   detectBrowserLocale,
@@ -92,8 +92,14 @@ describe('catalog fallback', () => {
   it('uses Spanish strings and falls back to English when a key is missing', () => {
     expect(translate('es', 'settings.title')).toBe('Ajustes');
     expect(translate('es', 'settings.language.helper')).toMatch(/El resto de la aplicación/);
+    expect(translate('es', 'nav.videos')).toBe('Vídeos');
+    expect(translate('es', 'nav.allVideos')).toBe('Todos los vídeos');
+    expect(translate('es', 'nav.classified')).toBe('Clasificados');
+    expect(translate('es', 'nav.awaitingAnalysis')).toBe('Pendiente de análisis');
+    expect(translate('es', 'nav.needsReview')).toBe('Requiere revisión');
     expect(translate('de', 'settings.password.current')).toBe('Current password');
     expect(translate('ja', 'nav.settings')).toBe('設定');
+    expect(translate('ja', 'nav.allVideos')).toBe('すべての動画');
   });
 
   it('has Settings chrome for every listed locale', async () => {
@@ -103,6 +109,21 @@ describe('catalog fallback', () => {
       expect(catalogHas(locale, 'settings.title')).toBe(true);
       expect(catalogHas(locale, 'settings.language.title')).toBe(true);
       expect(catalogHas(locale, 'nav.settings')).toBe(true);
+      expect(catalogHas(locale, 'nav.videos')).toBe(true);
+      expect(catalogHas(locale, 'nav.allVideos')).toBe(true);
+      expect(catalogHas(locale, 'nav.classified')).toBe(true);
+      expect(catalogHas(locale, 'nav.awaitingAnalysis')).toBe(true);
+      expect(catalogHas(locale, 'nav.needsReview')).toBe(true);
     }
+  });
+
+  it('posts Videos rail labels with the rest of office chrome', () => {
+    const chrome = verifierChromeStrings('es', 'light');
+    expect(chrome.videos).toBe('Vídeos');
+    expect(chrome.allVideos).toBe('Todos los vídeos');
+    expect(chrome.classified).toBe('Clasificados');
+    expect(chrome.awaitingAnalysis).toBe('Pendiente de análisis');
+    expect(chrome.needsReview).toBe('Requiere revisión');
+    expect(chrome.settings).toBe('Ajustes');
   });
 });
