@@ -108,7 +108,11 @@ describe('Railway corporate-website image', () => {
 
     const page = read('website/hardware.html');
     expect(page).toContain('Field Capture Chest Mount');
-    expect(page).toContain('Buy — $49');
+    expect(page).toContain('Buy — $49.99');
+    expect(page).toContain('$49.99');
+    expect(page).toContain('"price":"49.99"');
+    expect(page).not.toContain('Buy — $49<');
+    expect(page).not.toContain('https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00');
     expect(page).toContain('What\'s in the box');
     expect(page).toContain('4.7–6.7');
     expect(page).toContain('digital setup guide');
@@ -121,15 +125,16 @@ describe('Railway corporate-website image', () => {
     expect(page.toLowerCase()).not.toContain('amazon.com');
     expect(page.toLowerCase()).not.toContain('asin');
     expect(page).not.toContain('let-me-be');
-    expect(page).toContain('https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00');
-    expect(page).toMatch(/var CHECKOUT_URL = 'https:\/\/buy\.stripe\.com\/5kQ7sD47B54p7O9391fYY00'/);
-    expect(page).toMatch(/id="hardware-buy"[^>]*data-checkout-url="https:\/\/buy\.stripe\.com\/5kQ7sD47B54p7O9391fYY00"/);
+    expect(page).toContain('https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01');
+    expect(page).toMatch(/var CHECKOUT_URL = 'https:\/\/buy\.stripe\.com\/bJedR16fJ40l5G1eRJfYY01'/);
+    expect(page).toMatch(/id="hardware-buy"[^>]*data-checkout-url="https:\/\/buy\.stripe\.com\/bJedR16fJ40l5G1eRJfYY01"/);
     expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
 
     const js = read('website/assets/site.js');
     expect(js).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
     expect(js).toContain('Checkout coming online');
-    expect(js).toContain('Buy — $49');
+    expect(js).toContain('Buy — $49.99');
+    expect(js).not.toContain('Buy — $49\'');
 
     const preview = read('website/build-preview.py');
     expect(preview).toContain("('hardware', 'hardware.html')");
@@ -143,7 +148,7 @@ describe('Railway corporate-website image', () => {
     expect(field).toContain('href="hardware.html"');
   });
 
-  const PAYMENT_LINK = 'https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00';
+  const PAYMENT_LINK = 'https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01';
 
   function stubMatchMedia(win: { matchMedia: (q: string) => { matches: boolean } }) {
     win.matchMedia = () => ({ matches: false });
@@ -167,7 +172,7 @@ describe('Railway corporate-website image', () => {
     const buttons = [...on.window.document.querySelectorAll<HTMLAnchorElement>('#hardware-buy, .js-hardware-buy')];
     expect(buttons.length).toBeGreaterThanOrEqual(2);
     for (const buy of buttons) {
-      expect(buy.textContent).toBe('Buy — $49');
+      expect(buy.textContent).toBe('Buy — $49.99');
       expect(buy.getAttribute('href')).toBe(PAYMENT_LINK);
       expect(buy.getAttribute('aria-disabled')).toBeNull();
       expect(buy.classList.contains('is-disabled')).toBe(false);

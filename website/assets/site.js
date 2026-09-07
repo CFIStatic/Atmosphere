@@ -346,7 +346,7 @@
 
 // Field Capture Chest Mount checkout. A Stripe Payment Link or Checkout
 // Session URL in CHECKOUT_URL / data-checkout-url /
-// window.ATMOSPHERE_HARDWARE_CHECKOUT_URL turns Buy — $49 live. Empty
+// window.ATMOSPHERE_HARDWARE_CHECKOUT_URL turns Buy — $49.99 live. Empty
 // keeps a disabled “Checkout coming online” state — mailto is never
 // the purchase path.
 (function () {
@@ -382,7 +382,7 @@
     btn.removeAttribute('aria-disabled');
     btn.removeAttribute('role');
     btn.setAttribute('href', url);
-    btn.textContent = 'Buy — $49';
+    btn.textContent = 'Buy — $49.99';
   }
 
   var url = resolveCheckout();
