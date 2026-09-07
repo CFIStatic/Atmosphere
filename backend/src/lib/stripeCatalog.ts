@@ -30,8 +30,12 @@ export const LIVE_CHEST_MOUNT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyFtodoczS';
 export const LIVE_CHEST_MOUNT_PAYMENT_LINK =
   'https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01';
 
-export const WORK_VERIFICATION_DESCRIPTION =
-  'Field Capture + Evidence Platform. $599/mo includes 3 Field Capture accounts. Additional Field Capture accounts are $100/mo each. AI/token usage is billed the day it is used.';
+export const WORK_VERIFICATION_DESCRIPTION = [
+  '• Field Capture + Evidence Platform',
+  '• $599/mo includes 3 Field Capture accounts',
+  '• Additional Field Capture accounts are $100/mo each',
+  '• AI/token usage is billed the day it is used',
+].join('\n');
 
 export const EXTRA_FC_SEAT_DESCRIPTION =
   'Additional Field Capture account beyond the 3 included with Work Verification. $100/mo per account.';

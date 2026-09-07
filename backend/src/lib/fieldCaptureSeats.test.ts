@@ -4,6 +4,7 @@ import {
   allowedFcSeats,
   extraSeatsNeeded,
   INCLUDED_FC_SEATS,
+  WORK_VERIFICATION_DESCRIPTION,
 } from './stripeCatalog.js';
 import {
   entitledFcSeatCounts,
@@ -15,6 +16,15 @@ import {
   persistExtraFcSeats,
   summarizeFcSeats,
 } from './fieldCaptureSeats.js';
+
+describe('Work Verification catalog copy', () => {
+  it('uses same-day usage wording and does not expose markup', () => {
+    assert.match(WORK_VERIFICATION_DESCRIPTION, /AI\/token usage is billed the day it is used/);
+    assert.match(WORK_VERIFICATION_DESCRIPTION, /Field Capture \+ Evidence Platform/);
+    assert.doesNotMatch(WORK_VERIFICATION_DESCRIPTION, /10\s*[x×]/i);
+    assert.doesNotMatch(WORK_VERIFICATION_DESCRIPTION, /provider cost/i);
+  });
+});
 
 describe('Field Capture seat allowance', () => {
   it('includes 3 seats on Work Verification and adds extra quantity', () => {
