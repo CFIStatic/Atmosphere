@@ -570,11 +570,20 @@ a { color: inherit; }
   transition: color .15s ease, border-color .15s ease;
 }
 .plan ul.checks a:hover { color: var(--ink); border-color: var(--accent); }
-.plan .plan-cta { margin-top: auto; text-align: center; }
+.plan .plan-cta { margin-top: auto; text-align: center; width: 100%; box-sizing: border-box; }
 /* Six plans read as one rate card, not six offers. */
 .plans-1 { grid-template-columns: 1fr; max-width: 440px; margin-inline: auto; }
 .plans-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 880px; margin-inline: auto; }
 @media (max-width: 720px) { .plans-2 { grid-template-columns: 1fr; } }
+.plans-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 1100px;
+  margin-inline: auto;
+  padding-top: 14px;
+  align-items: stretch;
+}
+.plans-3 .plan-featured { padding-top: 38px; padding-bottom: 36px; }
+@media (max-width: 920px) { .plans-3 { grid-template-columns: 1fr; max-width: 440px; } }
 .plans-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .plans-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .plans-6 { grid-template-columns: 1fr; } }
