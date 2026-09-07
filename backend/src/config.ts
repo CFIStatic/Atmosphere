@@ -375,6 +375,10 @@ export const config = {
       }
       return isProduction ? 'manual' : 'dev';
     })(),
+
+    // Comma-separated emails that skip Stripe Checkout / subscription gating.
+    // Case-insensitive. Empty (default) means every creator must pay.
+    exemptEmails: parseEmailList(process.env.BILLING_EXEMPT_EMAILS, []),
   },
 
   stripe: {

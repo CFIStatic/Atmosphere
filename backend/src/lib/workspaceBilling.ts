@@ -4,6 +4,7 @@ import { getCustomerMeteringSummary } from '../metering/periodAggregation.js';
 import type { CustomerMeteringSummary } from '../metering/types.js';
 import { loadFieldCaptureSeatUsage, type FieldCaptureSeatUsage } from './fieldCaptureSeats.js';
 import { EXTRA_FC_SEAT_MONTHLY_CENTS, INCLUDED_FC_SEATS } from './stripeCatalog.js';
+import { isBillingExemptEmail } from './billingExempt.js';
 import { billingOnboardingGate } from './signupOnboarding.js';
 
 export interface WorkspacePlan {
@@ -78,10 +79,11 @@ export async function loadWorkspaceBilling(
   supabase: SupabaseClient,
   orgId: string,
   userId: string,
+  userEmail?: string | null,
 ): Promise<WorkspaceBilling> {
   const paymentProvider = config.billing.paymentProvider;
 
-  const [{ data: org }, { data: billing }, { data: overview }, { data: meteringRow }] =
+  const [{ data: org }, { data: billing }, { data: overview }, { data: meteringRow }, { data: profile }] =
     await Promise.all([
       supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle(),
       supabase
@@ -97,14 +99,20 @@ export async function loadWorkspaceBilling(
         )
         .eq('org_id', orgId)
         .maybeSingle(),
+      userEmail
+        ? Promise.resolve({ data: { email: userEmail } })
+        : supabase.from('profiles').select('email').eq('id', userId).maybeSingle(),
     ]);
 
   const isCreator = org?.created_by === userId;
+  const email = userEmail ?? (profile as { email?: string | null } | null)?.email ?? null;
+  const exempt = isBillingExemptEmail(email);
   const gate = billingOnboardingGate({
     paymentProvider,
     isCreator,
     subscriptionId: billing?.stripe_subscription_id,
     subscriptionStatus: billing?.status,
+    exempt,
   });
   const plan = planFromMeteringRow(meteringRow);
 
@@ -125,7 +133,7 @@ export async function loadWorkspaceBilling(
   };
   try {
     fieldCaptureSeats = {
-      ...(await loadFieldCaptureSeatUsage(supabase, orgId)),
+      ...(await loadFieldCaptureSeatUsage(supabase, orgId, { actingUserEmail: email })),
       extraSeatPriceCents: EXTRA_FC_SEAT_MONTHLY_CENTS,
     };
   } catch (err) {
@@ -140,7 +148,10 @@ export async function loadWorkspaceBilling(
     isCreator,
     subscription: {
       ...plan,
-      status: (billing?.status as string | undefined) ?? 'incomplete',
+      status:
+        exempt && !billing?.stripe_subscription_id
+          ? 'comped'
+          : ((billing?.status as string | undefined) ?? 'incomplete'),
       periodStart: (billing?.period_start as string | null | undefined) ?? usage?.periodStart ?? null,
       periodEnd: (billing?.period_end as string | null | undefined) ?? usage?.periodEnd ?? null,
       cancelAtPeriodEnd: Boolean(billing?.cancel_at_period_end),

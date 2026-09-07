@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { isBillingExemptEmail, parseBillingExemptEmails } from '../src/lib/billingExempt.js';
 import {
   SIGNUP_BILLING_STEP,
   billingOnboardingGate,
@@ -51,6 +52,7 @@ test('the org creator must pay when Stripe is on, then they are done', () => {
   });
   assert.equal(unpaid.required, true);
   assert.equal(unpaid.complete, false);
+  assert.equal(unpaid.hasSubscription, false);
 
   const paid = billingOnboardingGate({
     paymentProvider: 'stripe',
@@ -61,6 +63,43 @@ test('the org creator must pay when Stripe is on, then they are done', () => {
   assert.equal(paid.required, true);
   assert.equal(paid.complete, true);
   assert.equal(paid.hasSubscription, true);
+});
+
+test('an allowlisted email skips Stripe onboarding without a subscription', () => {
+  const allowlist = parseBillingExemptEmails('jack@jettx.ai');
+  const exempt = billingOnboardingGate({
+    paymentProvider: 'stripe',
+    isCreator: true,
+    subscriptionId: null,
+    subscriptionStatus: null,
+    exempt: isBillingExemptEmail('Jack@Jettx.ai', allowlist),
+  });
+  assert.equal(exempt.required, false);
+  assert.equal(exempt.complete, true);
+  assert.equal(exempt.hasSubscription, true);
+
+  const customer = billingOnboardingGate({
+    paymentProvider: 'stripe',
+    isCreator: true,
+    subscriptionId: null,
+    subscriptionStatus: null,
+    exempt: isBillingExemptEmail('paid@example.com', allowlist),
+  });
+  assert.equal(customer.required, true);
+  assert.equal(customer.complete, false);
+  assert.equal(customer.hasSubscription, false);
+});
+
+test('a comped org_billing status finishes signup without a Stripe subscription id', () => {
+  const comped = billingOnboardingGate({
+    paymentProvider: 'stripe',
+    isCreator: true,
+    subscriptionId: null,
+    subscriptionStatus: 'comped',
+  });
+  assert.equal(comped.required, true);
+  assert.equal(comped.complete, true);
+  assert.equal(comped.hasSubscription, true);
 });
 
 test('a trialing subscription also finishes signup', () => {

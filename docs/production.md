@@ -531,6 +531,7 @@ Strongly recommended:
 
 - `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Verifier dictation and Ask this job (`GET /api/ready` reports `checks.ask` + `checks.vision`)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID`) — see [`docs/stripe.md`](./stripe.md)
+- `BILLING_EXEMPT_EMAILS=jack@jettx.ai` on Railway Atmosphere APIs — founder / comped accounts skip Stripe Checkout; paying customers stay gated
 - `COOKIE_SECURE=true` (default when `NODE_ENV=production`)
 - `BACKUP_ENCRYPTION_KEY` if `BACKUP_ENABLED` is on
 - `LOG_LEVEL=info` (structured JSON logs)

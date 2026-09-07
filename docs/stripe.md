@@ -26,6 +26,7 @@ set. `STRIPE_WEBHOOK_SECRET` stays the only webhook signing-secret name.
 | **Onboarding price id** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Recommended fallback for signup. Live Jettx Work Verification is `price_1UD4Sq1b5twUY3Ly6nqfRaGC` — Railway is set by the human. |
 | **Extra Field Capture seat** (`price_…`) | `STRIPE_EXTRA_SEAT_PRICE_ID` | Optional. Defaults to live `price_1UD4Sl1b5twUY3LyjD850F4V` ($100/mo). |
 | Publishable (`pk_test_…`) | — | **Not used** — Checkout is hosted; the browser never talks to Stripe.js |
+| **Billing exempt emails** | `BILLING_EXEMPT_EMAILS` | No. Comma-separated, case-insensitive. Empty (default) = no exemptions. Example: `jack@jettx.ai`. |
 
 Prefer **test-mode** keys until go-live. Do not commit real keys.
 
@@ -140,7 +141,14 @@ FRONTEND_ORIGIN=http://localhost:5174,http://localhost:5173
 # STRIPE_CANCEL_URL=http://localhost:5174/settings?section=billing&checkout=cancelled
 # STRIPE_PORTAL_RETURN_URL=http://localhost:5174/settings?section=billing
 # STRIPE_ONBOARDING_RETURN_URL=http://localhost:5174/signup
+# BILLING_EXEMPT_EMAILS=jack@jettx.ai   # Railway Atmosphere APIs — skip Checkout for these creators
 ```
+
+`BILLING_EXEMPT_EMAILS` is an allowlist, not a product change. Listed
+creators skip the signup Checkout gate (`required: false`, `complete: true`,
+`hasSubscription: true`) and Field Capture seats stay entitled. Same-day
+token/AI usage invoices and period-close overage invoices are skipped when
+the org creator is listed or `org_billing.status` is `comped`.
 
 `/billing` still redirects to `/settings?section=billing` so older return URLs
 keep working.
