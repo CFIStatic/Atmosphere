@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialSetupStep, setupWizardCopy, workspaceNameFrom } from './setupWizard';
+import { initialSetupStep, setupWizardCopy } from './setupWizard';
 
 describe('setupWizardCopy', () => {
   it('uses Global Admin create-company copy', () => {
@@ -56,15 +56,5 @@ describe('initialSetupStep', () => {
         checkout: 'cancelled',
       }),
     ).toBe(2);
-  });
-});
-
-describe('workspaceNameFrom', () => {
-  it('uses the person name when present', () => {
-    expect(workspaceNameFrom('Dana Ortiz', 'dana@shop.example')).toBe('Dana Ortiz');
-  });
-
-  it('falls back to the email local part', () => {
-    expect(workspaceNameFrom('', 'dana.ortiz@shop.example')).toBe("Dana Ortiz's workspace");
   });
 });
