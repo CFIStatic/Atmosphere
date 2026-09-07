@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { unscopedAdminOrNull } from './scopedAdmin.js';
 
 export function parseBillingExemptEmails(value: string | undefined | null): string[] {
   return [
@@ -40,6 +41,17 @@ export function isCompedBillingStatus(status: string | null | undefined): boolea
   return String(status ?? '').trim().toLowerCase() === 'comped';
 }
 
+/** Keep a stored comp unless Stripe reports a live paid status. */
+export function retainStoredCompedStatus(
+  stored: string | null | undefined,
+  nextStatus: string,
+): string {
+  if (isCompedBillingStatus(stored) && !['active', 'trialing', 'past_due'].includes(nextStatus)) {
+    return 'comped';
+  }
+  return nextStatus;
+}
+
 /** Skip Stripe usage invoices for a comped org or an exempt creator. */
 export function shouldSkipUsageBilling(input: {
   status?: string | null;
@@ -54,10 +66,12 @@ export async function loadOrgCreatorEmail(
   supabase: SupabaseClient,
   orgId: string,
 ): Promise<string | null> {
-  const { data: org } = await supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle();
+  // profiles_self is id = auth.uid(); a manager JWT cannot read the creator row.
+  const client = unscopedAdminOrNull() ?? supabase;
+  const { data: org } = await client.from('orgs').select('created_by').eq('id', orgId).maybeSingle();
   const createdBy = (org as { created_by?: string } | null)?.created_by;
   if (!createdBy) return null;
-  const { data: profile } = await supabase
+  const { data: profile } = await client
     .from('profiles')
     .select('email')
     .eq('id', createdBy)

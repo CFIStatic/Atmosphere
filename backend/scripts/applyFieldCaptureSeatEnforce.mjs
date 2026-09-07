@@ -11,11 +11,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sqlPath = join(
-  here,
-  '../supabase/migrations/20260907170000_field_capture_seat_enforce.sql',
-);
-const sql = readFileSync(sqlPath, 'utf8');
+const sqlPaths = [
+  join(here, '../supabase/migrations/20260907170000_field_capture_seat_enforce.sql'),
+  join(here, '../supabase/migrations/20260907210000_billing_comped_status_and_seats.sql'),
+];
 
 function projectRefFromUrl(url) {
   try {
@@ -28,30 +27,35 @@ function projectRefFromUrl(url) {
 }
 
 async function applyViaManagementApi(token, ref, label) {
-  const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: sql }),
-  });
-  const body = await res.text();
-  if (!res.ok) {
-    console.warn(`${label} Management API apply failed (${res.status}): ${body.slice(0, 500)}`);
-    return false;
+  for (const sqlPath of sqlPaths) {
+    const sql = readFileSync(sqlPath, 'utf8');
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: sql }),
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      console.warn(`${label} Management API apply failed (${res.status}): ${body.slice(0, 500)}`);
+      return false;
+    }
   }
   console.log(`Applied Field Capture seat enforcement via ${label} Management API.`);
   return true;
 }
 
 function applyViaPsql(dbUrl, label) {
-  const psql = spawnSync('psql', [dbUrl, '-v', 'ON_ERROR_STOP=1', '-f', sqlPath], {
-    encoding: 'utf8',
-  });
-  if (psql.status !== 0) {
-    console.warn(`${label} psql failed: ${(psql.stderr || psql.stdout || 'psql failed').slice(0, 500)}`);
-    return false;
+  for (const sqlPath of sqlPaths) {
+    const psql = spawnSync('psql', [dbUrl, '-v', 'ON_ERROR_STOP=1', '-f', sqlPath], {
+      encoding: 'utf8',
+    });
+    if (psql.status !== 0) {
+      console.warn(`${label} psql failed: ${(psql.stderr || psql.stdout || 'psql failed').slice(0, 500)}`);
+      return false;
+    }
   }
   console.log(`Applied Field Capture seat enforcement via ${label}.`);
   return true;

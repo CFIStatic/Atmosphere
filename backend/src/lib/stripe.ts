@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
+import { retainStoredCompedStatus } from './billingExempt.js';
 import { persistExtraFcSeats } from './fieldCaptureSeats.js';
 import { unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
@@ -380,9 +381,17 @@ export async function syncMeteringSubscription(
     cancelAtPeriodEnd?: boolean;
   },
 ): Promise<void> {
+  const { data: existing } = await admin
+    .from('org_billing')
+    .select('status')
+    .eq('org_id', orgId)
+    .maybeSingle();
   const patch: Record<string, unknown> = {
     stripe_subscription_id: opts.subscriptionId,
-    status: mapSubscriptionStatus(opts.status),
+    status: retainStoredCompedStatus(
+      (existing?.status as string | undefined) ?? null,
+      mapSubscriptionStatus(opts.status),
+    ),
     cancel_at_period_end: Boolean(opts.cancelAtPeriodEnd),
   };
   if (opts.periodStart) patch.period_start = opts.periodStart;

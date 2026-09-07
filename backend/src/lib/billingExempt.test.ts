@@ -5,6 +5,7 @@ import {
   isBillingExemptEmail,
   isCompedBillingStatus,
   parseBillingExemptEmails,
+  retainStoredCompedStatus,
   shouldSkipUsageBilling,
 } from './billingExempt.js';
 
@@ -38,14 +39,27 @@ describe('billing exempt allowlist', () => {
     const list = parseBillingExemptEmails('jack@jettx.ai');
     assert.equal(isCompedBillingStatus('comped'), true);
     assert.equal(isCompedBillingStatus('active'), false);
-    assert.equal(shouldSkipUsageBilling({ status: 'comped', creatorEmail: 'paid@example.com' }), true);
+    assert.equal(
+      shouldSkipUsageBilling({ status: 'comped', creatorEmail: 'paid@example.com' }),
+      true,
+    );
     assert.equal(
       shouldSkipUsageBilling({ status: 'active', creatorEmail: 'Jack@Jettx.ai', allowlist: list }),
       true,
     );
     assert.equal(
-      shouldSkipUsageBilling({ status: 'active', creatorEmail: 'paid@example.com', allowlist: list }),
+      shouldSkipUsageBilling({
+        status: 'active',
+        creatorEmail: 'paid@example.com',
+        allowlist: list,
+      }),
       false,
     );
+  });
+
+  it('keeps a stored comped status through leftover Stripe cancel events', () => {
+    assert.equal(retainStoredCompedStatus('comped', 'canceled'), 'comped');
+    assert.equal(retainStoredCompedStatus('comped', 'active'), 'active');
+    assert.equal(retainStoredCompedStatus('canceled', 'canceled'), 'canceled');
   });
 });

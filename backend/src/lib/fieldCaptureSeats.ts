@@ -183,11 +183,23 @@ export async function loadFieldCaptureSeatUsage(
     readOrgBillingSeatState(supabase, orgId),
   ]);
   let entitledOverride = isBillingExemptEmail(opts?.actingUserEmail);
-  if (!entitledOverride && !isWorkVerificationEntitled(billing.status)) {
-    entitledOverride = isBillingExemptEmail(await loadOrgCreatorEmail(supabase, orgId));
+  if (!isWorkVerificationEntitled(billing.status)) {
+    const creatorExempt = isBillingExemptEmail(await loadOrgCreatorEmail(supabase, orgId));
+    entitledOverride = entitledOverride || creatorExempt;
+    if (creatorExempt) await persistCompedBillingStatus(orgId);
   }
   const entitled = entitledFcSeatCounts(billing.extra, billing.status, entitledOverride);
   return summarizeFcSeats(used, entitled.extra, entitled.included);
+}
+
+/** Durable DB sentinel so seat triggers see the same exemption the JS pre-check does. */
+async function persistCompedBillingStatus(orgId: string): Promise<void> {
+  const writer = unscopedAdminOrNull();
+  if (!writer) return;
+  const { error } = await writer.from('org_billing').update({ status: 'comped' }).eq('org_id', orgId);
+  if (error) {
+    console.warn('[billing] could not persist comped status:', error.message);
+  }
 }
 
 /** Throws `fc_seat_limit` when adding one more Field Capture account would exceed the allowance. */
