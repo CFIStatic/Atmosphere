@@ -121,7 +121,9 @@ describe('Railway corporate-website image', () => {
     expect(page.toLowerCase()).not.toContain('amazon.com');
     expect(page.toLowerCase()).not.toContain('asin');
     expect(page).not.toContain('let-me-be');
-    expect(page).not.toMatch(/href=["']https:\/\/buy\.stripe\.com\//);
+    expect(page).toContain('https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00');
+    expect(page).toMatch(/var CHECKOUT_URL = 'https:\/\/buy\.stripe\.com\/5kQ7sD47B54p7O9391fYY00'/);
+    expect(page).toMatch(/id="hardware-buy"[^>]*data-checkout-url="https:\/\/buy\.stripe\.com\/5kQ7sD47B54p7O9391fYY00"/);
     expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
 
     const js = read('website/assets/site.js');
@@ -141,34 +143,50 @@ describe('Railway corporate-website image', () => {
     expect(field).toContain('href="hardware.html"');
   });
 
-  it('keeps Buy disabled until a Stripe checkout URL is set', () => {
-    const html = read('website/hardware.html');
-    const js = read('website/assets/site.js');
-    const stubMatchMedia = (win: { matchMedia: (q: string) => { matches: boolean } }) => {
-      win.matchMedia = () => ({ matches: false });
-    };
+  const PAYMENT_LINK = 'https://buy.stripe.com/5kQ7sD47B54p7O9391fYY00';
 
-    const off = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
-    stubMatchMedia(off.window);
-    off.window.eval(js);
+  function stubMatchMedia(win: { matchMedia: (q: string) => { matches: boolean } }) {
+    win.matchMedia = () => ({ matches: false });
+  }
+
+  function runHardwareCheckout(html: string) {
+    const js = read('website/assets/site.js');
+    const dom = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
+    stubMatchMedia(dom.window);
+    const inline = html.match(
+      /\(function \(\) \{\s*var CHECKOUT_URL = '[^']*';[\s\S]*?window\.ATMOSPHERE_HARDWARE_CHECKOUT_URL = CHECKOUT_URL;[\s\S]*?\}\)\(\);/,
+    );
+    if (inline) dom.window.eval(inline[0]);
+    dom.window.eval(js);
+    return dom;
+  }
+
+  it('makes Buy navigate to the live Stripe Payment Link', () => {
+    const html = read('website/hardware.html');
+    const on = runHardwareCheckout(html);
+    const buttons = [...on.window.document.querySelectorAll<HTMLAnchorElement>('#hardware-buy, .js-hardware-buy')];
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    for (const buy of buttons) {
+      expect(buy.textContent).toBe('Buy — $49');
+      expect(buy.getAttribute('href')).toBe(PAYMENT_LINK);
+      expect(buy.getAttribute('aria-disabled')).toBeNull();
+      expect(buy.classList.contains('is-disabled')).toBe(false);
+    }
+    expect(on.window.ATMOSPHERE_HARDWARE_CHECKOUT_URL).toBe(PAYMENT_LINK);
+    expect(on.window.document.querySelector('.hw-buy-note')?.hidden).toBe(true);
+  });
+
+  it('disables Buy when checkout URL is empty (unit)', () => {
+    const html = read('website/hardware.html')
+      .replace(/var CHECKOUT_URL = '[^']*';/, "var CHECKOUT_URL = '';")
+      .replace(/data-checkout-url="[^"]*"/g, 'data-checkout-url=""');
+    const off = runHardwareCheckout(html);
     const offBuy = off.window.document.getElementById('hardware-buy');
     expect(offBuy?.textContent).toBe('Checkout coming online');
     expect(offBuy?.getAttribute('aria-disabled')).toBe('true');
     expect(offBuy?.getAttribute('href')).toBeNull();
     expect(offBuy?.classList.contains('is-disabled')).toBe(true);
-    const note = off.window.document.querySelector('.hw-buy-note');
-    expect(note?.hidden).toBe(false);
-
-    const on = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
-    stubMatchMedia(on.window);
-    on.window.ATMOSPHERE_HARDWARE_CHECKOUT_URL = 'https://example.com/checkout-session';
-    on.window.eval(js);
-    const onBuy = on.window.document.getElementById('hardware-buy');
-    expect(onBuy?.textContent).toBe('Buy — $49');
-    expect(onBuy?.getAttribute('href')).toBe('https://example.com/checkout-session');
-    expect(onBuy?.getAttribute('aria-disabled')).toBeNull();
-    expect(onBuy?.classList.contains('is-disabled')).toBe(false);
-    expect(on.window.document.querySelector('.hw-buy-note')?.hidden).toBe(true);
+    expect(off.window.document.querySelector('.hw-buy-note')?.hidden).toBe(false);
   });
 
   it('does not treat in-window Railway probe retries as a finished failure', () => {
