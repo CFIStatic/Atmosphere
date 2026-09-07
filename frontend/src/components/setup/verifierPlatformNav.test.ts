@@ -136,39 +136,43 @@ describe('verifier office rail', () => {
   });
 
   it('applies locale chrome to Videos labels without dropping count badges', () => {
+    const start = verifierHtml.indexOf('function applyChromeI18n(chrome, locale)');
+    const end = verifierHtml.indexOf('function labelThemeToggle');
+    if (start < 0 || end <= start) {
+      throw new Error('Could not find applyChromeI18n in verifier/index.html');
+    }
     const nav = verifierHtml.match(
       /<div class="rail-section" id="evidence-nav">[\s\S]*?<\/div>/,
     );
     const dom = new JSDOM(
       `<!doctype html><html><body>${nav![0]}<h1 id="viewtitle">All videos</h1></body></html>`,
     );
+    const apply = new Function(
+      'document',
+      'state',
+      `${verifierHtml.slice(start, end)}
+       function labelAllThemeToggles() {}
+       function readThemePref() { return 'light'; }
+       var chromeI18n = null;
+       return applyChromeI18n;`,
+    )(dom.window.document, { view: 'classified' }) as (
+      chrome: Record<string, string>,
+      locale: string,
+    ) => void;
+
+    apply(
+      {
+        videos: 'Vídeos',
+        allVideos: 'Todos los vídeos',
+        classified: 'Clasificados',
+        awaitingAnalysis: 'Pendiente de análisis',
+        needsReview: 'Requiere revisión',
+      },
+      'es',
+    );
+
     const { document } = dom.window;
-    const chromeI18n: Record<string, string> = {
-      videos: 'Vídeos',
-      allVideos: 'Todos los vídeos',
-      classified: 'Clasificados',
-      awaitingAnalysis: 'Pendiente de análisis',
-      needsReview: 'Requiere revisión',
-    };
-    const state = { view: 'classified' };
-
-    document.querySelectorAll('[data-i18n-chrome]').forEach((el) => {
-      const key = el.getAttribute('data-i18n-chrome');
-      if (key && chromeI18n[key]) {
-        el.textContent = chromeI18n[key];
-        const item = el.closest('[data-view]');
-        if (item) {
-          item.setAttribute('data-label', chromeI18n[key]);
-          item.setAttribute('title', chromeI18n[key]);
-        }
-      }
-    });
-    const titleEl = document.getElementById('viewtitle');
-    const active = document.querySelector(`.navitem[data-view="${state.view}"]`);
-    if (titleEl && active?.getAttribute('data-label')) {
-      titleEl.textContent = active.getAttribute('data-label');
-    }
-
+    expect(document.documentElement.lang).toBe('es');
     expect(document.querySelector('[data-i18n-chrome="videos"]')?.textContent).toBe('Vídeos');
     expect(document.querySelector('[data-view="all"]')?.getAttribute('data-label')).toBe(
       'Todos los vídeos',
@@ -187,7 +191,7 @@ describe('verifier office rail', () => {
     );
     expect(document.getElementById('n-all')?.textContent).toBe('0');
     expect(document.getElementById('n-classified')?.textContent).toBe('0');
-    expect(titleEl?.textContent).toBe('Clasificados');
+    expect(document.getElementById('viewtitle')?.textContent).toBe('Clasificados');
   });
 
   it('keeps untranslated Dashboard chrome LTR when the nav locale is RTL', () => {
