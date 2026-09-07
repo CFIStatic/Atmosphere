@@ -73,6 +73,14 @@ describe('verifier recorded-date formatting', () => {
     expect(html).not.toContain('14:16</small>');
   });
 
+  it('keeps the recorded date at normal weight, with gray time underneath', () => {
+    const dateCss = verifierHtml.match(/td\.job-when time \{[^}]+\}/)?.[0] ?? '';
+    expect(dateCss).toMatch(/font-weight:\s*400/);
+    expect(dateCss).not.toMatch(/font-weight:\s*(550|600|700|bold)/);
+    const timeCss = verifierHtml.match(/td\.job-when small \{[^}]+\}/)?.[0] ?? '';
+    expect(timeCss).toMatch(/color:\s*var\(--faint\)/);
+  });
+
   it('renders complementary date and time in dashboard job and clip rows', async () => {
     const dom = bootVerifier();
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
