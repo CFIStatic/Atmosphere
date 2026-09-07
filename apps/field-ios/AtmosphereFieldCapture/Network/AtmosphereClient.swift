@@ -92,7 +92,7 @@ final class AtmosphereClient: ObservableObject {
         return try await loginViaSupabase(email: email, password: password)
     }
 
-    static let currentTermsVersion = "2026-07-31"
+    static let currentTermsVersion = "2026-09-07"
     static let termsURL = URL(string: "https://atmosphereteam.com/terms")!
     static let privacyURL = URL(string: "https://atmosphereteam.com/privacy")!
 

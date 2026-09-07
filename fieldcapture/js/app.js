@@ -1016,7 +1016,7 @@
         }
         if (termsBtn) termsBtn.disabled = true;
         showTermsError('');
-        Core.acceptTerms(API_BASE, state.accessToken, Core.CURRENT_TERMS_VERSION || '2026-07-31')
+        Core.acceptTerms(API_BASE, state.accessToken, Core.CURRENT_TERMS_VERSION || '2026-09-07')
           .then(function () {
             return bootAccountSession().then(function () {
               return playElevate();

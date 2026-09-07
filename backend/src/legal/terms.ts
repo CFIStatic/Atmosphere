@@ -2,11 +2,11 @@
  * Versioned Terms of Service acknowledgment.
  *
  * CURRENT_TERMS_VERSION is the date string on website/terms.html
- * ("Last updated July 31, 2026"). Bump it when that page is revised so
+ * ("Last Modified: 9/7/2026"). Bump it when that page is revised so
  * everyone who accepted an older version must acknowledge again.
  */
 
-export const CURRENT_TERMS_VERSION = '2026-07-31';
+export const CURRENT_TERMS_VERSION = '2026-09-07';
 export const TERMS_PUBLIC_URL = 'https://atmosphereteam.com/terms';
 export const PRIVACY_PUBLIC_URL = 'https://atmosphereteam.com/privacy';
 
