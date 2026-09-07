@@ -5,12 +5,13 @@ import { displayName, nameFromMetadata } from '../lib/display';
 import { useT } from '../lib/i18n';
 import { setPreference, usePreferences } from '../lib/preferences';
 import { cycleThemePreference, setThemePreference } from '../lib/theme';
+import { usePlatformSupportUrl } from '../lib/contactSupport';
 import { PersonAvatar } from './PersonAvatar';
-import { LogOutIcon, MoonIcon, SettingsIcon, SpinnerIcon, SunIcon } from './icons';
+import { HelpIcon, LogOutIcon, MoonIcon, SettingsIcon, SpinnerIcon, SunIcon } from './icons';
 
 /**
  * Dashboard-matching account chip for the office top bar: name, org, and
- * avatar on the right, with appearance / Settings / sign-out in the menu.
+ * avatar on the right, with appearance / Settings / Support / sign-out in the menu.
  * Rail-only tabs hide the verifier top bar, so this chip is the one that
  * stays in the corner on Overview, Start a job, Job Files, and Settings.
  */
@@ -19,6 +20,7 @@ export function HeaderAccountChip() {
   const { user, profile, membership, logout } = useAuth();
   const { confirmSignOut, theme } = usePreferences();
   const navigate = useNavigate();
+  const supportUrl = usePlatformSupportUrl();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -128,6 +130,18 @@ export function HeaderAccountChip() {
             <SettingsIcon width={14} height={14} className="shrink-0 text-ink-600" />
             {t('nav.settings')}
           </button>
+
+          <a
+            role="menuitem"
+            href={supportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-ink-900 no-underline transition hover:bg-paper-200"
+          >
+            <HelpIcon width={14} height={14} className="shrink-0 text-ink-600" />
+            {t('nav.support')}
+          </a>
 
           <button
             type="button"

@@ -531,6 +531,20 @@ export function ChevronLeftIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function HelpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <path
+        d="M20 12.5a6.5 6.5 0 0 1-6.5 6.5H9l-4 2.5.9-3.4A6.5 6.5 0 0 1 9.5 6h4A6.5 6.5 0 0 1 20 12.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>

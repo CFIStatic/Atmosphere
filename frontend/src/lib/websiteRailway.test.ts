@@ -207,6 +207,29 @@ describe('Railway corporate-website image', () => {
     expect(page).not.toMatch(/plan-name mono">Enterprise/);
   });
 
+  it('prefills the contact form from query params used by hardware and Platform Support', () => {
+    const html = read('website/contact.html');
+    const js = read('website/assets/site.js');
+    expect(html).toContain('id="contact-form"');
+    expect(js).toContain("contactParams.get('note')");
+    expect(js).toContain("fillContactField('ct-email'");
+    expect(js).toContain("fillContactField('ct-name'");
+    expect(js).toContain("fillContactField('ct-company'");
+
+    const dom = new JSDOM(html, {
+      url: 'https://atmosphereteam.com/contact.html?note=I%20need%20help%20with%20Atmosphere%20Platform.&email=jack%40jettx.ai&name=Jack%20Cyganiak&company=Jettx%20LLC',
+      runScripts: 'outside-only',
+    });
+    dom.window.matchMedia = () => ({ matches: false });
+    dom.window.eval(js);
+    expect((dom.window.document.getElementById('ct-message') as HTMLTextAreaElement).value).toContain(
+      'I need help with Atmosphere Platform.',
+    );
+    expect((dom.window.document.getElementById('ct-email') as HTMLInputElement).value).toBe('jack@jettx.ai');
+    expect((dom.window.document.getElementById('ct-name') as HTMLInputElement).value).toBe('Jack Cyganiak');
+    expect((dom.window.document.getElementById('ct-company') as HTMLInputElement).value).toBe('Jettx LLC');
+  });
+
   it('does not treat in-window Railway probe retries as a finished failure', () => {
     const up = read('backend/scripts/railwayUp.sh');
     expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');

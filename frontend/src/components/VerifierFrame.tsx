@@ -15,6 +15,8 @@ import { usePreferences } from '../lib/preferences';
 import { isThemePreference, setThemePreference } from '../lib/theme';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { notifyLibraryChanged } from '../lib/libraryChanged';
+import { openPlatformSupport } from '../lib/contactSupport';
+import { nameFromMetadata } from '../lib/display';
 import { verifierSessionUser } from '../lib/verifierSession';
 
 /**
@@ -130,6 +132,16 @@ export function VerifierFrame({
         void logout().then(() => navigate('/login', { replace: true }));
         return;
       }
+      if (data.atmosphere === 'open-support') {
+        openPlatformSupport({
+          email: profile?.email ?? user?.email ?? null,
+          name: profile?.fullName || nameFromMetadata(user?.metadata),
+          orgName: membership?.org?.name ?? null,
+          orgId: membership?.org?.id ?? null,
+          path: location.pathname + (location.search || ''),
+        });
+        return;
+      }
       if (data.atmosphere === 'theme' && isThemePreference(data.preference)) {
         setThemePreference(data.preference);
         return;
@@ -141,7 +153,7 @@ export function VerifierFrame({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [logout, navigate, postSession, postToFrame]);
+  }, [location.pathname, location.search, logout, membership, navigate, postSession, postToFrame, profile, user]);
 
   const frameClass = 'h-full w-full border-0';
   const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=stable-previews-1';

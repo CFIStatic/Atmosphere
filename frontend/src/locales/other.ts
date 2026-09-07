@@ -1791,3 +1791,256 @@ for (const locale of Object.keys(VIDEO_NAV) as AppLocale[]) {
   if (!extra) continue;
   OTHER_CATALOGS[locale] = { ...OTHER_CATALOGS[locale], ...extra };
 }
+
+/** Machine-quality Support chrome. Missing keys still fall back to English. */
+const SUPPORT_NAV: Partial<Record<AppLocale, ChromeCatalog>> = {
+  'pt-BR': {
+    'nav.support': 'Suporte',
+    'settings.section.support': 'Suporte',
+    'settings.section.supportBlurb': 'Peça ajuda a uma pessoa',
+    'settings.support.title': 'Suporte',
+    'settings.support.description':
+      'Uma pessoa responde, geralmente em um dia útil. Incluímos sua organização e esta página para ajudar mais rápido.',
+    'settings.support.action': 'Falar com o suporte',
+  },
+  fr: {
+    'nav.support': 'Assistance',
+    'settings.section.support': 'Assistance',
+    'settings.section.supportBlurb': 'Obtenir de l’aide d’une personne',
+    'settings.support.title': 'Assistance',
+    'settings.support.description':
+      'Une personne répond, généralement sous un jour ouvrable. Votre organisation et cette page sont incluses pour vous aider plus vite.',
+    'settings.support.action': 'Contacter l’assistance',
+  },
+  de: {
+    'nav.support': 'Support',
+    'settings.section.support': 'Support',
+    'settings.section.supportBlurb': 'Hilfe von einer Person bekommen',
+    'settings.support.title': 'Support',
+    'settings.support.description':
+      'Eine Person antwortet in der Regel innerhalb eines Werktags. Organisation und diese Seite werden mitgeschickt.',
+    'settings.support.action': 'Support kontaktieren',
+  },
+  it: {
+    'nav.support': 'Supporto',
+    'settings.section.support': 'Supporto',
+    'settings.section.supportBlurb': 'Chiedi aiuto a una persona',
+    'settings.support.title': 'Supporto',
+    'settings.support.description':
+      'Una persona risponde, di solito entro un giorno lavorativo. Includiamo l’organizzazione e questa pagina.',
+    'settings.support.action': 'Contatta il supporto',
+  },
+  nl: {
+    'nav.support': 'Ondersteuning',
+    'settings.section.support': 'Ondersteuning',
+    'settings.section.supportBlurb': 'Hulp van een persoon vragen',
+    'settings.support.title': 'Ondersteuning',
+    'settings.support.description':
+      'Een persoon antwoordt meestal binnen één werkdag. Je organisatie en deze pagina gaan mee.',
+    'settings.support.action': 'Contact opnemen met support',
+  },
+  pl: {
+    'nav.support': 'Wsparcie',
+    'settings.section.support': 'Wsparcie',
+    'settings.section.supportBlurb': 'Poproś osobę o pomoc',
+    'settings.support.title': 'Wsparcie',
+    'settings.support.description':
+      'Osoba odpowiada zwykle w ciągu jednego dnia roboczego. Dołączamy organizację i tę stronę.',
+    'settings.support.action': 'Skontaktuj się z pomocą',
+  },
+  uk: {
+    'nav.support': 'Підтримка',
+    'settings.section.support': 'Підтримка',
+    'settings.section.supportBlurb': 'Отримати допомогу від людини',
+    'settings.support.title': 'Підтримка',
+    'settings.support.description':
+      'Людина відповідає, зазвичай протягом одного робочого дня. Ми додаємо організацію та цю сторінку.',
+    'settings.support.action': 'Зв’язатися з підтримкою',
+  },
+  ru: {
+    'nav.support': 'Поддержка',
+    'settings.section.support': 'Поддержка',
+    'settings.section.supportBlurb': 'Получить помощь от человека',
+    'settings.support.title': 'Поддержка',
+    'settings.support.description':
+      'Человек отвечает обычно в течение одного рабочего дня. Мы добавляем организацию и эту страницу.',
+    'settings.support.action': 'Связаться с поддержкой',
+  },
+  tr: {
+    'nav.support': 'Destek',
+    'settings.section.support': 'Destek',
+    'settings.section.supportBlurb': 'Bir kişiden yardım alın',
+    'settings.support.title': 'Destek',
+    'settings.support.description':
+      'Bir kişi genellikle bir iş günü içinde yanıtlar. Kuruluşunuz ve bu sayfa eklenir.',
+    'settings.support.action': 'Destekle iletişime geç',
+  },
+  ar: {
+    'nav.support': 'الدعم',
+    'settings.section.support': 'الدعم',
+    'settings.section.supportBlurb': 'اطلب المساعدة من شخص',
+    'settings.support.title': 'الدعم',
+    'settings.support.description':
+      'يرد شخص عادة خلال يوم عمل واحد. نُرفق منظمتك وهذه الصفحة لتسريع المساعدة.',
+    'settings.support.action': 'تواصل مع الدعم',
+  },
+  he: {
+    'nav.support': 'תמיכה',
+    'settings.section.support': 'תמיכה',
+    'settings.section.supportBlurb': 'קבלו עזרה מאדם',
+    'settings.support.title': 'תמיכה',
+    'settings.support.description':
+      'אדם משיב בדרך כלל תוך יום עסקים אחד. הארגון והעמוד הזה מצורפים.',
+    'settings.support.action': 'יצירת קשר עם התמיכה',
+  },
+  hi: {
+    'nav.support': 'सहायता',
+    'settings.section.support': 'सहायता',
+    'settings.section.supportBlurb': 'किसी व्यक्ति से मदद लें',
+    'settings.support.title': 'सहायता',
+    'settings.support.description':
+      'कोई व्यक्ति आमतौर पर एक कार्य दिवस में जवाब देता है। आपका संगठन और यह पृष्ठ शामिल होते हैं।',
+    'settings.support.action': 'सहायता से संपर्क करें',
+  },
+  ja: {
+    'nav.support': 'サポート',
+    'settings.section.support': 'サポート',
+    'settings.section.supportBlurb': '担当者に問い合わせる',
+    'settings.support.title': 'サポート',
+    'settings.support.description':
+      '担当者が通常1営業日以内に返信します。組織とこのページの情報を添えます。',
+    'settings.support.action': 'サポートに連絡',
+  },
+  ko: {
+    'nav.support': '지원',
+    'settings.section.support': '지원',
+    'settings.section.supportBlurb': '담당자에게 도움 받기',
+    'settings.support.title': '지원',
+    'settings.support.description':
+      '담당자가 보통 영업일 기준 하루 안에 답합니다. 조직과 이 페이지 정보가 포함됩니다.',
+    'settings.support.action': '지원팀에 문의',
+  },
+  'zh-Hans': {
+    'nav.support': '支持',
+    'settings.section.support': '支持',
+    'settings.section.supportBlurb': '向人工寻求帮助',
+    'settings.support.title': '支持',
+    'settings.support.description':
+      '通常会在一个工作日内有人回复。我们会附上你的组织和当前页面。',
+    'settings.support.action': '联系支持',
+  },
+  'zh-Hant': {
+    'nav.support': '支援',
+    'settings.section.support': '支援',
+    'settings.section.supportBlurb': '向專人尋求協助',
+    'settings.support.title': '支援',
+    'settings.support.description':
+      '通常會在一個工作天內有人回覆。我們會附上你的組織與這個頁面。',
+    'settings.support.action': '聯絡支援',
+  },
+  vi: {
+    'nav.support': 'Hỗ trợ',
+    'settings.section.support': 'Hỗ trợ',
+    'settings.section.supportBlurb': 'Nhờ một người giúp',
+    'settings.support.title': 'Hỗ trợ',
+    'settings.support.description':
+      'Một người thường trả lời trong một ngày làm việc. Tổ chức và trang này được kèm theo.',
+    'settings.support.action': 'Liên hệ hỗ trợ',
+  },
+  th: {
+    'nav.support': 'การสนับสนุน',
+    'settings.section.support': 'การสนับสนุน',
+    'settings.section.supportBlurb': 'ขอความช่วยเหลือจากพนักงาน',
+    'settings.support.title': 'การสนับสนุน',
+    'settings.support.description':
+      'มีผู้ตอบกลับโดยปกติภายในหนึ่งวันทำการ เราจะแนบองค์กรและหน้านี้ไปด้วย',
+    'settings.support.action': 'ติดต่อฝ่ายสนับสนุน',
+  },
+  id: {
+    'nav.support': 'Dukungan',
+    'settings.section.support': 'Dukungan',
+    'settings.section.supportBlurb': 'Minta bantuan orang',
+    'settings.support.title': 'Dukungan',
+    'settings.support.description':
+      'Seseorang biasanya membalas dalam satu hari kerja. Organisasi dan halaman ini disertakan.',
+    'settings.support.action': 'Hubungi dukungan',
+  },
+  sv: {
+    'nav.support': 'Support',
+    'settings.section.support': 'Support',
+    'settings.section.supportBlurb': 'Få hjälp av en person',
+    'settings.support.title': 'Support',
+    'settings.support.description':
+      'En person svarar vanligtvis inom en arbetsdag. Din organisation och den här sidan följer med.',
+    'settings.support.action': 'Kontakta support',
+  },
+  nb: {
+    'nav.support': 'Kundestøtte',
+    'settings.section.support': 'Kundestøtte',
+    'settings.section.supportBlurb': 'Få hjelp av en person',
+    'settings.support.title': 'Kundestøtte',
+    'settings.support.description':
+      'En person svarer vanligvis innen én virkedag. Organisasjonen og denne siden følger med.',
+    'settings.support.action': 'Kontakt kundestøtte',
+  },
+  da: {
+    'nav.support': 'Support',
+    'settings.section.support': 'Support',
+    'settings.section.supportBlurb': 'Få hjælp af en person',
+    'settings.support.title': 'Support',
+    'settings.support.description':
+      'En person svarer som regel inden for én hverdag. Din organisation og denne side følger med.',
+    'settings.support.action': 'Kontakt support',
+  },
+  fi: {
+    'nav.support': 'Tuki',
+    'settings.section.support': 'Tuki',
+    'settings.section.supportBlurb': 'Pyydä apua ihmiseltä',
+    'settings.support.title': 'Tuki',
+    'settings.support.description':
+      'Henkilö vastaa yleensä yhden arkipäivän kuluessa. Organisaatio ja tämä sivu liitetään mukaan.',
+    'settings.support.action': 'Ota yhteyttä tukeen',
+  },
+  el: {
+    'nav.support': 'Υποστήριξη',
+    'settings.section.support': 'Υποστήριξη',
+    'settings.section.supportBlurb': 'Ζητήστε βοήθεια από άνθρωπο',
+    'settings.support.title': 'Υποστήριξη',
+    'settings.support.description':
+      'Κάποιος απαντά συνήθως εντός μιας εργάσιμης ημέρας. Συμπεριλαμβάνουμε τον οργανισμό και αυτή τη σελίδα.',
+    'settings.support.action': 'Επικοινωνία με υποστήριξη',
+  },
+  cs: {
+    'nav.support': 'Podpora',
+    'settings.section.support': 'Podpora',
+    'settings.section.supportBlurb': 'Požádat člověka o pomoc',
+    'settings.support.title': 'Podpora',
+    'settings.support.description':
+      'Člověk obvykle odpoví do jednoho pracovního dne. Přiložíme organizaci a tuto stránku.',
+    'settings.support.action': 'Kontaktovat podporu',
+  },
+  ro: {
+    'nav.support': 'Asistență',
+    'settings.section.support': 'Asistență',
+    'settings.section.supportBlurb': 'Cere ajutor de la o persoană',
+    'settings.support.title': 'Asistență',
+    'settings.support.description':
+      'O persoană răspunde de obicei într-o zi lucrătoare. Includem organizația și această pagină.',
+    'settings.support.action': 'Contactează asistența',
+  },
+  hu: {
+    'nav.support': 'Támogatás',
+    'settings.section.support': 'Támogatás',
+    'settings.section.supportBlurb': 'Kérjen segítséget egy személytől',
+    'settings.support.title': 'Támogatás',
+    'settings.support.description':
+      'Egy személy általában egy munkanapon belül válaszol. A szervezetet és ezt az oldalt csatoljuk.',
+    'settings.support.action': 'Kapcsolat a támogatással',
+  },
+};
+
+for (const locale of Object.keys(SUPPORT_NAV) as AppLocale[]) {
+  const extra = SUPPORT_NAV[locale];
+  if (!extra) continue;
+  OTHER_CATALOGS[locale] = { ...OTHER_CATALOGS[locale], ...extra };
+}

@@ -97,6 +97,8 @@ describe('catalog fallback', () => {
     expect(translate('es', 'nav.classified')).toBe('Clasificados');
     expect(translate('es', 'nav.awaitingAnalysis')).toBe('Pendiente de análisis');
     expect(translate('es', 'nav.needsReview')).toBe('Requiere revisión');
+    expect(translate('es', 'nav.support')).toBe('Soporte');
+    expect(translate('ja', 'nav.support')).toBe('サポート');
     expect(translate('de', 'settings.password.current')).toBe('Current password');
     expect(translate('ja', 'nav.settings')).toBe('設定');
     expect(translate('ja', 'nav.allVideos')).toBe('すべての動画');
@@ -109,6 +111,8 @@ describe('catalog fallback', () => {
       expect(catalogHas(locale, 'settings.title')).toBe(true);
       expect(catalogHas(locale, 'settings.language.title')).toBe(true);
       expect(catalogHas(locale, 'nav.settings')).toBe(true);
+      expect(catalogHas(locale, 'nav.support')).toBe(true);
+      expect(catalogHas(locale, 'settings.support.title')).toBe(true);
       expect(catalogHas(locale, 'nav.videos')).toBe(true);
       expect(catalogHas(locale, 'nav.allVideos')).toBe(true);
       expect(catalogHas(locale, 'nav.classified')).toBe(true);
@@ -125,5 +129,6 @@ describe('catalog fallback', () => {
     expect(chrome.awaitingAnalysis).toBe('Pendiente de análisis');
     expect(chrome.needsReview).toBe('Requiere revisión');
     expect(chrome.settings).toBe('Ajustes');
+    expect(chrome.support).toBe('Soporte');
   });
 });

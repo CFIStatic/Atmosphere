@@ -17,6 +17,7 @@ import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
 import { PersonAvatar } from '../components/PersonAvatar';
 import { LanguagePicker } from '../components/LanguagePicker';
+import { usePlatformSupportUrl } from '../lib/contactSupport';
 import { useT } from '../lib/i18n';
 import { usePreferences } from '../lib/preferences';
 import {
@@ -26,6 +27,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   GlobeIcon,
+  HelpIcon,
   LogOutIcon,
   ShieldIcon,
   SpinnerIcon,
@@ -35,7 +37,7 @@ import {
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
-type SectionId = 'profile' | 'security' | 'organization' | 'billing';
+type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'support';
 
 interface SettingsSection {
   id: SectionId;
@@ -44,7 +46,7 @@ interface SettingsSection {
   icon: typeof UserIcon;
 }
 
-const SECTION_IDS: SectionId[] = ['profile', 'security', 'organization', 'billing'];
+const SECTION_IDS: SectionId[] = ['profile', 'security', 'organization', 'billing', 'support'];
 
 function isSectionId(value: string | null): value is SectionId {
   return SECTION_IDS.includes(value as SectionId);
@@ -69,6 +71,12 @@ export function SettingsPage() {
       label: t('settings.section.billing'),
       blurb: t('settings.section.billingBlurb'),
       icon: CreditCardIcon,
+    },
+    {
+      id: 'support',
+      label: t('settings.section.support'),
+      blurb: t('settings.section.supportBlurb'),
+      icon: HelpIcon,
     },
   ];
   const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'billing' || showBilling);
@@ -141,6 +149,7 @@ export function SettingsPage() {
             </>
           )}
           {active === 'billing' && showBilling && <BillingSection />}
+          {active === 'support' && <SupportSection />}
         </div>
       </div>
     </div>
@@ -619,6 +628,29 @@ function SignOutCard() {
         )}
         {busy ? t('common.signingOut') : t('common.signOut')}
       </button>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Support
+ * -------------------------------------------------------------------------- */
+
+function SupportSection() {
+  const t = useT();
+  const supportUrl = usePlatformSupportUrl();
+
+  return (
+    <Card title={t('settings.support.title')} description={t('settings.support.description')}>
+      <a
+        href={supportUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-semibold text-ink-900 transition hover:bg-paper-200"
+      >
+        <HelpIcon width={16} height={16} className="text-ink-600" />
+        {t('settings.support.action')}
+      </a>
     </Card>
   );
 }
