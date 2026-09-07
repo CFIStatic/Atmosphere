@@ -4025,10 +4025,13 @@ export const api = {
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
 
-  startOnboardingCheckout: (returnPath?: string) =>
+  startOnboardingCheckout: (returnPath?: string, planCode?: string) =>
     request<{ checkoutUrl: string | null }>('/api/billing/checkout/onboarding', {
       method: 'POST',
-      body: JSON.stringify(returnPath ? { returnPath } : {}),
+      body: JSON.stringify({
+        ...(returnPath ? { returnPath } : {}),
+        ...(planCode ? { planCode } : {}),
+      }),
     }),
 
   getPayments: (limit = 50) =>
@@ -5532,13 +5535,25 @@ export interface CustomerMeteringSummary {
   estimatedUpcomingBillCents: number;
 }
 
+export interface AtmosphereSelfServePlan {
+  code: 'starter' | 'work_verification' | 'scale';
+  name: string;
+  monthlyCents: number;
+  includedFcSeats: number;
+  recommended: boolean;
+  defaultSelected?: boolean;
+}
+
 export interface BillingOnboardingStatus {
   paymentProvider: 'stripe' | 'dev' | 'manual';
   required: boolean;
   complete: boolean;
   isCreator: boolean;
   hasSubscription: boolean;
+  defaultPlanCode?: 'starter' | 'work_verification' | 'scale';
+  plans?: AtmosphereSelfServePlan[];
   plan: {
+    code?: string;
     name: string;
     baseMonthlyFeeCents: number;
     includedJobs: number;
@@ -5629,6 +5644,7 @@ export interface WorkspaceBilling {
   complete: boolean;
   isCreator: boolean;
   subscription: {
+    code?: string;
     name: string;
     baseMonthlyFeeCents: number;
     includedJobs: number;

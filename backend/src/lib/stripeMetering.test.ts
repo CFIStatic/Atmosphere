@@ -69,9 +69,33 @@ describe('stripe helpers', () => {
       },
     });
     assert.equal(plan.name, 'Work Verification');
+    assert.equal(plan.code, 'work_verification');
     assert.equal(plan.baseMonthlyFeeCents, 59900);
     assert.equal(plan.includedJobs, 50);
     assert.equal(plan.includedFcSeats, 3);
+  });
+
+  it('overlays Starter / Scale seats from the stored Atmosphere plan', () => {
+    const starter = planFromMeteringRow(
+      {
+        metering_plan_versions: {
+          base_monthly_fee_cents: 59900,
+          included_jobs: 50,
+          additional_job_price_cents: 3000,
+          metering_plans: { name: 'Work Verification', code: 'work_verification' },
+        },
+      },
+      { planCode: 'starter', includedFcSeats: 1 },
+    );
+    assert.equal(starter.name, 'Starter');
+    assert.equal(starter.code, 'starter');
+    assert.equal(starter.baseMonthlyFeeCents, 29900);
+    assert.equal(starter.includedFcSeats, 1);
+
+    const scale = planFromMeteringRow(null, { planCode: 'scale' });
+    assert.equal(scale.name, 'Scale');
+    assert.equal(scale.baseMonthlyFeeCents, 149900);
+    assert.equal(scale.includedFcSeats, 10);
   });
 
   it('reads extra Field Capture seat quantity from a subscription', () => {

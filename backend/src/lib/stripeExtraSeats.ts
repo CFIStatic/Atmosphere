@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { persistExtraFcSeats, readExtraFcSeats } from './fieldCaptureSeats.js';
+import { persistExtraFcSeats, readOrgBillingSeatState } from './fieldCaptureSeats.js';
 import { paymentRequired } from './errors.js';
 import { allowedFcSeats } from './stripeCatalog.js';
 import {
@@ -63,7 +63,9 @@ export async function addExtraFieldCaptureSeats(
   allowedSeats: number;
 }> {
   const add = Math.max(1, Math.floor(addQuantity));
-  const currentExtra = await readExtraFcSeats(supabase, orgId);
+  const billing = await readOrgBillingSeatState(supabase, orgId);
+  const currentExtra = billing.extra;
+  const included = billing.included;
   const targetExtra = currentExtra + add;
 
   if (opts.billingExempt) {
@@ -72,7 +74,7 @@ export async function addExtraFieldCaptureSeats(
       checkoutUrl: null,
       updated: true,
       extraSeats: targetExtra,
-      allowedSeats: allowedFcSeats(targetExtra),
+      allowedSeats: allowedFcSeats(targetExtra, included),
     };
   }
 
@@ -97,7 +99,7 @@ export async function addExtraFieldCaptureSeats(
         checkoutUrl,
         updated: false,
         extraSeats: currentExtra,
-        allowedSeats: allowedFcSeats(currentExtra),
+        allowedSeats: allowedFcSeats(currentExtra, included),
       };
     }
     throw paymentRequired(
@@ -132,6 +134,6 @@ export async function addExtraFieldCaptureSeats(
     checkoutUrl: null,
     updated: true,
     extraSeats: targetExtra,
-    allowedSeats: allowedFcSeats(targetExtra),
+    allowedSeats: allowedFcSeats(targetExtra, included),
   };
 }

@@ -5,6 +5,10 @@ import {
   extraSeatsNeeded,
   INCLUDED_FC_SEATS,
   WORK_VERIFICATION_DESCRIPTION,
+  atmospherePlan,
+  includedFcSeatsForPlan,
+  parseAtmospherePlanCode,
+  planDescription,
 } from './stripeCatalog.js';
 import {
   entitledFcSeatCounts,
@@ -33,6 +37,26 @@ describe('Field Capture seat allowance', () => {
     assert.equal(allowedFcSeats(2), 5);
     assert.equal(allowedFcSeats(-1), 3);
     assert.equal(allowedFcSeats(1.8), 4);
+  });
+
+  it('resolves included seats from the org plan, not a hardcoded 3', () => {
+    assert.equal(parseAtmospherePlanCode(undefined), 'work_verification');
+    assert.equal(parseAtmospherePlanCode('starter'), 'starter');
+    assert.equal(parseAtmospherePlanCode('SCALE'), 'scale');
+    assert.equal(atmospherePlan('starter').includedFcSeats, 1);
+    assert.equal(atmospherePlan('work_verification').includedFcSeats, 3);
+    assert.equal(atmospherePlan('scale').includedFcSeats, 10);
+    assert.equal(includedFcSeatsForPlan('starter'), 1);
+    assert.equal(includedFcSeatsForPlan('scale', 10), 10);
+    assert.equal(allowedFcSeats(0, 1), 1);
+    assert.equal(allowedFcSeats(2, 1), 3);
+    assert.equal(allowedFcSeats(0, 10), 10);
+    assert.equal(extraSeatsNeeded(2, 0, 1), 1);
+    assert.equal(extraSeatsNeeded(10, 0, 10), 0);
+    assert.deepEqual(entitledFcSeatCounts(0, 'active', false, 1), { extra: 0, included: 1 });
+    assert.deepEqual(entitledFcSeatCounts(1, 'active', false, 10), { extra: 1, included: 10 });
+    assert.match(planDescription(atmospherePlan('starter')), /1 Field Capture account/);
+    assert.doesNotMatch(planDescription(atmospherePlan('scale')), /10\s*[x×]/i);
   });
 
   it('computes extra seats needed for a 4th Field Capture account', () => {
@@ -100,6 +124,8 @@ describe('Field Capture seat allowance', () => {
     assert.equal(err.code, 'fc_seat_limit');
     assert.match(err.message, /3 Field Capture accounts/);
     assert.match(err.message, /\$100/);
+    const starter = fcSeatLimitError(1, 1, 1);
+    assert.match(starter.message, /1 Field Capture account/);
   });
 
   it('recognizes the Postgres seat-limit trigger error', () => {

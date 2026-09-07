@@ -183,14 +183,15 @@ export function BillingSection() {
               Manage plan and payment method
             </button>
             <p className="text-xs text-ink-500">
-              Extra Field Capture accounts ($100/mo) are added automatically when you invite past the
-              3 included seats.
+              Extra Field Capture accounts ($100/mo) are added automatically when you invite past the{' '}
+              {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
+              Change plans in the billing portal, or contact us for Enterprise.
             </p>
           </div>
         ) : complimentary && workspace.canManage ? (
           <p className="mt-5 text-xs text-ink-500">
-            Extra Field Capture accounts are added automatically when you invite someone past the 3
-            included seats.
+            Extra Field Capture accounts are added automatically when you invite someone past the{' '}
+            {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
           </p>
         ) : workspace.canManage ? (
           <div

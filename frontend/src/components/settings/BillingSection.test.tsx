@@ -29,10 +29,12 @@ import { BillingSection } from './BillingSection';
 const paid: WorkspaceBilling = {
   paymentProvider: 'stripe',
   canManage: true,
+  billingExempt: false,
   required: true,
   complete: true,
   isCreator: true,
   subscription: {
+    code: 'work_verification',
     name: 'Work Verification',
     baseMonthlyFeeCents: 59900,
     includedJobs: 50,
@@ -141,6 +143,34 @@ describe('BillingSection', () => {
     expect(screen.getByText(/1 of 3 used/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeNull();
     expect(screen.getByText(/added automatically when you invite/i)).toBeInTheDocument();
+  });
+
+  it('shows the Scale plan name and 10 included seats', async () => {
+    getBillingWorkspace.mockResolvedValue({
+      ...paid,
+      subscription: {
+        ...paid.subscription,
+        code: 'scale',
+        name: 'Scale',
+        baseMonthlyFeeCents: 149900,
+        includedFcSeats: 10,
+      },
+      fieldCaptureSeats: {
+        included: 10,
+        extra: 0,
+        allowed: 10,
+        used: 2,
+        remaining: 8,
+        extraSeatPriceCents: 10000,
+      },
+    });
+
+    renderBilling();
+
+    expect(await screen.findByRole('heading', { name: 'Scale' })).toBeInTheDocument();
+    expect(screen.getByText(/2 of 10 used/)).toBeInTheDocument();
+    expect(screen.getByText(/10 included/)).toBeInTheDocument();
+    expect(screen.getByText(/\$1,499/)).toBeInTheDocument();
   });
 
   it('hides paid Stripe controls for a complimentary org', async () => {

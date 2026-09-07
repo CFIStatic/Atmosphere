@@ -24,7 +24,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 2 as const,
     title: 'Set up billing',
-    detail: 'Add your payment method in Stripe — $599/mo platform fee.',
+    detail: 'Choose Starter, Work Verification, or Scale, then add a payment method.',
   },
 ] as const;
 
