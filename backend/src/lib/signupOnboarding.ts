@@ -8,6 +8,8 @@
  * back to a removed step, or keep a paid org blocked waiting for invites.
  */
 
+import { isCompedBillingStatus } from './billingExempt.js';
+
 export const SIGNUP_BILLING_STEP = '2';
 
 export function signupCheckoutReturnUrl(input: {
@@ -25,10 +27,16 @@ export function billingOnboardingGate(input: {
   isCreator: boolean;
   subscriptionId: string | null | undefined;
   subscriptionStatus: string | null | undefined;
+  /** Current-user email is on BILLING_EXEMPT_EMAILS. */
+  exempt?: boolean;
 }): { required: boolean; complete: boolean; hasSubscription: boolean } {
+  if (input.exempt) {
+    return { required: false, complete: true, hasSubscription: true };
+  }
   const hasSubscription =
-    Boolean(input.subscriptionId) &&
-    ['active', 'trialing'].includes(String(input.subscriptionStatus ?? ''));
+    isCompedBillingStatus(input.subscriptionStatus) ||
+    (Boolean(input.subscriptionId) &&
+      ['active', 'trialing'].includes(String(input.subscriptionStatus ?? '')));
   const required = input.paymentProvider === 'stripe' && input.isCreator;
   // Paid (or not the person who has to pay) is enough. Invites are optional.
   const complete = !required || hasSubscription;

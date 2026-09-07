@@ -8,6 +8,7 @@ import { TokenUsageSection } from './TokenUsageSection';
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-success-50 text-success-600 ring-1 ring-success-200',
   trialing: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',
+  comped: 'bg-success-50 text-success-600 ring-1 ring-success-200',
   past_due: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
   unpaid: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
   incomplete: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',

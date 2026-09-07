@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import { config } from '../config.js';
+import { loadOrgCreatorEmail, shouldSkipUsageBilling } from './billingExempt.js';
 import { nanosToCents } from './money.js';
 import { adminClient, isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
 
@@ -277,6 +278,10 @@ async function invoiceSameDayUsageUnlocked(
   if (!customerId) return { invoiceId: null, skipped: 'no_customer', amountCents: 0 };
 
   const status = (billing?.status as string | undefined) ?? '';
+  const creatorEmail = await loadOrgCreatorEmail(usageAdminClient(supabase), orgId);
+  if (shouldSkipUsageBilling({ status, creatorEmail })) {
+    return { invoiceId: null, skipped: 'billing_exempt', amountCents: 0 };
+  }
   if (status && !['active', 'trialing', 'past_due'].includes(status)) {
     return { invoiceId: null, skipped: 'inactive_customer', amountCents: 0 };
   }

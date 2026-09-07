@@ -8,6 +8,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isBillingExemptEmail, loadOrgCreatorEmail } from './billingExempt.js';
 import { paymentRequired } from './errors.js';
 import { toOrgProductRole } from './productRoles.js';
 import { unscopedAdminOrNull } from './scopedAdmin.js';
@@ -67,15 +68,16 @@ export interface FieldCaptureSeatUsage {
 
 export function isWorkVerificationEntitled(status: string | null | undefined): boolean {
   if (!status) return true;
-  return status === 'active' || status === 'trialing' || status === 'past_due';
+  return status === 'active' || status === 'trialing' || status === 'past_due' || status === 'comped';
 }
 
 /** Extra seats and the 3 included seats only apply while Work Verification is live. */
 export function entitledFcSeatCounts(
   storedExtra: number,
   status: string | null | undefined,
+  entitledOverride = false,
 ): { extra: number; included: number } {
-  if (!isWorkVerificationEntitled(status)) {
+  if (!entitledOverride && !isWorkVerificationEntitled(status)) {
     return { extra: 0, included: 0 };
   }
   const extra = Number.isFinite(storedExtra) ? Math.max(0, Math.floor(storedExtra)) : 0;
@@ -174,12 +176,17 @@ export async function readExtraFcSeats(supabase: SupabaseClient, orgId: string):
 export async function loadFieldCaptureSeatUsage(
   supabase: SupabaseClient,
   orgId: string,
+  opts?: { actingUserEmail?: string | null },
 ): Promise<FieldCaptureSeatUsage> {
   const [used, billing] = await Promise.all([
     countFieldCaptureSeats(supabase, orgId),
     readOrgBillingSeatState(supabase, orgId),
   ]);
-  const entitled = entitledFcSeatCounts(billing.extra, billing.status);
+  let entitledOverride = isBillingExemptEmail(opts?.actingUserEmail);
+  if (!entitledOverride && !isWorkVerificationEntitled(billing.status)) {
+    entitledOverride = isBillingExemptEmail(await loadOrgCreatorEmail(supabase, orgId));
+  }
+  const entitled = entitledFcSeatCounts(billing.extra, billing.status, entitledOverride);
   return summarizeFcSeats(used, entitled.extra, entitled.included);
 }
 
@@ -187,8 +194,9 @@ export async function loadFieldCaptureSeatUsage(
 export async function assertFieldCaptureSeatAvailable(
   supabase: SupabaseClient,
   orgId: string,
+  opts?: { actingUserEmail?: string | null },
 ): Promise<FieldCaptureSeatUsage> {
-  const seats = await loadFieldCaptureSeatUsage(supabase, orgId);
+  const seats = await loadFieldCaptureSeatUsage(supabase, orgId, opts);
   if (seats.remaining <= 0) {
     throw fcSeatLimitError(seats.allowed, seats.used);
   }

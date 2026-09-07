@@ -597,7 +597,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     const seat = toOrgProductRole(input.role ?? 'employee');
 
     if (seat === 'employee') {
-      await assertFieldCaptureSeatAvailable(supabase, orgId);
+      await assertFieldCaptureSeatAvailable(supabase, orgId, { actingUserEmail: req.user!.email });
     }
 
     const { data: invite, error } = await supabase

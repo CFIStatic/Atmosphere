@@ -83,10 +83,13 @@ describe('Field Capture seat allowance', () => {
   it('drops extra and included seats when Work Verification is canceled', () => {
     assert.equal(isWorkVerificationEntitled('active'), true);
     assert.equal(isWorkVerificationEntitled('past_due'), true);
+    assert.equal(isWorkVerificationEntitled('comped'), true);
     assert.equal(isWorkVerificationEntitled('canceled'), false);
     assert.equal(isWorkVerificationEntitled(null), true);
     assert.deepEqual(entitledFcSeatCounts(2, 'active'), { extra: 2, included: 3 });
     assert.deepEqual(entitledFcSeatCounts(4, 'canceled'), { extra: 0, included: 0 });
+    assert.deepEqual(entitledFcSeatCounts(2, 'incomplete', true), { extra: 2, included: 3 });
+    assert.deepEqual(entitledFcSeatCounts(2, 'comped'), { extra: 2, included: 3 });
     assert.equal(summarizeFcSeats(1, 0, 0).allowed, 0);
     assert.equal(summarizeFcSeats(1, 0, 0).remaining, 0);
   });

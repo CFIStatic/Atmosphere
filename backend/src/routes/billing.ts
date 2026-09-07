@@ -468,7 +468,7 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
 billingRouter.get('/workspace', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
-    res.json(await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id));
+    res.json(await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email));
   } catch (err) {
     next(err);
   }
@@ -514,7 +514,7 @@ billingRouter.get('/token-usage', async (req: Request, res: Response, next: Next
 billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
-    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
     res.json({
       paymentProvider: workspace.paymentProvider,
       required: workspace.required,
@@ -548,7 +548,7 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
 
     const { returnPath } = onboardingCheckoutSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
-    const status = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
+    const status = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
 
     if (!status.required) {
       throw badRequest('Billing setup is not required for this account.', 'billing_not_required');
@@ -604,7 +604,7 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
 
     const { quantity } = extraSeatCheckoutSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
-    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
     if (!workspace.canManage) {
       throw forbidden('Only a Global Admin can add Field Capture seats.', 'billing_forbidden');
     }

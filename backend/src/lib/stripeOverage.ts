@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import { config } from '../config.js';
 import type { MeteringPeriodCalculation } from '../metering/types.js';
+import { loadOrgCreatorEmail, shouldSkipUsageBilling } from './billingExempt.js';
 import { isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
 
 export interface OverageInvoiceLine {
@@ -97,13 +98,18 @@ export async function invoiceMeteringOverage(
 
   const { data: billing, error } = await supabase
     .from('org_billing')
-    .select('stripe_customer_id')
+    .select('stripe_customer_id, status')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error) throw new Error(`overage customer lookup failed: ${error.message}`);
 
   const customerId = billing?.stripe_customer_id as string | undefined;
   if (!customerId) return { invoiceId: null, skipped: 'no_customer' };
+
+  const creatorEmail = await loadOrgCreatorEmail(supabase, orgId);
+  if (shouldSkipUsageBilling({ status: billing?.status as string | undefined, creatorEmail })) {
+    return { invoiceId: null, skipped: 'billing_exempt' };
+  }
 
   const stripe = stripeClient();
   const existing = await findExistingOverageInvoice(stripe, customerId, orgId, summary.periodStart);
