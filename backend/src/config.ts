@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { resolveBackupsEnabled, resolveComputerUseEnabled } from './bootFlags.js';
+import { resolveStripeSecretKey } from './lib/stripeSecret.js';
 import { usageCustomerMarkup } from './metering/customerMarkup.js';
 
 /**
@@ -352,7 +353,8 @@ export const config = {
 
     // Which payment processor settles credit purchases.
     //
-    //   stripe — selected automatically whenever STRIPE_SECRET_KEY is present.
+    //   stripe — selected automatically whenever a Stripe secret is present
+    //            (`STRIPE_SECRET_KEY`, or Railway alias `Stripe_Secret_Key`).
     //            Credits are minted by the Stripe webhook, never by the browser.
     //   dev    — a billing manager can settle their own purchase through the
     //            API so the credit flow is exercisable without a processor.
@@ -360,7 +362,7 @@ export const config = {
     //   manual — purchases stay `pending` until something holding the
     //            service-role key completes them.
     paymentProvider: ((): 'stripe' | 'dev' | 'manual' => {
-      if (process.env.STRIPE_SECRET_KEY) return 'stripe';
+      if (resolveStripeSecretKey()) return 'stripe';
 
       const configured = process.env.PAYMENT_PROVIDER;
       if (configured === 'dev' || configured === 'manual') {
@@ -376,7 +378,7 @@ export const config = {
   },
 
   stripe: {
-    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    secretKey: resolveStripeSecretKey(),
     // Signing secret for POST /api/webhooks/stripe. Without it we cannot tell a
     // genuine Stripe callback from anyone who can reach the URL, so the webhook
     // refuses every request rather than trusting an unverified payload.
