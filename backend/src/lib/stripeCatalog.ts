@@ -133,6 +133,19 @@ export function includedFcSeatsForPlan(
   return atmospherePlan(code).includedFcSeats;
 }
 
+/** Read `atmosphere_included_fc_seats` from Stripe product / price / subscription metadata. */
+export function includedFcSeatsFromMetadata(
+  ...sources: Array<{ atmosphere_included_fc_seats?: string | number | null } | null | undefined>
+): number | null {
+  for (const source of sources) {
+    const raw = source?.atmosphere_included_fc_seats;
+    if (raw == null || raw === '') continue;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  return null;
+}
+
 export function selfServePlanList(): AtmosphereSelfServePlan[] {
   return ATMOSPHERE_SELF_SERVE_PLAN_CODES.map((code) => ATMOSPHERE_SELF_SERVE_PLANS[code]);
 }

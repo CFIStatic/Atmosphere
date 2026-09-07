@@ -21,7 +21,11 @@ import {
   syncMeteringSubscription,
   toIso,
 } from '../lib/stripe.js';
-import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
+import {
+  atmospherePlan,
+  includedFcSeatsFromMetadata,
+  parseAtmospherePlanCode,
+} from '../lib/stripeCatalog.js';
 import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
 import { mentionWebhookSchema } from '../pm/validation.js';
 import {
@@ -300,7 +304,13 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
         .find(Boolean) ??
       (metering?.code && metering.code !== 'field_capture_extra_seat' ? metering.code : null);
     const plan = atmospherePlan(parseAtmospherePlanCode(fromMeta ?? fromPrice));
-    const includedFromMeta = Number(sub.metadata?.atmosphere_included_fc_seats);
+    const includedFromMeta = includedFcSeatsFromMetadata(
+      sub.metadata,
+      ...items.map((row) => {
+        const price = row.price;
+        return typeof price === 'object' && price ? price.metadata : null;
+      }),
+    );
     await syncMeteringSubscription(admin, orgId, {
       subscriptionId: sub.id,
       status: sub.status,
@@ -308,7 +318,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
       periodEnd,
       cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
       planCode: plan.code,
-      includedFcSeats: Number.isFinite(includedFromMeta) ? includedFromMeta : plan.includedFcSeats,
+      includedFcSeats: includedFromMeta ?? plan.includedFcSeats,
     });
     return;
   }

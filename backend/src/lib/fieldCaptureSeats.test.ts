@@ -8,6 +8,7 @@ import {
   WORK_VERIFICATION_DESCRIPTION,
   atmospherePlan,
   includedFcSeatsForPlan,
+  includedFcSeatsFromMetadata,
   parseAtmospherePlanCode,
   planDescription,
 } from './stripeCatalog.js';
@@ -62,6 +63,9 @@ describe('Field Capture seat allowance', () => {
     assert.doesNotMatch(planDescription(atmospherePlan('scale')), /10\s*[x×]/i);
     assert.equal(atmospherePlan('starter').knownPriceId, 'price_1UD7vi1b5twUY3LykzUsVQVr');
     assert.equal(atmospherePlan('scale').knownPriceId, 'price_1UD7vj1b5twUY3Ly1Q4uv4kS');
+    assert.equal(includedFcSeatsFromMetadata({ atmosphere_included_fc_seats: '1' }), 1);
+    assert.equal(includedFcSeatsFromMetadata(null, { atmosphere_included_fc_seats: '10' }), 10);
+    assert.equal(includedFcSeatsFromMetadata({}), null);
   });
 
   it('computes extra seats needed for a 4th Field Capture account', () => {
