@@ -350,13 +350,20 @@
     message: 'ct-message', website: 'ct-website'
   }, "Sent — a person replies, usually within one business day.");
 
-  // Optional prefill from /contact?note=… or ?message=… (hardware questions, etc.)
-  var contactNote = new URLSearchParams(location.search).get('note')
-    || new URLSearchParams(location.search).get('message');
+  // Optional prefill from /contact?note=… or ?message=… (hardware / Platform support).
+  var contactParams = new URLSearchParams(location.search);
+  var contactNote = contactParams.get('note') || contactParams.get('message');
   var contactMessage = document.getElementById('ct-message');
   if (contactNote && contactMessage && !contactMessage.value) {
     contactMessage.value = contactNote;
   }
+  function fillContactField(id, value) {
+    var field = document.getElementById(id);
+    if (field && value && !field.value) field.value = value;
+  }
+  fillContactField('ct-name', contactParams.get('name'));
+  fillContactField('ct-email', contactParams.get('email'));
+  fillContactField('ct-company', contactParams.get('company'));
 })();
 
 // Field Capture Chest Mount checkout. A Stripe Payment Link or Checkout

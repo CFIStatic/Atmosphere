@@ -20,6 +20,7 @@ export const ES: MessageCatalog = {
   'nav.startJob': 'Empezar un trabajo',
   'nav.dashboard': 'Panel',
   'nav.settings': 'Ajustes',
+  'nav.support': 'Soporte',
   'nav.fieldCapture': 'Captura de campo',
   'nav.jumpTo': 'Ir a…',
   'nav.jumpToAria': 'Ir a una pantalla',
@@ -46,6 +47,13 @@ export const ES: MessageCatalog = {
   'settings.section.organizationBlurb': 'Invitaciones y cuentas vinculadas',
   'settings.section.billing': 'Facturación',
   'settings.section.billingBlurb': 'Plan, tokens y recibos',
+  'settings.section.support': 'Soporte',
+  'settings.section.supportBlurb': 'Pide ayuda a una persona',
+
+  'settings.support.title': 'Soporte',
+  'settings.support.description':
+    'Una persona responde, normalmente en un día laborable. Incluimos tu organización y esta página para poder ayudarte antes.',
+  'settings.support.action': 'Contactar con soporte',
 
   'settings.language.title': 'Idioma',
   'settings.language.description':

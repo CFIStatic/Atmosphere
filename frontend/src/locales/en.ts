@@ -18,6 +18,7 @@ export const EN = {
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
   'nav.settings': 'Settings',
+  'nav.support': 'Support',
   'nav.fieldCapture': 'Field capture',
   'nav.jumpTo': 'Jump to…',
   'nav.jumpToAria': 'Jump to a screen',
@@ -44,6 +45,13 @@ export const EN = {
   'settings.section.organizationBlurb': 'Team invites and linked accounts',
   'settings.section.billing': 'Billing',
   'settings.section.billingBlurb': 'Plan, tokens, and receipts',
+  'settings.section.support': 'Support',
+  'settings.section.supportBlurb': 'Get help from a person',
+
+  'settings.support.title': 'Support',
+  'settings.support.description':
+    'A person replies, usually within one business day. Your organization and this page are included so we can help faster.',
+  'settings.support.action': 'Contact support',
 
   'settings.language.title': 'Language',
   'settings.language.description': 'Choose the language for Settings and navigation on this device.',

@@ -245,6 +245,21 @@ describe('Settings sections', () => {
     expect(screen.queryByText('Confirm before signing out')).toBeNull();
     expect(screen.getByText('Your profile')).toBeInTheDocument();
   });
+
+  it('opens the same contact form as hardware Support from the Support section', () => {
+    renderSettings('/settings?section=support');
+
+    expect(screen.getByRole('button', { name: 'Support' })).toHaveAttribute('aria-current', 'page');
+    const link = screen.getByRole('link', { name: 'Contact support' });
+    const href = link.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+    expect(href).toContain('contact.html');
+    expect(params.get('note')).toContain('Atmosphere Platform');
+    expect(params.get('note')).toContain('org-1');
+    expect(params.get('email')).toBe('jack@jettx.ai');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
 });
 
 describe('Settings language', () => {

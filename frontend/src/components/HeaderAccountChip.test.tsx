@@ -63,7 +63,7 @@ describe('HeaderAccountChip', () => {
     expect(document.querySelector('img')).toHaveAttribute('src', 'https://img.example/jack-icon.png');
   });
 
-  it('puts appearance, Settings, and sign-out in the account menu', async () => {
+  it('puts appearance, Settings, Support, and sign-out in the account menu', async () => {
     const user = userEvent.setup();
     renderChip();
 
@@ -73,8 +73,17 @@ describe('HeaderAccountChip', () => {
     const menu = screen.getByRole('menu', { name: 'Account' });
     expect(menu).toHaveTextContent('Appearance: Dark');
     expect(menu).toHaveTextContent('Settings');
+    expect(menu).toHaveTextContent('Support');
     expect(menu).toHaveTextContent('Sign out');
     expect(screen.getByRole('menuitem', { name: 'Switch to light mode' })).toBeInTheDocument();
+    const support = screen.getByRole('menuitem', { name: 'Support' });
+    const href = support.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+    expect(href).toContain('contact.html');
+    expect(params.get('note')).toContain('Atmosphere Platform');
+    expect(params.get('email')).toBe('jack@jettx.ai');
+    expect(params.get('company')).toBe('Jettx LLC');
+    expect(support).toHaveAttribute('target', '_blank');
   });
 
   it('cycles the document palette from the account menu', async () => {

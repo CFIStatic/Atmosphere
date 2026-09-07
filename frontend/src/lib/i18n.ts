@@ -82,6 +82,7 @@ export interface VerifierChromeStrings {
   startJob: string;
   dashboard: string;
   settings: string;
+  support: string;
   signOut: string;
   appearance: string;
   light: string;
@@ -107,6 +108,7 @@ export function verifierChromeStrings(
     startJob: translate(locale, 'nav.startJob'),
     dashboard: translate(locale, 'nav.dashboard'),
     settings: translate(locale, 'nav.settings'),
+    support: translate(locale, 'nav.support'),
     signOut: translate(locale, 'common.signOut'),
     appearance: translate(locale, 'nav.appearance', { theme: themeLabel }),
     light: translate(locale, 'theme.light'),

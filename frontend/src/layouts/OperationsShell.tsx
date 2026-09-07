@@ -16,7 +16,7 @@ import { JobFilesSearchContext } from './jobFilesSearch';
  * render beside the same anchored rail. The account chip (name, org, avatar)
  * lives in the top-right of these React pages because the verifier top bar is
  * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
- * menu — same as Dashboard. The rail itself only has Settings.
+ * menu — same as Dashboard. Support lives there too. The rail itself only has Settings.
  *
  * Every rail-only tab uses Dashboard's 72px top bar so the hairline under
  * the Atmosphere wordmark continues straight across into the page. Job Files
