@@ -114,7 +114,10 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('digital setup guide');
     expect(page).toContain('emailed after purchase');
     expect(page).toContain('Checkout coming online');
-    expect(page).toContain('mailto:hello@atmosphereteam.com');
+    expect(page).not.toContain('mailto:hello@atmosphereteam.com');
+    expect(page).not.toContain('hw-support');
+    expect(page).toContain('btn-dark');
+    expect(page).toContain('contact.html?note=I%20need%20help%20with%20Atmosphere%20%2F%20Field%20Capture%20Chest%20Mount.');
     expect(page).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
     expect(page).toMatch(/https:\/\/atmosphereteam\.com\/hardware/);
     expect(page).toContain('not an Amazon package');

@@ -129,8 +129,10 @@ The primary CTA is **Buy — $49.99**. It uses the live Stripe Payment Link
 `https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01` ($49.99). The older
 `5kQ7sD47B54p7O9391fYY00` link is $49 and inactive.
 
-Mailto is support-only, never checkout. If checkout URL overrides are empty,
-Buy shows a disabled “Checkout coming online” state.
+Support under Buy is a dark secondary button to the contact form
+(`contact.html?note=…` hardware intake). Mailto is never checkout.
+If checkout URL overrides are empty, Buy shows a disabled
+“Checkout coming online” state.
 A printable setup card lives at `hardware-setup-card.html` and
 `assets/field-capture-setup-card.pdf` (digital guide is emailed after
 purchase; we do not currently ship a printed card).
