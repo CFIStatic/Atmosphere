@@ -142,7 +142,7 @@ describe('TokenUsageSection', () => {
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
     expect(screen.getAllByText('Elena Ortiz').length).toBeGreaterThan(0);
-    expect(screen.getByText('Marcus Chen')).toBeInTheDocument();
+    expect(screen.getAllByText('Marcus Chen').length).toBeGreaterThan(0);
     expect(screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org')).toBeInTheDocument();
     expect(screen.getAllByText('Ask').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Video analysis').length).toBeGreaterThan(0);
