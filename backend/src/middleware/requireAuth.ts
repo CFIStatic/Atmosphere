@@ -5,6 +5,8 @@ import { createAnonClient } from '../lib/supabase.js';
 import { setSessionCookies, clearSessionCookies } from '../lib/session.js';
 import { unauthorized, serviceUnavailable } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
+import { isTermsExemptPath } from '../legal/terms.js';
+import { assertCurrentTermsAccepted } from '../legal/termsStore.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -52,6 +54,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       if (!error && data.user) {
         req.user = data.user;
         req.accessToken = accessToken;
+        await enforceTermsIfRequired(req);
         next();
         return;
       }
@@ -69,6 +72,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         setSessionCookies(res, data.session);
         req.user = data.user;
         req.accessToken = data.session.access_token;
+        await enforceTermsIfRequired(req);
         next();
         return;
       }
@@ -85,4 +89,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   } catch (err) {
     next(err);
   }
+}
+
+async function enforceTermsIfRequired(req: Request): Promise<void> {
+  const path = (req.originalUrl || req.url || req.path || '').split('?')[0] ?? '';
+  if (isTermsExemptPath(path)) return;
+  if (!req.user?.id) return;
+  await assertCurrentTermsAccepted(req.user.id, req.accessToken);
 }

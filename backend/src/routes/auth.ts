@@ -11,6 +11,8 @@ import {
 } from '../lib/session.js';
 import {
   credentialsSchema,
+  signupCredentialsSchema,
+  acceptTermsSchema,
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -45,6 +47,8 @@ import { signStaffChallenge, readStaffChallenge } from '../lib/internalStaffChal
 import { otpauthUrl, randomTotpSecret, verifyTotp } from '../lib/totp.js';
 import { loadEnrolledTotp, saveEnrolledTotp } from '../auth/internalStaffTotpStore.js';
 import { toDataURL as totpQrDataUrl } from 'qrcode';
+import { CURRENT_TERMS_VERSION, TERMS_PUBLIC_URL, clientIp, clientUserAgent } from '../legal/terms.js';
+import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
 
 export const authRouter = Router();
 
@@ -80,25 +84,52 @@ export const authLimiter = rateLimit({
  */
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = credentialsSchema.parse(req.body);
+    const { email, password, acceptedTermsVersion } = signupCredentialsSchema.parse(req.body);
+    requireAcceptedTermsVersion(acceptedTermsVersion);
     const result = await createPasswordAccount(email, password);
 
     if (result.kind === 'error') throw result.error;
 
     if (result.kind === 'confirm') {
+      if (result.user?.id) {
+        await recordTermsAcceptance({
+          userId: result.user.id,
+          termsVersion: acceptedTermsVersion,
+          ip: clientIp(req),
+          userAgent: clientUserAgent(req),
+        });
+      }
       res.status(201).json({
         user: result.user ? publicUser(result.user) : null,
         needsEmailConfirmation: true,
         message: result.message,
+        terms: result.user
+          ? await loadTermsStatus(result.user.id)
+          : {
+              required: true,
+              currentVersion: CURRENT_TERMS_VERSION,
+              acceptedVersion: null,
+              acceptedAt: null,
+              url: TERMS_PUBLIC_URL,
+            },
       });
       return;
     }
+
+    const terms = await recordTermsAcceptance({
+      userId: result.user.id,
+      accessToken: result.session.access_token,
+      termsVersion: acceptedTermsVersion,
+      ip: clientIp(req),
+      userAgent: clientUserAgent(req),
+    });
 
     setSessionCookies(res, result.session);
     res.status(result.status).json({
       user: publicUser(result.user),
       needsEmailConfirmation: false,
       session: sessionTokens(result.session),
+      terms,
     });
   } catch (err) {
     next(err);
@@ -127,7 +158,12 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
       entityId: result.user.id,
     });
 
-    res.json({ user: publicUser(result.user), session: sessionTokens(result.session) });
+    const terms = await loadTermsStatus(result.user.id, result.session.access_token);
+    res.json({
+      user: publicUser(result.user),
+      session: sessionTokens(result.session),
+      terms,
+    });
   } catch (err) {
     next(err);
   }
@@ -366,9 +402,50 @@ authRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
  * Returns the currently authenticated user (or 401). Protected by requireAuth,
  * which also transparently refreshes an expired access token.
  */
-authRouter.get('/me', requireAuth, (req: Request, res: Response) => {
-  res.json({ user: publicUser(req.user!) });
+authRouter.get('/me', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const terms = await loadTermsStatus(req.user!.id, req.accessToken);
+    res.json({ user: publicUser(req.user!), terms });
+  } catch (err) {
+    next(err);
+  }
 });
+
+/**
+ * GET /api/auth/terms
+ * Public: the live terms version and URL so clients can render the checkbox
+ * before a session exists.
+ */
+authRouter.get('/terms', (_req: Request, res: Response) => {
+  res.json({
+    currentVersion: CURRENT_TERMS_VERSION,
+    url: TERMS_PUBLIC_URL,
+  });
+});
+
+/**
+ * POST /api/auth/terms/accept
+ * Record that this signed-in user acknowledged the live terms version.
+ */
+authRouter.post(
+  '/terms/accept',
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { acceptedTermsVersion } = acceptTermsSchema.parse(req.body);
+      const terms = await recordTermsAcceptance({
+        userId: req.user!.id,
+        accessToken: req.accessToken,
+        termsVersion: acceptedTermsVersion,
+        ip: clientIp(req),
+        userAgent: clientUserAgent(req),
+      });
+      res.json({ terms });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /* ========================================================================== *
  * Password recovery
@@ -848,7 +925,8 @@ authRouter.post(
         entityId: user.id,
       });
 
-      res.json({ user: publicUser(user) });
+      const terms = await loadTermsStatus(user.id, session.access_token);
+      res.json({ user: publicUser(user), terms });
     } catch (err) {
       next(err);
     }

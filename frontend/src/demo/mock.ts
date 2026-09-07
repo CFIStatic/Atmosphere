@@ -61,6 +61,7 @@ const state = {
   avatarUrl: null as string | null,
   orgName: 'Ortiz Restoration Group',
   joinCode: '8F3A9C2B',
+  termsAccepted: !startSignedOut,
   settings: {
     autoReloadEnabled: true,
     autoReloadThresholdNanos: 5_000_000_000,
@@ -76,6 +77,15 @@ const user = (): AuthUser => ({
   lastSignInAt: '2026-08-01T13:05:00Z',
   emailConfirmed: true,
   metadata: {},
+});
+
+const TERMS_VERSION = '2026-07-31';
+const termsStatus = () => ({
+  required: !state.termsAccepted,
+  currentVersion: TERMS_VERSION,
+  acceptedVersion: state.termsAccepted ? TERMS_VERSION : null,
+  acceptedAt: state.termsAccepted ? '2026-08-01T13:05:00Z' : null,
+  url: 'https://atmosphereteam.com/terms',
 });
 
 const profile = (): Profile => ({
@@ -1973,18 +1983,35 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
     state.signedIn = true; state.onboarded = true;
     if (typeof b.email === 'string') state.email = b.email;
-    return { body: { user: user() } };
+    return { body: { user: user(), terms: termsStatus() } };
   }],
   ['POST', /^\/api\/auth\/signup$/, (_m, b) => {
+    if (b.acceptedTermsVersion !== '2026-07-31') {
+      return { status: 400, body: { error: 'Acknowledge the Terms of Service to continue.', code: 'terms_required' } };
+    }
     state.signedIn = true; state.onboarded = false; state.fullName = null; state.avatarUrl = null;
+    state.termsAccepted = true;
     if (typeof b.email === 'string') state.email = b.email;
-    return { body: { user: user(), needsEmailConfirmation: false } };
+    return { body: { user: user(), needsEmailConfirmation: false, terms: termsStatus() } };
+  }],
+  ['GET', /^\/api\/auth\/terms$/, () => ({
+    body: { currentVersion: TERMS_VERSION, url: 'https://atmosphereteam.com/terms' },
+  })],
+  ['POST', /^\/api\/auth\/terms\/accept$/, (_m, b) => {
+    if (b.acceptedTermsVersion !== TERMS_VERSION) {
+      return { status: 400, body: { error: 'Acknowledge the current Terms of Service to continue.', code: 'terms_version_mismatch' } };
+    }
+    state.termsAccepted = true;
+    return { body: { terms: termsStatus() } };
   }],
   ['POST', /^\/api\/field-app\/join$/, (_m, b) => {
     const fullName = typeof b.fullName === 'string' ? b.fullName.trim() : '';
     const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
     if (fullName.split(/\s+/).filter(Boolean).length < 2) {
       return { status: 400, body: { error: 'Enter your first and last name', code: 'validation_error' } };
+    }
+    if (b.acceptedTermsVersion !== TERMS_VERSION) {
+      return { status: 400, body: { error: 'Acknowledge the Terms of Service to continue.', code: 'terms_required' } };
     }
     if (!/^[A-Z0-9]{6,12}$/.test(joinCode)) {
       return { status: 400, body: { error: 'Enter a valid join code', code: 'validation_error' } };
@@ -1994,6 +2021,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     state.signedIn = true;
     state.onboarded = true;
+    state.termsAccepted = true;
     state.fullName = fullName;
     return {
       status: 201,
@@ -2010,6 +2038,9 @@ const routes: Array<[string, RegExp, Handler]> = [
     const password = typeof b.password === 'string' ? b.password : '';
     const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
     const orgName = typeof b.orgName === 'string' ? b.orgName.trim() : '';
+    if (b.acceptedTermsVersion !== TERMS_VERSION) {
+      return { status: 400, body: { error: 'Acknowledge the Terms of Service to continue.', code: 'terms_required' } };
+    }
     if (!email.includes('@') || password.length < 8) {
       return { status: 400, body: { error: 'Password must be at least 8 characters', code: 'validation_error' } };
     }
@@ -2034,6 +2065,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     state.signedIn = true;
     state.onboarded = true;
+    state.termsAccepted = true;
     state.email = email;
     if (typeof b.fullName === 'string') state.fullName = b.fullName;
     if (orgName) state.orgName = orgName;
@@ -2068,9 +2100,11 @@ const routes: Array<[string, RegExp, Handler]> = [
     state.onboarded = true;
     return { status: 201, body: { org: membership().org } };
   }],
-  ['POST', /^\/api\/auth\/logout$/, () => { state.signedIn = false; return { body: { ok: true } }; }],
+  ['POST', /^\/api\/auth\/logout$/, () => { state.signedIn = false; state.termsAccepted = false; return { body: { ok: true } }; }],
   ['GET', /^\/api\/auth\/me$/, () =>
-    state.signedIn ? { body: { user: user() } } : { status: 401, body: { error: 'Not signed in', code: 'unauthenticated' } }],
+    state.signedIn
+      ? { body: { user: user(), terms: termsStatus() } }
+      : { status: 401, body: { error: 'Not signed in', code: 'unauthenticated' } }],
   ['GET', /^\/api\/auth\/pin\/status$/, () => ({ body: { enrolled: false } })],
   ['POST', /^\/api\/auth\/pin\/enroll$/, () => ({ body: { ok: true } })],
   ['GET', /^\/api\/profile$/, () => ({ body: { profile: profile() } })],
@@ -4511,6 +4545,25 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   let body: Record<string, unknown> = {};
   if (typeof init?.body === 'string') {
     try { body = JSON.parse(init.body) as Record<string, unknown>; } catch { /* not JSON */ }
+  }
+
+  const cleanPath = path.split('?')[0] ?? path;
+  const termsExempt =
+    cleanPath === '/api/org/me' ||
+    cleanPath.startsWith('/api/org/me/') ||
+    cleanPath === '/api/profile' ||
+    cleanPath.startsWith('/api/profile/') ||
+    ['/api/auth', '/api/legal', '/api/analytics', '/api/cyber', '/api/telemetry', '/api/health', '/api/ready'].some(
+      (prefix) => cleanPath === prefix || cleanPath.startsWith(`${prefix}/`),
+    );
+  if (state.signedIn && !state.termsAccepted && !termsExempt) {
+    return new Response(
+      JSON.stringify({
+        error: 'Acknowledge the Terms of Service to continue.',
+        code: 'terms_required',
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   // A short beat so spinners and disabled states read the way they do live.

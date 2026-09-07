@@ -15,6 +15,8 @@ import {
   fieldRegisterSchema,
 } from '../lib/validation.js';
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import { clientIp, clientUserAgent } from '../legal/terms.js';
+import { recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
 import { linkFieldOffice } from '../field/officeLink.js';
 import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
@@ -80,11 +82,20 @@ fieldAppRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = fieldRegisterSchema.parse(req.body);
+      requireAcceptedTermsVersion(input.acceptedTermsVersion);
       const created = await createPasswordAccount(input.email, input.password);
 
       if (created.kind === 'error') throw created.error;
 
       if (created.kind === 'confirm') {
+        if (created.user?.id) {
+          await recordTermsAcceptance({
+            userId: created.user.id,
+            termsVersion: input.acceptedTermsVersion,
+            ip: clientIp(req),
+            userAgent: clientUserAgent(req),
+          });
+        }
         res.status(201).json({
           user: created.user ? publicUser(created.user) : null,
           needsEmailConfirmation: true,
@@ -93,6 +104,14 @@ fieldAppRouter.post(
         });
         return;
       }
+
+      await recordTermsAcceptance({
+        userId: created.user.id,
+        accessToken: created.session.access_token,
+        termsVersion: input.acceptedTermsVersion,
+        ip: clientIp(req),
+        userAgent: clientUserAgent(req),
+      });
 
       try {
         const org = await linkFieldOffice(created.session.access_token, created.user, {
@@ -135,7 +154,15 @@ fieldAppRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = fieldJoinSchema.parse(req.body);
+      requireAcceptedTermsVersion(input.acceptedTermsVersion);
       const joined = await joinCrewByName(input);
+      await recordTermsAcceptance({
+        userId: joined.user.id,
+        accessToken: joined.session.access_token,
+        termsVersion: input.acceptedTermsVersion,
+        ip: clientIp(req),
+        userAgent: clientUserAgent(req),
+      });
       writeFieldSession(res, joined.created ? 201 : 200, joined.user, joined.session, {
         org: joined.org,
       });

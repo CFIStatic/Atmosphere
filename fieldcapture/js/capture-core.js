@@ -667,6 +667,20 @@
     });
   }
 
+  var CURRENT_TERMS_VERSION = '2026-07-31';
+
+  function loadAuthMe(apiBase, accessToken) {
+    return apiJson(origin(apiBase) + '/api/auth/me', { accessToken: accessToken });
+  }
+
+  function acceptTerms(apiBase, accessToken, version) {
+    return apiJson(origin(apiBase) + '/api/auth/terms/accept', {
+      method: 'POST',
+      accessToken: accessToken,
+      body: { acceptedTermsVersion: version || CURRENT_TERMS_VERSION },
+    });
+  }
+
   function loadFieldMe(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
   }
@@ -1352,6 +1366,9 @@
     PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
+    loadAuthMe: loadAuthMe,
+    acceptTerms: acceptTerms,
+    CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,
     linkOffice: linkOffice,
     resolveApiBase: resolveApiBase,
     resolveOfficeHref: resolveOfficeHref,

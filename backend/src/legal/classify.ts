@@ -32,6 +32,7 @@ type Rule = {
 const RULES: Rule[] = [
   { method: 'POST', pattern: /^\/api\/auth\/login\/?$/, action: 'auth.signed_in' },
   { method: 'POST', pattern: /^\/api\/auth\/signup\/?$/, action: 'auth.signed_up' },
+  { method: 'POST', pattern: /^\/api\/auth\/terms\/accept\/?$/, action: 'auth.terms_accepted' },
   { method: 'POST', pattern: /^\/api\/auth\/logout\/?$/, action: 'auth.signed_out' },
   { method: 'POST', pattern: /^\/api\/auth\/forgot-password\/?$/, action: 'auth.password_reset_requested' },
   { method: 'POST', pattern: /^\/api\/auth\/reset-password\/?$/, action: 'auth.password_reset' },

@@ -125,7 +125,7 @@
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
-  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-office', 's-platform'];
+  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-office', 's-terms', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -746,6 +746,13 @@
     el.textContent = message;
   }
 
+  function isTermsRequired(err) {
+    if (!err) return false;
+    if (err.code === 'terms_required') return true;
+    var msg = String(err.message || '').toLowerCase();
+    return err.status === 403 && msg.indexOf('terms of service') !== -1;
+  }
+
   function isNoOrganization(err) {
     if (!err) return false;
     if (err.code === 'no_organization') return true;
@@ -763,9 +770,45 @@
     showOfficeError('');
   }
 
+  function showTermsError(message) {
+    var el = $('#terms-err');
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function showTermsGate() {
+    show('s-terms');
+    showFieldAccount(false);
+    showJobAdd(false);
+    showTermsError('');
+    var box = $('#terms-ack');
+    var btn = $('#terms-btn');
+    if (box) box.checked = false;
+    if (btn) btn.disabled = true;
+  }
+
+  function ensureTermsThenConnect(afterConnect) {
+    if (!Core.loadAuthMe) return Promise.resolve().then(afterConnect);
+    return Core.loadAuthMe(API_BASE, state.accessToken).then(function (me) {
+      if (me && me.terms && me.terms.required) {
+        showTermsGate();
+        return;
+      }
+      return afterConnect();
+    });
+  }
+
   function finishAccountConnect() {
-    return bootAccountSession().then(function () {
-      return playElevate();
+    return ensureTermsThenConnect(function () {
+      return bootAccountSession().then(function () {
+        return playElevate();
+      });
     });
   }
 
@@ -879,6 +922,10 @@
             return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isTermsRequired(err)) {
+              showTermsGate();
+              return;
+            }
             if (isNoOrganization(err)) {
               showOfficeLink();
               return;
@@ -948,6 +995,53 @@
         showOfficeError('');
       });
     });
+    var termsForm = $('#terms-form');
+    if (termsForm) {
+      var termsBox = $('#terms-ack');
+      var termsBtn = $('#terms-btn');
+      if (termsBox && termsBtn) {
+        termsBox.addEventListener('change', function () {
+          termsBtn.disabled = !termsBox.checked;
+        });
+      }
+      termsForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (!termsBox || !termsBox.checked) {
+          showTermsError('Acknowledge the Terms of Service to continue.');
+          return;
+        }
+        if (!state.accessToken || !Core.acceptTerms) {
+          showTermsError('Sign in first, then acknowledge the Terms.');
+          return;
+        }
+        if (termsBtn) termsBtn.disabled = true;
+        showTermsError('');
+        Core.acceptTerms(API_BASE, state.accessToken, Core.CURRENT_TERMS_VERSION || '2026-07-31')
+          .then(function () {
+            return bootAccountSession().then(function () {
+              return playElevate();
+            });
+          })
+          .catch(function (err) {
+            if (isNoOrganization(err)) {
+              showOfficeLink();
+              return;
+            }
+            showTermsError(err.message || 'Could not save your acknowledgment. Try again.');
+          })
+          .then(function () {
+            if (termsBtn && termsBox) termsBtn.disabled = !termsBox.checked;
+          });
+      });
+    }
+    when('#terms-sign-out', function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        writeStoredSession(null, null);
+        showTermsError('');
+        bootBlocked();
+      });
+    });
     when('#office-switch-account', function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
@@ -958,7 +1052,13 @@
       });
     });
     if (state.accessToken) {
-      bootAccountSession().catch(function (err) {
+      ensureTermsThenConnect(function () {
+        return bootAccountSession();
+      }).catch(function (err) {
+        if (isTermsRequired(err)) {
+          showTermsGate();
+          return;
+        }
         if (isNoOrganization(err)) {
           showOfficeLink();
           return;
@@ -1654,6 +1754,8 @@
         event.preventDefault();
         var blocked = document.getElementById('s-blocked');
         if (blocked && blocked.getAttribute('data-on') === '1') return;
+        var terms = document.getElementById('s-terms');
+        if (terms && terms.getAttribute('data-on') === '1') return;
         openPlatformInFrame();
       });
     }
@@ -1663,6 +1765,8 @@
         event.preventDefault();
         var blocked = document.getElementById('s-blocked');
         if (blocked && blocked.getAttribute('data-on') === '1') return;
+        var terms = document.getElementById('s-terms');
+        if (terms && terms.getAttribute('data-on') === '1') return;
         var office = document.getElementById('s-office');
         if (office && office.getAttribute('data-on') === '1') return;
         show('s-home');

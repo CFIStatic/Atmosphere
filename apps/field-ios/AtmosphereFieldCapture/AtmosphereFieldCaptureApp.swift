@@ -32,7 +32,7 @@ struct AtmosphereFieldCaptureApp: App {
                 .task {
                     auth.bindAPIRefresh()
                     await auth.restore()
-                    if auth.isLinked, !auth.needsOfficeLink {
+                    if auth.isLinked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
                         await session.loadToday(api: api)
                     }
                 }
@@ -62,6 +62,8 @@ struct RootView: View {
                         onJoinWithCode: { showJoinCrew = true }
                     )
                 }
+            } else if auth.needsTermsAcceptance {
+                TermsAcknowledgmentView()
             } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()
             } else {
@@ -89,13 +91,19 @@ struct RootView: View {
         }
         // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
         .onReceive(auth.$isLinked.dropFirst()) { linked in
-            if linked, !auth.needsOfficeLink {
+            if linked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
                 playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onReceive(auth.$needsOfficeLink.dropFirst()) { needsOffice in
-            if auth.isLinked, !needsOffice, !auth.showOfficeLink {
+            if auth.isLinked, !needsOffice, !auth.showOfficeLink, !auth.needsTermsAcceptance {
+                playElevateIfComingFromConnect()
+                Task { await session.loadToday(api: api) }
+            }
+        }
+        .onReceive(auth.$needsTermsAcceptance.dropFirst()) { needsTerms in
+            if auth.isLinked, !needsTerms, !auth.needsOfficeLink, !auth.showOfficeLink {
                 playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }

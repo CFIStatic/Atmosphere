@@ -17,6 +17,8 @@ import {
 import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
+import { CURRENT_TERMS_VERSION } from '../lib/terms';
+import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const JOIN_CODE_RE = /^[A-Za-z0-9]{6,12}$/;
@@ -61,6 +63,7 @@ export function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [termsAcknowledged, setTermsAcknowledged] = useState(false);
 
   const existingSession = Boolean(user) && !membership;
   const creatingNewAccount = !existingSession;
@@ -151,7 +154,8 @@ export function SignupPage() {
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const workspaceValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
   const accountValid = creatingNewAccount ? nameValid && emailValid && passwordValid : true;
-  const formValid = accountValid && workspaceValid;
+  const termsValid = creatingNewAccount ? termsAcknowledged : true;
+  const formValid = accountValid && workspaceValid && termsValid;
 
   function enterApp() {
     queueRedirect(redirectTo);
@@ -216,7 +220,7 @@ export function SignupPage() {
         if (user) {
           await logout();
         }
-        const res = await signup(email.trim(), password);
+        const res = await signup(email.trim(), password, CURRENT_TERMS_VERSION);
         if (res.needsEmailConfirmation) {
           if (res.user?.emailConfirmed) {
             setError('An account with this email already exists. Sign in instead.');
@@ -412,6 +416,14 @@ export function SignupPage() {
                   </button>
                 </p>
               </Field>
+            )}
+
+            {creatingNewAccount && (
+              <TermsAckCheckbox
+                id="signup-tos"
+                checked={termsAcknowledged}
+                onChange={setTermsAcknowledged}
+              />
             )}
 
             <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>

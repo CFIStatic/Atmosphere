@@ -87,7 +87,12 @@ describe('SignupPage', () => {
     expect(screen.getByLabelText('Company name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
+      'href',
+      'https://atmosphereteam.com/terms',
+    );
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
@@ -95,6 +100,22 @@ describe('SignupPage', () => {
     expect(screen.queryByText('Create your account')).toBeNull();
     expect(screen.queryByText('Invite teammates')).toBeNull();
     expect(screen.queryByText('You are in')).toBeNull();
+  });
+
+  it('does not enable Continue until the Terms checkbox is checked', async () => {
+    const user = userEvent.setup();
+    renderSignup();
+
+    await user.type(screen.getByLabelText('Your name'), 'New Person');
+    await user.type(screen.getByLabelText('Work email'), 'new@acme.com');
+    await user.type(screen.getByLabelText('Password'), 'password1');
+    fireEvent.change(screen.getByLabelText('Company name'), {
+      target: { value: 'New Person Co' },
+    });
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
   it('switches the right-hand card when a left-rail step is clicked', async () => {
@@ -167,10 +188,12 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'New Person Co' },
     });
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
-      expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1');
+      expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1', '2026-07-31');
     });
     expect(authState.logout).toHaveBeenCalledTimes(1);
     expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(
