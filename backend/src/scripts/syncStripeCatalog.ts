@@ -18,6 +18,20 @@
 import 'dotenv/config';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import {
+  EXTRA_FC_SEAT_DESCRIPTION,
+  EXTRA_FC_SEAT_MONTHLY_CENTS,
+  FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
+  LIVE_CHEST_MOUNT_PAYMENT_LINK,
+  LIVE_CHEST_MOUNT_PRICE_ID,
+  LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_EXTRA_FC_SEAT_PRODUCT_ID,
+  LIVE_WORK_VERIFICATION_PRICE_ID,
+  LIVE_WORK_VERIFICATION_PRODUCT_ID,
+  WORK_VERIFICATION_DESCRIPTION,
+  WORK_VERIFICATION_MONTHLY_CENTS,
+  WORK_VERIFICATION_PLAN_CODE,
+} from '../lib/stripeCatalog.js';
 
 type PlanRow = {
   code: string;
@@ -31,13 +45,23 @@ type PlanRow = {
   stripe_price_id_annual: string | null;
 };
 
-/** Seeded Work Verification metering plan — $599/mo, 50 included jobs. */
+/** Seeded Work Verification metering plan — $599/mo, 3 included Field Capture seats. */
 const WORK_VERIFICATION = {
-  code: 'work_verification',
+  code: WORK_VERIFICATION_PLAN_CODE,
   name: 'Work Verification',
-  description:
-    'Field Capture + Evidence Platform — base fee plus processed jobs and exceptional compute',
-  monthlyPriceCents: 59900,
+  description: WORK_VERIFICATION_DESCRIPTION,
+  monthlyPriceCents: WORK_VERIFICATION_MONTHLY_CENTS,
+  knownProductId: LIVE_WORK_VERIFICATION_PRODUCT_ID,
+  knownPriceId: LIVE_WORK_VERIFICATION_PRICE_ID,
+} as const;
+
+const EXTRA_FC_SEAT = {
+  code: FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
+  name: 'Field Capture extra seat',
+  description: EXTRA_FC_SEAT_DESCRIPTION,
+  monthlyPriceCents: EXTRA_FC_SEAT_MONTHLY_CENTS,
+  knownProductId: LIVE_EXTRA_FC_SEAT_PRODUCT_ID,
+  knownPriceId: LIVE_EXTRA_FC_SEAT_PRICE_ID,
 } as const;
 
 function requireEnv(name: string): string {
@@ -49,24 +73,41 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function findProduct(stripe: Stripe, planCode: string): Promise<Stripe.Product | null> {
+async function findProduct(
+  stripe: Stripe,
+  planCode: string,
+  knownId?: string,
+): Promise<Stripe.Product | null> {
   const listed = await stripe.products.search({
     query: `metadata["atmosphere_plan_code"]:"${planCode}"`,
     limit: 1,
   });
-  return listed.data[0] ?? null;
+  if (listed.data[0]) return listed.data[0];
+  if (!knownId) return null;
+  try {
+    return await stripe.products.retrieve(knownId);
+  } catch {
+    return null;
+  }
 }
 
 async function findPrice(
   stripe: Stripe,
   planCode: string,
   interval: 'month' | 'year',
+  knownId?: string,
 ): Promise<Stripe.Price | null> {
   const listed = await stripe.prices.search({
     query: `metadata["atmosphere_plan_code"]:"${planCode}" AND metadata["atmosphere_interval"]:"${interval}" AND active:"true"`,
     limit: 1,
   });
-  return listed.data[0] ?? null;
+  if (listed.data[0]) return listed.data[0];
+  if (!knownId) return null;
+  try {
+    return await stripe.prices.retrieve(knownId);
+  } catch {
+    return null;
+  }
 }
 
 async function ensureRecurringPrice(
@@ -76,15 +117,33 @@ async function ensureRecurringPrice(
   planName: string,
   interval: 'month' | 'year',
   unitAmount: number,
+  knownPriceId?: string,
 ): Promise<Stripe.Price> {
-  const existing = await findPrice(stripe, planCode, interval);
+  const existing = await findPrice(stripe, planCode, interval, knownPriceId);
   if (existing) {
     if (existing.unit_amount === unitAmount && existing.product === productId) {
+      const meta = existing.metadata ?? {};
+      if (meta.atmosphere_plan_code !== planCode || meta.atmosphere_interval !== interval) {
+        await stripe.prices.update(existing.id, {
+          metadata: {
+            ...meta,
+            atmosphere_plan_code: planCode,
+            atmosphere_interval: interval,
+          },
+        });
+      }
       return existing;
     }
     // Amount changed: archive the old price and create a replacement. Stripe
-    // prices are immutable on amount.
-    await stripe.prices.update(existing.id, { active: false });
+    // prices are immutable on amount. Never archive a pinned live catalog id.
+    if (existing.id !== knownPriceId) {
+      await stripe.prices.update(existing.id, { active: false });
+    } else {
+      console.warn(
+        `    ${planCode}: known price ${existing.id} amount/product differs; leaving it in place.`,
+      );
+      return existing;
+    }
   }
 
   return stripe.prices.create({
@@ -107,10 +166,21 @@ async function ensureProduct(
     name: string;
     description?: string | null;
     metadata?: Record<string, string>;
+    knownProductId?: string;
   },
 ): Promise<Stripe.Product> {
-  const existing = await findProduct(stripe, opts.code);
+  const existing = await findProduct(stripe, opts.code, opts.knownProductId);
   if (existing) {
+    if (opts.description && existing.description !== opts.description) {
+      await stripe.products.update(existing.id, {
+        description: opts.description,
+        metadata: {
+          ...(existing.metadata ?? {}),
+          atmosphere_plan_code: opts.code,
+          ...(opts.metadata ?? {}),
+        },
+      });
+    }
     console.log(`· ${opts.code}: reusing product ${existing.id}`);
     return existing;
   }
@@ -151,7 +221,8 @@ async function main() {
       code: WORK_VERIFICATION.code,
       name: `Atmosphere ${WORK_VERIFICATION.name}`,
       description: WORK_VERIFICATION.description,
-      metadata: { catalog: 'metering' },
+      metadata: { catalog: 'metering', atmosphere_included_fc_seats: '3' },
+      knownProductId: WORK_VERIFICATION.knownProductId,
     });
     const monthly = await ensureRecurringPrice(
       stripe,
@@ -160,6 +231,7 @@ async function main() {
       WORK_VERIFICATION.name,
       'month',
       WORK_VERIFICATION.monthlyPriceCents,
+      WORK_VERIFICATION.knownPriceId,
     );
     onboardingPriceId = monthly.id;
     console.log(
@@ -180,6 +252,35 @@ async function main() {
         ` );`,
     );
   }
+
+  // --- Extra Field Capture seats ($100/mo each beyond the 3 included) ----
+  console.log('\nSyncing extra Field Capture seats…\n');
+  {
+    const product = await ensureProduct(stripe, {
+      code: EXTRA_FC_SEAT.code,
+      name: `Atmosphere ${EXTRA_FC_SEAT.name}`,
+      description: EXTRA_FC_SEAT.description,
+      metadata: { catalog: 'metering' },
+      knownProductId: EXTRA_FC_SEAT.knownProductId,
+    });
+    const monthly = await ensureRecurringPrice(
+      stripe,
+      product.id,
+      EXTRA_FC_SEAT.code,
+      EXTRA_FC_SEAT.name,
+      'month',
+      EXTRA_FC_SEAT.monthlyPriceCents,
+      EXTRA_FC_SEAT.knownPriceId,
+    );
+    console.log(
+      `    monthly → ${monthly.id} ($${(EXTRA_FC_SEAT.monthlyPriceCents / 100).toFixed(2)} / extra seat)`,
+    );
+  }
+
+  console.log(
+    `\nChest Mount hardware is one-time ${LIVE_CHEST_MOUNT_PRICE_ID} ($49.99).\n` +
+      `Payment Link: ${LIVE_CHEST_MOUNT_PAYMENT_LINK}\n`,
+  );
 
   // --- Seat / credit billing_plans ---------------------------------------
   if (!supabaseUrl || !supabaseKey) {
@@ -291,6 +392,9 @@ async function main() {
 STRIPE_SECRET_KEY=${secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_') ? 'sk_test_…' : 'sk_live_…'}
 STRIPE_WEBHOOK_SECRET=whsec_…
 ${onboardingPriceId ? `STRIPE_ONBOARDING_PRICE_ID=${onboardingPriceId}` : ''}
+# Live Jettx Work Verification is price_1UD4Sq1b5twUY3Ly6nqfRaGC — Railway is set by the human.
+# Optional override for extra Field Capture seats ($100/mo):
+# STRIPE_EXTRA_SEAT_PRICE_ID=${LIVE_EXTRA_FC_SEAT_PRICE_ID}
 SUPABASE_SERVICE_ROLE_KEY=…   # required — webhooks mint credits under service role
 
 Next:

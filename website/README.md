@@ -12,7 +12,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
-| `hardware.html`   | Field Capture Chest Mount — $49 hands-free phone kit |
+| `hardware.html`   | Field Capture Chest Mount — $49.99 hands-free phone kit |
 | `platform.html`   | Redirect → home (legacy four-platform page) |
 | `sales.html`      | Redirect → home (legacy) |
 | `operations.html` | Redirect → home (legacy) |
@@ -36,18 +36,13 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells one bundled subscription plus usage in **understandable units**:
+`pricing.html` sells one bundled subscription plus seats and same-day usage:
 
-- **Work Verification** — configurable monthly platform fee (seed plan: $599/month).
-  Includes Field Capture and the Evidence Platform. Both parts are required.
-- **Job usage** — unique jobs processed per billing period; plans include an allowance
-  with per-job overage pricing (all configurable in `metering_plan_versions`).
-- **Exceptional compute** — Atmosphere Compute Units for heavy workloads (video analysis,
-  large documents). Internal AI/token costs are tracked in `private.ai_usage_events`
-  but never shown on customer invoices.
-
-Legacy prepaid credits (`credit_packs`, `record_usage`) remain during migration.
-New workflows should record via `record_ai_usage_event` and bill through job + compute.
+- **Work Verification** — $599/month. Includes 3 Field Capture accounts plus the
+  Evidence Platform.
+- **Extra Field Capture seats** — $100/month each beyond the 3 included.
+- **Usage (token/AI)** — billed the day it is used (customer charge is 10× provider cost).
+- **Chest Mount** — optional hardware, $49.99 one-time via Stripe Payment Link.
 
 ## Resources
 
@@ -121,21 +116,13 @@ python3 website/build-preview.py preview.html
 
 ## SEO & sharing
 
-`hardware.html` is a product page for the Field Capture Chest Mount ($49).
-The primary CTA is **Buy — $49**. It goes to Stripe when a Payment Link or
-Checkout Session URL is set; otherwise it shows a disabled
-“Checkout coming online” state (mailto is support-only, never checkout).
+`hardware.html` is a product page for the Field Capture Chest Mount ($49.99).
+The primary CTA is **Buy — $49.99**. It uses the live Stripe Payment Link
+`https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01` ($49.99). The older
+`5kQ7sD47B54p7O9391fYY00` link is $49 and inactive.
 
-To go live, create a Stripe Payment Link:
-
-1. Product name: **Field Capture Chest Mount**
-2. Price: **$49 USD**
-3. Enable **shipping address collection**
-4. Paste the URL (`https://buy.stripe.com/...`) into the page’s
-   `CHECKOUT_URL`, a Buy button’s `data-checkout-url`, or
-   `window.ATMOSPHERE_HARDWARE_CHECKOUT_URL`
-
-No redesign is required — one URL turns the existing button live.
+Mailto is support-only, never checkout. If checkout URL overrides are empty,
+Buy shows a disabled “Checkout coming online” state.
 A printable setup card lives at `hardware-setup-card.html` and
 `assets/field-capture-setup-card.pdf` (digital guide is emailed after
 purchase; we do not currently ship a printed card).

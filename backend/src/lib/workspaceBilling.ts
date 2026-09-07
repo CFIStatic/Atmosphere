@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { getCustomerMeteringSummary } from '../metering/periodAggregation.js';
 import type { CustomerMeteringSummary } from '../metering/types.js';
+import { loadFieldCaptureSeatUsage, type FieldCaptureSeatUsage } from './fieldCaptureSeats.js';
+import { EXTRA_FC_SEAT_MONTHLY_CENTS, INCLUDED_FC_SEATS } from './stripeCatalog.js';
 import { billingOnboardingGate } from './signupOnboarding.js';
 
 export interface WorkspacePlan {
@@ -9,6 +11,7 @@ export interface WorkspacePlan {
   baseMonthlyFeeCents: number;
   includedJobs: number;
   additionalJobPriceCents: number;
+  includedFcSeats: number;
 }
 
 export interface WorkspaceSubscription extends WorkspacePlan {
@@ -27,6 +30,7 @@ export interface WorkspaceBilling {
   isCreator: boolean;
   subscription: WorkspaceSubscription;
   usage: CustomerMeteringSummary | null;
+  fieldCaptureSeats: FieldCaptureSeatUsage & { extraSeatPriceCents: number };
 }
 
 const DEFAULT_PLAN: WorkspacePlan = {
@@ -34,6 +38,7 @@ const DEFAULT_PLAN: WorkspacePlan = {
   baseMonthlyFeeCents: 59900,
   includedJobs: 50,
   additionalJobPriceCents: 3000,
+  includedFcSeats: INCLUDED_FC_SEATS,
 };
 
 export function planFromMeteringRow(meteringRow: unknown): WorkspacePlan {
@@ -65,6 +70,7 @@ export function planFromMeteringRow(meteringRow: unknown): WorkspacePlan {
     baseMonthlyFeeCents: version.base_monthly_fee_cents ?? DEFAULT_PLAN.baseMonthlyFeeCents,
     includedJobs: version.included_jobs ?? DEFAULT_PLAN.includedJobs,
     additionalJobPriceCents: version.additional_job_price_cents ?? DEFAULT_PLAN.additionalJobPriceCents,
+    includedFcSeats: INCLUDED_FC_SEATS,
   };
 }
 
@@ -109,6 +115,23 @@ export async function loadWorkspaceBilling(
     console.warn('[billing] metering summary unavailable:', (err as Error).message);
   }
 
+  let fieldCaptureSeats = {
+    included: INCLUDED_FC_SEATS,
+    extra: 0,
+    allowed: INCLUDED_FC_SEATS,
+    used: 0,
+    remaining: INCLUDED_FC_SEATS,
+    extraSeatPriceCents: EXTRA_FC_SEAT_MONTHLY_CENTS,
+  };
+  try {
+    fieldCaptureSeats = {
+      ...(await loadFieldCaptureSeatUsage(supabase, orgId)),
+      extraSeatPriceCents: EXTRA_FC_SEAT_MONTHLY_CENTS,
+    };
+  } catch (err) {
+    console.warn('[billing] Field Capture seat usage unavailable:', (err as Error).message);
+  }
+
   return {
     paymentProvider,
     canManage: Boolean((overview as { can_manage?: boolean } | null)?.can_manage),
@@ -124,6 +147,7 @@ export async function loadWorkspaceBilling(
       hasStripeSubscription: gate.hasSubscription,
     },
     usage,
+    fieldCaptureSeats,
   };
 }
 

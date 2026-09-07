@@ -4,6 +4,7 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { FIELD_APP_CREATE_ONBOARDING, FIELD_APP_ONBOARDING } from '../lib/validation.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 import { HttpError } from '../lib/errors.js';
+import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 
 export function serializeFieldOrg(org: {
   id?: string;
@@ -156,6 +157,9 @@ export async function linkFieldOffice(
       p_work_type: FIELD_APP_ONBOARDING.workType,
     });
     if (error) {
+      if (isFcSeatLimitDbError(error)) {
+        throw fcSeatLimitFromDb();
+      }
       const message = /invalid join code/i.test(error.message)
         ? 'That join code did not match any organization.'
         : /already|member|belong/i.test(error.message) && current?.org_name
