@@ -39,6 +39,17 @@
           }
           document.documentElement.setAttribute('data-theme', pref);
           document.documentElement.setAttribute('data-theme-preference', pref);
+          var locale = localStorage.getItem('atmosphere.locale');
+          if (!locale) {
+            try {
+              var prefsForLocale = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}');
+              locale = prefsForLocale.locale;
+            } catch (localeErr) {}
+          }
+          if (typeof locale === 'string' && locale) {
+            document.documentElement.lang = locale;
+            document.documentElement.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr';
+          }
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
           document.documentElement.setAttribute('data-theme-preference', 'dark');

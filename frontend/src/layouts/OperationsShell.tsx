@@ -5,6 +5,7 @@ import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useT } from '../lib/i18n';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
 import { JobFilesSearchContext } from './jobFilesSearch';
@@ -28,6 +29,7 @@ import { JobFilesSearchContext } from './jobFilesSearch';
  * top bar is hidden.
  */
 export function OperationsShell() {
+  const t = useT();
   const { pathname } = useLocation();
   const isLibrary = pathname === '/verifier-library';
   const isJobsList = pathname === '/jobs';
@@ -65,7 +67,7 @@ export function OperationsShell() {
       {phone && !isLibrary && railOpen && (
         <button
           type="button"
-          aria-label="Close navigation"
+          aria-label={t('nav.close')}
           className="fixed inset-0 z-30 bg-black/45"
           onClick={() => setRailOpen(false)}
         />
@@ -96,7 +98,7 @@ export function OperationsShell() {
                 <button
                   type="button"
                   onClick={() => setRailOpen(true)}
-                  aria-label="Open navigation"
+                  aria-label={t('nav.open')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-ink-700 hover:bg-paper-200"
                 >
                   <MenuIcon width={22} height={22} />

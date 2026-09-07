@@ -73,6 +73,7 @@ vi.mock('../lib/avatarImage', async () => {
   };
 });
 
+import { setPreference } from '../lib/preferences';
 import { SettingsPage } from './SettingsPage';
 
 function renderSettings(path = '/settings') {
@@ -243,5 +244,49 @@ describe('Settings sections', () => {
     expect(screen.queryByText('Reduce motion')).toBeNull();
     expect(screen.queryByText('Confirm before signing out')).toBeNull();
     expect(screen.getByText('Your profile')).toBeInTheDocument();
+  });
+});
+
+describe('Settings language', () => {
+  it('switches Settings chrome when another language is chosen', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(
+      screen.getByText('More of the app will follow; Settings and navigation update first.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'Choose app language' }));
+    await user.click(screen.getByRole('option', { name: /Español/ }));
+
+    expect(screen.getByRole('heading', { name: 'Ajustes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Perfil' })).toBeInTheDocument();
+    expect(screen.getByText(/El resto de la aplicación/)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('atmosphere.preferences') ?? '{}').locale).toBe('es');
+    expect(document.documentElement.lang).toBe('es');
+  });
+
+  it('remembers the stored locale when Settings remounts', () => {
+    setPreference('locale', 'es');
+    renderSettings();
+
+    expect(screen.getByRole('heading', { name: 'Ajustes' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Elegir el idioma de la aplicación' })).toHaveTextContent(
+      'Español',
+    );
+  });
+
+  it('applies RTL when Arabic is selected', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole('combobox', { name: 'Choose app language' }));
+    await user.type(screen.getByLabelText('Search languages'), 'arab');
+    await user.click(screen.getByRole('option', { name: /العربية/ }));
+
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(screen.getByRole('heading', { name: 'الإعدادات' })).toBeInTheDocument();
   });
 });

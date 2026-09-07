@@ -5,6 +5,7 @@
  * (bars favicon + name), not a generic Vite/React page.
  */
 import { parseSignupIntent } from './authRedirect';
+import { t } from './i18n';
 
 export const APP_NAME = 'Atmosphere';
 
@@ -29,6 +30,9 @@ const PAGE_TITLES: Record<string, string> = {
 
 function pageNameFor(pathname: string): string | undefined {
   if (/^\/jobs\/[^/]+/.test(pathname)) return 'Job file';
+  if (pathname === '/settings') return t('document.settings');
+  if (pathname === '/intake') return t('document.startJob');
+  if (pathname === '/verifier-library') return t('document.dashboard');
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
 
   const match = Object.keys(PAGE_TITLES)

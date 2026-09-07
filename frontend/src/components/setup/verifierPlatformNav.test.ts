@@ -13,7 +13,7 @@ describe('verifier office rail', () => {
       /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
     );
     expect(nav).not.toBeNull();
-    const labels = [...nav![0].matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1]);
+    const labels = [...nav![0].matchAll(/<span class="label"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(labels).toEqual(['Start a job', 'Dashboard']);
     expect(nav![0]).not.toContain('data-route="/field"');
     expect(nav![0]).not.toContain('data-route="/my-work"');

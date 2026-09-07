@@ -1693,11 +1693,11 @@
     <div class="rail-section" id="platform-nav" hidden>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        <span class="label">Start a job</span>
+        <span class="label" data-i18n-chrome="startJob">Start a job</span>
       </button>
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span class="label">Dashboard</span>
+        <span class="label" data-i18n-chrome="dashboard">Dashboard</span>
       </button>
     </div>
 
@@ -1713,16 +1713,16 @@
     <div class="rail-footer" id="rail-footer" hidden>
       <button type="button" class="navitem nav-icon" id="nav-settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l-.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0 .34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
-        <span class="label">Settings</span>
+        <span class="label" data-i18n-chrome="settings">Settings</span>
       </button>
     </div>
   </aside>
 
 <header class="topbar">
-  <button type="button" class="rail-menu" id="rail-menu" aria-label="Open navigation" aria-controls="main-rail" aria-expanded="false">
+  <button type="button" class="rail-menu" id="rail-menu" aria-label="Open navigation" data-i18n-chrome-aria="openNav" aria-controls="main-rail" aria-expanded="false">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </button>
-  <button type="button" class="rail-backdrop" id="rail-backdrop" aria-label="Close navigation"></button>
+  <button type="button" class="rail-backdrop" id="rail-backdrop" aria-label="Close navigation" data-i18n-chrome-aria="closeNav"></button>
   <button type="button" class="brand brand-fallback" id="brand-home-fallback" aria-label="Atmosphere home">
     <svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true">
       <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
@@ -1746,7 +1746,7 @@
       </div>
       <div class="avatar" id="who-avatar">—</div>
     </button>
-    <div class="who-menu" id="who-menu" role="menu" aria-label="Account" hidden>
+    <div class="who-menu" id="who-menu" role="menu" aria-label="Account" data-i18n-chrome-aria="account" hidden>
       <div class="who-menu-head">
         <div class="name" id="menu-name">Your account</div>
         <div class="email" id="menu-email"></div>
@@ -1759,9 +1759,9 @@
       </button>
       <button type="button" role="menuitem" id="menu-settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
-        Settings
+        <span data-i18n-chrome="settings">Settings</span>
       </button>
-      <button type="button" role="menuitem" id="menu-signout" class="danger">Sign out</button>
+      <button type="button" role="menuitem" id="menu-signout" class="danger" data-i18n-chrome="signOut">Sign out</button>
     </div>
   </div>
 </header>
@@ -6181,16 +6181,43 @@
     return pref;
   }
 
+  var chromeI18n = null;
+
   function themeLabel(pref) {
+    if (chromeI18n) return pref === 'light' ? chromeI18n.light : chromeI18n.dark;
     return pref === 'light' ? 'Light' : 'Dark';
+  }
+
+  function applyChromeI18n(chrome, locale) {
+    chromeI18n = chrome && typeof chrome === 'object' ? chrome : null;
+    if (locale) {
+      document.documentElement.lang = locale;
+      document.documentElement.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr';
+    }
+    document.querySelectorAll('[data-i18n-chrome]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n-chrome');
+      if (chromeI18n && chromeI18n[key]) el.textContent = chromeI18n[key];
+    });
+    document.querySelectorAll('[data-i18n-chrome-aria]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n-chrome-aria');
+      if (chromeI18n && chromeI18n[key]) el.setAttribute('aria-label', chromeI18n[key]);
+    });
+    labelAllThemeToggles(readThemePref());
   }
 
   function labelThemeToggle(toggle, pref) {
     var next = pref === 'dark' ? 'light' : 'dark';
-    toggle.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+    var switchLabel = chromeI18n
+      ? (next === 'light' ? chromeI18n.switchToLight : chromeI18n.switchToDark)
+      : 'Switch to ' + next + ' mode';
+    toggle.setAttribute('aria-label', switchLabel || 'Switch to ' + next + ' mode');
     toggle.setAttribute('title', themeLabel(pref) + ' mode. Click for ' + next + '.');
     var text = toggle.querySelector('.theme-toggle-label');
-    if (text) text.textContent = 'Appearance: ' + themeLabel(pref);
+    if (text) {
+      text.textContent = chromeI18n && chromeI18n.appearance
+        ? chromeI18n.appearance
+        : 'Appearance: ' + themeLabel(pref);
+    }
   }
 
   function labelAllThemeToggles(pref) {
@@ -6541,6 +6568,7 @@
       setPhoneDrawer(!!d.phoneDrawer);
     }
     if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
+    if (d && d.atmosphere === 'locale') applyChromeI18n(d.chrome, d.locale);
     if (d && (d.atmosphere === 'reload-library' || d.atmosphere === 'library-changed')) {
       if (typeof loadOrgLibrary === 'function' && !SHARE_TOKEN) loadOrgLibrary({ silent: true });
     }

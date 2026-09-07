@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
+import { resetPreferencesForTests } from '../lib/preferences';
 
 if (typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {
@@ -20,4 +21,7 @@ if (typeof window.matchMedia !== 'function') {
 
 afterEach(() => {
   cleanup();
+  resetPreferencesForTests();
+  document.documentElement.lang = 'en';
+  document.documentElement.dir = 'ltr';
 });
