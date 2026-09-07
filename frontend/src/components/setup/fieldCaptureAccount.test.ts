@@ -22,12 +22,16 @@ describe('Field Capture account menu', () => {
     const menu = top.indexOf('id="who-menu"');
     const toggle = top.indexOf('id="fc-theme-toggle"');
     const settings = top.indexOf('id="fc-menu-settings"');
+    const support = top.indexOf('id="fc-menu-support"');
     const signout = top.indexOf('id="fc-menu-signout"');
     expect(chip).toBeGreaterThan(-1);
     expect(menu).toBeGreaterThan(chip);
     expect(toggle).toBeGreaterThan(menu);
     expect(settings).toBeGreaterThan(toggle);
-    expect(signout).toBeGreaterThan(settings);
+    expect(support).toBeGreaterThan(settings);
+    expect(signout).toBeGreaterThan(support);
+    expect(top).toContain('Support');
+    expect(top).toContain('contact.html');
     expect(top).toContain('Appearance: Light');
     expect(top).toContain('class="who-menu-head"');
     expect(top).not.toContain('who-block');
@@ -81,6 +85,7 @@ describe('Field Capture account menu', () => {
     expect(document.getElementById('menu-email')?.textContent).toBe('jack@jettx.ai');
     expect(document.getElementById('menu-meta')?.textContent).toBe('Jettx LLC');
     expect(document.getElementById('fc-menu-settings')?.hidden).toBe(false);
+    expect(document.getElementById('fc-menu-support')?.hidden).toBe(false);
     expect(document.getElementById('fc-menu-signout')?.hidden).toBe(false);
     expect(document.getElementById('fc-theme-toggle')?.closest('#who-menu')).not.toBeNull();
 
@@ -142,5 +147,17 @@ describe('Field Capture account menu', () => {
     expect(fieldApp).toContain("data.atmosphere === 'sign-out'");
     expect(fieldApp).toContain('paintFieldAccount');
     expect(fieldApp).not.toContain('showFieldThemeToggle');
+  });
+
+  it('opens the same contact form as hardware Support from the account menu', () => {
+    expect(fieldApp).toContain('buildFieldCaptureSupportUrl');
+    expect(fieldApp).toContain('refreshFieldSupportLink');
+    expect(fieldApp).toContain('fc-menu-support');
+    expect(fieldApp).toContain('me.org.id');
+    expect(fieldHtml).toContain('id="fc-menu-support"');
+    expect(fieldHtml).toContain('contact.html');
+    expect(fieldHtml).toContain('Atmosphere Field Capture');
+    expect(fieldHtml).toContain('target="_blank"');
+    expect(fieldHtml).not.toContain('Atmosphere Platform');
   });
 });

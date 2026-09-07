@@ -66,15 +66,54 @@
     if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
+  var supportCtx = { email: '', name: '', orgName: '', orgId: '' };
+
+  function supportHelpers() {
+    if (typeof window !== 'undefined' && window.FieldCaptureCore) return window.FieldCaptureCore;
+    if (typeof Core !== 'undefined') return Core;
+    return {};
+  }
+
+  function supportPagePath() {
+    var helpers = supportHelpers();
+    if (helpers.fieldCaptureSupportPath) return helpers.fieldCaptureSupportPath(location);
+    return (location.pathname || '/') + (location.search || '') + (location.hash || '');
+  }
+
+  function refreshFieldSupportLink() {
+    var link = document.getElementById('fc-menu-support');
+    var helpers = supportHelpers();
+    if (!link || !helpers.buildFieldCaptureSupportUrl) return;
+    link.href = helpers.buildFieldCaptureSupportUrl({
+      email: supportCtx.email,
+      name: supportCtx.name,
+      orgName: supportCtx.orgName,
+      orgId: supportCtx.orgId,
+      path: supportPagePath(),
+    });
+  }
+
+  function rememberSupportContext(opts) {
+    opts = opts || {};
+    supportCtx.email = opts.email || '';
+    supportCtx.name = opts.name || '';
+    supportCtx.orgName = opts.orgName || '';
+    supportCtx.orgId = opts.orgId || '';
+    refreshFieldSupportLink();
+  }
+
   function showFieldAccount(on, opts) {
     var wrap = document.getElementById('who-wrap');
     var settings = document.getElementById('fc-menu-settings');
+    var support = document.getElementById('fc-menu-support');
     var signout = document.getElementById('fc-menu-signout');
     if (wrap) wrap.hidden = !on;
     if (!on) closeFieldAccountMenu();
     var accountActions = Boolean(opts && opts.account);
     if (settings) settings.hidden = !accountActions;
+    if (support) support.hidden = !on;
     if (signout) signout.hidden = !accountActions;
+    if (on) refreshFieldSupportLink();
   }
 
   function isDisplayableAvatarUrl(url) {
@@ -122,6 +161,12 @@
       menuMeta.textContent = org;
       menuMeta.hidden = !org;
     }
+    rememberSupportContext({
+      email: email,
+      name: name,
+      orgName: opts.orgName || '',
+      orgId: opts.orgId || '',
+    });
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
@@ -824,6 +869,8 @@
       name: (me.user && (me.user.fullName || me.user.email)) || 'You',
       email: (me.user && me.user.email) || '',
       org: (me.org && me.org.name) || 'Office',
+      orgName: (me.org && me.org.name) || '',
+      orgId: (me.org && me.org.id) || '',
       avatarUrl: (me.user && me.user.avatarUrl) || null,
       account: true,
     });
@@ -1490,6 +1537,7 @@
       name: 'Field tech',
       email: 'you@office.test',
       org: 'Your office',
+      orgName: 'Your office',
       account: true,
     });
     showJobAdd(true);
@@ -1716,6 +1764,13 @@
       menuSettings.addEventListener('click', function () {
         closeFieldAccountMenu();
         openPlatformInFrame('/settings');
+      });
+    }
+    var menuSupport = document.getElementById('fc-menu-support');
+    if (menuSupport) {
+      menuSupport.addEventListener('click', function () {
+        refreshFieldSupportLink();
+        closeFieldAccountMenu();
       });
     }
     var menuSignout = document.getElementById('fc-menu-signout');
