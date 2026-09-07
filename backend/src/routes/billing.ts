@@ -5,8 +5,9 @@ import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
-import { ensureCustomer, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
-import { addExtraFieldCaptureSeats } from '../lib/stripeExtraSeats.js';
+import { ensureCustomer, liveStripeCustomerId, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
+import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
+import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
@@ -398,10 +399,36 @@ billingRouter.post('/portal', async (req: Request, res: Response, next: NextFunc
     }
 
     const supabase = createUserClient(req.accessToken!);
-    const customerId = await ensureCustomer(supabase, req.orgId!, {
-      email: req.user!.email,
-      orgName: await orgName(supabase, req.orgId!),
-    });
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
+    const { data: billing } = await supabase
+      .from('org_billing')
+      .select('stripe_customer_id')
+      .eq('org_id', req.orgId)
+      .maybeSingle();
+    const existingCustomerId = (billing?.stripe_customer_id as string | undefined) ?? null;
+
+    if (workspace.billingExempt || !canOpenStripeBillingPortal({
+      billingExempt: workspace.billingExempt,
+      customerId: existingCustomerId,
+    })) {
+      if (workspace.billingExempt) {
+        throw badRequest(
+          'This complimentary account does not use the Stripe billing portal.',
+          'billing_portal_unavailable',
+        );
+      }
+      throw badRequest(
+        'No Stripe customer is on file for this organization.',
+        'stripe_customer_missing',
+      );
+    }
+
+    const customerId =
+      liveStripeCustomerId(existingCustomerId) ??
+      (await ensureCustomer(supabase, req.orgId!, {
+        email: req.user!.email,
+        orgName: await orgName(supabase, req.orgId!),
+      }));
 
     const session = await stripeClient().billingPortal.sessions.create({
       customer: customerId,
@@ -420,7 +447,7 @@ billingRouter.post('/portal', async (req: Request, res: Response, next: NextFunc
  * invoice, with links to the Stripe receipt and invoice PDF so a customer can
  * retrieve proof of payment at any time.
  */
-billingRouter.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.get('/payments', async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const supabase = createUserClient(req.accessToken!);
@@ -433,7 +460,11 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
       .eq('org_id', req.orgId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (error) throw new HttpError(500, error.message, 'payments_failed');
+    if (error) {
+      console.warn('[billing] payment history unavailable:', error.message);
+      res.json({ payments: [] });
+      return;
+    }
 
     res.json({
       payments: (data ?? []).map((p: any) => ({
@@ -456,7 +487,8 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
       })),
     });
   } catch (err) {
-    next(err);
+    console.warn('[billing] payment history unavailable:', err instanceof Error ? err.message : err);
+    res.json({ payments: [] });
   }
 });
 
@@ -598,10 +630,6 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
  */
 billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (config.billing.paymentProvider !== 'stripe') {
-      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
-    }
-
     const { quantity } = extraSeatCheckoutSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
     const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
@@ -609,20 +637,49 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
       throw forbidden('Only a Global Admin can add Field Capture seats.', 'billing_forbidden');
     }
 
+    const { data: billing } = await supabase
+      .from('org_billing')
+      .select('stripe_subscription_id, stripe_customer_id')
+      .eq('org_id', req.orgId)
+      .maybeSingle();
+
+    if (workspace.billingExempt) {
+      const result = await addExtraFieldCaptureSeats(supabase, req.orgId!, quantity, {
+        customerId: (billing?.stripe_customer_id as string | undefined) ?? null,
+        subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+        billingExempt: true,
+      });
+      res.status(200).json(result);
+      return;
+    }
+
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
+
     const customerId = await ensureCustomer(supabase, req.orgId!, {
       email: req.user!.email,
       orgName: await orgName(supabase, req.orgId!),
     });
 
-    const { data: billing } = await supabase
-      .from('org_billing')
-      .select('stripe_subscription_id')
-      .eq('org_id', req.orgId)
-      .maybeSingle();
-
     const result = await addExtraFieldCaptureSeats(supabase, req.orgId!, quantity, {
       customerId,
       subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+      createCheckout: async ({ customerId: checkoutCustomerId, extraSeats }) => {
+        const priceId = await resolveOnboardingPriceId(supabase, req.orgId!);
+        if (!priceId) {
+          throw badRequest(
+            'No Stripe price is configured for onboarding. Set metering_plan_versions.stripe_price_id or STRIPE_ONBOARDING_PRICE_ID.',
+            'price_not_configured',
+          );
+        }
+        return createWorkVerificationExtraSeatCheckout({
+          customerId: checkoutCustomerId,
+          orgId: req.orgId!,
+          extraSeats,
+          workVerificationPriceId: priceId,
+        });
+      },
     });
 
     res.status(result.updated ? 200 : 201).json(result);

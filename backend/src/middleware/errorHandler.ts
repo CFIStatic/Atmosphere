@@ -28,7 +28,8 @@ export function errorHandler(
   }
 
   if (err instanceof HttpError) {
-    res.status(err.status).json({ error: err.message, code: err.code });
+    const { error: _ignoredError, code: _ignoredCode, ...safeDetails } = err.details ?? {};
+    res.status(err.status).json({ error: err.message, code: err.code, ...safeDetails });
     return;
   }
 

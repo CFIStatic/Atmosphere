@@ -39,11 +39,32 @@ let client: Stripe | null = null;
 export const STRIPE_API_VERSION = '2026-06-24.dahlia' as Stripe.LatestApiVersion;
 
 const STRIPE_PRICE_ID = /^price_[A-Za-z0-9]+$/;
+const STRIPE_SUBSCRIPTION_ID = /^sub_[A-Za-z0-9]+$/;
+const STRIPE_CUSTOMER_ID = /^cus_[A-Za-z0-9]+$/;
 
 export const isStripeConfigured = (): boolean => Boolean(config.stripe.secretKey);
 
 export function isStripePriceId(priceId: string | null | undefined): priceId is string {
   return Boolean(priceId && STRIPE_PRICE_ID.test(priceId));
+}
+
+/** Live Stripe subscription ids only — complimentary `comp_*` rows must never hit the API. */
+export function isLiveStripeSubscriptionId(id: string | null | undefined): id is string {
+  return Boolean(id && STRIPE_SUBSCRIPTION_ID.test(id.trim()));
+}
+
+export function liveStripeSubscriptionId(id: string | null | undefined): string | null {
+  const value = id?.trim();
+  return value && isLiveStripeSubscriptionId(value) ? value : null;
+}
+
+export function isLiveStripeCustomerId(id: string | null | undefined): id is string {
+  return Boolean(id && STRIPE_CUSTOMER_ID.test(id.trim()));
+}
+
+export function liveStripeCustomerId(id: string | null | undefined): string | null {
+  const value = id?.trim();
+  return value && isLiveStripeCustomerId(value) ? value : null;
 }
 
 /** Stripe idempotency keys are 255 characters; we keep ours short and stable. */

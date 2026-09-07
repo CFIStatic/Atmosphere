@@ -40,13 +40,38 @@ export function isCompedBillingStatus(status: string | null | undefined): boolea
   return String(status ?? '').trim().toLowerCase() === 'comped';
 }
 
+/** Founder comps store `comp_jack_<uuid>` (or any non-`sub_…` token) as the subscription id. */
+export function isComplimentarySubscriptionId(id: string | null | undefined): boolean {
+  const value = String(id ?? '').trim();
+  if (!value) return false;
+  if (value.startsWith('comp_')) return true;
+  return !/^sub_[A-Za-z0-9]+$/.test(value);
+}
+
+/** Org should not be charged or shown Stripe Manage/Add controls. */
+export function isBillingExemptOrg(input: {
+  status?: string | null;
+  subscriptionId?: string | null;
+  creatorEmail?: string | null;
+  actingUserEmail?: string | null;
+  allowlist?: readonly string[];
+}): boolean {
+  const allowlist = input.allowlist ?? billingExemptEmailsFromEnv();
+  if (isCompedBillingStatus(input.status)) return true;
+  if (isComplimentarySubscriptionId(input.subscriptionId)) return true;
+  if (isBillingExemptEmail(input.actingUserEmail, allowlist)) return true;
+  return isBillingExemptEmail(input.creatorEmail, allowlist);
+}
+
 /** Skip Stripe usage invoices for a comped org or an exempt creator. */
 export function shouldSkipUsageBilling(input: {
   status?: string | null;
   creatorEmail?: string | null;
+  subscriptionId?: string | null;
   allowlist?: readonly string[];
 }): boolean {
   if (isCompedBillingStatus(input.status)) return true;
+  if (isComplimentarySubscriptionId(input.subscriptionId)) return true;
   return isBillingExemptEmail(input.creatorEmail, input.allowlist ?? billingExemptEmailsFromEnv());
 }
 

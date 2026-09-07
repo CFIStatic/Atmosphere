@@ -39,7 +39,6 @@ export function InvitePanel() {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [seatLimit, setSeatLimit] = useState(false);
   const [seats, setSeats] = useState<{ used: number; allowed: number } | null>(null);
 
   async function load() {
@@ -83,7 +82,6 @@ export function InvitePanel() {
     setBusy(true);
     setError(null);
     setOutcome(null);
-    setSeatLimit(false);
     try {
       const res = await api.createOrgInvite({ email, role });
       setOutcome(
@@ -94,7 +92,10 @@ export function InvitePanel() {
       setEmail('');
       await load();
     } catch (err) {
-      setSeatLimit(err instanceof ApiError && err.code === 'fc_seat_limit');
+      if (err instanceof ApiError && err.checkoutUrl) {
+        window.location.href = err.checkoutUrl;
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not record that invitation.');
     } finally {
       setBusy(false);
@@ -159,35 +160,6 @@ export function InvitePanel() {
         <p role="alert" className="mt-2 text-xs text-danger-600">
           {error}
         </p>
-      )}
-      {seatLimit && (
-        <button
-          type="button"
-          onClick={() => {
-            void (async () => {
-              setBusy(true);
-              try {
-                const result = await api.addExtraFieldCaptureSeats(1);
-                if (result.checkoutUrl) {
-                  window.location.href = result.checkoutUrl;
-                  return;
-                }
-                setSeatLimit(false);
-                setError(null);
-                setOutcome('Added 1 extra Field Capture seat. You can invite now.');
-                await load();
-              } catch (err) {
-                setError(err instanceof Error ? err.message : 'Could not add a Field Capture seat.');
-              } finally {
-                setBusy(false);
-              }
-            })();
-          }}
-          disabled={busy}
-          className="mt-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-brand-700 disabled:opacity-50"
-        >
-          Add a Field Capture seat — $100/mo
-        </button>
       )}
 
       {invites !== null && invites.length > 0 && (

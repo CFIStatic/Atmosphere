@@ -8,7 +8,7 @@
  * back to a removed step, or keep a paid org blocked waiting for invites.
  */
 
-import { isCompedBillingStatus } from './billingExempt.js';
+import { isCompedBillingStatus, isComplimentarySubscriptionId } from './billingExempt.js';
 
 export const SIGNUP_BILLING_STEP = '2';
 
@@ -34,8 +34,10 @@ export function billingOnboardingGate(input: {
     return { required: false, complete: true, hasSubscription: true };
   }
   const hasSubscription =
+    isComplimentarySubscriptionId(input.subscriptionId) ||
     isCompedBillingStatus(input.subscriptionStatus) ||
     (Boolean(input.subscriptionId) &&
+      !isComplimentarySubscriptionId(input.subscriptionId) &&
       ['active', 'trialing'].includes(String(input.subscriptionStatus ?? '')));
   const required = input.paymentProvider === 'stripe' && input.isCreator;
   // Paid (or not the person who has to pay) is enough. Invites are optional.

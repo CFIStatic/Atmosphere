@@ -90,6 +90,18 @@ test('an allowlisted email skips Stripe onboarding without a subscription', () =
   assert.equal(customer.hasSubscription, false);
 });
 
+test('a complimentary subscription id finishes signup without a live Stripe id', () => {
+  const comped = billingOnboardingGate({
+    paymentProvider: 'stripe',
+    isCreator: true,
+    subscriptionId: 'comp_jack_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    subscriptionStatus: 'active',
+  });
+  assert.equal(comped.required, true);
+  assert.equal(comped.complete, true);
+  assert.equal(comped.hasSubscription, true);
+});
+
 test('a comped org_billing status finishes signup without a Stripe subscription id', () => {
   const comped = billingOnboardingGate({
     paymentProvider: 'stripe',

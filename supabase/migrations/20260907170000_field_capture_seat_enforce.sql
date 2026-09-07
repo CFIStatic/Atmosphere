@@ -44,7 +44,7 @@ begin
   if not found then
     return 3;
   end if;
-  if v_status is null or v_status in ('active', 'trialing', 'past_due') then
+  if v_status is null or v_status in ('active', 'trialing', 'past_due', 'comped') then
     return 3 + greatest(v_extra, 0);
   end if;
   return 0;

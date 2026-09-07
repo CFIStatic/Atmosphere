@@ -146,25 +146,43 @@ export async function countFieldCaptureSeats(
 export async function readOrgBillingSeatState(
   supabase: SupabaseClient,
   orgId: string,
-): Promise<{ extra: number; status: string | null }> {
+): Promise<{
+  extra: number;
+  status: string | null;
+  subscriptionId: string | null;
+  customerId: string | null;
+}> {
   const { data, error } = await supabase
     .from('org_billing')
-    .select('extra_fc_seats, status')
+    .select('extra_fc_seats, status, stripe_subscription_id, stripe_customer_id')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error && /extra_fc_seats|column .* does not exist/i.test(error.message)) {
     const { data: billing } = await supabase
       .from('org_billing')
-      .select('status')
+      .select('status, stripe_subscription_id, stripe_customer_id')
       .eq('org_id', orgId)
       .maybeSingle();
-    return { extra: 0, status: (billing?.status as string | undefined) ?? null };
+    return {
+      extra: 0,
+      status: (billing?.status as string | undefined) ?? null,
+      subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+      customerId: (billing?.stripe_customer_id as string | undefined) ?? null,
+    };
   }
   if (error) throw error;
-  const raw = (data as { extra_fc_seats?: number | null; status?: string | null } | null)?.extra_fc_seats;
+  const row = data as {
+    extra_fc_seats?: number | null;
+    status?: string | null;
+    stripe_subscription_id?: string | null;
+    stripe_customer_id?: string | null;
+  } | null;
+  const raw = row?.extra_fc_seats;
   return {
     extra: Number.isFinite(raw) ? Math.max(0, Math.floor(Number(raw))) : 0,
-    status: (data as { status?: string | null } | null)?.status ?? null,
+    status: row?.status ?? null,
+    subscriptionId: row?.stripe_subscription_id ?? null,
+    customerId: row?.stripe_customer_id ?? null,
   };
 }
 

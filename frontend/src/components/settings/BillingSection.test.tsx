@@ -139,7 +139,29 @@ describe('BillingSection', () => {
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Manage plan and payment method' })).toBeInTheDocument();
     expect(screen.getByText(/1 of 3 used/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeNull();
+    expect(screen.getByText(/added automatically when you invite/i)).toBeInTheDocument();
+  });
+
+  it('hides paid Stripe controls for a complimentary org', async () => {
+    getBillingWorkspace.mockResolvedValue({
+      ...paid,
+      billingExempt: true,
+      subscription: {
+        ...paid.subscription,
+        status: 'comped',
+      },
+    });
+    getPayments.mockResolvedValue({ payments: [] });
+
+    renderBilling();
+
+    expect(await screen.findByText('Comped')).toBeInTheDocument();
+    expect(screen.getByText('Complimentary')).toBeInTheDocument();
+    expect(screen.queryByText('$599')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Manage plan and payment method' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeNull();
+    expect(screen.getByText('No charges on this complimentary account.')).toBeInTheDocument();
   });
 
   it('stacks period details and titles the unpaid state when Stripe is missing', async () => {
