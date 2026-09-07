@@ -3997,6 +3997,17 @@ export const api = {
   openBillingPortal: () =>
     request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
 
+  addExtraFieldCaptureSeats: (quantity = 1) =>
+    request<{
+      checkoutUrl: string | null;
+      updated: boolean;
+      extraSeats: number;
+      allowedSeats: number;
+    }>('/api/billing/checkout/extra-seats', {
+      method: 'POST',
+      body: JSON.stringify({ quantity }),
+    }),
+
   getBillingWorkspace: () =>
     request<WorkspaceBilling>('/api/billing/workspace', { method: 'GET' }),
 
@@ -5524,6 +5535,15 @@ export interface BillingOnboardingStatus {
     baseMonthlyFeeCents: number;
     includedJobs: number;
     additionalJobPriceCents: number;
+    includedFcSeats?: number;
+  };
+  fieldCaptureSeats?: {
+    included: number;
+    extra: number;
+    allowed: number;
+    used: number;
+    remaining: number;
+    extraSeatPriceCents: number;
   };
 }
 
@@ -5604,6 +5624,7 @@ export interface WorkspaceBilling {
     baseMonthlyFeeCents: number;
     includedJobs: number;
     additionalJobPriceCents: number;
+    includedFcSeats?: number;
     status: string;
     periodStart: string | null;
     periodEnd: string | null;
@@ -5611,6 +5632,14 @@ export interface WorkspaceBilling {
     hasStripeSubscription: boolean;
   };
   usage: CustomerMeteringSummary | null;
+  fieldCaptureSeats: {
+    included: number;
+    extra: number;
+    allowed: number;
+    used: number;
+    remaining: number;
+    extraSeatPriceCents: number;
+  };
 }
 
 export interface SetPlanResult {

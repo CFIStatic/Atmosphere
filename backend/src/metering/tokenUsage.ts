@@ -20,6 +20,7 @@ import {
   usageCustomerMarkup,
 } from './customerMarkup.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
+import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
 
 export interface TokenUsageInput {
   orgId: string;
@@ -331,7 +332,17 @@ export async function recordTokenUsage(
   if (error) throw error;
   const row = data as { eventId?: string; duplicate?: boolean } | null;
   if (!row?.eventId) return null;
-  return { eventId: String(row.eventId), duplicate: Boolean(row.duplicate) };
+  const recorded = { eventId: String(row.eventId), duplicate: Boolean(row.duplicate) };
+  if (!recorded.duplicate) {
+    const { priceNanos } = resolveTokenLedgerAmounts({
+      costNanos: input.costNanos,
+      priceNanos: input.priceNanos,
+    });
+    if (priceNanos > 0) {
+      invoiceSameDayUsageAsync(client, input.orgId, input.at ? usageDayUtc(input.at) : undefined);
+    }
+  }
+  return recorded;
 }
 
 export function recordTokenUsageAsync(

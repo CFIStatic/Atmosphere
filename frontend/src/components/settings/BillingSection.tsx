@@ -75,6 +75,24 @@ export function BillingSection() {
     }
   }
 
+  async function addExtraSeat() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.addExtraFieldCaptureSeats(1);
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      const next = await api.getBillingWorkspace();
+      setWorkspace(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add a Field Capture seat.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error && !workspace) {
     return (
       <p role="alert" className="text-sm text-danger-600">
@@ -140,6 +158,18 @@ export function BillingSection() {
             {day(sub.periodEnd)}
             {sub.cancelAtPeriodEnd ? <span className="ml-1.5 text-caution-600">Cancelling</span> : null}
           </Row>
+          {workspace.fieldCaptureSeats ? (
+            <Row label="Field Capture accounts">
+              {workspace.fieldCaptureSeats.used} of {workspace.fieldCaptureSeats.allowed} used
+              <span className="ml-1.5 font-normal text-ink-500">
+                ({workspace.fieldCaptureSeats.included} included
+                {workspace.fieldCaptureSeats.extra > 0
+                  ? ` + ${workspace.fieldCaptureSeats.extra} extra`
+                  : ''}
+                )
+              </span>
+            </Row>
+          ) : null}
         </dl>
 
         {sub.cancelAtPeriodEnd ? (
@@ -149,15 +179,25 @@ export function BillingSection() {
         ) : null}
 
         {workspace.canManage && workspace.paymentProvider === 'stripe' ? (
-          <button
-            type="button"
-            onClick={() => void openPortal()}
-            disabled={busy}
-            className="mt-5 flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
-          >
-            {busy ? <SpinnerIcon className="animate-spin" width={14} height={14} /> : null}
-            Manage plan and payment method
-          </button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void openPortal()}
+              disabled={busy}
+              className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+            >
+              {busy ? <SpinnerIcon className="animate-spin" width={14} height={14} /> : null}
+              Manage plan and payment method
+            </button>
+            <button
+              type="button"
+              onClick={() => void addExtraSeat()}
+              disabled={busy}
+              className="flex items-center gap-2 rounded-lg border border-line bg-paper-50 px-4 py-2.5 text-sm font-semibold text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+            >
+              Add Field Capture seat — $100/mo
+            </button>
+          </div>
         ) : workspace.canManage ? (
           <div
             role="status"
