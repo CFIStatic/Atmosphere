@@ -18,6 +18,7 @@
 import 'dotenv/config';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { resolveStripeSecretKey } from '../lib/stripeSecret.js';
 
 type PlanRow = {
   code: string;
@@ -39,15 +40,6 @@ const WORK_VERIFICATION = {
     'Field Capture + Evidence Platform — base fee plus processed jobs and exceptional compute',
   monthlyPriceCents: 59900,
 } as const;
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    console.error(`Missing ${name}. Set it and re-run.`);
-    process.exit(1);
-  }
-  return value;
-}
 
 async function findProduct(stripe: Stripe, planCode: string): Promise<Stripe.Product | null> {
   const listed = await stripe.products.search({
@@ -127,7 +119,11 @@ async function ensureProduct(
 }
 
 async function main() {
-  const secretKey = requireEnv('STRIPE_SECRET_KEY');
+  const secretKey = resolveStripeSecretKey();
+  if (!secretKey) {
+    console.error('Missing STRIPE_SECRET_KEY (or Railway alias Stripe_Secret_Key). Set it and re-run.');
+    process.exit(1);
+  }
   if (secretKey.startsWith('pk_')) {
     console.error('STRIPE_SECRET_KEY must be a secret or restricted key (sk_… / rk_…), not pk_…');
     process.exit(1);

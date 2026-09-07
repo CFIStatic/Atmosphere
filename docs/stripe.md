@@ -11,11 +11,15 @@ shown in the app. Do not add UI for it unless that catalog is product again.
 Setting `STRIPE_SECRET_KEY` switches billing to Stripe. Without it the app
 falls back to `PAYMENT_PROVIDER=dev` locally (refused in production).
 
+Railway may store the live secret as `Stripe_Secret_Key` (mixed case). The
+backend accepts that name as an alias; `STRIPE_SECRET_KEY` wins if both are
+set. `STRIPE_WEBHOOK_SECRET` stays the only webhook signing-secret name.
+
 ## Keys
 
 | Key | Env var | Required? |
 | --- | --- | --- |
-| **Secret** (`sk_test_…`) or **restricted** secret (`rk_test_…` with Checkout + Customers + Subscriptions + Invoices + Webhooks) | `STRIPE_SECRET_KEY` | Yes |
+| **Secret** (`sk_test_…`) or **restricted** secret (`rk_test_…` with Checkout + Customers + Subscriptions + Invoices + Webhooks) | `STRIPE_SECRET_KEY` (alias: `Stripe_Secret_Key`) | Yes |
 | **Webhook signing secret** (`whsec_…`) | `STRIPE_WEBHOOK_SECRET` | Yes (webhooks reject all events without it) |
 | **Onboarding price id** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Recommended fallback for signup |
 | Publishable (`pk_test_…`) | — | **Not used** — Checkout is hosted; the browser never talks to Stripe.js |
