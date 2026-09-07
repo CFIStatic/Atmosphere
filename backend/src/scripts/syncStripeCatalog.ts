@@ -100,7 +100,7 @@ async function ensureRecurringPrice(
   knownPriceId?: string,
   includedFcSeats?: number,
 ): Promise<Stripe.Price> {
-  const seatMeta =
+  const seatMeta: Record<string, string> =
     includedFcSeats != null ? { atmosphere_included_fc_seats: String(includedFcSeats) } : {};
   const existing = await findPrice(stripe, planCode, interval, knownPriceId);
   if (existing) {

@@ -148,7 +148,17 @@ export async function loadWorkspaceBilling(
         : supabase.from('profiles').select('email').eq('id', userId).maybeSingle(),
     ]);
 
-  let billing = billingResult.data;
+  type OrgBillingRow = {
+    stripe_subscription_id?: string | null;
+    status?: string | null;
+    period_start?: string | null;
+    period_end?: string | null;
+    cancel_at_period_end?: boolean | null;
+    atmosphere_plan_code?: string | null;
+    included_fc_seats?: number | null;
+  };
+
+  let billing: OrgBillingRow | null = billingResult.data;
   if (
     billingResult.error &&
     /atmosphere_plan_code|included_fc_seats|column .* does not exist/i.test(billingResult.error.message)
@@ -161,15 +171,7 @@ export async function loadWorkspaceBilling(
     billing = fallback.data;
   }
 
-  const billingRow = (billing ?? null) as {
-    stripe_subscription_id?: string | null;
-    status?: string | null;
-    period_start?: string | null;
-    period_end?: string | null;
-    cancel_at_period_end?: boolean | null;
-    atmosphere_plan_code?: string | null;
-    included_fc_seats?: number | null;
-  } | null;
+  const billingRow = billing ?? null;
 
   const isCreator = org?.created_by === userId;
   const email = userEmail ?? (profile as { email?: string | null } | null)?.email ?? null;
