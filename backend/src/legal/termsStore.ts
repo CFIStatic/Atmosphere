@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createUserClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -17,8 +16,17 @@ type AcceptanceRow = {
   accepted_at: string;
 };
 
-function writer(accessToken?: string | null): SupabaseClient {
-  if (accessToken) return createUserClient(accessToken);
+/**
+ * Always write/read terms_acceptances as service_role.
+ *
+ * POST /api/auth/terms/accept already verified the session (requireAuth →
+ * auth.getUser). A user-scoped JWT client made PostgREST run as
+ * `authenticated`, which needs table GRANTs plus an UPDATE policy because
+ * upsert is INSERT ON CONFLICT DO UPDATE. Missing either surfaces as
+ * `permission denied for table terms_acceptances`. service_role bypasses
+ * RLS; rows are still keyed by the verified user id.
+ */
+function termsAdmin(): SupabaseClient {
   const admin = unscopedAdminOrNull();
   if (!admin) {
     throw new HttpError(
@@ -30,11 +38,20 @@ function writer(accessToken?: string | null): SupabaseClient {
   return admin;
 }
 
+function isMissingTermsTable(error: { code?: string; message?: string }): boolean {
+  return (
+    error.code === '42P01' ||
+    error.code === 'PGRST205' ||
+    /relation ["']?public\.?terms_acceptances["']? does not exist/i.test(error.message ?? '') ||
+    /Could not find the table ['"]public\.terms_acceptances['"]/i.test(error.message ?? '')
+  );
+}
+
 export async function latestTermsAcceptance(
   userId: string,
-  accessToken?: string | null,
+  _accessToken?: string | null,
 ): Promise<{ termsVersion: string; acceptedAt: string } | null> {
-  const supabase = writer(accessToken);
+  const supabase = termsAdmin();
   const { data, error } = await supabase
     .from('terms_acceptances')
     .select('terms_version, accepted_at')
@@ -44,13 +61,9 @@ export async function latestTermsAcceptance(
     .maybeSingle();
 
   if (error) {
-    // Rollout window: /me must still answer before the migration is applied.
-    // Treat a missing table as "no acceptance recorded" so the gate shows.
-    const missing =
-      error.code === '42P01' ||
-      error.code === 'PGRST205' ||
-      /terms_acceptances/i.test(error.message ?? '');
-    if (missing) return null;
+    // Rollout window: /me must still answer before the table exists.
+    // Do not treat GRANT/RLS errors as "missing" — those must surface.
+    if (isMissingTermsTable(error)) return null;
     throw new HttpError(500, error.message, 'terms_lookup_failed');
   }
   const row = data as AcceptanceRow | null;
@@ -91,7 +104,7 @@ export async function recordTermsAcceptance(input: {
     );
   }
 
-  const supabase = writer(input.accessToken);
+  const supabase = termsAdmin();
   const { error } = await supabase.from('terms_acceptances').upsert(
     {
       user_id: input.userId,
