@@ -114,6 +114,12 @@
     <div class="eyebrow mono">Resources · Account</div>
     <h1>Billing &amp; usage</h1>
     <p class="lede">Monthly Work Verification fee, extra Field Capture seats, and usage billed the day it’s used — not raw LLM tokens on your invoice.</p>
+    <ul>
+      <li>Field Capture + Evidence Platform</li>
+      <li>$599/mo includes 3 Field Capture accounts</li>
+      <li>Additional Field Capture accounts are $100/mo each</li>
+      <li>AI/token usage is billed the day it is used</li>
+    </ul>
 
 <h2>Three billing layers</h2>
 <ol>
@@ -131,7 +137,7 @@
 <li>Usage billed the day it ran</li>
 <li>Receipts for the $599 subscription, extra seats, and same-day usage invoices</li>
 </ul>
-<p>Token spend on Settings → Billing is the customer charge (10× provider cost). Same-day usage invoices settle through Stripe.</p>
+<p>Token spend on Settings → Billing is what you are charged. Usage invoices settle through Stripe the day the work runs.</p>
 
 <h2>Configurable plans</h2>
 <p>Seat counts and enterprise terms are stored in versioned billing plans. Customer-specific overrides are supported. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans change later. The published catalog is Work Verification ($599/mo, 3 Field Capture seats), extra Field Capture seats ($100/mo), same-day AI usage, and the Chest Mount ($49.99). A leftover seat/credit catalog still has API handlers so existing Stripe events do not break — it is not shown in the app.</p>

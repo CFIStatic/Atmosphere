@@ -42,9 +42,9 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
   Platform, with **3 Field Capture accounts**. Both software parts are required.
 - **Extra Field Capture seats** — $100/month per additional account beyond the
   3 included.
-- **Usage** — AI/token analysis is billed the day it is used (10× provider
-  cost internally). Do not publish a per-job dollar rate or a Compute Units
-  allowance as the customer-facing default.
+- **Usage** — AI/token usage is billed the day it is used. Do not publish a
+  per-job dollar rate, a Compute Units allowance, or internal costing as the
+  customer-facing default.
 - **Field Capture Chest Mount** — one-time $49.99 hardware add-on via Stripe
   Payment Link.
 
