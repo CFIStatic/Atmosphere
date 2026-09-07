@@ -150,6 +150,9 @@ creators skip the signup Checkout gate (`required: false`, `complete: true`,
 token/AI usage invoices and period-close overage invoices are skipped when
 the org creator is listed or `org_billing.status` is `comped`.
 
+Live production (2026-09-07): `BILLING_EXEMPT_EMAILS=jack@jettx.ai` is set on
+Railway Atmosphere APIs so founder Checkout and usage invoices stay off.
+
 `/billing` still redirects to `/settings?section=billing` so older return URLs
 keep working.
 
