@@ -109,6 +109,20 @@ const report: TokenUsageReport = {
       totalTokens: 1720,
       priceNanos: 80_000_000,
     },
+    {
+      id: 'r-2',
+      createdAt: '2026-08-02T15:12:00Z',
+      feature: 'video_analysis',
+      source: 'video_analysis',
+      modelId: 'gemini-3.6-flash',
+      userId: 'u-2',
+      userName: 'Marcus Chen',
+      inputTokens: 18400,
+      outputTokens: 2100,
+      cacheTokens: 0,
+      totalTokens: 20500,
+      priceNanos: 620_000_000,
+    },
   ],
 };
 
@@ -131,7 +145,9 @@ describe('TokenUsageSection', () => {
     expect(screen.getByText('Marcus Chen')).toBeInTheDocument();
     expect(screen.getByText('Global Admin · elena@ortizrestoration.com · 66% of org')).toBeInTheDocument();
     expect(screen.getAllByText('Ask').length).toBeGreaterThan(0);
-    expect(screen.getByText('claude-sonnet')).toBeInTheDocument();
+    expect(screen.getAllByText('Video analysis').length).toBeGreaterThan(0);
+    expect(screen.queryByText('claude-sonnet')).not.toBeInTheDocument();
+    expect(screen.queryByText('gemini-3.6-flash')).not.toBeInTheDocument();
     expect(screen.getByText('$12.20')).toBeInTheDocument();
   });
 
