@@ -1,16 +1,6 @@
--- Field Capture extra seats on Work Verification ($100/mo each beyond 3 included).
--- Railway does not run migrations on boot; apply via
--- backend/scripts/applyFieldCaptureExtraSeats.mjs on deploy.
+-- Environments that already applied 20260907160000 still need cancel to
+-- drop extra_fc_seats. create or replace is safe to re-run.
 
-alter table public.org_billing
-  add column if not exists extra_fc_seats integer not null default 0
-    check (extra_fc_seats >= 0);
-
-comment on column public.org_billing.extra_fc_seats is
-  'Stripe quantity of field_capture_extra_seat. Allowed Field Capture accounts = 3 + extra_fc_seats.';
-
--- Paid extras die with Work Verification. The original cancel RPC predates
--- this column and would otherwise leave leftover seats on a canceled org.
 create or replace function public.stripe_cancel_subscription(p_org uuid)
 returns void language plpgsql security definer
 set search_path to 'public','pg_temp' as $$

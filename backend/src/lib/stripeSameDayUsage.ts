@@ -129,7 +129,7 @@ export async function invoiceSameDayUsageCharge(
     return { invoiceId: null, skipped: already > 0 ? 'already_invoiced' : 'below_cent', amountCents: 0 };
   }
 
-  const key = stripeIdempotencyKey('same-day-usage', input.orgId, input.day, already, amountCents);
+  const key = stripeIdempotencyKey('same-day-usage', input.orgId, input.day, already);
   const invoice = await stripe.invoices.create(
     {
       customer: input.customerId,
@@ -163,16 +163,28 @@ export async function invoiceSameDayUsageCharge(
   }
 
   if ((invoice.lines?.data?.length ?? 0) === 0) {
-    await stripe.invoiceItems.create(
-      {
-        customer: input.customerId,
-        invoice: invoice.id,
-        currency: 'usd',
-        amount: amountCents,
-        description: `AI / token usage ${input.day}`,
-      },
-      { idempotencyKey: stripeIdempotencyKey(key, 'line') },
-    );
+    try {
+      await stripe.invoiceItems.create(
+        {
+          customer: input.customerId,
+          invoice: invoice.id,
+          currency: 'usd',
+          amount: amountCents,
+          description: `AI / token usage ${input.day}`,
+        },
+        { idempotencyKey: stripeIdempotencyKey(key, 'line') },
+      );
+    } catch (err) {
+      const e = err as { type?: string; rawType?: string; code?: string; message?: string };
+      const conflict =
+        e?.type === 'StripeIdempotencyError' ||
+        e?.type === 'idempotency_error' ||
+        e?.rawType === 'idempotency_error' ||
+        e?.code === 'idempotency_key_in_use' ||
+        /idempotenc/i.test(e?.message ?? '');
+      if (!conflict) throw err;
+      return { invoiceId: invoice.id, skipped: 'already_invoiced', amountCents };
+    }
   }
 
   const finalized =

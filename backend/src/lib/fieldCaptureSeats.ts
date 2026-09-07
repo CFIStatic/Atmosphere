@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { paymentRequired } from './errors.js';
 import { toOrgProductRole } from './productRoles.js';
+import { unscopedAdminOrNull } from './scopedAdmin.js';
 import {
   INCLUDED_FC_SEATS,
   allowedFcSeats,
@@ -190,7 +191,9 @@ export async function persistExtraFcSeats(
   extraSeats: number,
 ): Promise<void> {
   const extra = Math.max(0, Math.floor(extraSeats));
-  const { data, error } = await admin
+  // org_billing has no authenticated UPDATE policy — a user JWT is a silent no-op.
+  const writer = unscopedAdminOrNull() ?? admin;
+  const { data, error } = await writer
     .from('org_billing')
     .update({ extra_fc_seats: extra })
     .eq('org_id', orgId)
