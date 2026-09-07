@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { persistExtraFcSeats, readExtraFcSeats } from './fieldCaptureSeats.js';
-import { allowedFcSeats } from './stripeCatalog.js';
+import { allowedFcSeats, FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE } from './stripeCatalog.js';
 import {
   adminClient,
   extraSeatPriceId,
@@ -11,7 +11,6 @@ import {
   stripeIdempotencyKey,
   subscriptionItemPriceId,
 } from './stripe.js';
-import { FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE } from './stripeCatalog.js';
 
 export async function addExtraFieldCaptureSeats(
   supabase: SupabaseClient,
