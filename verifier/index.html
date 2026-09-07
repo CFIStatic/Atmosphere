@@ -1702,11 +1702,11 @@
     </div>
 
     <div class="rail-section" id="evidence-nav">
-    <h3>Videos</h3>
-    <button class="navitem nav-icon" data-view="all" data-label="All videos" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
-    <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
-    <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
-    <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
+    <h3 data-i18n-chrome="videos">Videos</h3>
+    <button class="navitem nav-icon" data-view="all" data-label="All videos" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label" data-i18n-chrome="allVideos">All videos</span> <span class="count" id="n-all">0</span></button>
+    <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label" data-i18n-chrome="classified">Classified</span> <span class="count" id="n-classified">0</span></button>
+    <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label" data-i18n-chrome="awaitingAnalysis">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
+    <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label" data-i18n-chrome="needsReview">Needs review</span> <span class="count" id="n-flag">0</span></button>
     </div>
     </div>
 
@@ -6200,12 +6200,26 @@
     }
     document.querySelectorAll('[data-i18n-chrome]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-chrome');
-      if (chromeI18n && chromeI18n[key]) el.textContent = chromeI18n[key];
+      if (chromeI18n && chromeI18n[key]) {
+        el.textContent = chromeI18n[key];
+        var item = el.closest('[data-view]');
+        if (item) {
+          item.setAttribute('data-label', chromeI18n[key]);
+          item.setAttribute('title', chromeI18n[key]);
+        }
+      }
     });
     document.querySelectorAll('[data-i18n-chrome-aria]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-chrome-aria');
       if (chromeI18n && chromeI18n[key]) el.setAttribute('aria-label', chromeI18n[key]);
     });
+    var titleEl = document.getElementById('viewtitle');
+    if (titleEl && state && state.view) {
+      var active = document.querySelector('.navitem[data-view="' + state.view + '"]');
+      if (active && active.getAttribute('data-label')) {
+        titleEl.textContent = active.getAttribute('data-label');
+      }
+    }
     labelAllThemeToggles(readThemePref());
   }
 
