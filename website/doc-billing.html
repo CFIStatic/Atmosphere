@@ -113,28 +113,27 @@
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
     <h1>Billing &amp; usage</h1>
-    <p class="lede">Monthly platform fee plus usage based on jobs processed and exceptional compute — not raw LLM tokens on your invoice.</p>
+    <p class="lede">Work Verification is $599/month with 3 Field Capture accounts included. Extra seats are $100/month. AI usage is billed the day it is used.</p>
 
 <h2>Three billing layers</h2>
 <ol>
-<li><strong>Base platform fee</strong> — fixed monthly subscription for Field Capture and the Evidence Platform. Varies by plan; enterprise terms are negotiable.</li>
-<li><strong>Job usage</strong> — each unique job Atmosphere actively processes in a billing period counts once, regardless of how many AI actions occur inside it. Plans include an allowance; overages are per job.</li>
-<li><strong>Exceptional compute</strong> — heavy workloads (long-form video, large documents, expensive autonomous workflows) draw from included Compute Units. Overages are billed in understandable units — never as token counts.</li>
+<li><strong>Base platform fee</strong> — $599/month for Field Capture and the Evidence Platform, including 3 Field Capture accounts.</li>
+<li><strong>Extra Field Capture seats</strong> — $100/month each beyond the 3 included. The 4th account is blocked until a seat is added.</li>
+<li><strong>Same-day AI usage</strong> — token/AI usage is invoiced the day it is used (coalesced per organization). Period close is a safety net for leftovers.</li>
 </ol>
+<p>Optional hardware: the Field Capture Chest Mount is a one-time $49.99 purchase from the <a href="hardware.html">Chest Mount</a> page.</p>
 
 <h2>What you see in the app</h2>
 <p>Open <strong>Usage</strong> in the product to see:</p>
 <ul>
-<li>Jobs processed this period</li>
-<li>Jobs above your plan allowance</li>
-<li>Video verification hours</li>
-<li>Compute overage, if applicable</li>
-<li>Estimated upcoming bill</li>
+<li>Work Verification subscription and Field Capture seat allowance (3 included + extras)</li>
+<li>Token spend for the current period</li>
+<li>Receipts for the $599 subscription, extra seats, and same-day usage invoices</li>
 </ul>
-<p>Token counts, model names, and provider costs are tracked internally for Atmosphere's cost accounting — they do not appear on your invoice.</p>
+<p>Token spend on Settings → Billing is the customer charge (10× provider cost). Same-day usage invoices settle through Stripe.</p>
 
 <h2>Configurable plans</h2>
-<p>Base fees, included jobs, per-job rates, compute allowances, and video processing rates are stored in versioned billing plans. Customer-specific overrides are supported. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans or provider costs change later.</p>
+<p>The published catalog is Work Verification ($599/mo, 3 Field Capture seats), extra Field Capture seats ($100/mo), same-day AI usage, and the Chest Mount ($49.99). A leftover seat/credit catalog still has API handlers so existing Stripe events do not break — it is not shown in the app.</p>
 
 <h2>Legacy credit ledger</h2>
 <p>Some agent paths still draw from the prepaid credit ledger during migration. New workflows record internal usage events and bill through the job + compute model above.</p>

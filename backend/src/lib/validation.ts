@@ -24,6 +24,24 @@ export const credentialsSchema = z.object({
 
 export type Credentials = z.infer<typeof credentialsSchema>;
 
+/** Live terms revision the client must send on signup / Field Capture register. */
+export const acceptedTermsVersionField = z
+  .string({ required_error: 'Acknowledge the Terms of Service to continue.' })
+  .trim()
+  .min(1, 'Acknowledge the Terms of Service to continue.');
+
+export const signupCredentialsSchema = credentialsSchema.extend({
+  acceptedTermsVersion: acceptedTermsVersionField,
+});
+
+export type SignupCredentials = z.infer<typeof signupCredentialsSchema>;
+
+export const acceptTermsSchema = z.object({
+  acceptedTermsVersion: acceptedTermsVersionField,
+});
+
+export type AcceptTermsInput = z.infer<typeof acceptTermsSchema>;
+
 const nameField = z
   .string({ required_error: 'Name is required' })
   .trim()
@@ -340,6 +358,7 @@ export const fieldRegisterSchema = z
       .min(2, 'Organization name is too short')
       .max(80, 'Organization name is too long')
       .optional(),
+    acceptedTermsVersion: acceptedTermsVersionField,
   })
   .refine((value) => Boolean(value.joinCode || value.orgName), {
     message: 'Enter an office join code or a new office name.',
@@ -389,6 +408,7 @@ export type FieldOfficePreviewInput = z.infer<typeof fieldOfficePreviewSchema>;
 export const fieldJoinSchema = z.object({
   fullName: crewFullNameField,
   joinCode: officeJoinCodeField,
+  acceptedTermsVersion: acceptedTermsVersionField,
 });
 
 export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
@@ -829,6 +849,11 @@ export const onboardingCheckoutSchema = z.object({
     .refine((value) => !value || (value.startsWith('/') && !value.startsWith('//')), {
       message: 'returnPath must be a relative path',
     }),
+});
+
+/** Extra Field Capture seats to add ($100/mo each beyond the 3 included). */
+export const extraSeatCheckoutSchema = z.object({
+  quantity: z.number().int().min(1, 'Add at least one seat').max(500, 'Too many seats').default(1),
 });
 
 /**

@@ -6,6 +6,7 @@ import type { WorkspaceBilling } from '../../lib/api';
 const getBillingWorkspace = vi.fn();
 const getPayments = vi.fn();
 const openBillingPortal = vi.fn();
+const addExtraFieldCaptureSeats = vi.fn();
 const getTokenUsage = vi.fn();
 
 vi.mock('../../lib/api', async (importOriginal) => {
@@ -17,6 +18,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
       getPayments: (...args: unknown[]) => getPayments(...args),
       openBillingPortal: (...args: unknown[]) => openBillingPortal(...args),
+      addExtraFieldCaptureSeats: (...args: unknown[]) => addExtraFieldCaptureSeats(...args),
       getTokenUsage: (...args: unknown[]) => getTokenUsage(...args),
     },
   };
@@ -40,6 +42,15 @@ const paid: WorkspaceBilling = {
     periodEnd: '2026-09-01T00:00:00Z',
     cancelAtPeriodEnd: false,
     hasStripeSubscription: true,
+    includedFcSeats: 3,
+  },
+  fieldCaptureSeats: {
+    included: 3,
+    extra: 0,
+    allowed: 3,
+    used: 1,
+    remaining: 2,
+    extraSeatPriceCents: 10000,
   },
   usage: {
     periodStart: '2026-08-01T00:00:00Z',
@@ -107,6 +118,7 @@ describe('BillingSection', () => {
     getBillingWorkspace.mockReset().mockResolvedValue(paid);
     getPayments.mockReset().mockResolvedValue({ payments: [payment] });
     openBillingPortal.mockReset();
+    addExtraFieldCaptureSeats.mockReset();
     getTokenUsage.mockReset().mockResolvedValue(tokenUsage);
   });
 
@@ -126,6 +138,8 @@ describe('BillingSection', () => {
     expect(screen.queryByText('Job overage')).toBeNull();
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Manage plan and payment method' })).toBeInTheDocument();
+    expect(screen.getByText(/1 of 3 used/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeInTheDocument();
   });
 
   it('stacks period details and titles the unpaid state when Stripe is missing', async () => {

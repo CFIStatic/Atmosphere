@@ -171,6 +171,9 @@ export function SetupBillingStep({
           {formatCents(plan.baseMonthlyFeeCents)}
           <span className="text-base font-medium text-ink-500"> / month</span>
         </p>
+        <p className="mt-2 text-sm text-ink-600">
+          Includes {plan.includedFcSeats ?? 3} Field Capture accounts. Extra seats are $100/mo each.
+        </p>
       </div>
 
       <div className="mt-7 flex justify-end">

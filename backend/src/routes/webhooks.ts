@@ -1,16 +1,22 @@
 import { Router, type Request, type Response } from 'express';
 import type Stripe from 'stripe';
 import { config } from '../config.js';
+import { persistExtraFcSeats } from '../lib/fieldCaptureSeats.js';
 import {
   adminClient,
   cardDetails,
+  extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
+  isExtraSeatPriceId,
   mapSubscriptionStatus,
+  shouldCancelOrgBillingForDeletedSubscription,
   meteringPlanForPrice,
   planForPrice,
   resolveOrgId,
   stripeClient,
+  subscriptionItemPriceId,
+  syncExtraFcSeatsFromCustomer,
   syncMeteringSubscription,
   toIso,
 } from '../lib/stripe.js';
@@ -223,36 +229,66 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
     `subscription ${sub.id}`,
   );
 
-  const item = sub.items?.data?.[0] as any;
-  const priceId = item?.price?.id as string | undefined;
+  const items = sub.items?.data ?? [];
+  const item = items[0] as any;
+  const priceId = subscriptionItemPriceId(item);
   // Period boundaries moved from the subscription onto its items in recent API
   // versions; read whichever the account's version provides.
   const periodStart = toIso(item?.current_period_start ?? (sub as any).current_period_start);
   const periodEnd = toIso(item?.current_period_end ?? (sub as any).current_period_end);
 
-  const plan = await planForPrice(admin, priceId);
-  if (plan) {
-    const { error } = await admin.rpc('stripe_sync_subscription', {
-      p_org: orgId,
-      p_plan: plan.code,
-      p_interval: plan.interval,
-      p_seats: item?.quantity ?? 1,
-      p_subscription_id: sub.id,
-      p_status: mapSubscriptionStatus(sub.status),
-      p_period_start: periodStart,
-      p_period_end: periodEnd,
-      p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
-    });
-    if (error) throw new Error(`subscription sync failed: ${error.message}`);
-    return;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  const extraOnThisSub = extraSeatQuantityFromSubscription(sub);
+  try {
+    await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
+  } catch (err) {
+    if (extraOnThisSub > 0 || items.some((row) => isExtraSeatPriceId(subscriptionItemPriceId(row)))) {
+      await persistExtraFcSeats(admin, orgId, extraOnThisSub);
+    } else {
+      throw err;
+    }
+  }
+
+  for (const row of items) {
+    const rowPriceId = subscriptionItemPriceId(row);
+    const plan = await planForPrice(admin, rowPriceId);
+    if (plan) {
+      const { error } = await admin.rpc('stripe_sync_subscription', {
+        p_org: orgId,
+        p_plan: plan.code,
+        p_interval: plan.interval,
+        p_seats: row.quantity ?? 1,
+        p_subscription_id: sub.id,
+        p_status: mapSubscriptionStatus(sub.status),
+        p_period_start: periodStart,
+        p_period_end: periodEnd,
+        p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+      });
+      if (error) throw new Error(`subscription sync failed: ${error.message}`);
+      return;
+    }
   }
 
   // Signup Checkout uses metering_plan_versions.stripe_price_id (or
   // STRIPE_ONBOARDING_PRICE_ID), which is not in billing_plans. Still mark the
   // org subscribed so the onboarding step can complete.
-  const metering = await meteringPlanForPrice(admin, priceId);
+  let metering = priceId ? await meteringPlanForPrice(admin, priceId) : null;
+  let meteringPriceId = priceId;
+  if (!metering) {
+    for (const row of items) {
+      const rowPriceId = subscriptionItemPriceId(row);
+      if (!rowPriceId) continue;
+      metering = await meteringPlanForPrice(admin, rowPriceId);
+      if (metering) {
+        meteringPriceId = rowPriceId;
+        break;
+      }
+    }
+  }
   const isOnboarding =
-    sub.metadata?.onboarding === 'true' || isConfiguredOnboardingPrice(priceId);
+    sub.metadata?.onboarding === 'true' ||
+    isConfiguredOnboardingPrice(meteringPriceId) ||
+    items.some((row) => isConfiguredOnboardingPrice(subscriptionItemPriceId(row)));
   if (metering || isOnboarding) {
     await syncMeteringSubscription(admin, orgId, {
       subscriptionId: sub.id,
@@ -264,6 +300,10 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
     return;
   }
 
+  if (items.some((row) => isExtraSeatPriceId(subscriptionItemPriceId(row)))) {
+    return;
+  }
+
   throw new Error(`[stripe] price ${priceId ?? 'unknown'} is not mapped to a plan`);
 }
 
@@ -272,9 +312,27 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
     await resolveOrgId(admin, sub.metadata, sub.customer as string | null),
     `subscription ${sub.id}`,
   );
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  const { data: billing } = await admin
+    .from('org_billing')
+    .select('stripe_subscription_id')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (
+    !shouldCancelOrgBillingForDeletedSubscription({
+      deletedSubscriptionId: sub.id,
+      storedSubscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+      subscription: sub,
+    })
+  ) {
+    await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
+    return;
+  }
 
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
+  await persistExtraFcSeats(admin, orgId, 0);
 }
 
 /**

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   credentialsSchema,
+  fieldJoinSchema,
   fieldOfficePreviewSchema,
   fieldOfficeSchema,
   fieldRegisterSchema,
@@ -35,6 +36,7 @@ test('field register: join an existing office', () => {
     password: 'long-enough',
     fullName: 'Alex Rivera',
     joinCode: '  8f3a9c2b ',
+    acceptedTermsVersion: '2026-07-31',
   });
   assert.equal(parsed.email, 'alex@crew.example');
   assert.equal(parsed.joinCode, '8F3A9C2B');
@@ -47,9 +49,23 @@ test('field register: start a new office', () => {
     email: 'owner@shop.example',
     password: 'long-enough',
     orgName: '  Rio Grande Restoration  ',
+    acceptedTermsVersion: '2026-07-31',
   });
   assert.equal(parsed.orgName, 'Rio Grande Restoration');
   assert.equal(parsed.joinCode, undefined);
+});
+
+test('field register: require a Terms of Service acknowledgment', () => {
+  try {
+    fieldRegisterSchema.parse({
+      email: 'alex@crew.example',
+      password: 'long-enough',
+      orgName: 'Shop',
+    });
+    assert.fail('expected a validation error');
+  } catch (err) {
+    assert.match(JSON.stringify(err), /Terms of Service/);
+  }
 });
 
 test('field register: require an office join code or a new office name', () => {
@@ -57,6 +73,7 @@ test('field register: require an office join code or a new office name', () => {
     fieldRegisterSchema.parse({
       email: 'alex@crew.example',
       password: 'long-enough',
+      acceptedTermsVersion: '2026-07-31',
     });
     assert.fail('expected a validation error');
   } catch (err) {
@@ -71,8 +88,24 @@ test('field register: reject supplying both a join code and a new office name', 
       password: 'long-enough',
       joinCode: '8F3A9C2B',
       orgName: 'Acme',
+      acceptedTermsVersion: '2026-07-31',
     }),
   );
+});
+
+test('field join: require a Terms of Service acknowledgment', () => {
+  assert.throws(() =>
+    fieldJoinSchema.parse({
+      fullName: 'Alex Rivera',
+      joinCode: '8F3A9C2B',
+    }),
+  );
+  const parsed = fieldJoinSchema.parse({
+    fullName: 'Alex Rivera',
+    joinCode: '8F3A9C2B',
+    acceptedTermsVersion: '2026-07-31',
+  });
+  assert.equal(parsed.acceptedTermsVersion, '2026-07-31');
 });
 
 test('field office: same office rules once the phone already has a session', () => {
@@ -142,6 +175,7 @@ test('POST /api/field-app/register rejects a short password before hitting Auth'
         email: 'crew@office.example',
         password: 'short',
         orgName: 'Shop',
+        acceptedTermsVersion: '2026-07-31',
       }),
     });
     assert.equal(res.status, 400);

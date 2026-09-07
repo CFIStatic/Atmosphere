@@ -27,6 +27,8 @@ final class AuthSession: ObservableObject {
     @Published var confirmationNotice: String?
     /// Soft banner while linked but the network/profile refresh failed.
     @Published var restoreWarning: String?
+    /// Signed in but the live Terms of Service have not been acknowledged.
+    @Published private(set) var needsTermsAcceptance = false
 
     private let accessAccount = "accessToken"
     private let refreshAccount = "refreshToken"
@@ -59,11 +61,17 @@ final class AuthSession: ObservableObject {
         restoreWarning = nil
         do {
             try await ensureFreshAccess()
+            if try await refreshTermsRequirement() { return }
             let me = try await api.fieldMe()
             applyProfile(me)
             needsOfficeLink = false
             lastError = nil
         } catch {
+            if isTermsRequired(error) {
+                needsTermsAcceptance = true
+                lastError = nil
+                return
+            }
             if isNoOrganization(error) {
                 needsOfficeLink = true
                 lastError = nil
@@ -72,12 +80,16 @@ final class AuthSession: ObservableObject {
             if isUnauthorized(error) {
                 do {
                     try await ensureFreshAccess(forceRefresh: true)
+                    if try await refreshTermsRequirement() { return }
                     let me = try await api.fieldMe()
                     applyProfile(me)
                     needsOfficeLink = false
                     lastError = nil
                 } catch {
-                    if isNoOrganization(error) {
+                    if isTermsRequired(error) {
+                        needsTermsAcceptance = true
+                        lastError = nil
+                    } else if isNoOrganization(error) {
                         needsOfficeLink = true
                         lastError = nil
                     } else if isUnauthorized(error) {
@@ -109,6 +121,7 @@ final class AuthSession: ObservableObject {
             persist(session: session, email: result.user?.email ?? "")
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
+            needsTermsAcceptance = false
             let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedName.isEmpty {
                 self.fullName = trimmedName
@@ -148,6 +161,7 @@ final class AuthSession: ObservableObject {
             persist(session: session, email: result.user?.email ?? email)
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
+            if try await refreshTermsRequirement() { return }
             await refreshProfileOrMarkOffice()
         } catch {
             lastError = Self.friendlyConnectError(error)
@@ -187,6 +201,7 @@ final class AuthSession: ObservableObject {
             persist(session: session, email: result.user?.email ?? email)
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
+            needsTermsAcceptance = false
             let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedName.isEmpty {
                 self.fullName = trimmedName
@@ -277,14 +292,36 @@ final class AuthSession: ObservableObject {
         }
     }
 
+    func acceptCurrentTerms() async {
+        lastError = nil
+        do {
+            _ = try await api.acceptTerms()
+            needsTermsAcceptance = false
+            await refreshProfileOrMarkOffice()
+        } catch {
+            lastError = Self.friendlyCreateError(error)
+        }
+    }
+
+    private func refreshTermsRequirement() async throws -> Bool {
+        let me = try await api.authMe()
+        let required = me.terms?.required ?? true
+        needsTermsAcceptance = required
+        return required
+    }
+
     private func refreshProfileOrMarkOffice() async {
         do {
+            if try await refreshTermsRequirement() { return }
             let me = try await api.fieldMe()
             applyProfile(me)
             needsOfficeLink = false
             lastError = nil
         } catch {
-            if isNoOrganization(error) {
+            if isTermsRequired(error) {
+                needsTermsAcceptance = true
+                lastError = nil
+            } else if isNoOrganization(error) {
                 needsOfficeLink = true
             } else {
                 restoreWarning =
@@ -408,6 +445,7 @@ final class AuthSession: ObservableObject {
         api.refreshToken = nil
         isLinked = false
         needsOfficeLink = false
+        needsTermsAcceptance = false
         showOfficeLink = false
         pendingJoinCode = nil
         officePreviewName = nil
@@ -440,8 +478,15 @@ final class AuthSession: ObservableObject {
         return false
     }
 
+    private func isTermsRequired(_ error: Error) -> Bool {
+        guard case let APIError.http(status, body) = error, status == 403 else { return false }
+        let lower = body.lowercased()
+        return lower.contains("terms of service") || lower.contains("terms_required")
+    }
+
     private func isNoOrganization(_ error: Error) -> Bool {
         guard case let APIError.http(status, body) = error, status == 403 else { return false }
+        if isTermsRequired(error) { return false }
         let lower = body.lowercased()
         return lower.contains("organization")
             || lower.contains("office")

@@ -1,12 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
+  isExtraSeatOnlySubscription,
+  isExtraSeatPriceId,
   isStripePriceId,
   mapSubscriptionStatus,
+  shouldCancelOrgBillingForDeletedSubscription,
   stripeIdempotencyKey,
 } from './stripe.js';
+import { LIVE_EXTRA_FC_SEAT_PRICE_ID, LIVE_WORK_VERIFICATION_PRICE_ID } from './stripeCatalog.js';
 import { planFromMeteringRow } from './workspaceBilling.js';
 import type Stripe from 'stripe';
 
@@ -66,5 +71,48 @@ describe('stripe helpers', () => {
     assert.equal(plan.name, 'Work Verification');
     assert.equal(plan.baseMonthlyFeeCents, 59900);
     assert.equal(plan.includedJobs, 50);
+    assert.equal(plan.includedFcSeats, 3);
+  });
+
+  it('reads extra Field Capture seat quantity from a subscription', () => {
+    assert.equal(isExtraSeatPriceId(LIVE_EXTRA_FC_SEAT_PRICE_ID), true);
+    assert.equal(
+      extraSeatQuantityFromSubscription({
+        items: {
+          data: [
+            { price: { id: 'price_other' }, quantity: 1 },
+            { price: { id: LIVE_EXTRA_FC_SEAT_PRICE_ID }, quantity: 2 },
+          ],
+        },
+      }),
+      2,
+    );
+  });
+
+  it('does not cancel Work Verification when an extra-seat-only subscription ends', () => {
+    const extraOnly = {
+      metadata: { kind: 'field_capture_extra_seat', extra_fc_seats: '1' },
+      items: { data: [{ price: { id: LIVE_EXTRA_FC_SEAT_PRICE_ID } }] },
+    };
+    assert.equal(isExtraSeatOnlySubscription(extraOnly), true);
+    assert.equal(
+      shouldCancelOrgBillingForDeletedSubscription({
+        deletedSubscriptionId: 'sub_extra',
+        storedSubscriptionId: 'sub_wv',
+        subscription: extraOnly,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldCancelOrgBillingForDeletedSubscription({
+        deletedSubscriptionId: 'sub_wv',
+        storedSubscriptionId: 'sub_wv',
+        subscription: {
+          metadata: { onboarding: 'true' },
+          items: { data: [{ price: { id: LIVE_WORK_VERIFICATION_PRICE_ID } }] },
+        },
+      }),
+      true,
+    );
   });
 });

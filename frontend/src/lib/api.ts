@@ -7,6 +7,7 @@
  */
 
 import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
+import type { TermsStatus } from './terms';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -2702,18 +2703,19 @@ export interface AuthResponse {
   };
   org?: Org | null;
   orgError?: string;
+  terms?: TermsStatus;
 }
 
 export const api = {
   // ---- Auth ----
-  signup: (email: string, password: string) =>
+  signup: (email: string, password: string, acceptedTermsVersion: string) =>
     request<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, acceptedTermsVersion }),
     }),
 
   /** Field Capture iOS — name + office join code (no email). */
-  fieldJoin: (input: { fullName: string; joinCode: string }) =>
+  fieldJoin: (input: { fullName: string; joinCode: string; acceptedTermsVersion: string }) =>
     request<AuthResponse>('/api/field-app/join', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -2726,6 +2728,7 @@ export const api = {
     fullName?: string;
     joinCode?: string;
     orgName?: string;
+    acceptedTermsVersion: string;
   }) =>
     request<AuthResponse>('/api/field-app/register', {
       method: 'POST',
@@ -2764,7 +2767,16 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
-  me: () => request<{ user: AuthUser }>('/api/auth/me', { method: 'GET' }),
+  me: () => request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/me', { method: 'GET' }),
+
+  getTerms: () =>
+    request<{ currentVersion: string; url: string }>('/api/auth/terms', { method: 'GET' }),
+
+  acceptTerms: (acceptedTermsVersion: string) =>
+    request<{ terms: TermsStatus }>('/api/auth/terms/accept', {
+      method: 'POST',
+      body: JSON.stringify({ acceptedTermsVersion }),
+    }),
 
   // ---- Password recovery ----
   forgotPassword: (email: string) =>
@@ -2815,7 +2827,7 @@ export const api = {
     }),
 
   pinUnlock: (pin: string) =>
-    request<{ user: AuthUser }>('/api/auth/pin/unlock', {
+    request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/pin/unlock', {
       method: 'POST',
       body: JSON.stringify({ pin }),
     }),
@@ -3984,6 +3996,17 @@ export const api = {
   /** Stripe's hosted portal: cards, invoices and cancellation. */
   openBillingPortal: () =>
     request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
+
+  addExtraFieldCaptureSeats: (quantity = 1) =>
+    request<{
+      checkoutUrl: string | null;
+      updated: boolean;
+      extraSeats: number;
+      allowedSeats: number;
+    }>('/api/billing/checkout/extra-seats', {
+      method: 'POST',
+      body: JSON.stringify({ quantity }),
+    }),
 
   getBillingWorkspace: () =>
     request<WorkspaceBilling>('/api/billing/workspace', { method: 'GET' }),
@@ -5512,6 +5535,15 @@ export interface BillingOnboardingStatus {
     baseMonthlyFeeCents: number;
     includedJobs: number;
     additionalJobPriceCents: number;
+    includedFcSeats?: number;
+  };
+  fieldCaptureSeats?: {
+    included: number;
+    extra: number;
+    allowed: number;
+    used: number;
+    remaining: number;
+    extraSeatPriceCents: number;
   };
 }
 
@@ -5592,6 +5624,7 @@ export interface WorkspaceBilling {
     baseMonthlyFeeCents: number;
     includedJobs: number;
     additionalJobPriceCents: number;
+    includedFcSeats?: number;
     status: string;
     periodStart: string | null;
     periodEnd: string | null;
@@ -5599,6 +5632,14 @@ export interface WorkspaceBilling {
     hasStripeSubscription: boolean;
   };
   usage: CustomerMeteringSummary | null;
+  fieldCaptureSeats: {
+    included: number;
+    extra: number;
+    allowed: number;
+    used: number;
+    remaining: number;
+    extraSeatPriceCents: number;
+  };
 }
 
 export interface SetPlanResult {

@@ -309,8 +309,23 @@
   function stubForm(formId, statusId, text, appHref) {
     var form = document.getElementById(formId);
     if (!form) return;
+    var tos = document.getElementById('su-tos');
+    var submit = form.querySelector('button[type="submit"]');
+    if (tos && submit) {
+      function syncTos() { submit.disabled = !tos.checked; }
+      tos.addEventListener('change', syncTos);
+      syncTos();
+    }
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (tos && !tos.checked) {
+        var status = document.getElementById(statusId);
+        if (status) {
+          status.className = 'form-status err';
+          status.textContent = 'Acknowledge the Terms of Service to continue.';
+        }
+        return;
+      }
       if (appHref) {
         location.href = appHref;
         return;
@@ -346,7 +361,7 @@
 
 // Field Capture Chest Mount checkout. A Stripe Payment Link or Checkout
 // Session URL in CHECKOUT_URL / data-checkout-url /
-// window.ATMOSPHERE_HARDWARE_CHECKOUT_URL turns Buy — $49 live. Empty
+// window.ATMOSPHERE_HARDWARE_CHECKOUT_URL turns Buy — $49.99 live. Empty
 // keeps a disabled “Checkout coming online” state — mailto is never
 // the purchase path.
 (function () {
@@ -382,7 +397,7 @@
     btn.removeAttribute('aria-disabled');
     btn.removeAttribute('role');
     btn.setAttribute('href', url);
-    btn.textContent = 'Buy — $49';
+    btn.textContent = 'Buy — $49.99';
   }
 
   var url = resolveCheckout();

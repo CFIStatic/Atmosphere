@@ -34,9 +34,11 @@ test('field join: name plus office code', () => {
   const parsed = fieldJoinSchema.parse({
     fullName: '  Nick   Smith ',
     joinCode: '  8f3a9c2b ',
+    acceptedTermsVersion: '2026-07-31',
   });
   assert.equal(parsed.fullName, 'Nick Smith');
   assert.equal(parsed.joinCode, '8F3A9C2B');
+  assert.equal(parsed.acceptedTermsVersion, '2026-07-31');
 });
 
 test('field join: reject a first name only', () => {

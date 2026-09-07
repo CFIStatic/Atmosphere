@@ -149,8 +149,12 @@
           <label for="su-org">Company name</label>
           <input id="su-org" name="org" type="text" autocomplete="organization" placeholder="Optional" />
         </div>
+        <label class="ack-row" for="su-tos">
+          <input id="su-tos" name="tos" type="checkbox" required />
+          <span>I acknowledge and agree to the <a href="https://atmosphereteam.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and have read the <a href="privacy.html">Privacy Policy</a>.</span>
+        </label>
         <div class="form-foot">
-          <button class="btn btn-lg" type="submit">Create account</button>
+          <button class="btn btn-lg" type="submit" id="signup-submit" disabled>Create account</button>
           <span class="fine">Already have an account? <a href="signin.html" style="color: inherit;">Sign in</a></span>
           <span class="form-status" id="signup-status" role="status" aria-live="polite"></span>
         </div>

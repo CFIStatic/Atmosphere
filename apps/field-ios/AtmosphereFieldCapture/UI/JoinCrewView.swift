@@ -14,6 +14,7 @@ struct JoinCrewView: View {
     @State private var joinCode = ""
     @State private var previewTask: Task<Void, Never>?
     @State private var busy = false
+    @State private var acknowledgedTerms = false
 
     private var nameValid: Bool {
         fullName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -92,6 +93,8 @@ struct JoinCrewView: View {
                         .foregroundStyle(FieldTheme.faint)
                 }
 
+                TermsAckToggle(acknowledged: $acknowledgedTerms)
+
                 if let err = auth.lastError {
                     Text(err)
                         .font(.system(size: 13))
@@ -122,7 +125,7 @@ struct JoinCrewView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || !nameValid || !codeValid)
+                .disabled(busy || !nameValid || !codeValid || !acknowledgedTerms)
                 .padding(.top, 6)
 
                 Button(action: onDashboardLogin) {

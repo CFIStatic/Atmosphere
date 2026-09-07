@@ -24,6 +24,15 @@ const unpaid = {
     baseMonthlyFeeCents: 59900,
     includedJobs: 50,
     additionalJobPriceCents: 3000,
+    includedFcSeats: 3,
+  },
+  fieldCaptureSeats: {
+    included: 3,
+    extra: 0,
+    allowed: 3,
+    used: 0,
+    remaining: 3,
+    extraSeatPriceCents: 10000,
   },
 };
 
