@@ -251,10 +251,12 @@ describe('Settings sections', () => {
 
     expect(screen.getByRole('button', { name: 'Support' })).toHaveAttribute('aria-current', 'page');
     const link = screen.getByRole('link', { name: 'Contact support' });
-    expect(link).toHaveAttribute('href', expect.stringContaining('contact.html'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('Atmosphere%20Platform'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('jack%40jettx.ai'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('org-1'));
+    const href = link.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+    expect(href).toContain('contact.html');
+    expect(params.get('note')).toContain('Atmosphere Platform');
+    expect(params.get('note')).toContain('org-1');
+    expect(params.get('email')).toBe('jack@jettx.ai');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });

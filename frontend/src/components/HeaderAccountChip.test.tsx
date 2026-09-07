@@ -77,9 +77,12 @@ describe('HeaderAccountChip', () => {
     expect(menu).toHaveTextContent('Sign out');
     expect(screen.getByRole('menuitem', { name: 'Switch to light mode' })).toBeInTheDocument();
     const support = screen.getByRole('menuitem', { name: 'Support' });
-    expect(support).toHaveAttribute('href', expect.stringContaining('contact.html'));
-    expect(support).toHaveAttribute('href', expect.stringContaining('Atmosphere%20Platform'));
-    expect(support).toHaveAttribute('href', expect.stringContaining('jack%40jettx.ai'));
+    const href = support.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+    expect(href).toContain('contact.html');
+    expect(params.get('note')).toContain('Atmosphere Platform');
+    expect(params.get('email')).toBe('jack@jettx.ai');
+    expect(params.get('company')).toBe('Jettx LLC');
     expect(support).toHaveAttribute('target', '_blank');
   });
 
