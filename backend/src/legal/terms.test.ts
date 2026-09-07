@@ -13,8 +13,8 @@ import {
 import { requireAcceptedTermsVersion } from './termsStore.js';
 
 describe('terms versioning', () => {
-  it('treats the July 31 2026 draft as the live version', () => {
-    assert.equal(CURRENT_TERMS_VERSION, '2026-07-31');
+  it('treats the September 7 2026 Terms of Use as the live version', () => {
+    assert.equal(CURRENT_TERMS_VERSION, '2026-09-07');
     assert.equal(TERMS_PUBLIC_URL, 'https://atmosphereteam.com/terms');
   });
 

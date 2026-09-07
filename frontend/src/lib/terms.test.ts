@@ -7,8 +7,8 @@ import {
 } from './terms';
 
 describe('terms version helpers', () => {
-  it('matches the July 31 2026 public draft', () => {
-    expect(CURRENT_TERMS_VERSION).toBe('2026-07-31');
+  it('matches the September 7 2026 public Terms of Use', () => {
+    expect(CURRENT_TERMS_VERSION).toBe('2026-09-07');
     expect(TERMS_PUBLIC_URL).toBe('https://atmosphereteam.com/terms');
   });
 
