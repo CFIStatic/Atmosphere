@@ -4538,6 +4538,25 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     try { body = JSON.parse(init.body) as Record<string, unknown>; } catch { /* not JSON */ }
   }
 
+  const cleanPath = path.split('?')[0] ?? path;
+  const termsExempt =
+    cleanPath === '/api/org/me' ||
+    cleanPath.startsWith('/api/org/me/') ||
+    cleanPath === '/api/profile' ||
+    cleanPath.startsWith('/api/profile/') ||
+    ['/api/auth', '/api/legal', '/api/analytics', '/api/cyber', '/api/telemetry', '/api/health', '/api/ready'].some(
+      (prefix) => cleanPath === prefix || cleanPath.startsWith(`${prefix}/`),
+    );
+  if (state.signedIn && !state.termsAccepted && !termsExempt) {
+    return new Response(
+      JSON.stringify({
+        error: 'Acknowledge the Terms of Service to continue.',
+        code: 'terms_required',
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
   // A short beat so spinners and disabled states read the way they do live.
   await new Promise((resolve) => setTimeout(resolve, 180));
 
