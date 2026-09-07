@@ -16,6 +16,8 @@ import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
 import { PersonAvatar } from '../components/PersonAvatar';
+import { LanguagePicker } from '../components/LanguagePicker';
+import { useT } from '../lib/i18n';
 import { usePreferences } from '../lib/preferences';
 import {
   BuildingIcon,
@@ -23,6 +25,7 @@ import {
   CheckIcon,
   EyeIcon,
   EyeOffIcon,
+  GlobeIcon,
   LogOutIcon,
   ShieldIcon,
   SpinnerIcon,
@@ -41,31 +44,33 @@ interface SettingsSection {
   icon: typeof UserIcon;
 }
 
-const ALL_SECTIONS: SettingsSection[] = [
-  { id: 'profile', label: 'Profile', blurb: 'Your name and account details', icon: UserIcon },
-  { id: 'security', label: 'Security', blurb: 'Password and sign-out', icon: ShieldIcon },
-  {
-    id: 'organization',
-    label: 'Organization',
-    blurb: 'Team invites and linked accounts',
-    icon: BuildingIcon,
-  },
-  {
-    id: 'billing',
-    label: 'Billing',
-    blurb: 'Plan, tokens, and receipts',
-    icon: CreditCardIcon,
-  },
-];
+const SECTION_IDS: SectionId[] = ['profile', 'security', 'organization', 'billing'];
 
 function isSectionId(value: string | null): value is SectionId {
-  return ALL_SECTIONS.some((section) => section.id === value);
+  return SECTION_IDS.includes(value as SectionId);
 }
 
 export function SettingsPage() {
   useFeatureTimer('settings');
+  const t = useT();
   const { membership } = useAuth();
   const showBilling = canManageBilling(membership?.role);
+  const ALL_SECTIONS: SettingsSection[] = [
+    { id: 'profile', label: t('settings.section.profile'), blurb: t('settings.section.profileBlurb'), icon: UserIcon },
+    { id: 'security', label: t('settings.section.security'), blurb: t('settings.section.securityBlurb'), icon: ShieldIcon },
+    {
+      id: 'organization',
+      label: t('settings.section.organization'),
+      blurb: t('settings.section.organizationBlurb'),
+      icon: BuildingIcon,
+    },
+    {
+      id: 'billing',
+      label: t('settings.section.billing'),
+      blurb: t('settings.section.billingBlurb'),
+      icon: CreditCardIcon,
+    },
+  ];
   const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'billing' || showBilling);
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
@@ -97,10 +102,12 @@ export function SettingsPage() {
       )}
       <div className={inShell ? 'mx-auto max-w-5xl' : 'mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10'}>
         <header>
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">Settings</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+            {t('settings.title')}
+          </h1>
         </header>
 
-        <nav className="mt-8 border-b border-line" aria-label="Settings sections">
+        <nav className="mt-8 border-b border-line" aria-label={t('settings.sectionsAria')}>
           <ul className="flex gap-1 overflow-x-auto pb-px">
             {SECTIONS.map((section) => {
               const isActive = section.id === active;
@@ -206,11 +213,13 @@ function PrimaryButton({
   );
 }
 
-function Saved({ show, label = 'Saved' }: { show: boolean; label?: string }) {
+function Saved({ show, label }: { show: boolean; label?: string }) {
+  const t = useT();
+  const text = label ?? t('common.saved');
   if (!show) return null;
   return (
     <span className="flex items-center gap-1.5 text-sm text-success-600">
-      <CheckIcon width={16} height={16} /> {label}
+      <CheckIcon width={16} height={16} /> {text}
     </span>
   );
 }
@@ -233,11 +242,11 @@ function ReadOnlyRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function formatDate(value: string | null | undefined): string {
+function formatDate(value: string | null | undefined, locale: string): string {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 /* -------------------------------------------------------------------------- *
@@ -245,6 +254,8 @@ function formatDate(value: string | null | undefined): string {
  * -------------------------------------------------------------------------- */
 
 function ProfileSection() {
+  const t = useT();
+  const { locale } = usePreferences();
   const { user, profile, setProfile } = useAuth();
   const resolvedName = profile?.fullName || nameFromMetadata(user?.metadata);
   const [name, setName] = useState(resolvedName ?? '');
@@ -281,7 +292,7 @@ function ProfileSection() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save your name. Try again.');
+      setError(err instanceof ApiError ? err.message : t('settings.profile.saveError'));
     } finally {
       setSaving(false);
     }
@@ -310,7 +321,7 @@ function ProfileSection() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not update that photo.');
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('settings.profile.photoError'));
     } finally {
       setUploading(false);
     }
@@ -329,7 +340,7 @@ function ProfileSection() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not remove that photo.');
+      setError(err instanceof ApiError ? err.message : t('settings.profile.removePhotoError'));
     } finally {
       setUploading(false);
     }
@@ -338,8 +349,8 @@ function ProfileSection() {
   return (
     <>
       <Card
-        title="Your profile"
-        description="This is how teammates see you in the linked accounts list."
+        title={t('settings.profile.title')}
+        description={t('settings.profile.description')}
       >
         <div className="flex items-center gap-4">
           <label className="relative shrink-0 cursor-pointer">
@@ -360,7 +371,7 @@ function ProfileSection() {
               type="file"
               accept={AVATAR_ACCEPT}
               className="sr-only"
-              aria-label="Upload a profile photo or icon"
+              aria-label={t('settings.profile.uploadAria')}
               disabled={uploading}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -376,7 +387,9 @@ function ProfileSection() {
             <p className="truncate text-sm text-ink-500">{user?.email}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="cursor-pointer text-sm font-medium text-brand-700 transition hover:text-brand-800">
-                {profile?.avatarUrl || previewUrl ? 'Change photo' : 'Upload photo or icon'}
+                {profile?.avatarUrl || previewUrl
+                  ? t('settings.profile.changePhoto')
+                  : t('settings.profile.uploadPhoto')}
                 <input
                   type="file"
                   accept={AVATAR_ACCEPT}
@@ -396,7 +409,7 @@ function ProfileSection() {
                   disabled={uploading}
                   className="text-sm font-medium text-ink-600 transition hover:text-ink-900 disabled:opacity-50"
                 >
-                  Remove
+                  {t('common.remove')}
                 </button>
               )}
             </div>
@@ -404,7 +417,7 @@ function ProfileSection() {
         </div>
 
         <div className="mt-6 max-w-md">
-          <Field label="Display name" hint="Leave blank to fall back to your email address.">
+          <Field label={t('settings.profile.displayName')} hint={t('settings.profile.displayNameHint')}>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -417,25 +430,42 @@ function ProfileSection() {
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <PrimaryButton onClick={save} busy={saving} disabled={!dirty}>
-            Save changes
+            {t('common.saveChanges')}
           </PrimaryButton>
           <Saved show={saved} />
           <ErrorText message={error} />
         </div>
       </Card>
 
-      <Card title="Account" description="Details tied to your Atmosphere sign-in.">
-        <ReadOnlyRow label="Email" value={user?.email ?? '—'} />
+      <Card title={t('settings.account.title')} description={t('settings.account.description')}>
+        <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />
         <ReadOnlyRow
-          label="Email confirmed"
-          value={user?.emailConfirmed ? 'Yes' : 'Not yet confirmed'}
+          label={t('settings.account.emailConfirmed')}
+          value={
+            user?.emailConfirmed
+              ? t('settings.account.emailConfirmedYes')
+              : t('settings.account.emailConfirmedNo')
+          }
         />
-        <ReadOnlyRow label="Member since" value={formatDate(user?.createdAt)} />
-        <ReadOnlyRow label="Last sign-in" value={formatDate(user?.lastSignInAt)} />
-        <p className="mt-4 text-xs text-ink-500">
-          Your sign-in email can't be changed here — it identifies your account across the
-          organization.
-        </p>
+        <ReadOnlyRow label={t('settings.account.memberSince')} value={formatDate(user?.createdAt, locale)} />
+        <ReadOnlyRow label={t('settings.account.lastSignIn')} value={formatDate(user?.lastSignInAt, locale)} />
+        <p className="mt-4 text-xs text-ink-500">{t('settings.account.emailLocked')}</p>
+      </Card>
+
+      <Card
+        title={t('settings.language.title')}
+        description={t('settings.language.description')}
+      >
+        <div className="flex items-start gap-3">
+          <GlobeIcon width={20} height={20} className="mt-2.5 shrink-0 text-ink-500" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-ink-700">{t('settings.language.label')}</p>
+            <div className="mt-2">
+              <LanguagePicker />
+            </div>
+            <p className="mt-1.5 text-xs text-ink-500">{t('settings.language.helper')}</p>
+          </div>
+        </div>
       </Card>
     </>
   );
@@ -455,6 +485,7 @@ function SecuritySection() {
 }
 
 function ChangePasswordCard() {
+  const t = useT();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -481,7 +512,7 @@ function ChangePasswordCard() {
       window.setTimeout(() => setSaved(false), 4000);
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : 'Could not change your password. Try again.',
+        err instanceof ApiError ? err.message : t('settings.password.error'),
       );
     } finally {
       setSaving(false);
@@ -490,15 +521,15 @@ function ChangePasswordCard() {
 
   return (
     <Card
-      title="Password"
-      description="Changing your password signs you out everywhere else. This device stays signed in."
+      title={t('settings.password.title')}
+      description={t('settings.password.description')}
     >
       <form onSubmit={submit} className="max-w-md space-y-4">
         {/* Present for password managers: they need the account this credential
             belongs to in order to offer the right entry. */}
         <input type="text" name="username" autoComplete="username" className="hidden" readOnly />
 
-        <Field label="Current password">
+        <Field label={t('settings.password.current')}>
           <div className="relative mt-2">
             <input
               type={reveal ? 'text' : 'password'}
@@ -510,7 +541,7 @@ function ChangePasswordCard() {
             <button
               type="button"
               onClick={() => setReveal((value) => !value)}
-              aria-label={reveal ? 'Hide passwords' : 'Show passwords'}
+              aria-label={reveal ? t('settings.password.hide') : t('settings.password.show')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 transition hover:text-ink-800"
             >
               {reveal ? <EyeOffIcon width={18} height={18} /> : <EyeIcon width={18} height={18} />}
@@ -518,7 +549,7 @@ function ChangePasswordCard() {
           </div>
         </Field>
 
-        <Field label="New password" hint="At least 8 characters.">
+        <Field label={t('settings.password.new')} hint={t('settings.password.hint')}>
           <input
             type={reveal ? 'text' : 'password'}
             value={newPassword}
@@ -528,7 +559,7 @@ function ChangePasswordCard() {
           />
         </Field>
 
-        <Field label="Confirm new password">
+        <Field label={t('settings.password.confirm')}>
           <input
             type={reveal ? 'text' : 'password'}
             value={confirmPassword}
@@ -538,14 +569,14 @@ function ChangePasswordCard() {
           />
         </Field>
 
-        {mismatch && <p className="text-sm text-caution-600">Those passwords don't match yet.</p>}
+        {mismatch && <p className="text-sm text-caution-600">{t('settings.password.mismatch')}</p>}
         <ErrorText message={error} />
 
         <div className="flex flex-wrap items-center gap-3">
           <PrimaryButton type="submit" busy={saving} disabled={!canSubmit}>
-            Update password
+            {t('settings.password.update')}
           </PrimaryButton>
-          <Saved show={saved} label="Password updated" />
+          <Saved show={saved} label={t('settings.password.updated')} />
         </div>
       </form>
     </Card>
@@ -553,13 +584,14 @@ function ChangePasswordCard() {
 }
 
 function SignOutCard() {
+  const t = useT();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const { confirmSignOut } = usePreferences();
   const [busy, setBusy] = useState(false);
 
   async function signOut() {
-    if (confirmSignOut && !window.confirm('Sign out of Atmosphere?')) return;
+    if (confirmSignOut && !window.confirm(t('nav.signOutConfirm'))) return;
     setBusy(true);
     try {
       await logout();
@@ -571,8 +603,8 @@ function SignOutCard() {
 
   return (
     <Card
-      title="Sign out"
-      description="Ends the session on this device. Sign in again with your email and password to continue."
+      title={t('settings.signOut.title')}
+      description={t('settings.signOut.description')}
       tone="danger"
     >
       <button
@@ -585,7 +617,7 @@ function SignOutCard() {
         ) : (
           <LogOutIcon width={16} height={16} />
         )}
-        {busy ? 'Signing out…' : 'Sign out'}
+        {busy ? t('common.signingOut') : t('common.signOut')}
       </button>
     </Card>
   );
@@ -596,6 +628,7 @@ function SignOutCard() {
  * -------------------------------------------------------------------------- */
 
 function LinkedAccountsCard() {
+  const t = useT();
   const { user, membership } = useAuth();
   const canRemoveMembers = isGlobalAdmin(membership?.role);
   const [members, setMembers] = useState<OrgMember[] | null>(null);
@@ -624,7 +657,7 @@ function LinkedAccountsCard() {
       await api.removeMember(member.userId);
       setMembers((prev) => (prev ?? []).filter((row) => row.userId !== member.userId));
     } catch (err) {
-      setRemoveError(err instanceof Error ? err.message : 'Could not remove that person.');
+      setRemoveError(err instanceof Error ? err.message : t('settings.linked.removeError'));
     } finally {
       setRemovingId(null);
     }
@@ -632,8 +665,8 @@ function LinkedAccountsCard() {
 
   return (
     <Card
-      title="Linked accounts"
-      description="Everyone whose login is linked to this office account can work in the same workspace."
+      title={t('settings.linked.title')}
+      description={t('settings.linked.description')}
     >
       {members === null ? (
         <div className="grid place-items-center py-8 text-brand-600">
@@ -641,7 +674,7 @@ function LinkedAccountsCard() {
         </div>
       ) : members.length === 0 ? (
         <p className="text-sm text-ink-500">
-          No linked accounts yet. Invite teammates so they can link theirs.
+          {t('settings.linked.empty')}
         </p>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
@@ -664,7 +697,11 @@ function LinkedAccountsCard() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">
                       {name}
-                      {isYou && <span className="ml-2 text-xs font-normal text-brand-600">(you)</span>}
+                      {isYou && (
+                        <span className="ms-2 text-xs font-normal text-brand-600">
+                          {t('settings.linked.you')}
+                        </span>
+                      )}
                     </p>
                     <p className="truncate text-xs text-ink-500">
                       {member.email ?? '—'}
@@ -681,7 +718,7 @@ function LinkedAccountsCard() {
                       type="button"
                       onClick={() => void removeMember(member)}
                       disabled={removingId === member.userId}
-                      aria-label={`Remove ${name} from this workspace`}
+                      aria-label={t('settings.linked.removeAria', { name })}
                       className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
                     >
                       {removingId === member.userId ? (
@@ -699,7 +736,7 @@ function LinkedAccountsCard() {
       )}
       {canRemoveMembers && members && members.length > 0 && (
         <p className="mt-3 text-[11px] text-ink-400">
-          Remove unlinks their login from this office. Invite that address again if they should come back.
+          {t('settings.linked.removeHint')}
         </p>
       )}
       {removeError && (

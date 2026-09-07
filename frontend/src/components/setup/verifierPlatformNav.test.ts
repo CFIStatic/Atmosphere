@@ -13,7 +13,7 @@ describe('verifier office rail', () => {
       /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
     );
     expect(nav).not.toBeNull();
-    const labels = [...nav![0].matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1]);
+    const labels = [...nav![0].matchAll(/<span class="label"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(labels).toEqual(['Start a job', 'Dashboard']);
     expect(nav![0]).not.toContain('data-route="/field"');
     expect(nav![0]).not.toContain('data-route="/my-work"');
@@ -116,6 +116,14 @@ describe('verifier office rail', () => {
     );
     expect(verifierHtml).toContain(
       "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
+    );
+  });
+
+  it('keeps untranslated Dashboard chrome LTR when the nav locale is RTL', () => {
+    expect(verifierHtml).toContain("document.documentElement.dir = 'ltr'");
+    expect(verifierHtml).toContain("rail.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr'");
+    expect(verifierHtml).not.toContain(
+      "document.documentElement.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr'",
     );
   });
 

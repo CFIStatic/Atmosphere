@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ROLE_LABELS, type MemberRole, type OrgInvite } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
 
@@ -27,6 +28,7 @@ const ago = (iso: string) => {
 };
 
 export function InvitePanel() {
+  const t = useT();
   const { membership } = useAuth();
   const admin = isGlobalAdmin(membership?.role);
   const roles: OrgProductRole[] = ROLES;
@@ -57,11 +59,8 @@ export function InvitePanel() {
   if (!admin) {
     return (
       <section className="mb-6 rounded-xl glass-card p-5">
-        <h2 className="text-base font-semibold text-ink-900">Team invites</h2>
-        <p className="mt-1 text-xs text-ink-500">
-          Only the Global Admin can invite people onto this workspace. Ask them to send an invite
-          for your teammates.
-        </p>
+        <h2 className="text-base font-semibold text-ink-900">{t('settings.invites.title')}</h2>
+        <p className="mt-1 text-xs text-ink-500">{t('settings.invites.adminOnly')}</p>
       </section>
     );
   }
@@ -100,12 +99,8 @@ export function InvitePanel() {
 
   return (
     <section className="mb-6 rounded-xl glass-card p-5">
-      <h2 className="text-base font-semibold text-ink-900">Invite teammates</h2>
-      <p className="mt-1 text-xs text-ink-500">
-        Only you (Global Admin) can create workspace accounts for others. They open the invite
-        email and create a login with that address. For a subcontractor on one job, invite them
-        from the job file instead.
-      </p>
+      <h2 className="text-base font-semibold text-ink-900">{t('settings.invites.title')}</h2>
+      <p className="mt-1 text-xs text-ink-500">{t('settings.invites.description')}</p>
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
         <input
@@ -134,11 +129,11 @@ export function InvitePanel() {
           className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
         >
           {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-          Invite
+          {t('settings.invites.button')}
         </button>
       </form>
       <p className="mt-1.5 text-[11px] text-ink-400">
-        Global Admin can manage billing. Employees can do everything else.
+        {t('settings.invites.rolesHint')}
       </p>
 
       {outcome && <p className="mt-2 text-xs text-success-600">{outcome}</p>}

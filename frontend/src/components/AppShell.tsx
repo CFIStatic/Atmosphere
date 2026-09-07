@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { PersonAvatar } from './PersonAvatar';
+import { useT, type MessageKey } from '../lib/i18n';
 import { usePreferences } from '../lib/preferences';
 import { PLATFORMS, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
@@ -44,6 +45,15 @@ const JUMP_TARGETS = (() => {
  * approvals pill, and the page content. `rail` renders a right-hand column on
  * wide screens — the Overview passes the Atmosphere panel through it.
  */
+const NAV_LABEL_KEYS: Record<string, MessageKey> = {
+  'Start a job': 'nav.startJob',
+  Dashboard: 'nav.dashboard',
+  Settings: 'nav.settings',
+  'Field capture': 'nav.fieldCapture',
+  Work: 'nav.work',
+  System: 'nav.system',
+};
+
 export function AppShell({
   children,
   rail,
@@ -54,6 +64,7 @@ export function AppShell({
   wide?: boolean;
   rail?: ReactNode;
 }) {
+  const t = useT();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [platformId, setPlatformId] = usePlatform();
   const location = useLocation();
@@ -84,17 +95,17 @@ export function AppShell({
           <button
             className="text-ink-500 md:hidden"
             onClick={() => setMobileOpen(false)}
-            aria-label="Close navigation"
+            aria-label={t('nav.close')}
           >
             <CloseIcon width={18} height={18} />
           </button>
         </div>
 
-        <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
+        <nav aria-label={t('nav.primary')} className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
           {platform.groups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0">
               <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
-                {group.label}
+                {NAV_LABEL_KEYS[group.label] ? t(NAV_LABEL_KEYS[group.label]) : group.label}
               </p>
               <div className="space-y-0.5">
                 {group.items.map(({ to, label, Icon }) => (
@@ -111,7 +122,9 @@ export function AppShell({
                     }
                   >
                     <Icon width={16} height={16} className="shrink-0" />
-                    <span className="flex-1 truncate">{label}</span>
+                    <span className="flex-1 truncate">
+                      {NAV_LABEL_KEYS[label] ? t(NAV_LABEL_KEYS[label]) : label}
+                    </span>
                   </NavLink>
                 ))}
               </div>
@@ -122,7 +135,7 @@ export function AppShell({
 
       {mobileOpen && (
         <button
-          aria-label="Close navigation"
+          aria-label={t('nav.close')}
           className="fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
@@ -135,7 +148,7 @@ export function AppShell({
             <button
               className="text-ink-600 md:hidden"
               onClick={() => setMobileOpen(true)}
-              aria-label="Open navigation"
+              aria-label={t('nav.open')}
             >
               <MenuIcon width={20} height={20} />
             </button>
@@ -172,6 +185,7 @@ export function AppShell({
  * hands stay on the keys between screens.
  */
 function JumpPalette() {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -181,8 +195,16 @@ function JumpPalette() {
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return JUMP_TARGETS;
-    return JUMP_TARGETS.filter((t) => t.label.toLowerCase().includes(q));
-  }, [query]);
+    return JUMP_TARGETS.filter((target) => {
+      const translated = NAV_LABEL_KEYS[target.label]
+        ? t(NAV_LABEL_KEYS[target.label])
+        : target.label;
+      return (
+        target.label.toLowerCase().includes(q) ||
+        translated.toLowerCase().includes(q)
+      );
+    });
+  }, [query, t]);
 
   const go = useCallback(
     (to: string) => {
@@ -229,8 +251,8 @@ function JumpPalette() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && matches[0]) go(matches[0].to);
           }}
-          placeholder="Jump to…"
-          aria-label="Jump to a screen"
+          placeholder={t('nav.jumpTo')}
+          aria-label={t('nav.jumpToAria')}
           className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
         />
         <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
@@ -249,7 +271,7 @@ function JumpPalette() {
               }`}
             >
               <Icon width={15} height={15} className="text-ink-500" />
-              {label}
+              {NAV_LABEL_KEYS[label] ? t(NAV_LABEL_KEYS[label]) : label}
             </button>
           ))}
         </div>
@@ -263,6 +285,7 @@ function JumpPalette() {
  * than about the work: Settings, and signing out.
  */
 function AccountMenu() {
+  const t = useT();
   const { user, profile, membership, logout } = useAuth();
   const { confirmSignOut } = usePreferences();
   const navigate = useNavigate();
@@ -289,7 +312,7 @@ function AccountMenu() {
   }, [open]);
 
   async function handleLogout() {
-    if (confirmSignOut && !window.confirm('Sign out of Atmosphere?')) return;
+    if (confirmSignOut && !window.confirm(t('nav.signOutConfirm'))) return;
     setLoggingOut(true);
     try {
       await logout();
@@ -338,7 +361,7 @@ function AccountMenu() {
             className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-200"
           >
             <SettingsIcon width={17} height={17} className="text-ink-500" />
-            Settings
+            {t('nav.settings')}
           </button>
 
           <button
@@ -352,7 +375,7 @@ function AccountMenu() {
             ) : (
               <LogOutIcon width={17} height={17} />
             )}
-            {loggingOut ? 'Signing out…' : 'Sign out'}
+            {loggingOut ? t('common.signingOut') : t('common.signOut')}
           </button>
         </div>
       )}
