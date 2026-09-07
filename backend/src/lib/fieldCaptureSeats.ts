@@ -1,5 +1,6 @@
 /**
- * Work Verification includes 3 Field Capture accounts. Extra seats are $100/mo.
+ * Included Field Capture seats come from the org's Atmosphere plan
+ * (Starter 1 / Work Verification 3 / Scale 10). Extra seats are $100/mo.
  *
  * A Field Capture seat is an org member (or a pending invite that will become
  * one) who uses Field Capture — crew logins and Employee / field-technician
@@ -16,6 +17,7 @@ import {
   INCLUDED_FC_SEATS,
   allowedFcSeats,
   extraSeatsNeeded,
+  includedFcSeatsForPlan,
 } from './stripeCatalog.js';
 
 export { INCLUDED_FC_SEATS, allowedFcSeats, extraSeatsNeeded };
@@ -49,11 +51,12 @@ export function fcSeatLimitFromDb(used = 0, allowed = INCLUDED_FC_SEATS) {
   return fcSeatLimitError(Math.max(0, allowed), Math.max(0, used));
 }
 
-export function fcSeatLimitError(allowed: number, used: number) {
-  const extraNeeded = extraSeatsNeeded(used + 1, Math.max(0, allowed - INCLUDED_FC_SEATS));
+export function fcSeatLimitError(allowed: number, used: number, included: number = INCLUDED_FC_SEATS) {
+  const extraNeeded = extraSeatsNeeded(used + 1, Math.max(0, allowed - included), included);
   const extraLabel = extraNeeded === 1 ? '1 extra Field Capture seat' : `${Math.max(1, extraNeeded)} extra Field Capture seats`;
+  const seatWord = included === 1 ? 'account' : 'accounts';
   return paymentRequired(
-    `This plan includes ${INCLUDED_FC_SEATS} Field Capture accounts (${used} in use). Add ${extraLabel} at $100/mo to continue.`,
+    `This plan includes ${included} Field Capture ${seatWord} (${used} in use). Add ${extraLabel} at $100/mo to continue.`,
     'fc_seat_limit',
   );
 }
@@ -71,17 +74,19 @@ export function isWorkVerificationEntitled(status: string | null | undefined): b
   return status === 'active' || status === 'trialing' || status === 'past_due' || status === 'comped';
 }
 
-/** Extra seats and the 3 included seats only apply while Work Verification is live. */
+/** Extra seats and the plan's included seats only apply while the subscription is live. */
 export function entitledFcSeatCounts(
   storedExtra: number,
   status: string | null | undefined,
   entitledOverride = false,
+  included: number = INCLUDED_FC_SEATS,
 ): { extra: number; included: number } {
   if (!entitledOverride && !isWorkVerificationEntitled(status)) {
     return { extra: 0, included: 0 };
   }
   const extra = Number.isFinite(storedExtra) ? Math.max(0, Math.floor(storedExtra)) : 0;
-  return { extra, included: INCLUDED_FC_SEATS };
+  const seats = Number.isFinite(included) ? Math.max(0, Math.floor(included)) : INCLUDED_FC_SEATS;
+  return { extra, included: seats };
 }
 
 export function summarizeFcSeats(used: number, extra: number, included: number = INCLUDED_FC_SEATS): FieldCaptureSeatUsage {
@@ -151,13 +156,17 @@ export async function readOrgBillingSeatState(
   status: string | null;
   subscriptionId: string | null;
   customerId: string | null;
+  planCode: string | null;
+  included: number;
 }> {
   const { data, error } = await supabase
     .from('org_billing')
-    .select('extra_fc_seats, status, stripe_subscription_id, stripe_customer_id')
+    .select(
+      'extra_fc_seats, status, stripe_subscription_id, stripe_customer_id, atmosphere_plan_code, included_fc_seats',
+    )
     .eq('org_id', orgId)
     .maybeSingle();
-  if (error && /extra_fc_seats|column .* does not exist/i.test(error.message)) {
+  if (error && /extra_fc_seats|atmosphere_plan_code|included_fc_seats|column .* does not exist/i.test(error.message)) {
     const { data: billing } = await supabase
       .from('org_billing')
       .select('status, stripe_subscription_id, stripe_customer_id')
@@ -168,6 +177,8 @@ export async function readOrgBillingSeatState(
       status: (billing?.status as string | undefined) ?? null,
       subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
       customerId: (billing?.stripe_customer_id as string | undefined) ?? null,
+      planCode: null,
+      included: INCLUDED_FC_SEATS,
     };
   }
   if (error) throw error;
@@ -176,6 +187,8 @@ export async function readOrgBillingSeatState(
     status?: string | null;
     stripe_subscription_id?: string | null;
     stripe_customer_id?: string | null;
+    atmosphere_plan_code?: string | null;
+    included_fc_seats?: number | null;
   } | null;
   const raw = row?.extra_fc_seats;
   return {
@@ -183,6 +196,8 @@ export async function readOrgBillingSeatState(
     status: row?.status ?? null,
     subscriptionId: row?.stripe_subscription_id ?? null,
     customerId: row?.stripe_customer_id ?? null,
+    planCode: row?.atmosphere_plan_code ?? null,
+    included: includedFcSeatsForPlan(row?.atmosphere_plan_code, row?.included_fc_seats),
   };
 }
 
@@ -204,7 +219,12 @@ export async function loadFieldCaptureSeatUsage(
   if (!entitledOverride && !isWorkVerificationEntitled(billing.status)) {
     entitledOverride = isBillingExemptEmail(await loadOrgCreatorEmail(supabase, orgId));
   }
-  const entitled = entitledFcSeatCounts(billing.extra, billing.status, entitledOverride);
+  const entitled = entitledFcSeatCounts(
+    billing.extra,
+    billing.status,
+    entitledOverride,
+    billing.included,
+  );
   return summarizeFcSeats(used, entitled.extra, entitled.included);
 }
 
@@ -216,7 +236,7 @@ export async function assertFieldCaptureSeatAvailable(
 ): Promise<FieldCaptureSeatUsage> {
   const seats = await loadFieldCaptureSeatUsage(supabase, orgId, opts);
   if (seats.remaining <= 0) {
-    throw fcSeatLimitError(seats.allowed, seats.used);
+    throw fcSeatLimitError(seats.allowed, seats.used, seats.included);
   }
   return seats;
 }

@@ -18,7 +18,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `operations.html` | Redirect → home (legacy) |
 | `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — Work Verification ($599/mo, 3 seats), extra seats, Chest Mount |
+| `pricing.html`    | Pricing — Starter / Work Verification / Scale, extra seats, Chest Mount |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Integrity agent, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
@@ -36,15 +36,18 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells one bundled subscription plus seats and same-day usage:
+`pricing.html` sells three self-serve plans plus seats and same-day usage:
 
-- **Work Verification** — $599/month. Includes Field Capture and the Evidence
-  Platform, with **3 Field Capture accounts**. Both software parts are required.
+- **Starter** — $299/month, **1 Field Capture account**.
+- **Work Verification** — $599/month, **3 Field Capture accounts**. Featured /
+  default checkout plan.
+- **Scale** — $1,499/month, **10 Field Capture accounts**.
 - **Extra Field Capture seats** — $100/month per additional account beyond the
-  3 included.
+  seats included with the plan.
 - **Usage** — AI/token usage is billed the day it is used. Do not publish a
   per-job dollar rate, a Compute Units allowance, or internal costing as the
   customer-facing default.
+- **Enterprise** — contact sales on the pricing page only. No fourth self-serve SKU.
 - **Field Capture Chest Mount** — one-time $49.99 hardware add-on via Stripe
   Payment Link.
 

@@ -840,6 +840,13 @@ export const setPlanSchema = z.object({
   seats: z.number().int().min(1, 'At least one seat').max(10000, 'Too many seats').default(1),
 });
 
+/** Self-serve Atmosphere plans. Omitted / unknown → Work Verification. */
+export const ATMOSPHERE_ONBOARDING_PLAN_CODES = [
+  'starter',
+  'work_verification',
+  'scale',
+] as const;
+
 /** Optional post-checkout return path — must be a same-origin relative path. */
 export const onboardingCheckoutSchema = z.object({
   returnPath: z
@@ -849,9 +856,10 @@ export const onboardingCheckoutSchema = z.object({
     .refine((value) => !value || (value.startsWith('/') && !value.startsWith('//')), {
       message: 'returnPath must be a relative path',
     }),
+  planCode: z.enum(ATMOSPHERE_ONBOARDING_PLAN_CODES).optional(),
 });
 
-/** Extra Field Capture seats to add ($100/mo each beyond the 3 included). */
+/** Extra Field Capture seats to add ($100/mo each beyond the seats included with the plan). */
 export const extraSeatCheckoutSchema = z.object({
   quantity: z.number().int().min(1, 'Add at least one seat').max(500, 'Too many seats').default(1),
 });

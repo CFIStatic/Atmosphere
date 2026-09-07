@@ -7,8 +7,13 @@ import { HttpError } from './errors.js';
 import {
   FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_PRICE_ID,
   LIVE_WORK_VERIFICATION_PRICE_ID,
   WORK_VERIFICATION_PLAN_CODE,
+  atmospherePlan,
+  isAtmosphereSelfServePlanCode,
+  type AtmosphereSelfServePlanCode,
 } from './stripeCatalog.js';
 
 /**
@@ -236,9 +241,9 @@ export async function planForPrice(
 }
 
 /**
- * Look up whether a Stripe price is the Work Verification metering plan
+ * Look up whether a Stripe price is an Atmosphere platform metering plan
  * (signup onboarding). Separate from `billing_plans` — that catalog is seats /
- * usage credits; metering is the $599/mo platform subscription.
+ * usage credits; metering is the Starter / Work Verification / Scale subscription.
  */
 export async function meteringPlanForPrice(
   admin: SupabaseClient,
@@ -261,12 +266,44 @@ export async function meteringPlanForPrice(
   return { code: plan.code as string, name: (plan.name as string) ?? plan.code };
 }
 
-/** True when the price matches STRIPE_ONBOARDING_PRICE_ID (DB may still be unset). */
+/** Configured Stripe price ids for Starter / Work Verification / Scale. */
+export function configuredSelfServePriceIds(): string[] {
+  return [
+    config.stripe.onboardingPriceId,
+    config.stripe.starterPriceId,
+    config.stripe.scalePriceId,
+    LIVE_STARTER_PRICE_ID,
+    LIVE_WORK_VERIFICATION_PRICE_ID,
+    LIVE_SCALE_PRICE_ID,
+  ].filter(Boolean);
+}
+
+/** True when the price is a configured Atmosphere platform plan. */
 export function isConfiguredOnboardingPrice(priceId: string | null | undefined): boolean {
-  return Boolean(
-    priceId &&
-      (priceId === config.stripe.onboardingPriceId || priceId === LIVE_WORK_VERIFICATION_PRICE_ID),
-  );
+  return Boolean(priceId && configuredSelfServePriceIds().includes(priceId));
+}
+
+export function resolveSelfServePriceId(
+  planCode?: string | null,
+): string | null {
+  const plan = atmospherePlan(planCode);
+  if (plan.code === 'starter') return config.stripe.starterPriceId || LIVE_STARTER_PRICE_ID;
+  if (plan.code === 'scale') return config.stripe.scalePriceId || LIVE_SCALE_PRICE_ID;
+  return config.stripe.onboardingPriceId || LIVE_WORK_VERIFICATION_PRICE_ID;
+}
+
+export function atmospherePlanCodeForPriceId(
+  priceId: string | null | undefined,
+): AtmosphereSelfServePlanCode | null {
+  if (!priceId) return null;
+  if (priceId === config.stripe.starterPriceId || priceId === LIVE_STARTER_PRICE_ID) {
+    return 'starter';
+  }
+  if (priceId === config.stripe.scalePriceId || priceId === LIVE_SCALE_PRICE_ID) {
+    return 'scale';
+  }
+  if (isWorkVerificationPriceId(priceId)) return WORK_VERIFICATION_PLAN_CODE;
+  return null;
 }
 
 export function extraSeatPriceId(): string {
@@ -301,10 +338,11 @@ export function extraSeatQuantityFromSubscription(sub: {
 }
 
 export function subscriptionHasWorkVerification(sub: {
-  metadata?: { onboarding?: string } | null;
+  metadata?: { onboarding?: string; atmosphere_plan_code?: string } | null;
   items?: { data?: Array<{ price?: { id?: string } | string | null }> };
 }): boolean {
   if (sub.metadata?.onboarding === 'true') return true;
+  if (isAtmosphereSelfServePlanCode(sub.metadata?.atmosphere_plan_code)) return true;
   return (sub.items?.data ?? []).some((item) => {
     const priceId = subscriptionItemPriceId(item);
     return isWorkVerificationPriceId(priceId) || isConfiguredOnboardingPrice(priceId);
@@ -378,7 +416,8 @@ export async function syncExtraFcSeatsFromCustomer(
 export function pricePlanCode(price: { metadata?: Stripe.Metadata | null; id?: string } | null | undefined): string | null {
   const fromMeta = price?.metadata?.atmosphere_plan_code;
   if (fromMeta) return fromMeta;
-  if (isWorkVerificationPriceId(price?.id)) return WORK_VERIFICATION_PLAN_CODE;
+  const fromPrice = atmospherePlanCodeForPriceId(price?.id);
+  if (fromPrice) return fromPrice;
   if (isExtraSeatPriceId(price?.id)) return FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE;
   return null;
 }
@@ -399,31 +438,45 @@ export async function syncMeteringSubscription(
     periodStart: string | null;
     periodEnd: string | null;
     cancelAtPeriodEnd?: boolean;
+    planCode?: string | null;
+    includedFcSeats?: number | null;
   },
 ): Promise<void> {
+  const plan = atmospherePlan(opts.planCode);
+  const included =
+    opts.includedFcSeats != null && Number.isFinite(Number(opts.includedFcSeats))
+      ? Math.max(0, Math.floor(Number(opts.includedFcSeats)))
+      : plan.includedFcSeats;
   const patch: Record<string, unknown> = {
     stripe_subscription_id: opts.subscriptionId,
     status: mapSubscriptionStatus(opts.status),
     cancel_at_period_end: Boolean(opts.cancelAtPeriodEnd),
+    atmosphere_plan_code: plan.code,
+    included_fc_seats: included,
   };
   if (opts.periodStart) patch.period_start = opts.periodStart;
   if (opts.periodEnd) patch.period_end = opts.periodEnd;
 
-  const { data, error } = await admin
-    .from('org_billing')
-    .update(patch)
-    .eq('org_id', orgId)
-    .select('org_id');
-  if (error) throw new Error(`metering subscription sync failed: ${error.message}`);
-  if (data && data.length > 0) return;
+  const write = async (row: Record<string, unknown>) => {
+    const { data, error } = await admin
+      .from('org_billing')
+      .update(row)
+      .eq('org_id', orgId)
+      .select('org_id');
+    if (error) return { data: null, error };
+    if (data && data.length > 0) return { data, error: null };
+    const inserted = await admin.from('org_billing').insert({ org_id: orgId, ...row });
+    return { data: inserted.data, error: inserted.error };
+  };
 
-  // Checkout normally creates the row via link_stripe_customer. If the webhook
-  // wins the race, still mark the org paid so signup can finish.
-  const { error: insertError } = await admin.from('org_billing').insert({
-    org_id: orgId,
-    ...patch,
-  });
-  if (insertError) throw new Error(`metering subscription sync failed: ${insertError.message}`);
+  let result = await write(patch);
+  if (result.error && /atmosphere_plan_code|included_fc_seats|column .* does not exist/i.test(result.error.message)) {
+    const fallback = { ...patch };
+    delete fallback.atmosphere_plan_code;
+    delete fallback.included_fc_seats;
+    result = await write(fallback);
+  }
+  if (result.error) throw new Error(`metering subscription sync failed: ${result.error.message}`);
 }
 
 /** Seconds-since-epoch → ISO, for Stripe's period boundaries. */

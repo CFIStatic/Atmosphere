@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { persistExtraFcSeats } from '../lib/fieldCaptureSeats.js';
 import {
   adminClient,
+  atmospherePlanCodeForPriceId,
   cardDetails,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
@@ -20,6 +21,11 @@ import {
   syncMeteringSubscription,
   toIso,
 } from '../lib/stripe.js';
+import {
+  atmospherePlan,
+  includedFcSeatsFromMetadata,
+  parseAtmospherePlanCode,
+} from '../lib/stripeCatalog.js';
 import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
 import { mentionWebhookSchema } from '../pm/validation.js';
 import {
@@ -290,12 +296,29 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
     isConfiguredOnboardingPrice(meteringPriceId) ||
     items.some((row) => isConfiguredOnboardingPrice(subscriptionItemPriceId(row)));
   if (metering || isOnboarding) {
+    const fromMeta = sub.metadata?.atmosphere_plan_code;
+    const fromPrice =
+      atmospherePlanCodeForPriceId(meteringPriceId) ??
+      items
+        .map((row) => atmospherePlanCodeForPriceId(subscriptionItemPriceId(row)))
+        .find(Boolean) ??
+      (metering?.code && metering.code !== 'field_capture_extra_seat' ? metering.code : null);
+    const plan = atmospherePlan(parseAtmospherePlanCode(fromMeta ?? fromPrice));
+    const includedFromMeta = includedFcSeatsFromMetadata(
+      sub.metadata,
+      ...items.map((row) => {
+        const price = row.price;
+        return typeof price === 'object' && price ? price.metadata : null;
+      }),
+    );
     await syncMeteringSubscription(admin, orgId, {
       subscriptionId: sub.id,
       status: sub.status,
       periodStart,
       periodEnd,
       cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+      planCode: plan.code,
+      includedFcSeats: includedFromMeta ?? plan.includedFcSeats,
     });
     return;
   }

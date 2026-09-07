@@ -9,7 +9,8 @@ import { ensureCustomer, liveStripeCustomerId, stripeClient, stripeIdempotencyKe
 import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
 import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
-import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
+import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
 import {
   billingError,
@@ -553,7 +554,10 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
       complete: workspace.complete,
       isCreator: workspace.isCreator,
       hasSubscription: workspace.subscription.hasStripeSubscription,
+      defaultPlanCode: 'work_verification',
+      plans: publicSelfServePlans(),
       plan: {
+        code: workspace.subscription.code,
         name: workspace.subscription.name,
         baseMonthlyFeeCents: workspace.subscription.baseMonthlyFeeCents,
         includedJobs: workspace.subscription.includedJobs,
@@ -578,7 +582,8 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
     }
 
-    const { returnPath } = onboardingCheckoutSchema.parse(req.body ?? {});
+    const { returnPath, planCode: rawPlanCode } = onboardingCheckoutSchema.parse(req.body ?? {});
+    const plan = atmospherePlan(parseAtmospherePlanCode(rawPlanCode));
     const supabase = createUserClient(req.accessToken!);
     const status = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
 
@@ -589,10 +594,16 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       throw badRequest('Billing is already set up for this organization.', 'billing_already_complete');
     }
 
-    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!);
+    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code);
     if (!priceId) {
       throw badRequest(
-        'No Stripe price is configured for onboarding. Set metering_plan_versions.stripe_price_id or STRIPE_ONBOARDING_PRICE_ID.',
+        `No Stripe price is configured for the ${plan.name} plan. Set ${
+          plan.code === 'starter'
+            ? 'STRIPE_STARTER_PRICE_ID'
+            : plan.code === 'scale'
+              ? 'STRIPE_SCALE_PRICE_ID'
+              : 'STRIPE_ONBOARDING_PRICE_ID'
+        }.`,
         'price_not_configured',
       );
     }
@@ -602,6 +613,13 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       orgName: await orgName(supabase, req.orgId!),
     });
 
+    const planMeta = {
+      org_id: req.orgId!,
+      onboarding: 'true',
+      atmosphere_plan_code: plan.code,
+      atmosphere_included_fc_seats: String(plan.includedFcSeats),
+    };
+
     const session = await stripeClient().checkout.sessions.create(
       {
         mode: 'subscription',
@@ -609,8 +627,8 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
         success_url: onboardingReturnUrl('success', returnPath),
         cancel_url: onboardingReturnUrl('cancelled', returnPath),
         client_reference_id: req.orgId,
-        metadata: { org_id: req.orgId!, onboarding: 'true' },
-        subscription_data: { metadata: { org_id: req.orgId!, onboarding: 'true' } },
+        metadata: planMeta,
+        subscription_data: { metadata: planMeta },
         line_items: [{ price: priceId, quantity: 1 }],
       },
       { idempotencyKey: stripeIdempotencyKey('onboarding', req.orgId, priceId) },
@@ -666,10 +684,14 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
       customerId,
       subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
       createCheckout: async ({ customerId: checkoutCustomerId, extraSeats }) => {
-        const priceId = await resolveOnboardingPriceId(supabase, req.orgId!);
+        const priceId = await resolveOnboardingPriceId(
+          supabase,
+          req.orgId!,
+          workspace.subscription.code,
+        );
         if (!priceId) {
           throw badRequest(
-            'No Stripe price is configured for onboarding. Set metering_plan_versions.stripe_price_id or STRIPE_ONBOARDING_PRICE_ID.',
+            'No Stripe price is configured for this plan. Set STRIPE_ONBOARDING_PRICE_ID, STRIPE_STARTER_PRICE_ID, or STRIPE_SCALE_PRICE_ID.',
             'price_not_configured',
           );
         }
@@ -678,6 +700,7 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
           orgId: req.orgId!,
           extraSeats,
           workVerificationPriceId: priceId,
+          planCode: workspace.subscription.code,
         });
       },
     });

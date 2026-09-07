@@ -176,6 +176,17 @@ test('checkout returnPath must be a same-origin relative path', () => {
   assert.throws(() => onboardingCheckoutSchema.parse({ returnPath: '//evil.example' }));
 });
 
+test('onboarding checkout accepts a self-serve plan and defaults when omitted', () => {
+  assert.equal(onboardingCheckoutSchema.parse({}).planCode, undefined);
+  assert.equal(onboardingCheckoutSchema.parse({ planCode: 'starter' }).planCode, 'starter');
+  assert.equal(onboardingCheckoutSchema.parse({ planCode: 'scale' }).planCode, 'scale');
+  assert.equal(
+    onboardingCheckoutSchema.parse({ planCode: 'work_verification' }).planCode,
+    'work_verification',
+  );
+  assert.throws(() => onboardingCheckoutSchema.parse({ planCode: 'enterprise' }));
+});
+
 test('the website signup defaults are a valid create-org payload', () => {
   const parsed = createOrgSchema.parse({
     name: 'Meridian Services',

@@ -219,6 +219,10 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(office).toContain('node scripts/applyFieldCaptureSeatEnforce.mjs');
   });
 
+  it('applies Atmosphere plan codes so included Field Capture seats follow the org plan', () => {
+    expect(office).toContain('node scripts/applyAtmosphereSelfServePlans.mjs');
+  });
+
   it('applies terms_acceptances grants so ToS Continue can persist', () => {
     expect(office).toContain('node scripts/applyTermsAcceptances.mjs');
   });

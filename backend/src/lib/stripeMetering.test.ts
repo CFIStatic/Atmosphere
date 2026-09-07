@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  atmospherePlanCodeForPriceId,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
@@ -8,10 +9,16 @@ import {
   isExtraSeatPriceId,
   isStripePriceId,
   mapSubscriptionStatus,
+  resolveSelfServePriceId,
   shouldCancelOrgBillingForDeletedSubscription,
   stripeIdempotencyKey,
 } from './stripe.js';
-import { LIVE_EXTRA_FC_SEAT_PRICE_ID, LIVE_WORK_VERIFICATION_PRICE_ID } from './stripeCatalog.js';
+import {
+  LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_PRICE_ID,
+  LIVE_WORK_VERIFICATION_PRICE_ID,
+} from './stripeCatalog.js';
 import { planFromMeteringRow } from './workspaceBilling.js';
 import type Stripe from 'stripe';
 
@@ -30,6 +37,23 @@ describe('isConfiguredOnboardingPrice', () => {
     assert.equal(isConfiguredOnboardingPrice('price_abc'), false);
     assert.equal(isConfiguredOnboardingPrice(null), false);
     assert.equal(isConfiguredOnboardingPrice(undefined), false);
+  });
+
+  it('recognizes live Starter, Work Verification, and Scale prices', () => {
+    assert.equal(isConfiguredOnboardingPrice(LIVE_STARTER_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_WORK_VERIFICATION_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_SCALE_PRICE_ID), true);
+  });
+});
+
+describe('self-serve price resolution', () => {
+  it('defaults checkout to Work Verification and maps live catalog ids', () => {
+    assert.equal(resolveSelfServePriceId(undefined), LIVE_WORK_VERIFICATION_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('starter'), LIVE_STARTER_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('scale'), LIVE_SCALE_PRICE_ID);
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_STARTER_PRICE_ID), 'starter');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_SCALE_PRICE_ID), 'scale');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_WORK_VERIFICATION_PRICE_ID), 'work_verification');
   });
 });
 
@@ -69,9 +93,33 @@ describe('stripe helpers', () => {
       },
     });
     assert.equal(plan.name, 'Work Verification');
+    assert.equal(plan.code, 'work_verification');
     assert.equal(plan.baseMonthlyFeeCents, 59900);
     assert.equal(plan.includedJobs, 50);
     assert.equal(plan.includedFcSeats, 3);
+  });
+
+  it('overlays Starter / Scale seats from the stored Atmosphere plan', () => {
+    const starter = planFromMeteringRow(
+      {
+        metering_plan_versions: {
+          base_monthly_fee_cents: 59900,
+          included_jobs: 50,
+          additional_job_price_cents: 3000,
+          metering_plans: { name: 'Work Verification', code: 'work_verification' },
+        },
+      },
+      { planCode: 'starter', includedFcSeats: 1 },
+    );
+    assert.equal(starter.name, 'Starter');
+    assert.equal(starter.code, 'starter');
+    assert.equal(starter.baseMonthlyFeeCents, 29900);
+    assert.equal(starter.includedFcSeats, 1);
+
+    const scale = planFromMeteringRow(null, { planCode: 'scale' });
+    assert.equal(scale.name, 'Scale');
+    assert.equal(scale.baseMonthlyFeeCents, 149900);
+    assert.equal(scale.includedFcSeats, 10);
   });
 
   it('reads extra Field Capture seat quantity from a subscription', () => {

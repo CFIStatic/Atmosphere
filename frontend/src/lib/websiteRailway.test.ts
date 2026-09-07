@@ -182,6 +182,31 @@ describe('Railway corporate-website image', () => {
     expect(offBuy?.classList.contains('is-disabled')).toBe(true);
   });
 
+  it('sells three self-serve plans on /pricing with Work Verification featured', () => {
+    const page = read('website/pricing.html');
+    expect(page).toContain('plan-name mono">Starter');
+    expect(page).toContain('plan-name mono">Work Verification');
+    expect(page).toContain('plan-name mono">Scale');
+    expect(page).toContain('$299');
+    expect(page).toContain('$599');
+    expect(page).toContain('$1,499');
+    expect(page).toContain('1 Field Capture account included');
+    expect(page).toContain('3 Field Capture accounts included');
+    expect(page).toContain('10 Field Capture accounts included');
+    expect(page).toContain('RECOMMENDED');
+    expect(page).toContain('signup.html?plan=starter');
+    expect(page).toContain('signup.html?plan=work_verification');
+    expect(page).toContain('signup.html?plan=scale');
+    expect(page).toContain('contact.html');
+    expect(page).toContain('Extra Field Capture seats are');
+    expect(page).toContain('$100/month');
+    expect(page).toContain('billed the day it is used');
+    expect(page).toContain('Field Capture Chest Mount');
+    expect(page).not.toContain('10×');
+    expect(page).not.toContain('provider cost');
+    expect(page).not.toMatch(/plan-name mono">Enterprise/);
+  });
+
   it('does not treat in-window Railway probe retries as a finished failure', () => {
     const up = read('backend/scripts/railwayUp.sh');
     expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');

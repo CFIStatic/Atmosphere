@@ -26,11 +26,9 @@ import {
   LIVE_CHEST_MOUNT_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRODUCT_ID,
-  LIVE_WORK_VERIFICATION_PRICE_ID,
-  LIVE_WORK_VERIFICATION_PRODUCT_ID,
-  WORK_VERIFICATION_DESCRIPTION,
-  WORK_VERIFICATION_MONTHLY_CENTS,
   WORK_VERIFICATION_PLAN_CODE,
+  planDescription,
+  selfServePlanList,
 } from '../lib/stripeCatalog.js';
 import { resolveStripeSecretKey } from '../lib/stripeSecret.js';
 
@@ -45,16 +43,6 @@ type PlanRow = {
   stripe_price_id_monthly: string | null;
   stripe_price_id_annual: string | null;
 };
-
-/** Seeded Work Verification metering plan — $599/mo, 3 included Field Capture seats. */
-const WORK_VERIFICATION = {
-  code: WORK_VERIFICATION_PLAN_CODE,
-  name: 'Work Verification',
-  description: WORK_VERIFICATION_DESCRIPTION,
-  monthlyPriceCents: WORK_VERIFICATION_MONTHLY_CENTS,
-  knownProductId: LIVE_WORK_VERIFICATION_PRODUCT_ID,
-  knownPriceId: LIVE_WORK_VERIFICATION_PRICE_ID,
-} as const;
 
 const EXTRA_FC_SEAT = {
   code: FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
@@ -110,17 +98,25 @@ async function ensureRecurringPrice(
   interval: 'month' | 'year',
   unitAmount: number,
   knownPriceId?: string,
+  includedFcSeats?: number,
 ): Promise<Stripe.Price> {
+  const seatMeta: Record<string, string> =
+    includedFcSeats != null ? { atmosphere_included_fc_seats: String(includedFcSeats) } : {};
   const existing = await findPrice(stripe, planCode, interval, knownPriceId);
   if (existing) {
     if (existing.unit_amount === unitAmount && existing.product === productId) {
       const meta = existing.metadata ?? {};
-      if (meta.atmosphere_plan_code !== planCode || meta.atmosphere_interval !== interval) {
+      if (
+        meta.atmosphere_plan_code !== planCode ||
+        meta.atmosphere_interval !== interval ||
+        (includedFcSeats != null && meta.atmosphere_included_fc_seats !== String(includedFcSeats))
+      ) {
         await stripe.prices.update(existing.id, {
           metadata: {
             ...meta,
             atmosphere_plan_code: planCode,
             atmosphere_interval: interval,
+            ...seatMeta,
           },
         });
       }
@@ -147,6 +143,7 @@ async function ensureRecurringPrice(
     metadata: {
       atmosphere_plan_code: planCode,
       atmosphere_interval: interval,
+      ...seatMeta,
     },
   });
 }
@@ -209,47 +206,57 @@ async function main() {
   const stripe = new Stripe(secretKey);
   const updates: string[] = [];
   let onboardingPriceId: string | null = null;
+  let starterPriceId: string | null = null;
+  let scalePriceId: string | null = null;
 
-  // --- Work Verification metering (signup onboarding) --------------------
-  console.log('Syncing Work Verification metering plan…\n');
-  {
+  // --- Self-serve Atmosphere plans (signup onboarding) -------------------
+  console.log('Syncing Atmosphere self-serve plans…\n');
+  for (const plan of selfServePlanList()) {
     const product = await ensureProduct(stripe, {
-      code: WORK_VERIFICATION.code,
-      name: `Atmosphere ${WORK_VERIFICATION.name}`,
-      description: WORK_VERIFICATION.description,
-      metadata: { catalog: 'metering', atmosphere_included_fc_seats: '3' },
-      knownProductId: WORK_VERIFICATION.knownProductId,
+      code: plan.code,
+      name: `Atmosphere ${plan.name}`,
+      description: planDescription(plan),
+      metadata: {
+        catalog: 'metering',
+        atmosphere_included_fc_seats: String(plan.includedFcSeats),
+      },
+      knownProductId: plan.knownProductId,
     });
     const monthly = await ensureRecurringPrice(
       stripe,
       product.id,
-      WORK_VERIFICATION.code,
-      WORK_VERIFICATION.name,
+      plan.code,
+      plan.name,
       'month',
-      WORK_VERIFICATION.monthlyPriceCents,
-      WORK_VERIFICATION.knownPriceId,
+      plan.monthlyCents,
+      plan.knownPriceId,
+      plan.includedFcSeats,
     );
-    onboardingPriceId = monthly.id;
+    if (plan.code === WORK_VERIFICATION_PLAN_CODE) onboardingPriceId = monthly.id;
+    if (plan.code === 'starter') starterPriceId = monthly.id;
+    if (plan.code === 'scale') scalePriceId = monthly.id;
     console.log(
-      `    monthly → ${monthly.id} ($${(WORK_VERIFICATION.monthlyPriceCents / 100).toFixed(2)})`,
+      `    ${plan.code} monthly → ${monthly.id} ($${(plan.monthlyCents / 100).toFixed(2)}, ${plan.includedFcSeats} seats)`,
     );
 
-    updates.push(
-      `-- Work Verification onboarding / metering\n` +
-        `update public.metering_plan_versions\n` +
-        `   set stripe_price_id = '${monthly.id}'\n` +
-        ` where id = (\n` +
-        `   select pv.id\n` +
-        `     from public.metering_plan_versions pv\n` +
-        `     join public.metering_plans p on p.id = pv.plan_id\n` +
-        `    where p.code = 'work_verification' and pv.effective_to is null\n` +
-        `    order by pv.version desc\n` +
-        `    limit 1\n` +
-        ` );`,
-    );
+    if (plan.code === WORK_VERIFICATION_PLAN_CODE) {
+      updates.push(
+        `-- Work Verification onboarding / metering\n` +
+          `update public.metering_plan_versions\n` +
+          `   set stripe_price_id = '${monthly.id}'\n` +
+          ` where id = (\n` +
+          `   select pv.id\n` +
+          `     from public.metering_plan_versions pv\n` +
+          `     join public.metering_plans p on p.id = pv.plan_id\n` +
+          `    where p.code = 'work_verification' and pv.effective_to is null\n` +
+          `    order by pv.version desc\n` +
+          `    limit 1\n` +
+          ` );`,
+      );
+    }
   }
 
-  // --- Extra Field Capture seats ($100/mo each beyond the 3 included) ----
+  // --- Extra Field Capture seats ($100/mo each beyond included seats) ----
   console.log('\nSyncing extra Field Capture seats…\n');
   {
     const product = await ensureProduct(stripe, {
@@ -388,7 +395,11 @@ async function main() {
 STRIPE_SECRET_KEY=${secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_') ? 'sk_test_…' : 'sk_live_…'}
 STRIPE_WEBHOOK_SECRET=whsec_…
 ${onboardingPriceId ? `STRIPE_ONBOARDING_PRICE_ID=${onboardingPriceId}` : ''}
-# Live Jettx Work Verification is price_1UD4Sq1b5twUY3Ly6nqfRaGC — Railway is set by the human.
+${starterPriceId ? `STRIPE_STARTER_PRICE_ID=${starterPriceId}` : '# STRIPE_STARTER_PRICE_ID=price_…  # set after this sync creates Starter'}
+${scalePriceId ? `STRIPE_SCALE_PRICE_ID=${scalePriceId}` : '# STRIPE_SCALE_PRICE_ID=price_…    # set after this sync creates Scale'}
+# Live Starter is price_1UD7vi1b5twUY3LykzUsVQVr (prod_VDZ3e7oBJWIYSE).
+# Live Work Verification is price_1UD4Sq1b5twUY3Ly6nqfRaGC (prod_VDVR9rM3g9Tkpg) — Railway is set by the human.
+# Live Scale is price_1UD7vj1b5twUY3Ly1Q4uv4kS (prod_VDZ3SMytTKoxc5).
 # Optional override for extra Field Capture seats ($100/mo):
 # STRIPE_EXTRA_SEAT_PRICE_ID=${LIVE_EXTRA_FC_SEAT_PRICE_ID}
 SUPABASE_SERVICE_ROLE_KEY=…   # required — webhooks mint credits under service role

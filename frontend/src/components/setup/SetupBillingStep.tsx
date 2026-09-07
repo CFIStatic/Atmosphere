@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, type BillingOnboardingStatus } from '../../lib/api';
+import { useSearchParams } from 'react-router-dom';
+import { api, ApiError, type AtmosphereSelfServePlan, type BillingOnboardingStatus } from '../../lib/api';
+import {
+  ATMOSPHERE_SELF_SERVE_PLANS,
+  DEFAULT_ONBOARDING_PLAN_CODE,
+  parseAtmospherePlanCode,
+} from '../../lib/atmospherePlans';
 import { formatCents } from '../../lib/money';
 import { SetupStepCard } from './SetupWizardShell';
 import { SpinnerIcon, CheckIcon } from '../icons';
@@ -15,11 +21,15 @@ export function SetupBillingStep({
   nextLabel?: string;
   onComplete: () => void;
 }) {
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<BillingOnboardingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState(() =>
+    parseAtmospherePlanCode(searchParams.get('plan')),
+  );
   const autoEnteredRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -88,7 +98,7 @@ export function SetupBillingStep({
     setError(null);
     setNotice(null);
     try {
-      const { checkoutUrl } = await api.startOnboardingCheckout(redirectTo);
+      const { checkoutUrl } = await api.startOnboardingCheckout(redirectTo, selectedPlan);
       if (checkoutUrl) {
         window.location.assign(checkoutUrl);
         return;
@@ -143,10 +153,16 @@ export function SetupBillingStep({
     );
   }
 
-  const plan = status.plan;
+  const catalog: AtmosphereSelfServePlan[] = status.plans?.length
+    ? status.plans
+    : ATMOSPHERE_SELF_SERVE_PLANS;
+  const chosen =
+    catalog.find((plan) => plan.code === selectedPlan) ??
+    catalog.find((plan) => plan.code === (status.defaultPlanCode ?? DEFAULT_ONBOARDING_PLAN_CODE)) ??
+    catalog[1]!;
 
   return (
-    <SetupStepCard step={2} title="Set up billing" subtitle="Add a payment method to activate the workspace.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, then add a payment method.">
       {error && (
         <div
           role="alert"
@@ -165,16 +181,48 @@ export function SetupBillingStep({
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">{plan.name}</p>
-        <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
-          {formatCents(plan.baseMonthlyFeeCents)}
-          <span className="text-base font-medium text-ink-500"> / month</span>
-        </p>
-        <p className="mt-2 text-sm text-ink-600">
-          Includes {plan.includedFcSeats ?? 3} Field Capture accounts. Extra seats are $100/mo each.
-        </p>
-      </div>
+      <fieldset className="mt-6 grid gap-3 sm:grid-cols-3">
+        <legend className="sr-only">Atmosphere plan</legend>
+        {catalog.map((plan) => {
+          const selected = plan.code === chosen.code;
+          const seatWord = plan.includedFcSeats === 1 ? 'account' : 'accounts';
+          return (
+            <label
+              key={plan.code}
+              className={`relative flex cursor-pointer flex-col rounded-xl border p-4 ${
+                selected ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-200' : 'border-line bg-paper-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="atmosphere-plan"
+                value={plan.code}
+                checked={selected}
+                onChange={() => setSelectedPlan(plan.code)}
+                className="sr-only"
+              />
+              {plan.recommended ? (
+                <span className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700">
+                  Recommended
+                </span>
+              ) : null}
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+                {plan.name}
+              </span>
+              <span className="mt-2 text-2xl font-bold tracking-tight text-ink-900">
+                {formatCents(plan.monthlyCents)}
+                <span className="text-sm font-medium text-ink-500"> / month</span>
+              </span>
+              <span className="mt-2 text-sm text-ink-600">
+                {plan.includedFcSeats} Field Capture {seatWord} included
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+      <p className="mt-3 text-sm text-ink-600">
+        Extra Field Capture seats are $100/mo each. AI/token usage is billed the day it is used.
+      </p>
 
       <div className="mt-7 flex justify-end">
         {status.complete ? (

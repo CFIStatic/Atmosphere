@@ -2231,11 +2231,14 @@ const routes: Array<[string, RegExp, Handler]> = [
       complete: true,
       isCreator: true,
       hasSubscription: false,
+      defaultPlanCode: 'work_verification',
       plan: {
+        code: 'work_verification',
         name: 'Work Verification',
         baseMonthlyFeeCents: 59900,
         includedJobs: 50,
         additionalJobPriceCents: 3000,
+        includedFcSeats: 3,
       },
     },
   })],
@@ -2248,6 +2251,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       complete: true,
       isCreator: true,
       subscription: {
+        code: 'work_verification',
         name: 'Work Verification',
         baseMonthlyFeeCents: 59900,
         includedJobs: 50,

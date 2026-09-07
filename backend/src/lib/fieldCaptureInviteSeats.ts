@@ -20,6 +20,7 @@ import {
   stripeClient,
   stripeIdempotencyKey,
 } from './stripe.js';
+import { atmospherePlan } from './stripeCatalog.js';
 import { resolveOnboardingPriceId } from './workspaceBilling.js';
 
 export async function createWorkVerificationExtraSeatCheckout(input: {
@@ -29,6 +30,7 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
   successUrl?: string;
   cancelUrl?: string;
   workVerificationPriceId: string;
+  planCode?: string | null;
 }): Promise<string> {
   const extra = Math.max(1, Math.floor(input.extraSeats));
   const session = await stripeClient().checkout.sessions.create(
@@ -42,12 +44,16 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
         org_id: input.orgId,
         extra_fc_seats: String(extra),
         onboarding: 'true',
+        atmosphere_plan_code: atmospherePlan(input.planCode).code,
+        atmosphere_included_fc_seats: String(atmospherePlan(input.planCode).includedFcSeats),
       },
       subscription_data: {
         metadata: {
           org_id: input.orgId,
           extra_fc_seats: String(extra),
           onboarding: 'true',
+          atmosphere_plan_code: atmospherePlan(input.planCode).code,
+          atmosphere_included_fc_seats: String(atmospherePlan(input.planCode).includedFcSeats),
         },
       },
       line_items: [
@@ -107,7 +113,7 @@ export async function ensureFieldCaptureSeatForInvite(
   }
 
   if (config.billing.paymentProvider !== 'stripe' || !isStripeConfigured()) {
-    throw fcSeatLimitError(seats.allowed, seats.used);
+    throw fcSeatLimitError(seats.allowed, seats.used, seats.included);
   }
 
   let customerId = liveStripeCustomerId(billing.customerId);
@@ -125,10 +131,10 @@ export async function ensureFieldCaptureSeatForInvite(
     createCheckout:
       decision.action === 'checkout'
         ? async ({ customerId: checkoutCustomerId, extraSeats }) => {
-            const priceId = await resolveOnboardingPriceId(supabase, orgId);
+            const priceId = await resolveOnboardingPriceId(supabase, orgId, billing.planCode);
             if (!priceId) {
               throw paymentRequired(
-                'No Stripe price is configured for Work Verification. Set metering_plan_versions.stripe_price_id or STRIPE_ONBOARDING_PRICE_ID.',
+                'No Stripe price is configured for this plan. Set STRIPE_ONBOARDING_PRICE_ID, STRIPE_STARTER_PRICE_ID, or STRIPE_SCALE_PRICE_ID.',
                 'price_not_configured',
               );
             }
@@ -137,6 +143,7 @@ export async function ensureFieldCaptureSeatForInvite(
               orgId,
               extraSeats,
               workVerificationPriceId: priceId,
+              planCode: billing.planCode,
             });
           }
         : undefined,

@@ -1,10 +1,11 @@
 # Stripe payments
 
-The product customers pay for is **Work Verification** — a $599/month platform
-subscription that includes **3 Field Capture accounts**. Extra Field Capture
-seats are **$100/month** each. Token/AI usage is invoiced **the day it is
-used**. Signup Checkout and Settings → Billing are that bill. The Field Capture
-Chest Mount is a one-time **$49.99** Payment Link on the website.
+Self-serve Atmosphere plans are **Starter** ($299/mo, 1 Field Capture seat),
+**Work Verification** ($599/mo, 3 seats, the default), and **Scale** ($1,499/mo,
+10 seats). Extra Field Capture seats are **$100/month** each. Token/AI usage is
+invoiced **the day it is used**. Signup Checkout and Settings → Billing are that
+bill. Enterprise is contact-sales only — there is no fourth self-serve SKU. The
+Field Capture Chest Mount is a one-time **$49.99** Payment Link on the website.
 
 A leftover seat / LLM-credit catalog (`billing_plans`, credit packs) still has
 API and webhook handlers so existing Stripe events do not break. It is **not**
@@ -23,7 +24,9 @@ set. `STRIPE_WEBHOOK_SECRET` stays the only webhook signing-secret name.
 | --- | --- | --- |
 | **Secret** (`sk_test_…`) or **restricted** secret (`rk_test_…` with Checkout + Customers + Subscriptions + Invoices + Webhooks) | `STRIPE_SECRET_KEY` (alias: `Stripe_Secret_Key`) | Yes |
 | **Webhook signing secret** (`whsec_…`) | `STRIPE_WEBHOOK_SECRET` | Yes (webhooks reject all events without it) |
-| **Onboarding price id** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Recommended fallback for signup. Live Jettx Work Verification is `price_1UD4Sq1b5twUY3Ly6nqfRaGC` — Railway is set by the human. |
+| **Work Verification onboarding price** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Default signup plan. Live Jettx Work Verification is `price_1UD4Sq1b5twUY3Ly6nqfRaGC` (`prod_VDVR9rM3g9Tkpg`) — Railway is set by the human. |
+| **Starter price** (`price_…`) | `STRIPE_STARTER_PRICE_ID` | Set on Railway. Live Starter is `price_1UD7vi1b5twUY3LykzUsVQVr` (`prod_VDZ3e7oBJWIYSE`, $299/mo, 1 seat). Checkout falls back to this id if the env is unset. |
+| **Scale price** (`price_…`) | `STRIPE_SCALE_PRICE_ID` | Set on Railway. Live Scale is `price_1UD7vj1b5twUY3Ly1Q4uv4kS` (`prod_VDZ3SMytTKoxc5`, $1,499/mo, 10 seats). Checkout falls back to this id if the env is unset. |
 | **Extra Field Capture seat** (`price_…`) | `STRIPE_EXTRA_SEAT_PRICE_ID` | Optional. Defaults to live `price_1UD4Sl1b5twUY3LyjD850F4V` ($100/mo). |
 | Publishable (`pk_test_…`) | — | **Not used** — Checkout is hosted; the browser never talks to Stripe.js |
 | **Billing exempt emails** | `BILLING_EXEMPT_EMAILS` | No. Comma-separated, case-insensitive. Empty (default) = no exemptions. Example: `jack@jettx.ai`. |
@@ -40,7 +43,7 @@ applied when Stripe confirms payment. Returning to a success URL proves nothing.
 
 | Flow | Endpoint | Settled by |
 | ---- | -------- | ---------- |
-| Work Verification signup | `POST /api/billing/checkout/onboarding` | `customer.subscription.*` |
+| Atmosphere signup (Starter / Work Verification / Scale) | `POST /api/billing/checkout/onboarding` | `customer.subscription.*` |
 | Extra Field Capture seats | `POST /api/billing/checkout/extra-seats` | Updates the subscription item, or Checkout; webhook syncs quantity |
 | Cards / invoices / cancel | `POST /api/billing/portal` | Stripe Customer Portal |
 | Same-day token/AI usage | recorded with `record_token_usage` | InvoiceItem + Invoice that day; `invoice.paid` records it |
@@ -62,13 +65,15 @@ coalesced: later usage that day invoices only the leftover. `invoice.paid`
 still records the receipt. Period-close invoices leftover usage days as a
 safety net. Do not apply this multiplier to seat or Stripe subscription prices.
 
-Field Capture seats: allowed = **3 + extra seat quantity**. Creating a 4th
-Field Capture account (crew join or Employee invite) returns `fc_seat_limit`
-until extra seats are added via `POST /api/billing/checkout/extra-seats` or
-the Customer Portal. The webhook syncs extra quantity from any
-`field_capture_extra_seat` subscription item. Inserts into `org_members` /
-`org_invites` are also checked in Postgres under an advisory lock so
-concurrent join-code requests cannot mint unpaid seats.
+Field Capture seats: allowed = **included seats from the org plan + extra
+seat quantity** (Starter 1, Work Verification 3, Scale 10). Creating an
+account past that limit returns `fc_seat_limit` until extra seats are added
+on invite (`POST /api/org/invites`) or via `POST /api/billing/checkout/extra-seats`.
+The webhook syncs extra quantity from any `field_capture_extra_seat`
+subscription item and writes `atmosphere_plan_code` / `included_fc_seats`
+from subscription metadata. Inserts into `org_members` / `org_invites` are
+also checked in Postgres under an advisory lock so concurrent join-code
+requests cannot mint unpaid seats.
 
 Checkout sessions use Stripe idempotency keys so a double-click reuses the
 session instead of opening a second charge.
@@ -85,11 +90,14 @@ npm run stripe:sync
 
 Apply the printed `UPDATE` statements in the Supabase SQL editor. Then set
 `STRIPE_ONBOARDING_PRICE_ID` to the Work Verification `price_…` the script
-prints (also written into `metering_plan_versions.stripe_price_id`). Live
-Jettx catalog ids are pinned in `backend/src/lib/stripeCatalog.ts` so re-runs
-look up by `atmosphere_plan_code` (and those ids) instead of creating
-duplicates. The Work Verification description mentions 3 included Field
-Capture seats; extra seats are `field_capture_extra_seat`.
+prints (also written into `metering_plan_versions.stripe_price_id`). Set
+`STRIPE_STARTER_PRICE_ID` and `STRIPE_SCALE_PRICE_ID` on Railway to the live
+Starter / Scale ids (`price_1UD7vi1b5twUY3LykzUsVQVr` /
+`price_1UD7vj1b5twUY3Ly1Q4uv4kS`). Those ids are also pinned in
+`backend/src/lib/stripeCatalog.ts` so re-runs look up by `atmosphere_plan_code`
+(and those ids) instead of creating duplicates, and checkout can fall back if
+the env is unset. Product/price metadata includes `atmosphere_plan_code` and
+`atmosphere_included_fc_seats`. Extra seats are `field_capture_extra_seat`.
 
 Chest Mount hardware is one-time `price_1UD4Sl1b5twUY3LyFtodoczS` ($49.99).
 The live Payment Link is
@@ -133,6 +141,8 @@ on boot.
 STRIPE_SECRET_KEY=sk_test_…
 STRIPE_WEBHOOK_SECRET=whsec_…
 STRIPE_ONBOARDING_PRICE_ID=price_1UD4Sq1b5twUY3Ly6nqfRaGC   # live Work Verification $599/mo; Railway is set by the human
+STRIPE_STARTER_PRICE_ID=price_1UD7vi1b5twUY3LykzUsVQVr     # live Starter $299/mo (1 seat)
+STRIPE_SCALE_PRICE_ID=price_1UD7vj1b5twUY3Ly1Q4uv4kS       # live Scale $1,499/mo (10 seats)
 # STRIPE_EXTRA_SEAT_PRICE_ID=price_1UD4Sl1b5twUY3LyjD850F4V  # optional; live extra FC seat $100/mo
 SUPABASE_SERVICE_ROLE_KEY=…
 FRONTEND_ORIGIN=http://localhost:5174,http://localhost:5173

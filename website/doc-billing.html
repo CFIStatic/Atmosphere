@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="How Atmosphere billing works — $599/mo Work Verification, extra Field Capture seats, and usage billed the day it’s used." />
+  <meta name="description" content="How Atmosphere billing works — Starter, Work Verification, and Scale plans, extra Field Capture seats, and usage billed the day it’s used." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Billing &amp; usage · Atmosphere Docs</title>
   <meta property="og:title" content="Billing &amp; usage · Atmosphere Docs" />
-  <meta property="og:description" content="How Atmosphere billing works — $599/mo Work Verification, extra Field Capture seats, and usage billed the day it’s used." />
+  <meta property="og:description" content="How Atmosphere billing works — Starter, Work Verification, and Scale plans, extra Field Capture seats, and usage billed the day it’s used." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -113,18 +113,18 @@
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
     <h1>Billing &amp; usage</h1>
-    <p class="lede">Monthly Work Verification fee, extra Field Capture seats, and usage billed the day it’s used — not raw LLM tokens on your invoice.</p>
+    <p class="lede">Monthly Atmosphere plan, extra Field Capture seats, and usage billed the day it’s used — not raw LLM tokens on your invoice.</p>
     <ul>
-      <li>Field Capture + Evidence Platform</li>
-      <li>$599/mo includes 3 Field Capture accounts</li>
+      <li>Field Capture + Evidence Platform on every plan</li>
+      <li>Starter $299/mo (1 seat) · Work Verification $599/mo (3 seats) · Scale $1,499/mo (10 seats)</li>
       <li>Additional Field Capture accounts are $100/mo each</li>
       <li>AI/token usage is billed the day it is used</li>
     </ul>
 
 <h2>Three billing layers</h2>
 <ol>
-<li><strong>Work Verification — $599/month</strong> — Field Capture and the Evidence Platform, including <strong>3 Field Capture accounts</strong>. Both software parts ship together.</li>
-<li><strong>Extra Field Capture seats — $100/month each</strong> — additional accounts beyond the 3 included. The 4th account is blocked until a seat is added.</li>
+<li><strong>Platform plan</strong> — Field Capture and the Evidence Platform. Starter includes <strong>1</strong> Field Capture account, Work Verification includes <strong>3</strong>, Scale includes <strong>10</strong>. Work Verification is the default at signup.</li>
+<li><strong>Extra Field Capture seats — $100/month each</strong> — additional accounts beyond the seats included with your plan. Invites past the limit add a seat.</li>
 <li><strong>Usage — billed the day it’s used</strong> — AI and token analysis is charged when the work runs (coalesced per organization). You see a usage line, not token counts, model names, or a per-job dollar rate.</li>
 </ol>
 
@@ -133,14 +133,14 @@
 <h2>What you see in the app</h2>
 <p>Open <strong>Usage</strong> in the product to see:</p>
 <ul>
-<li>Field Capture seats on the current plan (3 included + extras)</li>
+<li>Field Capture seats on the current plan (included + extras)</li>
 <li>Usage billed the day it ran</li>
-<li>Receipts for the $599 subscription, extra seats, and same-day usage invoices</li>
+<li>Receipts for the subscription, extra seats, and same-day usage invoices</li>
 </ul>
 <p>Token spend on Settings → Billing is what you are charged. Usage invoices settle through Stripe the day the work runs.</p>
 
 <h2>Configurable plans</h2>
-<p>Seat counts and enterprise terms are stored in versioned billing plans. Customer-specific overrides are supported. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans change later. The published catalog is Work Verification ($599/mo, 3 Field Capture seats), extra Field Capture seats ($100/mo), same-day AI usage, and the Chest Mount ($49.99). A leftover seat/credit catalog still has API handlers so existing Stripe events do not break — it is not shown in the app.</p>
+<p>Seat counts follow the org’s Atmosphere plan (Starter 1 / Work Verification 3 / Scale 10). Enterprise terms are arranged with sales — there is no self-serve Enterprise SKU. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans change later. The published catalog is Starter ($299/mo), Work Verification ($599/mo), Scale ($1,499/mo), extra Field Capture seats ($100/mo), same-day AI usage, and the Chest Mount ($49.99). A leftover seat/credit catalog still has API handlers so existing Stripe events do not break — it is not shown in the app.</p>
 
 <h2>Legacy credit ledger</h2>
 <p>Some agent paths still draw from the prepaid credit ledger during migration. That path is legacy. New workflows record internal usage events and bill the day the work runs.</p>
