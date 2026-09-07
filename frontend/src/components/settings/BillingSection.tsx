@@ -30,7 +30,8 @@ function titleCase(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function planStatus(sub: WorkspaceBilling['subscription']) {
+function planStatus(sub: WorkspaceBilling['subscription'], billingExempt?: boolean) {
+  if (billingExempt || sub.status === 'comped') return 'comped';
   if (!sub.hasStripeSubscription) return 'unpaid';
   return sub.status;
 }
@@ -76,24 +77,6 @@ export function BillingSection() {
     }
   }
 
-  async function addExtraSeat() {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.addExtraFieldCaptureSeats(1);
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-        return;
-      }
-      const next = await api.getBillingWorkspace();
-      setWorkspace(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add a Field Capture seat.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (error && !workspace) {
     return (
       <p role="alert" className="text-sm text-danger-600">
@@ -105,8 +88,11 @@ export function BillingSection() {
   if (!workspace) return <p className="text-sm text-ink-600">Loading…</p>;
 
   const sub = workspace.subscription;
-  const status = planStatus(sub);
+  const status = planStatus(sub, workspace.billingExempt);
   const renewsLabel = sub.cancelAtPeriodEnd ? 'Ends' : 'Renews';
+  const complimentary = status === 'comped' || Boolean(workspace.billingExempt);
+  const showStripePortal =
+    workspace.canManage && workspace.paymentProvider === 'stripe' && !complimentary;
 
   return (
     <div className="space-y-6">
@@ -145,8 +131,14 @@ export function BillingSection() {
               </span>
             </div>
             <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-ink-900">
-              {formatCents(sub.baseMonthlyFeeCents)}
-              <span className="ml-1.5 text-sm font-medium text-ink-500">per month</span>
+              {complimentary ? (
+                'Complimentary'
+              ) : (
+                <>
+                  {formatCents(sub.baseMonthlyFeeCents)}
+                  <span className="ml-1.5 text-sm font-medium text-ink-500">per month</span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -179,8 +171,8 @@ export function BillingSection() {
           </p>
         ) : null}
 
-        {workspace.canManage && workspace.paymentProvider === 'stripe' ? (
-          <div className="mt-5 flex flex-wrap gap-2">
+        {showStripePortal ? (
+          <div className="mt-5 space-y-2">
             <button
               type="button"
               onClick={() => void openPortal()}
@@ -190,15 +182,16 @@ export function BillingSection() {
               {busy ? <SpinnerIcon className="animate-spin" width={14} height={14} /> : null}
               Manage plan and payment method
             </button>
-            <button
-              type="button"
-              onClick={() => void addExtraSeat()}
-              disabled={busy}
-              className="flex items-center gap-2 rounded-lg border border-line bg-paper-50 px-4 py-2.5 text-sm font-semibold text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
-            >
-              Add Field Capture seat — $100/mo
-            </button>
+            <p className="text-xs text-ink-500">
+              Extra Field Capture accounts ($100/mo) are added automatically when you invite past the
+              3 included seats.
+            </p>
           </div>
+        ) : complimentary && workspace.canManage ? (
+          <p className="mt-5 text-xs text-ink-500">
+            Extra Field Capture accounts are added automatically when you invite someone past the 3
+            included seats.
+          </p>
         ) : workspace.canManage ? (
           <div
             role="status"
@@ -230,7 +223,7 @@ export function BillingSection() {
           <p className="mt-4 text-sm text-ink-600">Loading…</p>
         ) : payments.length === 0 ? (
           <p className="mt-4 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-            Nothing charged yet.
+            {complimentary ? 'No charges on this complimentary account.' : 'Nothing charged yet.'}
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">

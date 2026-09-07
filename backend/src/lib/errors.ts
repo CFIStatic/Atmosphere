@@ -5,12 +5,19 @@
 export class HttpError extends Error {
   public readonly status: number;
   public readonly code: string;
+  public readonly details: Record<string, unknown>;
 
-  constructor(status: number, message: string, code = 'error') {
+  constructor(
+    status: number,
+    message: string,
+    code = 'error',
+    details: Record<string, unknown> = {},
+  ) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -20,8 +27,11 @@ export const unauthorized = (msg = 'Not authenticated', code = 'unauthorized') =
 /** The caller is signed in but not allowed to perform this action. */
 export const forbidden = (msg = 'Not allowed', code = 'forbidden') => new HttpError(403, msg, code);
 /** Out of credits, or over a configured spend limit — the caller must top up. */
-export const paymentRequired = (msg: string, code = 'payment_required') =>
-  new HttpError(402, msg, code);
+export const paymentRequired = (
+  msg: string,
+  code = 'payment_required',
+  details: Record<string, unknown> = {},
+) => new HttpError(402, msg, code, details);
 export const notFound = (msg = 'Not found', code = 'not_found') => new HttpError(404, msg, code);
 export const tooMany = (msg = 'Too many requests', code = 'rate_limited') =>
   new HttpError(429, msg, code);

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   billingExemptEmailsFromEnv,
   isBillingExemptEmail,
+  isBillingExemptOrg,
   isCompedBillingStatus,
+  isComplimentarySubscriptionId,
   parseBillingExemptEmails,
   shouldSkipUsageBilling,
 } from './billingExempt.js';
@@ -46,6 +48,61 @@ describe('billing exempt allowlist', () => {
     assert.equal(
       shouldSkipUsageBilling({ status: 'active', creatorEmail: 'paid@example.com', allowlist: list }),
       false,
+    );
+    assert.equal(
+      shouldSkipUsageBilling({
+        status: 'active',
+        creatorEmail: 'paid@example.com',
+        subscriptionId: 'comp_jack_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      }),
+      true,
+    );
+  });
+
+  it('treats founder comp subscription ids as complimentary', () => {
+    assert.equal(isComplimentarySubscriptionId('comp_jack_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'), true);
+    assert.equal(isComplimentarySubscriptionId('sub_1ABC'), false);
+    assert.equal(isComplimentarySubscriptionId(null), false);
+    assert.equal(isComplimentarySubscriptionId(''), false);
+  });
+
+  it('marks an org billing-exempt from email, status, or a fake subscription id', () => {
+    const list = parseBillingExemptEmails('jack@jettx.ai');
+    assert.equal(
+      isBillingExemptOrg({
+        status: 'active',
+        subscriptionId: 'sub_paid',
+        creatorEmail: 'paid@example.com',
+        allowlist: list,
+      }),
+      false,
+    );
+    assert.equal(
+      isBillingExemptOrg({
+        status: 'active',
+        subscriptionId: 'sub_paid',
+        creatorEmail: 'Jack@jettx.ai',
+        allowlist: list,
+      }),
+      true,
+    );
+    assert.equal(
+      isBillingExemptOrg({
+        status: 'comped',
+        subscriptionId: null,
+        creatorEmail: 'paid@example.com',
+        allowlist: list,
+      }),
+      true,
+    );
+    assert.equal(
+      isBillingExemptOrg({
+        status: 'active',
+        subscriptionId: 'comp_jack_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        creatorEmail: 'paid@example.com',
+        allowlist: list,
+      }),
+      true,
     );
   });
 });

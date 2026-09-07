@@ -2593,11 +2593,18 @@ export const SALES_STATUS_LABELS: Record<SalesCampaignStatus, string> = {
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, message: string, code = 'error') {
+  readonly checkoutUrl: string | null;
+  constructor(
+    status: number,
+    message: string,
+    code = 'error',
+    checkoutUrl: string | null = null,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.checkoutUrl = checkoutUrl;
   }
 }
 
@@ -2684,7 +2691,8 @@ async function request<T>(path: string, options: RequestInit = {}, retried = fal
 
   if (!res.ok) {
     const { message, code } = apiFailureMessage(res.status, body, text);
-    throw new ApiError(res.status, message, code);
+    const checkoutUrl = typeof body.checkoutUrl === 'string' && body.checkoutUrl ? body.checkoutUrl : null;
+    throw new ApiError(res.status, message, code, checkoutUrl);
   }
 
   return body as T;
@@ -5616,6 +5624,7 @@ export interface TokenUsageReport {
 export interface WorkspaceBilling {
   paymentProvider: 'stripe' | 'dev' | 'manual';
   canManage: boolean;
+  billingExempt?: boolean;
   required: boolean;
   complete: boolean;
   isCreator: boolean;

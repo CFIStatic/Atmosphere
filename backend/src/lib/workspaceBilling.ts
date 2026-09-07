@@ -4,7 +4,7 @@ import { getCustomerMeteringSummary } from '../metering/periodAggregation.js';
 import type { CustomerMeteringSummary } from '../metering/types.js';
 import { loadFieldCaptureSeatUsage, type FieldCaptureSeatUsage } from './fieldCaptureSeats.js';
 import { EXTRA_FC_SEAT_MONTHLY_CENTS, INCLUDED_FC_SEATS } from './stripeCatalog.js';
-import { isBillingExemptEmail } from './billingExempt.js';
+import { isBillingExemptEmail, isBillingExemptOrg, loadOrgCreatorEmail } from './billingExempt.js';
 import { billingOnboardingGate } from './signupOnboarding.js';
 
 export interface WorkspacePlan {
@@ -26,6 +26,8 @@ export interface WorkspaceSubscription extends WorkspacePlan {
 export interface WorkspaceBilling {
   paymentProvider: 'stripe' | 'dev' | 'manual';
   canManage: boolean;
+  /** Complimentary / allowlisted — hide Stripe Manage and paid seat CTAs. */
+  billingExempt: boolean;
   required: boolean;
   complete: boolean;
   isCreator: boolean;
@@ -106,7 +108,14 @@ export async function loadWorkspaceBilling(
 
   const isCreator = org?.created_by === userId;
   const email = userEmail ?? (profile as { email?: string | null } | null)?.email ?? null;
-  const exempt = isBillingExemptEmail(email);
+  const creatorEmail = isCreator ? email : await loadOrgCreatorEmail(supabase, orgId);
+  const billingExempt = isBillingExemptOrg({
+    status: billing?.status as string | undefined,
+    subscriptionId: billing?.stripe_subscription_id as string | undefined,
+    creatorEmail,
+    actingUserEmail: email,
+  });
+  const exempt = isBillingExemptEmail(email) || billingExempt;
   const gate = billingOnboardingGate({
     paymentProvider,
     isCreator,
@@ -143,15 +152,15 @@ export async function loadWorkspaceBilling(
   return {
     paymentProvider,
     canManage: Boolean((overview as { can_manage?: boolean } | null)?.can_manage),
+    billingExempt,
     required: gate.required,
     complete: gate.complete,
     isCreator,
     subscription: {
       ...plan,
-      status:
-        exempt && !billing?.stripe_subscription_id
-          ? 'comped'
-          : ((billing?.status as string | undefined) ?? 'incomplete'),
+      status: billingExempt
+        ? 'comped'
+        : ((billing?.status as string | undefined) ?? 'incomplete'),
       periodStart: (billing?.period_start as string | null | undefined) ?? usage?.periodStart ?? null,
       periodEnd: (billing?.period_end as string | null | undefined) ?? usage?.periodEnd ?? null,
       cancelAtPeriodEnd: Boolean(billing?.cancel_at_period_end),

@@ -269,7 +269,7 @@ async function invoiceSameDayUsageUnlocked(
 
   const { data: billing, error } = await usageAdminClient(supabase)
     .from('org_billing')
-    .select('stripe_customer_id, status')
+    .select('stripe_customer_id, stripe_subscription_id, status')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error) throw new Error(`same-day usage customer lookup failed: ${error.message}`);
@@ -279,7 +279,13 @@ async function invoiceSameDayUsageUnlocked(
 
   const status = (billing?.status as string | undefined) ?? '';
   const creatorEmail = await loadOrgCreatorEmail(usageAdminClient(supabase), orgId);
-  if (shouldSkipUsageBilling({ status, creatorEmail })) {
+  if (
+    shouldSkipUsageBilling({
+      status,
+      creatorEmail,
+      subscriptionId: billing?.stripe_subscription_id as string | undefined,
+    })
+  ) {
     return { invoiceId: null, skipped: 'billing_exempt', amountCents: 0 };
   }
   if (status && !['active', 'trialing', 'past_due'].includes(status)) {

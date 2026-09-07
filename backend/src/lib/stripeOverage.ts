@@ -98,7 +98,7 @@ export async function invoiceMeteringOverage(
 
   const { data: billing, error } = await supabase
     .from('org_billing')
-    .select('stripe_customer_id, status')
+    .select('stripe_customer_id, stripe_subscription_id, status')
     .eq('org_id', orgId)
     .maybeSingle();
   if (error) throw new Error(`overage customer lookup failed: ${error.message}`);
@@ -107,7 +107,13 @@ export async function invoiceMeteringOverage(
   if (!customerId) return { invoiceId: null, skipped: 'no_customer' };
 
   const creatorEmail = await loadOrgCreatorEmail(supabase, orgId);
-  if (shouldSkipUsageBilling({ status: billing?.status as string | undefined, creatorEmail })) {
+  if (
+    shouldSkipUsageBilling({
+      status: billing?.status as string | undefined,
+      creatorEmail,
+      subscriptionId: billing?.stripe_subscription_id as string | undefined,
+    })
+  ) {
     return { invoiceId: null, skipped: 'billing_exempt' };
   }
 
