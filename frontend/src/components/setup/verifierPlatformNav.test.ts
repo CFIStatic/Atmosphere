@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -110,13 +111,83 @@ describe('verifier office rail', () => {
 
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
-    expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);
+    expect(verifierHtml).toMatch(/<h3[^>]*>Videos<\/h3>/);
     expect(verifierHtml).not.toMatch(
       /body\[data-atm-rail-only\]\s+#evidence-nav\s*\{[^}]*display:\s*none/,
     );
     expect(verifierHtml).toContain(
       "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
     );
+  });
+
+  it('marks Videos rail labels for the same chrome i18n as Settings/nav', () => {
+    const nav = verifierHtml.match(
+      /<div class="rail-section" id="evidence-nav">[\s\S]*?<\/div>/,
+    );
+    expect(nav).not.toBeNull();
+    expect(nav![0]).toContain('data-i18n-chrome="videos"');
+    expect(nav![0]).toContain('data-i18n-chrome="allVideos"');
+    expect(nav![0]).toContain('data-i18n-chrome="classified"');
+    expect(nav![0]).toContain('data-i18n-chrome="awaitingAnalysis"');
+    expect(nav![0]).toContain('data-i18n-chrome="needsReview"');
+    expect(verifierHtml).toContain("item.setAttribute('data-label', chromeI18n[key])");
+    expect(verifierHtml).toContain("item.setAttribute('title', chromeI18n[key])");
+    expect(verifierHtml).toContain("titleEl.textContent = active.getAttribute('data-label')");
+  });
+
+  it('applies locale chrome to Videos labels without dropping count badges', () => {
+    const nav = verifierHtml.match(
+      /<div class="rail-section" id="evidence-nav">[\s\S]*?<\/div>/,
+    );
+    const dom = new JSDOM(
+      `<!doctype html><html><body>${nav![0]}<h1 id="viewtitle">All videos</h1></body></html>`,
+    );
+    const { document } = dom.window;
+    const chromeI18n: Record<string, string> = {
+      videos: 'Vídeos',
+      allVideos: 'Todos los vídeos',
+      classified: 'Clasificados',
+      awaitingAnalysis: 'Pendiente de análisis',
+      needsReview: 'Requiere revisión',
+    };
+    const state = { view: 'classified' };
+
+    document.querySelectorAll('[data-i18n-chrome]').forEach((el) => {
+      const key = el.getAttribute('data-i18n-chrome');
+      if (key && chromeI18n[key]) {
+        el.textContent = chromeI18n[key];
+        const item = el.closest('[data-view]');
+        if (item) {
+          item.setAttribute('data-label', chromeI18n[key]);
+          item.setAttribute('title', chromeI18n[key]);
+        }
+      }
+    });
+    const titleEl = document.getElementById('viewtitle');
+    const active = document.querySelector(`.navitem[data-view="${state.view}"]`);
+    if (titleEl && active?.getAttribute('data-label')) {
+      titleEl.textContent = active.getAttribute('data-label');
+    }
+
+    expect(document.querySelector('[data-i18n-chrome="videos"]')?.textContent).toBe('Vídeos');
+    expect(document.querySelector('[data-view="all"]')?.getAttribute('data-label')).toBe(
+      'Todos los vídeos',
+    );
+    expect(document.querySelector('[data-view="all"]')?.getAttribute('title')).toBe(
+      'Todos los vídeos',
+    );
+    expect(document.querySelector('[data-view="classified"] .label')?.textContent).toBe(
+      'Clasificados',
+    );
+    expect(document.querySelector('[data-view="unanalysed"] .label')?.textContent).toBe(
+      'Pendiente de análisis',
+    );
+    expect(document.querySelector('[data-view="flagged"] .label')?.textContent).toBe(
+      'Requiere revisión',
+    );
+    expect(document.getElementById('n-all')?.textContent).toBe('0');
+    expect(document.getElementById('n-classified')?.textContent).toBe('0');
+    expect(titleEl?.textContent).toBe('Clasificados');
   });
 
   it('keeps untranslated Dashboard chrome LTR when the nav locale is RTL', () => {

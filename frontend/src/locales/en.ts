@@ -28,6 +28,11 @@ export const EN = {
   'nav.switchToDark': 'Switch to dark mode',
   'nav.signOutConfirm': 'Sign out of Atmosphere?',
   'nav.themeModeHint': '{current} mode. Click for {next}.',
+  'nav.videos': 'Videos',
+  'nav.allVideos': 'All videos',
+  'nav.classified': 'Classified',
+  'nav.awaitingAnalysis': 'Awaiting analysis',
+  'nav.needsReview': 'Needs review',
 
   'settings.title': 'Settings',
   'settings.sectionsAria': 'Settings sections',
