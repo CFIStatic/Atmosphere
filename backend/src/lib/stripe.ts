@@ -1,8 +1,15 @@
 import Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
+import { persistExtraFcSeats } from './fieldCaptureSeats.js';
 import { unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
+import {
+  FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
+  LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_WORK_VERIFICATION_PRICE_ID,
+  WORK_VERIFICATION_PLAN_CODE,
+} from './stripeCatalog.js';
 
 /**
  * Stripe wiring.
@@ -236,8 +243,68 @@ export async function meteringPlanForPrice(
 /** True when the price matches STRIPE_ONBOARDING_PRICE_ID (DB may still be unset). */
 export function isConfiguredOnboardingPrice(priceId: string | null | undefined): boolean {
   return Boolean(
-    priceId && config.stripe.onboardingPriceId && priceId === config.stripe.onboardingPriceId,
+    priceId &&
+      (priceId === config.stripe.onboardingPriceId || priceId === LIVE_WORK_VERIFICATION_PRICE_ID),
   );
+}
+
+export function extraSeatPriceId(): string {
+  return config.stripe.extraSeatPriceId || LIVE_EXTRA_FC_SEAT_PRICE_ID;
+}
+
+export function isExtraSeatPriceId(priceId: string | null | undefined): boolean {
+  return Boolean(priceId && (priceId === extraSeatPriceId() || priceId === LIVE_EXTRA_FC_SEAT_PRICE_ID));
+}
+
+export function isWorkVerificationPriceId(priceId: string | null | undefined): boolean {
+  return Boolean(
+    priceId &&
+      (priceId === config.stripe.onboardingPriceId || priceId === LIVE_WORK_VERIFICATION_PRICE_ID),
+  );
+}
+
+export function subscriptionItemPriceId(item: { price?: { id?: string } | string | null } | null | undefined): string | null {
+  const price = item?.price;
+  if (typeof price === 'string') return price;
+  return price?.id ?? null;
+}
+
+export function extraSeatQuantityFromSubscription(sub: {
+  items?: { data?: Array<{ price?: { id?: string } | string | null; quantity?: number | null }> };
+}): number {
+  return (sub.items?.data ?? []).reduce((sum, item) => {
+    const priceId = subscriptionItemPriceId(item);
+    if (!isExtraSeatPriceId(priceId)) return sum;
+    return sum + Math.max(0, item.quantity ?? 1);
+  }, 0);
+}
+
+export async function syncExtraFcSeatsFromCustomer(
+  admin: SupabaseClient,
+  orgId: string,
+  customerId: string | null | undefined,
+): Promise<number> {
+  if (!customerId) return 0;
+  const listed = await stripeClient().subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 20,
+  });
+  let extra = 0;
+  for (const sub of listed.data) {
+    if (sub.status === 'canceled' || sub.status === 'incomplete_expired') continue;
+    extra += extraSeatQuantityFromSubscription(sub);
+  }
+  await persistExtraFcSeats(admin, orgId, extra);
+  return extra;
+}
+
+export function pricePlanCode(price: { metadata?: Stripe.Metadata | null; id?: string } | null | undefined): string | null {
+  const fromMeta = price?.metadata?.atmosphere_plan_code;
+  if (fromMeta) return fromMeta;
+  if (isWorkVerificationPriceId(price?.id)) return WORK_VERIFICATION_PLAN_CODE;
+  if (isExtraSeatPriceId(price?.id)) return FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE;
+  return null;
 }
 
 /**

@@ -108,7 +108,7 @@ describe('Railway corporate-website image', () => {
 
     const page = read('website/hardware.html');
     expect(page).toContain('Field Capture Chest Mount');
-    expect(page).toContain('Buy — $49');
+    expect(page).toContain('Buy — $49.99');
     expect(page).toContain('What\'s in the box');
     expect(page).toContain('4.7–6.7');
     expect(page).toContain('digital setup guide');
@@ -121,13 +121,14 @@ describe('Railway corporate-website image', () => {
     expect(page.toLowerCase()).not.toContain('amazon.com');
     expect(page.toLowerCase()).not.toContain('asin');
     expect(page).not.toContain('let-me-be');
-    expect(page).not.toMatch(/href=["']https:\/\/buy\.stripe\.com\//);
+    expect(page).toContain('https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01');
+    expect(page).not.toContain('5kQ7sD47B54p7O9391fYY00');
     expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
 
     const js = read('website/assets/site.js');
     expect(js).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
     expect(js).toContain('Checkout coming online');
-    expect(js).toContain('Buy — $49');
+    expect(js).toContain('Buy — $49.99');
 
     const preview = read('website/build-preview.py');
     expect(preview).toContain("('hardware', 'hardware.html')");
@@ -141,34 +142,34 @@ describe('Railway corporate-website image', () => {
     expect(field).toContain('href="hardware.html"');
   });
 
-  it('keeps Buy disabled until a Stripe checkout URL is set', () => {
+  it('wires Buy to the live $49.99 Payment Link and can still disable when empty', () => {
     const html = read('website/hardware.html');
     const js = read('website/assets/site.js');
     const stubMatchMedia = (win: { matchMedia: (q: string) => { matches: boolean } }) => {
       win.matchMedia = () => ({ matches: false });
     };
 
+    const on = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
+    stubMatchMedia(on.window);
+    on.window.eval(js);
+    const onBuy = on.window.document.getElementById('hardware-buy');
+    expect(onBuy?.textContent).toBe('Buy — $49.99');
+    expect(onBuy?.getAttribute('href')).toBe('https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01');
+    expect(onBuy?.getAttribute('aria-disabled')).toBeNull();
+    expect(onBuy?.classList.contains('is-disabled')).toBe(false);
+    expect(on.window.document.querySelector('.hw-buy-note')?.hidden).toBe(true);
+
     const off = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
     stubMatchMedia(off.window);
+    off.window.ATMOSPHERE_HARDWARE_CHECKOUT_URL = '';
+    off.window.document.querySelectorAll('.js-hardware-buy').forEach((btn) => {
+      btn.setAttribute('data-checkout-url', '');
+    });
     off.window.eval(js);
     const offBuy = off.window.document.getElementById('hardware-buy');
     expect(offBuy?.textContent).toBe('Checkout coming online');
     expect(offBuy?.getAttribute('aria-disabled')).toBe('true');
-    expect(offBuy?.getAttribute('href')).toBeNull();
     expect(offBuy?.classList.contains('is-disabled')).toBe(true);
-    const note = off.window.document.querySelector('.hw-buy-note');
-    expect(note?.hidden).toBe(false);
-
-    const on = new JSDOM(html, { url: 'https://atmosphereteam.com/hardware', runScripts: 'outside-only' });
-    stubMatchMedia(on.window);
-    on.window.ATMOSPHERE_HARDWARE_CHECKOUT_URL = 'https://example.com/checkout-session';
-    on.window.eval(js);
-    const onBuy = on.window.document.getElementById('hardware-buy');
-    expect(onBuy?.textContent).toBe('Buy — $49');
-    expect(onBuy?.getAttribute('href')).toBe('https://example.com/checkout-session');
-    expect(onBuy?.getAttribute('aria-disabled')).toBeNull();
-    expect(onBuy?.classList.contains('is-disabled')).toBe(false);
-    expect(on.window.document.querySelector('.hw-buy-note')?.hidden).toBe(true);
   });
 
   it('does not treat in-window Railway probe retries as a finished failure', () => {

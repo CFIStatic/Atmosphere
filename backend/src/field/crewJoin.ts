@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createAnonClient } from '../lib/supabase.js';
 import { unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError, serviceUnavailable } from '../lib/errors.js';
+import { assertFieldCaptureSeatAvailable } from '../lib/fieldCaptureSeats.js';
 import { toOrgProductRole } from '../lib/productRoles.js';
 import { linkFieldOffice, serializeFieldOrg } from './officeLink.js';
 
@@ -238,6 +239,8 @@ export async function joinCrewByName(input: { fullName: string; joinCode: string
     });
     return { user, session, org: serializeFieldOrg(org), created: false };
   }
+
+  await assertFieldCaptureSeatAvailable(adminOrThrow(), org.id);
 
   const created = await createCrewUser(org.id, fullName);
   const linked = await linkFieldOffice(created.session.access_token, created.user, {

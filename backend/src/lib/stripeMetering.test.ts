@@ -1,12 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
+  isExtraSeatPriceId,
   isStripePriceId,
   mapSubscriptionStatus,
   stripeIdempotencyKey,
 } from './stripe.js';
+import { LIVE_EXTRA_FC_SEAT_PRICE_ID } from './stripeCatalog.js';
 import { planFromMeteringRow } from './workspaceBilling.js';
 import type Stripe from 'stripe';
 
@@ -66,5 +69,21 @@ describe('stripe helpers', () => {
     assert.equal(plan.name, 'Work Verification');
     assert.equal(plan.baseMonthlyFeeCents, 59900);
     assert.equal(plan.includedJobs, 50);
+    assert.equal(plan.includedFcSeats, 3);
+  });
+
+  it('reads extra Field Capture seat quantity from a subscription', () => {
+    assert.equal(isExtraSeatPriceId(LIVE_EXTRA_FC_SEAT_PRICE_ID), true);
+    assert.equal(
+      extraSeatQuantityFromSubscription({
+        items: {
+          data: [
+            { price: { id: 'price_other' }, quantity: 1 },
+            { price: { id: LIVE_EXTRA_FC_SEAT_PRICE_ID }, quantity: 2 },
+          ],
+        },
+      }),
+      2,
+    );
   });
 });

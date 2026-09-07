@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import { ensureCustomer, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
+import { addExtraFieldCaptureSeats } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
@@ -20,6 +21,7 @@ import {
 import {
   billingSettingsSchema,
   completePurchaseSchema,
+  extraSeatCheckoutSchema,
   onboardingCheckoutSchema,
   setPlanSchema,
   startPurchaseSchema,
@@ -524,7 +526,9 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
         baseMonthlyFeeCents: workspace.subscription.baseMonthlyFeeCents,
         includedJobs: workspace.subscription.includedJobs,
         additionalJobPriceCents: workspace.subscription.additionalJobPriceCents,
+        includedFcSeats: workspace.subscription.includedFcSeats,
       },
+      fieldCaptureSeats: workspace.fieldCaptureSeats,
     });
   } catch (err) {
     next(err);
@@ -581,6 +585,46 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
     );
 
     res.status(201).json({ checkoutUrl: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/billing/checkout/extra-seats
+ * Add Field Capture extra seats ($100/mo each). Updates the existing Work
+ * Verification subscription when one exists; otherwise opens Checkout.
+ */
+billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
+
+    const { quantity } = extraSeatCheckoutSchema.parse(req.body ?? {});
+    const supabase = createUserClient(req.accessToken!);
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id);
+    if (!workspace.canManage) {
+      throw forbidden('Only a Global Admin can add Field Capture seats.', 'billing_forbidden');
+    }
+
+    const customerId = await ensureCustomer(supabase, req.orgId!, {
+      email: req.user!.email,
+      orgName: await orgName(supabase, req.orgId!),
+    });
+
+    const { data: billing } = await supabase
+      .from('org_billing')
+      .select('stripe_subscription_id')
+      .eq('org_id', req.orgId)
+      .maybeSingle();
+
+    const result = await addExtraFieldCaptureSeats(supabase, req.orgId!, quantity, {
+      customerId,
+      subscriptionId: (billing?.stripe_subscription_id as string | undefined) ?? null,
+    });
+
+    res.status(result.updated ? 200 : 201).json(result);
   } catch (err) {
     next(err);
   }

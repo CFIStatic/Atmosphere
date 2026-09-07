@@ -2223,6 +2223,15 @@ const routes: Array<[string, RegExp, Handler]> = [
         periodEnd: '2026-09-01T00:00:00Z',
         cancelAtPeriodEnd: false,
         hasStripeSubscription: true,
+        includedFcSeats: 3,
+      },
+      fieldCaptureSeats: {
+        included: 3,
+        extra: 0,
+        allowed: 3,
+        used: 2,
+        remaining: 1,
+        extraSeatPriceCents: 10000,
       },
       usage: {
         periodStart: '2026-08-01T00:00:00Z',

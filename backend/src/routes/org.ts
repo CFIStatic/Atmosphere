@@ -15,6 +15,7 @@ import {
   updateOrgProfileSchema,
 } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
+import { assertFieldCaptureSeatAvailable } from '../lib/fieldCaptureSeats.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 
@@ -590,6 +591,10 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     }
     const email = input.email.trim().toLowerCase();
     const seat = toOrgProductRole(input.role ?? 'employee');
+
+    if (seat === 'employee') {
+      await assertFieldCaptureSeatAvailable(supabase, orgId);
+    }
 
     const { data: invite, error } = await supabase
       .from('org_invites')

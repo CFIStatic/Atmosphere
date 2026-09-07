@@ -10,6 +10,7 @@ import {
   closeMeteringPeriod,
 } from '../metering/periodAggregation.js';
 import { invoiceMeteringOverage } from '../lib/stripeOverage.js';
+import { invoiceLeftoverUsageDays } from '../lib/stripeSameDayUsage.js';
 import type { MeteringPeriodCalculation } from '../metering/types.js';
 import { recordAiUsageEvent } from '../metering/usageEvents.js';
 import { registerBillableJob } from '../metering/jobMetering.js';
@@ -155,7 +156,18 @@ meteringRouter.post('/period/close', async (req: Request, res: Response, next: N
       summary,
       result.statementId,
     );
-    res.json({ ...result, invoiceId: invoice.invoiceId, invoiceSkipped: invoice.skipped });
+    const leftoverUsage = await invoiceLeftoverUsageDays(
+      supabase,
+      req.orgId!,
+      summary.periodStart,
+      summary.periodEnd,
+    );
+    res.json({
+      ...result,
+      invoiceId: invoice.invoiceId,
+      invoiceSkipped: invoice.skipped,
+      leftoverUsageInvoices: leftoverUsage,
+    });
   } catch (err) {
     next(err instanceof Error && 'code' in err ? billingError(err as never) : err);
   }

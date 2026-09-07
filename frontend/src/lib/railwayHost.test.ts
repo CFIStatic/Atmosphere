@@ -211,6 +211,10 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(office).toContain('node scripts/applyStripeCancelAtPeriodEnd.mjs');
   });
 
+  it('applies Field Capture extra_fc_seats so seat allowance persists', () => {
+    expect(office).toContain('node scripts/applyFieldCaptureExtraSeats.mjs');
+  });
+
   it('deploys the staff site from this repo to the public BFF', () => {
     expect(office).toContain('service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"');
     expect(office).toContain('upstream="https://atmosphere-production.up.railway.app"');
