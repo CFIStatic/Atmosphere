@@ -30,19 +30,26 @@ export interface AtmosphereSelfServePlan {
   monthlyCents: number;
   includedFcSeats: number;
   recommended: boolean;
-  /** Live product id when known. Starter/Scale are created by stripe:sync. */
+  /** Live product id when known. Used by stripe:sync so re-runs reuse the SKU. */
   knownProductId?: string;
   /**
-   * Live price id when known. Work Verification is pinned. Starter/Scale
-   * come from STRIPE_STARTER_PRICE_ID / STRIPE_SCALE_PRICE_ID — the
-   * coordinator sets those on Railway after stripe:sync.
+   * Live price id when known. Runtime still prefers STRIPE_*_PRICE_ID env
+   * vars; these ids are the fallback so checkout works before Railway is set.
    */
   knownPriceId?: string;
 }
 
+/** Live Starter $299/mo (1 Field Capture seat). */
+export const LIVE_STARTER_PRODUCT_ID = 'prod_VDZ3e7oBJWIYSE';
+export const LIVE_STARTER_PRICE_ID = 'price_1UD7vi1b5twUY3LykzUsVQVr';
+
 /** Live Work Verification $599/mo. */
 export const LIVE_WORK_VERIFICATION_PRODUCT_ID = 'prod_VDVR9rM3g9Tkpg';
 export const LIVE_WORK_VERIFICATION_PRICE_ID = 'price_1UD4Sq1b5twUY3Ly6nqfRaGC';
+
+/** Live Scale $1,499/mo (10 Field Capture seats). */
+export const LIVE_SCALE_PRODUCT_ID = 'prod_VDZ3SMytTKoxc5';
+export const LIVE_SCALE_PRICE_ID = 'price_1UD7vj1b5twUY3Ly1Q4uv4kS';
 
 /** Live extra Field Capture seat $100/mo. */
 export const LIVE_EXTRA_FC_SEAT_PRODUCT_ID = 'prod_VDVTrP97lB98V6';
@@ -66,7 +73,8 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
     monthlyCents: 29_900,
     includedFcSeats: 1,
     recommended: false,
-    // knownPriceId: set STRIPE_STARTER_PRICE_ID after stripe:sync
+    knownProductId: LIVE_STARTER_PRODUCT_ID,
+    knownPriceId: LIVE_STARTER_PRICE_ID,
   },
   work_verification: {
     code: WORK_VERIFICATION_PLAN_CODE,
@@ -83,7 +91,8 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
     monthlyCents: 149_900,
     includedFcSeats: 10,
     recommended: false,
-    // knownPriceId: set STRIPE_SCALE_PRICE_ID after stripe:sync
+    knownProductId: LIVE_SCALE_PRODUCT_ID,
+    knownPriceId: LIVE_SCALE_PRICE_ID,
   },
 };
 

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  atmospherePlanCodeForPriceId,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
@@ -8,10 +9,16 @@ import {
   isExtraSeatPriceId,
   isStripePriceId,
   mapSubscriptionStatus,
+  resolveSelfServePriceId,
   shouldCancelOrgBillingForDeletedSubscription,
   stripeIdempotencyKey,
 } from './stripe.js';
-import { LIVE_EXTRA_FC_SEAT_PRICE_ID, LIVE_WORK_VERIFICATION_PRICE_ID } from './stripeCatalog.js';
+import {
+  LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_PRICE_ID,
+  LIVE_WORK_VERIFICATION_PRICE_ID,
+} from './stripeCatalog.js';
 import { planFromMeteringRow } from './workspaceBilling.js';
 import type Stripe from 'stripe';
 
@@ -30,6 +37,23 @@ describe('isConfiguredOnboardingPrice', () => {
     assert.equal(isConfiguredOnboardingPrice('price_abc'), false);
     assert.equal(isConfiguredOnboardingPrice(null), false);
     assert.equal(isConfiguredOnboardingPrice(undefined), false);
+  });
+
+  it('recognizes live Starter, Work Verification, and Scale prices', () => {
+    assert.equal(isConfiguredOnboardingPrice(LIVE_STARTER_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_WORK_VERIFICATION_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_SCALE_PRICE_ID), true);
+  });
+});
+
+describe('self-serve price resolution', () => {
+  it('defaults checkout to Work Verification and maps live catalog ids', () => {
+    assert.equal(resolveSelfServePriceId(undefined), LIVE_WORK_VERIFICATION_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('starter'), LIVE_STARTER_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('scale'), LIVE_SCALE_PRICE_ID);
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_STARTER_PRICE_ID), 'starter');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_SCALE_PRICE_ID), 'scale');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_WORK_VERIFICATION_PRICE_ID), 'work_verification');
   });
 });
 

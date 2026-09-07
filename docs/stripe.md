@@ -24,9 +24,9 @@ set. `STRIPE_WEBHOOK_SECRET` stays the only webhook signing-secret name.
 | --- | --- | --- |
 | **Secret** (`sk_test_…`) or **restricted** secret (`rk_test_…` with Checkout + Customers + Subscriptions + Invoices + Webhooks) | `STRIPE_SECRET_KEY` (alias: `Stripe_Secret_Key`) | Yes |
 | **Webhook signing secret** (`whsec_…`) | `STRIPE_WEBHOOK_SECRET` | Yes (webhooks reject all events without it) |
-| **Work Verification onboarding price** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Default signup plan. Live Jettx Work Verification is `price_1UD4Sq1b5twUY3Ly6nqfRaGC` — Railway is set by the human. |
-| **Starter price** (`price_…`) | `STRIPE_STARTER_PRICE_ID` | Required for Starter checkout. Coordinator sets this after `npm run stripe:sync`. |
-| **Scale price** (`price_…`) | `STRIPE_SCALE_PRICE_ID` | Required for Scale checkout. Coordinator sets this after `npm run stripe:sync`. |
+| **Work Verification onboarding price** (`price_…`) | `STRIPE_ONBOARDING_PRICE_ID` | Default signup plan. Live Jettx Work Verification is `price_1UD4Sq1b5twUY3Ly6nqfRaGC` (`prod_VDVR9rM3g9Tkpg`) — Railway is set by the human. |
+| **Starter price** (`price_…`) | `STRIPE_STARTER_PRICE_ID` | Set on Railway. Live Starter is `price_1UD7vi1b5twUY3LykzUsVQVr` (`prod_VDZ3e7oBJWIYSE`, $299/mo, 1 seat). Checkout falls back to this id if the env is unset. |
+| **Scale price** (`price_…`) | `STRIPE_SCALE_PRICE_ID` | Set on Railway. Live Scale is `price_1UD7vj1b5twUY3Ly1Q4uv4kS` (`prod_VDZ3SMytTKoxc5`, $1,499/mo, 10 seats). Checkout falls back to this id if the env is unset. |
 | **Extra Field Capture seat** (`price_…`) | `STRIPE_EXTRA_SEAT_PRICE_ID` | Optional. Defaults to live `price_1UD4Sl1b5twUY3LyjD850F4V` ($100/mo). |
 | Publishable (`pk_test_…`) | — | **Not used** — Checkout is hosted; the browser never talks to Stripe.js |
 | **Billing exempt emails** | `BILLING_EXEMPT_EMAILS` | No. Comma-separated, case-insensitive. Empty (default) = no exemptions. Example: `jack@jettx.ai`. |
@@ -91,12 +91,13 @@ npm run stripe:sync
 Apply the printed `UPDATE` statements in the Supabase SQL editor. Then set
 `STRIPE_ONBOARDING_PRICE_ID` to the Work Verification `price_…` the script
 prints (also written into `metering_plan_versions.stripe_price_id`). Set
-`STRIPE_STARTER_PRICE_ID` and `STRIPE_SCALE_PRICE_ID` to the Starter / Scale
-ids the script prints. Live Jettx Work Verification ids are pinned in
+`STRIPE_STARTER_PRICE_ID` and `STRIPE_SCALE_PRICE_ID` on Railway to the live
+Starter / Scale ids (`price_1UD7vi1b5twUY3LykzUsVQVr` /
+`price_1UD7vj1b5twUY3Ly1Q4uv4kS`). Those ids are also pinned in
 `backend/src/lib/stripeCatalog.ts` so re-runs look up by `atmosphere_plan_code`
-(and those ids) instead of creating duplicates. Product/price metadata includes
-`atmosphere_plan_code` and `atmosphere_included_fc_seats`. Extra seats are
-`field_capture_extra_seat`.
+(and those ids) instead of creating duplicates, and checkout can fall back if
+the env is unset. Product/price metadata includes `atmosphere_plan_code` and
+`atmosphere_included_fc_seats`. Extra seats are `field_capture_extra_seat`.
 
 Chest Mount hardware is one-time `price_1UD4Sl1b5twUY3LyFtodoczS` ($49.99).
 The live Payment Link is
@@ -140,8 +141,8 @@ on boot.
 STRIPE_SECRET_KEY=sk_test_…
 STRIPE_WEBHOOK_SECRET=whsec_…
 STRIPE_ONBOARDING_PRICE_ID=price_1UD4Sq1b5twUY3Ly6nqfRaGC   # live Work Verification $599/mo; Railway is set by the human
-# STRIPE_STARTER_PRICE_ID=price_…   # Starter $299/mo (1 seat) — coordinator sets after stripe:sync
-# STRIPE_SCALE_PRICE_ID=price_…     # Scale $1,499/mo (10 seats) — coordinator sets after stripe:sync
+STRIPE_STARTER_PRICE_ID=price_1UD7vi1b5twUY3LykzUsVQVr     # live Starter $299/mo (1 seat)
+STRIPE_SCALE_PRICE_ID=price_1UD7vj1b5twUY3Ly1Q4uv4kS       # live Scale $1,499/mo (10 seats)
 # STRIPE_EXTRA_SEAT_PRICE_ID=price_1UD4Sl1b5twUY3LyjD850F4V  # optional; live extra FC seat $100/mo
 SUPABASE_SERVICE_ROLE_KEY=…
 FRONTEND_ORIGIN=http://localhost:5174,http://localhost:5173

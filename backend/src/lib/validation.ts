@@ -859,7 +859,7 @@ export const onboardingCheckoutSchema = z.object({
   planCode: z.enum(ATMOSPHERE_ONBOARDING_PLAN_CODES).optional(),
 });
 
-/** Extra Field Capture seats to add ($100/mo each beyond the 3 included). */
+/** Extra Field Capture seats to add ($100/mo each beyond the seats included with the plan). */
 export const extraSeatCheckoutSchema = z.object({
   quantity: z.number().int().min(1, 'Add at least one seat').max(500, 'Too many seats').default(1),
 });

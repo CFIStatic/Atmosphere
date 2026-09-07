@@ -4,6 +4,7 @@ import {
   allowedFcSeats,
   extraSeatsNeeded,
   INCLUDED_FC_SEATS,
+  EXTRA_FC_SEAT_DESCRIPTION,
   WORK_VERIFICATION_DESCRIPTION,
   atmospherePlan,
   includedFcSeatsForPlan,
@@ -27,6 +28,8 @@ describe('Work Verification catalog copy', () => {
     assert.match(WORK_VERIFICATION_DESCRIPTION, /Field Capture \+ Evidence Platform/);
     assert.doesNotMatch(WORK_VERIFICATION_DESCRIPTION, /10\s*[x×]/i);
     assert.doesNotMatch(WORK_VERIFICATION_DESCRIPTION, /provider cost/i);
+    assert.match(EXTRA_FC_SEAT_DESCRIPTION, /beyond the seats included with your Atmosphere plan/);
+    assert.doesNotMatch(EXTRA_FC_SEAT_DESCRIPTION, /beyond the 3 included/);
   });
 });
 
@@ -57,6 +60,8 @@ describe('Field Capture seat allowance', () => {
     assert.deepEqual(entitledFcSeatCounts(1, 'active', false, 10), { extra: 1, included: 10 });
     assert.match(planDescription(atmospherePlan('starter')), /1 Field Capture account/);
     assert.doesNotMatch(planDescription(atmospherePlan('scale')), /10\s*[x×]/i);
+    assert.equal(atmospherePlan('starter').knownPriceId, 'price_1UD7vi1b5twUY3LykzUsVQVr');
+    assert.equal(atmospherePlan('scale').knownPriceId, 'price_1UD7vj1b5twUY3Ly1Q4uv4kS');
   });
 
   it('computes extra seats needed for a 4th Field Capture account', () => {

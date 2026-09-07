@@ -7,6 +7,8 @@ import { HttpError } from './errors.js';
 import {
   FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_PRICE_ID,
   LIVE_WORK_VERIFICATION_PRICE_ID,
   WORK_VERIFICATION_PLAN_CODE,
   atmospherePlan,
@@ -270,7 +272,9 @@ export function configuredSelfServePriceIds(): string[] {
     config.stripe.onboardingPriceId,
     config.stripe.starterPriceId,
     config.stripe.scalePriceId,
+    LIVE_STARTER_PRICE_ID,
     LIVE_WORK_VERIFICATION_PRICE_ID,
+    LIVE_SCALE_PRICE_ID,
   ].filter(Boolean);
 }
 
@@ -283,8 +287,8 @@ export function resolveSelfServePriceId(
   planCode?: string | null,
 ): string | null {
   const plan = atmospherePlan(planCode);
-  if (plan.code === 'starter') return config.stripe.starterPriceId || null;
-  if (plan.code === 'scale') return config.stripe.scalePriceId || null;
+  if (plan.code === 'starter') return config.stripe.starterPriceId || LIVE_STARTER_PRICE_ID;
+  if (plan.code === 'scale') return config.stripe.scalePriceId || LIVE_SCALE_PRICE_ID;
   return config.stripe.onboardingPriceId || LIVE_WORK_VERIFICATION_PRICE_ID;
 }
 
@@ -292,8 +296,12 @@ export function atmospherePlanCodeForPriceId(
   priceId: string | null | undefined,
 ): AtmosphereSelfServePlanCode | null {
   if (!priceId) return null;
-  if (priceId === config.stripe.starterPriceId) return 'starter';
-  if (priceId === config.stripe.scalePriceId) return 'scale';
+  if (priceId === config.stripe.starterPriceId || priceId === LIVE_STARTER_PRICE_ID) {
+    return 'starter';
+  }
+  if (priceId === config.stripe.scalePriceId || priceId === LIVE_SCALE_PRICE_ID) {
+    return 'scale';
+  }
   if (isWorkVerificationPriceId(priceId)) return WORK_VERIFICATION_PLAN_CODE;
   return null;
 }
