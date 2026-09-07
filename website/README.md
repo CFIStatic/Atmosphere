@@ -18,7 +18,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `operations.html` | Redirect → home (legacy) |
 | `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — Work Verification bundle ($599/mo) and usage |
+| `pricing.html`    | Pricing — Work Verification ($599/mo, 3 seats), extra seats, Chest Mount |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Integrity agent, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
@@ -38,11 +38,19 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 `pricing.html` sells one bundled subscription plus seats and same-day usage:
 
-- **Work Verification** — $599/month. Includes 3 Field Capture accounts plus the
-  Evidence Platform.
-- **Extra Field Capture seats** — $100/month each beyond the 3 included.
-- **Usage (token/AI)** — billed the day it is used (customer charge is 10× provider cost).
-- **Chest Mount** — optional hardware, $49.99 one-time via Stripe Payment Link.
+- **Work Verification** — $599/month. Includes Field Capture and the Evidence
+  Platform, with **3 Field Capture accounts**. Both software parts are required.
+- **Extra Field Capture seats** — $100/month per additional account beyond the
+  3 included.
+- **Usage** — AI/token analysis is billed the day it is used (10× provider
+  cost internally). Do not publish a per-job dollar rate or a Compute Units
+  allowance as the customer-facing default.
+- **Field Capture Chest Mount** — one-time $49.99 hardware add-on via Stripe
+  Payment Link.
+
+Legacy prepaid credits (`credit_packs`, `record_usage`) remain during migration
+and should be marked legacy when mentioned. New workflows should record via
+`record_ai_usage_event` and bill the day the work runs.
 
 ## Resources
 
