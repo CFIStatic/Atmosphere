@@ -32,6 +32,7 @@ import {
   WORK_VERIFICATION_MONTHLY_CENTS,
   WORK_VERIFICATION_PLAN_CODE,
 } from '../lib/stripeCatalog.js';
+import { resolveStripeSecretKey } from '../lib/stripeSecret.js';
 
 type PlanRow = {
   code: string;
@@ -63,15 +64,6 @@ const EXTRA_FC_SEAT = {
   knownProductId: LIVE_EXTRA_FC_SEAT_PRODUCT_ID,
   knownPriceId: LIVE_EXTRA_FC_SEAT_PRICE_ID,
 } as const;
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    console.error(`Missing ${name}. Set it and re-run.`);
-    process.exit(1);
-  }
-  return value;
-}
 
 async function findProduct(
   stripe: Stripe,
@@ -197,7 +189,11 @@ async function ensureProduct(
 }
 
 async function main() {
-  const secretKey = requireEnv('STRIPE_SECRET_KEY');
+  const secretKey = resolveStripeSecretKey();
+  if (!secretKey) {
+    console.error('Missing STRIPE_SECRET_KEY (or Railway alias Stripe_Secret_Key). Set it and re-run.');
+    process.exit(1);
+  }
   if (secretKey.startsWith('pk_')) {
     console.error('STRIPE_SECRET_KEY must be a secret or restricted key (sk_… / rk_…), not pk_…');
     process.exit(1);
