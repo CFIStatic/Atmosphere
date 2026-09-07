@@ -36,7 +36,7 @@ export function TermsAcknowledgment({
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
-        <Logo size="lg" />
+        <Logo size="lg" to={null} />
         <ThemeToggle />
       </header>
 

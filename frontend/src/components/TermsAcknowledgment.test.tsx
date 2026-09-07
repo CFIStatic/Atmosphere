@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TermsAckCheckbox } from './TermsAckCheckbox';
@@ -8,7 +9,11 @@ describe('TermsAckCheckbox', () => {
   it('keeps Continue gated until the acknowledgment is checked', async () => {
     const user = userEvent.setup();
     const onAccept = vi.fn();
-    render(<TermsAcknowledgment onAccept={onAccept} />);
+    render(
+      <MemoryRouter>
+        <TermsAcknowledgment onAccept={onAccept} />
+      </MemoryRouter>,
+    );
 
     const continueBtn = screen.getByRole('button', { name: 'Continue' });
     expect(continueBtn).toBeDisabled();
