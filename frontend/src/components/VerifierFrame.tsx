@@ -10,6 +10,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from './icons';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/api';
+import { verifierChromeStrings } from '../lib/i18n';
 import { usePreferences } from '../lib/preferences';
 import { isThemePreference, setThemePreference } from '../lib/theme';
 import { usePhoneShell } from '../lib/usePhoneShell';
@@ -32,7 +33,7 @@ export function VerifierFrame({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = usePreferences();
+  const { theme, locale } = usePreferences();
   const { user, profile, membership, logout } = useAuth();
   const phone = usePhoneShell();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -76,8 +77,13 @@ export function VerifierFrame({
     postToFrame({ atmosphere: 'layout', railOnly, phoneDrawer: phone && railOnly });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
     postToFrame({ atmosphere: 'theme', preference: theme });
+    postToFrame({
+      atmosphere: 'locale',
+      locale,
+      chrome: verifierChromeStrings(locale, theme),
+    });
     postSession();
-  }, [location.pathname, phone, postSession, postToFrame, railOnly, theme]);
+  }, [location.pathname, locale, phone, postSession, postToFrame, railOnly, theme]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();
@@ -92,6 +98,16 @@ export function VerifierFrame({
   useEffect(() => {
     if (frameReady) postToFrame({ atmosphere: 'theme', preference: theme });
   }, [frameReady, postToFrame, theme]);
+
+  useEffect(() => {
+    if (frameReady) {
+      postToFrame({
+        atmosphere: 'locale',
+        locale,
+        chrome: verifierChromeStrings(locale, theme),
+      });
+    }
+  }, [frameReady, locale, postToFrame, theme]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {

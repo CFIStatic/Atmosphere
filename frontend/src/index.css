@@ -674,7 +674,7 @@ html[data-field-embed] #root {
   width: var(--office-rail-w);
 }
 .operations-main {
-  padding-left: var(--office-rail-w);
+  padding-inline-start: var(--office-rail-w);
 }
 
 /* Legacy class kept so older references do not break */

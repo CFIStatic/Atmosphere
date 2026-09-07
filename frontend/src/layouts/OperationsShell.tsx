@@ -5,6 +5,7 @@ import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useT } from '../lib/i18n';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
 import { JobFilesSearchContext } from './jobFilesSearch';
@@ -28,6 +29,7 @@ import { JobFilesSearchContext } from './jobFilesSearch';
  * top bar is hidden.
  */
 export function OperationsShell() {
+  const t = useT();
   const { pathname } = useLocation();
   const isLibrary = pathname === '/verifier-library';
   const isJobsList = pathname === '/jobs';
@@ -48,10 +50,10 @@ export function OperationsShell() {
   const railClass = isLibrary
     ? 'fixed inset-0 z-0 h-full w-full'
     : phone
-      ? `fixed inset-y-0 left-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
-          railOpen ? 'translate-x-0' : '-translate-x-full'
+      ? `fixed inset-y-0 start-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
+          railOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
         }`
-      : 'operations-rail fixed inset-y-0 left-0 z-20 h-full overflow-hidden bg-panel';
+      : 'operations-rail fixed inset-y-0 start-0 z-20 h-full overflow-hidden bg-panel';
 
   return (
     <div
@@ -65,7 +67,7 @@ export function OperationsShell() {
       {phone && !isLibrary && railOpen && (
         <button
           type="button"
-          aria-label="Close navigation"
+          aria-label={t('nav.close')}
           className="fixed inset-0 z-30 bg-black/45"
           onClick={() => setRailOpen(false)}
         />
@@ -96,7 +98,7 @@ export function OperationsShell() {
                 <button
                   type="button"
                   onClick={() => setRailOpen(true)}
-                  aria-label="Open navigation"
+                  aria-label={t('nav.open')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-ink-700 hover:bg-paper-200"
                 >
                   <MenuIcon width={22} height={22} />
@@ -111,16 +113,16 @@ export function OperationsShell() {
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}
-              <div className="ml-auto shrink-0">
+              <div className="ms-auto shrink-0">
                 <HeaderAccountChip />
               </div>
             </header>
             <div
               className={
-              isJobFile
-                ? phone
-                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                  : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
+                isJobFile
+                  ? phone
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                    : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
                   : phone
                     ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-3 py-3'
                     : 'px-4 py-6 sm:px-6'

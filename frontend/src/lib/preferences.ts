@@ -1,5 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import {
+  applyDocumentLocale,
+  coerceLocale,
+  DEFAULT_LOCALE,
+  persistLocalePreference,
+  readStoredLocaleOverride,
+  type AppLocale,
+} from './locale';
+import {
   coerceThemePreference,
   initTheme,
   persistThemePreference,
@@ -26,12 +34,17 @@ export interface Preferences {
    * Appearance: light or dark. Applied as `data-theme` on <html>.
    */
   theme: ThemePreference;
+  /**
+   * UI language for Settings and shell chrome. Applied as `lang` + `dir` on <html>.
+   */
+  locale: AppLocale;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   reduceMotion: false,
   confirmSignOut: false,
   theme: 'dark',
+  locale: DEFAULT_LOCALE,
 };
 
 const STORAGE_KEY = 'atmosphere.preferences';
@@ -58,6 +71,7 @@ function normalize(parsed: Partial<Preferences>, opts?: { hadStoredBlob?: boolea
     ...DEFAULT_PREFERENCES,
     ...parsed,
     theme,
+    locale: readStoredLocaleOverride() ?? coerceLocale(parsed.locale),
   };
 }
 
@@ -65,14 +79,22 @@ function read(): Preferences {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { ...DEFAULT_PREFERENCES, theme: readThemePreference() };
+      return {
+        ...DEFAULT_PREFERENCES,
+        theme: readThemePreference(),
+        locale: readStoredLocaleOverride() ?? coerceLocale(undefined),
+      };
     }
     const parsed = JSON.parse(raw) as Partial<Preferences>;
     // Merge over the defaults so a preference added in a later release does not
     // arrive as `undefined` for users with an older blob already stored.
     return normalize(parsed, { hadStoredBlob: true });
   } catch {
-    return { ...DEFAULT_PREFERENCES, theme: readThemePreference() };
+    return {
+      ...DEFAULT_PREFERENCES,
+      theme: readThemePreference(),
+      locale: readStoredLocaleOverride() ?? coerceLocale(undefined),
+    };
   }
 }
 
@@ -84,6 +106,7 @@ function applyDocumentPreferences(prefs: Preferences) {
   if (typeof document === 'undefined') return;
   document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion);
   syncThemeRuntime(prefs.theme);
+  applyDocumentLocale(prefs.locale);
 }
 
 /** Called once at startup, before React renders, to avoid a flash of animation. */
@@ -94,6 +117,7 @@ export function initPreferences(): void {
   current = read();
   applyDocumentPreferences(current);
   persistThemePreference(current.theme);
+  persistLocalePreference(current.locale);
   // Keep React state aligned when another tab (or the marketing site) changes
   // atmosphere.theme — otherwise the header toggle can show a stale selection.
   subscribeTheme(() => {
@@ -121,7 +145,21 @@ export function setPreference<K extends keyof Preferences>(key: K, value: Prefer
   if (key === 'theme') {
     persistThemePreference(value as ThemePreference);
   }
+  if (key === 'locale') {
+    persistLocalePreference(value as AppLocale);
+  }
   listeners.forEach((listener) => listener());
+}
+
+/** Test helper: restore English + defaults so locale tests do not leak. */
+export function resetPreferencesForTests(next: Partial<Preferences> = {}): void {
+  current = {
+    ...DEFAULT_PREFERENCES,
+    theme: 'dark',
+    locale: DEFAULT_LOCALE,
+    ...next,
+  };
+  applyDocumentPreferences(current);
 }
 
 function subscribe(listener: () => void): () => void {
