@@ -10,7 +10,15 @@ import {
   isTermsExemptPath,
   termsStatus,
 } from './terms.js';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { requireAcceptedTermsVersion } from './termsStore.js';
+
+const storeSrc = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'termsStore.ts'),
+  'utf8',
+);
 
 describe('terms versioning', () => {
   it('treats the July 31 2026 draft as the live version', () => {
@@ -116,5 +124,13 @@ describe('client metadata', () => {
 
   it('exports the terms_required code the clients branch on', () => {
     assert.equal(TERMS_REQUIRED_CODE, 'terms_required');
+  });
+});
+
+describe('terms store client', () => {
+  it('uses the service_role admin client so Continue is not blocked by authenticated GRANTs', () => {
+    assert.match(storeSrc, /function termsAdmin/);
+    assert.match(storeSrc, /unscopedAdminOrNull/);
+    assert.doesNotMatch(storeSrc, /from '\.\.\/lib\/supabase/);
   });
 });
