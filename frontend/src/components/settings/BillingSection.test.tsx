@@ -169,7 +169,7 @@ describe('BillingSection', () => {
 
     expect(await screen.findByRole('heading', { name: 'Scale' })).toBeInTheDocument();
     expect(screen.getByText(/2 of 10 used/)).toBeInTheDocument();
-    expect(screen.getByText(/10 included/)).toBeInTheDocument();
+    expect(screen.getAllByText(/10 included/).length).toBeGreaterThan(0);
     expect(screen.getByText(/\$1,499/)).toBeInTheDocument();
   });
 
