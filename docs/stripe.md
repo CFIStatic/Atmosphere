@@ -61,7 +61,9 @@ Field Capture seats: allowed = **3 + extra seat quantity**. Creating a 4th
 Field Capture account (crew join or Employee invite) returns `fc_seat_limit`
 until extra seats are added via `POST /api/billing/checkout/extra-seats` or
 the Customer Portal. The webhook syncs extra quantity from any
-`field_capture_extra_seat` subscription item.
+`field_capture_extra_seat` subscription item. Inserts into `org_members` /
+`org_invites` are also checked in Postgres under an advisory lock so
+concurrent join-code requests cannot mint unpaid seats.
 
 Checkout sessions use Stripe idempotency keys so a double-click reuses the
 session instead of opening a second charge.
