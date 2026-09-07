@@ -229,12 +229,7 @@ export function TokenUsageSection() {
                   <tr key={row.id} className="border-b border-line/60 last:border-b-0">
                     <td className="py-2.5 pr-3 tabular-nums text-ink-700">{day(row.createdAt)}</td>
                     <td className="px-3 py-2.5 text-ink-700">{row.userName}</td>
-                    <td className="px-3 py-2.5 text-ink-700">
-                      {TOKEN_FEATURE_LABELS[row.feature]}
-                      {row.modelId ? (
-                        <span className="block font-mono text-[10.5px] text-ink-500">{row.modelId}</span>
-                      ) : null}
-                    </td>
+                    <td className="px-3 py-2.5 text-ink-700">{TOKEN_FEATURE_LABELS[row.feature]}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-ink-800">
                       {formatTokens(row.totalTokens)}
                     </td>
