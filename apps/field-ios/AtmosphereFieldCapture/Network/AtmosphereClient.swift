@@ -92,12 +92,29 @@ final class AtmosphereClient: ObservableObject {
         return try await loginViaSupabase(email: email, password: password)
     }
 
+    static let currentTermsVersion = "2026-07-31"
+    static let termsURL = URL(string: "https://atmosphereteam.com/terms")!
+    static let privacyURL = URL(string: "https://atmosphereteam.com/privacy")!
+
+    struct TermsStatus: Decodable {
+        let required: Bool
+        let currentVersion: String
+        let acceptedVersion: String?
+        let url: String?
+    }
+
+    struct AuthMe: Decodable {
+        let user: PublicUser
+        let terms: TermsStatus?
+    }
+
     private struct RegisterBody: Encodable {
         let email: String
         let password: String
         let fullName: String?
         let joinCode: String?
         let orgName: String?
+        let acceptedTermsVersion: String
     }
 
     /// Create the same Atmosphere account the website uses, then join or start an office.
@@ -113,7 +130,8 @@ final class AtmosphereClient: ObservableObject {
             password: password,
             fullName: fullName,
             joinCode: joinCode,
-            orgName: orgName
+            orgName: orgName,
+            acceptedTermsVersion: Self.currentTermsVersion
         )
         if usesBFF {
             do {
@@ -175,12 +193,31 @@ final class AtmosphereClient: ObservableObject {
     private struct JoinCrewBody: Encodable {
         let fullName: String
         let joinCode: String
+        let acceptedTermsVersion: String
     }
 
     /// Crew connect: name + office invite code. No email or password.
     func joinCrew(fullName: String, joinCode: String) async throws -> AuthResponse {
-        let body = JoinCrewBody(fullName: fullName, joinCode: joinCode)
+        let body = JoinCrewBody(
+            fullName: fullName,
+            joinCode: joinCode,
+            acceptedTermsVersion: Self.currentTermsVersion
+        )
         return try await post(path: "/api/field-app/join", body: body, authed: false)
+    }
+
+    func authMe() async throws -> AuthMe {
+        try await get(path: "/api/auth/me")
+    }
+
+    func acceptTerms(version: String = AtmosphereClient.currentTermsVersion) async throws -> TermsStatus {
+        struct Body: Encodable { let acceptedTermsVersion: String }
+        struct Res: Decodable { let terms: TermsStatus }
+        let res: Res = try await post(
+            path: "/api/auth/terms/accept",
+            body: Body(acceptedTermsVersion: version)
+        )
+        return res.terms
     }
 
     func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
@@ -574,9 +611,18 @@ final class AtmosphereClient: ObservableObject {
         joinCode: String?,
         orgName: String?
     ) async throws -> AuthResponse {
+        struct SignupBody: Encodable {
+            let email: String
+            let password: String
+            let acceptedTermsVersion: String
+        }
         let result = try await post(
             path: "/api/auth/signup",
-            body: PasswordLoginBody(email: email, password: password),
+            body: SignupBody(
+                email: email,
+                password: password,
+                acceptedTermsVersion: Self.currentTermsVersion
+            ),
             authed: false
         )
         if result.needsEmailConfirmation == true || result.session == nil {

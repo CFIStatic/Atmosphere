@@ -309,8 +309,23 @@
   function stubForm(formId, statusId, text, appHref) {
     var form = document.getElementById(formId);
     if (!form) return;
+    var tos = document.getElementById('su-tos');
+    var submit = form.querySelector('button[type="submit"]');
+    if (tos && submit) {
+      function syncTos() { submit.disabled = !tos.checked; }
+      tos.addEventListener('change', syncTos);
+      syncTos();
+    }
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (tos && !tos.checked) {
+        var status = document.getElementById(statusId);
+        if (status) {
+          status.className = 'form-status err';
+          status.textContent = 'Acknowledge the Terms of Service to continue.';
+        }
+        return;
+      }
       if (appHref) {
         location.href = appHref;
         return;

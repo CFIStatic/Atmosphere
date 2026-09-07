@@ -558,6 +558,15 @@
     background: var(--panel); color: var(--ink); font: inherit;
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tos-ack {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-weight: 550; color: var(--ink-2); line-height: 1.45;
+  }
+  .tos-ack input[type="checkbox"] {
+    display: inline-block; width: 18px; height: 18px; margin: 2px 0 0;
+    padding: 0; flex: 0 0 auto; accent-color: var(--accent);
+  }
+  .tos-ack a { color: var(--accent); font-weight: 650; }
   .auth-form .field-head {
     display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   }
@@ -842,6 +851,27 @@
         <p class="auth-foot">
           Don&apos;t have an account?
           <a id="signup-link" href="/signup">Create an account</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= TERMS: signed in, current Terms not yet acknowledged ================= -->
+  <div class="screen" id="s-terms" data-on="0">
+    <div class="pad" style="padding-top:36px">
+      <h1 class="h1">Please acknowledge the Terms</h1>
+      <p class="lede">Please acknowledge the Terms of Service before using Field Capture. If the Terms change, we will ask you to review them again.</p>
+      <form class="auth-form" id="terms-form" novalidate>
+        <label class="tos-ack" for="terms-ack">
+          <input id="terms-ack" type="checkbox" />
+          <span>I acknowledge and agree to the <a href="https://atmosphereteam.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and have read the <a href="https://atmosphereteam.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <p class="auth-err" id="terms-err" hidden></p>
+        <button class="daybtn" type="submit" id="terms-btn" disabled>
+          <span class="lbl">Continue</span>
+        </button>
+        <p class="auth-foot">
+          <a href="#signin" id="terms-sign-out">Sign out</a>
         </p>
       </form>
     </div>

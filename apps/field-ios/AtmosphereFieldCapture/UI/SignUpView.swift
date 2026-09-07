@@ -18,6 +18,7 @@ struct SignUpView: View {
     @State private var joinCode = ""
     @State private var orgName = ""
     @State private var busy = false
+    @State private var acknowledgedTerms = false
 
     private enum OfficeMode {
         case join
@@ -33,6 +34,7 @@ struct SignUpView: View {
         fullName.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
             && emailValid
             && password.count >= 8
+            && acknowledgedTerms
     }
 
     private var step2Valid: Bool {
@@ -193,6 +195,8 @@ struct SignUpView: View {
                 .background(FieldTheme.panel)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                 .cornerRadius(10)
+
+            TermsAckToggle(acknowledged: $acknowledgedTerms)
         }
         .padding(.top, 4)
     }

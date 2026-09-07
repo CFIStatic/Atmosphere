@@ -11,6 +11,8 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { TermsAcknowledgment } from './components/TermsAcknowledgment';
+import { ApiError } from './lib/api';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { api } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
@@ -46,6 +48,59 @@ const HomeownerReportPage = lazy(() =>
 const JobProgressGuestPage = lazy(() =>
   import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
 );
+
+const TERMS_EXEMPT_PREFIXES = [
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+  '/guest',
+  '/shared/',
+  '/report/',
+  '/progress-view',
+  '/progress/',
+];
+
+function isTermsExemptPath(pathname: string): boolean {
+  if (TERMS_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) {
+    return true;
+  }
+  return false;
+}
+
+function TermsGate({ children }: { children: ReactNode }) {
+  const { user, loading, needsTermsAcceptance, termsLoading, acceptTerms, logout } = useAuth();
+  const location = useLocation();
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (loading) return <FullScreenSpinner />;
+  if (!user || !needsTermsAcceptance || isTermsExemptPath(location.pathname)) {
+    return <>{children}</>;
+  }
+
+  async function onAccept(version: string) {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await acceptTerms(version);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save your acknowledgment. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <TermsAcknowledgment
+      submitting={submitting || termsLoading}
+      error={error}
+      onAccept={onAccept}
+      onSignOut={() => {
+        void logout();
+      }}
+    />
+  );
+}
 
 function FullScreenSpinner() {
   return (
@@ -246,6 +301,7 @@ export default function App() {
       <AuthProvider>
         <DocumentTitle />
         <Suspense fallback={<FullScreenSpinner />}>
+          <TermsGate>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -335,6 +391,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          </TermsGate>
         </Suspense>
       </AuthProvider>
     </Router>

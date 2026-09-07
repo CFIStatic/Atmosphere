@@ -24,6 +24,7 @@ import {
   postSignOutToFieldCapture,
 } from '../lib/fieldEmbed';
 import { preferFresherProfile } from '../lib/preferFresherProfile';
+import { publicTermsStatus, termsRequired, type TermsStatus } from '../lib/terms';
 
 function rememberSession(session?: { accessToken?: string; refreshToken?: string } | null): void {
   if (!session?.accessToken && !session?.refreshToken) return;
@@ -44,7 +45,7 @@ interface AuthContextValue {
   membershipLoading: boolean; // true while resolving membership for a known user
   profile: Profile | null; // display name etc.; null until loaded
   login: (email: string, password: string) => Promise<Membership | null>;
-  signup: (email: string, password: string) => Promise<SignupResult>;
+  signup: (email: string, password: string, acceptedTermsVersion: string) => Promise<SignupResult>;
   unlockWithPin: (pin: string) => Promise<Membership | null>;
   /** Adopt a session the backend just established (e.g. after a password reset). */
   adoptUser: (user: AuthUser) => Promise<Membership | null>;
@@ -52,6 +53,10 @@ interface AuthContextValue {
   refreshMembership: () => Promise<Membership | null>;
   /** Publish a profile the user just saved, so the shell re-renders at once. */
   setProfile: (profile: Profile) => void;
+  terms: TermsStatus | null;
+  termsLoading: boolean;
+  needsTermsAcceptance: boolean;
+  acceptTerms: (acceptedTermsVersion: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -62,6 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [membership, setMembership] = useState<Membership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [terms, setTerms] = useState<TermsStatus | null>(null);
+  const [termsLoading, setTermsLoading] = useState(false);
 
   // True once an explicit login/signup/logout has run. The mount-time restore
   // below must never overwrite the result of an explicit action that races it.
@@ -74,7 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { membership } = await api.getMembership();
         resolved = membership;
-      } catch {
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'terms_required') {
+          resolved = null;
+        }
         /* office membership unavailable — Field Capture may still have an org */
       }
 
@@ -122,9 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const { user } = await api.me();
+        const { user, terms: nextTerms } = await api.me();
         if (!cancelled && !explicitAuthRef.current) {
           setUser(user);
+          setTerms(nextTerms ?? publicTermsStatus());
           await loadMembership();
         }
       } catch (err) {
@@ -132,9 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const adopted = await waitForParentFieldSession();
           if (adopted && !cancelled && !explicitAuthRef.current) {
             try {
-              const { user } = await api.me();
+              const { user, terms: nextTerms } = await api.me();
               if (!cancelled && !explicitAuthRef.current) {
                 setUser(user);
+                setTerms(nextTerms ?? publicTermsStatus());
                 await loadMembership();
                 return;
               }
@@ -158,20 +170,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const { user, session } = await api.login(email, password);
+      const { user, session, terms: nextTerms } = await api.login(email, password);
       rememberSession(session);
       explicitAuthRef.current = true;
       setUser(user);
+      setTerms(nextTerms ?? publicTermsStatus());
       return loadMembership();
     },
     [loadMembership],
   );
 
   const signup = useCallback(
-    async (email: string, password: string): Promise<SignupResult> => {
-      const res = await api.signup(email, password);
+    async (
+      email: string,
+      password: string,
+      acceptedTermsVersion: string,
+    ): Promise<SignupResult> => {
+      const res = await api.signup(email, password, acceptedTermsVersion);
       // If the project auto-confirms, a session is set and the user is logged in.
       let membership: Membership | null = null;
+      setTerms(res.terms ?? publicTermsStatus());
       if (!res.needsEmailConfirmation && res.user) {
         rememberSession(res.session);
         explicitAuthRef.current = true;
@@ -190,10 +208,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const unlockWithPin = useCallback(
     async (pin: string) => {
-      const { user } = await api.pinUnlock(pin);
+      const { user, terms: nextTerms } = await api.pinUnlock(pin);
       explicitAuthRef.current = true;
       setUser(user);
+      setTerms(nextTerms ?? publicTermsStatus());
       return loadMembership();
+    },
+    [loadMembership],
+  );
+
+  const acceptTerms = useCallback(
+    async (acceptedTermsVersion: string) => {
+      setTermsLoading(true);
+      try {
+        const { terms: nextTerms } = await api.acceptTerms(acceptedTermsVersion);
+        setTerms(nextTerms);
+        await loadMembership();
+      } finally {
+        setTermsLoading(false);
+      }
     },
     [loadMembership],
   );
@@ -202,6 +235,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (nextUser: AuthUser) => {
       explicitAuthRef.current = true;
       setUser(nextUser);
+      try {
+        const { terms: nextTerms } = await api.me();
+        setTerms(nextTerms ?? publicTermsStatus());
+      } catch {
+        setTerms(publicTermsStatus());
+      }
       return loadMembership();
     },
     [loadMembership],
@@ -217,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setMembership(null);
       setProfile(null);
+      setTerms(null);
     }
   }, []);
 
@@ -234,6 +274,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adoptUser,
       logout,
       refreshMembership: loadMembership,
+      terms,
+      termsLoading,
+      needsTermsAcceptance: Boolean(user) && !loading && termsRequired(terms),
+      acceptTerms,
     }),
     [
       user,
@@ -247,6 +291,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adoptUser,
       logout,
       loadMembership,
+      terms,
+      termsLoading,
+      acceptTerms,
     ],
   );
 
