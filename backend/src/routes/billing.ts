@@ -447,7 +447,7 @@ billingRouter.post('/portal', async (req: Request, res: Response, next: NextFunc
  * invoice, with links to the Stripe receipt and invoice PDF so a customer can
  * retrieve proof of payment at any time.
  */
-billingRouter.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.get('/payments', async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const supabase = createUserClient(req.accessToken!);
