@@ -11,7 +11,6 @@ import { SetupBillingStep } from '../components/setup/SetupBillingStep';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
-  workspaceNameFrom,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
 import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
@@ -57,7 +56,6 @@ export function SignupPage() {
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
-  const [orgNameEdited, setOrgNameEdited] = useState(false);
   const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
 
   const [error, setError] = useState<string | null>(null);
@@ -91,11 +89,6 @@ export function SignupPage() {
     const fromLink = (searchParams.get('code') ?? '').toUpperCase();
     if (fromLink && JOIN_CODE_RE.test(fromLink)) setJoinCode(fromLink);
   }, [searchParams]);
-
-  useEffect(() => {
-    if (mode !== 'create' || orgNameEdited) return;
-    setOrgName(workspaceNameFrom(fullName, email || user?.email || ''));
-  }, [mode, fullName, email, user?.email, orgNameEdited]);
 
   useEffect(() => {
     if (loading || !user || !membership) return;
@@ -328,6 +321,7 @@ export function SignupPage() {
                 <Field label="Your name" htmlFor="signup-name">
                   <input
                     id="signup-name"
+                    name="name"
                     type="text"
                     autoComplete="name"
                     required
@@ -382,11 +376,11 @@ export function SignupPage() {
               <Field label="Company name" htmlFor="org-name">
                 <input
                   id="org-name"
+                  name="organization"
+                  type="text"
+                  autoComplete="organization"
                   value={orgName}
-                  onChange={(e) => {
-                    setOrgNameEdited(true);
-                    setOrgName(e.target.value);
-                  }}
+                  onChange={(e) => setOrgName(e.target.value)}
                   placeholder="e.g. Meridian Services"
                   className={inputClass}
                 />

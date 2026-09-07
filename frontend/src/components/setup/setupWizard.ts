@@ -83,15 +83,3 @@ export function initialSetupStep(options: {
   if (parsed === 2) return options.membership ? 2 : 1;
   return 1;
 }
-
-/** Company name when the user skips it — still gives the workspace a real label. */
-export function workspaceNameFrom(fullName: string, email: string): string {
-  const name = fullName.trim();
-  if (name.length >= 2) return name;
-  const local = email.split('@')[0]?.trim().replace(/[._]+/g, ' ');
-  if (local) {
-    const labelled = local.replace(/\b\w/g, (ch) => ch.toUpperCase());
-    return `${labelled}'s workspace`;
-  }
-  return 'My workspace';
-}

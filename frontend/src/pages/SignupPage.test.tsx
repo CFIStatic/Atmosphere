@@ -250,12 +250,19 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText('Company name')).toBeNull();
   });
 
-  it('keeps suggesting the company name while the person types theirs', async () => {
+  it('keeps your name and company name independent while typing', async () => {
     const user = userEvent.setup();
     renderSignup();
 
-    await user.type(screen.getByLabelText('Your name'), 'John Smith');
-    expect(screen.getByLabelText('Company name')).toHaveValue('John Smith');
+    await user.type(screen.getByLabelText('Your name'), 'Jack Cyganiak');
+    expect(screen.getByLabelText('Company name')).toHaveValue('');
+
+    await user.type(screen.getByLabelText('Work email'), 'jack@meridian.example');
+    expect(screen.getByLabelText('Company name')).toHaveValue('');
+
+    await user.type(screen.getByLabelText('Company name'), 'Meridian Services');
+    expect(screen.getByLabelText('Your name')).toHaveValue('Jack Cyganiak');
+    expect(screen.getByLabelText('Company name')).toHaveValue('Meridian Services');
   });
 
   it('opens billing — not the account form — after a Stripe checkout return', () => {
