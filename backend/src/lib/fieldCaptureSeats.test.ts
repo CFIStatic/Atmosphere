@@ -8,6 +8,7 @@ import {
 import {
   entitledFcSeatCounts,
   fcSeatLimitError,
+  isFcSeatLimitDbError,
   isFieldCaptureSeat,
   isFieldCaptureSeatRole,
   isWorkVerificationEntitled,
@@ -86,6 +87,11 @@ describe('Field Capture seat allowance', () => {
     assert.equal(err.code, 'fc_seat_limit');
     assert.match(err.message, /3 Field Capture accounts/);
     assert.match(err.message, /\$100/);
+  });
+
+  it('recognizes the Postgres seat-limit trigger error', () => {
+    assert.equal(isFcSeatLimitDbError({ message: 'fc_seat_limit', hint: 'fc_seat_limit' }), true);
+    assert.equal(isFcSeatLimitDbError({ message: 'duplicate key' }), false);
   });
 
   it('refuses a silent extra-seat persist when no org_billing row is updated', async () => {

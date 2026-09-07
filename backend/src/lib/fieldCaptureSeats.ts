@@ -38,6 +38,16 @@ export function isFieldCaptureSeat(input: {
   return Boolean(input.usageIntents?.includes('field_work'));
 }
 
+export function isFcSeatLimitDbError(error: { message?: string; hint?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const blob = `${error.message ?? ''} ${error.hint ?? ''} ${error.code ?? ''}`;
+  return /fc_seat_limit/i.test(blob);
+}
+
+export function fcSeatLimitFromDb(used = 0, allowed = INCLUDED_FC_SEATS) {
+  return fcSeatLimitError(Math.max(0, allowed), Math.max(0, used));
+}
+
 export function fcSeatLimitError(allowed: number, used: number) {
   const extraNeeded = extraSeatsNeeded(used + 1, Math.max(0, allowed - INCLUDED_FC_SEATS));
   const extraLabel = extraNeeded === 1 ? '1 extra Field Capture seat' : `${Math.max(1, extraNeeded)} extra Field Capture seats`;

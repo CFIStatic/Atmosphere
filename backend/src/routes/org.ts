@@ -15,7 +15,11 @@ import {
   updateOrgProfileSchema,
 } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
-import { assertFieldCaptureSeatAvailable } from '../lib/fieldCaptureSeats.js';
+import {
+  assertFieldCaptureSeatAvailable,
+  fcSeatLimitFromDb,
+  isFcSeatLimitDbError,
+} from '../lib/fieldCaptureSeats.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
 import { requirePendingOrgInvite } from '../lib/orgInviteGate.js';
 
@@ -610,6 +614,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     if (error) {
       if (error.code === '23505') {
         throw new HttpError(409, 'That address already has a live invitation.', 'duplicate_invite');
+      }
+      if (isFcSeatLimitDbError(error)) {
+        throw fcSeatLimitFromDb();
       }
       throw new HttpError(400, error.message, 'invite_failed');
     }
