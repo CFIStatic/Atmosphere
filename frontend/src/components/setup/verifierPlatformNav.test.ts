@@ -119,6 +119,14 @@ describe('verifier office rail', () => {
     );
   });
 
+  it('keeps untranslated Dashboard chrome LTR when the nav locale is RTL', () => {
+    expect(verifierHtml).toContain("document.documentElement.dir = 'ltr'");
+    expect(verifierHtml).toContain("rail.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr'");
+    expect(verifierHtml).not.toContain(
+      "document.documentElement.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr'",
+    );
+  });
+
   it('does not show a Legal hold filter on the Dashboard', () => {
     expect(verifierHtml).not.toContain('data-view="hold"');
     expect(verifierHtml).not.toContain('id="n-hold"');

@@ -64,6 +64,8 @@ describe('phone and Field Capture frame', () => {
     expect(shell).toContain('operations-rail');
     expect(shell).toContain('h-[100dvh]');
     expect(shell).toContain('w-[min(280px,86vw)]');
+    expect(shell).toContain('start-0');
+    expect(shell).toContain('-translate-x-full rtl:translate-x-full');
   });
 });
 
@@ -124,7 +126,7 @@ describe('Job Files search chrome', () => {
       'utf8',
     );
     expect(shell).toContain('HeaderAccountChip');
-    expect(shell).toContain('ml-auto shrink-0');
+    expect(shell).toContain('ms-auto shrink-0');
     expect(shell).toContain('justify-between');
     expect(shell).toContain("t('nav.open')");
     expect(shell).not.toContain('ThemeToggle');

@@ -7,7 +7,12 @@ import {
   isRtlLocale,
   matchLocale,
 } from './locale';
-import { getPreferences, initPreferences, resetPreferencesForTests, setPreference } from './preferences';
+import {
+  getPreferences,
+  initPreferences,
+  resetPreferencesForTests,
+  setPreference,
+} from './preferences';
 
 describe('locale matching', () => {
   it('accepts supported BCP-47 tags and maps common aliases', () => {
@@ -62,6 +67,17 @@ describe('locale persistence', () => {
     vi.stubGlobal('navigator', { language: 'it-IT', languages: ['it-IT'] });
     initPreferences();
     expect(getPreferences().locale).toBe('it');
+  });
+
+  it('honors atmosphere.locale when the preferences blob has no locale', () => {
+    localStorage.clear();
+    localStorage.setItem('atmosphere.locale', 'ar');
+    localStorage.setItem('atmosphere.preferences', JSON.stringify({ theme: 'dark' }));
+    vi.stubGlobal('navigator', { language: 'en-US', languages: ['en-US'] });
+    initPreferences();
+    expect(getPreferences().locale).toBe('ar');
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
   });
 
   it('keeps a user override instead of re-detecting the browser', () => {

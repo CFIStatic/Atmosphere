@@ -4,6 +4,7 @@ import {
   coerceLocale,
   DEFAULT_LOCALE,
   persistLocalePreference,
+  readStoredLocaleOverride,
   type AppLocale,
 } from './locale';
 import {
@@ -70,7 +71,7 @@ function normalize(parsed: Partial<Preferences>, opts?: { hadStoredBlob?: boolea
     ...DEFAULT_PREFERENCES,
     ...parsed,
     theme,
-    locale: coerceLocale(parsed.locale),
+    locale: readStoredLocaleOverride() ?? coerceLocale(parsed.locale),
   };
 }
 
@@ -81,7 +82,7 @@ function read(): Preferences {
       return {
         ...DEFAULT_PREFERENCES,
         theme: readThemePreference(),
-        locale: coerceLocale(undefined),
+        locale: readStoredLocaleOverride() ?? coerceLocale(undefined),
       };
     }
     const parsed = JSON.parse(raw) as Partial<Preferences>;
@@ -92,7 +93,7 @@ function read(): Preferences {
     return {
       ...DEFAULT_PREFERENCES,
       theme: readThemePreference(),
-      locale: coerceLocale(undefined),
+      locale: readStoredLocaleOverride() ?? coerceLocale(undefined),
     };
   }
 }

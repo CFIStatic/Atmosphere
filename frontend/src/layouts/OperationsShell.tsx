@@ -50,10 +50,10 @@ export function OperationsShell() {
   const railClass = isLibrary
     ? 'fixed inset-0 z-0 h-full w-full'
     : phone
-      ? `fixed inset-y-0 left-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
-          railOpen ? 'translate-x-0' : '-translate-x-full'
+      ? `fixed inset-y-0 start-0 z-40 h-full w-[min(280px,86vw)] overflow-hidden bg-panel shadow-xl transition-transform duration-200 ${
+          railOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
         }`
-      : 'operations-rail fixed inset-y-0 left-0 z-20 h-full overflow-hidden bg-panel';
+      : 'operations-rail fixed inset-y-0 start-0 z-20 h-full overflow-hidden bg-panel';
 
   return (
     <div
@@ -113,16 +113,16 @@ export function OperationsShell() {
                 />
               )}
               {isJobsList && !phone && <div className="flex-1" />}
-              <div className="ml-auto shrink-0">
+              <div className="ms-auto shrink-0">
                 <HeaderAccountChip />
               </div>
             </header>
             <div
               className={
-              isJobFile
-                ? phone
-                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                  : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
+                isJobFile
+                  ? phone
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                    : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
                   : phone
                     ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-3 py-3'
                     : 'px-4 py-6 sm:px-6'

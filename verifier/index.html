@@ -6192,7 +6192,11 @@
     chromeI18n = chrome && typeof chrome === 'object' ? chrome : null;
     if (locale) {
       document.documentElement.lang = locale;
-      document.documentElement.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr';
+      // v1 only translates Settings + nav. Keep the Dashboard LTR so lists,
+      // clip chrome, and toolbars are not mirrored as a side effect of dir=rtl.
+      document.documentElement.dir = 'ltr';
+      var rail = document.getElementById('main-rail');
+      if (rail) rail.dir = locale === 'ar' || locale === 'he' ? 'rtl' : 'ltr';
     }
     document.querySelectorAll('[data-i18n-chrome]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-chrome');
