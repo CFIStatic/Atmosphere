@@ -71,6 +71,7 @@ export interface SameDayUsageStripe {
     ) => Promise<Stripe.Invoice>;
     finalizeInvoice: (id: string) => Promise<Stripe.Invoice>;
     pay: (id: string) => Promise<Stripe.Invoice>;
+    del?: (id: string) => Promise<unknown>;
   };
   invoiceItems: {
     create: (
@@ -86,6 +87,36 @@ export interface SameDayUsageInvoiceInput {
   day: string;
   billableNanos: number;
   existingInvoices?: Stripe.Invoice[];
+  refreshInvoices?: () => Promise<Stripe.Invoice[]>;
+}
+
+const sameDayLocks = new Map<string, Promise<unknown>>();
+
+export function sameDayUsageLockKey(orgId: string, day: string): string {
+  return `${orgId}:${day}`;
+}
+
+/** One in-flight same-day invoice per org+day so overlapping token events do not double-charge. */
+export async function enqueueSameDayUsage<T>(
+  orgId: string,
+  day: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const key = sameDayUsageLockKey(orgId, day);
+  const previous = sameDayLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => gate);
+  sameDayLocks.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await work();
+  } finally {
+    release();
+    if (sameDayLocks.get(key) === queued) sameDayLocks.delete(key);
+  }
 }
 
 export async function invoiceSameDayUsageCharge(
@@ -98,7 +129,7 @@ export async function invoiceSameDayUsageCharge(
     return { invoiceId: null, skipped: already > 0 ? 'already_invoiced' : 'below_cent', amountCents: 0 };
   }
 
-  const key = stripeIdempotencyKey('same-day-usage', input.orgId, input.day, amountCents);
+  const key = stripeIdempotencyKey('same-day-usage', input.orgId, input.day, already, amountCents);
   const invoice = await stripe.invoices.create(
     {
       customer: input.customerId,
@@ -116,6 +147,19 @@ export async function invoiceSameDayUsageCharge(
 
   if (sameDayUsageAlreadyIssued(invoice.status) && (invoice.lines?.data?.length ?? 0) > 0) {
     return { invoiceId: invoice.id, skipped: 'already_invoiced', amountCents };
+  }
+
+  if (input.refreshInvoices) {
+    const latest = await input.refreshInvoices();
+    const others = alreadyInvoicedSameDayCents(
+      latest.filter((row) => row.id !== invoice.id),
+      input.orgId,
+      input.day,
+    );
+    if (others + amountCents > nanosToCents(input.billableNanos) && invoice.status === 'draft') {
+      if (stripe.invoices.del) await stripe.invoices.del(invoice.id);
+      return { invoiceId: null, skipped: 'coalesced', amountCents: 0 };
+    }
   }
 
   if ((invoice.lines?.data?.length ?? 0) === 0) {
@@ -198,6 +242,14 @@ export async function invoiceSameDayUsage(
   orgId: string,
   day: string = usageDayUtc(),
 ): Promise<{ invoiceId: string | null; skipped: string | null; amountCents: number }> {
+  return enqueueSameDayUsage(orgId, day, () => invoiceSameDayUsageUnlocked(supabase, orgId, day));
+}
+
+async function invoiceSameDayUsageUnlocked(
+  supabase: SupabaseClient,
+  orgId: string,
+  day: string,
+): Promise<{ invoiceId: string | null; skipped: string | null; amountCents: number }> {
   if (config.billing.paymentProvider !== 'stripe' || !isStripeConfigured()) {
     return { invoiceId: null, skipped: 'stripe_unconfigured', amountCents: 0 };
   }
@@ -221,18 +273,31 @@ export async function invoiceSameDayUsage(
   if (billableNanos <= 0) return { invoiceId: null, skipped: 'no_usage', amountCents: 0 };
 
   const stripe = stripeClient();
-  const existingInvoices = await listCustomerInvoices(stripe, customerId);
-  return invoiceSameDayUsageCharge(stripe, {
+  const api: SameDayUsageStripe = {
+    invoices: {
+      list: (params) => stripe.invoices.list(params),
+      create: (params, options) => stripe.invoices.create(params, options),
+      finalizeInvoice: (id) => stripe.invoices.finalizeInvoice(id),
+      pay: (id) => stripe.invoices.pay(id),
+      del: (id) => stripe.invoices.del(id),
+    },
+    invoiceItems: {
+      create: (params, options) => stripe.invoiceItems.create(params, options),
+    },
+  };
+  const existingInvoices = await listCustomerInvoices(api, customerId);
+  return invoiceSameDayUsageCharge(api, {
     customerId,
     orgId,
     day,
     billableNanos,
     existingInvoices,
+    refreshInvoices: () => listCustomerInvoices(api, customerId),
   });
 }
 
 export function invoiceSameDayUsageAsync(supabase: SupabaseClient, orgId: string, day?: string): void {
-  void invoiceSameDayUsage(supabase, orgId, day).catch((err) => {
+  void invoiceSameDayUsage(supabase, orgId, day ?? usageDayUtc()).catch((err) => {
     console.error('[stripe] same-day usage invoice failed', { orgId, day, err });
   });
 }

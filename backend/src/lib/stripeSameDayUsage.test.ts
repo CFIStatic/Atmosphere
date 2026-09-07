@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { centsToNanos } from './money.js';
 import {
   alreadyInvoicedSameDayCents,
+  enqueueSameDayUsage,
   invoiceSameDayUsageCharge,
   isSameDayUsageInvoice,
   sameDayUsageChargeCents,
@@ -89,6 +90,10 @@ function mockStripe() {
         calls.push({ name: 'invoices.pay', args: id });
         return { id, status: 'paid' } as never;
       },
+      async del(id) {
+        calls.push({ name: 'invoices.del', args: id });
+        return { id, deleted: true };
+      },
     },
     invoiceItems: {
       async create(params) {
@@ -165,5 +170,46 @@ describe('same-day usage invoice path', () => {
     assert.equal(result.amountCents, 53);
     const item = calls.find((c) => c.name === 'invoiceItems.create')?.args as { amount: number };
     assert.equal(item.amount, 53);
+  });
+
+  it('voids a draft when a concurrent invoice already covers the day', async () => {
+    const { stripe, calls } = mockStripe();
+    const result = await invoiceSameDayUsageCharge(stripe, {
+      customerId: 'cus_1',
+      orgId: 'org-1',
+      day: '2026-09-07',
+      billableNanos: centsToNanos(40),
+      existingInvoices: [],
+      refreshInvoices: async () => [
+        {
+          id: 'in_other',
+          metadata: { org_id: 'org-1', kind: 'same_day_usage', usage_day: '2026-09-07' },
+          status: 'paid',
+          amount_paid: 40,
+        } as never,
+      ],
+    });
+    assert.equal(result.skipped, 'coalesced');
+    assert.equal(result.invoiceId, null);
+    assert.equal(calls.some((c) => c.name === 'invoices.del'), true);
+    assert.equal(calls.some((c) => c.name === 'invoices.pay'), false);
+  });
+});
+
+describe('same-day usage lock', () => {
+  it('runs overlapping org+day work one after another', async () => {
+    const order: string[] = [];
+    const first = enqueueSameDayUsage('org-1', '2026-09-07', async () => {
+      order.push('a-start');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      order.push('a-end');
+      return 1;
+    });
+    const second = enqueueSameDayUsage('org-1', '2026-09-07', async () => {
+      order.push('b');
+      return 2;
+    });
+    assert.deepEqual(await Promise.all([first, second]), [1, 2]);
+    assert.deepEqual(order, ['a-start', 'a-end', 'b']);
   });
 });
