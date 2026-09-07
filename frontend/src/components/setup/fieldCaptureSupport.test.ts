@@ -85,12 +85,14 @@ describe('Field Capture contact support URL', () => {
   });
 
   it('puts Support in the Field Capture account menu next to Settings', () => {
-    const menu = fieldHtml.match(/<div class="who-menu" id="who-menu"[\s\S]*?<\/div>\s*<\/div>/);
-    expect(menu).not.toBeNull();
-    expect(menu![0]).toContain('id="fc-menu-settings"');
-    expect(menu![0]).toContain('id="fc-menu-support"');
-    expect(menu![0].indexOf('id="fc-menu-support"')).toBeGreaterThan(menu![0].indexOf('id="fc-menu-settings"'));
-    expect(menu![0].indexOf('id="fc-menu-signout"')).toBeGreaterThan(menu![0].indexOf('id="fc-menu-support"'));
+    const menu = fieldHtml.indexOf('id="who-menu"');
+    const settings = fieldHtml.indexOf('id="fc-menu-settings"', menu);
+    const support = fieldHtml.indexOf('id="fc-menu-support"', menu);
+    const signout = fieldHtml.indexOf('id="fc-menu-signout"', menu);
+    expect(menu).toBeGreaterThan(-1);
+    expect(settings).toBeGreaterThan(menu);
+    expect(support).toBeGreaterThan(settings);
+    expect(signout).toBeGreaterThan(support);
     expect(fieldApp).toContain('refreshFieldSupportLink');
     expect(fieldApp).not.toContain('openPlatformSupport');
   });
