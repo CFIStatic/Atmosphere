@@ -46,6 +46,7 @@ applied when Stripe confirms payment. Returning to a success URL proves nothing.
 | Atmosphere signup (Starter / Work Verification / Scale) | `POST /api/billing/checkout/onboarding` | `customer.subscription.*` |
 | Extra Field Capture seats | `POST /api/billing/checkout/extra-seats` | Updates the subscription item, or Checkout; webhook syncs quantity |
 | Cards / invoices / cancel | `POST /api/billing/portal` | Stripe Customer Portal |
+| Invoice / receipt list | `GET /api/billing/invoices` | Stripe Invoices API for the org `stripe_customer_id` |
 | Same-day token/AI usage | recorded with `record_token_usage` | InvoiceItem + Invoice that day; `invoice.paid` records it |
 | Period overage (jobs / compute) + leftover usage | `POST /api/metering/period/close` | Creates a Stripe invoice; `invoice.paid` records it |
 | Credit packs (no UI) | `POST /api/billing/purchases` | `checkout.session.completed` |
@@ -61,9 +62,11 @@ subscription. `token_usage_events.cost_nanos` is the provider/COGS estimate;
 gross margin). When billable usage is recorded for an org with an active
 Stripe customer, leftover cents for that UTC day become a Stripe InvoiceItem
 and a same-day Invoice (`kind=same_day_usage`). Same-day charges are
-coalesced: later usage that day invoices only the leftover. `invoice.paid`
-still records the receipt. Period-close invoices leftover usage days as a
-safety net. Do not apply this multiplier to seat or Stripe subscription prices.
+coalesced: later usage that day invoices only the leftover. `invoice.finalized`
+and `invoice.paid` record the receipt. Period-close invoices leftover usage
+days as a safety net. Do not apply this multiplier to seat or Stripe
+subscription prices. Settings → Billing lists the same invoices from Stripe
+(`GET /api/billing/invoices`) with a hosted invoice / PDF link.
 
 Field Capture seats: allowed = **included seats from the org plan + extra
 seat quantity** (Starter 1, Work Verification 3, Scale 10). Creating an
@@ -115,6 +118,7 @@ retry). Do not skip unmapped prices — that loses a paid signup.
 Point Stripe at `POST https://<api-host>/api/webhooks/stripe` with events:
 
 - `checkout.session.completed`
+- `invoice.finalized`
 - `invoice.paid`
 - `invoice.payment_failed`
 - `customer.subscription.created`
@@ -177,8 +181,33 @@ once. Never apply both. See [`docs/production.md`](./production.md).
 
 ## Dashboard toggles
 
-1. **Customer portal** — Settings → Billing → Customer portal (the sync script
-   tries to create a default configuration).
-2. **Email finalized invoices** — so customers get subscription receipts.
-3. Stay in **Test mode** until the go-live checklist in
+Do these in the **live** Stripe Dashboard (and again in test mode while
+rehearsing). Atmosphere does **not** send a custom receipt email — Stripe’s
+hosted invoice email is the receipt.
+
+### Jack — invoice / receipt email checklist
+
+1. **Customer emails** — Settings → Billing → Subscriptions and emails
+   (sometimes labeled **Customer emails**).
+   Enable:
+   - **Successful payments** — receipt for each charged invoice (monthly plan
+     renewals and same-day usage invoices).
+   - **Invoice finalized** / **Email finalized invoices** — so an open invoice
+     is emailed even before collection finishes.
+   - **Failed payments** — so a declined renewal is not silent.
+2. Confirm the **Customer** has an email (Checkout writes the org creator
+   email onto the Stripe Customer; `ensureCustomer` backfills if it was
+   missing). Invoice emails go to that address / the billing email on the
+   Customer, not to a Resend template.
+3. **Customer portal** — Settings → Billing → Customer portal (the sync script
+   tries to create a default configuration). Invoices also appear in
+   Settings → Billing → **Invoices / Receipts** (`GET /api/billing/invoices`)
+   with **View receipt** → `hosted_invoice_url` or `invoice_pdf`.
+4. Stay in **Test mode** until the go-live checklist in
    [`docs/production.md`](./production.md) is done.
+
+Checkout / subscription creates already use `collection_method=charge_automatically`
+(Stripe default for Checkout subscriptions; same-day and period-close invoices
+set it explicitly). One-time credit Checkout enables `invoice_creation` so
+those charges get an invoice too. Do not invent a Resend receipt unless these
+Dashboard toggles are insufficient.

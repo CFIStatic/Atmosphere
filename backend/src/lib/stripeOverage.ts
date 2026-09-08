@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import type { MeteringPeriodCalculation } from '../metering/types.js';
 import { loadOrgCreatorEmail, shouldSkipUsageBilling } from './billingExempt.js';
 import { isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
+import { stripeAutoCollectInvoiceFields } from './stripeInvoices.js';
 
 export interface OverageInvoiceLine {
   amountCents: number;
@@ -130,6 +131,7 @@ export async function invoiceMeteringOverage(
       {
         customer: customerId,
         auto_advance: false,
+        ...stripeAutoCollectInvoiceFields(),
         pending_invoice_items_behavior: 'exclude',
         description: `Work Verification usage ${summary.periodStart} – ${summary.periodEnd}`,
         metadata: {

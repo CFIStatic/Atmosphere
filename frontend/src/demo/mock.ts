@@ -2290,6 +2290,46 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/billing\/ledger$/, () => ({ body: { entries: LEDGER } })],
   ['GET', /^\/api\/billing\/purchases$/, () => ({ body: { purchases: PURCHASES } })],
   ['GET', /^\/api\/billing\/payments$/, () => ({ body: { payments: PAYMENTS } })],
+  ['GET', /^\/api\/billing\/invoices$/, () => ({
+    body: {
+      complimentary: false,
+      invoices: [
+        {
+          id: 'in_aug',
+          number: 'INV-0008',
+          status: 'paid',
+          amountCents: 84900,
+          currency: 'usd',
+          description: 'Work Verification — August',
+          hostedInvoiceUrl: 'about:blank#demo-invoice',
+          invoicePdfUrl: 'about:blank#demo-invoice-pdf',
+          createdAt: '2026-08-01T00:05:00Z',
+        },
+        {
+          id: 'in_overage',
+          number: 'INV-0007',
+          status: 'paid',
+          amountCents: 9000,
+          currency: 'usd',
+          description: '3 additional jobs beyond 50 included',
+          hostedInvoiceUrl: 'about:blank#demo-overage',
+          invoicePdfUrl: null,
+          createdAt: '2026-08-01T00:06:00Z',
+        },
+        {
+          id: 'in_july',
+          number: 'INV-0006',
+          status: 'paid',
+          amountCents: 84900,
+          currency: 'usd',
+          description: 'Work Verification — July',
+          hostedInvoiceUrl: 'about:blank#demo-invoice-july',
+          invoicePdfUrl: 'about:blank#demo-invoice-july-pdf',
+          createdAt: '2026-07-01T00:05:00Z',
+        },
+      ],
+    },
+  })],
   ['PATCH', /^\/api\/billing\/settings$/, (_m, b) => {
     state.settings = { ...state.settings, ...(b as Partial<BillingSettings>) };
     return { body: { settings: state.settings } };

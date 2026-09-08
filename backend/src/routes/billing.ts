@@ -5,12 +5,19 @@ import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
-import { ensureCustomer, liveStripeCustomerId, stripeClient, stripeIdempotencyKey } from '../lib/stripe.js';
+import {
+  ensureCustomer,
+  isStripeConfigured,
+  liveStripeCustomerId,
+  stripeClient,
+  stripeIdempotencyKey,
+} from '../lib/stripe.js';
 import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
 import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
+import { checkoutInvoiceCreationFields, loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
 import {
   billingError,
@@ -272,6 +279,7 @@ billingRouter.post('/purchases', async (req: Request, res: Response, next: NextF
         {
           mode: 'payment',
           customer: customerId,
+          ...checkoutInvoiceCreationFields('payment'),
           success_url: config.stripe.successUrl,
           cancel_url: config.stripe.cancelUrl,
           client_reference_id: req.orgId,
@@ -490,6 +498,41 @@ billingRouter.get('/payments', async (req: Request, res: Response, _next: NextFu
   } catch (err) {
     console.warn('[billing] payment history unavailable:', err instanceof Error ? err.message : err);
     res.json({ payments: [] });
+  }
+});
+
+/**
+ * GET /api/billing/invoices
+ *
+ * Live Stripe invoices for this org (subscription renewals + same-day usage).
+ * Complimentary orgs get an empty list, not an error. Receipt emails are sent
+ * by Stripe; this list only exposes hosted invoice / PDF links.
+ */
+billingRouter.get('/invoices', async (req: Request, res: Response, _next: NextFunction) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const supabase = createUserClient(req.accessToken!);
+    const workspace = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
+    const { data: billing, error } = await supabase
+      .from('org_billing')
+      .select('stripe_customer_id')
+      .eq('org_id', req.orgId)
+      .maybeSingle();
+    if (error) {
+      console.warn('[billing] invoice customer lookup failed:', error.message);
+    }
+
+    res.json(
+      await loadOrgBillingInvoices({
+        customerId: (billing?.stripe_customer_id as string | undefined) ?? null,
+        billingExempt: workspace.billingExempt,
+        stripeConfigured: config.billing.paymentProvider === 'stripe' && isStripeConfigured(),
+        limit,
+      }),
+    );
+  } catch (err) {
+    console.warn('[billing] invoice history unavailable:', err instanceof Error ? err.message : err);
+    res.json({ invoices: [], complimentary: false });
   }
 });
 

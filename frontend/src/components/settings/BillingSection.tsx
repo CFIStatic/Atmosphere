@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, type Payment, type WorkspaceBilling } from '../../lib/api';
+import { api, type BillingInvoice, type WorkspaceBilling } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { AlertIcon, SpinnerIcon } from '../icons';
 import { TokenUsageSection } from './TokenUsageSection';
@@ -16,12 +16,11 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: 'bg-paper-200/60 text-ink-500 ring-1 ring-line',
 };
 
-const PAYMENT_STYLE: Record<string, string> = {
-  succeeded: 'bg-success-50 text-success-600 ring-1 ring-success-200',
+const INVOICE_STYLE: Record<string, string> = {
   paid: 'bg-success-50 text-success-600 ring-1 ring-success-200',
-  pending: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
-  failed: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
-  refunded: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
+  open: 'bg-caution-50 text-caution-600 ring-1 ring-caution-200',
+  void: 'bg-paper-200/60 text-ink-600 ring-1 ring-line',
+  uncollectible: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200',
 };
 
 function titleCase(value: string) {
@@ -45,17 +44,22 @@ export function BillingSection() {
   const [params] = useSearchParams();
   const checkout = params.get('checkout');
   const [workspace, setWorkspace] = useState<WorkspaceBilling | null>(null);
-  const [payments, setPayments] = useState<Payment[] | null>(null);
+  const [invoices, setInvoices] = useState<BillingInvoice[] | null>(null);
+  const [invoicesComplimentary, setInvoicesComplimentary] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    Promise.all([api.getBillingWorkspace(), api.getPayments(25).catch(() => ({ payments: [] as Payment[] }))])
+    Promise.all([
+      api.getBillingWorkspace(),
+      api.getInvoices(25).catch(() => ({ invoices: [] as BillingInvoice[], complimentary: false })),
+    ])
       .then(([next, history]) => {
         if (!live) return;
         setWorkspace(next);
-        setPayments(history.payments);
+        setInvoices(history.invoices);
+        setInvoicesComplimentary(history.complimentary);
       })
       .catch((err) => {
         if (!live) return;
@@ -216,15 +220,19 @@ export function BillingSection() {
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>
-          <h3 className="text-base font-semibold text-ink-900">Billing history</h3>
-          <p className="mt-0.5 text-xs text-ink-500">Every charge on this account, newest first.</p>
+          <h3 className="text-base font-semibold text-ink-900">Invoices / Receipts</h3>
+          <p className="mt-0.5 text-xs text-ink-500">
+            Stripe invoices for this account, newest first. Email receipts go to the billing email on file.
+          </p>
         </header>
 
-        {payments === null ? (
+        {invoices === null ? (
           <p className="mt-4 text-sm text-ink-600">Loading…</p>
-        ) : payments.length === 0 ? (
+        ) : invoices.length === 0 ? (
           <p className="mt-4 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-            {complimentary ? 'No charges on this complimentary account.' : 'Nothing charged yet.'}
+            {complimentary || invoicesComplimentary
+              ? 'No Stripe invoices — complimentary billing'
+              : 'No invoices yet.'}
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">
@@ -238,40 +246,35 @@ export function BillingSection() {
                 </tr>
               </thead>
               <tbody>
-                {payments.map((payment) => (
-                  <tr key={payment.id} className="border-b border-line/60 last:border-b-0">
-                    <td className="py-3 pr-3 tabular-nums text-ink-700">{day(payment.createdAt)}</td>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id} className="border-b border-line/60 last:border-b-0">
+                    <td className="py-3 pr-3 tabular-nums text-ink-700">{day(invoice.createdAt)}</td>
                     <td className="px-3 py-3 text-ink-800">
-                      {payment.description ?? 'Subscription'}
-                      {payment.cardBrand && payment.cardLast4 ? (
-                        <span className="block text-[11px] text-ink-500">
-                          {titleCase(payment.cardBrand)} ····{payment.cardLast4}
-                        </span>
-                      ) : null}
-                      {payment.failureReason ? (
-                        <span className="block text-[11px] text-danger-600">{payment.failureReason}</span>
+                      {invoice.description ?? invoice.number ?? 'Invoice'}
+                      {invoice.number && invoice.description ? (
+                        <span className="block text-[11px] text-ink-500">{invoice.number}</span>
                       ) : null}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums font-medium text-ink-900">
-                      {formatCents(payment.amountCents)}
+                      {formatCents(invoice.amountCents)}
                     </td>
                     <td className="py-3 pl-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            PAYMENT_STYLE[payment.status] ?? 'bg-paper-200/60 text-ink-600 ring-1 ring-line'
+                            INVOICE_STYLE[invoice.status] ?? 'bg-paper-200/60 text-ink-600 ring-1 ring-line'
                           }`}
                         >
-                          {titleCase(payment.status)}
+                          {titleCase(invoice.status)}
                         </span>
-                        {payment.invoicePdfUrl || payment.hostedInvoiceUrl || payment.receiptUrl ? (
+                        {invoice.hostedInvoiceUrl || invoice.invoicePdfUrl ? (
                           <a
-                            href={payment.invoicePdfUrl ?? payment.hostedInvoiceUrl ?? payment.receiptUrl ?? '#'}
+                            href={invoice.hostedInvoiceUrl ?? invoice.invoicePdfUrl ?? '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-medium text-brand-700 hover:text-brand-800"
                           >
-                            {payment.invoicePdfUrl ? 'Invoice' : 'Receipt'}
+                            View receipt
                           </a>
                         ) : null}
                       </div>

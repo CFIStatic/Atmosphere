@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceBilling } from '../../lib/api';
 
 const getBillingWorkspace = vi.fn();
-const getPayments = vi.fn();
+const getInvoices = vi.fn();
 const openBillingPortal = vi.fn();
 const addExtraFieldCaptureSeats = vi.fn();
 const getTokenUsage = vi.fn();
@@ -16,7 +16,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
     api: {
       ...actual.api,
       getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
-      getPayments: (...args: unknown[]) => getPayments(...args),
+      getInvoices: (...args: unknown[]) => getInvoices(...args),
       openBillingPortal: (...args: unknown[]) => openBillingPortal(...args),
       addExtraFieldCaptureSeats: (...args: unknown[]) => addExtraFieldCaptureSeats(...args),
       getTokenUsage: (...args: unknown[]) => getTokenUsage(...args),
@@ -70,23 +70,28 @@ const paid: WorkspaceBilling = {
   },
 };
 
-const payment = {
-  id: 'pay-1',
-  kind: 'subscription' as const,
-  status: 'succeeded',
+const invoice = {
+  id: 'in_paid',
+  number: 'INV-0008',
+  status: 'paid' as const,
   amountCents: 84900,
   currency: 'usd',
   description: 'Work Verification — August',
-  receiptUrl: null,
   hostedInvoiceUrl: 'https://stripe.test/invoice',
   invoicePdfUrl: null,
-  receiptEmail: 'owner@example.com',
-  cardBrand: 'visa',
-  cardLast4: '4242',
-  periodStart: '2026-08-01T00:00:00Z',
-  periodEnd: '2026-09-01T00:00:00Z',
-  failureReason: null,
   createdAt: '2026-08-01T00:05:00Z',
+};
+
+const openInvoice = {
+  id: 'in_open',
+  number: 'INV-0009',
+  status: 'open' as const,
+  amountCents: 3700,
+  currency: 'usd',
+  description: 'Atmosphere AI usage 2026-09-08',
+  hostedInvoiceUrl: 'https://stripe.test/usage',
+  invoicePdfUrl: 'https://stripe.test/usage.pdf',
+  createdAt: '2026-09-08T16:00:00Z',
 };
 
 const tokenUsage = {
@@ -118,7 +123,7 @@ function renderBilling(path = '/settings?section=billing') {
 describe('BillingSection', () => {
   beforeEach(() => {
     getBillingWorkspace.mockReset().mockResolvedValue(paid);
-    getPayments.mockReset().mockResolvedValue({ payments: [payment] });
+    getInvoices.mockReset().mockResolvedValue({ invoices: [invoice], complimentary: false });
     openBillingPortal.mockReset();
     addExtraFieldCaptureSeats.mockReset();
     getTokenUsage.mockReset().mockResolvedValue(tokenUsage);
@@ -133,9 +138,13 @@ describe('BillingSection', () => {
     expect(screen.queryByText(/50 jobs included/)).toBeNull();
     expect(screen.queryByText(/\$30 each/)).toBeNull();
     expect(screen.queryByText(/additional job/i)).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Invoices / Receipts' })).toBeInTheDocument();
     expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
-    expect(screen.getByText('Succeeded')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Receipt' })).toBeInTheDocument();
+    expect(screen.getByText('Paid')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute(
+      'href',
+      'https://stripe.test/invoice',
+    );
     expect(screen.queryByText('jobs processed')).toBeNull();
     expect(screen.queryByText('Job overage')).toBeNull();
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
@@ -182,7 +191,7 @@ describe('BillingSection', () => {
         status: 'comped',
       },
     });
-    getPayments.mockResolvedValue({ payments: [] });
+    getInvoices.mockResolvedValue({ invoices: [], complimentary: true });
 
     renderBilling();
 
@@ -191,7 +200,7 @@ describe('BillingSection', () => {
     expect(screen.queryByText('$849')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage plan and payment method' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $125/mo' })).toBeNull();
-    expect(screen.getByText('No charges on this complimentary account.')).toBeInTheDocument();
+    expect(screen.getByText('No Stripe invoices — complimentary billing')).toBeInTheDocument();
   });
 
   it('stacks period details and titles the unpaid state when Stripe is missing', async () => {
@@ -207,7 +216,7 @@ describe('BillingSection', () => {
         periodEnd: '2026-09-23T00:00:00Z',
       },
     });
-    getPayments.mockResolvedValue({ payments: [] });
+    getInvoices.mockResolvedValue({ invoices: [], complimentary: false });
 
     renderBilling();
 
@@ -217,7 +226,7 @@ describe('BillingSection', () => {
     expect(screen.getByText("Payments aren't available")).toBeInTheDocument();
     expect(screen.getByText(/Stripe is not configured on this server/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage plan and payment method' })).toBeNull();
-    expect(screen.getByText('Nothing charged yet.')).toBeInTheDocument();
+    expect(screen.getByText('No invoices yet.')).toBeInTheDocument();
   });
 
   it('explains a plan that ends at the period close', async () => {
@@ -235,6 +244,22 @@ describe('BillingSection', () => {
     expect(await screen.findByText('Ends')).toBeInTheDocument();
     expect(screen.getByText('Cancelling')).toBeInTheDocument();
     expect(screen.getByText(/This plan ends on/)).toBeInTheDocument();
+  });
+
+  it('lists paid and open Stripe invoices with view links', async () => {
+    getInvoices.mockResolvedValue({ invoices: [invoice, openInvoice], complimentary: false });
+
+    renderBilling();
+
+    expect(await screen.findByRole('heading', { name: 'Invoices / Receipts' })).toBeInTheDocument();
+    expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
+    expect(screen.getByText('Atmosphere AI usage 2026-09-08')).toBeInTheDocument();
+    expect(screen.getByText('Paid')).toBeInTheDocument();
+    expect(screen.getByText('Open')).toBeInTheDocument();
+    const links = screen.getAllByRole('link', { name: 'View receipt' });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute('href', 'https://stripe.test/invoice');
+    expect(links[1]).toHaveAttribute('href', 'https://stripe.test/usage');
   });
 
   it('hides plan changes from viewers who cannot manage billing', async () => {

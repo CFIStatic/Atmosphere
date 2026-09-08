@@ -4037,6 +4037,12 @@ export const api = {
   getPayments: (limit = 50) =>
     request<{ payments: Payment[] }>(`/api/billing/payments?limit=${limit}`, { method: 'GET' }),
 
+  getInvoices: (limit = 50) =>
+    request<{ invoices: BillingInvoice[]; complimentary: boolean }>(
+      `/api/billing/invoices?limit=${limit}`,
+      { method: 'GET' },
+    ),
+
   confirmPurchase: (purchaseId: string) =>
     request<{ purchaseId: string; status: string; creditedNanos: number; balance: CreditBalance }>(
       `/api/billing/purchases/${purchaseId}/confirm`,
@@ -5727,6 +5733,19 @@ export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
   credits: 'Usage credits',
   refund: 'Refund',
 };
+
+/** One Stripe invoice / receipt row on Settings → Billing. */
+export interface BillingInvoice {
+  id: string;
+  number: string | null;
+  status: 'paid' | 'open' | 'void' | 'uncollectible';
+  amountCents: number;
+  currency: string;
+  description: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdfUrl: string | null;
+  createdAt: string;
+}
 
 /* -------------------------------------------------------------- usage types */
 

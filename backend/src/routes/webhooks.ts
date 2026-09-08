@@ -34,6 +34,7 @@ import {
   requireAttributedOrg,
   requireCreditPurchaseId,
 } from '../lib/stripeWebhook.js';
+import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
 
 export const webhookRouter = Router();
 
@@ -106,9 +107,10 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
       await onCheckoutCompleted(event.data.object as Stripe.Checkout.Session, admin);
       break;
 
+    case 'invoice.finalized':
     case 'invoice.paid':
     case 'invoice.payment_failed':
-      await onInvoice(event.data.object as Stripe.Invoice, admin, event.type === 'invoice.paid');
+      await onInvoice(event.data.object as Stripe.Invoice, admin, event.type);
       break;
 
     case 'customer.subscription.created':
@@ -184,8 +186,8 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
   if (paymentError) throw new Error(`payment record failed: ${paymentError.message}`);
 }
 
-/** Subscription invoices: the receipt trail and the period roll-forward. */
-async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Promise<void> {
+/** Subscription and same-day usage invoices: the receipt trail. */
+async function onInvoice(invoice: Stripe.Invoice, admin: any, eventType: string): Promise<void> {
   const orgId = requireAttributedOrg(
     await resolveOrgId(admin, invoice.metadata, invoice.customer as string | null),
     `invoice ${invoice.id}`,
@@ -193,6 +195,18 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Pr
 
   const line = invoice.lines?.data?.[0] as any;
   const chargeId = invoiceChargeId(invoice);
+  const record = invoiceWebhookRecord(eventType, invoice);
+
+  if (record.status === 'pending' && invoice.id) {
+    const { data: existing } = await admin
+      .from('payments')
+      .select('status')
+      .eq('stripe_invoice_id', invoice.id)
+      .maybeSingle();
+    if (!invoiceWebhookShouldApply(record, existing?.status)) {
+      return;
+    }
+  }
 
   let charge: Stripe.Charge | null = null;
   if (chargeId) {
@@ -203,10 +217,10 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Pr
   const { error } = await admin.rpc('record_payment', {
     p_org: orgId,
     p_kind: 'subscription',
-    p_status: paid ? 'succeeded' : 'failed',
-    p_amount_cents: paid ? (invoice.amount_paid ?? 0) : (invoice.amount_due ?? 0),
+    p_status: record.status,
+    p_amount_cents: record.paid ? (invoice.amount_paid ?? 0) : (invoice.amount_due ?? invoice.total ?? 0),
     p_currency: invoice.currency ?? 'usd',
-    p_description: line?.description ?? 'Subscription',
+    p_description: line?.description ?? invoice.description ?? 'Subscription',
     p_invoice_id: invoice.id,
     p_charge_id: chargeId,
     p_receipt_url: charge?.receipt_url ?? null,
@@ -217,11 +231,11 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Pr
     p_card_last4: card.last4,
     p_period_start: toIso(line?.period?.start),
     p_period_end: toIso(line?.period?.end),
-    p_failure_reason: paid ? null : 'Payment failed',
+    p_failure_reason: record.status === 'failed' ? 'Payment failed' : null,
   });
   if (error) throw new Error(`invoice record failed: ${error.message}`);
 
-  if (!paid) {
+  if (record.status === 'failed') {
     // Leave the plan in place but flag it; Stripe will retry the charge and
     // send customer.subscription.deleted if it ultimately gives up.
     await admin.from('org_billing').update({ status: 'past_due' }).eq('org_id', orgId);

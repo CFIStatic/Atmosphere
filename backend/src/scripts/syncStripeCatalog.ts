@@ -412,6 +412,7 @@ Next:
   1. Apply the SQL above so checkout can resolve plan → price.
   2. Point a webhook at POST /api/webhooks/stripe for:
        checkout.session.completed
+       invoice.finalized
        invoice.paid
        invoice.payment_failed
        customer.subscription.created
