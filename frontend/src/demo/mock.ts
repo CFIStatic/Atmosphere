@@ -2304,6 +2304,14 @@ const routes: Array<[string, RegExp, Handler]> = [
           hostedInvoiceUrl: 'about:blank#demo-invoice',
           invoicePdfUrl: 'about:blank#demo-invoice-pdf',
           createdAt: '2026-08-01T00:05:00Z',
+          lines: [
+            {
+              description: 'Work Verification — August',
+              quantity: 1,
+              unitAmountCents: 84900,
+              amountCents: 84900,
+            },
+          ],
         },
         {
           id: 'in_overage',
@@ -2315,6 +2323,14 @@ const routes: Array<[string, RegExp, Handler]> = [
           hostedInvoiceUrl: 'about:blank#demo-overage',
           invoicePdfUrl: null,
           createdAt: '2026-08-01T00:06:00Z',
+          lines: [
+            {
+              description: '3 additional jobs beyond 50 included',
+              quantity: 3,
+              unitAmountCents: 3000,
+              amountCents: 9000,
+            },
+          ],
         },
         {
           id: 'in_july',
@@ -2326,6 +2342,14 @@ const routes: Array<[string, RegExp, Handler]> = [
           hostedInvoiceUrl: 'about:blank#demo-invoice-july',
           invoicePdfUrl: 'about:blank#demo-invoice-july-pdf',
           createdAt: '2026-07-01T00:05:00Z',
+          lines: [
+            {
+              description: 'Work Verification — July',
+              quantity: 1,
+              unitAmountCents: 84900,
+              amountCents: 84900,
+            },
+          ],
         },
       ],
     },

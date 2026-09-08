@@ -13,6 +13,13 @@ export const LISTABLE_INVOICE_STATUSES = ['open', 'paid', 'uncollectible', 'void
 
 export type BillingInvoiceStatus = (typeof LISTABLE_INVOICE_STATUSES)[number];
 
+export interface BillingInvoiceLine {
+  description: string | null;
+  quantity: number | null;
+  unitAmountCents: number | null;
+  amountCents: number;
+}
+
 export interface BillingInvoice {
   id: string;
   number: string | null;
@@ -23,6 +30,16 @@ export interface BillingInvoice {
   hostedInvoiceUrl: string | null;
   invoicePdfUrl: string | null;
   createdAt: string;
+  lines: BillingInvoiceLine[];
+}
+
+export interface StripeInvoiceLineLike {
+  description?: string | null;
+  quantity?: number | null;
+  quantity_decimal?: string | number | null;
+  amount?: number | null;
+  subtotal?: number | null;
+  pricing?: { unit_amount_decimal?: string | number | null } | null;
 }
 
 export interface StripeInvoiceLike {
@@ -37,7 +54,51 @@ export interface StripeInvoiceLike {
   hosted_invoice_url?: string | null;
   invoice_pdf?: string | null;
   created?: number | null;
-  lines?: { data?: Array<{ description?: string | null }> } | null;
+  lines?: { data?: StripeInvoiceLineLike[] } | null;
+}
+
+/**
+ * One analysis unit is $0.01 so leftover token/AI cents factor exactly as
+ * quantity × unit price on Stripe PDFs and in Settings → Billing.
+ */
+export const ANALYSIS_UNIT_CENTS = 1;
+
+export function analysisUnitsFromCents(amountCents: number): {
+  quantity: number;
+  unitAmountCents: number;
+} {
+  const cents = Math.max(0, Math.trunc(amountCents));
+  return { quantity: cents, unitAmountCents: ANALYSIS_UNIT_CENTS };
+}
+
+/** Prefer an explicit qty × unit when it equals the charge; otherwise 1¢ units. */
+export function quantityUnitForAmount(
+  amountCents: number,
+  preferredQuantity?: number | null,
+  preferredUnitCents?: number | null,
+): { quantity: number; unitAmountCents: number } {
+  const amount = Math.max(0, Math.trunc(amountCents));
+  const qty = preferredQuantity != null ? Math.trunc(preferredQuantity) : 0;
+  const unit = preferredUnitCents != null ? Math.trunc(preferredUnitCents) : 0;
+  if (qty > 0 && unit > 0 && qty * unit === amount) {
+    return { quantity: qty, unitAmountCents: unit };
+  }
+  if (qty > 0 && amount % qty === 0) {
+    return { quantity: qty, unitAmountCents: amount / qty };
+  }
+  return analysisUnitsFromCents(amount);
+}
+
+export function stripeQuantityInvoiceItemFields(input: {
+  quantity: number;
+  unitAmountCents: number;
+  description: string;
+}): Pick<Stripe.InvoiceItemCreateParams, 'quantity' | 'unit_amount_decimal' | 'description'> {
+  return {
+    quantity: input.quantity,
+    unit_amount_decimal: String(input.unitAmountCents) as unknown as Stripe.InvoiceItemCreateParams['unit_amount_decimal'],
+    description: input.description,
+  };
 }
 
 export interface OrgBillingInvoices {
@@ -67,6 +128,33 @@ export function isListableInvoiceStatus(status: string | null | undefined): stat
   return LISTABLE_INVOICE_STATUSES.includes((status ?? '') as BillingInvoiceStatus);
 }
 
+export function serializeStripeInvoiceLine(line: StripeInvoiceLineLike): BillingInvoiceLine {
+  const quantityRaw =
+    line.quantity ??
+    (line.quantity_decimal != null && line.quantity_decimal !== ''
+      ? Number(line.quantity_decimal)
+      : null);
+  const quantity =
+    quantityRaw != null && Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : null;
+  const amountCents = Math.trunc(line.amount ?? line.subtotal ?? 0);
+  const priced =
+    line.pricing?.unit_amount_decimal != null && line.pricing.unit_amount_decimal !== ''
+      ? Number(line.pricing.unit_amount_decimal)
+      : null;
+  const unitAmountCents =
+    priced != null && Number.isFinite(priced)
+      ? Math.round(priced)
+      : quantity
+        ? Math.round(amountCents / quantity)
+        : null;
+  return {
+    description: line.description ?? null,
+    quantity,
+    unitAmountCents,
+    amountCents,
+  };
+}
+
 export function serializeStripeInvoice(invoice: StripeInvoiceLike): BillingInvoice | null {
   const id = invoice.id?.trim();
   if (!id || !isListableInvoiceStatus(invoice.status)) return null;
@@ -91,6 +179,7 @@ export function serializeStripeInvoice(invoice: StripeInvoiceLike): BillingInvoi
     hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
     invoicePdfUrl: invoice.invoice_pdf ?? null,
     createdAt: created,
+    lines: (invoice.lines?.data ?? []).map(serializeStripeInvoiceLine),
   };
 }
 
@@ -126,8 +215,9 @@ export async function listStripeCustomerInvoices(
   const listed = await stripeClient().invoices.list({
     customer: customerId,
     limit,
+    expand: ['data.lines.data.pricing'],
   });
-  return listed.data;
+  return listed.data as StripeInvoiceLike[];
 }
 
 /**

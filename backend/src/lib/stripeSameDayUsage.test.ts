@@ -123,8 +123,16 @@ describe('same-day usage invoice path', () => {
       calls.map((c) => c.name),
       ['invoices.create', 'invoiceItems.create', 'invoices.finalizeInvoice', 'invoices.pay'],
     );
-    const item = calls.find((c) => c.name === 'invoiceItems.create')?.args as { amount: number };
-    assert.equal(item.amount, 37);
+    const item = calls.find((c) => c.name === 'invoiceItems.create')?.args as {
+      quantity?: number;
+      unit_amount_decimal?: string;
+      amount?: number;
+      description?: string;
+    };
+    assert.equal(item.amount, undefined);
+    assert.equal(item.quantity, 37);
+    assert.equal(item.unit_amount_decimal, '1');
+    assert.equal(item.description, 'AI analysis units 2026-09-07');
     const created = calls.find((c) => c.name === 'invoices.create')?.args as {
       metadata: { kind: string; usage_day: string };
       collection_method?: string;
@@ -170,8 +178,14 @@ describe('same-day usage invoice path', () => {
       ],
     });
     assert.equal(result.amountCents, 53);
-    const item = calls.find((c) => c.name === 'invoiceItems.create')?.args as { amount: number };
-    assert.equal(item.amount, 53);
+    const item = calls.find((c) => c.name === 'invoiceItems.create')?.args as {
+      quantity?: number;
+      unit_amount_decimal?: string;
+      amount?: number;
+    };
+    assert.equal(item.amount, undefined);
+    assert.equal(item.quantity, 53);
+    assert.equal(item.unit_amount_decimal, '1');
   });
 
   it('voids a draft when a concurrent invoice already covers the day', async () => {

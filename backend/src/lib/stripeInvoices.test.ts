@@ -1,13 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  analysisUnitsFromCents,
   checkoutInvoiceCreationFields,
   customerEmailBackfill,
   invoiceWebhookRecord,
   invoiceWebhookShouldApply,
   loadOrgBillingInvoices,
+  quantityUnitForAmount,
   serializeStripeInvoice,
+  serializeStripeInvoiceLine,
   stripeAutoCollectInvoiceFields,
+  stripeQuantityInvoiceItemFields,
   type StripeInvoiceLike,
 } from './stripeInvoices.js';
 
@@ -23,6 +27,16 @@ const paidInvoice: StripeInvoiceLike = {
   hosted_invoice_url: 'https://invoice.stripe.com/i/paid',
   invoice_pdf: 'https://pay.stripe.com/invoice/paid/pdf',
   created: 1_754_006_700,
+  lines: {
+    data: [
+      {
+        description: 'Work Verification — August',
+        quantity: 1,
+        amount: 84900,
+        pricing: { unit_amount_decimal: '84900' },
+      },
+    ],
+  },
 };
 
 const openInvoice: StripeInvoiceLike = {
@@ -52,6 +66,14 @@ describe('serializeStripeInvoice', () => {
       hostedInvoiceUrl: 'https://invoice.stripe.com/i/paid',
       invoicePdfUrl: 'https://pay.stripe.com/invoice/paid/pdf',
       createdAt: '2025-08-01T00:05:00.000Z',
+      lines: [
+        {
+          description: 'Work Verification — August',
+          quantity: 1,
+          unitAmountCents: 84900,
+          amountCents: 84900,
+        },
+      ],
     });
   });
 
@@ -61,6 +83,23 @@ describe('serializeStripeInvoice', () => {
     assert.equal(row?.amountCents, 3700);
     assert.equal(row?.description, 'Atmosphere AI usage 2026-09-08');
     assert.equal(row?.hostedInvoiceUrl, 'https://invoice.stripe.com/i/open');
+  });
+
+  it('maps usage lines as quantity × unit price, not a lump qty=1', () => {
+    assert.deepEqual(
+      serializeStripeInvoiceLine({
+        description: 'AI analysis units 2026-09-08',
+        quantity: 37,
+        amount: 37,
+        pricing: { unit_amount_decimal: '1' },
+      }),
+      {
+        description: 'AI analysis units 2026-09-08',
+        quantity: 37,
+        unitAmountCents: 1,
+        amountCents: 37,
+      },
+    );
   });
 
   it('drops drafts so they never appear as receipts', () => {
@@ -191,6 +230,24 @@ describe('checkout and invoice create fields', () => {
     assert.deepEqual(stripeAutoCollectInvoiceFields(), {
       collection_method: 'charge_automatically',
     });
+  });
+
+  it('factors leftover cents as analysis units × $0.01', () => {
+    assert.deepEqual(analysisUnitsFromCents(37), { quantity: 37, unitAmountCents: 1 });
+    assert.deepEqual(quantityUnitForAmount(9000, 3, 3000), { quantity: 3, unitAmountCents: 3000 });
+    assert.deepEqual(quantityUnitForAmount(1500, 15, null), { quantity: 15, unitAmountCents: 100 });
+    assert.deepEqual(
+      stripeQuantityInvoiceItemFields({
+        quantity: 37,
+        unitAmountCents: 1,
+        description: 'AI analysis units 2026-09-07',
+      }),
+      {
+        quantity: 37,
+        unit_amount_decimal: '1',
+        description: 'AI analysis units 2026-09-07',
+      },
+    );
   });
 
   it('backfills a missing Stripe customer email and leaves an existing one alone', () => {

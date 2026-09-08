@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, type BillingInvoice, type WorkspaceBilling } from '../../lib/api';
+import { api, type BillingInvoice, type BillingInvoiceLine, type WorkspaceBilling } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { AlertIcon, SpinnerIcon } from '../icons';
+import { Logo } from '../Logo';
 import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -219,11 +220,14 @@ export function BillingSection() {
       </section>
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
-        <header>
-          <h3 className="text-base font-semibold text-ink-900">Invoices / Receipts</h3>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Stripe invoices for this account, newest first. Email receipts go to the billing email on file.
-          </p>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-ink-900">Invoices / Receipts</h3>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Atmosphere invoices for this account, newest first. Email receipts go to the billing email on file.
+            </p>
+          </div>
+          <Logo to={null} size="md" className="shrink-0" />
         </header>
 
         {invoices === null ? (
@@ -235,60 +239,93 @@ export function BillingSection() {
               : 'No invoices yet.'}
           </p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[30rem] text-left text-xs">
-              <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
-                <tr className="border-b border-line">
-                  <th className="py-2 pr-3 font-semibold">Date</th>
-                  <th className="px-3 py-2 font-semibold">Description</th>
-                  <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                  <th className="py-2 pl-3 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-b border-line/60 last:border-b-0">
-                    <td className="py-3 pr-3 tabular-nums text-ink-700">{day(invoice.createdAt)}</td>
-                    <td className="px-3 py-3 text-ink-800">
-                      {invoice.description ?? invoice.number ?? 'Invoice'}
-                      {invoice.number && invoice.description ? (
-                        <span className="block text-[11px] text-ink-500">{invoice.number}</span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums font-medium text-ink-900">
-                      {formatCents(invoice.amountCents)}
-                    </td>
-                    <td className="py-3 pl-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            INVOICE_STYLE[invoice.status] ?? 'bg-paper-200/60 text-ink-600 ring-1 ring-line'
-                          }`}
-                        >
-                          {titleCase(invoice.status)}
-                        </span>
-                        {invoice.hostedInvoiceUrl || invoice.invoicePdfUrl ? (
-                          <a
-                            href={invoice.hostedInvoiceUrl ?? invoice.invoicePdfUrl ?? '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-brand-700 hover:text-brand-800"
-                          >
-                            View receipt
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 space-y-5">
+            {invoices.map((invoice) => (
+              <InvoiceReceiptCard key={invoice.id} invoice={invoice} />
+            ))}
           </div>
         )}
       </section>
 
       <TokenUsageSection />
     </div>
+  );
+}
+
+function invoiceLines(invoice: BillingInvoice): BillingInvoiceLine[] {
+  if (invoice.lines && invoice.lines.length > 0) return invoice.lines;
+  return [
+    {
+      description: invoice.description ?? invoice.number ?? 'Invoice',
+      quantity: 1,
+      unitAmountCents: invoice.amountCents,
+      amountCents: invoice.amountCents,
+    },
+  ];
+}
+
+function InvoiceReceiptCard({ invoice }: { invoice: BillingInvoice }) {
+  const lines = invoiceLines(invoice);
+  const receiptHref = invoice.hostedInvoiceUrl ?? invoice.invoicePdfUrl;
+  return (
+    <article className="rounded-lg border border-line">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3.5 py-2.5">
+        <div className="min-w-0 text-xs">
+          <p className="tabular-nums font-medium text-ink-800">{day(invoice.createdAt)}</p>
+          <p className="text-ink-500">{invoice.number ?? invoice.id}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              INVOICE_STYLE[invoice.status] ?? 'bg-paper-200/60 text-ink-600 ring-1 ring-line'
+            }`}
+          >
+            {titleCase(invoice.status)}
+          </span>
+          <span className="text-sm font-semibold tabular-nums text-ink-900">
+            {formatCents(invoice.amountCents)}
+          </span>
+          {receiptHref ? (
+            <a
+              href={receiptHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-700 hover:text-brand-800"
+            >
+              View receipt
+            </a>
+          ) : null}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[28rem] text-left text-xs">
+          <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
+            <tr className="border-b border-line/60">
+              <th className="px-3.5 py-2 font-semibold">Description</th>
+              <th className="px-3 py-2 text-right font-semibold">Qty</th>
+              <th className="px-3 py-2 text-right font-semibold">Unit price</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, index) => (
+              <tr key={`${invoice.id}-line-${index}`} className="border-b border-line/40 last:border-b-0">
+                <td className="px-3.5 py-2.5 text-ink-800">{line.description ?? 'Usage'}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">
+                  {line.quantity != null ? line.quantity : '—'}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">
+                  {line.unitAmountCents != null ? formatCents(line.unitAmountCents) : '—'}
+                </td>
+                <td className="px-3.5 py-2.5 text-right tabular-nums font-medium text-ink-900">
+                  {formatCents(line.amountCents)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
   );
 }
 
