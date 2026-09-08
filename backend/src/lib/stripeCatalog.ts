@@ -1,8 +1,8 @@
 /**
  * Live Jettx LLC Atmosphere catalog.
  *
- * These public Stripe ids are already created. Prefer lookup by
- * `atmosphere_plan_code` metadata, then these ids — do not mint duplicates.
+ * These public Stripe ids are already created. Prefer these pinned ids,
+ * then lookup by `atmosphere_plan_code` metadata — do not mint duplicates.
  * Secret keys never live here.
  *
  * Self-serve platform plans: Starter ($399 / 1 seat), Work Verification

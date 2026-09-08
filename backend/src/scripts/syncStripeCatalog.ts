@@ -77,17 +77,21 @@ async function findPrice(
   interval: 'month' | 'year',
   knownId?: string,
 ): Promise<Stripe.Price | null> {
+  // Prefer the pinned catalog id. Metadata search is not deterministic when
+  // legacy prices remain active with the same atmosphere_plan_code, and those
+  // older amounts would otherwise win, get archived, and mint a duplicate.
+  if (knownId) {
+    try {
+      return await stripe.prices.retrieve(knownId);
+    } catch {
+      // Fall through to metadata search if the pinned id is missing.
+    }
+  }
   const listed = await stripe.prices.search({
     query: `metadata["atmosphere_plan_code"]:"${planCode}" AND metadata["atmosphere_interval"]:"${interval}" AND active:"true"`,
     limit: 1,
   });
-  if (listed.data[0]) return listed.data[0];
-  if (!knownId) return null;
-  try {
-    return await stripe.prices.retrieve(knownId);
-  } catch {
-    return null;
-  }
+  return listed.data[0] ?? null;
 }
 
 async function ensureRecurringPrice(
