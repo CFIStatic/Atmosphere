@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, type BillingInvoice, type WorkspaceBilling } from '../../lib/api';
 import { formatCents } from '../../lib/money';
+import { PlanPrice } from '../billing/AtmospherePlanPicker';
 import { AlertIcon, SpinnerIcon } from '../icons';
 import { TokenUsageSection } from './TokenUsageSection';
 
@@ -134,16 +135,13 @@ export function BillingSection() {
                 {titleCase(status)}
               </span>
             </div>
-            <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-ink-900">
-              {complimentary ? (
-                'Complimentary'
-              ) : (
-                <>
-                  {formatCents(sub.baseMonthlyFeeCents)}
-                  <span className="ml-1.5 text-sm font-medium text-ink-500">per month</span>
-                </>
-              )}
-            </p>
+            {complimentary ? (
+              <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-ink-900">
+                Complimentary
+              </p>
+            ) : (
+              <PlanPrice monthlyCents={sub.baseMonthlyFeeCents} className="mt-2" />
+            )}
           </div>
         </div>
 

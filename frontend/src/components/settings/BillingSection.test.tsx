@@ -133,6 +133,8 @@ describe('BillingSection', () => {
     renderBilling();
 
     expect(await screen.findByRole('heading', { name: 'Work Verification' })).toBeInTheDocument();
+    expect(screen.getAllByText('$849').length).toBeGreaterThan(0);
+    expect(screen.getByText('/ month')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plan' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
     expect(screen.queryByText(/50 jobs included/)).toBeNull();
