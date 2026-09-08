@@ -38,11 +38,11 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 `pricing.html` sells three self-serve plans plus seats and same-day usage:
 
-- **Starter** — $299/month, **1 Field Capture account**.
-- **Work Verification** — $599/month, **3 Field Capture accounts**. Featured /
+- **Starter** — $399/month, **1 Field Capture account**.
+- **Work Verification** — $849/month, **3 Field Capture accounts**. Featured /
   default checkout plan.
-- **Scale** — $1,499/month, **10 Field Capture accounts**.
-- **Extra Field Capture seats** — $100/month per additional account beyond the
+- **Scale** — $1,999/month, **10 Field Capture accounts**.
+- **Extra Field Capture seats** — $125/month per additional account beyond the
   seats included with the plan.
 - **Usage** — AI/token usage is billed the day it is used. Do not publish a
   per-job dollar rate, a Compute Units allowance, or internal costing as the

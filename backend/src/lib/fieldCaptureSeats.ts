@@ -1,6 +1,6 @@
 /**
  * Included Field Capture seats come from the org's Atmosphere plan
- * (Starter 1 / Work Verification 3 / Scale 10). Extra seats are $100/mo.
+ * (Starter 1 / Work Verification 3 / Scale 10). Extra seats are $125/mo.
  *
  * A Field Capture seat is an org member (or a pending invite that will become
  * one) who uses Field Capture — crew logins and Employee / field-technician
@@ -14,6 +14,7 @@ import { paymentRequired } from './errors.js';
 import { toOrgProductRole } from './productRoles.js';
 import { unscopedAdminOrNull } from './scopedAdmin.js';
 import {
+  EXTRA_FC_SEAT_MONTHLY_CENTS,
   INCLUDED_FC_SEATS,
   allowedFcSeats,
   extraSeatsNeeded,
@@ -56,7 +57,7 @@ export function fcSeatLimitError(allowed: number, used: number, included: number
   const extraLabel = extraNeeded === 1 ? '1 extra Field Capture seat' : `${Math.max(1, extraNeeded)} extra Field Capture seats`;
   const seatWord = included === 1 ? 'account' : 'accounts';
   return paymentRequired(
-    `This plan includes ${included} Field Capture ${seatWord} (${used} in use). Add ${extraLabel} at $100/mo to continue.`,
+    `This plan includes ${included} Field Capture ${seatWord} (${used} in use). Add ${extraLabel} at $${(EXTRA_FC_SEAT_MONTHLY_CENTS / 100).toLocaleString('en-US')}/mo to continue.`,
     'fc_seat_limit',
   );
 }

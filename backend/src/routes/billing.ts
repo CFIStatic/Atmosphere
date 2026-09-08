@@ -642,9 +642,9 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
 
 /**
  * POST /api/billing/checkout/extra-seats
- * Add Field Capture extra seats ($100/mo each) on the live Work Verification
+ * Add Field Capture extra seats ($125/mo each) on the live Work Verification
  * subscription. Refuses when that subscription is missing so we never open a
- * second extra-seat-only Checkout that can cancel the $599 plan.
+ * second extra-seat-only Checkout that can cancel the $849 plan.
  */
 billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, next: NextFunction) => {
   try {

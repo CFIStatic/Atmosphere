@@ -14,6 +14,10 @@ import {
   stripeIdempotencyKey,
 } from './stripe.js';
 import {
+  LEGACY_EXTRA_FC_SEAT_PRICE_ID,
+  LEGACY_SCALE_PRICE_ID,
+  LEGACY_STARTER_PRICE_ID,
+  LEGACY_WORK_VERIFICATION_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
   LIVE_SCALE_PRICE_ID,
   LIVE_STARTER_PRICE_ID,
@@ -54,6 +58,10 @@ describe('self-serve price resolution', () => {
     assert.equal(atmospherePlanCodeForPriceId(LIVE_STARTER_PRICE_ID), 'starter');
     assert.equal(atmospherePlanCodeForPriceId(LIVE_SCALE_PRICE_ID), 'scale');
     assert.equal(atmospherePlanCodeForPriceId(LIVE_WORK_VERIFICATION_PRICE_ID), 'work_verification');
+    assert.equal(atmospherePlanCodeForPriceId(LEGACY_STARTER_PRICE_ID), 'starter');
+    assert.equal(atmospherePlanCodeForPriceId(LEGACY_SCALE_PRICE_ID), 'scale');
+    assert.equal(atmospherePlanCodeForPriceId(LEGACY_WORK_VERIFICATION_PRICE_ID), 'work_verification');
+    assert.equal(isExtraSeatPriceId(LEGACY_EXTRA_FC_SEAT_PRICE_ID), true);
   });
 });
 
@@ -86,7 +94,7 @@ describe('stripe helpers', () => {
   it('reads Work Verification terms from a metering join row', () => {
     const plan = planFromMeteringRow({
       metering_plan_versions: {
-        base_monthly_fee_cents: 59900,
+        base_monthly_fee_cents: 84900,
         included_jobs: 50,
         additional_job_price_cents: 3000,
         metering_plans: { name: 'Work Verification' },
@@ -94,7 +102,7 @@ describe('stripe helpers', () => {
     });
     assert.equal(plan.name, 'Work Verification');
     assert.equal(plan.code, 'work_verification');
-    assert.equal(plan.baseMonthlyFeeCents, 59900);
+    assert.equal(plan.baseMonthlyFeeCents, 84900);
     assert.equal(plan.includedJobs, 50);
     assert.equal(plan.includedFcSeats, 3);
   });
@@ -103,7 +111,7 @@ describe('stripe helpers', () => {
     const starter = planFromMeteringRow(
       {
         metering_plan_versions: {
-          base_monthly_fee_cents: 59900,
+          base_monthly_fee_cents: 84900,
           included_jobs: 50,
           additional_job_price_cents: 3000,
           metering_plans: { name: 'Work Verification', code: 'work_verification' },
@@ -113,12 +121,12 @@ describe('stripe helpers', () => {
     );
     assert.equal(starter.name, 'Starter');
     assert.equal(starter.code, 'starter');
-    assert.equal(starter.baseMonthlyFeeCents, 29900);
+    assert.equal(starter.baseMonthlyFeeCents, 39900);
     assert.equal(starter.includedFcSeats, 1);
 
     const scale = planFromMeteringRow(null, { planCode: 'scale' });
     assert.equal(scale.name, 'Scale');
-    assert.equal(scale.baseMonthlyFeeCents, 149900);
+    assert.equal(scale.baseMonthlyFeeCents, 199900);
     assert.equal(scale.includedFcSeats, 10);
   });
 

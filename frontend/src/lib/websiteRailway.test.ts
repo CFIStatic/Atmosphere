@@ -187,9 +187,9 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('plan-name mono">Starter');
     expect(page).toContain('plan-name mono">Work Verification');
     expect(page).toContain('plan-name mono">Scale');
-    expect(page).toContain('$299');
-    expect(page).toContain('$599');
-    expect(page).toContain('$1,499');
+    expect(page).toContain('$399');
+    expect(page).toContain('$849');
+    expect(page).toContain('$1,999');
     expect(page).toContain('1 Field Capture account included');
     expect(page).toContain('3 Field Capture accounts included');
     expect(page).toContain('10 Field Capture accounts included');
@@ -199,7 +199,7 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('signup.html?plan=scale');
     expect(page).toContain('contact.html');
     expect(page).toContain('Extra Field Capture seats are');
-    expect(page).toContain('$100/month');
+    expect(page).toContain('$125/month');
     expect(page).toContain('billed the day it is used');
     expect(page).toContain('Field Capture Chest Mount');
     expect(page).not.toContain('10×');

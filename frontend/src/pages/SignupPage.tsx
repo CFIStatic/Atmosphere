@@ -448,7 +448,7 @@ export function SignupPage() {
               Work Verification
             </p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
-              $599
+              $849
               <span className="text-base font-medium text-ink-500"> / month</span>
             </p>
           </div>

@@ -347,7 +347,7 @@ export const config = {
 
     // Token-usage customer markup. Provider COGS stays on cost_nanos;
     // price_nanos (Settings → Billing → Token spend) is cost × this factor.
-    // Default 10× (~90% gross margin). Does not touch the $599 seat / Stripe
+    // Default 10× (~90% gross margin). Does not touch the $849 seat / Stripe
     // subscription. Override with USAGE_CUSTOMER_MARKUP or TOKEN_BILLABLE_MARKUP.
     usageCustomerMarkup: usageCustomerMarkup(),
 
@@ -397,11 +397,11 @@ export const config = {
     portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/settings?section=billing`,
     /** Fallback Stripe price when metering_plan_versions.stripe_price_id is unset. Work Verification default. */
     onboardingPriceId: process.env.STRIPE_ONBOARDING_PRICE_ID ?? '',
-    /** Starter $299/mo (1 included Field Capture seat). Falls back to the live catalog id. */
+    /** Starter $399/mo (1 included Field Capture seat). Falls back to the live catalog id. */
     starterPriceId: process.env.STRIPE_STARTER_PRICE_ID ?? '',
-    /** Scale $1,499/mo (10 included Field Capture seats). Falls back to the live catalog id. */
+    /** Scale $1,999/mo (10 included Field Capture seats). Falls back to the live catalog id. */
     scalePriceId: process.env.STRIPE_SCALE_PRICE_ID ?? '',
-    /** Extra Field Capture seat $100/mo. Defaults to the live Jettx catalog id. */
+    /** Extra Field Capture seat $125/mo. Defaults to the live Jettx catalog id. */
     extraSeatPriceId: process.env.STRIPE_EXTRA_SEAT_PRICE_ID ?? '',
     /** Base path for signup billing return URLs (step 2 + checkout query params appended). */
     onboardingReturnBase:

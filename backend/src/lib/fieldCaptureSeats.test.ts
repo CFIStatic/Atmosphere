@@ -61,8 +61,9 @@ describe('Field Capture seat allowance', () => {
     assert.deepEqual(entitledFcSeatCounts(1, 'active', false, 10), { extra: 1, included: 10 });
     assert.match(planDescription(atmospherePlan('starter')), /1 Field Capture account/);
     assert.doesNotMatch(planDescription(atmospherePlan('scale')), /10\s*[x×]/i);
-    assert.equal(atmospherePlan('starter').knownPriceId, 'price_1UD7vi1b5twUY3LykzUsVQVr');
-    assert.equal(atmospherePlan('scale').knownPriceId, 'price_1UD7vj1b5twUY3Ly1Q4uv4kS');
+    assert.equal(atmospherePlan('starter').knownPriceId, 'price_1UDGIY1b5twUY3Ly7UlLMYBW');
+    assert.equal(atmospherePlan('work_verification').knownPriceId, 'price_1UDGIZ1b5twUY3LyO0culT5W');
+    assert.equal(atmospherePlan('scale').knownPriceId, 'price_1UDGIb1b5twUY3LyUuZeyp75');
     assert.equal(includedFcSeatsFromMetadata({ atmosphere_included_fc_seats: '1' }), 1);
     assert.equal(includedFcSeatsFromMetadata(null, { atmosphere_included_fc_seats: '10' }), 10);
     assert.equal(includedFcSeatsFromMetadata({}), null);
@@ -132,7 +133,7 @@ describe('Field Capture seat allowance', () => {
     assert.equal(err.status, 402);
     assert.equal(err.code, 'fc_seat_limit');
     assert.match(err.message, /3 Field Capture accounts/);
-    assert.match(err.message, /\$100/);
+    assert.match(err.message, /\$125/);
     const starter = fcSeatLimitError(1, 1, 1);
     assert.match(starter.message, /1 Field Capture account/);
   });

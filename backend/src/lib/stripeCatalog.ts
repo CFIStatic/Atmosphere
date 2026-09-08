@@ -5,9 +5,9 @@
  * `atmosphere_plan_code` metadata, then these ids — do not mint duplicates.
  * Secret keys never live here.
  *
- * Self-serve platform plans: Starter ($299 / 1 seat), Work Verification
- * ($599 / 3 seats, default), Scale ($1,499 / 10 seats). Extra Field Capture
- * seats stay $100/mo. Enterprise is contact-sales only — no fourth SKU.
+ * Self-serve platform plans: Starter ($399 / 1 seat), Work Verification
+ * ($849 / 3 seats, default), Scale ($1,999 / 10 seats). Extra Field Capture
+ * seats are $125/mo. Enterprise is contact-sales only — no fourth SKU.
  */
 
 export const STARTER_PLAN_CODE = 'starter';
@@ -39,21 +39,27 @@ export interface AtmosphereSelfServePlan {
   knownPriceId?: string;
 }
 
-/** Live Starter $299/mo (1 Field Capture seat). */
+/** Live Starter $399/mo (1 Field Capture seat). */
 export const LIVE_STARTER_PRODUCT_ID = 'prod_VDZ3e7oBJWIYSE';
-export const LIVE_STARTER_PRICE_ID = 'price_1UD7vi1b5twUY3LykzUsVQVr';
+export const LIVE_STARTER_PRICE_ID = 'price_1UDGIY1b5twUY3Ly7UlLMYBW';
 
-/** Live Work Verification $599/mo. */
+/** Live Work Verification $849/mo. */
 export const LIVE_WORK_VERIFICATION_PRODUCT_ID = 'prod_VDVR9rM3g9Tkpg';
-export const LIVE_WORK_VERIFICATION_PRICE_ID = 'price_1UD4Sq1b5twUY3Ly6nqfRaGC';
+export const LIVE_WORK_VERIFICATION_PRICE_ID = 'price_1UDGIZ1b5twUY3LyO0culT5W';
 
-/** Live Scale $1,499/mo (10 Field Capture seats). */
+/** Live Scale $1,999/mo (10 Field Capture seats). */
 export const LIVE_SCALE_PRODUCT_ID = 'prod_VDZ3SMytTKoxc5';
-export const LIVE_SCALE_PRICE_ID = 'price_1UD7vj1b5twUY3Ly1Q4uv4kS';
+export const LIVE_SCALE_PRICE_ID = 'price_1UDGIb1b5twUY3LyUuZeyp75';
 
-/** Live extra Field Capture seat $100/mo. */
+/** Live extra Field Capture seat $125/mo. */
 export const LIVE_EXTRA_FC_SEAT_PRODUCT_ID = 'prod_VDVTrP97lB98V6';
-export const LIVE_EXTRA_FC_SEAT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyjD850F4V';
+export const LIVE_EXTRA_FC_SEAT_PRICE_ID = 'price_1UDGIc1b5twUY3Ly0cEsD5Pr';
+
+/** Prior live prices — still on existing subscriptions until they migrate. */
+export const LEGACY_STARTER_PRICE_ID = 'price_1UD7vi1b5twUY3LykzUsVQVr';
+export const LEGACY_WORK_VERIFICATION_PRICE_ID = 'price_1UD4Sq1b5twUY3Ly6nqfRaGC';
+export const LEGACY_SCALE_PRICE_ID = 'price_1UD7vj1b5twUY3Ly1Q4uv4kS';
+export const LEGACY_EXTRA_FC_SEAT_PRICE_ID = 'price_1UD4Sl1b5twUY3LyjD850F4V';
 
 /** Live Chest Mount one-time $49.99. */
 export const LIVE_CHEST_MOUNT_PRODUCT_ID = 'prod_VDVQSFSfFnEs4J';
@@ -70,7 +76,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
   starter: {
     code: STARTER_PLAN_CODE,
     name: 'Starter',
-    monthlyCents: 29_900,
+    monthlyCents: 39_900,
     includedFcSeats: 1,
     recommended: false,
     knownProductId: LIVE_STARTER_PRODUCT_ID,
@@ -79,7 +85,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
   work_verification: {
     code: WORK_VERIFICATION_PLAN_CODE,
     name: 'Work Verification',
-    monthlyCents: 59_900,
+    monthlyCents: 84_900,
     includedFcSeats: 3,
     recommended: true,
     knownProductId: LIVE_WORK_VERIFICATION_PRODUCT_ID,
@@ -88,7 +94,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
   scale: {
     code: SCALE_PLAN_CODE,
     name: 'Scale',
-    monthlyCents: 149_900,
+    monthlyCents: 199_900,
     includedFcSeats: 10,
     recommended: false,
     knownProductId: LIVE_SCALE_PRODUCT_ID,
@@ -100,7 +106,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
 export const INCLUDED_FC_SEATS = ATMOSPHERE_SELF_SERVE_PLANS.work_verification.includedFcSeats;
 export const WORK_VERIFICATION_MONTHLY_CENTS =
   ATMOSPHERE_SELF_SERVE_PLANS.work_verification.monthlyCents;
-export const EXTRA_FC_SEAT_MONTHLY_CENTS = 10_000;
+export const EXTRA_FC_SEAT_MONTHLY_CENTS = 12_500;
 export const CHEST_MOUNT_PRICE_CENTS = 4_999;
 
 export function isAtmosphereSelfServePlanCode(
@@ -155,7 +161,7 @@ export function planDescription(plan: AtmosphereSelfServePlan): string {
   return [
     '• Field Capture + Evidence Platform',
     `• $${(plan.monthlyCents / 100).toLocaleString('en-US')}/mo includes ${plan.includedFcSeats} Field Capture ${seatWord}`,
-    '• Additional Field Capture accounts are $100/mo each',
+    `• Additional Field Capture accounts are $${(EXTRA_FC_SEAT_MONTHLY_CENTS / 100).toLocaleString('en-US')}/mo each`,
     '• AI/token usage is billed the day it is used',
   ].join('\n');
 }
@@ -165,7 +171,7 @@ export const WORK_VERIFICATION_DESCRIPTION = planDescription(
 );
 
 export const EXTRA_FC_SEAT_DESCRIPTION =
-  'Additional Field Capture account beyond the seats included with your Atmosphere plan. $100/mo per account.';
+  `Additional Field Capture account beyond the seats included with your Atmosphere plan. $${(EXTRA_FC_SEAT_MONTHLY_CENTS / 100).toLocaleString('en-US')}/mo per account.`;
 
 export function allowedFcSeats(
   extraSeats: number,

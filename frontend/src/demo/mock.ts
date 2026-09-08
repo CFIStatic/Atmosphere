@@ -421,9 +421,9 @@ const PURCHASES = [
 ];
 
 const PAYMENTS = [
-  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 59900, currency: 'usd', description: 'Work Verification — August', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-08-01T00:00:00Z', periodEnd: '2026-09-01T00:00:00Z', failureReason: null, createdAt: '2026-08-01T00:05:00Z' },
+  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 84900, currency: 'usd', description: 'Work Verification — August', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-08-01T00:00:00Z', periodEnd: '2026-09-01T00:00:00Z', failureReason: null, createdAt: '2026-08-01T00:05:00Z' },
   { id: 'pay-2', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 9000, currency: 'usd', description: '3 additional jobs beyond 50 included', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-overage', invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-01T00:00:00Z', periodEnd: '2026-08-01T00:00:00Z', failureReason: null, createdAt: '2026-08-01T00:06:00Z' },
-  { id: 'pay-3', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 59900, currency: 'usd', description: 'Work Verification — July', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice-july', invoicePdfUrl: 'about:blank#demo-invoice-july-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-01T00:00:00Z', periodEnd: '2026-08-01T00:00:00Z', failureReason: null, createdAt: '2026-07-01T00:05:00Z' },
+  { id: 'pay-3', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 84900, currency: 'usd', description: 'Work Verification — July', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice-july', invoicePdfUrl: 'about:blank#demo-invoice-july-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-01T00:00:00Z', periodEnd: '2026-08-01T00:00:00Z', failureReason: null, createdAt: '2026-07-01T00:05:00Z' },
 ];
 
 /* ------------------------------------------------------------------ usage */
@@ -2235,7 +2235,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       plan: {
         code: 'work_verification',
         name: 'Work Verification',
-        baseMonthlyFeeCents: 59900,
+        baseMonthlyFeeCents: 84900,
         includedJobs: 50,
         additionalJobPriceCents: 3000,
         includedFcSeats: 3,
@@ -2253,7 +2253,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       subscription: {
         code: 'work_verification',
         name: 'Work Verification',
-        baseMonthlyFeeCents: 59900,
+        baseMonthlyFeeCents: 84900,
         includedJobs: 50,
         additionalJobPriceCents: 3000,
         status: 'active',
@@ -2269,7 +2269,7 @@ const routes: Array<[string, RegExp, Handler]> = [
         allowed: 3,
         used: 2,
         remaining: 1,
-        extraSeatPriceCents: 10000,
+        extraSeatPriceCents: 12500,
       },
       usage: {
         periodStart: '2026-08-01T00:00:00Z',
@@ -2280,10 +2280,10 @@ const routes: Array<[string, RegExp, Handler]> = [
         excessJobs: 0,
         videoVerificationHours: 4.2,
         computeOverage: null,
-        basePlatformChargeCents: 59900,
+        basePlatformChargeCents: 84900,
         jobOverageChargeCents: 0,
         videoProcessingChargeCents: 0,
-        estimatedUpcomingBillCents: 59900,
+        estimatedUpcomingBillCents: 84900,
       },
     },
   })],

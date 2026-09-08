@@ -10,7 +10,7 @@ export interface OverageInvoiceLine {
   description: string;
 }
 
-/** Usage beyond the included Work Verification allowance — not the $599 base fee. */
+/** Usage beyond the included Work Verification allowance — not the $849 base fee. */
 export function overageInvoiceLines(summary: MeteringPeriodCalculation): OverageInvoiceLine[] {
   const lines: OverageInvoiceLine[] = [];
   if (summary.jobOverageChargeCents > 0) {
@@ -80,7 +80,7 @@ async function findExistingOverageInvoice(
 
 /**
  * After a period close, invoice overage on the org's Stripe customer.
- * The $599 platform fee is the subscription — this is only extra jobs / compute.
+ * The $849 platform fee is the subscription — this is only extra jobs / compute.
  * Idempotent on org + period start so a retried close does not double-bill.
  */
 export async function invoiceMeteringOverage(
