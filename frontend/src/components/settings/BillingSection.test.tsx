@@ -80,18 +80,34 @@ const invoice = {
   hostedInvoiceUrl: 'https://stripe.test/invoice',
   invoicePdfUrl: null,
   createdAt: '2026-08-01T00:05:00Z',
+  lines: [
+    {
+      description: 'Work Verification — August',
+      quantity: 1,
+      unitAmountCents: 84900,
+      amountCents: 84900,
+    },
+  ],
 };
 
 const openInvoice = {
   id: 'in_open',
   number: 'INV-0009',
   status: 'open' as const,
-  amountCents: 3700,
+  amountCents: 37,
   currency: 'usd',
-  description: 'Atmosphere AI usage 2026-09-08',
+  description: 'AI analysis units 2026-09-08',
   hostedInvoiceUrl: 'https://stripe.test/usage',
   invoicePdfUrl: 'https://stripe.test/usage.pdf',
   createdAt: '2026-09-08T16:00:00Z',
+  lines: [
+    {
+      description: 'AI analysis units 2026-09-08',
+      quantity: 37,
+      unitAmountCents: 1,
+      amountCents: 37,
+    },
+  ],
 };
 
 const tokenUsage = {
@@ -141,7 +157,10 @@ describe('BillingSection', () => {
     expect(screen.queryByText(/\$30 each/)).toBeNull();
     expect(screen.queryByText(/additional job/i)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Invoices / Receipts' })).toBeInTheDocument();
+    expect(screen.getByText('Atmosphere')).toBeInTheDocument();
     expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
+    expect(screen.getByText('Qty')).toBeInTheDocument();
+    expect(screen.getByText('Unit price')).toBeInTheDocument();
     expect(screen.getByText('Paid')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute(
       'href',
@@ -255,9 +274,11 @@ describe('BillingSection', () => {
 
     expect(await screen.findByRole('heading', { name: 'Invoices / Receipts' })).toBeInTheDocument();
     expect(screen.getByText('Work Verification — August')).toBeInTheDocument();
-    expect(screen.getByText('Atmosphere AI usage 2026-09-08')).toBeInTheDocument();
+    expect(screen.getByText('AI analysis units 2026-09-08')).toBeInTheDocument();
     expect(screen.getByText('Paid')).toBeInTheDocument();
     expect(screen.getByText('Open')).toBeInTheDocument();
+    expect(screen.getByText('37')).toBeInTheDocument();
+    expect(screen.getByText('$0.01')).toBeInTheDocument();
     const links = screen.getAllByRole('link', { name: 'View receipt' });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute('href', 'https://stripe.test/invoice');

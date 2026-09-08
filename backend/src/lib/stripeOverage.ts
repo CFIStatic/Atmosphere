@@ -3,12 +3,19 @@ import type Stripe from 'stripe';
 import { config } from '../config.js';
 import type { MeteringPeriodCalculation } from '../metering/types.js';
 import { loadOrgCreatorEmail, shouldSkipUsageBilling } from './billingExempt.js';
+import { NANOS_PER_CENT } from './money.js';
 import { isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
-import { stripeAutoCollectInvoiceFields } from './stripeInvoices.js';
+import {
+  quantityUnitForAmount,
+  stripeAutoCollectInvoiceFields,
+  stripeQuantityInvoiceItemFields,
+} from './stripeInvoices.js';
 
 export interface OverageInvoiceLine {
   amountCents: number;
   description: string;
+  quantity: number;
+  unitAmountCents: number;
 }
 
 /** Usage beyond the included Work Verification allowance — not the $849 base fee. */
@@ -16,8 +23,15 @@ export function overageInvoiceLines(summary: MeteringPeriodCalculation): Overage
   const lines: OverageInvoiceLine[] = [];
   if (summary.jobOverageChargeCents > 0) {
     const extra = summary.excessJobs;
+    const priced = quantityUnitForAmount(
+      summary.jobOverageChargeCents,
+      extra,
+      summary.terms.additionalJobPriceCents,
+    );
     lines.push({
       amountCents: summary.jobOverageChargeCents,
+      quantity: priced.quantity,
+      unitAmountCents: priced.unitAmountCents,
       description:
         extra === 1
           ? `1 additional job beyond ${summary.includedJobs} included`
@@ -25,14 +39,31 @@ export function overageInvoiceLines(summary: MeteringPeriodCalculation): Overage
     });
   }
   if (summary.computeOverageChargeCents > 0) {
+    const priced = quantityUnitForAmount(
+      summary.computeOverageChargeCents,
+      summary.excessComputeUnits,
+      summary.terms.computeUnitOverageNanos > 0
+        ? Math.round(summary.terms.computeUnitOverageNanos / NANOS_PER_CENT)
+        : null,
+    );
     lines.push({
       amountCents: summary.computeOverageChargeCents,
-      description: 'Additional compute beyond the included allowance',
+      quantity: priced.quantity,
+      unitAmountCents: priced.unitAmountCents,
+      description: 'Additional compute units beyond the included allowance',
     });
   }
   if (summary.videoProcessingChargeCents > 0) {
+    const hours = summary.videoVerificationHours;
+    const priced = quantityUnitForAmount(
+      summary.videoProcessingChargeCents,
+      Number.isInteger(hours) ? hours : null,
+      summary.terms.videoHourPriceCents,
+    );
     lines.push({
       amountCents: summary.videoProcessingChargeCents,
+      quantity: priced.quantity,
+      unitAmountCents: priced.unitAmountCents,
       description: 'Video verification processing',
     });
   }
@@ -157,8 +188,11 @@ export async function invoiceMeteringOverage(
           customer: customerId,
           invoice: invoice.id,
           currency: 'usd',
-          amount: line.amountCents,
-          description: line.description,
+          ...stripeQuantityInvoiceItemFields({
+            quantity: line.quantity,
+            unitAmountCents: line.unitAmountCents,
+            description: line.description,
+          }),
         },
         { idempotencyKey: stripeIdempotencyKey(periodKey, 'line', index) },
       );

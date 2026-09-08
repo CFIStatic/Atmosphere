@@ -66,7 +66,11 @@ coalesced: later usage that day invoices only the leftover. `invoice.finalized`
 and `invoice.paid` record the receipt. Period-close invoices leftover usage
 days as a safety net. Do not apply this multiplier to seat or Stripe
 subscription prices. Settings → Billing lists the same invoices from Stripe
-(`GET /api/billing/invoices`) with a hosted invoice / PDF link.
+(`GET /api/billing/invoices`) with a hosted invoice / PDF link. Usage
+InvoiceItems are created as **quantity × `unit_amount_decimal`** (analysis
+units at $0.01 for leftover token/AI cents; extra jobs as qty × job price),
+never a single `amount` with qty=1. The Billing UI shows Description / Qty /
+Unit price / Amount for those lines.
 
 Field Capture seats: allowed = **included seats from the org plan + extra
 seat quantity** (Starter 1, Work Verification 3, Scale 10). Creating an
@@ -203,7 +207,19 @@ hosted invoice email is the receipt.
    tries to create a default configuration). Invoices also appear in
    Settings → Billing → **Invoices / Receipts** (`GET /api/billing/invoices`)
    with **View receipt** → `hosted_invoice_url` or `invoice_pdf`.
-4. Stay in **Test mode** until the go-live checklist in
+4. **Branding on Stripe invoices / PDFs (Dashboard-only).** Hosted invoices
+   and PDF receipts use the **Stripe account logo**, not an app-side header.
+   Code cannot stamp a logo onto Stripe’s PDF. In **Settings → Branding**:
+   - [ ] **Icon** — upload the Atmosphere five-bar mark
+     (`frontend/public/icons/atmosphere.svg` or
+     `website/index.html` wordmark bars). Orange base bar + four ink bars.
+   - [ ] **Logo** — upload the Atmosphere lockup
+     (`website/assets/atmosphere-invoice-lockup.svg`): bars + the word
+     **Atmosphere**.
+   - [ ] Do **not** use a Jettx mark, wordmark, or square tile.
+   Settings → Billing in the Platform UI already shows that same lockup
+   next to Invoices / Receipts.
+5. Stay in **Test mode** until the go-live checklist in
    [`docs/production.md`](./production.md) is done.
 
 Checkout / subscription creates already use `collection_method=charge_automatically`
