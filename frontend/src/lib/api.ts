@@ -5734,6 +5734,14 @@ export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
   refund: 'Refund',
 };
 
+/** One Stripe invoice line — usage rows carry quantity × unit price. */
+export interface BillingInvoiceLine {
+  description: string | null;
+  quantity: number | null;
+  unitAmountCents: number | null;
+  amountCents: number;
+}
+
 /** One Stripe invoice / receipt row on Settings → Billing. */
 export interface BillingInvoice {
   id: string;
@@ -5745,6 +5753,7 @@ export interface BillingInvoice {
   hostedInvoiceUrl: string | null;
   invoicePdfUrl: string | null;
   createdAt: string;
+  lines?: BillingInvoiceLine[];
 }
 
 /* -------------------------------------------------------------- usage types */

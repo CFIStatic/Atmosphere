@@ -13,7 +13,11 @@ import { config } from '../config.js';
 import { loadOrgCreatorEmail, shouldSkipUsageBilling } from './billingExempt.js';
 import { nanosToCents } from './money.js';
 import { adminClient, isStripeConfigured, stripeClient, stripeIdempotencyKey } from './stripe.js';
-import { stripeAutoCollectInvoiceFields } from './stripeInvoices.js';
+import {
+  analysisUnitsFromCents,
+  stripeAutoCollectInvoiceFields,
+  stripeQuantityInvoiceItemFields,
+} from './stripeInvoices.js';
 
 export const SAME_DAY_USAGE_KIND = 'same_day_usage';
 
@@ -167,13 +171,17 @@ export async function invoiceSameDayUsageCharge(
 
   if ((invoice.lines?.data?.length ?? 0) === 0) {
     try {
+      const units = analysisUnitsFromCents(amountCents);
       await stripe.invoiceItems.create(
         {
           customer: input.customerId,
           invoice: invoice.id,
           currency: 'usd',
-          amount: amountCents,
-          description: `AI / token usage ${input.day}`,
+          ...stripeQuantityInvoiceItemFields({
+            quantity: units.quantity,
+            unitAmountCents: units.unitAmountCents,
+            description: `AI analysis units ${input.day}`,
+          }),
         },
         { idempotencyKey: stripeIdempotencyKey(key, 'line') },
       );

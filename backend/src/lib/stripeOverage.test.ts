@@ -60,6 +60,8 @@ describe('overageInvoiceLines', () => {
     );
     assert.equal(lines.length, 1);
     assert.equal(lines[0]?.amountCents, 9000);
+    assert.equal(lines[0]?.quantity, 3);
+    assert.equal(lines[0]?.unitAmountCents, 3000);
     assert.match(lines[0]?.description ?? '', /3 additional jobs/);
   });
 
