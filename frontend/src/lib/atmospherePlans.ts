@@ -6,14 +6,14 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: AtmosphereSelfServePlan[] = [
   {
     code: 'starter',
     name: 'Starter',
-    monthlyCents: 29_900,
+    monthlyCents: 39_900,
     includedFcSeats: 1,
     recommended: false,
   },
   {
     code: 'work_verification',
     name: 'Work Verification',
-    monthlyCents: 59_900,
+    monthlyCents: 84_900,
     includedFcSeats: 3,
     recommended: true,
     defaultSelected: true,
@@ -21,7 +21,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: AtmosphereSelfServePlan[] = [
   {
     code: 'scale',
     name: 'Scale',
-    monthlyCents: 149_900,
+    monthlyCents: 199_900,
     includedFcSeats: 10,
     recommended: false,
   },

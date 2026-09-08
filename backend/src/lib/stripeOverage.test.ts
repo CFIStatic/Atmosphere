@@ -54,7 +54,7 @@ describe('overageInvoiceLines', () => {
     assert.deepEqual(overageInvoiceLines(summary({})), []);
   });
 
-  it('invoices extra jobs, not the $599 base fee', () => {
+  it('invoices extra jobs, not the $849 base fee', () => {
     const lines = overageInvoiceLines(
       summary({ excessJobs: 3, jobOverageChargeCents: 9000, processedJobs: 53 }),
     );

@@ -77,17 +77,21 @@ async function findPrice(
   interval: 'month' | 'year',
   knownId?: string,
 ): Promise<Stripe.Price | null> {
+  // Prefer the pinned catalog id. Metadata search is not deterministic when
+  // legacy prices remain active with the same atmosphere_plan_code, and those
+  // older amounts would otherwise win, get archived, and mint a duplicate.
+  if (knownId) {
+    try {
+      return await stripe.prices.retrieve(knownId);
+    } catch {
+      // Fall through to metadata search if the pinned id is missing.
+    }
+  }
   const listed = await stripe.prices.search({
     query: `metadata["atmosphere_plan_code"]:"${planCode}" AND metadata["atmosphere_interval"]:"${interval}" AND active:"true"`,
     limit: 1,
   });
-  if (listed.data[0]) return listed.data[0];
-  if (!knownId) return null;
-  try {
-    return await stripe.prices.retrieve(knownId);
-  } catch {
-    return null;
-  }
+  return listed.data[0] ?? null;
 }
 
 async function ensureRecurringPrice(
@@ -256,7 +260,7 @@ async function main() {
     }
   }
 
-  // --- Extra Field Capture seats ($100/mo each beyond included seats) ----
+  // --- Extra Field Capture seats ($125/mo each beyond included seats) ----
   console.log('\nSyncing extra Field Capture seats…\n');
   {
     const product = await ensureProduct(stripe, {
@@ -397,10 +401,10 @@ STRIPE_WEBHOOK_SECRET=whsec_…
 ${onboardingPriceId ? `STRIPE_ONBOARDING_PRICE_ID=${onboardingPriceId}` : ''}
 ${starterPriceId ? `STRIPE_STARTER_PRICE_ID=${starterPriceId}` : '# STRIPE_STARTER_PRICE_ID=price_…  # set after this sync creates Starter'}
 ${scalePriceId ? `STRIPE_SCALE_PRICE_ID=${scalePriceId}` : '# STRIPE_SCALE_PRICE_ID=price_…    # set after this sync creates Scale'}
-# Live Starter is price_1UD7vi1b5twUY3LykzUsVQVr (prod_VDZ3e7oBJWIYSE).
-# Live Work Verification is price_1UD4Sq1b5twUY3Ly6nqfRaGC (prod_VDVR9rM3g9Tkpg) — Railway is set by the human.
-# Live Scale is price_1UD7vj1b5twUY3Ly1Q4uv4kS (prod_VDZ3SMytTKoxc5).
-# Optional override for extra Field Capture seats ($100/mo):
+# Live Starter is price_1UDGIY1b5twUY3Ly7UlLMYBW (prod_VDZ3e7oBJWIYSE).
+# Live Work Verification is price_1UDGIZ1b5twUY3LyO0culT5W (prod_VDVR9rM3g9Tkpg) — Railway is set by the human.
+# Live Scale is price_1UDGIb1b5twUY3LyUuZeyp75 (prod_VDZ3SMytTKoxc5).
+# Optional override for extra Field Capture seats ($125/mo):
 # STRIPE_EXTRA_SEAT_PRICE_ID=${LIVE_EXTRA_FC_SEAT_PRICE_ID}
 SUPABASE_SERVICE_ROLE_KEY=…   # required — webhooks mint credits under service role
 

@@ -6,6 +6,10 @@ import { unscopedAdmin } from './scopedAdmin.js';
 import { HttpError } from './errors.js';
 import {
   FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
+  LEGACY_EXTRA_FC_SEAT_PRICE_ID,
+  LEGACY_SCALE_PRICE_ID,
+  LEGACY_STARTER_PRICE_ID,
+  LEGACY_WORK_VERIFICATION_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
   LIVE_SCALE_PRICE_ID,
   LIVE_STARTER_PRICE_ID,
@@ -275,6 +279,9 @@ export function configuredSelfServePriceIds(): string[] {
     LIVE_STARTER_PRICE_ID,
     LIVE_WORK_VERIFICATION_PRICE_ID,
     LIVE_SCALE_PRICE_ID,
+    LEGACY_STARTER_PRICE_ID,
+    LEGACY_WORK_VERIFICATION_PRICE_ID,
+    LEGACY_SCALE_PRICE_ID,
   ].filter(Boolean);
 }
 
@@ -296,10 +303,18 @@ export function atmospherePlanCodeForPriceId(
   priceId: string | null | undefined,
 ): AtmosphereSelfServePlanCode | null {
   if (!priceId) return null;
-  if (priceId === config.stripe.starterPriceId || priceId === LIVE_STARTER_PRICE_ID) {
+  if (
+    priceId === config.stripe.starterPriceId ||
+    priceId === LIVE_STARTER_PRICE_ID ||
+    priceId === LEGACY_STARTER_PRICE_ID
+  ) {
     return 'starter';
   }
-  if (priceId === config.stripe.scalePriceId || priceId === LIVE_SCALE_PRICE_ID) {
+  if (
+    priceId === config.stripe.scalePriceId ||
+    priceId === LIVE_SCALE_PRICE_ID ||
+    priceId === LEGACY_SCALE_PRICE_ID
+  ) {
     return 'scale';
   }
   if (isWorkVerificationPriceId(priceId)) return WORK_VERIFICATION_PLAN_CODE;
@@ -311,13 +326,20 @@ export function extraSeatPriceId(): string {
 }
 
 export function isExtraSeatPriceId(priceId: string | null | undefined): boolean {
-  return Boolean(priceId && (priceId === extraSeatPriceId() || priceId === LIVE_EXTRA_FC_SEAT_PRICE_ID));
+  return Boolean(
+    priceId &&
+      (priceId === extraSeatPriceId() ||
+        priceId === LIVE_EXTRA_FC_SEAT_PRICE_ID ||
+        priceId === LEGACY_EXTRA_FC_SEAT_PRICE_ID),
+  );
 }
 
 export function isWorkVerificationPriceId(priceId: string | null | undefined): boolean {
   return Boolean(
     priceId &&
-      (priceId === config.stripe.onboardingPriceId || priceId === LIVE_WORK_VERIFICATION_PRICE_ID),
+      (priceId === config.stripe.onboardingPriceId ||
+        priceId === LIVE_WORK_VERIFICATION_PRICE_ID ||
+        priceId === LEGACY_WORK_VERIFICATION_PRICE_ID),
   );
 }
 

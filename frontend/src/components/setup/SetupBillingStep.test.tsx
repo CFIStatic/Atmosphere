@@ -24,20 +24,20 @@ const unpaid = {
   complete: false,
   defaultPlanCode: 'work_verification' as const,
   plans: [
-    { code: 'starter' as const, name: 'Starter', monthlyCents: 29900, includedFcSeats: 1, recommended: false },
+    { code: 'starter' as const, name: 'Starter', monthlyCents: 39900, includedFcSeats: 1, recommended: false },
     {
       code: 'work_verification' as const,
       name: 'Work Verification',
-      monthlyCents: 59900,
+      monthlyCents: 84900,
       includedFcSeats: 3,
       recommended: true,
       defaultSelected: true,
     },
-    { code: 'scale' as const, name: 'Scale', monthlyCents: 149900, includedFcSeats: 10, recommended: false },
+    { code: 'scale' as const, name: 'Scale', monthlyCents: 199900, includedFcSeats: 10, recommended: false },
   ],
   plan: {
     name: 'Work Verification',
-    baseMonthlyFeeCents: 59900,
+    baseMonthlyFeeCents: 84900,
     includedJobs: 50,
     additionalJobPriceCents: 3000,
     includedFcSeats: 3,
@@ -48,7 +48,7 @@ const unpaid = {
     allowed: 3,
     used: 0,
     remaining: 3,
-    extraSeatPriceCents: 10000,
+    extraSeatPriceCents: 12500,
   },
 };
 

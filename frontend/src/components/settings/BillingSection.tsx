@@ -183,7 +183,7 @@ export function BillingSection() {
               Manage plan and payment method
             </button>
             <p className="text-xs text-ink-500">
-              Extra Field Capture accounts ($100/mo) are added automatically when you invite past the{' '}
+              Extra Field Capture accounts ({formatCents(workspace.fieldCaptureSeats?.extraSeatPriceCents ?? 12_500)}/mo) are added automatically when you invite past the{' '}
               {workspace.fieldCaptureSeats?.included ?? sub.includedFcSeats ?? 3} included seats.
               Change plans in the billing portal, or contact us for Enterprise.
             </p>

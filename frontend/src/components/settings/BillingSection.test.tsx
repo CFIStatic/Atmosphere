@@ -36,7 +36,7 @@ const paid: WorkspaceBilling = {
   subscription: {
     code: 'work_verification',
     name: 'Work Verification',
-    baseMonthlyFeeCents: 59900,
+    baseMonthlyFeeCents: 84900,
     includedJobs: 50,
     additionalJobPriceCents: 3000,
     status: 'active',
@@ -52,7 +52,7 @@ const paid: WorkspaceBilling = {
     allowed: 3,
     used: 1,
     remaining: 2,
-    extraSeatPriceCents: 10000,
+    extraSeatPriceCents: 12500,
   },
   usage: {
     periodStart: '2026-08-01T00:00:00Z',
@@ -63,10 +63,10 @@ const paid: WorkspaceBilling = {
     excessJobs: 0,
     videoVerificationHours: 1,
     computeOverage: null,
-    basePlatformChargeCents: 59900,
+    basePlatformChargeCents: 84900,
     jobOverageChargeCents: 0,
     videoProcessingChargeCents: 0,
-    estimatedUpcomingBillCents: 59900,
+    estimatedUpcomingBillCents: 84900,
   },
 };
 
@@ -74,7 +74,7 @@ const payment = {
   id: 'pay-1',
   kind: 'subscription' as const,
   status: 'succeeded',
-  amountCents: 59900,
+  amountCents: 84900,
   currency: 'usd',
   description: 'Work Verification — August',
   receiptUrl: null,
@@ -141,7 +141,7 @@ describe('BillingSection', () => {
     expect(screen.queryByText(/Plan & credits/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Manage plan and payment method' })).toBeInTheDocument();
     expect(screen.getByText(/1 of 3 used/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $125/mo' })).toBeNull();
     expect(screen.getByText(/added automatically when you invite/i)).toBeInTheDocument();
   });
 
@@ -152,7 +152,7 @@ describe('BillingSection', () => {
         ...paid.subscription,
         code: 'scale',
         name: 'Scale',
-        baseMonthlyFeeCents: 149900,
+        baseMonthlyFeeCents: 199900,
         includedFcSeats: 10,
       },
       fieldCaptureSeats: {
@@ -161,7 +161,7 @@ describe('BillingSection', () => {
         allowed: 10,
         used: 2,
         remaining: 8,
-        extraSeatPriceCents: 10000,
+        extraSeatPriceCents: 12500,
       },
     });
 
@@ -170,7 +170,7 @@ describe('BillingSection', () => {
     expect(await screen.findByRole('heading', { name: 'Scale' })).toBeInTheDocument();
     expect(screen.getByText(/2 of 10 used/)).toBeInTheDocument();
     expect(screen.getAllByText(/10 included/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/\$1,499/)).toBeInTheDocument();
+    expect(screen.getByText(/\$1,999/)).toBeInTheDocument();
   });
 
   it('hides paid Stripe controls for a complimentary org', async () => {
@@ -188,9 +188,9 @@ describe('BillingSection', () => {
 
     expect(await screen.findByText('Comped')).toBeInTheDocument();
     expect(screen.getByText('Complimentary')).toBeInTheDocument();
-    expect(screen.queryByText('$599')).toBeNull();
+    expect(screen.queryByText('$849')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage plan and payment method' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $100/mo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Field Capture seat — $125/mo' })).toBeNull();
     expect(screen.getByText('No charges on this complimentary account.')).toBeInTheDocument();
   });
 

@@ -21,9 +21,10 @@ describe('atmosphere self-serve plans', () => {
       'scale',
     ]);
     expect(atmospherePlan('starter').includedFcSeats).toBe(1);
-    expect(atmospherePlan('starter').monthlyCents).toBe(29900);
+    expect(atmospherePlan('starter').monthlyCents).toBe(39900);
     expect(atmospherePlan('work_verification').includedFcSeats).toBe(3);
+    expect(atmospherePlan('work_verification').monthlyCents).toBe(84900);
     expect(atmospherePlan('scale').includedFcSeats).toBe(10);
-    expect(atmospherePlan('scale').monthlyCents).toBe(149900);
+    expect(atmospherePlan('scale').monthlyCents).toBe(199900);
   });
 });
