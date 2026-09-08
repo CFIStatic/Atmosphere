@@ -107,6 +107,18 @@ export function invoiceWebhookRecord(
   return { status: 'pending', paid: false };
 }
 
+/**
+ * A retried `invoice.finalized` snapshot is typically still `open` → pending.
+ * Stripe does not order events, so that must not overwrite a paid or failed row.
+ */
+export function invoiceWebhookShouldApply(
+  next: { status: 'succeeded' | 'failed' | 'pending' },
+  existingStatus?: string | null,
+): boolean {
+  if (next.status !== 'pending') return true;
+  return existingStatus !== 'succeeded' && existingStatus !== 'failed';
+}
+
 export async function listStripeCustomerInvoices(
   customerId: string,
   limit: number,

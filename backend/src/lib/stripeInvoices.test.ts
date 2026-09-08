@@ -4,6 +4,7 @@ import {
   checkoutInvoiceCreationFields,
   customerEmailBackfill,
   invoiceWebhookRecord,
+  invoiceWebhookShouldApply,
   loadOrgBillingInvoices,
   serializeStripeInvoice,
   stripeAutoCollectInvoiceFields,
@@ -163,6 +164,18 @@ describe('invoice webhook status', () => {
       status: 'failed',
       paid: false,
     });
+  });
+
+  it('does not let a pending finalized snapshot overwrite paid or failed', () => {
+    const pending = invoiceWebhookRecord('invoice.finalized', { status: 'open' });
+    assert.equal(invoiceWebhookShouldApply(pending, null), true);
+    assert.equal(invoiceWebhookShouldApply(pending, 'pending'), true);
+    assert.equal(invoiceWebhookShouldApply(pending, 'succeeded'), false);
+    assert.equal(invoiceWebhookShouldApply(pending, 'failed'), false);
+    assert.equal(
+      invoiceWebhookShouldApply(invoiceWebhookRecord('invoice.paid', { status: 'paid' }), 'pending'),
+      true,
+    );
   });
 });
 

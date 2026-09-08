@@ -34,7 +34,7 @@ import {
   requireAttributedOrg,
   requireCreditPurchaseId,
 } from '../lib/stripeWebhook.js';
-import { invoiceWebhookRecord } from '../lib/stripeInvoices.js';
+import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
 
 export const webhookRouter = Router();
 
@@ -196,6 +196,17 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, eventType: string)
   const line = invoice.lines?.data?.[0] as any;
   const chargeId = invoiceChargeId(invoice);
   const record = invoiceWebhookRecord(eventType, invoice);
+
+  if (record.status === 'pending' && invoice.id) {
+    const { data: existing } = await admin
+      .from('payments')
+      .select('status')
+      .eq('stripe_invoice_id', invoice.id)
+      .maybeSingle();
+    if (!invoiceWebhookShouldApply(record, existing?.status)) {
+      return;
+    }
+  }
 
   let charge: Stripe.Charge | null = null;
   if (chargeId) {
