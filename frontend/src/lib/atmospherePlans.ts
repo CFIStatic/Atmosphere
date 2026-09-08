@@ -41,3 +41,8 @@ export function atmospherePlan(
   const parsed = parseAtmospherePlanCode(code);
   return catalog.find((plan) => plan.code === parsed) ?? ATMOSPHERE_SELF_SERVE_PLANS[1]!;
 }
+
+/** Seat line on the plan picker — title-case, no "included". */
+export function fieldCaptureSeatLabel(seats: number): string {
+  return seats === 1 ? '1 Field Capture account' : `${seats} Field Capture accounts`;
+}

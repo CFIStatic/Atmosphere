@@ -74,7 +74,14 @@ describe('SetupBillingStep', () => {
     expect(screen.getByText('Work Verification')).toBeInTheDocument();
     expect(screen.getByText('Starter')).toBeInTheDocument();
     expect(screen.getByText('Scale')).toBeInTheDocument();
-    expect(screen.getAllByText(/\/ month/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getByText('$399')).toBeInTheDocument();
+    expect(screen.getByText('$849')).toBeInTheDocument();
+    expect(screen.getByText('$1,999')).toBeInTheDocument();
+    expect(screen.getByText('1 Field Capture account')).toBeInTheDocument();
+    expect(screen.getByText('3 Field Capture accounts')).toBeInTheDocument();
+    expect(screen.getByText('10 Field Capture accounts')).toBeInTheDocument();
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
     expect(screen.queryByText(/processed jobs/i)).toBeNull();
     expect(screen.queryByText(/Card details never touch/i)).toBeNull();
     expect(screen.queryByText(/Cancel anytime/i)).toBeNull();

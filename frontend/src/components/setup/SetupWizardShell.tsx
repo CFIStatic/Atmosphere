@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../design/cn';
 import { Logo } from '../Logo';
 import { ThemeToggle } from '../ThemeToggle';
 import { CheckIcon } from '../icons';
@@ -22,6 +23,7 @@ export function SetupWizardShell({
   children: ReactNode;
 }) {
   const copy = setupWizardCopy(intent);
+  const wide = step === 2;
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
@@ -33,8 +35,15 @@ export function SetupWizardShell({
       </header>
 
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-2 sm:items-center">
-        <div className="w-full max-w-4xl animate-fade-in-up">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:items-start lg:gap-14">
+        <div className={cn('w-full animate-fade-in-up', wide ? 'max-w-6xl' : 'max-w-4xl')}>
+          <div
+            className={cn(
+              'grid gap-10 lg:items-start',
+              wide
+                ? 'lg:grid-cols-[minmax(16rem,19rem)_minmax(0,1fr)] lg:gap-10'
+                : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:gap-14',
+            )}
+          >
             <div className="hidden lg:block">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
                 Get started

@@ -6,6 +6,7 @@ import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRe
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
+import { PlanPrice } from '../components/billing/AtmospherePlanPicker';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
 import {
@@ -444,13 +445,8 @@ export function SignupPage() {
           subtitle="Add a payment method to activate the workspace."
         >
           <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
-              Work Verification
-            </p>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
-              $849
-              <span className="text-base font-medium text-ink-500"> / month</span>
-            </p>
+            <p className="text-[15px] font-semibold tracking-tight text-ink-900">Work Verification</p>
+            <PlanPrice monthlyCents={84_900} />
           </div>
           <div className="mt-7 flex justify-end">
             <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>
