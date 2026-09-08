@@ -3,6 +3,7 @@ import {
   ATMOSPHERE_SELF_SERVE_PLANS,
   DEFAULT_ONBOARDING_PLAN_CODE,
   atmospherePlan,
+  fieldCaptureSeatLabel,
   parseAtmospherePlanCode,
 } from './atmospherePlans';
 
@@ -26,5 +27,11 @@ describe('atmosphere self-serve plans', () => {
     expect(atmospherePlan('work_verification').monthlyCents).toBe(84900);
     expect(atmospherePlan('scale').includedFcSeats).toBe(10);
     expect(atmospherePlan('scale').monthlyCents).toBe(199900);
+  });
+
+  it('formats Field Capture seat copy without included', () => {
+    expect(fieldCaptureSeatLabel(1)).toBe('1 Field Capture account');
+    expect(fieldCaptureSeatLabel(3)).toBe('3 Field Capture accounts');
+    expect(fieldCaptureSeatLabel(10)).toBe('10 Field Capture accounts');
   });
 });

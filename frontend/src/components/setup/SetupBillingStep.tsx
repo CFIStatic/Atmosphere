@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, type AtmosphereSelfServePlan, type BillingOnboardingStatus } from '../../lib/api';
+import { AtmospherePlanPicker } from '../billing/AtmospherePlanPicker';
 import {
   ATMOSPHERE_SELF_SERVE_PLANS,
   DEFAULT_ONBOARDING_PLAN_CODE,
   parseAtmospherePlanCode,
 } from '../../lib/atmospherePlans';
-import { formatCents } from '../../lib/money';
 import { SetupStepCard } from './SetupWizardShell';
 import { SpinnerIcon, CheckIcon } from '../icons';
 
@@ -144,7 +144,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -181,45 +181,9 @@ export function SetupBillingStep({
         </div>
       )}
 
-      <fieldset className="mt-6 grid gap-3 sm:grid-cols-3">
-        <legend className="sr-only">Atmosphere plan</legend>
-        {catalog.map((plan) => {
-          const selected = plan.code === chosen.code;
-          const seatWord = plan.includedFcSeats === 1 ? 'account' : 'accounts';
-          return (
-            <label
-              key={plan.code}
-              className={`relative flex cursor-pointer flex-col rounded-xl border p-4 ${
-                selected ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-200' : 'border-line bg-paper-50'
-              }`}
-            >
-              <input
-                type="radio"
-                name="atmosphere-plan"
-                value={plan.code}
-                checked={selected}
-                onChange={() => setSelectedPlan(plan.code)}
-                className="sr-only"
-              />
-              {plan.recommended ? (
-                <span className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700">
-                  Recommended
-                </span>
-              ) : null}
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
-                {plan.name}
-              </span>
-              <span className="mt-2 text-2xl font-bold tracking-tight text-ink-900">
-                {formatCents(plan.monthlyCents)}
-                <span className="text-sm font-medium text-ink-500"> / month</span>
-              </span>
-              <span className="mt-2 text-sm text-ink-600">
-                {plan.includedFcSeats} Field Capture {seatWord} included
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
+      <div className="mt-6">
+        <AtmospherePlanPicker plans={catalog} value={chosen.code} onChange={setSelectedPlan} />
+      </div>
       <p className="mt-3 text-sm text-ink-600">
         Extra Field Capture seats are $125/mo each. AI/token usage is billed the day it is used.
       </p>
@@ -229,7 +193,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -238,7 +202,7 @@ export function SetupBillingStep({
             type="button"
             disabled={busy || Boolean(notice?.includes('confirming'))}
             onClick={() => void startCheckout()}
-            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? (
               <>
