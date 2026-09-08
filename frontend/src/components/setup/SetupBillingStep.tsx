@@ -144,7 +144,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -193,7 +193,7 @@ export function SetupBillingStep({
           <button
             type="button"
             onClick={onComplete}
-            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             {nextLabel}
           </button>
@@ -202,7 +202,7 @@ export function SetupBillingStep({
             type="button"
             disabled={busy || Boolean(notice?.includes('confirming'))}
             onClick={() => void startCheckout()}
-            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white shadow-lg shadow-card transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? (
               <>

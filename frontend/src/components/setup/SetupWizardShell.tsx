@@ -118,7 +118,12 @@ export function SetupStepCard({
 }) {
   const label = setupWizardCopy(intent).steps[step - 1]?.title ?? title;
   return (
-    <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
+    <div
+      className={cn(
+        'rounded-2xl border border-line bg-paper-0 shadow-lift',
+        step === 2 ? 'p-5 sm:p-6' : 'p-8 sm:p-10',
+      )}
+    >
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
         Step {step} · {label}
       </p>

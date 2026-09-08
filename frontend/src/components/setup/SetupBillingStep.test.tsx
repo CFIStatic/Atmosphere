@@ -70,7 +70,10 @@ describe('SetupBillingStep', () => {
   it('shows the plan price without extra payment copy', async () => {
     renderBilling();
 
-    expect(await screen.findByRole('button', { name: 'Continue to Stripe' })).toBeInTheDocument();
+    const checkout = await screen.findByRole('button', { name: 'Continue to Stripe' });
+    expect(checkout).toBeInTheDocument();
+    expect(checkout.className).toMatch(/text-white/);
+    expect(checkout.className).not.toMatch(/text-ink-900/);
     expect(screen.getByText('Work Verification')).toBeInTheDocument();
     expect(screen.getByText('Starter')).toBeInTheDocument();
     expect(screen.getByText('Scale')).toBeInTheDocument();
@@ -81,7 +84,9 @@ describe('SetupBillingStep', () => {
     expect(screen.getByText('1 Field Capture account')).toBeInTheDocument();
     expect(screen.getByText('3 Field Capture accounts')).toBeInTheDocument();
     expect(screen.getByText('10 Field Capture accounts')).toBeInTheDocument();
-    expect(screen.getByText('Recommended')).toBeInTheDocument();
+    expect(screen.getAllByText('Recommended').filter((el) => !el.className.includes('invisible'))).toHaveLength(
+      1,
+    );
     expect(screen.queryByText(/processed jobs/i)).toBeNull();
     expect(screen.queryByText(/Card details never touch/i)).toBeNull();
     expect(screen.queryByText(/Cancel anytime/i)).toBeNull();

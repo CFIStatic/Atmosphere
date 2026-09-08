@@ -35,14 +35,19 @@ describe('AtmospherePlanPicker', () => {
     expect(screen.getByText('3 Field Capture accounts')).toBeInTheDocument();
     expect(screen.getByText('10 Field Capture accounts')).toBeInTheDocument();
     expect(screen.queryByText(/included/i)).toBeNull();
-    expect(screen.getByText('Recommended')).toBeInTheDocument();
+    const badges = screen.getAllByText('Recommended');
+    expect(badges).toHaveLength(3);
+    expect(badges.filter((el) => el.className.includes('invisible'))).toHaveLength(2);
+    expect(badges.filter((el) => !el.className.includes('invisible'))).toHaveLength(1);
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
   });
 
-  it('does not scream plan names in CSS uppercase', () => {
+  it('keeps plan names title-case on a single line', () => {
     render(<Picker />);
     const name = screen.getByText('Work Verification');
     expect(name.className).not.toMatch(/uppercase/);
+    expect(name.className).toMatch(/whitespace-nowrap/);
+    expect(name.textContent).toBe('Work Verification');
   });
 
   it('keeps a constant selected border so choosing a plan does not shift layout classes', async () => {
