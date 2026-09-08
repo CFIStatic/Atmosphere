@@ -89,6 +89,12 @@ export function quantityUnitForAmount(
   return analysisUnitsFromCents(amount);
 }
 
+/**
+ * Create-time qty × unit. 2026-06-24.dahlia still takes top-level
+ * `unit_amount_decimal` (string) on InvoiceItem create. Response lines
+ * put that same figure on `pricing.unit_amount_decimal`. `pricing` on
+ * create is a Price id, not an ad-hoc unit amount.
+ */
 export function stripeQuantityInvoiceItemFields(input: {
   quantity: number;
   unitAmountCents: number;
@@ -96,7 +102,9 @@ export function stripeQuantityInvoiceItemFields(input: {
 }): Pick<Stripe.InvoiceItemCreateParams, 'quantity' | 'unit_amount_decimal' | 'description'> {
   return {
     quantity: input.quantity,
-    unit_amount_decimal: String(input.unitAmountCents) as unknown as Stripe.InvoiceItemCreateParams['unit_amount_decimal'],
+    unit_amount_decimal: String(
+      Math.trunc(input.unitAmountCents),
+    ) as unknown as Stripe.InvoiceItemCreateParams['unit_amount_decimal'],
     description: input.description,
   };
 }
@@ -128,21 +136,24 @@ export function isListableInvoiceStatus(status: string | null | undefined): stat
   return LISTABLE_INVOICE_STATUSES.includes((status ?? '') as BillingInvoiceStatus);
 }
 
+function stripeDecimalNumber(value: string | number | { toString(): string } | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function serializeStripeInvoiceLine(line: StripeInvoiceLineLike): BillingInvoiceLine {
   const quantityRaw =
     line.quantity ??
     (line.quantity_decimal != null && line.quantity_decimal !== ''
-      ? Number(line.quantity_decimal)
+      ? stripeDecimalNumber(line.quantity_decimal)
       : null);
   const quantity =
     quantityRaw != null && Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : null;
   const amountCents = Math.trunc(line.amount ?? line.subtotal ?? 0);
-  const priced =
-    line.pricing?.unit_amount_decimal != null && line.pricing.unit_amount_decimal !== ''
-      ? Number(line.pricing.unit_amount_decimal)
-      : null;
+  const priced = stripeDecimalNumber(line.pricing?.unit_amount_decimal);
   const unitAmountCents =
-    priced != null && Number.isFinite(priced)
+    priced != null
       ? Math.round(priced)
       : quantity
         ? Math.round(amountCents / quantity)
@@ -208,14 +219,16 @@ export function invoiceWebhookShouldApply(
   return existingStatus !== 'succeeded' && existingStatus !== 'failed';
 }
 
+/** List params only — `pricing` is an embedded hash, not expandable. */
+export function stripeInvoiceListParams(customerId: string, limit: number): Stripe.InvoiceListParams {
+  return { customer: customerId, limit };
+}
+
 export async function listStripeCustomerInvoices(
   customerId: string,
   limit: number,
 ): Promise<StripeInvoiceLike[]> {
-  const listed = await stripeClient().invoices.list({
-    customer: customerId,
-    limit,
-  });
+  const listed = await stripeClient().invoices.list(stripeInvoiceListParams(customerId, limit));
   return listed.data as StripeInvoiceLike[];
 }
 

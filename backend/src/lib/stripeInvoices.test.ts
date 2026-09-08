@@ -11,6 +11,7 @@ import {
   serializeStripeInvoice,
   serializeStripeInvoiceLine,
   stripeAutoCollectInvoiceFields,
+  stripeInvoiceListParams,
   stripeQuantityInvoiceItemFields,
   type StripeInvoiceLike,
 } from './stripeInvoices.js';
@@ -98,6 +99,22 @@ describe('serializeStripeInvoice', () => {
         quantity: 37,
         unitAmountCents: 1,
         amountCents: 37,
+      },
+    );
+  });
+
+  it('derives unit price from amount ÷ qty when pricing is omitted', () => {
+    assert.deepEqual(
+      serializeStripeInvoiceLine({
+        description: '3 additional jobs beyond 50 included',
+        quantity: 3,
+        amount: 9000,
+      }),
+      {
+        description: '3 additional jobs beyond 50 included',
+        quantity: 3,
+        unitAmountCents: 3000,
+        amountCents: 9000,
       },
     );
   });
@@ -248,6 +265,12 @@ describe('checkout and invoice create fields', () => {
         description: 'AI analysis units 2026-09-07',
       },
     );
+    assert.equal('amount' in stripeQuantityInvoiceItemFields({
+      quantity: 37,
+      unitAmountCents: 1,
+      description: 'AI analysis units 2026-09-07',
+    }), false);
+    assert.deepEqual(stripeInvoiceListParams('cus_1', 25), { customer: 'cus_1', limit: 25 });
   });
 
   it('backfills a missing Stripe customer email and leaves an existing one alone', () => {
