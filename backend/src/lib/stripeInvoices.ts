@@ -215,7 +215,6 @@ export async function listStripeCustomerInvoices(
   const listed = await stripeClient().invoices.list({
     customer: customerId,
     limit,
-    expand: ['data.lines.data.pricing'],
   });
   return listed.data as StripeInvoiceLike[];
 }
