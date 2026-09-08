@@ -127,9 +127,11 @@ describe('same-day usage invoice path', () => {
     assert.equal(item.amount, 37);
     const created = calls.find((c) => c.name === 'invoices.create')?.args as {
       metadata: { kind: string; usage_day: string };
+      collection_method?: string;
     };
     assert.equal(created.metadata.kind, 'same_day_usage');
     assert.equal(created.metadata.usage_day, '2026-09-07');
+    assert.equal(created.collection_method, 'charge_automatically');
   });
 
   it('skips when the day is already invoiced for that amount', async () => {

@@ -126,12 +126,16 @@ export async function ensureCustomer(
   if (error) throw new HttpError(500, error.message, 'customer_lookup_failed');
 
   const existing = data?.stripe_customer_id as string | undefined;
-  if (existing) return existing;
+  if (existing) {
+    await backfillCustomerEmail(existing, opts.email);
+    return existing;
+  }
 
   // Two overlapping checkouts must not create two customers. Search Stripe
   // first (metadata is written on create), then create, then re-read if the
   // unique link loses the race.
   const found = await findCustomerByOrgId(orgId);
+  if (found) await backfillCustomerEmail(found, opts.email);
   const customerId = found ?? (await createCustomer(orgId, opts)).id;
 
   const { error: linkError } = await supabase.rpc('link_stripe_customer', {
@@ -176,6 +180,30 @@ async function createCustomer(
     },
     { idempotencyKey: stripeIdempotencyKey('customer', orgId) },
   );
+}
+
+/**
+ * Stripe invoice / receipt emails go to the Customer email. Checkout cannot
+ * send `customer_email` when `customer` is already set, so a missing email
+ * on an existing customer would silently skip receipts.
+ */
+async function backfillCustomerEmail(
+  customerId: string,
+  email?: string | null,
+): Promise<void> {
+  if (!isLiveStripeCustomerId(customerId)) return;
+  try {
+    const customer = await stripeClient().customers.retrieve(customerId);
+    if ('deleted' in customer && customer.deleted) return;
+    const next = email?.trim();
+    if (!next || customer.email?.trim()) return;
+    await stripeClient().customers.update(customerId, { email: next });
+  } catch (err) {
+    console.warn(
+      '[stripe] customer email backfill skipped:',
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**
