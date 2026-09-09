@@ -61,7 +61,15 @@ import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromPro
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
-import { assertOwnedProofStoragePath, CLIP_ID, proofObjectPath, resolveClipId } from '../shared/proofStoragePath.js';
+import {
+  assertOwnedProofStoragePath,
+  CLIP_ID,
+  clipIdOfStoragePath,
+  framePathLacksClipId,
+  proofFrameObjectPath,
+  proofObjectPath,
+  resolveClipId,
+} from '../shared/proofStoragePath.js';
 import { resolveDictationEntries, sanitizeDictationEvents } from '../shared/dictationEvents.js';
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
@@ -576,12 +584,14 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // updates its own row, and the next film that day is its own row — the
   // crew stops one video and starts another without losing the first. A
   // customer-deleted clip stays in the vault and does not block a refilm.
+  const recordedClipId = clipIdOfStoragePath(storagePath);
   const proofRow = {
     org_id: party.org_id,
     job_id: party.job_id,
     party_id: party.id,
     work_date: input.workDate,
     phase: input.phase,
+    clip_id: recordedClipId,
     storage_path: storagePath,
     byte_size: input.byteSize ?? null,
     duration_seconds: input.durationSeconds ?? null,
@@ -1038,9 +1048,34 @@ async function ensureSparseFramesFromStorage(
 ): Promise<number> {
   const { data: existing } = await admin
     .from('job_proof_frames')
-    .select('id')
+    .select('id, storage_path')
     .eq('proof_id', proofId);
-  const have = (existing ?? []).length;
+
+  const { data: proof } = await admin
+    .from('job_proofs')
+    .select('storage_path, org_id, job_id, party_id, work_date, phase, clip_id')
+    .eq('id', proofId)
+    .maybeSingle();
+  if (!proof?.storage_path) return (existing ?? []).length;
+
+  const clipId =
+    (typeof (proof as any).clip_id === 'string' && (proof as any).clip_id.trim()
+      ? String((proof as any).clip_id).trim().toLowerCase()
+      : null) ?? clipIdOfStoragePath(String((proof as any).storage_path));
+
+  // Legacy same-day frames shared a stem without clipId; force re-extract onto
+  // unique keys so posters no longer collide across clips.
+  let have = (existing ?? []).length;
+  const legacySharedStem =
+    Boolean(clipId) &&
+    (existing ?? []).some(
+      (row: any) => row.storage_path && framePathLacksClipId(String(row.storage_path), clipId!),
+    );
+  if (legacySharedStem) {
+    await admin.from('job_proof_frames').delete().eq('proof_id', proofId);
+    have = 0;
+  }
+
   // A short guided clip with a handful of device frames is already enough.
   // A workday needs a real sample across the timeline.
   // Device stills (≤12) are never enough for a workday. Always re-extract
@@ -1048,13 +1083,6 @@ async function ensureSparseFramesFromStorage(
   // phone thumbnails.
   const minWanted = 1;
   if (have >= config.verification.sparseMaxFrames) return have;
-
-  const { data: proof } = await admin
-    .from('job_proofs')
-    .select('storage_path, org_id, job_id, party_id, work_date, phase')
-    .eq('id', proofId)
-    .maybeSingle();
-  if (!proof?.storage_path) return have;
 
   const { data: signed, error: signErr } = await admin.storage
     .from(PROOF_BUCKET)
@@ -1078,8 +1106,19 @@ async function ensureSparseFramesFromStorage(
     await admin.from('job_proof_frames').delete().eq('proof_id', proofId);
   }
 
+  const party = {
+    org_id: (proof as any).org_id,
+    job_id: (proof as any).job_id,
+    id: (proof as any).party_id,
+  };
   for (const frame of prepared.frames) {
-    const path = `${(proof as any).org_id}/${(proof as any).job_id}/${(proof as any).party_id}/${(proof as any).work_date}-${(proof as any).phase}-sf${Math.round(frame.atSeconds)}.jpg`;
+    const path = proofFrameObjectPath(party, {
+      workDate: (proof as any).work_date,
+      phase: (proof as any).phase,
+      kind: 'sf',
+      atSeconds: frame.atSeconds,
+      clipId,
+    });
     await admin.storage.from(PROOF_BUCKET).upload(path, frame.jpeg, {
       contentType: 'image/jpeg',
       upsert: true,
@@ -1126,13 +1165,17 @@ export async function ensureStillsAndDuration(
 ): Promise<{ durationSeconds: number; longForm: boolean; error: string | null }> {
   const { data: proofRow } = await admin
     .from('job_proofs')
-    .select('duration_seconds, byte_size, storage_path')
+    .select('duration_seconds, byte_size, storage_path, clip_id')
     .eq('id', proofId)
     .maybeSingle();
 
   let durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
   const byteSize = Number((proofRow as any)?.byte_size ?? 0);
   const storagePath = (proofRow as any)?.storage_path ?? null;
+  const proofClipId =
+    (typeof (proofRow as any)?.clip_id === 'string' && (proofRow as any).clip_id.trim()
+      ? String((proofRow as any).clip_id).trim().toLowerCase()
+      : null) ?? (storagePath ? clipIdOfStoragePath(String(storagePath)) : null);
   let error: string | null = null;
 
   if (!(durationSeconds > 0) && storagePath) {
@@ -1165,19 +1208,26 @@ export async function ensureStillsAndDuration(
 
   const longForm = durationSeconds > config.verification.longFormSeconds || byteSize > 80_000_000;
 
-  const { count } = await admin
+  const { data: frameMeta } = await admin
     .from('job_proof_frames')
-    .select('id', { count: 'exact', head: true })
+    .select('id, storage_path')
     .eq('proof_id', proofId);
-  const have = count ?? 0;
+  const have = (frameMeta ?? []).length;
+  const legacySharedStem =
+    Boolean(proofClipId) &&
+    (frameMeta ?? []).some(
+      (row: any) => row.storage_path && framePathLacksClipId(String(row.storage_path), proofClipId!),
+    );
 
   // A workday always gets the server's spread — a handful of device stills
   // does not cover eight hours. A short clip with one still at 0s also needs
-  // a server extract so Analysis can timestamp scene changes.
+  // a server extract so Analysis can timestamp scene changes. Legacy frames
+  // that omit this clip's id must be re-extracted onto unique keys.
   const wanted =
     longForm ||
     have === 0 ||
     Boolean(opts?.force) ||
+    legacySharedStem ||
     shortClipNeedsServerFrames({ have, durationSeconds, longForm });
   if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
     if (!opts?.force) stillsAttempted.add(proofId);
@@ -1655,11 +1705,27 @@ async function storeClientFrames(
   admin: any,
   party: { org_id: string; job_id: string; id: string },
   proof: { id: string },
-  input: { workDate: string; phase: string; frames?: Array<{ atSeconds: number; base64: string }> },
+  input: {
+    workDate: string;
+    phase: string;
+    storagePath?: string;
+    clipId?: string | null;
+    frames?: Array<{ atSeconds: number; base64: string }>;
+  },
 ): Promise<void> {
   if (!input.frames?.length) return;
+  const clipId =
+    (typeof input.clipId === 'string' && input.clipId.trim()
+      ? input.clipId.trim().toLowerCase()
+      : null) ?? (input.storagePath ? clipIdOfStoragePath(input.storagePath) : null);
   for (const frame of input.frames) {
-    const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}-f${Math.round(frame.atSeconds)}.jpg`;
+    const path = proofFrameObjectPath(party, {
+      workDate: input.workDate,
+      phase: input.phase,
+      kind: 'f',
+      atSeconds: frame.atSeconds,
+      clipId,
+    });
     const bytes = Buffer.from(frame.base64, 'base64');
     await admin.storage.from(PROOF_BUCKET).upload(path, bytes, {
       contentType: 'image/jpeg',

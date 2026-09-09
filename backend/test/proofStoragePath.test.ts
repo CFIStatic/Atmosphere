@@ -4,7 +4,9 @@ import { HttpError } from '../src/lib/errors.js';
 import {
   assertOwnedProofStoragePath,
   clipIdOfStoragePath,
+  framePathLacksClipId,
   mintClipId,
+  proofFrameObjectPath,
   proofObjectPath,
   resolveClipId,
 } from '../src/shared/proofStoragePath.js';
@@ -176,4 +178,62 @@ test('a later migration adds searchable clip_id on job_proofs', async () => {
   assert.match(sql, /add column if not exists clip_id text/);
   assert.match(sql, /job_proofs_org_clip_id_uidx/);
   assert.match(sql, /unique index/i);
+});
+
+test('proofFrameObjectPath includes clipId so same-day previews do not collide', () => {
+  assert.equal(
+    proofFrameObjectPath(party, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      kind: 'sf',
+      atSeconds: 7,
+      clipId: 'mtum1m3c',
+    }),
+    'org-1/job-1/party-1/2026-09-09-after-mtum1m3c-sf7.jpg',
+  );
+  assert.equal(
+    proofFrameObjectPath(party, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      kind: 'f',
+      atSeconds: 12,
+      clipId: 'aaaaaa',
+    }),
+    'org-1/job-1/party-1/2026-09-09-after-aaaaaa-f12.jpg',
+  );
+  assert.notEqual(
+    proofFrameObjectPath(party, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      kind: 'sf',
+      atSeconds: 7,
+      clipId: 'clipaaa',
+    }),
+    proofFrameObjectPath(party, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      kind: 'sf',
+      atSeconds: 7,
+      clipId: 'clipbbb',
+    }),
+  );
+  assert.equal(
+    proofFrameObjectPath(party, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      kind: 'sf',
+      atSeconds: 7,
+      clipId: null,
+    }),
+    'org-1/job-1/party-1/2026-09-09-after-sf7.jpg',
+    'legacy proofs without clipId keep the old stem',
+  );
+  assert.equal(
+    framePathLacksClipId('org-1/job-1/party-1/2026-09-09-after-sf7.jpg', 'mtum1m3c'),
+    true,
+  );
+  assert.equal(
+    framePathLacksClipId('org-1/job-1/party-1/2026-09-09-after-mtum1m3c-sf7.jpg', 'mtum1m3c'),
+    false,
+  );
 });

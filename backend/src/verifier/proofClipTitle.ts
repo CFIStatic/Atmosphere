@@ -160,23 +160,28 @@ function clipKindLabel(phase: string | null | undefined): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-function shortTimeLabel(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return null;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(ms));
-  } catch {
-    return null;
-  }
+/**
+ * Short unique token for list fallbacks — never a clock time.
+ * Prefer a short clip id; else the tail of the proof id.
+ */
+export function shortProofListId(input: {
+  clipId?: string | null;
+  proofId?: string | null;
+  id?: string | null;
+}): string | null {
+  const clip = typeof input.clipId === 'string' ? input.clipId.trim().toLowerCase() : '';
+  if (/^[a-z0-9]{6,32}$/.test(clip)) return clip.slice(0, 8);
+  const proofId = typeof input.proofId === 'string' ? input.proofId.trim() : '';
+  if (proofId.length >= 6) return proofId.replace(/-/g, '').slice(-8);
+  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  if (id.length >= 6) return id.replace(/-/g, '').slice(-8);
+  return null;
 }
 
 /**
  * What the Videos list paints as the clip name under a job group.
- * Prefer stored title; else phase + time / "Video" — never the job name.
+ * Prefer stored (or derived) title; else phase + short id — never clock time alone,
+ * and never the job name on nested rows.
  */
 export function proofClipListLabel(input: {
   title?: string | null;
@@ -186,15 +191,34 @@ export function proofClipListLabel(input: {
   /** When true (nested under the job folder), never fall back to the job name. */
   underJob?: boolean;
   jobName?: string | null;
+  clipId?: string | null;
+  proofId?: string | null;
+  id?: string | null;
+  /** Optional analysis fields used when title is empty. */
+  summary?: string | null;
+  narration?: string | null;
+  narrationSummary?: string | null;
+  actions?: ProofTitleAction[] | null;
+  labels?: string[] | null;
 }): string {
   const stored = typeof input.title === 'string' ? input.title.trim() : '';
   if (stored) return stored;
 
+  const derived = deriveProofClipTitle({
+    summary: input.summary,
+    narration: input.narration,
+    narrationSummary: input.narrationSummary,
+    actions: input.actions,
+    labels: input.labels,
+    phase: input.phase,
+  });
+  if (derived) return derived;
+
   const kind = clipKindLabel(input.phase);
-  const time = shortTimeLabel(input.capturedAt || input.uploadedAt || null);
-  if (kind !== 'Video' && time) return `${kind} · ${time}`;
+  const shortId = shortProofListId(input);
+  if (kind !== 'Video' && shortId) return `${kind} · ${shortId}`;
   if (kind !== 'Video') return kind;
-  if (time) return `Video · ${time}`;
+  if (shortId) return `Video · ${shortId}`;
   if (input.underJob) return 'Video';
   const job = typeof input.jobName === 'string' ? input.jobName.trim() : '';
   return job || 'Video';

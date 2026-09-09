@@ -3368,17 +3368,25 @@
   }
 
   /**
-   * Clip name under a job folder: AI title when set, else phase + time / "Video".
+   * Clip name under a job folder: AI title when set, else phase + short id / "Video".
+   * Never use clock time as the only distinguisher.
    * Never repeat the job name on nested rows — that made every clip look identical.
    */
+  function shortClipListId(e) {
+    var clip = String(e.clipId || '').trim().toLowerCase();
+    if (/^[a-z0-9]{6,32}$/.test(clip)) return clip.slice(0, 8);
+    var id = String(e.id || '').trim().replace(/-/g, '');
+    if (id.length >= 6) return id.slice(-8);
+    return '';
+  }
   function clipListLabel(e, underJob) {
     var stored = String(e.title || '').trim();
     if (stored) return stored;
     var kind = clipKind(e.phase);
-    var time = shortTimeLabel(e.capturedAt || e.uploadedAt);
-    if (kind !== 'Video' && time) return kind + ' · ' + time;
+    var shortId = shortClipListId(e);
+    if (kind !== 'Video' && shortId) return kind + ' · ' + shortId;
     if (kind !== 'Video') return kind;
-    if (time) return 'Video · ' + time;
+    if (shortId) return 'Video · ' + shortId;
     if (underJob) return 'Video';
     var job = JOBS[e.job] || { name: e.jobName || 'Job' };
     return job.name || 'Video';
@@ -6784,6 +6792,7 @@
       person: raw.person || raw.company || '—',
       phase: raw.phase,
       title: raw.title || null,
+      clipId: raw.clipId || null,
       workDate: raw.workDate,
       capturedAt: raw.capturedAt,
       uploadedAt: raw.uploadedAt,
