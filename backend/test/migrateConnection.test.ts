@@ -44,7 +44,7 @@ test('poolerHost never invents us-east-1; needs HOST or REGION', () => {
   assert.equal(poolerHost({ SUPABASE_DB_REGION: 'us-east-2' }), 'aws-0-us-east-2.pooler.supabase.com');
 });
 
-test('resolveDatabaseUrl builds a pooler URL only when host/region is set', () => {
+test('resolveDatabaseUrl builds a session pooler URL only when host/region is set', () => {
   assert.equal(
     resolveDatabaseUrl({
       SUPABASE_DB_PASSWORD: 's3cret',
@@ -60,7 +60,7 @@ test('resolveDatabaseUrl builds a pooler URL only when host/region is set', () =
   assert.ok(resolved);
   assert.equal(resolved.source, 'pooler');
   assert.match(resolved.url, /^postgresql:\/\/postgres\.ccxatzfsvzetciiwsjlj:/);
-  assert.match(resolved.url, /@aws-0-us-east-2\.pooler\.supabase\.com:6543\/postgres$/);
+  assert.match(resolved.url, /@aws-0-us-east-2\.pooler\.supabase\.com:5432\/postgres$/);
   assert.equal(
     poolerUrl({
       SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co',
@@ -111,10 +111,10 @@ test('pickRailwayDbEnv copies only connection secrets', () => {
   });
 });
 
-test('missingConnectionHelp names the Keys gap, not a generic env dump', () => {
-  assert.match(missingConnectionHelp(), /SUPABASE_SERVICE_ROLE_KEY/);
+test('missingConnectionHelp prefers ACCESS_TOKEN and names the Keys gap', () => {
+  assert.match(missingConnectionHelp(), /SUPABASE_ACCESS_TOKEN/);
   assert.match(missingConnectionHelp(), /DATABASE_URL/);
-  assert.match(missingConnectionHelp(), /SUPABASE_DB_HOST/);
+  assert.match(missingConnectionHelp(), /SERVICE_ROLE_KEY/);
   assert.match(missingConnectionHelp(), /us-east-2/);
   assert.doesNotMatch(missingConnectionHelp(), /SERVICE_ROLE_KEY can run DDL/);
 });
@@ -207,7 +207,7 @@ test('migrate.mjs fails closed when no database connection is configured', () =>
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /no database connection configured/);
-  assert.match(result.stderr, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(result.stderr, /SERVICE_ROLE_KEY/);
 });
 
 test('baseline workflow also installs psql and copies Railway DB secrets', () => {
