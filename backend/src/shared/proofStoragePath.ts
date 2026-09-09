@@ -65,6 +65,38 @@ export function proofObjectPath(
   return `${party.org_id}/${party.job_id}/${party.id}/${stem}.${extension}`;
 }
 
+
+/**
+ * Still / poster JPEG under the same folder as the video. When a clipId is
+ * present the stem matches the video object so two same-day films never share
+ * preview keys; without one we keep the legacy day-phase stem for old rows.
+ *
+ * `kind` is `sf` (server sparse extract) or `f` (device-uploaded still).
+ */
+export function proofFrameObjectPath(
+  party: ProofPartyRef,
+  input: {
+    workDate: string;
+    phase: string;
+    kind: 'sf' | 'f';
+    atSeconds: number;
+    clipId?: string | null;
+  },
+): string {
+  const clipId = normalizeClipId(input.clipId);
+  const stem = clipId
+    ? `${input.workDate}-${input.phase}-${clipId}`
+    : `${input.workDate}-${input.phase}`;
+  return `${party.org_id}/${party.job_id}/${party.id}/${stem}-${input.kind}${Math.round(input.atSeconds)}.jpg`;
+}
+
+/** True when a stored frame path is the legacy shared stem (no clip id in it). */
+export function framePathLacksClipId(frameStoragePath: string, clipId: string): boolean {
+  const id = String(clipId ?? '').trim().toLowerCase();
+  if (!id) return false;
+  return !String(frameStoragePath ?? '').toLowerCase().includes(`-${id}-`);
+}
+
 /** The clip id carried in a storage path, or null for a legacy one-per-day path. */
 export function clipIdOfStoragePath(storagePath: string): string | null {
   const match = OWNED_PATH.exec(String(storagePath ?? '').trim());

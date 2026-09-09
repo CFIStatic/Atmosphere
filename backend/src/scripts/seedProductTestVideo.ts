@@ -24,6 +24,7 @@ import 'dotenv/config';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '../lib/supabase.js';
 import { verifyProof } from '../shared/proofVerifier.js';
+import { clipIdOfStoragePath, proofFrameObjectPath } from '../shared/proofStoragePath.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -866,7 +867,16 @@ async function fileClip(
       const framePath = join(dir, `f${at}.jpg`);
       await extractJpegFrame(videoPath, at, framePath);
       const jpeg = await readFile(framePath);
-      const frameStorage = `${org.id}/${job.id}/${party.id}/${clip.workDate}-${clip.phase}-f${at}.jpg`;
+      const frameStorage = proofFrameObjectPath(
+        { org_id: org.id, job_id: job.id, id: party.id },
+        {
+          workDate: clip.workDate,
+          phase: clip.phase,
+          kind: 'f',
+          atSeconds: at,
+          clipId: clipIdOfStoragePath(storagePath),
+        },
+      );
       await admin.storage.from(PROOF_BUCKET).upload(frameStorage, jpeg, {
         contentType: 'image/jpeg',
         upsert: true,

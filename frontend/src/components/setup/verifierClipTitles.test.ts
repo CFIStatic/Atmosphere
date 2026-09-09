@@ -19,6 +19,14 @@ describe('Videos list clip titles', () => {
     expect(verifierHtml).toContain('title: raw.title || null');
   });
 
+
+  it('never uses Video · clock time as the sole list fallback', () => {
+    expect(verifierHtml).toContain('function shortClipListId(e)');
+    expect(verifierHtml).toContain("if (shortId) return 'Video · ' + shortId");
+    expect(verifierHtml).not.toContain("if (time) return 'Video · ' + time");
+    expect(verifierHtml).toContain('clipId: raw.clipId || null');
+  });
+
   it('keeps nested clip titles visible on phone cards', () => {
     expect(verifierHtml).not.toMatch(
       /tbody tr\.cliprow-nested td\.titlecell \.t \{ display: none; \}/,

@@ -5,6 +5,7 @@ import {
   proofClipListLabel,
   proofTitleWritePatch,
   persistProofClipTitleIfEmpty,
+  shortProofListId,
 } from '../src/verifier/proofClipTitle.js';
 
 test('deriveProofClipTitle: prefers a short narration summary', () => {
@@ -80,8 +81,9 @@ test('proofClipListLabel: title wins; nested never repeats the job name', () => 
       capturedAt: '2026-09-09T21:28:00Z',
       underJob: true,
       jobName: 'Von mour test',
-    }).startsWith('Video'),
-    true,
+      clipId: 'mtum1m3cxy',
+    }),
+    'Video · mtum1m3c',
   );
   assert.notEqual(
     proofClipListLabel({
@@ -100,6 +102,39 @@ test('proofClipListLabel: title wins; nested never repeats the job name', () => 
       jobName: 'Von mour test',
     }),
     'Walkthrough',
+  );
+});
+
+test('proofClipListLabel: never falls back to Video · clock time alone', () => {
+  const withTimeOnly = proofClipListLabel({
+    title: null,
+    phase: 'after',
+    capturedAt: '2026-09-09T21:28:00Z',
+    uploadedAt: '2026-09-09T21:30:00Z',
+    underJob: true,
+    jobName: 'Von mour test',
+  });
+  assert.doesNotMatch(withTimeOnly, /^Video · \d{1,2}:\d{2}/);
+  assert.equal(
+    proofClipListLabel({
+      title: null,
+      phase: 'after',
+      capturedAt: '2026-09-09T21:28:00Z',
+      underJob: true,
+      proofId: 'aaaaaaaa-bbbb-cccc-dddd-123456789abc',
+    }),
+    'Video · 56789abc',
+  );
+  assert.equal(shortProofListId({ clipId: 'mtum1m3cxy' }), 'mtum1m3c');
+  assert.equal(
+    proofClipListLabel({
+      title: null,
+      phase: 'after',
+      underJob: true,
+      narrationSummary: 'Tear-off north slope',
+      clipId: 'mtum1m3cxy',
+    }),
+    'Tear-off North Slope',
   );
 });
 
