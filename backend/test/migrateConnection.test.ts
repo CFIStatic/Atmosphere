@@ -8,6 +8,7 @@ const {
   refFromUrl,
   projectRef,
   poolerUrl,
+  poolerHost,
   resolveDatabaseUrl,
   managementApiTarget,
   flattenRailwayVariables,
@@ -37,16 +38,36 @@ test('resolveDatabaseUrl prefers an explicit URL over the pooler', () => {
   assert.deepEqual(resolved, { url: 'postgresql://user:pass@host/db', source: 'DATABASE_URL' });
 });
 
-test('resolveDatabaseUrl builds a pooler URL from password + SUPABASE_URL', () => {
+test('poolerHost never invents us-east-1; needs HOST or REGION', () => {
+  assert.equal(poolerHost({}), '');
+  assert.equal(poolerHost({ SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com' }), 'aws-0-us-east-2.pooler.supabase.com');
+  assert.equal(poolerHost({ SUPABASE_DB_REGION: 'us-east-2' }), 'aws-0-us-east-2.pooler.supabase.com');
+});
+
+test('resolveDatabaseUrl builds a pooler URL only when host/region is set', () => {
+  assert.equal(
+    resolveDatabaseUrl({
+      SUPABASE_DB_PASSWORD: 's3cret',
+      SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co',
+    }),
+    null,
+  );
   const resolved = resolveDatabaseUrl({
     SUPABASE_DB_PASSWORD: 's3cret',
     SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co',
+    SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com',
   });
   assert.ok(resolved);
   assert.equal(resolved.source, 'pooler');
   assert.match(resolved.url, /^postgresql:\/\/postgres\.ccxatzfsvzetciiwsjlj:/);
-  assert.match(resolved.url, /@aws-0-us-east-1\.pooler\.supabase\.com:6543\/postgres$/);
-  assert.equal(poolerUrl({ SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co' }), '');
+  assert.match(resolved.url, /@aws-0-us-east-2\.pooler\.supabase\.com:6543\/postgres$/);
+  assert.equal(
+    poolerUrl({
+      SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co',
+      SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com',
+    }),
+    '',
+  );
 });
 
 test('managementApiTarget needs both a token and a project ref', () => {
@@ -81,16 +102,20 @@ test('pickRailwayDbEnv copies only connection secrets', () => {
     RAILWAY_TOKEN: 'do-not-copy',
     FRONTEND_ORIGIN: 'https://platform.example',
     SUPABASE_ACCESS_TOKEN: 'sbp_x',
+    SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com',
   });
   assert.deepEqual(picked, {
     DATABASE_URL: 'postgresql://x',
     SUPABASE_ACCESS_TOKEN: 'sbp_x',
+    SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com',
   });
 });
 
 test('missingConnectionHelp names the Keys gap, not a generic env dump', () => {
   assert.match(missingConnectionHelp(), /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(missingConnectionHelp(), /DATABASE_URL/);
+  assert.match(missingConnectionHelp(), /SUPABASE_DB_HOST/);
+  assert.match(missingConnectionHelp(), /us-east-2/);
   assert.doesNotMatch(missingConnectionHelp(), /SERVICE_ROLE_KEY can run DDL/);
 });
 
@@ -102,6 +127,7 @@ test('deploy installs psql and copies Railway DB secrets before migrate', () => 
   const backendJob = production.slice(0, production.indexOf('name: Deploy office app'));
   assert.match(backendJob, /postgresql-client/);
   assert.match(backendJob, /loadRailwayDbEnv\.mjs/);
+  assert.match(backendJob, /SUPABASE_DB_HOST/);
   assert.ok(backendJob.indexOf('loadRailwayDbEnv.mjs') < backendJob.indexOf('node scripts/migrate.mjs'));
   assert.ok(backendJob.indexOf('postgresql-client') < backendJob.indexOf('node scripts/migrate.mjs'));
   assert.ok(backendJob.indexOf('node scripts/migrate.mjs') < backendJob.indexOf('name: Deploy backend'));
@@ -120,12 +146,41 @@ test('loadRailwayDbEnv copies DATABASE_URL from Railway JSON on stdin', () => {
       POSTGRES_PASSWORD: '',
       SUPABASE_ACCESS_TOKEN: '',
       SUPABASE_PROJECT_REF: '',
+      SUPABASE_DB_HOST: '',
+      SUPABASE_DB_REGION: '',
       GITHUB_ENV: '',
     },
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /^DATABASE_URL=postgresql:\/\/copied\/db$/m);
   assert.doesNotMatch(result.stdout, /RAILWAY_TOKEN/);
+  assert.match(`${result.stdout}\n${result.stderr}`, /copied 1 database secret/);
+});
+
+test('loadRailwayDbEnv still copies host when Keys only has a password', () => {
+  const script = fileURLToPath(new URL('../scripts/loadRailwayDbEnv.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [script, '--stdin'], {
+    encoding: 'utf8',
+    input: JSON.stringify({
+      SUPABASE_DB_HOST: 'aws-0-us-east-2.pooler.supabase.com',
+      RAILWAY_TOKEN: 'nope',
+    }),
+    env: {
+      ...process.env,
+      DATABASE_URL: '',
+      SUPABASE_DB_URL: '',
+      SUPABASE_DB_PASSWORD: 'keys-only-password',
+      POSTGRES_PASSWORD: '',
+      SUPABASE_ACCESS_TOKEN: '',
+      SUPABASE_URL: 'https://ccxatzfsvzetciiwsjlj.supabase.co',
+      SUPABASE_PROJECT_REF: '',
+      SUPABASE_DB_HOST: '',
+      SUPABASE_DB_REGION: '',
+      GITHUB_ENV: '',
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^SUPABASE_DB_HOST=aws-0-us-east-2\.pooler\.supabase\.com$/m);
   assert.match(`${result.stdout}\n${result.stderr}`, /copied 1 database secret/);
 });
 
@@ -146,6 +201,8 @@ test('migrate.mjs fails closed when no database connection is configured', () =>
       SUPABASE_ACCESS_TOKEN: '',
       SUPABASE_PROJECT_REF: '',
       SUPABASE_URL: '',
+      SUPABASE_DB_HOST: '',
+      SUPABASE_DB_REGION: '',
     },
   });
   assert.equal(result.status, 1);
@@ -161,5 +218,6 @@ test('baseline workflow also installs psql and copies Railway DB secrets', () =>
   assert.match(baseline, /postgresql-client/);
   assert.match(baseline, /loadRailwayDbEnv\.mjs/);
   assert.match(baseline, /installRailwayCli\.sh/);
+  assert.match(baseline, /SUPABASE_DB_HOST/);
   assert.ok(baseline.indexOf('Load database URL from Railway') < baseline.indexOf('Reconcile the live schema'));
 });

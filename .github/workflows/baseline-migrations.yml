@@ -65,7 +65,7 @@ jobs:
 
       # Keys has SUPABASE_URL + SERVICE_ROLE_KEY, which cannot run DDL. Copy a
       # real Postgres URL from the live backend service when Keys does not
-      # have one.
+      # have one. Atmosphere is us-east-2 — pass SUPABASE_DB_HOST / REGION.
       - name: Load database URL from Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -78,6 +78,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/loadRailwayDbEnv.mjs
 
@@ -92,6 +95,9 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF || env.SUPABASE_PROJECT_REF }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || env.SUPABASE_URL }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST || env.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/reconcile-migrations.mjs
 
@@ -102,6 +108,9 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF || env.SUPABASE_PROJECT_REF }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || env.SUPABASE_URL }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST || env.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
         run: |
           # Exits 1 when something looks unapplied; the list is still correct,
@@ -118,6 +127,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL || env.DATABASE_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL || env.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST || env.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/migrate.mjs --baseline --versions-from /tmp/safe-versions.txt
 
@@ -133,5 +145,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL || env.DATABASE_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL || env.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST || env.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/migrate.mjs --dry-run
