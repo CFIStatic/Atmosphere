@@ -20,7 +20,12 @@ import { recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/ter
 import { linkFieldOffice } from '../field/officeLink.js';
 import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
-import { completeChunkedProofUpload, createUploadUrl, recordProof } from './proofOfWork.js';
+import {
+  completeChunkedProofUpload,
+  createPartUploadUrl,
+  createUploadUrl,
+  recordProof,
+} from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
@@ -601,108 +606,77 @@ async function adminOrThrow() {
   }
 }
 
-/** POST /api/field-app/jobs/:jobId/proof/upload-url */
-fieldAppRouter.post(
-  '/jobs/:jobId/proof/upload-url',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle();
-      const party = await ensureFieldParty(
-        supabase,
-        orgId,
-        req.params.jobId,
-        userId,
-        req.user?.email,
-        (profile as { full_name?: string } | null)?.full_name,
-      );
-      const admin = await adminOrThrow();
-      // recordProof/createUploadUrl expect the party row shape from partyForToken
-      const partyRow = {
-        id: party.id,
-        org_id: orgId,
-        job_id: req.params.jobId,
-        company: party.company,
-        access_token: party.access_token,
-      };
-      res.json(await createUploadUrl(partyRow, admin, req.body));
-    } catch (err) {
-      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
-      else next(err);
-    }
-  },
-);
+type ProofPartyRow = {
+  id: string;
+  org_id: string;
+  job_id: string;
+  company: string;
+  access_token: string;
+};
 
-/** POST /api/field-app/jobs/:jobId/proof/upload-complete — stitch resumed parts. */
-fieldAppRouter.post(
-  '/jobs/:jobId/proof/upload-complete',
-  async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * The party row `createUploadUrl` / `recordProof` expect (the shape
+ * `partyForToken` returns for job-share tokens), for the signed-in crew
+ * member filing on one of the office's jobs.
+ */
+async function fieldProofParty(req: Request) {
+  const { orgId, userId, supabase } = await requireOrgContext(req);
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
+  const party = await ensureFieldParty(
+    supabase,
+    orgId,
+    req.params.jobId,
+    userId,
+    req.user?.email,
+    (profile as { full_name?: string } | null)?.full_name,
+  );
+  const admin = await adminOrThrow();
+  const partyRow: ProofPartyRow = {
+    id: party.id,
+    org_id: orgId,
+    job_id: req.params.jobId,
+    company: party.company,
+    access_token: party.access_token,
+  };
+  return { admin, partyRow };
+}
+
+function proofRoute(
+  handler: (
+    party: ProofPartyRow,
+    admin: Awaited<ReturnType<typeof adminOrThrow>>,
+    body: unknown,
+  ) => Promise<unknown>,
+  status: 200 | 201 = 200,
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle();
-      const party = await ensureFieldParty(
-        supabase,
-        orgId,
-        req.params.jobId,
-        userId,
-        req.user?.email,
-        (profile as { full_name?: string } | null)?.full_name,
-      );
-      const admin = await adminOrThrow();
-      const partyRow = {
-        id: party.id,
-        org_id: orgId,
-        job_id: req.params.jobId,
-        company: party.company,
-        access_token: party.access_token,
-      };
-      res.json(await completeChunkedProofUpload(partyRow, admin, req.body));
+      const { partyRow, admin } = await fieldProofParty(req);
+      res.status(status).json(await handler(partyRow, admin, req.body));
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);
     }
-  },
-);
+  };
+}
+
+/**
+ * The crew's side, in the order the phone calls them: somewhere to put the
+ * film, the bytes (whole, resumed in parts, or streamed while still filming),
+ * then the record of how it was filmed.
+ */
+/** POST /api/field-app/jobs/:jobId/proof/upload-url */
+fieldAppRouter.post('/jobs/:jobId/proof/upload-url', proofRoute(createUploadUrl));
+
+/** POST /api/field-app/jobs/:jobId/proof/upload-part-url — one slice of a film still being recorded. */
+fieldAppRouter.post('/jobs/:jobId/proof/upload-part-url', proofRoute(createPartUploadUrl));
+
+/** POST /api/field-app/jobs/:jobId/proof/upload-complete — stitch resumed or streamed parts. */
+fieldAppRouter.post('/jobs/:jobId/proof/upload-complete', proofRoute(completeChunkedProofUpload));
 
 /** POST /api/field-app/jobs/:jobId/proof — file the uploaded day film into the org record. */
-fieldAppRouter.post(
-  '/jobs/:jobId/proof',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle();
-      const party = await ensureFieldParty(
-        supabase,
-        orgId,
-        req.params.jobId,
-        userId,
-        req.user?.email,
-        (profile as { full_name?: string } | null)?.full_name,
-      );
-      const admin = await adminOrThrow();
-      const partyRow = {
-        id: party.id,
-        org_id: orgId,
-        job_id: req.params.jobId,
-        company: party.company,
-        access_token: party.access_token,
-      };
-      res.status(201).json(await recordProof(partyRow, admin, req.body));
-    } catch (err) {
-      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
-      else next(err);
-    }
-  },
-);
+fieldAppRouter.post('/jobs/:jobId/proof', proofRoute(recordProof, 201));

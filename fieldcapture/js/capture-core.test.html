@@ -17,6 +17,13 @@
     && typeof FieldCaptureCore.placesAutocomplete === 'function'
     && typeof FieldCaptureCore.placesResolve === 'function'
     && FieldCaptureCore.HOLD_TO_FINISH_MS === 5000
+    && typeof FieldCaptureCore.openDayFilmStore === 'function'
+    && typeof FieldCaptureCore.createDayFilmQueue === 'function'
+    && typeof FieldCaptureCore.newDayFilmEntry === 'function'
+    && typeof FieldCaptureCore.summarizeDayFilms === 'function'
+    && typeof FieldCaptureCore.refreshSession === 'function'
+    && FieldCaptureCore.nextFilingBackoffMs(0) === 5000
+    && FieldCaptureCore.nextFilingBackoffMs(9) === 60000
     && FieldCaptureCore.resolveFinishHold({ recorder: {} }) === 'live'
     && FieldCaptureCore.resolveFinishHold({ demoFinish: function () {} }) === 'demo'
     && FieldCaptureCore.resolveFinishHold({}) === null;

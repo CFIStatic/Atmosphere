@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 136,
+    "migrationCount": 137,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -150,6 +150,7 @@
     "20260907200000_terms_acceptances_grants.sql",
     "20260907210000_comped_field_capture_seats.sql",
     "20260907220000_atmosphere_self_serve_plans.sql",
+    "20260909190000_job_proofs_many_visible_clips.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5112,6 +5113,16 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20260909190000_job_proofs_many_visible_clips",
+      "file": "20260909190000_job_proofs_many_visible_clips.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 1
     },
     {
       "version": "20260807194500_verifier_share_kind",

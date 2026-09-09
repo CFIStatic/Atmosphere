@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { completeChunkedProofUpload, createUploadUrl } from '../src/routes/proofOfWork.js';
+import {
+  completeChunkedProofUpload,
+  createPartUploadUrl,
+  createUploadUrl,
+} from '../src/routes/proofOfWork.js';
 
 function memoryAdmin(existing: Record<string, Buffer> = {}) {
   const objects = { ...existing };
@@ -149,5 +153,84 @@ test('completeChunkedProofUpload refuses to invent a missing slice', async () =>
         partCount: 2,
       }),
     /part 2 did not land/i,
+  );
+});
+
+/* ---- upload while recording -------------------------------------------------
+   The phone asks for one part URL at a time while the camera runs, PUTs each
+   slice as it fills, and stitches at hold-to-finish. Parts live under the
+   clip's own path, so the next film on the same job and day cannot collide. */
+
+test('createUploadUrl carries the clip id into the object path', async () => {
+  const admin = memoryAdmin();
+  const slot = await createUploadUrl(party, admin, {
+    workDate: '2026-09-09',
+    phase: 'after',
+    extension: 'webm',
+    byteSize: 1024,
+    clipId: 'mf3k9x2abc',
+  });
+  assert.equal(slot.path, 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm');
+  assert.equal(slot.clipId, 'mf3k9x2abc');
+  assert.equal(slot.parts, undefined);
+  const legacy = await createUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm' });
+  assert.equal(legacy.path, 'org-1/job-1/party-1/2026-09-09-after.webm');
+  assert.equal(legacy.clipId, null);
+});
+
+test('createPartUploadUrl mints one slice of a film that is still recording', async () => {
+  const admin = memoryAdmin();
+  const part = await createPartUploadUrl(party, admin, {
+    workDate: '2026-09-09',
+    phase: 'after',
+    extension: 'webm',
+    clipId: 'mf3k9x2abc',
+    index: 3,
+  });
+  assert.equal(part.path, 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm');
+  assert.equal(part.partPath, 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm.parts/0003');
+  assert.ok(part.uploadUrl.endsWith(part.partPath));
+  assert.equal(part.index, 3);
+  assert.equal(part.maxParts, 128);
+  assert.equal(part.assembleMaxBytes, 512 * 1024 * 1024);
+  await assert.rejects(
+    createPartUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm', index: 0 }),
+    'a clip id is required so streamed slices can never collide with another film',
+  );
+  await assert.rejects(
+    createPartUploadUrl(party, admin, {
+      workDate: '2026-09-09',
+      phase: 'after',
+      extension: 'webm',
+      clipId: 'mf3k9x2abc',
+      index: 128,
+    }),
+    'upload-complete stitches at most 128 parts',
+  );
+});
+
+test('completeChunkedProofUpload stitches streamed slices under a clip path', async () => {
+  const path = 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm';
+  const admin = memoryAdmin({
+    [`${path}.parts/0000`]: Buffer.from('AAAA'),
+    [`${path}.parts/0001`]: Buffer.from('BB'),
+    [`${path}.parts/0002`]: Buffer.from('C'),
+    // Another film the same day keeps its own slices.
+    ['org-1/job-1/party-1/2026-09-09-after-zzzzzz.webm.parts/0000']: Buffer.from('ZZZ'),
+  });
+  const out = await completeChunkedProofUpload(party, admin, {
+    workDate: '2026-09-09',
+    phase: 'after',
+    storagePath: path,
+    partCount: 3,
+  });
+  assert.equal(out.path, path);
+  assert.equal(out.byteSize, 7);
+  assert.equal(admin.objects[path].toString(), 'AAAABBC');
+  assert.equal(admin.objects[`${path}.parts/0000`], undefined, 'stitched slices are removed');
+  assert.equal(
+    admin.objects['org-1/job-1/party-1/2026-09-09-after-zzzzzz.webm.parts/0000'].toString(),
+    'ZZZ',
+    "another clip's slices are untouched",
   );
 });

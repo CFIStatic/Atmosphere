@@ -51,9 +51,74 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 1. Sign in (`POST /api/auth/login`) **or** open `?token=`
 2. Load today’s jobs (`GET /api/field-app/today`) or the shared job
 3. `getUserMedia({ video, audio: true })` + live `<video>` preview + `MediaRecorder` (mic required; iPhone needs playsinline + play())
-4. Hold 5 seconds to finish → `readCapture` (hash / duration / GPS / frames)
-5. `POST …/proof/upload-url` → `PUT` bytes to storage → `POST …/proof`
-6. Door screen shows **real** checks / problems from the API
+4. While the camera rolls, the film **streams to the office in parts**
+   (`POST …/proof/upload-part-url` → `PUT` each ~8 MB slice as it fills)
+5. Hold 5 seconds to finish → the film is **saved on the phone** (IndexedDB)
+   and the door reads **Done** — tap **Record another** to open the camera
+   again at once, or go Home and pick another job, even with no signal
+6. The filing queue sends the tail in the background, then
+   `POST …/proof/upload-complete` stitches the parts and `POST …/proof`
+   files the day (`readCapture` — hash / duration / GPS / frames — runs
+   alongside). A film that could not stream uploads whole:
+   `POST …/proof/upload-url` → `PUT` → `POST …/proof`
+7. While the door is open its filing line updates live; once the office has
+   the film the door shows the **real** checks / problems from the API
+
+## Stop one video, start the next
+
+Every recording gets its own clip id and its own storage object
+(`…/<workDate>-after-<clipId>.webm`), so a second film on the same job the
+same day is a second film in the library, not a replacement. The door offers
+**Record another** (same job, one tap) next to **Back to Home Screen**.
+
+## Fast uploads: send while filming
+
+`createDayFilmStreamer` groups MediaRecorder chunks into ~8 MB parts and
+PUTs each one to its own signed URL while recording continues — one part at
+a time, strictly in order, so the landed prefix is always contiguous. By
+hold-to-finish most of the film is already in storage; the queue sends only
+the tail (two parts at a time), then asks the office to stitch. Streaming
+needs an office job id (not a phone-only draft) or a job-share link, and
+signal at the start of the recording. It is a head start, never the record
+of truth: if a part will not land, or the film would exceed what the office
+stitches (512 MB / 128 parts), streaming simply stops and the queue sends
+everything from `bytesDone` on. If the office refuses to stitch, the queue
+sends the whole film instead, straight away.
+
+## Filing in the background
+
+Finishing a day never waits on the upload.
+
+- **Saved first.** `recordDayFilm().stop()` hands the blob to
+  `createDayFilmQueue`, which writes it to IndexedDB (`atm.field.dayFilms`,
+  bytes and metadata in separate stores). A killed tab, a reload, or a dead
+  battery does not lose the day. If the phone refuses IndexedDB the film
+  stays in memory and Today says to keep Field Capture open.
+- **One at a time, oldest first.** Sequential uploads give each film the
+  whole connection, so each lands fast when signal is there.
+- **Waits, never fails.** `navigator.onLine === false` marks films
+  *Waiting for signal* without burning an attempt. A failed attempt retries
+  on its own: 5s, 10s, 20s, 40s, then every minute, forever. The `online`
+  event, the app returning to the front (`visibilitychange` / `pageshow`),
+  and a 15-second safety tick all skip the backoff.
+- **Stamped when filmed.** `workDate`, `recordedAt` (→ `capturedAt`) and
+  the GPS fix from the recording travel with the film; a film sent hours
+  later is filed under the day and place it was shot. Hash, stills and
+  duration are read once and kept for retries.
+- **Outlives the token.** A 401 mid-queue refreshes the session
+  (`POST /api/auth/refresh`) and retries. If the refresh token is dead too,
+  the sign-in screen says how many days are saved on this phone; they finish
+  after the next sign-in by the same crew.
+- **Phone-only jobs.** A day filmed on a job named offline carries a copy of
+  the draft. Once the office creates the job the film follows the office id;
+  if the draft list was cleared, the film recreates the job itself.
+- **Today strip.** `#filing` shows what is on this phone and what it is doing
+  (`Filing 2 days with the office · 43%`, `1 day saved on this phone ·
+  Waiting for signal`) and disappears when the office has everything. Jobs
+  show *Filmed today* the moment the recorder stops.
+
+Older phones without a clip id still use the one-object-per-day path, where
+a re-upload replaces the day's film; the office accepts both.
 
 AI dictation stays in the **Verifier**. Twin / RoomPlan stays in the **App Store**
 build and office `verifier/twin.html` — not marketing copy on the crew home.

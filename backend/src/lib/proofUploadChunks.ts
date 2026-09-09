@@ -10,6 +10,8 @@ export const PROOF_DAY_CHUNK_SIZE = 32 * 1024 * 1024;
 export const PROOF_ASSEMBLE_MAX_BYTES = 512 * 1024 * 1024;
 export const PROOF_UPLOAD_ATTEMPTS = 8;
 export const PROOF_UPLOAD_PARALLEL = 2;
+/** `upload-complete` stitches at most this many `.parts/` objects. */
+export const PROOF_MAX_PARTS = 128;
 
 export type ProofChunkPlan = {
   byteSize: number;
