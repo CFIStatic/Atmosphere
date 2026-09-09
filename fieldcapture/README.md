@@ -51,14 +51,39 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 1. Sign in (`POST /api/auth/login`) **or** open `?token=`
 2. Load today’s jobs (`GET /api/field-app/today`) or the shared job
 3. `getUserMedia({ video, audio: true })` + live `<video>` preview + `MediaRecorder` (mic required; iPhone needs playsinline + play())
-4. Hold 5 seconds to finish → the film is **saved on the phone** (IndexedDB)
-   and the door reads **Done** — the crew goes Home and can start the next
-   day immediately, even with no signal
-5. The filing queue sends one film at a time in the background:
-   `readCapture` (hash / duration / GPS / frames) →
-   `POST …/proof/upload-url` → `PUT` bytes to storage → `POST …/proof`
-6. While the door is open its filing line updates live; once the office has
+4. While the camera rolls, the film **streams to the office in parts**
+   (`POST …/proof/upload-part-url` → `PUT` each ~8 MB slice as it fills)
+5. Hold 5 seconds to finish → the film is **saved on the phone** (IndexedDB)
+   and the door reads **Done** — tap **Record another** to open the camera
+   again at once, or go Home and pick another job, even with no signal
+6. The filing queue sends the tail in the background, then
+   `POST …/proof/upload-complete` stitches the parts and `POST …/proof`
+   files the day (`readCapture` — hash / duration / GPS / frames — runs
+   alongside). A film that could not stream uploads whole:
+   `POST …/proof/upload-url` → `PUT` → `POST …/proof`
+7. While the door is open its filing line updates live; once the office has
    the film the door shows the **real** checks / problems from the API
+
+## Stop one video, start the next
+
+Every recording gets its own clip id and its own storage object
+(`…/<workDate>-after-<clipId>.webm`), so a second film on the same job the
+same day is a second film in the library, not a replacement. The door offers
+**Record another** (same job, one tap) next to **Back to Home Screen**.
+
+## Fast uploads: send while filming
+
+`createDayFilmStreamer` groups MediaRecorder chunks into ~8 MB parts and
+PUTs each one to its own signed URL while recording continues — one part at
+a time, strictly in order, so the landed prefix is always contiguous. By
+hold-to-finish most of the film is already in storage; the queue sends only
+the tail (two parts at a time), then asks the office to stitch. Streaming
+needs an office job id (not a phone-only draft) or a job-share link, and
+signal at the start of the recording. It is a head start, never the record
+of truth: if a part will not land, or the film would exceed what the office
+stitches (512 MB / 128 parts), streaming simply stops and the queue sends
+everything from `bytesDone` on. If the office refuses to stitch, the queue
+sends the whole film instead, straight away.
 
 ## Filing in the background
 
@@ -92,9 +117,8 @@ Finishing a day never waits on the upload.
   Waiting for signal`) and disappears when the office has everything. Jobs
   show *Filmed today* the moment the recorder stops.
 
-The office keeps one day film per job, per day, per crew member: a second
-film of the same job on the same day replaces the first when it lands
-(`job_proofs_one_per_phase`). The queue sends both in order.
+Older phones without a clip id still use the one-object-per-day path, where
+a re-upload replaces the day's film; the office accepts both.
 
 AI dictation stays in the **Verifier**. Twin / RoomPlan stays in the **App Store**
 build and office `verifier/twin.html` — not marketing copy on the crew home.

@@ -9,7 +9,7 @@ const coreSrc = readFileSync(join(here, 'capture-core.js'), 'utf8');
 const appSrc = readFileSync(join(here, 'app.js'), 'utf8');
 const html = readFileSync(join(here, '..', 'index.html'), 'utf8');
 
-const sandbox = { navigator: {}, console, setTimeout, clearTimeout, URL, URLSearchParams };
+const sandbox = { navigator: {}, console, setTimeout, clearTimeout, URL, URLSearchParams, Blob };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 vm.runInNewContext(coreSrc, sandbox);
@@ -143,7 +143,9 @@ assert.match(html, /js\/app\.js\?v=field-filing-queue-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.doesNotMatch(html, /retrybtn/, 'the filing queue retries on its own — no Retry button on the door');
-assert.match(html, /\.donebtn\.on \{ display: block; \}/);
+assert.match(html, /\.donebtn\.on, \.nextbtn\.on \{ display: block; \}/);
+assert.match(html, /id="nextbtn"/, 'stop one video, start the next: the camera opens straight from the door');
+assert.match(html, /Record another/);
 assert.match(html, /class="door-actions"/, 'home actions stay pinned under the door scroll');
 assert.match(html, /\.door-actions \{[\s\S]*?flex: 0 0 auto/, 'home button stays visible while checks scroll');
 assert.match(html, /\.donebtn\.on/);
@@ -154,7 +156,7 @@ assert.match(
   /function renderDoorSaved\([\s\S]*?showHomeAction\(\)/,
   'Back to Home Screen must appear as soon as recording ends, while the film is still filing',
 );
-assert.match(appSrc, /filmQueue\.enqueue\(entry\)/, 'the day film goes to the filing queue, which holds it until the office has it');
+assert.match(appSrc, /filmQueue\.enqueue\(entry, settle/, 'the day film goes to the filing queue, which holds it until the office has it');
 assert.match(appSrc, /Core\.openDayFilmStore/, 'films wait in IndexedDB so a killed tab does not lose the day');
 assert.match(appSrc, /Core\.createDayFilmQueue/);
 {
@@ -182,7 +184,7 @@ assert.doesNotMatch(
 );
 assert.match(
   appSrc,
-  /var boundJobId = state\.activeJobId;[\s\S]*?jobId: boundJobId/,
+  /var boundJobId = \(rec && rec\.jobId\) \|\| state\.activeJobId;[\s\S]*?jobId: boundJobId/,
   'stop must stamp the job the day was filmed on so a later Home tap cannot reroute the file',
 );
 assert.match(
@@ -498,12 +500,12 @@ assert.match(
   const to = appSrc.indexOf('function setDoorSub');
   assert.ok(from >= 0 && to > from, 'finishLiveDay must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /var boundJobId = state\.activeJobId/);
+  assert.match(src, /var boundJobId = \(rec && rec\.jobId\) \|\| state\.activeJobId/, 'the film files on the job the recording started on');
   assert.match(src, /var boundOwner = state\.filmOwner \|\| state\.owner/, 'the film belongs to the crew that started it, even if the session dies mid-day');
   assert.match(src, /owner: boundOwner/);
   assert.match(src, /Core\.newDayFilmEntry\(/);
   assert.ok(
-    src.indexOf('renderDoorSaved(entry)') < src.indexOf('filmQueue.enqueue(entry)'),
+    src.indexOf('renderDoorSaved(entry)') < src.indexOf('filmQueue.enqueue(entry,'),
     'the door shows the day as done before the save or upload even starts',
   );
   assert.match(src, /markJobFilmed\(boundJobId\)/, 'Today shows the job filmed the moment the recorder stops');
@@ -989,6 +991,238 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   assert.equal(Core.newDayFilmEntry({ durationSeconds: 0 }).durationSeconds, null, '0:00 is unknown, not a length');
   assert.equal(Core.newDayFilmEntry({ mode: 'share' }).mode, 'share');
   assert.equal(Core.newDayFilmEntry({}).mode, 'account');
+}
+
+
+/* ---------- upload while recording ----------
+   Chunks group into parts and PUT while the camera rolls, one at a time and in
+   order. By hold-to-finish most of the film is with the office; the queue sends
+   the tail and asks the office to stitch. Any failure just stops the head start. */
+
+assert.equal(typeof Core.createDayFilmStreamer, 'function');
+assert.equal(typeof Core.mintPartUploadUrl, 'function');
+assert.equal(typeof Core.newClipId, 'function');
+assert.equal(typeof Core.localDateISO, 'function');
+assert.equal(Core.STREAM_PART_BYTES, 8 * 1024 * 1024);
+assert.equal(Core.STREAM_MAX_BYTES, 512 * 1024 * 1024, 'the office stitches at most 512 MB');
+assert.equal(Core.STREAM_MAX_PARTS, 128);
+assert.match(Core.newClipId(), Core.CLIP_ID, 'clip ids fit the storage path rule');
+assert.notEqual(Core.newClipId(), Core.newClipId());
+assert.equal(Core.localDateISO(Date.parse('2026-09-09T12:00:00Z')).length, 10);
+assert.equal(Core.streamStateOf(null), null);
+assert.equal(Core.streamStateOf({ path: 'p', partCount: 0 }), null, 'no landed part → no head start');
+assert.equal(
+  JSON.stringify(Core.streamStateOf({ path: 'p', partCount: 2, bytesDone: 20, partBytes: 4096, inFlight: true, broken: 'x' })),
+  JSON.stringify({ path: 'p', partCount: 2, bytesDone: 20, partBytes: 4096 }),
+);
+assert.match(coreSrc, /\/proof\/upload-part-url/, 'one signed URL per slice while recording');
+assert.match(coreSrc, /function uploadStreamedTail/, 'only the tail is sent after hold-to-finish');
+assert.match(coreSrc, /runPool\(tail, 2,/, 'tail parts go two at a time');
+assert.match(coreSrc, /whole\.streamFailed = true/, 'a head the office will not stitch falls back to the whole film');
+assert.match(coreSrc, /clipId: clipId \|\| undefined/, 'every recording asks for its own storage object');
+assert.match(appSrc, /function canStreamNow/);
+assert.match(appSrc, /function streamChunk/);
+assert.match(appSrc, /onChunk: function \(chunk, meta\)/, 'the recorder hands every chunk to the streamer');
+assert.match(appSrc, /Core\.createDayFilmStreamer\(\{/);
+assert.match(appSrc, /partBytes: Core\.STREAM_PART_BYTES/);
+assert.match(appSrc, /rec\.streamer\.finish\(\)/);
+assert.match(appSrc, /clipId: rec \? rec\.clipId : undefined/, 'the film carries the clip id its parts were streamed under');
+assert.match(appSrc, /stream: entry\.stream \|\| null/);
+assert.match(appSrc, /onStreamAdvance: hooks\.onStreamAdvance/, 'tail progress is saved so a retry resumes from solid ground');
+assert.match(appSrc, /workDate: Core\.localDateISO/, 'a film is filed under the day it STARTED');
+assert.match(appSrc, /function recordAnother/);
+assert.match(appSrc, /when\('#nextbtn'/, 'Record another lives on the door');
+{
+  const from = appSrc.indexOf('function recordAnother');
+  const to = appSrc.indexOf('/** The office has it');
+  assert.ok(from >= 0 && to > from, 'recordAnother must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /startLiveDay\(\)/, 'one tap from the door opens the camera again');
+  assert.doesNotMatch(src, /show\('s-home'\);\s*startLiveDay/, 'no detour through Today');
+}
+
+{
+  // Chunks group into parts; parts land one at a time, in order.
+  const clock = fakeClock();
+  const puts = [];
+  const mints = [];
+  const streamer = Core.createDayFilmStreamer({
+    mimeType: 'video/webm',
+    partBytes: 4096,
+    mint: async (index) => {
+      mints.push(index);
+      return { uploadUrl: 'u' + index, path: 'org/job/party/2026-09-09-after-abc123.webm' };
+    },
+    put: (url, blob, mime, onProgress, control) => {
+      const d = deferred();
+      control.abort = () => d.reject(new Error('aborted'));
+      puts.push({ url, size: blob.size, d });
+      return d.promise;
+    },
+    timers: clock.timers,
+    wait: () => Promise.resolve(),
+  });
+  const chunk = (n) => new Blob([new Uint8Array(n)]);
+  streamer.push(chunk(1500));
+  streamer.push(chunk(1500));
+  await flush();
+  assert.equal(puts.length, 0, 'not yet a full part');
+  streamer.push(chunk(1500));
+  await flush();
+  assert.equal(puts.length, 1, 'a full part is sent while recording continues');
+  assert.equal(puts[0].size, 4500, 'a part is whole chunks, never a split chunk');
+  assert.deepEqual(mints, [0]);
+  streamer.push(chunk(4096));
+  await flush();
+  assert.equal(puts.length, 1, 'one part in flight at a time keeps the landed prefix contiguous');
+  puts[0].d.resolve({ ok: true });
+  await flush();
+  assert.equal(puts.length, 2);
+  assert.equal(streamer.snapshot().bytesDone, 4500);
+  assert.equal(streamer.snapshot().partCount, 1);
+  assert.equal(streamer.snapshot().path, 'org/job/party/2026-09-09-after-abc123.webm');
+  streamer.push(chunk(300));
+  const fin = streamer.finish();
+  assert.equal(fin.snapshot.bytesDone, 4500, 'the snapshot at finish counts only landed parts');
+  assert.equal(fin.snapshot.inFlight, true);
+  puts[1].d.resolve({ ok: true });
+  const final = await fin.settled;
+  assert.equal(final.bytesDone, 8596, 'the part in flight at finish still counts once it lands');
+  assert.equal(final.partCount, 2);
+  assert.equal(final.inFlight, false);
+  assert.equal(final.broken, '');
+  streamer.push(chunk(8192));
+  await flush();
+  assert.equal(puts.length, 2, 'nothing new is sent after finish — the queue owns the tail');
+}
+
+{
+  // A part that will not land stops the head start; nothing is lost.
+  const clock = fakeClock();
+  let mints = 0;
+  const streamer = Core.createDayFilmStreamer({
+    partBytes: 4096,
+    mint: async (index) => {
+      mints += 1;
+      return { uploadUrl: 'u' + index, path: 'p' };
+    },
+    put: () => Promise.reject(new Error('network')),
+    timers: clock.timers,
+    wait: () => Promise.resolve(),
+  });
+  streamer.push(new Blob([new Uint8Array(4096)]));
+  await flush();
+  assert.equal(mints, 3, 'three tries, then stop');
+  assert.equal(streamer.snapshot().broken, 'network');
+  assert.equal(streamer.snapshot().bytesDone, 0);
+  streamer.push(new Blob([new Uint8Array(4096)]));
+  await flush();
+  assert.equal(mints, 3, 'once broken, no more attempts while recording');
+  const fin = streamer.finish();
+  const final = await fin.settled;
+  assert.equal(final.partCount, 0);
+  assert.equal(Core.streamStateOf(final), null, 'the queue sends the whole film');
+}
+
+{
+  // finish() never holds the door: past the cap the part in flight is cut off.
+  const clock = fakeClock();
+  let aborted = false;
+  const streamer = Core.createDayFilmStreamer({
+    partBytes: 4096,
+    finishWaitMs: 1000,
+    mint: async () => ({ uploadUrl: 'u', path: 'p' }),
+    put: (url, blob, mime, onProgress, control) => {
+      const d = deferred();
+      control.abort = () => {
+        aborted = true;
+        d.reject(new Error('aborted'));
+      };
+      return d.promise;
+    },
+    timers: clock.timers,
+    wait: () => Promise.resolve(),
+  });
+  streamer.push(new Blob([new Uint8Array(4096)]));
+  await flush();
+  const fin = streamer.finish();
+  assert.equal(fin.snapshot.inFlight, true);
+  await clock.advance(999);
+  assert.equal(aborted, false);
+  await clock.advance(1);
+  assert.equal(aborted, true, 'the cap cuts the PUT off');
+  const final = await fin.settled;
+  assert.equal(final.bytesDone, 0, 'a cut-off part does not count');
+  assert.equal(final.inFlight, false);
+}
+
+{
+  // The queue holds a film until its streamed head has settled, then sends the tail.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const settle = deferred();
+  const film = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-a', clipId: 'abc123xyz', blob: fakeBlob(40),
+    stream: { path: 'org/job/party/2026-09-09-after-abc123xyz.webm', partCount: 1, bytesDone: 4500, partBytes: 4096, inFlight: true },
+  });
+  assert.equal(film.clipId, 'abc123xyz');
+  assert.equal(JSON.stringify(film.stream), JSON.stringify({ path: 'org/job/party/2026-09-09-after-abc123xyz.webm', partCount: 1, bytesDone: 4500, partBytes: 4096 }));
+  await queue.enqueue(film, { settle: settle.promise });
+  await flush();
+  assert.equal(uploads.length, 0, 'the tail waits for the part in flight to land');
+  assert.equal(queue.get(film.id).status, 'queued');
+  settle.resolve({ stream: { path: 'org/job/party/2026-09-09-after-abc123xyz.webm', partCount: 2, bytesDone: 8596, partBytes: 4096 } });
+  await flush();
+  assert.equal(uploads.length, 1, 'settled → the tail goes at once');
+  assert.equal(uploads[0].entry.stream.bytesDone, 8596, 'the upload sees the landed head');
+  assert.equal((await store.list())[0].stream.bytesDone, 8596, 'and it is saved on the phone');
+  // The office refuses to stitch: the queue drops the head and sends the whole film right away.
+  uploads[0].d.reject(Object.assign(new Error('Upload part 2 did not land. Retry that slice.'), { status: 409, streamFailed: true }));
+  await flush();
+  assert.equal(uploads.length, 2, 'whole-film attempt starts without waiting for a backoff');
+  assert.equal(uploads[1].entry.stream, null);
+  uploads[1].d.resolve(okResult);
+  await flush();
+  assert.equal(queue.films().length, 0);
+}
+
+{
+  // A settle that never comes back cannot hold a film forever.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const film = Core.newDayFilmEntry({ owner: 'user:1', jobId: 'job-a', blob: fakeBlob(40) });
+  assert.match(film.clipId, Core.CLIP_ID, 'every film gets a clip id even without streaming');
+  await queue.enqueue(film, { settle: new Promise(() => {}) });
+  await flush();
+  assert.equal(uploads.length, 0);
+  await clock.advance(20 * 1000 + 5000);
+  assert.equal(uploads.length, 1, 'the guard releases the hold');
+  uploads[0].d.resolve(okResult);
+  await flush();
 }
 
 console.log('hold-to-finish OK');
