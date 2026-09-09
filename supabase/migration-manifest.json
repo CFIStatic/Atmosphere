@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 138,
+    "migrationCount": 140,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -150,8 +150,10 @@
     "20260907200000_terms_acceptances_grants.sql",
     "20260907210000_comped_field_capture_seats.sql",
     "20260907220000_atmosphere_self_serve_plans.sql",
-    "20260909190000_job_proofs_many_visible_clips.sql",
-    "20260909200000_job_proofs_clip_id.sql",
+    "20260909192643_job_proofs_many_visible_clips.sql",
+    "20260909202517_atmosphere_migrations_ledger.sql",
+    "20260909214444_job_proofs_clip_id.sql",
+    "20260909220422_enable_rls_atmosphere_migrations.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5116,8 +5118,8 @@
       "dropsCount": 0
     },
     {
-      "version": "20260909190000_job_proofs_many_visible_clips",
-      "file": "20260909190000_job_proofs_many_visible_clips.sql",
+      "version": "20260909192643_job_proofs_many_visible_clips",
+      "file": "20260909192643_job_proofs_many_visible_clips.sql",
       "structurallyVerifiable": false,
       "indistinguishableReason": "creates no durable object",
       "expect": [],
@@ -5126,14 +5128,43 @@
       "dropsCount": 1
     },
     {
-      "version": "20260909200000_job_proofs_clip_id",
-      "file": "20260909200000_job_proofs_clip_id.sql",
+      "version": "20260909202517_atmosphere_migrations_ledger",
+      "file": "20260909202517_atmosphere_migrations_ledger.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.atmosphere_migrations",
+        "column|public.atmosphere_migrations.version",
+        "column|public.atmosphere_migrations.checksum",
+        "column|public.atmosphere_migrations.applied_at",
+        "column|public.atmosphere_migrations.applied_by",
+        "column|public.atmosphere_migrations.baselined"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260909214444_job_proofs_clip_id",
+      "file": "20260909214444_job_proofs_clip_id.sql",
       "structurallyVerifiable": true,
       "indistinguishableReason": null,
       "expect": [
         "column|public.job_proofs.clip_id",
         "index|public.job_proofs.job_proofs_clip_id_idx",
         "index|public.job_proofs.job_proofs_org_clip_id_uidx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260909220422_enable_rls_atmosphere_migrations",
+      "file": "20260909220422_enable_rls_atmosphere_migrations.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "rls|public.atmosphere_migrations"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
