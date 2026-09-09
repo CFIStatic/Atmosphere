@@ -35,9 +35,9 @@
  * ledger is missing, `apply` fails and tells the operator to baseline first.
  *
  * Connection (first that is configured wins):
+ *   SUPABASE_ACCESS_TOKEN + SUPABASE_URL     Supabase Management API (preferred)
  *   DATABASE_URL / SUPABASE_DB_URL           psql, real transactions
- *   SUPABASE_DB_PASSWORD + SUPABASE_URL      psql via the pooler
- *   SUPABASE_ACCESS_TOKEN + SUPABASE_URL     Supabase Management API
+ *   SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST  psql via the session pooler
  *
  * SERVICE_ROLE_KEY is not a connection. The deploy copies a URL from the
  * Railway backend service when Keys does not have one.
@@ -106,8 +106,15 @@ function hasPsql() {
 /**
  * A driver runs SQL and reads rows back. Both implementations throw on error —
  * nothing here is allowed to swallow a failure.
+ *
+ * Prefer the Management API when a personal access token is set. GitHub Actions
+ * often cannot auth to Supavisor (ENOTFOUND tenant/user) even with the right
+ * region; the Management API path avoids the pooler entirely.
  */
 function makeDriver() {
+  const api = managementApiTarget();
+  if (api) return managementApiDriver(api.token, api.ref);
+
   const resolved = resolveDatabaseUrl();
   if (resolved) {
     if (!hasPsql()) {
@@ -118,9 +125,6 @@ function makeDriver() {
     }
     return psqlDriver(resolved.url);
   }
-
-  const api = managementApiTarget();
-  if (api) return managementApiDriver(api.token, api.ref);
 
   fail(missingConnectionHelp());
 }

@@ -48,13 +48,14 @@ export function poolerHost(env = process.env) {
   return '';
 }
 
+/** Session-mode pooler URL (port 5432). Prefer this over transaction 6543 for DDL. */
 export function poolerUrl(env = process.env) {
   const ref = projectRef(env);
-  const password = env.SUPABASE_DB_PASSWORD || env.POSTGRES_PASSWORD || '';
+  const password = String(env.SUPABASE_DB_PASSWORD || env.POSTGRES_PASSWORD || '').trim();
   const host = poolerHost(env);
   if (!ref || !password || !host) return '';
-  const user = env.SUPABASE_DB_USER || `postgres.${ref}`;
-  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:6543/postgres`;
+  const user = String(env.SUPABASE_DB_USER || `postgres.${ref}`).trim();
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:5432/postgres`;
 }
 
 /**
@@ -109,13 +110,10 @@ export function pickRailwayDbEnv(vars) {
 
 export function missingConnectionHelp() {
   return [
-    'no database connection configured. Set DATABASE_URL (or SUPABASE_DB_PASSWORD +',
-    '  SUPABASE_DB_HOST / SUPABASE_DB_REGION + SUPABASE_PROJECT_REF / SUPABASE_URL for the pooler),',
-    '  or SUPABASE_ACCESS_TOKEN + project ref.',
-    '  GitHub Keys currently has SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY only — those cannot',
-    '  run DDL. Add DATABASE_URL, SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST, or SUPABASE_ACCESS_TOKEN',
-    '  to Keys, or put one of those on the Railway backend service so the deploy can copy it.',
-    '  Do not rely on a hard-coded pooler region — Atmosphere is us-east-2',
-    '  (aws-0-us-east-2.pooler.supabase.com).',
+    'no database connection configured. Prefer SUPABASE_ACCESS_TOKEN + SUPABASE_URL /',
+    '  SUPABASE_PROJECT_REF (Management API — works from GitHub Actions without the pooler).',
+    '  Or set DATABASE_URL, or SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST / REGION + project ref.',
+    '  GitHub Keys SERVICE_ROLE_KEY cannot run DDL.',
+    '  Atmosphere pooler host is aws-0-us-east-2.pooler.supabase.com (session port 5432).',
   ].join('\n');
 }
