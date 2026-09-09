@@ -19,10 +19,10 @@ comment on column public.job_proofs.clip_id is
 update public.job_proofs
 set clip_id = substring(
   storage_path
-  from '[0-9]{4}-[0-9]{2}-[0-9]{2}-(?:before|after)-([a-z0-9]{6,32})\\.[a-z0-9]{2,5}$'
+  from '[0-9]{4}-[0-9]{2}-[0-9]{2}-(?:before|after)-([a-z0-9]{6,32})\.[a-z0-9]{2,5}$'
 )
 where clip_id is null
-  and storage_path ~ '[0-9]{4}-[0-9]{2}-[0-9]{2}-(?:before|after)-[a-z0-9]{6,32}\\.[a-z0-9]{2,5}$';
+  and storage_path ~ '[0-9]{4}-[0-9]{2}-[0-9]{2}-(?:before|after)-[a-z0-9]{6,32}\.[a-z0-9]{2,5}$';
 
 create unique index if not exists job_proofs_org_clip_id_uidx
   on public.job_proofs (org_id, clip_id)
