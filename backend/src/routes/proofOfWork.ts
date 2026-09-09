@@ -112,6 +112,36 @@ const PROOF_SELECT =
   'transcript_status, transcript_text, transcript_error, transcribed_at, ' +
   'decided_at, decided_note, created_at, device_metadata';
 
+/**
+ * Page size while walking every clip on a job. Not a product cap — a job
+ * file holds as many films as the crew records. PostgREST's default max-rows
+ * is 1_000, so we walk pages instead of cutting the library off at 200.
+ */
+export const JOB_PROOF_PAGE = 1000;
+
+/** Every visible proof matching the filter, newest work day first. */
+export async function listAllVisibleProofs(
+  supabase: any,
+  filter: { orgId?: string; jobId?: string; partyId?: string },
+): Promise<any[]> {
+  const rows: any[] = [];
+  for (let from = 0; ; from += JOB_PROOF_PAGE) {
+    let query = supabase.from('job_proofs').select(PROOF_SELECT).is('deleted_at', null);
+    if (filter.orgId) query = query.eq('org_id', filter.orgId);
+    if (filter.jobId) query = query.eq('job_id', filter.jobId);
+    if (filter.partyId) query = query.eq('party_id', filter.partyId);
+    const { data, error } = await query
+      .order('work_date', { ascending: false })
+      .order('received_at', { ascending: false })
+      .range(from, from + JOB_PROOF_PAGE - 1);
+    if (error) throw new HttpError(500, error.message, 'proofs_failed');
+    const page = (data ?? []) as any[];
+    rows.push(...page);
+    if (page.length < JOB_PROOF_PAGE) break;
+  }
+  return rows;
+}
+
 /** Event-boundary timestamps already stored on the Analysis reading. */
 function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: string }> {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
@@ -1765,15 +1795,7 @@ export async function liveObserve(req: Request, res: Response, next: NextFunctio
 
 /** GET /api/job-share/:token/proof — what this sub has filed. */
 export async function listPartyProofs(party: any, admin: any) {
-  const { data } = await admin
-    .from('job_proofs')
-    .select(PROOF_SELECT)
-    .eq('party_id', party.id)
-    .is('deleted_at', null)
-    .order('work_date', { ascending: false })
-    .limit(60);
-
-  const rows = (data ?? []) as any[];
+  const rows = await listAllVisibleProofs(admin, { partyId: party.id });
   const site = await siteLocation(admin, party.org_id, party.job_id);
   const byDate = new Map<string, any[]>();
   for (const row of rows) {
@@ -1862,16 +1884,9 @@ function disputeClipFromRow(
 
 /** Assemble proof-of-work days for one job — shared by org routes and progress shares. */
 export async function buildJobProofPayload(supabase: any, orgId: string, jobId: string) {
-  const [{ data: proofRows }, { data: partyRows }, { data: scopeRows }, { data: jobRow }, site] =
+  const [proofRows, { data: partyRows }, { data: scopeRows }, { data: jobRow }, site] =
     await Promise.all([
-      supabase
-        .from('job_proofs')
-        .select(PROOF_SELECT)
-        .eq('org_id', orgId)
-        .eq('job_id', jobId)
-        .is('deleted_at', null)
-        .order('work_date', { ascending: false })
-        .limit(200),
+      listAllVisibleProofs(supabase, { orgId, jobId }),
       supabase.from('job_parties').select('id, company, trade, contact_name').eq('job_id', jobId),
       supabase
         .from('job_scope_items')
@@ -1882,7 +1897,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       siteLocation(supabase, orgId, jobId),
     ]);
 
-  const rows = (proofRows ?? []) as any[];
+  const rows = proofRows;
   const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
   const person = new Map(
     ((partyRows ?? []) as any[]).map((p) => [p.id, (p.contact_name as string | null) ?? null]),

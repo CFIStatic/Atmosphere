@@ -132,4 +132,23 @@ test('recordProof keys the live row on the storage object, so a second clip that
   );
   assert.match(lookup, /\.is\('deleted_at', null\)/, 'a customer-deleted clip must not block a refilm');
   assert.match(src, /function latestOfPhase\(/, "a day's verdict follows the latest film of that phase");
+  assert.match(src, /listAllVisibleProofs/, 'the job file walks every clip, not a one-page slice');
+  const library = src.slice(src.indexOf('export async function listAllVisibleProofs'));
+  assert.doesNotMatch(
+    library.slice(0, library.indexOf('/** Event-boundary')),
+    /\.limit\(/,
+    'walking pages must not also cap the library',
+  );
+  const payload = src.slice(src.indexOf('export async function buildJobProofPayload'));
+  assert.match(payload, /listAllVisibleProofs\(supabase, \{ orgId, jobId \}\)/);
+});
+
+test('a later migration drops the one-visible-phase unique index so a job file can hold many films', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const sql = await readFile(
+    new URL('../supabase/migrations/20260909190000_job_proofs_many_visible_clips.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /drop index if exists public\.job_proofs_one_visible_phase/);
+  assert.doesNotMatch(sql, /create unique index/i);
 });
