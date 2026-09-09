@@ -248,24 +248,53 @@
   var state = {
     recorder: null,
     stopWatch: null,
-    uploadResult: null,
-    lastClip: null,
     job: null,
     site: null,
     seconds: 0,
-    finishing: false,
     accessToken: null,
     refreshToken: null,
+    refreshing: null,
     jobs: [],
     listedJobs: [],
     jobQuery: '',
     activeJobId: null,
     account: false,
     demoStream: null,
+    /* Whose day films this phone may file right now: 'user:<id>' for a
+       signed-in crew, 'share:<job>' for a job-share link. Films carry the
+       owner they were filmed under, so a session that ends mid-upload
+       leaves them waiting on this phone instead of losing them. */
+    owner: '',
+    filmOwner: '',
+    doorFilmId: null,
+    sessionLost: false,
   };
 
   var DONELINE_OK = 'The office can open it now.';
-  var failRetryTimer = null;
+  /* Hold-to-finish is stopping the recorder — one finish per day film. */
+  var stopping = false;
+
+  /* The filing queue outlives screens, sessions, and reloads. Created once,
+     hydrated from IndexedDB, and driven by hold-to-finish, signal coming
+     back, the app returning to the front, and the 15-second safety tick.
+     Uploads run one at a time in the background: the crew goes Home and
+     starts the next day while this one is still sending. */
+  var filmStore = Core.openDayFilmStore ? Core.openDayFilmStore() : null;
+  var filmQueue =
+    filmStore && Core.createDayFilmQueue
+      ? Core.createDayFilmQueue({
+          store: filmStore,
+          upload: uploadFilm,
+          resolveJob: resolveFilmJob,
+          canRun: canFileFilm,
+          isOnline: function () {
+            return navigator.onLine !== false;
+          },
+          onChange: paintFiling,
+          onFiled: filmFiled,
+        })
+      : null;
+  if (filmQueue) filmQueue.load();
 
   function readStoredSession() {
     try {
@@ -290,26 +319,20 @@
     }
     if (!accessToken) {
       if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
-      abandonUnfiledWork();
+      endSessionWork();
     }
   }
 
-  function abandonUnfiledWork() {
+  /**
+   * The session is over: stop in-flight job sync from painting into the
+   * next account. Day films are NOT dropped — they stay in the filing queue
+   * under the owner they were filmed for and finish when that crew signs
+   * back in on this phone.
+   */
+  function endSessionWork() {
     sessionGen += 1;
-    clearFailRetry();
     pendingSync = null;
-    state.lastClip = null;
-    state.finishing = false;
-    state.uploadResult = null;
-    state.recorder = null;
-    if (state.stopWatch) {
-      try {
-        state.stopWatch();
-      } catch (e) {
-        /* watch is best-effort */
-      }
-      state.stopWatch = null;
-    }
+    state.refreshing = null;
   }
 
   /* ---------- home hydration ---------- */
@@ -371,16 +394,8 @@
   function openNewJobForm() {
     if (LIVE) return;
     if ($('#job-add') && $('#job-add').hidden) return;
-    if (state.finishing) {
-      setStatus('The last day is still uploading.', true);
-      return;
-    }
-    if (state.lastClip) {
-      setStatus('The last day is still on this phone.');
-      state.finishing = true;
-      uploadLastClip();
-      return;
-    }
+    /* A day still filing in the background is not a reason to wait: the
+       queue keeps sending while the next job is named and filmed. */
     showNewJobError('');
     var name = $('#new-job-name');
     var note = $('#new-job-note');
@@ -409,32 +424,116 @@
 
   function remapLocalJob(localId, serverJob) {
     var listed = toListedJob(serverJob);
+    var wasFilmed = (state.jobs || []).some(function (j) {
+      return j.id === localId && j.filmed;
+    });
+    if (wasFilmed) listed.filmed = true;
     state.jobs = (state.jobs || []).map(function (j) {
       return j.id === localId ? listed : j;
     });
     if (state.activeJobId === localId) state.activeJobId = listed.id;
-    if (state.lastClip && state.lastClip.jobId === localId) {
-      state.lastClip.jobId = listed.id;
-    }
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
+    /* Every day film waiting on the phone-only id follows the office id —
+       including films from an earlier session still in the store. */
+    return filmQueue ? filmQueue.remapJob(localId, listed.id) : Promise.resolve(0);
   }
 
   var pendingSync = null;
   var sessionGen = 0;
 
+  /* Sync and filing bind to the session that started them. The generation
+     bumps on sign-out; a refreshed access token keeps the same generation,
+     so a film that outlives its one-hour token still files. */
   function captureSession() {
-    return {
-      gen: sessionGen,
-      accessToken: state.accessToken || null,
-    };
+    return { gen: sessionGen };
   }
 
   function sessionStillOpen(bound) {
-    return Boolean(
-      bound &&
-        bound.gen === sessionGen &&
-        bound.accessToken === (state.accessToken || null),
+    return Boolean(bound && bound.gen === sessionGen);
+  }
+
+  function sessionUsable() {
+    if (LIVE) return true;
+    return Boolean(state.account && state.accessToken);
+  }
+
+  /**
+   * Run an office call with the live access token; on 401, refresh once and
+   * run it again. Filing must outlast the token, not the other way round.
+   */
+  function withSession(run) {
+    var bound = captureSession();
+    return Promise.resolve()
+      .then(function () {
+        return run(state.accessToken);
+      })
+      .catch(function (err) {
+        if (!err || err.status !== 401 || !sessionStillOpen(bound)) throw err;
+        return refreshAccess(bound).then(function (fresh) {
+          if (!fresh) throw err;
+          return run(fresh);
+        });
+      });
+  }
+
+  function refreshAccess(bound) {
+    if (!sessionStillOpen(bound)) return Promise.resolve(null);
+    if (!state.refreshToken || !Core.refreshSession) {
+      if (state.account) sessionExpired();
+      return Promise.resolve(null);
+    }
+    if (!state.refreshing) {
+      var refreshToken = state.refreshToken;
+      state.refreshing = Core.refreshSession(API_BASE, refreshToken).then(
+        function (session) {
+          state.refreshing = null;
+          if (!sessionStillOpen(bound)) return null;
+          if (!session || !session.accessToken) {
+            sessionExpired();
+            return null;
+          }
+          writeStoredSession(session.accessToken, session.refreshToken || refreshToken);
+          return session.accessToken;
+        },
+        function (err) {
+          state.refreshing = null;
+          if (!sessionStillOpen(bound)) return null;
+          if (err && (err.status === 401 || err.status === 400)) sessionExpired();
+          return null;
+        },
+      );
+    }
+    return state.refreshing;
+  }
+
+  /**
+   * The office no longer knows this session. Films stay on this phone and
+   * finish after the next sign-in. Never yank a crew off a running recording
+   * or the door — the sign-in screen waits for Back to Home Screen.
+   */
+  function sessionExpired() {
+    writeStoredSession(null, null);
+    state.account = false;
+    state.owner = '';
+    var screen = document.body.getAttribute('data-screen') || '';
+    if (screen === 's-rec' || screen === 's-door') {
+      state.sessionLost = true;
+      if (filmQueue) paintFiling(filmQueue.films(), 'session');
+      return;
+    }
+    showSignInAfterExpiry();
+  }
+
+  function showSignInAfterExpiry() {
+    state.sessionLost = false;
+    state.jobs = [];
+    state.activeJobId = null;
+    showJobAdd(false);
+    showLoginError('');
+    bootBlocked();
+    showBlockedMsg(
+      'Your session expired. Sign in again — the days saved on this phone finish filing on their own.',
     );
   }
 
@@ -451,16 +550,22 @@
     var work = queue.reduce(function (chain, localJob) {
       return chain.then(function () {
         if (!sessionStillOpen(bound)) return;
-        return Core.createTodayJob({
-          apiBase: API_BASE,
-          accessToken: bound.accessToken,
-          title: localJob.title || localJob.name,
-          situation: localJob.situation || '',
+        return withSession(function (accessToken) {
+          return Core.createTodayJob({
+            apiBase: API_BASE,
+            accessToken: accessToken,
+            title: localJob.title || localJob.name,
+            situation: localJob.situation || '',
+          });
         }).then(function (serverJob) {
           if (!sessionStillOpen(bound)) return;
-          if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, serverJob);
-          remapLocalJob(localJob.id, serverJob);
-          notifyOfficeLibraryChanged();
+          /* Films follow the office id before the draft is forgotten, so a
+             tab killed between the two steps re-syncs rather than orphans. */
+          return remapLocalJob(localJob.id, serverJob).then(function () {
+            if (!sessionStillOpen(bound)) return;
+            if (Core.markPendingJobSynced) Core.markPendingJobSynced(localJob.id, serverJob);
+            notifyOfficeLibraryChanged();
+          });
         });
       });
     }, Promise.resolve());
@@ -476,32 +581,73 @@
     return pendingSync;
   }
 
-  function resolveActiveJobId(jobId) {
+  function listDraftOnToday(draft) {
+    if (!state.account || !draft || !draft.id) return;
+    var shown = (state.jobs || []).some(function (j) {
+      return j.id === draft.id;
+    });
+    if (shown) return;
+    state.jobs = [toListedJob(draft)].concat(state.jobs || []);
+    renderExpect(state.jobs);
+  }
+
+  /**
+   * A day filmed on a phone-only job files once the office has that job.
+   * The film carries its own copy of the draft, so a cleared draft list
+   * (sign-out, a new phone session) recreates the job instead of orphaning
+   * the film.
+   */
+  function resolveFilmJob(entry) {
+    var jobId = entry.jobId;
+    if (!jobId || entry.mode === 'share' || !Core.isLocalJobId || !Core.isLocalJobId(jobId)) {
+      return Promise.resolve(jobId);
+    }
     var bound = captureSession();
-    var id = jobId || state.activeJobId;
-    if (!id || !Core.isLocalJobId || !Core.isLocalJobId(id)) return Promise.resolve(id);
+    var drafts = Core.readPendingJobs ? Core.readPendingJobs() : [];
+    var hasDraft = drafts.some(function (j) {
+      return j && j.id === jobId;
+    });
+    if (!hasDraft && entry.jobDraft && Core.upsertPendingJob) {
+      var draft = {
+        id: jobId,
+        title: entry.jobDraft.title,
+        name: entry.jobDraft.title,
+        situation: entry.jobDraft.situation || '',
+        address: '',
+        at: 'Today',
+        placed: true,
+        filmed: true,
+        pending: true,
+        createdAt: entry.recordedAt,
+      };
+      Core.upsertPendingJob(draft);
+      listDraftOnToday(draft);
+    }
     return syncPendingJobs().then(function () {
-      if (!sessionStillOpen(bound)) {
-        throw new Error('Session ended.');
-      }
-      var resolved =
-        (jobId && state.lastClip && state.lastClip.jobId) || state.activeJobId;
-      if (resolved && !Core.isLocalJobId(resolved)) {
-        return resolved;
-      }
-      throw new Error('Waiting for signal…');
+      if (!sessionStillOpen(bound)) throw new Error('Session ended.');
+      var latest = filmQueue ? filmQueue.get(entry.id) : null;
+      var resolved = (latest && latest.jobId) || entry.jobId;
+      if (resolved && !Core.isLocalJobId(resolved)) return resolved;
+      throw new Error(Core.WAITING_FOR_SIGNAL || 'Waiting for signal…');
     });
   }
 
-  function flushFieldWork() {
+  /** Signal back, app back in front, or the safety tick: sync drafts, then file. */
+  function flushFieldWork(reason) {
     var bound = captureSession();
-    return syncPendingJobs().then(function () {
-      if (!sessionStillOpen(bound)) return;
-      if (state.lastClip && !state.finishing) {
-        state.finishing = true;
-        return uploadLastClip();
-      }
-    });
+    function file() {
+      if (!filmQueue) return undefined;
+      return filmQueue.kick(reason || 'flush');
+    }
+    return syncPendingJobs().then(
+      function () {
+        if (!sessionStillOpen(bound)) return undefined;
+        return file();
+      },
+      function () {
+        return file();
+      },
+    );
   }
 
   function startRecordingForNewJob(stream) {
@@ -544,17 +690,6 @@
         return;
       }
       if (btn && btn.disabled) return;
-      if (state.finishing || state.lastClip) {
-        show('s-home');
-        if (state.finishing) {
-          setStatus('The last day is still uploading.', true);
-          return;
-        }
-        setStatus('The last day is still on this phone.');
-        state.finishing = true;
-        uploadLastClip();
-        return;
-      }
       if (btn) btn.disabled = true;
       var bound = captureSession();
 
@@ -723,6 +858,8 @@
     showJobAdd(false);
     setStatus('Ready — pick a job.');
     when('#daybtn', function (btn) { btn.disabled = false; });
+    state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
+    if (filmQueue) filmQueue.kick('session');
   }
 
   function bootLive(preloaded) {
@@ -765,6 +902,8 @@
     showFieldAccount(false);
     showJobAdd(false);
     showBlockedMsg('');
+    /* Days saved on this phone are the reason to sign back in. */
+    if (filmQueue) paintFiling(filmQueue.films(), 'blocked');
   }
 
   function showLoginError(message) {
@@ -883,6 +1022,9 @@
         : 'No jobs yet. Tap + to start one.',
     );
     show('s-home');
+    state.owner = 'user:' + (Core.cacheOwnerId ? Core.cacheOwnerId(me) : '');
+    state.sessionLost = false;
+    if (filmQueue) filmQueue.kick('session');
     warmPlatformFrame();
   }
 
@@ -1135,8 +1277,7 @@
       setStatus('No open job to file this day against.', true);
       return;
     }
-    if (state.finishing) {
-      setStatus('The last day is still uploading.', true);
+    if (state.recorder || stopping) {
       if (stream) {
         stream.getTracks().forEach(function (t) {
           t.stop();
@@ -1144,20 +1285,12 @@
       }
       return;
     }
-    if (state.lastClip) {
-      setStatus('The last day is still on this phone.');
-      if (stream) {
-        stream.getTracks().forEach(function (t) {
-          t.stop();
-        });
-      }
-      state.finishing = true;
-      uploadLastClip();
-      return;
-    }
-    state.finishing = false;
+    /* Earlier days still filing in the background never block this one —
+       the filing queue keeps sending while this recording runs. */
+    state.filmOwner = state.owner;
     // Fresh recording — do not file the last clip's fix if watch has not fired yet.
     state.site = null;
+    resetRecScreen();
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
@@ -1190,101 +1323,103 @@
       });
   }
 
+  /**
+   * Back-to-back days are the normal flow now, so the recording screen must
+   * not inherit the last one: a completed hold leaves the fill bar full and
+   * the label on "Finishing…" unless it is reset here.
+   */
+  function resetRecScreen() {
+    var stopBtn = $('#stopbtn');
+    if (stopBtn) {
+      stopBtn.removeAttribute('data-holding');
+      var lbl = stopBtn.querySelector('.lbl');
+      if (lbl) lbl.textContent = 'Hold 5 seconds to finish';
+    }
+    var clock = $('#clock');
+    if (clock) clock.textContent = fmt(0);
+    var siteText = $('#site-text');
+    if (siteText) siteText.textContent = 'Getting your bearings…';
+    var strip = $('#sitestrip');
+    if (strip) strip.className = 'sitestrip';
+  }
+
+  function jobById(id) {
+    var list = state.jobs || [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && list[i].id === id) return list[i];
+    }
+    return null;
+  }
+
+  function filmJobName(jobId) {
+    var listed = jobById(jobId);
+    if (listed && listed.name) return listed.name;
+    if (state.job && state.job.job && state.job.job.title) return state.job.job.title;
+    var only = (state.listedJobs || [])[0];
+    return (only && only.name) || 'Job';
+  }
+
+  /** Today shows the day as filmed the moment the recorder stops. */
+  function markJobFilmed(jobId) {
+    if (!jobId) return;
+    var changed = false;
+    state.jobs = (state.jobs || []).map(function (j) {
+      if (!j || j.id !== jobId || j.filmed) return j;
+      changed = true;
+      return Object.assign({}, j, { filmed: true });
+    });
+    if (changed) renderExpect(state.jobs);
+  }
+
+  /**
+   * Hold-to-finish: stop the recorder, save the film on this phone, show the
+   * door as done, and let the queue file it in the background. The crew can
+   * go Home and start the next day immediately — including with no signal.
+   */
   function finishLiveDay() {
-    if (!state.recorder || state.finishing) return;
-    var bound = captureSession();
+    if (!state.recorder || stopping) return;
+    var recorder = state.recorder;
     var boundJobId = state.activeJobId;
-    state.finishing = true;
+    var boundJob = jobById(boundJobId);
+    var boundOwner = state.filmOwner || state.owner;
+    var site = state.site;
+    stopping = true;
     if (state.stopWatch) state.stopWatch();
     state.stopWatch = null;
     var stopLbl = $('#stopbtn') && $('#stopbtn').querySelector('.lbl');
     if (stopLbl) stopLbl.textContent = 'Finishing…';
-    state.recorder
+    recorder
       .stop()
       .then(function (clip) {
-        if (!sessionStillOpen(bound)) return;
-        clip.jobId = boundJobId;
-        state.lastClip = clip;
-        return uploadLastClip();
-      })
-      .catch(function (err) {
-        if (!sessionStillOpen(bound)) return;
-        openDoorUploading();
-        $('#upload-step').textContent = err.message || 'Upload failed.';
-        $('#upload-step').style.color = 'var(--fail)';
-        renderDoorFailed(err);
-      });
-  }
-
-  function uploadLastClip() {
-    var clip = state.lastClip;
-    var bound = captureSession();
-    var boundAccount = Boolean(state.account);
-    if (!clip || !clip.blob) {
-      return Promise.reject(new Error('Nothing to upload. Record the day again.'));
-    }
-    var screen = document.body.getAttribute('data-screen') || '';
-    var showDoor = screen === 's-door' || screen === 's-rec';
-    if (showDoor) openDoorUploading();
-    else setStatus('Filing with the office…');
-    return resolveActiveJobId(clip.jobId)
-      .then(function (jobId) {
-        if (!sessionStillOpen(bound)) {
-          throw new Error('Session ended.');
-        }
-        return Core.uploadDayFilm({
-          token: TOKEN || undefined,
-          jobId: boundAccount ? jobId : undefined,
-          accessToken: boundAccount ? bound.accessToken : undefined,
-          apiBase: API_BASE,
-          storageBase: STORAGE_BASE,
+        stopping = false;
+        state.recorder = null;
+        var entry = Core.newDayFilmEntry({
+          owner: boundOwner,
+          mode: LIVE ? 'share' : 'account',
+          jobId: boundJobId || '',
+          jobName: filmJobName(boundJobId),
+          jobDraft:
+            boundJob && boundJob.pending
+              ? { title: boundJob.title || boundJob.name, situation: boundJob.situation || '' }
+              : null,
           blob: clip.blob,
           mimeType: clip.mimeType,
-          knownSite: state.site || null,
           durationSeconds: clip.durationSeconds,
-          onStep: function (step) {
-            if (!sessionStillOpen(bound)) return;
-            var stepEl = $('#upload-step');
-            if (stepEl) {
-              stepEl.textContent = step;
-              stepEl.style.color = '';
-            }
-          },
-          onProgress: function (ratio) {
-            if (!sessionStillOpen(bound)) return;
-            var bar = $('#upload-bar');
-            var pct = $('#upload-pct');
-            var pctVal = Math.round((ratio || 0) * 100);
-            if (bar) bar.style.width = pctVal + '%';
-            if (pct) pct.textContent = pctVal + '%';
-          },
+          site: site,
+        });
+        state.doorFilmId = entry.id;
+        markJobFilmed(boundJobId);
+        renderDoorSaved(entry);
+        if (!filmQueue) return undefined;
+        return filmQueue.enqueue(entry).then(function () {
+          if (state.doorFilmId === entry.id) paintDoorFilm(filmQueue.get(entry.id) || entry);
         });
       })
-      .then(
-      function (result) {
-        if (!sessionStillOpen(bound)) return result;
-        state.uploadResult = result;
-        if (state.lastClip === clip) state.lastClip = null;
-        if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
-          renderDoorLive(result);
-        } else {
-          setStatus('Filed with the office.');
-          state.finishing = false;
-        }
-        notifyOfficeLibraryChanged();
-        return result;
-      },
-      function (err) {
-        if (!sessionStillOpen(bound)) return;
-        if (showDoor || (document.body.getAttribute('data-screen') || '') === 's-door') {
-          renderDoorFailed(err);
-        } else {
-          setStatus('Still on this phone — filing with the office.');
-          state.finishing = false;
-          if (state.lastClip) scheduleFailRetry();
-        }
-      },
-    );
+      .catch(function (err) {
+        stopping = false;
+        state.recorder = null;
+        renderDoorNotSaved(err);
+      });
   }
 
   function setDoorSub(text) {
@@ -1292,46 +1427,91 @@
     if (sub) sub.textContent = text || '';
   }
 
-  function clearFailRetry() {
-    if (failRetryTimer) {
-      clearTimeout(failRetryTimer);
-      failRetryTimer = null;
-    }
+  function setDoneline(title, copy) {
+    var t = $('#doneline-title');
+    var c = $('#doneline-copy');
+    if (t) t.textContent = title || '';
+    if (c) c.textContent = copy || '';
   }
 
-  function scheduleFailRetry() {
-    clearFailRetry();
-    if (!state.lastClip) return;
-    failRetryTimer = setTimeout(function () {
-      failRetryTimer = null;
-      if (!state.lastClip || state.finishing) return;
-      state.finishing = true;
-      uploadLastClip();
-    }, 8000);
+  function onScreen(id) {
+    return (document.body.getAttribute('data-screen') || '') === id;
   }
 
-  function openDoorUploading() {
+  function filingRowHtml(step, pct) {
+    return (
+      '<div class="lrow on"><span>Filing with the office</span><em id="upload-step">' +
+      escapeHtml(step || 'Starting…') +
+      '</em><span class="ok" id="upload-pct">' +
+      escapeHtml(pct == null ? '' : pct + '%') +
+      '</span></div>' +
+      '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>'
+    );
+  }
+
+  /**
+   * The door, the moment the recorder stops: the day is saved and the crew is
+   * done here. Filing progress runs on its own line and keeps updating while
+   * the door is open — but nothing on this screen asks anyone to wait.
+   */
+  function renderDoorSaved(entry) {
     show('s-door');
-    setDoorSub('Filing this day with the office.');
+    setDoorSub('Saved. You can start the next one.');
+    var length = Core.formatClipLength(entry.durationSeconds);
     $('#ledger').innerHTML =
-      '<div class="lrow on"><span>Uploading</span><em id="upload-step">Starting…</em><span class="ok" id="upload-pct">0%</span></div>' +
-      '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>';
-    $('#daytl').innerHTML = '';
-    $('#doneline').classList.remove('on');
-    var copy = $('#doneline-copy');
-    if (copy) copy.textContent = DONELINE_OK;
-    clearFailRetry();
-    /* Home stays available while reading/uploading — crews must never be
-       stuck on the door if the phone stalls mid-step. Retry waits for fail. */
-    hideDoorActions();
+      '<div class="lrow on"><span>Filmed live — video + audio</span><em>mic track required</em><span class="ok">✓</span></div>' +
+      '<div class="lrow on"><span>Saved on this phone</span><em>' +
+      escapeHtml(length !== '—' ? length : 'day film') +
+      '</em><span class="ok">✓</span></div>' +
+      filingRowHtml('Starting…', 0);
+    $('#daytl').innerHTML =
+      '<div class="tlrow"><b>' +
+      escapeHtml(entry.jobName || 'Job') +
+      '</b><span>Filing with the office in the background.</span></div>';
+    setDoneline(
+      'Done.',
+      'Saved on this phone and filing with the office on its own. You can start the next one now.',
+    );
+    $('#doneline').classList.add('on');
     showHomeAction();
   }
 
-  function hideDoorActions() {
-    var done = $('#donebtn');
-    var retry = $('#retrybtn');
-    if (done) done.classList.remove('on');
-    if (retry) retry.classList.remove('on');
+  /** Live filing state for the film this door is showing. */
+  function paintDoorFilm(film) {
+    if (!film) return;
+    var stepEl = $('#upload-step');
+    var pctEl = $('#upload-pct');
+    var bar = $('#upload-bar');
+    if (!stepEl) return;
+    var ratio = film.status === 'uploading' ? film.progress || 0 : 0;
+    var pct = Math.round(ratio * 100);
+    var step;
+    if (film.status === 'uploading') step = film.step || 'Uploading…';
+    else if (!sessionUsable()) step = 'Sign in to finish filing';
+    else if (navigator.onLine === false) step = Core.WAITING_FOR_SIGNAL || 'Waiting for signal…';
+    else if (film.status === 'waiting') step = film.lastError || 'Retrying…';
+    else step = film.step || 'Saved on this phone';
+    stepEl.textContent = step;
+    stepEl.style.color = '';
+    if (pctEl) pctEl.textContent = film.status === 'uploading' ? pct + '%' : '';
+    if (bar) bar.style.width = pct + '%';
+    if (film.volatile) {
+      setDoorSub('Saved. Keep Field Capture open until this files — this phone could not keep a copy.');
+    }
+  }
+
+  /** The recorder had nothing to save (empty film, mic missing): say so, no queue entry. */
+  function renderDoorNotSaved(err) {
+    state.doorFilmId = null;
+    show('s-door');
+    setDoorSub('Recording was not saved.');
+    $('#ledger').innerHTML =
+      '<div class="lrow on"><span>Not saved</span><em id="upload-step">' +
+      escapeHtml((err && err.message) || 'Record the day again.') +
+      '</em><span class="ok">!</span></div>';
+    $('#daytl').innerHTML = '';
+    $('#doneline').classList.remove('on');
+    showHomeAction();
   }
 
   function showHomeAction() {
@@ -1339,7 +1519,8 @@
     if (done) done.classList.add('on');
   }
 
-  function renderDoorLive(result) {
+  /** The office has it: the real checks replace the filing line. */
+  function renderDoorLive(result, entry) {
     var problems = result.problems || [];
     var checks = result.checks || [];
     var rows = [];
@@ -1383,45 +1564,144 @@
       );
     }
     $('#ledger').innerHTML = rows.join('');
-    var jobName =
-      state.job && state.job.job ? state.job.job.title : 'Job';
+    var jobName = (entry && entry.jobName) || filmJobName(entry && entry.jobId);
     setDoorSub('Filed with the office.');
     $('#daytl').innerHTML =
       '<div class="tlrow"><b>' +
       escapeHtml(jobName) +
       '</b><span>The office can watch it now.</span></div>';
-    var copy = $('#doneline-copy');
-    if (copy) copy.textContent = DONELINE_OK;
+    setDoneline('Uploaded.', DONELINE_OK);
     $('#doneline').classList.add('on');
-    hideDoorActions();
     showHomeAction();
-    state.finishing = false;
   }
 
-  function renderDoorFailed(err) {
-    show('s-door');
-    setDoorSub(state.lastClip ? 'Still on this phone.' : 'Recording was not saved.');
-    var step = (err && err.message) || 'Retrying…';
-    if (state.lastClip && step !== 'Waiting for signal…') step = 'Retrying…';
-    var stepEl = $('#upload-step');
-    if (stepEl) {
-      stepEl.textContent = step;
-      stepEl.style.color = '';
-    } else {
-      $('#ledger').innerHTML =
-        '<div class="lrow on"><span>Uploading</span><em id="upload-step">' +
-        escapeHtml(step) +
-        '</em><span class="ok" id="upload-pct"></span></div>' +
-        '<div class="upload-meter" aria-hidden="true"><div class="upload-meter-fill" id="upload-bar"></div></div>';
+  /* ---------- the filing queue: glue between Core and these screens ---------- */
+
+  function canFileFilm(entry) {
+    if (!entry || !state.owner || entry.owner !== state.owner) return false;
+    if (entry.mode === 'share') return LIVE;
+    return sessionUsable();
+  }
+
+  /** One filing attempt for one film. The queue owns retries and order. */
+  function uploadFilm(entry, hooks) {
+    var isShare = entry.mode === 'share';
+    var recordedMs = Date.parse(entry.recordedAt || '') || Date.now();
+    var stale = Date.now() - recordedMs > (Core.POSITION_FRESH_MS || 10 * 60 * 1000);
+    function attempt(accessToken) {
+      return Core.uploadDayFilm({
+        token: isShare ? TOKEN || undefined : undefined,
+        jobId: isShare ? undefined : entry.jobId,
+        accessToken: isShare ? undefined : accessToken,
+        apiBase: API_BASE,
+        storageBase: STORAGE_BASE,
+        blob: entry.blob,
+        mimeType: entry.mimeType,
+        knownSite: entry.site || null,
+        noPosition: !entry.site && stale,
+        durationSeconds: entry.durationSeconds,
+        workDate: entry.workDate,
+        recordedAt: entry.recordedAt,
+        facts: entry.facts || null,
+        onFacts: hooks.onFacts,
+        onStep: hooks.onStep,
+        onProgress: hooks.onProgress,
+      });
     }
-    $('#daytl').innerHTML = '';
-    $('#doneline').classList.remove('on');
-    hideDoorActions();
-    if (state.lastClip) {
-      scheduleFailRetry();
+    if (isShare) return attempt(undefined);
+    return withSession(attempt);
+  }
+
+  function filmFiled(entry, result) {
+    if (entry.owner === state.owner) notifyOfficeLibraryChanged();
+    markJobFilmed(entry.jobId);
+    if (state.doorFilmId === entry.id && onScreen('s-door')) {
+      renderDoorLive(result, entry);
+      return;
     }
-    showHomeAction();
-    state.finishing = false;
+    if (onScreen('s-home') && entry.owner === state.owner) {
+      var left = filmQueue
+        ? filmQueue.pending(function (f) {
+            return f.owner === state.owner;
+          }).length
+        : 0;
+      setStatus(
+        left
+          ? 'Filed with the office. ' + (left === 1 ? '1 day' : left + ' days') + ' still filing.'
+          : 'Filed with the office.',
+      );
+    }
+  }
+
+  function renderFilingStrip(summary) {
+    var root = $('#filing');
+    if (!root) return;
+    if (!summary || !summary.count) {
+      root.hidden = true;
+      return;
+    }
+    root.hidden = false;
+    root.setAttribute('data-tone', summary.tone || 'idle');
+    var title = $('#filing-title');
+    var detail = $('#filing-detail');
+    var bar = $('#filing-bar');
+    if (title) title.textContent = summary.title;
+    if (detail) detail.textContent = summary.detail;
+    if (bar) bar.style.width = Math.round((summary.progress || 0) * 100) + '%';
+    var rows = $('#filing-rows');
+    if (rows) {
+      rows.innerHTML = (summary.rows || [])
+        .map(function (r) {
+          return (
+            '<li><b>' +
+            escapeHtml(r.name) +
+            (r.length && r.length !== '—' ? ' · ' + escapeHtml(r.length) : '') +
+            '</b><span>' +
+            escapeHtml(r.state) +
+            '</span></li>'
+          );
+        })
+        .join('');
+    }
+  }
+
+  /** Every queue change lands here: Today's strip, the door, the sign-in note. */
+  function paintFiling(films, reason) {
+    if (!Core.summarizeDayFilms) return;
+    var online = navigator.onLine !== false;
+    var mine = Core.summarizeDayFilms(films, {
+      owner: state.owner,
+      online: online,
+      signedIn: sessionUsable(),
+    });
+    renderFilingStrip(mine);
+    if (state.doorFilmId && onScreen('s-door')) {
+      for (var i = 0; i < films.length; i += 1) {
+        if (films[i].id === state.doorFilmId) {
+          paintDoorFilm(films[i]);
+          break;
+        }
+      }
+    }
+    if (onScreen('s-blocked')) {
+      var msg = $('#blocked-msg');
+      var all = Core.summarizeDayFilms(films, { signedIn: false });
+      if (all.count && msg && (msg.hidden || !msg.textContent)) showBlockedMsg(all.signInLine);
+    }
+  }
+
+  function bindFilingStrip() {
+    var toggle = $('#filing-toggle');
+    var rows = $('#filing-rows');
+    if (!toggle || !rows || toggle.getAttribute('data-bound') === '1') return;
+    toggle.setAttribute('data-bound', '1');
+    toggle.addEventListener('click', function () {
+      var open = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      rows.hidden = open;
+      /* Opening the list is also a nudge: try now rather than at the next backoff. */
+      if (!open && filmQueue) filmQueue.retryNow();
+    });
   }
 
   /* ---------- hold to finish ----------
@@ -1449,7 +1729,7 @@
     }
     function beginHold(e) {
       if (e && e.cancelable) e.preventDefault();
-      if (holdTimer || state.finishing) return;
+      if (holdTimer || stopping) return;
       if (e && e.pointerId != null && stopBtn.setPointerCapture) {
         try {
           stopBtn.setPointerCapture(e.pointerId);
@@ -1579,8 +1859,8 @@
         '<div class="lrow on"><span>Demo only</span><em>nothing uploaded</em><span class="ok">✓</span></div>';
       $('#daytl').innerHTML =
         '<div class="tlrow"><b>Demo day</b><span>Open with ?token= to file a real day film.</span></div>';
+      setDoneline('Demo day.', 'Nothing was uploaded.');
       $('#doneline').classList.add('on');
-      hideDoorActions();
       showHomeAction();
     };
     show('s-home');
@@ -1727,9 +2007,26 @@
 
     function signOutFieldAccount() {
       closeFieldAccountMenu();
+      /* Films still filing are not lost by signing out — they wait on this
+         phone for the same crew — but the crew should know they have not
+         reached the office yet. */
+      var waiting = filmQueue
+        ? filmQueue.pending(function (f) {
+            return f.owner === state.owner;
+          })
+        : [];
+      if (waiting.length) {
+        var n = waiting.length;
+        var ok = window.confirm(
+          (n === 1 ? '1 day is' : n + ' days are') +
+            ' still filing with the office. They stay saved on this phone and finish the next time you sign in here. Sign out anyway?',
+        );
+        if (!ok) return;
+      }
       if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
       writeStoredSession(null, null);
       state.account = false;
+      state.owner = '';
       state.jobs = [];
       state.activeJobId = null;
       showJobAdd(false);
@@ -1829,45 +2126,43 @@
     }
   })();
   $('#donebtn').addEventListener('click', function () {
-    /* Leave even if reading/uploading is still running — do not trap the crew.
-       Never drop lastClip here. The day stays on this phone until filing
-       succeeds, including after a paused upload or a trip Home mid-PUT. */
+    /* Home is always open from the door. The day film is already saved in
+       the filing queue; leaving never drops it, and the strip on Today shows
+       it finishing. */
     state.recorder = null;
-    hideDoorActions();
-    show('s-home');
-    if (state.lastClip) {
-      setStatus('Still on this phone — filing with the office.');
-    } else {
-      setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    state.doorFilmId = null;
+    if (state.sessionLost) {
+      showSignInAfterExpiry();
+      return;
     }
-  });
-  when('#retrybtn', function (btn) {
-    btn.addEventListener('click', function () {
-      if (!state.lastClip || state.finishing) return;
-      clearFailRetry();
-      state.finishing = true;
-      uploadLastClip().catch(function () {
-        /* renderDoorFailed already painted the door */
-      });
-    });
+    show('s-home');
+    setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    if (filmQueue) paintFiling(filmQueue.films(), 'home');
   });
 
   bindJobSearch();
   bindNewJob();
+  bindFilingStrip();
   (function bindOfflineSync() {
     if (typeof window === 'undefined' || window.__fieldOfflineSyncBound) return;
     window.__fieldOfflineSyncBound = true;
+    /* Signal back: file now, not at the next backoff. */
     window.addEventListener('online', function () {
-      flushFieldWork();
+      flushFieldWork('online');
     });
+    window.addEventListener('offline', function () {
+      if (filmQueue) paintFiling(filmQueue.films(), 'offline');
+    });
+    /* Field Capture back in front (home-screen app resumed, tab refocused). */
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') flushFieldWork('visible');
+    });
+    window.addEventListener('pageshow', function () {
+      flushFieldWork('visible');
+    });
+    /* Safety tick: a missed event must never leave a day on this phone. */
     window.setInterval(function () {
-      var pending = Core.readPendingJobs ? Core.readPendingJobs() : [];
-      var hasDraft = pending.some(function (j) {
-        return j && Core.isLocalJobId && Core.isLocalJobId(j.id);
-      });
-      if (hasDraft || (state.lastClip && !state.finishing)) {
-        flushFieldWork();
-      }
+      flushFieldWork('tick');
     }, 15000);
   })();
 
