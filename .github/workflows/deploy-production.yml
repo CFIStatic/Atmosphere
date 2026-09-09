@@ -170,6 +170,8 @@ jobs:
       # Keys has SUPABASE_URL + SERVICE_ROLE_KEY, which cannot run DDL. Copy a
       # real Postgres URL from the live backend service when Keys does not
       # have one, then fail closed if still nothing is configured.
+      # Atmosphere Supabase is us-east-2 — pass SUPABASE_DB_HOST / REGION so the
+      # pooler is not silently dialed as us-east-1.
       - name: Load database URL from Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -182,6 +184,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/loadRailwayDbEnv.mjs
 
@@ -194,6 +199,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL || env.DATABASE_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL || env.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST || vars.SUPABASE_DB_HOST || env.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
+          SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
         run: node scripts/migrate.mjs
 
@@ -204,10 +212,6 @@ jobs:
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
         run: |
-          # Upload the repo root so root railway.toml watchPatterns (backend/**)
-          # match. `railway up` from backend/ previously skipped the Docker
-          # build ("no changes detected in watch paths") and left production
-          # on an image without /api/auth/internal-challenge.
           echo "Deploying Railway service: $RAILWAY_SERVICE from repo root"
           chmod +x backend/scripts/railwayUp.sh
           if service_id="$(node backend/scripts/resolveRailwayService.mjs "$RAILWAY_SERVICE")"; then
@@ -217,19 +221,11 @@ jobs:
               --project "$RAILWAY_PROJECT_ID" --environment production || true
             export RAILWAY_SERVICE="$service_id"
           fi
-          # The root railway.toml is inert now, so a service that inherits it
-          # cannot build the BFF image onto the marketing site. `railway up`
-          # reads its config from the upload root, so put the backend's own
-          # config there first — exactly what the office, staff and website
-          # jobs already do. Without this the upload matches no watch path and
-          # Railway skips the build.
           cp backend/railway.toml railway.toml
           backend/scripts/railwayUp.sh
 
   app:
     name: Deploy office app
-    # Migrations run in the backend job. If they fail, the backend does not
-    # ship, and the office app must not ship against a schema that did not move.
     needs: backend
     runs-on: ubuntu-latest
     environment: Keys
@@ -265,35 +261,17 @@ jobs:
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Platform}}"
           echo "Deploying office app to Railway service '$service' in project $project."
-          echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
           railway link --project "$project" --environment production --service "$service" \
             || railway link --project "$project" --environment production \
             || railway link --project "$project" \
             || true
           railway status --project "$project" --environment production || railway status || true
-          # Live name is Platform. Login & Dashboard and Atmosphere-web are old aliases.
-          # resolveRailwayService maps all three. railway variable set rejects names
-          # that are not on the canvas.
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
-          # RAILWAY_DOCKERFILE_PATH loses to config-as-code. If this service's
-          # Config File was never set, GitHub autodeploys read the repo-root
-          # /railway.toml and build the backend image here instead — the same
-          # fault that made Corporate Website fail its pre-deploy command in
-          # four seconds. Pin the path; warn rather than fail the ship.
           node backend/scripts/applyRailwayConfigFile.mjs "$service" frontend/railway.toml \
             || echo "warn: set Config File = /frontend/railway.toml by hand (Settings → Config-as-code)."
-          # Private HTTP to the BFF. The public https://atmosphere-production URL
-          # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
-          # which is the spinner on /login (api.me() before the form).
-          #
-          # Prefer the BFF's *resolved* private domain. api.upstream holds a
-          # Railway reference, and a reference whose service name no longer
-          # matches resolves to an empty string rather than failing: the app
-          # then boots with API_UPSTREAM=http://: and nginx dies with
-          # "invalid port in upstream". Writing the literal cannot do that.
           upstream=""
           if backend_id="$(node backend/scripts/resolveRailwayService.mjs "${RAILWAY_BACKEND_SERVICE:-Atmosphere APIs}")"; then
             upstream="$(node scripts/resolveApiUpstream.mjs "$backend_id" || true)"
@@ -304,8 +282,6 @@ jobs:
           fi
           echo "API_UPSTREAM=$upstream"
           printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
-          # railway up reads /railway.toml from the upload root. Without this copy
-          # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
@@ -326,14 +302,6 @@ jobs:
       - name: Install Railway CLI
         run: bash scripts/installRailwayCli.sh
 
-      # No deploy here. deploy-website.yml ships the site when website/**
-      # changes; this job only re-asserts the service's settings, because the
-      # push that breaks Corporate Website is a backend-only one that
-      # deploy-website.yml never sees. The root /railway.toml watches
-      # backend/**, so Railway autodeploys that commit onto every service
-      # whose Config File is unset — building the BFF image on the marketing
-      # site. Config-as-code beats stamped settings, so the Config File path
-      # is the only setting that actually stops it.
       - name: Point Corporate Website at /website/railway.toml
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -348,7 +316,6 @@ jobs:
           fi
           railway link --project "$RAILWAY_PROJECT_ID" --environment production || true
           chmod +x website/scripts/apply-railway-config.sh
-          # Never fail the production deploy over a config repair.
           website/scripts/apply-railway-config.sh || \
             echo "warn: could not repair Corporate Website config; see docs/production.md."
 
@@ -387,7 +354,6 @@ jobs:
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"
           echo "Deploying internal site to Railway service '$service' in project $project."
-          echo "Writing internal/railway.json onto the service (nginx + /healthz)."
           case "$service" in
             Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
           esac
@@ -404,16 +370,11 @@ jobs:
             || true
           chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
           internal/scripts/apply-railway-config.sh
-          # Public BFF on purpose: the private mesh 504s from this nginx.
           upstream="https://atmosphere-production.up.railway.app"
           echo "API_UPSTREAM=$upstream"
           printf '%s' "$upstream" | railway variable set API_UPSTREAM \
             --stdin --skip-deploys --service "$service_id" \
             --project "$project" --environment production
-          # Autodeploy of this SHA may already have uploaded the same
-          # internal/** tree and crashed on empty API_UPSTREAM. railway up
-          # then skips watch paths and leaves the old replica. Dirty a
-          # watched file so this CLI upload is a new image with the var set.
           printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> internal/nginx/default.conf.template
           export RAILWAY_UP_STAMP_FILE="$PWD/internal/nginx/default.conf.template"
           export RAILWAY_UP_ATTEMPTS=3
