@@ -75,6 +75,14 @@ button** — never on its own:
 - **Overt, never covert.** The live preview stays on screen and a status line
   reads *“Recording — keep the screen on”*, switching to an amber
   *“Recording paused — reopen Field Capture”* if a lock pauses the camera.
+- **Dim screen (put it down and work).** *Dim screen — keep recording* covers
+  the bright preview with a true-black veil showing only a live REC dot and the
+  clock. The screen stays on, the wake lock still holds, and filming keeps
+  running — this is the closest honest thing to “screen off while it records,”
+  and it works on iPhone and Android alike. A tap on the veil only shows the
+  camera again; it never stops the day (that is the 5-second hold), so a pocket
+  brush is harmless. The web cannot lower the hardware backlight, so this is a
+  black cover, not a brightness change — on OLED it also draws less power.
 
 ### Platform limits worth stating plainly
 

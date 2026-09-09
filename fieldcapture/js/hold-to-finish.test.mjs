@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=resilient-record-1/);
-assert.match(html, /js\/app\.js\?v=resilient-record-1/);
+assert.match(html, /js\/capture-core\.js\?v=dim-mode-1/);
+assert.match(html, /js\/app\.js\?v=dim-mode-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -578,5 +578,46 @@ assert.match(appSrc, /function showRecStatus/);
 assert.match(appSrc, /Core\.describeRecordingStatus/);
 assert.match(html, /id="rec-status"/, 'the record screen needs a status line for keep-awake / paused');
 assert.match(html, /class="recnote"/);
+
+// ---- dim mode: pocket the phone, keep filming, stop only on the off button ----
+assert.match(html, /id="dim-btn"/, 'the record screen needs a Dim button');
+assert.match(html, /class="dimbtn"/);
+assert.match(html, /Dim screen/, 'the dim control must read as dimming, not stopping');
+assert.match(html, /id="dimveil"/, 'dim mode needs a black veil over the preview');
+assert.match(html, /class="dimveil"/);
+assert.match(html, /id="dim-clock"/, 'the veil shows the clock so it is clearly still recording');
+assert.match(html, /tap to show the camera/i, 'a veil tap reveals the camera — it must say so');
+assert.match(html, /\.dimveil \{[\s\S]*?background: #000/, 'the veil must be true black for OLED power');
+assert.match(appSrc, /function enterDim/);
+assert.match(appSrc, /function exitDim/);
+assert.match(appSrc, /function bindDim/);
+assert.match(appSrc, /\bbindDim\(\);/, 'dim must be wired up at init');
+{
+  const from = appSrc.indexOf('function enterDim');
+  const to = appSrc.indexOf('function exitDim');
+  assert.ok(from >= 0 && to > from, 'enterDim must exist before exitDim');
+  const src = appSrc.slice(from, to);
+  assert.doesNotMatch(
+    src,
+    /\.stop\(/,
+    'dimming must never stop the recorder — it only covers the preview',
+  );
+  assert.match(src, /data-dim/, 'dim toggles a screen flag, not the recording');
+  assert.match(
+    src,
+    /getAttribute\('data-screen'\)[\s\S]*?'s-rec'/,
+    'dim is only reachable while actually on the record screen',
+  );
+}
+{
+  const from = appSrc.indexOf('function show(');
+  const to = appSrc.indexOf('function stopDemoPreview');
+  assert.ok(from >= 0 && to > from, 'show() must exist');
+  assert.match(
+    appSrc.slice(from, to),
+    /!== 's-rec'\) exitDim\(\)/,
+    'leaving the record screen must drop the veil so the door is never covered',
+  );
+}
 
 console.log('hold-to-finish OK');

@@ -490,6 +490,32 @@
     color: #F1EFEB; background: rgba(0,0,0,.42);
   }
   .recnote[data-state="interrupted"] { background: rgba(196,88,42,.94); color: #FFF; }
+  /* Dim: put the phone down and keep filming. A black cover, not a hardware
+     brightness change (the web cannot dim the backlight), so on OLED it also
+     draws less power. Recording never stops — only the off button ends it. */
+  .dimbtn {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 10px 16px;
+    border: 1px solid rgba(241,239,235,.4); border-radius: 999px;
+    background: rgba(0,0,0,.35); color: #F1EFEB;
+    font-family: var(--mono); font-size: 12.5px; font-weight: 650; cursor: pointer;
+  }
+  .dimbtn:active { background: rgba(0,0,0,.55); }
+  .dimbtn .moon { flex: none; }
+  .dimveil {
+    position: absolute; inset: 0; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    background: #000; color: #6B675F; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dimveil .dv-rec {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 13px; font-weight: 650; letter-spacing: .06em; color: #8A857C;
+  }
+  .dimveil .dv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); animation: blink 1.1s steps(2) infinite; }
+  .dimveil .dv-clock { font-family: var(--mono); font-size: 12px; }
+  .dimveil .dv-hint { font-size: 12px; }
   .stopwrap {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
     padding: 28px 18px max(18px, env(safe-area-inset-bottom));
@@ -950,6 +976,19 @@
         <p class="rechint" style="color:rgba(241,239,235,.75)">
           Keep holding for 5 seconds. A tap will not stop the day.
         </p>
+        <button type="button" class="dimbtn" id="dim-btn" aria-label="Dim the screen and keep recording">
+          <svg class="moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          Dim screen — keep recording
+        </button>
+      </div>
+
+      <!-- Dim: a black cover over the bright preview. The screen stays on and
+           filming keeps running; a tap only shows the camera again (never
+           stops the day), so a pocket brush is harmless. -->
+      <div class="dimveil" id="dimveil" role="button" tabindex="0" aria-label="Tap to show the camera" hidden>
+        <span class="dv-rec"><span class="dv-dot"></span>REC</span>
+        <span class="dv-clock mono" id="dim-clock">0:00</span>
+        <span class="dv-hint">Recording · tap to show the camera</span>
       </div>
     </div>
   </div>
@@ -1015,7 +1054,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=resilient-record-1"></script>
-<script src="js/app.js?v=resilient-record-1"></script>
+<script src="js/capture-core.js?v=dim-mode-1"></script>
+<script src="js/app.js?v=dim-mode-1"></script>
 </body>
 </html>

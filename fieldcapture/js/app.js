@@ -177,6 +177,9 @@
       if (el) el.setAttribute('data-on', s === id ? '1' : '0');
     });
     document.body.setAttribute('data-screen', id);
+    // The veil belongs to the record screen only — never let the door or home
+    // open under a black cover.
+    if (id !== 's-rec') exitDim();
     var app = document.getElementById('app');
     if (app) {
       app.setAttribute(
@@ -704,12 +707,50 @@
   // Live/interrupted line on the record screen. Keeps recording overt: the
   // crew sees it is filming, and sees plainly when a lock has paused it.
   function showRecStatus(status) {
+    // A real interruption must be seen — never leave it hidden under the veil.
+    if (status === 'interrupted') exitDim();
     var el = $('#rec-status');
     if (!el) return;
     var msg = Core.describeRecordingStatus(status);
     el.textContent = msg;
     el.hidden = !msg;
     el.setAttribute('data-state', status === 'interrupted' ? 'interrupted' : 'live');
+  }
+
+  // Dim mode: cover the bright preview with black so the crew can pocket the
+  // phone and work while it keeps filming. The screen stays on (the wake lock
+  // still holds), the recorder is untouched, and only the hold-to-finish off
+  // button ends the day — a tap on the veil just shows the camera again.
+  function enterDim() {
+    if (!state.recorder) return;
+    if ((document.body.getAttribute('data-screen') || '') !== 's-rec') return;
+    var veil = $('#dimveil');
+    if (!veil) return;
+    veil.hidden = false;
+    document.body.setAttribute('data-dim', '1');
+  }
+
+  function exitDim() {
+    var veil = $('#dimveil');
+    if (veil) veil.hidden = true;
+    document.body.removeAttribute('data-dim');
+  }
+
+  function bindDim() {
+    when('#dim-btn', function (btn) {
+      btn.addEventListener('click', enterDim);
+    });
+    when('#dimveil', function (veil) {
+      // A tap only reveals the camera — it can never stop the day (that is a
+      // deliberate 5-second hold), so a pocket brush is harmless.
+      veil.addEventListener('click', exitDim);
+      veil.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          exitDim();
+        }
+      });
+    });
   }
 
   function paintLiveJob(payload) {
@@ -1176,6 +1217,8 @@
       onTick: function (sec) {
         state.seconds = sec;
         $('#clock').textContent = fmt(sec);
+        var dimClock = $('#dim-clock');
+        if (dimClock) dimClock.textContent = fmt(sec);
       },
       onStatus: showRecStatus,
     });
@@ -1613,6 +1656,7 @@
   }
 
   bindHold();
+  bindDim();
   (function bindProductSwitch() {
     var link = document.getElementById('platform-link');
     var frame = document.getElementById('platform-frame');
