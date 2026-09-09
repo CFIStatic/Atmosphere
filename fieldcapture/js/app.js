@@ -268,6 +268,8 @@
     filmOwner: '',
     doorFilmId: null,
     sessionLost: false,
+    /* The recording in progress: its clip id and its streamer. */
+    recording: null,
   };
 
   var DONELINE_OK = 'The office can open it now.';
@@ -1291,6 +1293,17 @@
     // Fresh recording — do not file the last clip's fix if watch has not fired yet.
     state.site = null;
     resetRecScreen();
+    /* One id per recording: its own storage object, so the next film on this
+       job today never overwrites it. While the camera rolls, chunks stream to
+       the office as parts — by hold-to-finish most of the film is already there. */
+    var rec = {
+      clipId: Core.newClipId ? Core.newClipId() : '',
+      jobId: state.activeJobId,
+      startedAt: '',
+      streamer: null,
+      canStream: canStreamNow(),
+    };
+    state.recording = rec;
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
@@ -1298,6 +1311,9 @@
       onTick: function (sec) {
         state.seconds = sec;
         $('#clock').textContent = fmt(sec);
+      },
+      onChunk: function (chunk, meta) {
+        streamChunk(rec, chunk, meta);
       },
     });
     setStatus('');
@@ -1321,6 +1337,55 @@
         alert(err.message || 'Could not start camera/mic.');
         show('s-home');
       });
+  }
+
+  /**
+   * Streaming while recording needs somewhere to put parts: an office job id
+   * (not a phone-only draft) or a job-share link, and signal right now. A
+   * recording that cannot stream simply uploads whole at the end.
+   */
+  function canStreamNow() {
+    if (DEMO || !Core.createDayFilmStreamer || !Core.mintPartUploadUrl) return false;
+    if (navigator.onLine === false) return false;
+    if (LIVE) return true;
+    return Boolean(
+      state.account &&
+        state.accessToken &&
+        state.activeJobId &&
+        !(Core.isLocalJobId && Core.isLocalJobId(state.activeJobId)),
+    );
+  }
+
+  /** Every chunk the recorder hands over goes to the streamer, in order. */
+  function streamChunk(rec, chunk, meta) {
+    if (!rec || !meta) return;
+    if (!rec.startedAt && meta.startedAt) rec.startedAt = meta.startedAt;
+    if (!rec.canStream) return;
+    if (!rec.streamer) {
+      var mimeType = meta.mimeType || 'video/webm';
+      var extension = mimeType.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+      var workDate = Core.localDateISO(Date.parse(meta.startedAt || '') || Date.now());
+      rec.streamer = Core.createDayFilmStreamer({
+        mimeType: mimeType,
+        partBytes: Core.STREAM_PART_BYTES,
+        mint: function (index) {
+          var call = function (accessToken) {
+            return Core.mintPartUploadUrl({
+              apiBase: API_BASE,
+              jobId: LIVE ? undefined : rec.jobId,
+              token: LIVE ? TOKEN || undefined : undefined,
+              accessToken: LIVE ? undefined : accessToken,
+              workDate: workDate,
+              extension: extension,
+              clipId: rec.clipId,
+              index: index,
+            });
+          };
+          return LIVE ? call(undefined) : withSession(call);
+        },
+      });
+    }
+    rec.streamer.push(chunk);
   }
 
   /**
@@ -1379,7 +1444,8 @@
   function finishLiveDay() {
     if (!state.recorder || stopping) return;
     var recorder = state.recorder;
-    var boundJobId = state.activeJobId;
+    var rec = state.recording || null;
+    var boundJobId = (rec && rec.jobId) || state.activeJobId;
     var boundJob = jobById(boundJobId);
     var boundOwner = state.filmOwner || state.owner;
     var site = state.site;
@@ -1393,6 +1459,12 @@
       .then(function (clip) {
         stopping = false;
         state.recorder = null;
+        state.recording = null;
+        /* The streamer stops taking chunks; whatever is in flight settles (or
+           is cut off) in the background. The film is stamped with the day it
+           STARTED on — a day that runs past midnight is still that day. */
+        var streamed = rec && rec.streamer ? rec.streamer.finish() : null;
+        var startedAt = clip.startedAt || (rec && rec.startedAt) || new Date().toISOString();
         var entry = Core.newDayFilmEntry({
           owner: boundOwner,
           mode: LIVE ? 'share' : 'account',
@@ -1402,22 +1474,32 @@
             boundJob && boundJob.pending
               ? { title: boundJob.title || boundJob.name, situation: boundJob.situation || '' }
               : null,
+          clipId: rec ? rec.clipId : undefined,
           blob: clip.blob,
           mimeType: clip.mimeType,
           durationSeconds: clip.durationSeconds,
+          recordedAt: startedAt,
+          workDate: Core.localDateISO ? Core.localDateISO(Date.parse(startedAt) || Date.now()) : undefined,
           site: site,
+          stream: streamed ? streamed.snapshot : null,
         });
         state.doorFilmId = entry.id;
         markJobFilmed(boundJobId);
         renderDoorSaved(entry);
         if (!filmQueue) return undefined;
-        return filmQueue.enqueue(entry).then(function () {
+        var settle = streamed
+          ? streamed.settled.then(function (snap) {
+              return { stream: Core.streamStateOf ? Core.streamStateOf(snap) : null };
+            })
+          : null;
+        return filmQueue.enqueue(entry, settle ? { settle: settle } : undefined).then(function () {
           if (state.doorFilmId === entry.id) paintDoorFilm(filmQueue.get(entry.id) || entry);
         });
       })
       .catch(function (err) {
         stopping = false;
         state.recorder = null;
+        state.recording = null;
         renderDoorNotSaved(err);
       });
   }
@@ -1514,9 +1596,36 @@
     showHomeAction();
   }
 
+  /**
+   * Door actions: Record another (same job, one tap — the camera opens
+   * straight from here) and Back to Home Screen (pick another job). The
+   * film just finished is already saved and filing; neither waits on it.
+   */
   function showHomeAction() {
     var done = $('#donebtn');
     if (done) done.classList.add('on');
+    var next = $('#nextbtn');
+    if (next) next.classList.toggle('on', canRecordAgain());
+  }
+
+  function canRecordAgain() {
+    if (DEMO) return false;
+    if (LIVE) return true;
+    return Boolean(state.account && state.activeJobId);
+  }
+
+  function recordAnother() {
+    state.recorder = null;
+    state.doorFilmId = null;
+    if (state.sessionLost) {
+      showSignInAfterExpiry();
+      return;
+    }
+    if (!canRecordAgain()) {
+      show('s-home');
+      return;
+    }
+    startLiveDay();
   }
 
   /** The office has it: the real checks replace the filing line. */
@@ -1602,8 +1711,11 @@
         durationSeconds: entry.durationSeconds,
         workDate: entry.workDate,
         recordedAt: entry.recordedAt,
+        clipId: entry.clipId,
+        stream: entry.stream || null,
         facts: entry.facts || null,
         onFacts: hooks.onFacts,
+        onStreamAdvance: hooks.onStreamAdvance,
         onStep: hooks.onStep,
         onProgress: hooks.onProgress,
       });
@@ -2125,6 +2237,9 @@
       });
     }
   })();
+  when('#nextbtn', function (btn) {
+    btn.addEventListener('click', recordAnother);
+  });
   $('#donebtn').addEventListener('click', function () {
     /* Home is always open from the door. The day film is already saved in
        the filing queue; leaving never drops it, and the strip on Today shows

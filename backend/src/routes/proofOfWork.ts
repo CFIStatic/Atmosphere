@@ -60,7 +60,7 @@ import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromPro
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
-import { assertOwnedProofStoragePath, proofObjectPath } from '../shared/proofStoragePath.js';
+import { assertOwnedProofStoragePath, CLIP_ID, proofObjectPath } from '../shared/proofStoragePath.js';
 import { resolveDictationEntries, sanitizeDictationEvents } from '../shared/dictationEvents.js';
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
@@ -83,6 +83,7 @@ import {
   planProofChunks,
   storageListEntryByteSize,
   storageObjectByteSize,
+  PROOF_MAX_PARTS,
 } from '../lib/proofUploadChunks.js';
 
 /**
@@ -147,6 +148,24 @@ function catalogEventsFromRow(row: any): Array<{ atSeconds: number; text?: strin
     events.push({ atSeconds: at, text: text || undefined });
   }
   return events.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+
+/**
+ * A day can now hold several films of one phase (stop one video, start the
+ * next). The day's verdict and reading follow the latest film.
+ */
+function latestOfPhase(rows: any[], phase: 'before' | 'after'): any | undefined {
+  let latest: any | undefined;
+  let latestAt = -Infinity;
+  for (const row of rows) {
+    if (row?.phase !== phase) continue;
+    const at = Date.parse(row.captured_at ?? row.received_at ?? '') || 0;
+    if (!latest || at >= latestAt) {
+      latest = row;
+      latestAt = at;
+    }
+  }
+  return latest;
 }
 
 /** The row shape the verifier wants. */
@@ -230,6 +249,7 @@ export async function createUploadUrl(
   body: unknown,
 ): Promise<{
   path: string;
+  clipId: string | null;
   token: string;
   uploadUrl: string;
   chunkSize: number;
@@ -241,6 +261,9 @@ export async function createUploadUrl(
       phase: z.enum(['before', 'after']),
       extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
       byteSize: z.number().int().positive().max(8 * 1024 * 1024 * 1024).optional(),
+      // One object per recording: a second film on the same job and day is a
+      // second film, not a replacement. Older phones omit it.
+      clipId: z.string().regex(CLIP_ID).optional(),
     })
     .parse(body ?? {});
 
@@ -251,12 +274,14 @@ export async function createUploadUrl(
   const plan = planProofChunks(input.byteSize ?? 0);
   const slot: {
     path: string;
+    clipId: string | null;
     token: string;
     uploadUrl: string;
     chunkSize: number;
     parts?: ProofUploadPart[];
   } = {
     path,
+    clipId: input.clipId ?? null,
     token: signed.token,
     uploadUrl: signed.signedUrl,
     chunkSize: plan.chunkSize,
@@ -283,11 +308,59 @@ export async function createUploadUrl(
   return slot;
 }
 
+const partUploadSchema = z.object({
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  phase: z.enum(['before', 'after']),
+  extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
+  clipId: z.string().regex(CLIP_ID),
+  index: z.number().int().min(0).max(PROOF_MAX_PARTS - 1),
+});
+
+/**
+ * POST …/proof/upload-part-url
+ *
+ * One signed URL for one slice of a film that is still being recorded. The
+ * phone PUTs slices while the camera runs, so by hold-to-finish most of the
+ * day is already in storage and only the tail is left; `upload-complete`
+ * then stitches `.parts/0000…` onto the final path. A clip id is required:
+ * parts live under the clip's own path, so the next film on the same job and
+ * day can never overwrite slices of this one.
+ */
+export async function createPartUploadUrl(
+  party: any,
+  admin: any,
+  body: unknown,
+): Promise<{
+  path: string;
+  clipId: string;
+  index: number;
+  partPath: string;
+  token: string;
+  uploadUrl: string;
+  maxParts: number;
+  assembleMaxBytes: number;
+}> {
+  const input = partUploadSchema.parse(body ?? {});
+  const path = proofObjectPath(party, input);
+  const partPath = partObjectPath(path, input.index);
+  const signed = await mintSignedUpload(admin, partPath);
+  return {
+    path,
+    clipId: input.clipId,
+    index: input.index,
+    partPath,
+    token: signed.token,
+    uploadUrl: signed.signedUrl,
+    maxParts: PROOF_MAX_PARTS,
+    assembleMaxBytes: PROOF_ASSEMBLE_MAX_BYTES,
+  };
+}
+
 const completeChunksSchema = z.object({
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   phase: z.enum(['before', 'after']),
   storagePath: z.string().min(1).max(500),
-  partCount: z.number().int().min(2).max(128),
+  partCount: z.number().int().min(2).max(PROOF_MAX_PARTS),
 });
 
 /**
@@ -462,8 +535,12 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     { seenHashes },
   );
 
-  // Visible unique (party, day, phase): a second attempt replaces the live
-  // row. A customer-deleted clip stays in the vault and does not block a refilm.
+  // One live row per storage object. A legacy path is one object per party,
+  // day and phase, so a second attempt replaces the live row as before. A
+  // clip path is one object per recording: a retried POST for the same clip
+  // updates its own row, and the next film that day is its own row — the
+  // crew stops one video and starts another without losing the first. A
+  // customer-deleted clip stays in the vault and does not block a refilm.
   const proofRow = {
     org_id: party.org_id,
     job_id: party.job_id,
@@ -487,9 +564,10 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     .from('job_proofs')
     .select('id')
     .eq('party_id', party.id)
-    .eq('work_date', input.workDate)
-    .eq('phase', input.phase)
+    .eq('storage_path', storagePath)
     .is('deleted_at', null)
+    .order('received_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   const write = existingVisible?.id
@@ -1706,8 +1784,8 @@ export async function listPartyProofs(party: any, admin: any) {
 
   return {
     days: [...byDate.entries()].map(([workDate, list]) => {
-      const before = list.find((r) => r.phase === 'before');
-      const after = list.find((r) => r.phase === 'after');
+      const before = latestOfPhase(list, 'before');
+      const after = latestOfPhase(list, 'after');
       const verdict = verifyDay({
         workDate,
         before: before ? asUpload(before) : null,
@@ -1835,8 +1913,8 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
 
   const days = [...grouped.entries()].map(([key, list]) => {
     const [partyId, workDate] = key.split('|');
-    const before = list.find((r) => r.phase === 'before');
-    const after = list.find((r) => r.phase === 'after');
+    const before = latestOfPhase(list, 'before');
+    const after = latestOfPhase(list, 'after');
     const verdict = verifyDay({
       workDate,
       before: before ? asUpload(before) : null,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { HttpError } from '../src/lib/errors.js';
 import {
   assertOwnedProofStoragePath,
+  clipIdOfStoragePath,
   proofObjectPath,
 } from '../src/shared/proofStoragePath.js';
 
@@ -52,4 +53,83 @@ test('assertOwnedProofStoragePath rejects another party, day, or phase', () => {
       (err: unknown) => err instanceof HttpError && err.status === 400 && err.code === 'storage_path_mismatch',
     );
   }
+});
+
+/* ---- one object per recording ----------------------------------------------
+   A crew stops one video and starts the next on the same job the same day.
+   Each recording carries a clip id, so the second film never overwrites the
+   first, and a legacy phone without one keeps the one-per-day path. */
+
+test('proofObjectPath gives every recording its own object when a clip id is sent', () => {
+  assert.equal(
+    proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: 'mf3k9x2abc' }),
+    'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm',
+  );
+  assert.equal(
+    proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: 'MF3K9X2ABC' }),
+    'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm',
+    'clip ids are lower-cased so the path regex stays one shape',
+  );
+  assert.notEqual(
+    proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: 'aaaaaa' }),
+    proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: 'bbbbbb' }),
+  );
+  assert.equal(
+    proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: null }),
+    'org-1/job-1/party-1/2026-09-09-after.webm',
+    'no clip id → the legacy one-per-day path',
+  );
+  for (const bad of ['short', 'has-dash', 'has/slash', 'x'.repeat(33), '../up']) {
+    assert.throws(
+      () => proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: bad }),
+      (err: unknown) => err instanceof HttpError && err.status === 400 && err.code === 'invalid_clip_id',
+      `clip id ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+});
+
+test('clipIdOfStoragePath reads the clip id back, null for legacy paths', () => {
+  assert.equal(clipIdOfStoragePath('org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm'), 'mf3k9x2abc');
+  assert.equal(clipIdOfStoragePath('org-1/job-1/party-1/2026-09-09-after.webm'), null);
+  assert.equal(clipIdOfStoragePath('garbage'), null);
+});
+
+test('assertOwnedProofStoragePath accepts a clip path for this party and can pin the clip', () => {
+  const path = proofObjectPath(party, { workDate: '2026-09-09', phase: 'after', extension: 'webm', clipId: 'mf3k9x2abc' });
+  assert.equal(assertOwnedProofStoragePath(party, { workDate: '2026-09-09', phase: 'after', storagePath: path }), path);
+  assert.equal(
+    assertOwnedProofStoragePath(party, { workDate: '2026-09-09', phase: 'after', storagePath: path, clipId: 'mf3k9x2abc' }),
+    path,
+  );
+  const mismatches = [
+    { storagePath: path, clipId: 'other0' },
+    { storagePath: 'org-1/job-1/party-1/2026-09-09-after.webm', clipId: 'mf3k9x2abc' },
+    { storagePath: 'org-1/job-1/party-OTHER/2026-09-09-after-mf3k9x2abc.webm' },
+    { storagePath: 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm.parts/0000' },
+    { storagePath: 'org-1/job-1/party-1/2026-09-09-after-MF3K9X2ABC.webm' },
+  ];
+  for (const input of mismatches) {
+    assert.throws(
+      () => assertOwnedProofStoragePath(party, { workDate: '2026-09-09', phase: 'after', ...input }),
+      (err: unknown) => err instanceof HttpError && err.status === 400 && err.code === 'storage_path_mismatch',
+      `${JSON.stringify(input)} must be refused`,
+    );
+  }
+});
+
+test('recordProof keys the live row on the storage object, so a second clip that day is a second row', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/routes/proofOfWork.ts', import.meta.url), 'utf8');
+  const from = src.indexOf('export async function recordProof(');
+  const to = src.indexOf('const write = existingVisible?.id', from);
+  assert.ok(from > 0 && to > from, 'recordProof must look up the existing visible row before writing');
+  const lookup = src.slice(from, to);
+  assert.match(lookup, /\.eq\('storage_path', storagePath\)/, 'the live row is the one for this object');
+  assert.doesNotMatch(
+    lookup,
+    /\.eq\('phase', input\.phase\)/,
+    'a second film of the same phase on the same day must not replace the first',
+  );
+  assert.match(lookup, /\.is\('deleted_at', null\)/, 'a customer-deleted clip must not block a refilm');
+  assert.match(src, /function latestOfPhase\(/, "a day's verdict follows the latest film of that phase");
 });
