@@ -138,79 +138,72 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=field-support-1/);
-assert.match(html, /js\/app\.js\?v=field-support-1/);
+assert.match(html, /js\/capture-core\.js\?v=field-filing-queue-1/);
+assert.match(html, /js\/app\.js\?v=field-filing-queue-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
-assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
-assert.match(html, /\.donebtn\.on, \.retrybtn\.on \{ display: block; \}/);
+assert.doesNotMatch(html, /retrybtn/, 'the filing queue retries on its own — no Retry button on the door');
+assert.match(html, /\.donebtn\.on \{ display: block; \}/);
 assert.match(html, /class="door-actions"/, 'home actions stay pinned under the door scroll');
 assert.match(html, /\.door-actions \{[\s\S]*?flex: 0 0 auto/, 'home button stays visible while checks scroll');
 assert.match(html, /\.donebtn\.on/);
-assert.match(appSrc, /function uploadLastClip/);
+assert.match(appSrc, /function uploadFilm/);
 assert.match(appSrc, /showHomeAction/);
-assert.match(appSrc, /scheduleFailRetry/);
 assert.match(
   appSrc,
-  /function openDoorUploading\([\s\S]*?showHomeAction\(\)/,
-  'Back to Home Screen must appear as soon as recording ends, including while uploading',
+  /function renderDoorSaved\([\s\S]*?showHomeAction\(\)/,
+  'Back to Home Screen must appear as soon as recording ends, while the film is still filing',
 );
-assert.match(appSrc, /state\.lastClip/, 'keep the day film on device until upload succeeds');
+assert.match(appSrc, /filmQueue\.enqueue\(entry\)/, 'the day film goes to the filing queue, which holds it until the office has it');
+assert.match(appSrc, /Core\.openDayFilmStore/, 'films wait in IndexedDB so a killed tab does not lose the day');
+assert.match(appSrc, /Core\.createDayFilmQueue/);
 {
   const doneFrom = appSrc.indexOf("$('#donebtn')");
-  const doneTo = appSrc.indexOf("when('#retrybtn'");
+  const doneTo = appSrc.indexOf('bindJobSearch();');
   assert.ok(doneFrom >= 0 && doneTo > doneFrom, 'Home lives on the door done button');
   const doneHandler = appSrc.slice(doneFrom, doneTo);
+  assert.match(doneHandler, /show\('s-home'\)/);
   assert.doesNotMatch(
     doneHandler,
-    /state\.lastClip = null/,
-    'Home must not drop lastClip while upload is in flight or paused',
+    /filmQueue\.(remove|drop|clear)/,
+    'Home must never drop a film that is still filing',
   );
-  assert.match(
-    doneHandler,
-    /Still on this phone/,
-    'Home during an unfiled clip keeps a calm on-phone status',
-  );
+  assert.doesNotMatch(doneHandler, /Still on this phone/, 'the Today strip, not the status line, shows what is still filing');
 }
-assert.match(
+assert.doesNotMatch(
   appSrc,
-  /if \(state\.lastClip === clip\) state\.lastClip = null;/,
-  'a settled PUT must not wipe a newer recording',
+  /The last day is still uploading/,
+  'a second day starts while the previous film is still filing in the background',
+);
+assert.doesNotMatch(
+  appSrc,
+  /The last day is still on this phone/,
+  'Home starts a second day even while the last film is still local',
 );
 assert.match(
   appSrc,
-  /if \(state\.finishing\) \{\s*setStatus\('The last day is still uploading\.'/,
-  'a second day must not start while the previous PUT is still running',
-);
-assert.match(
-  appSrc,
-  /if \(state\.lastClip\) \{\s*setStatus\('The last day is still on this phone\.'/,
-  'Home must not start a second day while the last clip is still local',
-);
-assert.match(
-  appSrc,
-  /var boundJobId = state\.activeJobId;[\s\S]*?clip\.jobId = boundJobId/,
+  /var boundJobId = state\.activeJobId;[\s\S]*?jobId: boundJobId/,
   'stop must stamp the job the day was filmed on so a later Home tap cannot reroute the file',
 );
 assert.match(
   appSrc,
-  /resolveActiveJobId\(clip\.jobId\)/,
-  'filing must use the clip job, not whatever is selected on Today',
+  /resolveJob: resolveFilmJob/,
+  'filing must resolve the film job, not whatever is selected on Today',
 );
 assert.match(
   appSrc,
-  /if \(state\.lastClip && state\.lastClip\.jobId === localId\)/,
-  'a local-to-office remap must keep an unfiled clip on that same job',
+  /filmQueue\.remapJob\(localId, listed\.id\)/,
+  'a local-to-office remap must move every waiting film onto that office job',
 );
 {
   const openFrom = appSrc.indexOf('function openNewJobForm');
   const openTo = appSrc.indexOf('function selectCreatedJob');
   assert.ok(openFrom >= 0 && openTo > openFrom, 'openNewJobForm must exist');
   const openSrc = appSrc.slice(openFrom, openTo);
-  assert.match(
+  assert.doesNotMatch(
     openSrc,
-    /if \(state\.lastClip\)/,
-    '+ must not open a new job while the last clip is still on this phone',
+    /lastClip|finishing|uploading/,
+    '+ opens a new job even while an earlier film is still filing',
   );
 }
 assert.match(coreSrc, /putBytesWithRetry/, 'video + audio PUT must retry on truck signal');
@@ -256,8 +249,17 @@ assert.match(appSrc, /field-session-missing/, 'unsigned Field Capture must not f
 assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the in-app Platform');
 assert.match(appSrc, /notifyOfficeLibraryChanged/, 'a new Field Capture job must refresh the office list');
 assert.match(appSrc, /atmosphere: 'library-changed'/);
-assert.match(appSrc, /scheduleFailRetry/, 'hard-fail still auto-retries so Retry is not the only path');
+assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
 assert.match(html, /id="door-sub"/);
+assert.match(html, /id="doneline-title"/, 'the door done-line changes from Done to Uploaded as the film files');
+assert.match(html, /id="filing"/, 'Today carries a strip for days saved on this phone');
+assert.match(html, /id="filing-title"/);
+assert.match(html, /id="filing-detail"/);
+assert.match(html, /id="filing-rows"/);
+assert.match(html, /id="filing-bar"/);
+assert.match(appSrc, /function renderFilingStrip/);
+assert.match(appSrc, /function paintFiling/);
+assert.match(appSrc, /Core\.summarizeDayFilms/);
 assert.doesNotMatch(html, /Your part is done/);
 assert.doesNotMatch(html, /Your day, as the office will read it/);
 assert.doesNotMatch(appSrc, /Fix signal and tap Retry upload/);
@@ -316,10 +318,10 @@ assert.match(appSrc, /Core\.createTodayJob/);
     /Core\.createTodayJob\(\{/,
     'new-job submit must POST through pendingSync, not a parallel createTodayJob',
   );
-  assert.match(
+  assert.doesNotMatch(
     submitSrc,
-    /if \(state\.finishing \|\| state\.lastClip\)/,
-    'Start recording must not draft a second job while the last clip is unfiled',
+    /state\.finishing|state\.lastClip/,
+    'Start recording drafts the next job even while the last film is still filing',
   );
 }
 assert.match(
@@ -388,7 +390,7 @@ assert.equal(Core.isTransientNetworkError({ status: 401, message: 'Unauthorized'
 assert.match(appSrc, /Core\.draftFieldJob/);
 assert.match(appSrc, /Core\.upsertPendingJob/);
 assert.match(appSrc, /function syncPendingJobs/);
-assert.match(appSrc, /function resolveActiveJobId/);
+assert.match(appSrc, /function resolveFilmJob/);
 assert.match(
   appSrc,
   /isTransientNetworkError\(err\) && cachedMe/,
@@ -401,19 +403,26 @@ assert.match(
 );
 assert.match(
   appSrc,
-  /!accessToken[\s\S]*?abandonUnfiledWork\(\)/,
+  /!accessToken[\s\S]*?endSessionWork\(\)/,
   'sign-out must drop pending jobs and cached profile, not only the session tokens',
 );
 {
-  const from = appSrc.indexOf('function abandonUnfiledWork');
+  const from = appSrc.indexOf('function endSessionWork');
   const to = appSrc.indexOf('/* ---------- home hydration ---------- */');
-  assert.ok(from >= 0 && to > from, 'abandonUnfiledWork must exist');
+  assert.ok(from >= 0 && to > from, 'endSessionWork must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /sessionGen \+= 1/, 'sign-out must invalidate in-flight sync and upload');
-  assert.match(src, /state\.lastClip = null/);
-  assert.match(src, /state\.finishing = false/);
-  assert.match(src, /clearFailRetry\(\)/);
+  assert.match(src, /sessionGen \+= 1/, 'sign-out must invalidate in-flight sync');
   assert.match(src, /pendingSync = null/);
+  assert.doesNotMatch(src, /filmQueue/, 'sign-out must not drop day films — they wait on this phone for the same crew');
+}
+{
+  const from = appSrc.indexOf('function signOutFieldAccount');
+  const to = appSrc.indexOf('var whoBtn = ');
+  assert.ok(from >= 0 && to > from, 'signOutFieldAccount must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /filmQueue\.pending/, 'sign-out must check for films still filing');
+  assert.match(src, /window\.confirm/, 'sign-out with films still filing asks first');
+  assert.match(src, /still filing with the office/);
 }
 {
   const from = appSrc.indexOf('function captureSession');
@@ -423,13 +432,21 @@ assert.match(
   assert.match(src, /function sessionStillOpen/);
   assert.match(
     src,
-    /accessToken: bound\.accessToken/,
-    'pending-job POST must use the captured token, not the live session',
+    /withSession\(function \(accessToken\) \{\s*return Core\.createTodayJob/,
+    'pending-job POST must refresh a one-hour token on 401 instead of failing the day',
   );
   assert.match(
     src,
     /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?Core\.createTodayJob/,
     'sign-out must stop the next pending-job POST',
+  );
+  assert.match(src, /function refreshAccess/);
+  assert.match(src, /Core\.refreshSession\(API_BASE, refreshToken\)/);
+  assert.match(src, /function sessionExpired/);
+  assert.match(
+    src,
+    /screen === 's-rec' \|\| screen === 's-door'/,
+    'an expired session must not yank a crew off a running recording or the door',
   );
   assert.match(
     src,
@@ -438,13 +455,24 @@ assert.match(
   );
   assert.match(
     src,
-    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
-    'resolveActiveJobId must not fall back to the next account\'s activeJobId',
+    /if \(!sessionStillOpen\(bound\)\) throw new Error\('Session ended\.'\);/,
+    'resolveFilmJob must not resolve into the next account\'s session',
   );
   assert.match(
     src,
-    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?uploadLastClip\(\)/,
-    'flush after sign-out must not upload the previous clip',
+    /function flushFieldWork[\s\S]*?filmQueue\.kick/,
+    'signal back / app in front must kick the filing queue',
+  );
+  assert.match(
+    src,
+    /return remapLocalJob\(localJob\.id, serverJob\)\.then\(function \(\) \{[\s\S]*?markPendingJobSynced/,
+    'films follow the office job before the draft is forgotten',
+  );
+  assert.match(src, /function resolveFilmJob/);
+  assert.match(
+    src,
+    /entry\.jobDraft && Core\.upsertPendingJob/,
+    'a film on a cleared phone-only job recreates that job from its own draft',
   );
   assert.match(
     src,
@@ -453,45 +481,73 @@ assert.match(
   );
 }
 {
-  const from = appSrc.indexOf('function uploadLastClip');
-  const to = appSrc.indexOf('function setDoorSub');
-  assert.ok(from >= 0 && to > from, 'uploadLastClip must exist');
+  const from = appSrc.indexOf('function uploadFilm');
+  const to = appSrc.indexOf('function filmFiled');
+  assert.ok(from >= 0 && to > from, 'uploadFilm must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /var bound = captureSession\(\)/);
-  assert.match(
-    src,
-    /accessToken: boundAccount \? bound\.accessToken : undefined/,
-    'day-film PUT must use the captured token, not the live session',
-  );
-  assert.match(
-    src,
-    /if \(!sessionStillOpen\(bound\)\) \{\s*throw new Error\('Session ended\.'\);/,
-    'sign-out mid-upload must not call uploadDayFilm',
-  );
-  assert.match(
-    src,
-    /if \(!sessionStillOpen\(bound\)\) return result;/,
-    'a late upload must not notify the next account\'s library',
-  );
+  assert.match(src, /return withSession\(attempt\)/, 'a 401 mid-queue refreshes the token and retries, not fails the day');
+  assert.match(src, /knownSite: entry\.site \|\| null/, 'the film is placed where it was filmed, not where the truck is when signal returns');
+  assert.match(src, /noPosition: !entry\.site && stale/);
+  assert.match(src, /workDate: entry\.workDate/, 'a film sent after midnight files under the day it was filmed');
+  assert.match(src, /recordedAt: entry\.recordedAt/);
+  assert.match(src, /facts: entry\.facts \|\| null/, 'a retry must not hash the film again');
+  assert.match(src, /onFacts: hooks\.onFacts/);
 }
 {
   const from = appSrc.indexOf('function finishLiveDay');
-  const to = appSrc.indexOf('function uploadLastClip');
+  const to = appSrc.indexOf('function setDoorSub');
   assert.ok(from >= 0 && to > from, 'finishLiveDay must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /var bound = captureSession\(\)/);
   assert.match(src, /var boundJobId = state\.activeJobId/);
-  assert.match(
-    src,
-    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?clip\.jobId = boundJobId/,
-    'a late recorder.stop must not attach the previous clip to the next account',
+  assert.match(src, /var boundOwner = state\.filmOwner \|\| state\.owner/, 'the film belongs to the crew that started it, even if the session dies mid-day');
+  assert.match(src, /owner: boundOwner/);
+  assert.match(src, /Core\.newDayFilmEntry\(/);
+  assert.ok(
+    src.indexOf('renderDoorSaved(entry)') < src.indexOf('filmQueue.enqueue(entry)'),
+    'the door shows the day as done before the save or upload even starts',
   );
-  assert.match(
-    src,
-    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?renderDoorFailed/,
-    'a late finish error must not paint the door for the next account',
-  );
+  assert.match(src, /markJobFilmed\(boundJobId\)/, 'Today shows the job filmed the moment the recorder stops');
+  assert.match(src, /site: site/, 'GPS from the recording travels with the film');
+  assert.doesNotMatch(src, /uploadDayFilm/, 'finish never uploads inline — the queue does, in the background');
 }
+{
+  const from = appSrc.indexOf('function renderDoorSaved');
+  const to = appSrc.indexOf('function paintDoorFilm');
+  assert.ok(from >= 0 && to > from, 'renderDoorSaved must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /Saved on this phone/);
+  assert.match(src, /Filing with the office/);
+  assert.match(src, /setDoneline\(\s*'Done\.'/, 'the door reads as done immediately');
+  assert.match(src, /You can start the next one now/);
+  assert.match(src, /classList\.add\('on'\)/);
+}
+{
+  const from = appSrc.indexOf('function renderDoorLive');
+  const to = appSrc.indexOf('/* ---------- the filing queue');
+  assert.ok(from >= 0 && to > from, 'renderDoorLive must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /setDoneline\('Uploaded\.', DONELINE_OK\)/, 'Uploaded is said only once the office really has it');
+}
+{
+  const from = appSrc.indexOf('function startLiveDay');
+  const to = appSrc.indexOf('function jobById');
+  assert.ok(from >= 0 && to > from, 'startLiveDay must exist');
+  const src = appSrc.slice(from, to);
+  assert.doesNotMatch(src, /filmQueue|lastClip|finishing/, 'Start the day never waits on the filing queue');
+  assert.match(src, /state\.filmOwner = state\.owner/);
+  assert.match(src, /resetRecScreen\(\)/, 'the second day must not open with a full red fill bar from the first hold');
+}
+{
+  const from = appSrc.indexOf('function resetRecScreen');
+  const to = appSrc.indexOf('function jobById');
+  assert.ok(from >= 0 && to > from, 'resetRecScreen must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /removeAttribute\('data-holding'\)/);
+  assert.match(src, /Hold 5 seconds to finish/);
+}
+assert.match(appSrc, /addEventListener\('visibilitychange'/, 'Field Capture back in front kicks the queue');
+assert.match(appSrc, /addEventListener\('pageshow'/);
+assert.match(appSrc, /flushFieldWork\('tick'\)/, 'the safety tick keeps filing even if an event is missed');
 assert.match(
   appSrc,
   /if \(!sessionStillOpen\(bound\)\) \{[\s\S]*?upsertPendingJob/,
@@ -541,5 +597,398 @@ assert.match(html, /id="fc-menu-support"/);
 assert.match(html, /contact\.html/);
 assert.match(appSrc, /buildFieldCaptureSupportUrl/);
 assert.match(appSrc, /refreshFieldSupportLink/);
+
+
+/* ---------- the filing queue: the crew is done at hold-to-finish ----------
+   The film is saved on the phone, the door reads Done, Today opens, and the
+   next day can start. The queue files one film at a time in the background,
+   waits for signal instead of failing, and survives a killed tab. */
+
+assert.equal(typeof Core.openDayFilmStore, 'function');
+assert.equal(typeof Core.createDayFilmQueue, 'function');
+assert.equal(typeof Core.newDayFilmEntry, 'function');
+assert.equal(typeof Core.summarizeDayFilms, 'function');
+assert.equal(typeof Core.refreshSession, 'function');
+assert.equal(Core.nextFilingBackoffMs(0), 5000);
+assert.equal(Core.nextFilingBackoffMs(1), 10000);
+assert.equal(Core.nextFilingBackoffMs(9), 60000, 'retries settle at once a minute and never give up');
+assert.equal(Core.WAITING_FOR_SIGNAL, 'Waiting for signal…');
+assert.equal(Core.POSITION_FRESH_MS, 10 * 60 * 1000);
+assert.match(coreSrc, /workDate: workDate,/, 'upload files under the day it was filmed, not the day signal came back');
+assert.doesNotMatch(coreSrc, /workDate: todayISO\(\)/);
+assert.match(coreSrc, /function readFacts/, 'a retry reuses hash, stills and GPS instead of reading 400 MB again');
+assert.match(coreSrc, /onFacts\(facts\)/, 'the first read is handed back even when the PUT fails');
+assert.match(coreSrc, /lastModified: Number\.isFinite\(recordedMs\) \? recordedMs : Date\.now\(\)/, 'capturedAt is the recording time, not the upload time');
+assert.match(coreSrc, /opts\.noPosition/, 'an old film is not placed where the truck is now');
+assert.match(coreSrc, /\/api\/auth\/refresh/);
+assert.match(coreSrc, /createObjectStore\(DAY_FILM_BYTES_STORE/, 'bytes live in their own store so a status change never rewrites the film');
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+function fakeClock(start = 1_700_000_000_000) {
+  let t = start;
+  const pending = new Map();
+  let seq = 0;
+  return {
+    now: () => t,
+    timers: {
+      setTimeout(fn, ms) {
+        const id = ++seq;
+        pending.set(id, { at: t + ms, fn });
+        return id;
+      },
+      clearTimeout(id) {
+        pending.delete(id);
+      },
+    },
+    async advance(ms) {
+      t += ms;
+      for (const [id, entry] of [...pending.entries()].sort((a, b) => a[1].at - b[1].at)) {
+        if (entry.at <= t) {
+          pending.delete(id);
+          entry.fn();
+          await flush();
+        }
+      }
+    },
+  };
+}
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const fakeBlob = (size) => ({ size, type: 'video/webm' });
+const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durationSeconds: 12 } };
+
+{
+  // Record, go Home, record again: both files, one at a time, oldest first.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  assert.equal(await store.ready, false, 'no IndexedDB → memory store, still works');
+  const clock = fakeClock();
+  const uploads = [];
+  const filed = [];
+  const changes = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry, hooks) {
+      const d = deferred();
+      uploads.push({ entry, hooks, d });
+      return d.promise;
+    },
+    onChange(films, reason) {
+      changes.push(reason);
+    },
+    onFiled(entry, result) {
+      filed.push({ id: entry.id, result });
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-a', jobName: 'Meridian Ave', blob: fakeBlob(10),
+    durationSeconds: 12, recordedAt: '2026-09-09T10:00:00.000Z',
+  });
+  const b = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-b', jobName: 'Cedar Ridge', blob: fakeBlob(20),
+    durationSeconds: 30, recordedAt: '2026-09-09T10:05:00.000Z',
+  });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 1, 'the first film starts filing at once');
+  assert.equal(queue.get(a.id).status, 'uploading');
+  await queue.enqueue(b);
+  await flush();
+  assert.equal(uploads.length, 1, 'the second film waits — one film at a time keeps each one fast');
+  assert.equal(queue.get(b.id).status, 'queued');
+  assert.equal((await store.list()).length, 2, 'both films are saved on the phone while the first sends');
+  uploads[0].hooks.onProgress(0.5);
+  assert.equal(queue.get(a.id).progress, 0.5);
+  uploads[0].hooks.onStep('Uploading…');
+  assert.equal(queue.get(a.id).step, 'Uploading…');
+  uploads[0].d.resolve(okResult);
+  await flush();
+  assert.deepEqual(filed.map((f) => f.id), [a.id]);
+  assert.equal(queue.get(a.id), null, 'a filed film leaves the queue');
+  assert.equal(uploads.length, 2, 'the next film starts the moment the first is filed');
+  assert.equal(uploads[1].entry.id, b.id);
+  uploads[1].d.resolve(okResult);
+  await flush();
+  assert.equal(queue.films().length, 0);
+  assert.equal((await store.list()).length, 0, 'nothing left on the phone once the office has both');
+  assert.ok(changes.includes('enqueue') && changes.includes('start') && changes.includes('filed'));
+}
+
+{
+  // Truck signal: a failed PUT waits with backoff, keeps what it already read,
+  // and signal coming back skips the wait.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry, hooks) {
+      const d = deferred();
+      uploads.push({ entry, hooks, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({ owner: 'user:1', jobId: 'job-a', blob: fakeBlob(10) });
+  await queue.enqueue(a);
+  await flush();
+  const facts = { contentHash: 'abc', durationSeconds: 9, frames: [] };
+  uploads[0].hooks.onFacts(facts);
+  uploads[0].d.reject(Object.assign(new Error('network'), { status: 0 }));
+  await flush();
+  const after = queue.get(a.id);
+  assert.equal(after.status, 'waiting');
+  assert.equal(after.attempts, 1);
+  assert.equal(after.lastError, 'network');
+  assert.equal(after.nextAttemptAt, clock.now() + 5000, 'first retry after 5s');
+  assert.deepEqual(after.facts, facts, 'the hash and stills survive a failed PUT');
+  assert.equal(uploads.length, 1);
+  await clock.advance(4999);
+  assert.equal(uploads.length, 1, 'not before the backoff');
+  await clock.advance(1);
+  assert.equal(uploads.length, 2, 'retries on its own');
+  assert.deepEqual(uploads[1].entry.facts, facts, 'the retry reuses the facts');
+  uploads[1].d.reject(new Error('network'));
+  await flush();
+  assert.equal(queue.get(a.id).nextAttemptAt, clock.now() + 10000, 'backoff doubles');
+  await queue.kick('online');
+  await flush();
+  assert.equal(uploads.length, 3, 'signal back skips the backoff');
+  uploads[2].d.resolve(okResult);
+  await flush();
+  assert.equal(queue.films().length, 0);
+}
+
+{
+  // Airplane mode: nothing is attempted, the film is held, the online event sends it.
+  let online = false;
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => online,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({ owner: 'user:1', jobId: 'job-a', blob: fakeBlob(10) });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 0, 'no radio: do not burn an attempt');
+  assert.equal(queue.get(a.id).status, 'waiting');
+  assert.equal(queue.get(a.id).lastError, Core.WAITING_FOR_SIGNAL);
+  assert.equal((await store.list()).length, 1, 'the film is held on the phone');
+  online = true;
+  await queue.kick('online');
+  await flush();
+  assert.equal(uploads.length, 1, 'the online event files it immediately');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // Signed out, or another crew on the phone: films wait for their owner.
+  let owner = '';
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    canRun: (e) => e.owner === owner,
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const mine = Core.newDayFilmEntry({ owner: 'user:1', jobId: 'job-a', blob: fakeBlob(10) });
+  const theirs = Core.newDayFilmEntry({ owner: 'user:2', jobId: 'job-z', blob: fakeBlob(10) });
+  await queue.enqueue(mine);
+  await queue.enqueue(theirs);
+  await flush();
+  assert.equal(uploads.length, 0, 'signed out: films wait, nothing is sent');
+  assert.equal(queue.pending().length, 2);
+  owner = 'user:1';
+  await queue.kick('session');
+  await flush();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].entry.owner, 'user:1', "only the signed-in crew's films file");
+  uploads[0].d.resolve(okResult);
+  await flush();
+  assert.equal(uploads.length, 1, "another crew's film stays on the phone for them");
+  assert.equal(queue.pending((f) => f.owner === 'user:2').length, 1);
+}
+
+{
+  // A day filmed on a phone-only job files once the office id arrives.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    resolveJob(entry) {
+      if (Core.isLocalJobId(entry.jobId)) return Promise.reject(new Error(Core.WAITING_FOR_SIGNAL));
+      return Promise.resolve(entry.jobId);
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'local-1-abc', jobDraft: { title: 'Camden Court' }, blob: fakeBlob(10),
+  });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 0, 'no office job yet: nothing to PUT against');
+  assert.equal(queue.get(a.id).status, 'waiting');
+  assert.equal(queue.get(a.id).lastError, Core.WAITING_FOR_SIGNAL);
+  assert.equal(
+    JSON.stringify(queue.get(a.id).jobDraft),
+    JSON.stringify({ title: 'Camden Court', situation: '' }),
+    'the film carries the draft so a cleared draft list can recreate the job',
+  );
+  const moved = await queue.remapJob('local-1-abc', 'job-1038');
+  await flush();
+  assert.equal(moved, 1);
+  assert.equal(uploads.length, 1, 'the office id arrives → files at once, no backoff');
+  assert.equal(uploads[0].entry.jobId, 'job-1038');
+  assert.equal((await store.list())[0].jobId, 'job-1038', 'the remap is saved on the phone too');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // The tab dies mid-upload: the next launch finds both films and starts over, oldest first.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const first = Core.createDayFilmQueue({
+    store,
+    upload() {
+      return deferred().promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const older = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-a', jobName: 'Meridian Ave', blob: fakeBlob(10), recordedAt: '2026-09-09T09:00:00.000Z',
+  });
+  const newer = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-b', jobName: 'Cedar Ridge', blob: fakeBlob(10), recordedAt: '2026-09-09T09:30:00.000Z',
+  });
+  await first.enqueue(newer);
+  await first.enqueue(older);
+  await flush();
+  assert.equal(first.get(newer.id).status, 'uploading');
+  assert.equal(first.get(older.id).status, 'queued');
+  const uploads = [];
+  const second = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const films = await second.load();
+  assert.equal(films.length, 2, 'a killed tab keeps both films');
+  assert.ok(films.every((f) => f.status === 'queued'), 'a film left mid-upload starts over instead of hanging');
+  await second.kick('session');
+  await flush();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].entry.id, older.id, 'oldest first');
+  assert.ok(uploads[0].entry.blob, 'the bytes come back from the store');
+}
+
+{
+  // The Today strip, in words.
+  const films = [
+    { id: 'f1', owner: 'user:1', status: 'uploading', progress: 0.43, step: 'Uploading…', jobName: 'Meridian Ave', durationSeconds: 720, lastStatus: 0, jobId: 'job-a' },
+    { id: 'f2', owner: 'user:1', status: 'waiting', progress: 0, jobName: 'Cedar Ridge', durationSeconds: 180, lastError: 'network', lastStatus: 0, jobId: 'job-b' },
+    { id: 'f3', owner: 'user:2', status: 'queued', jobId: 'job-z' },
+  ];
+  const busy = Core.summarizeDayFilms(films, { owner: 'user:1', online: true, signedIn: true });
+  assert.equal(busy.count, 2, "only this crew's films");
+  assert.equal(busy.tone, 'busy');
+  assert.equal(busy.title, 'Filing 2 days with the office');
+  assert.equal(busy.detail, 'Uploading… · 43%');
+  assert.equal(busy.progress, 0.43);
+  assert.deepEqual(busy.rows.map((r) => r.state), ['Filing · 43%', 'Retrying…']);
+  assert.equal(busy.rows[0].name, 'Meridian Ave');
+  assert.equal(busy.rows[0].length, '12 minutes');
+  const offline = Core.summarizeDayFilms([films[1]], { owner: 'user:1', online: false, signedIn: true });
+  assert.equal(offline.tone, 'wait');
+  assert.equal(offline.title, '1 day saved on this phone');
+  assert.match(offline.detail, /Waiting for signal/);
+  assert.deepEqual(offline.rows.map((r) => r.state), ['Waiting for signal']);
+  const signedOut = Core.summarizeDayFilms(films, { signedIn: false });
+  assert.equal(signedOut.count, 3);
+  assert.equal(signedOut.title, 'Sign in to finish filing 3 days');
+  assert.equal(signedOut.signInLine, '3 days are saved on this phone. Sign in to finish filing them.');
+  const stuck = Core.summarizeDayFilms(
+    [{ id: 'f4', owner: 'user:1', status: 'waiting', lastError: 'That day film is too large to assemble here.', lastStatus: 413, jobId: 'job-a' }],
+    { owner: 'user:1', online: true, signedIn: true },
+  );
+  assert.equal(stuck.tone, 'warn');
+  assert.equal(stuck.detail, 'That day film is too large to assemble here.', 'a server answer that will not change by itself is said out loud');
+  assert.deepEqual(stuck.rows.map((r) => r.state), ['Needs the office']);
+  const volatile = Core.summarizeDayFilms(
+    [{ id: 'f5', owner: 'user:1', status: 'queued', volatile: true, jobId: 'job-a' }],
+    { owner: 'user:1', online: true, signedIn: true },
+  );
+  assert.match(volatile.detail, /Keep Field Capture open/);
+  assert.equal(Core.summarizeDayFilms([], { owner: 'user:1' }).count, 0);
+  const localJob = Core.summarizeDayFilms(
+    [{ id: 'f6', owner: 'user:1', status: 'waiting', jobId: 'local-9', lastError: Core.WAITING_FOR_SIGNAL, lastStatus: 0 }],
+    { owner: 'user:1', online: true, signedIn: true },
+  );
+  assert.deepEqual(localJob.rows.map((r) => r.state), ['Creating the job']);
+}
+
+{
+  const e = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-a', jobName: 'Meridian Ave', blob: fakeBlob(4096), mimeType: 'video/webm',
+    durationSeconds: 61, site: { lat: 30.1, lon: -97.7, accuracyM: 12 },
+  });
+  assert.match(e.id, /^film-/);
+  assert.equal(e.byteSize, 4096);
+  assert.equal(e.workDate, Core.todayISO(), 'stamped on the day it was filmed');
+  assert.ok(Date.parse(e.recordedAt) > 0);
+  assert.equal(JSON.stringify(e.site), JSON.stringify({ lat: 30.1, lon: -97.7, accuracyM: 12 }));
+  assert.equal(e.status, 'queued');
+  assert.equal(e.attempts, 0);
+  assert.equal(e.jobDraft, null);
+  assert.equal(Core.newDayFilmEntry({ site: { lat: null } }).site, null);
+  assert.equal(Core.newDayFilmEntry({ durationSeconds: 0 }).durationSeconds, null, '0:00 is unknown, not a length');
+  assert.equal(Core.newDayFilmEntry({ mode: 'share' }).mode, 'share');
+  assert.equal(Core.newDayFilmEntry({}).mode, 'account');
+}
 
 console.log('hold-to-finish OK');
