@@ -635,20 +635,49 @@ then to the Wave 2 lease sweep.
 
 Full catalogue: `backend/.env.example`.
 
-## Migration apply order
+## Migrations
 
-The two directories are a **byte-identical mirror** (CI enforces this):
+Migrations are applied by the deploy, not by hand. The **Apply database
+migrations** step in `deploy-production.yml` runs `backend/scripts/migrate.mjs`
+before `railway up`, and **a failed migration fails the deploy** — the backend
+image is never shipped against schema that is not there.
 
-- `backend/supabase/migrations/`
-- `supabase/migrations/`
+The runner keeps a ledger, `public.atmosphere_migrations`, of what it has
+applied. It applies only the files missing from that ledger, in filename order,
+each file and its ledger row in one transaction.
 
-Apply **one** of them, once, in filename order. Never apply both.
+```bash
+npm run migrate         --prefix backend   # apply what is pending
+npm run migrate:check   --prefix backend   # report drift, change nothing
+npm run migrate:dry-run --prefix backend   # list what apply would do
+```
 
-Production deploy also runs `backend/scripts/applyOldProductTables.mjs`, which
-applies `20260828220000_drop_old_product_tables.sql`. That removes leftover
-CRM/sales/finance/estimator/web-access tables. It does **not** drop `crm_jobs`,
-`crm_properties`, Stripe/metering, Field Capture, verification, or HomeOwner
-Report tables.
+### One-time baseline
+
+Production was migrated by hand for its whole life, so nothing recorded which
+of the committed migrations are applied. Before the first deploy that includes
+the migrate step, run **Actions → Baseline database migrations → Run workflow**
+once from `main`. That marks every migration currently in the tree as applied
+*without running any of it*.
+
+Until that has run, the deploy's migrate step fails on purpose rather than
+replay the whole history over a live schema. The baseline is only correct while
+production really is at head; if you suspect a committed migration was never
+applied, apply that one by hand first.
+
+### Rules the runner enforces
+
+- An applied migration whose file later changes is a hard failure. Add a new
+  migration; never edit one that has shipped.
+- A migration that fails is rolled back and not recorded, so the next deploy
+  retries it rather than skipping it.
+- Migrations in the ledger but no longer in the tree are reported as a warning.
+
+### Two directories
+
+`backend/supabase/migrations/` and `supabase/migrations/` are a byte-identical
+mirror (CI enforces this). The runner reads `supabase/migrations/`. Apply
+**one** tree, once — never both.
 
 ```bash
 npm run check:migrations --prefix backend

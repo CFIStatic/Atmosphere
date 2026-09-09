@@ -4,9 +4,6 @@
 name: Seed Cursor 1 test video
 
 on:
-  push:
-    branches:
-      - cursor/seed-cursor1-test-video-a05f
   workflow_dispatch:
 
 concurrency:

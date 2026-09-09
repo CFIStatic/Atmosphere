@@ -4,9 +4,6 @@
 name: Seed Jettx LLC demo videos
 
 on:
-  push:
-    branches:
-      - cursor/jettx-llc-demo-clips-bf9a
   workflow_dispatch:
 
 concurrency:

@@ -1,0 +1,63 @@
+# One-time: tell the migration runner what the database already has.
+#
+# Production was migrated by hand for its whole life, so there is no record of
+# which of the 136 committed migrations are applied. This workflow writes that
+# record (public.atmosphere_migrations) by marking every migration currently in
+# the tree as applied WITHOUT running any of it.
+#
+# Run this once, from `main`, BEFORE the next production deploy. Until it has
+# run, the "Apply database migrations" step in Deploy Work Verification will
+# fail on purpose rather than replay 136 migrations over a live schema.
+#
+# It is safe to re-run: already-recorded versions are left alone. It is only
+# correct while production really is at head — if you suspect a committed
+# migration was never applied, apply that one by hand first, or drop it from
+# the baseline and let the runner apply it.
+#
+# Uses the GitHub environment `Keys` for Supabase credentials.
+
+name: Baseline database migrations
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: baseline-migrations
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    name: Record applied migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Baseline
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
+        run: node scripts/migrate.mjs --baseline
+
+      - name: Confirm no drift
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
+        run: node scripts/migrate.mjs --check

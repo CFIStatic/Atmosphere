@@ -19,8 +19,6 @@ on:
   push:
     branches:
       - main
-      - cursor/host-corporate-website-51c8
-      - cursor/fix-railway-office-deploy-157d
     paths:
       - 'website/**'
       - '.dockerignore'
