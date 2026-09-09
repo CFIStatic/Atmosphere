@@ -1,0 +1,27 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
+
+describe('Videos list clip titles', () => {
+  it('defines clipListLabel so nested rows do not repeat the job name', () => {
+    expect(verifierHtml).toContain('function clipListLabel(e, underJob)');
+    expect(verifierHtml).toContain('Never repeat the job name on nested rows');
+    expect(verifierHtml).toContain("if (underJob) return 'Video'");
+    expect(verifierHtml).toContain("var clipName = clipListLabel(e, underJob)");
+    expect(verifierHtml).toContain("'<div class=\"t\">' + esc(clipName) + '</div>'");
+  });
+
+  it('maps portal title onto each library item', () => {
+    expect(verifierHtml).toContain('title: raw.title || null');
+  });
+
+  it('keeps nested clip titles visible on phone cards', () => {
+    expect(verifierHtml).not.toMatch(
+      /tbody tr\.cliprow-nested td\.titlecell \.t \{ display: none; \}/,
+    );
+  });
+});

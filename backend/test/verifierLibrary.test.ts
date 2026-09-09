@@ -212,6 +212,67 @@ test('youtube poster time is a quarter of the way through the clip', () => {
   assert.equal(pickPosterFrame([{ at_seconds: 3, storage_path: null }], 120), null);
 });
 
+test('serialization: exposes short clip title for the Videos list', () => {
+  const withTitle = serializeEvidence({
+    proof: {
+      id: 'p-title',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-09-09',
+      captured_at: '2026-09-09T21:28:00Z',
+      received_at: '2026-09-09T21:30:00Z',
+      duration_seconds: '29',
+      byte_size: '1000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'abc',
+      state: 'checked',
+      checks: [],
+      title: 'Inspection',
+      ai_summary: 'Inspection of the attic.',
+      analysis_status: 'done',
+    },
+    jobName: 'Von mour test',
+    jobNumber: 1,
+    company: 'Field Capture',
+    contactName: 'Jack',
+    tier: 1,
+    dayHasAfter: true,
+  });
+  assert.equal(withTitle.title, 'Inspection');
+  assert.equal(withTitle.jobName, 'Von mour test');
+
+  const without = serializeEvidence({
+    proof: {
+      id: 'p-no-title',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-09-09',
+      captured_at: '2026-09-09T21:28:00Z',
+      received_at: '2026-09-09T21:30:00Z',
+      duration_seconds: '29',
+      byte_size: '1000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'abc',
+      state: 'checked',
+      checks: [],
+      title: '   ',
+    },
+    jobName: 'Von mour test',
+    jobNumber: 1,
+    company: 'Field Capture',
+    contactName: 'Jack',
+    tier: 1,
+    dayHasAfter: true,
+  });
+  assert.equal(without.title, null);
+});
+
 test('serialization: a still out of the clip rides along as the poster', () => {
   const base = {
     id: 'p-poster',
