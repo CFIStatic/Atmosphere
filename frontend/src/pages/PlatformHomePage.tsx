@@ -10,6 +10,7 @@ import {
   PIPELINE_META,
   buildOverview,
   emptyPulse,
+  officePending,
   todayLine,
   type OverviewAction,
   type OverviewModel,
@@ -99,6 +100,10 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   );
   const loaded = jobs != null && shared != null && pulseReady;
   const crew = useMemo(() => buildCrewBoard(visibleJobs), [visibleJobs]);
+  const pending = useMemo(
+    () => (loaded ? officePending(model.today) : null),
+    [loaded, model.today],
+  );
 
   return (
     <div
@@ -121,6 +126,14 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
           </p>
         )}
       </div>
+
+      {pending ? (
+        <OfficePendingBanner
+          pending={pending}
+          compact={phone}
+          onOpen={() => setStage('being_read')}
+        />
+      ) : null}
 
       <PipelineStrip
         model={model}
@@ -169,6 +182,41 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   );
 }
 
+
+function OfficePendingBanner({
+  pending,
+  compact,
+  onOpen,
+}: {
+  pending: NonNullable<ReturnType<typeof officePending>>;
+  compact: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="office-pending"
+      onClick={onOpen}
+      className={cn(
+        'flex w-full items-start gap-3 rounded-xl border border-caution-200 bg-caution-50 text-left transition hover:bg-caution-50/80',
+        compact ? 'mt-3 shrink-0 px-3 py-2.5' : 'mt-6 px-4 py-3.5 sm:px-5',
+      )}
+      aria-label={pending.label}
+    >
+      <span
+        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-caution-600"
+        style={{ animation: 'pulse 1.4s ease-in-out infinite' }}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink-900">{pending.label}</span>
+        <span className="mt-0.5 block text-[13px] text-ink-600">{pending.detail}</span>
+      </span>
+      <span className="mt-0.5 shrink-0 text-xs font-medium text-caution-600">View</span>
+    </button>
+  );
+}
+
 function PipelineStrip({
   model,
   loaded,
@@ -214,7 +262,9 @@ function PipelineStrip({
               className={`min-w-0 rounded-lg px-1 py-2 text-center transition sm:px-3 sm:py-2.5 sm:text-left ${
                 active
                   ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20'
-                  : 'bg-paper-200/70 text-ink-900 hover:bg-paper-200'
+                  : bucket.stage === 'being_read' && bucket.count > 0
+                    ? 'bg-caution-50 text-ink-900 ring-1 ring-inset ring-caution-200 hover:bg-caution-50/80'
+                    : 'bg-paper-200/70 text-ink-900 hover:bg-paper-200'
               }`}
             >
               <p
@@ -413,8 +463,13 @@ function TodayCard({ model, loaded }: { model: OverviewModel; loaded: boolean })
           icon={<DecisionIcon width={14} height={14} />}
           label="Waiting to be read"
           value={loaded ? String(model.today.unread) : '—'}
+          caution={loaded && model.today.unread > 0}
         />
-        <TodayStat label="Being read" value={loaded ? String(model.today.analysing) : '—'} />
+        <TodayStat
+          label="Being read"
+          value={loaded ? String(model.today.analysing) : '—'}
+          caution={loaded && model.today.analysing > 0}
+        />
         <TodayStat
           label="Failed"
           value={loaded ? String(model.today.failed) : '—'}
@@ -439,11 +494,13 @@ function TodayStat({
   value,
   icon,
   danger,
+  caution,
 }: {
   label: string;
   value: string;
   icon?: ReactNode;
   danger?: boolean;
+  caution?: boolean;
 }) {
   return (
     <div className="bg-paper-0 px-5 py-3.5">
@@ -453,7 +510,7 @@ function TodayStat({
       </dt>
       <dd
         className={`mt-1 text-xl font-bold tabular-nums tracking-tight ${
-          danger ? 'text-danger-600' : 'text-ink-900'
+          danger ? 'text-danger-600' : caution ? 'text-caution-600' : 'text-ink-900'
         }`}
       >
         {value}

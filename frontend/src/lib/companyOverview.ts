@@ -430,3 +430,26 @@ export function todayLine(model: OverviewModel): string {
   if (today.failed > 0) parts.push(`${today.failed} failed`);
   return parts.join(' · ');
 }
+
+
+/**
+ * Office-visible pending film from the proof pulse: clips recently filed that
+ * are still analysing or waiting to be read. Phone-local Uploading… is not
+ * visible here until recordProof — this is the dashboard stand-in.
+ */
+export function officePending(today: OverviewModel['today']): {
+  count: number;
+  label: string;
+  detail: string;
+} | null {
+  const count = today.analysing + today.unread;
+  if (count <= 0) return null;
+  const parts: string[] = [];
+  if (today.analysing > 0) parts.push(`${today.analysing} being read`);
+  if (today.unread > 0) parts.push(`${today.unread} waiting to be read`);
+  return {
+    count,
+    label: count === 1 ? '1 clip pending with the office' : `${count} clips pending with the office`,
+    detail: parts.join(' · '),
+  };
+}

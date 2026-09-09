@@ -1748,7 +1748,10 @@
   function renderFilingStrip(summary) {
     var root = $('#filing');
     if (!root) return;
-    if (!summary || !summary.count) {
+    /* Quiet phone-local Uploading… progress is no longer a home banner —
+       background filing still runs; only warn tones (fail / sign-in /
+       volatile) stay conspicuous here. Office Overview shows pending. */
+    if (!Core.filingHomeVisible || !Core.filingHomeVisible(summary)) {
       root.hidden = true;
       return;
     }

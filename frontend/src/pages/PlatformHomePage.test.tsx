@@ -236,6 +236,9 @@ describe('PlatformHomePage', () => {
     expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
     expect(screen.getByTestId('proof-chain-grid')).toHaveClass('grid-cols-5');
+    expect(screen.getByTestId('office-pending')).toBeInTheDocument();
+    expect(screen.getByText('2 clips pending with the office')).toBeInTheDocument();
+    expect(screen.getByText('1 being read · 1 waiting to be read')).toBeInTheDocument();
   });
 
   it('fits the proof chain as a five-stage strip in the Field Capture frame', async () => {
@@ -259,6 +262,7 @@ describe('PlatformHomePage', () => {
       expect(screen.getByRole('link', { name: 'Start a job' })).toBeInTheDocument();
       expect(screen.queryByText("Today's film")).not.toBeInTheDocument();
       expect(screen.queryByText('Who is on jobs')).not.toBeInTheDocument();
+      expect(screen.getByTestId('office-pending')).toBeInTheDocument();
 
       await waitFor(() => {
         expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
