@@ -4,7 +4,9 @@ import { HttpError } from '../src/lib/errors.js';
 import {
   assertOwnedProofStoragePath,
   clipIdOfStoragePath,
+  mintClipId,
   proofObjectPath,
+  resolveClipId,
 } from '../src/shared/proofStoragePath.js';
 
 const party = {
@@ -151,4 +153,27 @@ test('a later migration drops the one-visible-phase unique index so a job file c
   );
   assert.match(sql, /drop index if exists public\.job_proofs_one_visible_phase/);
   assert.doesNotMatch(sql, /create unique index/i);
+});
+
+test('mintClipId / resolveClipId always yield a searchable recording id', () => {
+  const a = mintClipId();
+  const b = mintClipId();
+  assert.match(a, /^[a-z0-9]{6,32}$/);
+  assert.notEqual(a, b);
+  assert.equal(resolveClipId('mf3k9x2abc'), 'mf3k9x2abc');
+  assert.equal(resolveClipId('MF3K9X2ABC'), 'mf3k9x2abc');
+  assert.match(resolveClipId(null), /^[a-z0-9]{6,32}$/);
+  assert.match(resolveClipId(''), /^[a-z0-9]{6,32}$/);
+  assert.match(resolveClipId(undefined), /^[a-z0-9]{6,32}$/);
+});
+
+test('a later migration adds searchable clip_id on job_proofs', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const sql = await readFile(
+    new URL('../supabase/migrations/20260909200000_job_proofs_clip_id.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /add column if not exists clip_id text/);
+  assert.match(sql, /job_proofs_org_clip_id_uidx/);
+  assert.match(sql, /unique index/i);
 });
