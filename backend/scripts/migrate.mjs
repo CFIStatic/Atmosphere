@@ -36,8 +36,11 @@
  *
  * Connection (first that is configured wins):
  *   DATABASE_URL / SUPABASE_DB_URL           psql, real transactions
- *   SUPABASE_DB_PASSWORD + SUPABASE_PROJECT_REF   psql via the pooler
- *   SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF  Supabase Management API
+ *   SUPABASE_DB_PASSWORD + SUPABASE_URL      psql via the pooler
+ *   SUPABASE_ACCESS_TOKEN + SUPABASE_URL     Supabase Management API
+ *
+ * SERVICE_ROLE_KEY is not a connection. The deploy copies a URL from the
+ * Railway backend service when Keys does not have one.
  */
 
 import { createHash } from 'node:crypto';
@@ -46,6 +49,11 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveDatabaseUrl,
+  managementApiTarget,
+  missingConnectionHelp,
+} from './lib/migrateConnection.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '../..');
@@ -91,20 +99,6 @@ function migrationFiles() {
 
 /* ----------------------------------------------------------- connection -- */
 
-function poolerUrl() {
-  const ref = process.env.SUPABASE_PROJECT_REF || refFromUrl(process.env.SUPABASE_URL || '');
-  const password = process.env.SUPABASE_DB_PASSWORD || process.env.POSTGRES_PASSWORD || '';
-  if (!ref || !password) return '';
-  const user = process.env.SUPABASE_DB_USER || `postgres.${ref}`;
-  const host = process.env.SUPABASE_DB_HOST || 'aws-0-us-east-1.pooler.supabase.com';
-  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:6543/postgres`;
-}
-
-function refFromUrl(url) {
-  const m = /^https:\/\/([a-z0-9]+)\.supabase\./i.exec(url || '');
-  return m ? m[1] : '';
-}
-
 function hasPsql() {
   return spawnSync('psql', ['--version'], { encoding: 'utf8' }).status === 0;
 }
@@ -114,17 +108,21 @@ function hasPsql() {
  * nothing here is allowed to swallow a failure.
  */
 function makeDriver() {
-  const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || poolerUrl();
-  if (dbUrl && hasPsql()) return psqlDriver(dbUrl);
+  const resolved = resolveDatabaseUrl();
+  if (resolved) {
+    if (!hasPsql()) {
+      fail(
+        `a ${resolved.source} connection is set but psql is not on PATH.\n` +
+          '  Install postgresql-client in the deploy job, then retry.',
+      );
+    }
+    return psqlDriver(resolved.url);
+  }
 
-  const token = process.env.SUPABASE_ACCESS_TOKEN || '';
-  const ref = process.env.SUPABASE_PROJECT_REF || refFromUrl(process.env.SUPABASE_URL || '');
-  if (token && ref) return managementApiDriver(token, ref);
+  const api = managementApiTarget();
+  if (api) return managementApiDriver(api.token, api.ref);
 
-  fail(
-    'no database connection configured. Set DATABASE_URL (or SUPABASE_DB_PASSWORD +\n' +
-      '  SUPABASE_PROJECT_REF for the pooler), or SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF.',
-  );
+  fail(missingConnectionHelp());
 }
 
 function psqlDriver(url) {
