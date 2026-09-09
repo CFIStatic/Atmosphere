@@ -1,5 +1,44 @@
 import type { WorkAction } from './actions.js';
-import type { CitationId } from '../estimator/mitigation/standards/s500.js';
+/**
+ * IICRC S500 clauses an episode step can cite.
+ *
+ * This union lived in the estimator's standards module, which went with the
+ * estimator. Episodes is the only thing that still cites a clause, so it keeps
+ * the list rather than depending on a product that no longer ships.
+ */
+export type CitationId =
+  // Classification
+  | 'WATER_CATEGORIES'
+  | 'CATEGORY_DEGRADATION'
+  | 'WATER_CLASSES'
+  | 'CLASS_4_SPECIALTY_DRYING'
+  // Inspection and documentation
+  | 'PRELIMINARY_DETERMINATION'
+  | 'DRY_STANDARD'
+  | 'MONITORING_AND_DOCUMENTATION'
+  | 'PSYCHROMETRIC_DOCUMENTATION'
+  // Removal decisions
+  | 'POROUS_MATERIAL_REMOVAL_CAT3'
+  | 'SALVAGEABILITY_ASSESSMENT'
+  | 'WALL_CAVITY_ACCESS'
+  | 'FLOOD_CUT_HEIGHT'
+  // Cleaning and treatment
+  | 'CLEANING_BEFORE_ANTIMICROBIAL'
+  | 'ANTIMICROBIAL_APPLICATION'
+  | 'POST_DEMOLITION_CLEANING'
+  // Drying
+  | 'WATER_EXTRACTION_FIRST'
+  | 'DEHUMIDIFICATION_SIZING'
+  | 'AIRFLOW_SIZING'
+  | 'DRYING_VERIFICATION'
+  // Safety and containment
+  | 'WORKER_SAFETY_PPE'
+  | 'CONTAINMENT'
+  | 'NEGATIVE_PRESSURE'
+  | 'WORK_PATH_PROTECTION'
+  // Contents
+  | 'CONTENTS_HANDLING';
+
 
 /**
  * The construction work ontology.

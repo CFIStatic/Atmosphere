@@ -31,19 +31,6 @@ updates:
         patterns: ['*']
         update-types: ['minor', 'patch']
 
-  - package-ecosystem: npm
-    directory: /agent
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 1
-    labels: ['dependencies', 'agent']
-    ignore:
-      - dependency-name: '*'
-        update-types: ['version-update:semver-major']
-    groups:
-      agent-patch-minor:
-        patterns: ['*']
-        update-types: ['minor', 'patch']
 
   - package-ecosystem: github-actions
     directory: /

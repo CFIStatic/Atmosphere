@@ -6,10 +6,10 @@
  * Video still matters: it is the visual record of the space and of work
  * as it progresses, linked onto the twin as evidence and work overlays.
  *
- * Room shapes reuse the estimator's RoomMeasurements so a twin can feed
+ * Room shapes use RoomMeasurements so a twin can feed
  * mitigation / construction estimating without a second geometry model.
  */
-import type { JobPhoto, Opening, RoomMeasurements } from '../estimator/types.js';
+import type { JobPhoto, Opening, RoomMeasurements } from './measurements.js';
 
 /** How the metric room graph was obtained. */
 export const GEOMETRY_SOURCES = [

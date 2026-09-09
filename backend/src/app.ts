@@ -11,47 +11,21 @@ import { profileRouter } from './routes/profile.js';
 import { auditRouter } from './routes/audit.js';
 import { jobsRouter } from './routes/jobs.js';
 import { memoryRouter } from './routes/memory.js';
-import { technicianRouter } from './routes/technician.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { meteringRouter } from './routes/metering.js';
-import { pmRouter } from './routes/pm.js';
 import { portalRouter } from './portal/routes.js';
-import { webAccessRouter } from './routes/webAccess.js';
-import { connectorsRouter } from './routes/connectors.js';
-import { verifierRouter } from './routes/verifier.js';
-import { aiRouter } from './routes/ai.js';
-import { modelGatewayRouter } from './routes/modelGateway.js';
 import { webhookRouter } from './routes/webhooks.js';
-import { crmRouter } from './routes/crm.js';
-import { prospectingRouter } from './routes/prospecting.js';
-import { campaignsRouter } from './routes/campaigns.js';
-import { salesWorkRouter } from './routes/salesWork.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { placesRouter } from './routes/places.js';
-import { purchasingRouter } from './routes/purchasing.js';
 import { episodesRouter } from './routes/episodes.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
 import { verificationRouter } from './verification/routes.js';
 import { progressShareRouter } from './routes/progressShare.js';
-import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
-import { locationsRouter } from './routes/locations.js';
-import { backupRouter } from './routes/backups.js';
-import { integrationsRouter } from './routes/integrations.js';
-import { computerRouter } from './routes/computer.js';
-import { estimatorRouter } from './routes/estimator.js';
-import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
-import { mitigationRouter } from './routes/mitigation.js';
-import { xactimateRouter } from './routes/xactimate.js';
-import { salesRouter } from './routes/sales.js';
-import { emailMarketingRouter } from './routes/emailMarketing.js';
-import { cyberRouter } from './routes/cyber.js';
-import { symbilityRouter } from './routes/symbility.js';
-import { crmSyncRouter } from './routes/crmSync.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
@@ -63,11 +37,7 @@ import { legalRouter } from './routes/legal.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
-import { cyberMonitor } from './cyber/index.js';
-import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
-import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 import { forbidden } from './lib/errors.js';
-import { resolveLeftoverSurfaces, type LeftoverSurfaceFlags } from './lib/platformSurfaces.js';
 import {
   isAtmosphereCustomAppOrigin,
   isAtmosphereCustomFieldCaptureOrigin,
@@ -104,39 +74,8 @@ function isAllowedFrontendOrigin(origin: string): boolean {
   return Boolean(alt && config.frontendOrigins.includes(alt));
 }
 
-function disabledSurface(name: string): express.Router {
-  const router = express.Router();
-  router.use((_req, res) => {
-    res.status(404).json({
-      error: `${name} is not enabled on this server.`,
-      code: 'platform_surface_disabled',
-    });
-  });
-  return router;
-}
-
-function mountMaybe(
-  app: Express,
-  enabled: boolean,
-  prefix: string,
-  router: express.Router,
-  label: string,
-): void {
-  app.use(prefix, enabled ? router : disabledSurface(label));
-}
-
-export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags }): Express {
-  const leftover = options?.leftoverSurfaces ?? resolveLeftoverSurfaces();
+export function createApp(): Express {
   const app = express();
-
-  // Wire the second agent to the first. Web Access does not import the verifier
-  // — it calls whatever hook has been registered — so this one line is the
-  // whole coupling between them, and removing it leaves runs behaving exactly
-  // as they did before the verifier existed.
-  setRunSucceededHook(verificationHook);
-  // Runs and checks share one browser budget, so a finished run is the moment
-  // a waiting check can start.
-  setSlotReleasedHook(pumpVerificationQueue);
 
   // Behind a proxy/load balancer (needed for correct secure-cookie + rate-limit IP).
   app.set('trust proxy', 1);
@@ -150,8 +89,8 @@ export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags })
   // so it inherits requestId; before routers so every /api path is watched.
   app.use(userActivityMonitor);
 
-  // Liveness/readiness before CORS, parsers, and cyber so a platform probe
-  // cannot be failed by an Origin check or a blocked IP.
+  // Liveness/readiness before CORS and parsers so a platform probe cannot be
+  // failed by an Origin check.
   app.use(healthRouter);
   app.use('/api', healthRouter);
 
@@ -192,60 +131,29 @@ export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags })
 
   // Body + cookie parsing.
   //
-  // CRM writes are bigger than an auth payload but still small, so the cap
-  // stays tight everywhere except the routes that legitimately carry more: a
-  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model, a
-  // pasted mitigation estimate (a whole-house Xactimate export) on the
-  // construction estimator, and a DocuSketch scan plus a MICA drying log on
-  // /api/mitigation.
+  // The cap stays tight everywhere except the one route that legitimately
+  // carries more: a raw phone photo on the way to becoming an avatar.
   //
-  // The parser is CHOSEN here rather than stacked on those routes: the first
+  // The parser is CHOSEN here rather than stacked on that route: the first
   // json() to run consumes the stream, so a route-level raise would never be
   // reached — the global cap would already have rejected the upload with 413.
   // Every raised limit therefore has to be declared in this one place.
-  //
-  // A Web Access data-entry run carries the rows to be entered, which is more
-  // than a login form's worth of JSON but comfortably inside the 256kb
-  // standard, so it needs no exception of its own.
-  const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
-  const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
-  const mitigationPath = /^\/api\/mitigation(\/|$)/;
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const standardJson = express.json({ limit: '256kb' });
-  const csvImportJson = express.json({ limit: '12mb' });
-  const bulkTextJson = express.json({ limit: '2mb' });
-  // The mitigation estimator takes raw vendor exports rather than pasted text,
-  // so its ceiling is an order of magnitude above the others'.
-  const mitigationJson = express.json({ limit: '8mb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
 
   app.use((req, res, next) => {
-    const parse = csvImportPath.test(req.path)
-      ? csvImportJson
-      : mitigationPath.test(req.path)
-        ? mitigationJson
-        : avatarPath.test(req.path)
-          ? avatarJson
-          : bulkTextPath.test(req.path)
-            ? bulkTextJson
-            : standardJson;
+    const parse = avatarPath.test(req.path) ? avatarJson : standardJson;
     parse(req, res, next);
   });
 
   app.use(cookieParser());
 
-  // Cyber Defense Agent — after parsers so body/query signatures can fire, and
-  // before routers so blocked IPs and honeypot hits never reach auth, billing,
-  // or CRM. Stripe's raw webhook path is excluded above from JSON parsing and
-  // is still watched for path/UA probes.
-  app.use(cyberMonitor);
-
-  // Routes. Leftover platform products stay in the tree but are unmounted
-  // (404 + platform_surface_disabled) in production unless ENABLE_* is set.
-  // See backend/src/lib/platformSurfaces.ts and docs/production.md.
-  mountMaybe(app, leftover.cyber, '/api/cyber', cyberRouter, 'Cyber Defense');
+  // Routes. Work Verification and Field Capture only — the office console
+  // ships nothing else, and the sales / PM / estimator / CRM / finance /
+  // web-access products that used to sit beside these have been removed.
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
@@ -253,31 +161,17 @@ export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags })
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
-  mountMaybe(app, leftover.estimator, '/api/mitigation', mitigationRouter, 'Mitigation estimator');
-  mountMaybe(app, leftover.estimator, '/api/xactimate', xactimateRouter, 'Xactimate');
-  mountMaybe(app, leftover.estimator, '/api/symbility', symbilityRouter, 'Symbility');
-  mountMaybe(app, leftover.crmSync, '/api/crm-sync', crmSyncRouter, 'CRM sync');
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
-  mountMaybe(app, leftover.technician, '/api/technician', technicianRouter, 'Technician assistant');
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);
   app.use('/api/metering', meteringRouter);
-  // Two different subsystems, two namespaces: /api/ai is the learning layer's
-  // task execution, /api/model is the metered gateway that bills a raw model
-  // call. Co-mounting them would run requireAuth twice on every metered call.
-  // Neither takes a route-level json() — the chooser above already parsed the
-  // body, so one here would never run.
-  mountMaybe(app, leftover.ai, '/api/ai', aiRouter, 'Learning layer');
-  mountMaybe(app, leftover.ai, '/api/model', modelGatewayRouter, 'Model gateway');
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
-  mountMaybe(app, leftover.pm, '/api/pm', pmRouter, 'Project Manager');
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
-  mountMaybe(app, leftover.purchasing, '/api/purchasing', purchasingRouter, 'Purchasing');
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);
   // Video work-verification pipeline (extends proof-of-work; async stages).
@@ -293,7 +187,6 @@ export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags })
   app.use('/api/job-share', jobShareRouter);
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);
-  mountMaybe(app, leftover.finance, '/api/finance', financeRouter, 'Finance');
   // Also outside auth, and for a sharper version of the same reason: this is
   // where a subcontractor turns a pile of per-job links from several general
   // contractors into one list. They hold a session of their own, not a seat
@@ -301,45 +194,17 @@ export function createApp(options?: { leftoverSurfaces?: LeftoverSurfaceFlags })
   app.use('/api/field', fieldIdentityRouter);
   // App Store Field Capture signed in as the same org account as the dashboard.
   app.use('/api/field-app', fieldAppRouter);
-  // Any inbound video (proof, field capture, CRM, upload) can share one
+  // Any inbound video (proof, field capture, upload) can share one
   // sparse+diversity+dictation pipeline without a job_proofs row.
   app.use('/api/media/video', mediaVideoRouter);
   // Fleet catalog: many ≤24h objects in object storage (hot/warm/cold).
   app.use('/api/media/catalog', mediaCatalogRouter);
   // App Store Field Capture: RoomPlan/ARKit/LiDAR rooms + video → property twin.
   app.use('/api/geometry', geometryRouter);
-  mountMaybe(app, leftover.webAccess, '/api/web-access', webAccessRouter, 'Web Access');
-  mountMaybe(app, leftover.integrations, '/api/connectors', connectorsRouter, 'Connectors');
-  app.use('/api/verifier', verifierRouter);
-  // Before crmRouter, not after. crmRouter registers a generic GET
-  // /accounts/:id, so mounted second this router would never be reached —
-  // /accounts/duplicates would be read as an account whose id is "duplicates".
-  // Express falls through to crmRouter for anything this one does not handle.
-  mountMaybe(app, leftover.crm, '/api/crm/accounts', crmAccountsRouter, 'CRM accounts');
-  mountMaybe(app, leftover.crm, '/api/crm', crmRouter, 'CRM');
-  mountMaybe(app, leftover.prospecting, '/api/prospecting', prospectingRouter, 'Prospecting');
-  // Campaigns and territories share a router: a campaign is usually worked one
-  // territory at a time, and splitting them would put one join across two files.
-  mountMaybe(app, leftover.sales, '/api/sales', campaignsRouter, 'Sales');
-  // Same namespace, separate file: delivery visibility has nothing to do with
-  // campaigns beyond both being things a salesperson opens.
-  if (leftover.sales) {
-    app.use('/api/sales', salesWorkRouter);
-  }
-  mountMaybe(app, leftover.locations, '/api/locations', locationsRouter, 'Live locations');
   // Deliberately outside every auth middleware: the person clicking is a
   // recipient who never had an account, and an unsubscribe link that requires
-  // signing in is not one. Kept mounted even when email marketing is gated —
-  // an old mail still has to work (CAN-SPAM).
+  // signing in is not one. An old mail still has to work (CAN-SPAM).
   app.use('/api/unsubscribe', unsubscribeRouter);
-  mountMaybe(app, leftover.backups, '/api/backups', backupRouter, 'Backups');
-  mountMaybe(app, leftover.integrations, '/api/integrations', integrationsRouter, 'Integrations');
-  mountMaybe(app, leftover.computer, '/api/computer', computerRouter, 'Computer use');
-  mountMaybe(app, leftover.estimator, '/api/estimator', estimatorRouter, 'Estimator');
-  if (leftover.sales) {
-    app.use('/api/sales', salesRouter);
-  }
-  mountMaybe(app, leftover.emailMarketing, '/api/email-marketing', emailMarketingRouter, 'Email marketing');
   app.use('/api/careers', careersRouter);
   app.use('/api/contact', contactRouter);
 

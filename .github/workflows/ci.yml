@@ -102,21 +102,6 @@ jobs:
       - run: npm run build
         working-directory: internal
 
-  agent:
-    name: Agent
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: agent/package-lock.json
-      - run: npm ci
-        working-directory: agent
-      - run: npm run typecheck
-        working-directory: agent
-
   migrations:
     name: Migrations
     runs-on: ubuntu-latest

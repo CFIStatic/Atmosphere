@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { allLeftoverSurfaces } from '../src/lib/platformSurfaces.js';
 
 /**
  * HTTP contract for the sold Work Verification path.
@@ -11,13 +10,11 @@ import { allLeftoverSurfaces } from '../src/lib/platformSurfaces.js';
  * That is the point: a BFF regression should break this file, not production.
  */
 
-async function listen(leftoverOff = true): Promise<{
+async function listen(): Promise<{
   url: string;
   close: () => Promise<void>;
 }> {
-  const app = leftoverOff
-    ? createApp({ leftoverSurfaces: allLeftoverSurfaces(false) })
-    : createApp({ leftoverSurfaces: allLeftoverSurfaces(true) });
+  const app = createApp();
   const server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
@@ -50,7 +47,12 @@ async function json(
   return { status: res.status, body };
 }
 
-const LEFTOVER_PATHS = [
+/**
+ * Products that were removed when Atmosphere narrowed to Work Verification.
+ * They used to be mounted behind ENABLE_* flags, off in production. Nothing
+ * mounts them now, so they must 404 as unknown paths — not as a gated surface.
+ */
+const REMOVED_PATHS = [
   '/api/sales',
   '/api/pm',
   '/api/estimator',
@@ -73,34 +75,23 @@ const LEFTOVER_PATHS = [
   '/api/crm-sync',
 ];
 
-test('leftover platform APIs return 404 platform_surface_disabled when gated', async () => {
-  const { url, close } = await listen(true);
+test('removed product APIs are gone, not gated', async () => {
+  const { url, close } = await listen();
   try {
-    for (const path of LEFTOVER_PATHS) {
+    for (const path of REMOVED_PATHS) {
       const { status, body } = await json(url, path);
-      assert.equal(status, 404, `${path} should be gated`);
-      assert.equal(body.code, 'platform_surface_disabled', `${path} code`);
+      assert.equal(status, 404, `${path} should not be mounted`);
+      // A flag that could turn one of these back on would be a way to ship a
+      // product that no longer exists. There is no flag any more.
+      assert.notEqual(body.code, 'platform_surface_disabled', `${path} is still gated, not removed`);
     }
   } finally {
     await close();
   }
 });
 
-test('leftover APIs are reachable when explicitly enabled (local / preview)', async () => {
-  const { url, close } = await listen(false);
-  try {
-    const { status, body } = await json(url, '/api/sales');
-    assert.notEqual(body.code, 'platform_surface_disabled');
-    // Sales is auth-gated once mounted — 401, 404 (no matching verb), or 400
-    // are all fine. Disabled is not.
-    assert.ok(status === 401 || status === 404 || status === 400, `got ${status}`);
-  } finally {
-    await close();
-  }
-});
-
-test('sold path: health stays up with leftover surfaces gated', async () => {
-  const { url, close } = await listen(true);
+test('sold path: health stays up', async () => {
+  const { url, close } = await listen();
   try {
     const { status, body } = await json(url, '/api/health');
     assert.equal(status, 200);
@@ -112,7 +103,7 @@ test('sold path: health stays up with leftover surfaces gated', async () => {
 });
 
 test('sold path: login rejects an empty body (validation, not 404)', async () => {
-  const { url, close } = await listen(true);
+  const { url, close } = await listen();
   try {
     const { status, body } = await json(url, '/api/auth/login', {
       method: 'POST',
@@ -127,7 +118,7 @@ test('sold path: login rejects an empty body (validation, not 404)', async () =>
 });
 
 test('sold path: login → intake → share → proof mounts stay registered', async () => {
-  const { url, close } = await listen(true);
+  const { url, close } = await listen();
   try {
     const login = await json(url, '/api/auth/login', {
       method: 'POST',
@@ -212,7 +203,7 @@ test('sold path: login → intake → share → proof mounts stay registered', a
 });
 
 test('sold path: Stripe webhook stays mounted (unsigned / unconfigured)', async () => {
-  const { url, close } = await listen(true);
+  const { url, close } = await listen();
   try {
     const { status, body } = await json(url, '/api/webhooks/stripe', {
       method: 'POST',
@@ -230,7 +221,7 @@ test('sold path: Stripe webhook stays mounted (unsigned / unconfigured)', async 
 });
 
 test('CAN-SPAM unsubscribe stays mounted when email marketing is gated', async () => {
-  const { url, close } = await listen(true);
+  const { url, close } = await listen();
   try {
     const res = await fetch(`${url}/api/unsubscribe`);
     assert.equal(res.status, 200);

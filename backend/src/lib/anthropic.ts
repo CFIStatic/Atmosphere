@@ -169,16 +169,9 @@ export const isModelProviderConfigured = (): boolean => Boolean(config.anthropic
  * one is enough for the job-file chat to use a model instead of the keyword
  * fallback.
  */
-export async function resolveAskApiKey(orgId?: string | null): Promise<string | null> {
-  if (orgId) {
-    try {
-      const { getApiKey } = await import('../computer/credentials.js');
-      const orgKey = await getApiKey(orgId);
-      if (orgKey?.trim()) return orgKey.trim();
-    } catch {
-      // Vault missing or unreadable — fall through to the server key.
-    }
-  }
+export async function resolveAskApiKey(_orgId?: string | null): Promise<string | null> {
+  // Per-org keys came out of the computer-use credential vault, which went
+  // with that product. Every org now runs on the platform key.
   const server = config.anthropic.apiKey.trim();
   return server || null;
 }

@@ -36,7 +36,6 @@ import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
-import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
@@ -995,28 +994,29 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
           emailed = result.ok;
           if (!result.ok) mailWhy = result.why;
         } else {
-          const sender = await buildMailSender(orgId);
-          if (sender) {
-            const mail = shareEmail({
-              orgName,
-              sharerName,
-              jobTitle: (job as any)?.title ?? null,
-              recipientEmail,
-              recipientHasAccount,
-              origin: publicAppOrigin(),
-              path: sharePath,
-              expiresAt,
-            });
-            const result = await sender.send({
-              to: recipientEmail,
-              subject: mail.subject,
-              text: mail.text,
-            });
-            emailed = result.ok;
-            if (!result.ok) mailWhy = result.error ?? 'The email could not be sent.';
-          } else {
-            mailWhy = 'No mailbox is connected for this organization.';
-          }
+          // Evidence shares go out over Atmosphere's own mail, like capture
+          // invites and homeowner shares. This used to send through the org's
+          // connected mailbox, which came from the campaigns product; with
+          // that gone there is one sender for every invite the product makes,
+          // which is also what the product promises: the email names the
+          // contractor, the From line is Atmosphere.
+          const mail = shareEmail({
+            orgName,
+            sharerName,
+            jobTitle: (job as any)?.title ?? null,
+            recipientEmail,
+            recipientHasAccount,
+            origin: publicAppOrigin(),
+            path: sharePath,
+            expiresAt,
+          });
+          const result = await sendSystemMail({
+            to: recipientEmail,
+            subject: mail.subject,
+            text: mail.text,
+          });
+          emailed = result.ok;
+          if (!result.ok) mailWhy = result.why;
         }
       } catch (err) {
         if (err instanceof HttpError) throw err;

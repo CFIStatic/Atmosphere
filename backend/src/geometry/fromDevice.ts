@@ -1,11 +1,11 @@
 /**
- * Turn App Store / on-device measurement payloads into estimator-compatible
- * room rows. Derives missing SF from L×W×H the same way mitigation ingest
- * does — measured areas always win when the device sends them.
+ * Turn App Store / on-device measurement payloads into twin room rows.
+ * Derives missing SF from L×W×H — measured areas always win when the device
+ * sends them.
  */
 import { randomUUID } from 'node:crypto';
-import type { Opening, RoomMeasurements } from '../estimator/types.js';
-import { deriveGeometry, round } from '../estimator/mitigation/lib/geometry.js';
+import type { Opening, RoomMeasurements } from './measurements.js';
+import { deriveGeometry, round } from './measurements.js';
 import type { DeviceGeometryIngest, DeviceRoomPayload, TwinRoom } from './types.js';
 
 export function deviceRoomToMeasurements(room: DeviceRoomPayload): RoomMeasurements {
