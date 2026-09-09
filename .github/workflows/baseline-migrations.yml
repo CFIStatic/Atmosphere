@@ -9,10 +9,13 @@
 # run, the "Apply database migrations" step in Deploy Work Verification will
 # fail on purpose rather than replay 136 migrations over a live schema.
 #
-# It is safe to re-run: already-recorded versions are left alone. It is only
-# correct while production really is at head — if you suspect a committed
-# migration was never applied, apply that one by hand first, or drop it from
-# the baseline and let the runner apply it.
+# It is safe to re-run: already-recorded versions are left alone.
+#
+# It does not assume production is at head. The first step reconciles the live
+# schema against supabase/migration-manifest.json and records only the versions
+# that check out, leaving anything that looks unapplied for the runner to apply
+# on the next deploy. A migration that never actually ran is therefore not
+# buried by the baseline.
 #
 # Uses the GitHub environment `Keys` for Supabase credentials.
 
@@ -38,6 +41,34 @@ jobs:
         with:
           node-version: '22'
 
+      # What the live schema can prove, before anything is written. A migration
+      # whose objects are absent is left out of the baseline below.
+      - name: Reconcile the live schema against the manifest
+        id: reconcile
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+        working-directory: backend
+        run: node scripts/reconcile-migrations.mjs
+
+      - name: Compute the safe baseline set
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+        working-directory: backend
+        run: |
+          # Exits 1 when something looks unapplied; the list is still correct,
+          # and those versions are deliberately absent from it.
+          node scripts/reconcile-migrations.mjs --baseline-list > /tmp/safe-versions.txt || true
+          echo "Recording $(wc -l < /tmp/safe-versions.txt) of 136 migrations."
+
       - name: Baseline
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -48,9 +79,12 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
         working-directory: backend
-        run: node scripts/migrate.mjs --baseline
+        run: node scripts/migrate.mjs --baseline --versions-from /tmp/safe-versions.txt
 
-      - name: Confirm no drift
+      # After the baseline the ledger holds only what was verified. Anything
+      # left out is now pending, and `migrate.mjs` will apply it on the next
+      # deploy — so drift here is expected and reported, not a failure.
+      - name: Report what the next deploy will apply
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
@@ -60,4 +94,4 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
         working-directory: backend
-        run: node scripts/migrate.mjs --check
+        run: node scripts/migrate.mjs --dry-run

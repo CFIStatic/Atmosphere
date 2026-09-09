@@ -35,6 +35,8 @@
     "migrate:check": "node scripts/migrate.mjs --check",
     "migrate:baseline": "node scripts/migrate.mjs --baseline",
     "migrate:dry-run": "node scripts/migrate.mjs --dry-run",
+    "migrate:reconcile": "node scripts/reconcile-migrations.mjs",
+    "migrate:manifest": "node scripts/migration-manifest.mjs",
     "check:email-auth": "node scripts/checkEmailAuthDns.mjs",
     "stripe:sync": "tsx src/scripts/syncStripeCatalog.ts",
     "test:vitest": "vitest run --passWithNoTests"

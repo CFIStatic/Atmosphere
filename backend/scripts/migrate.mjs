@@ -22,6 +22,12 @@
  *   node scripts/migrate.mjs --baseline   record every current file as applied
  *                                         WITHOUT running it — one-time, for a
  *                                         database that was migrated by hand
+ *   node scripts/migrate.mjs --baseline --versions-from <file>
+ *                                         baseline only the versions listed in
+ *                                         that file, one per line. Use with
+ *                                         `reconcile-migrations.mjs --baseline-list`
+ *                                         so migrations that never actually ran
+ *                                         are left for the runner to apply.
  *   node scripts/migrate.mjs --dry-run    list what apply would do
  *
  * The baseline is deliberately a separate, explicit act. This runner will not
@@ -46,7 +52,12 @@ const repoRoot = join(here, '../..');
 const MIGRATIONS_DIR = join(repoRoot, 'supabase/migrations');
 const LEDGER = 'public.atmosphere_migrations';
 
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
+const versionsFrom = (() => {
+  const i = argv.indexOf('--versions-from');
+  return i >= 0 ? argv[i + 1] : undefined;
+})();
 const MODE = args.has('--baseline')
   ? 'baseline'
   : args.has('--check')
@@ -218,15 +229,34 @@ async function main() {
   const exists = await ledgerExists(db);
 
   if (MODE === 'baseline') {
+    let toRecord = files;
+    if (versionsFrom) {
+      if (!existsSync(versionsFrom)) fail(`no such file: ${versionsFrom}`);
+      const allowed = new Set(
+        readFileSync(versionsFrom, 'utf8')
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('#')),
+      );
+      toRecord = files.filter((f) => allowed.has(f.version));
+      const held = files.filter((f) => !allowed.has(f.version));
+      if (toRecord.length === 0) fail(`${versionsFrom} matched none of the migrations in the tree.`);
+      console.log(`migrate: baselining ${toRecord.length} of ${files.length} migrations from ${versionsFrom}`);
+      if (held.length > 0) {
+        console.log(`migrate: leaving ${held.length} for the runner to apply on the next deploy:`);
+        for (const f of held) console.log(`      ${f.name}`);
+      }
+    }
+
     await db.exec(CREATE_LEDGER);
-    const values = files
+    const values = toRecord
       .map((f) => `(${sqlLiteral(f.version)}, ${sqlLiteral(f.checksum)}, true)`)
       .join(',\n  ');
     await db.exec(
       `insert into ${LEDGER} (version, checksum, baselined) values\n  ${values}\n` +
         `on conflict (version) do nothing;`,
     );
-    console.log(`migrate: baselined ${files.length} migrations as already applied.`);
+    console.log(`migrate: baselined ${toRecord.length} migrations as already applied.`);
     console.log('migrate: nothing was run against the database. Future migrations will apply normally.');
     return;
   }
