@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 140,
+    "migrationCount": 141,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -145,6 +145,7 @@
     "20260906180000_token_usage_customer_markup.sql",
     "20260907160000_field_capture_extra_seats.sql",
     "20260907170000_field_capture_seat_enforce.sql",
+    "20260907172826_terms_acceptances_grants.sql",
     "20260907180000_reset_extra_fc_seats_on_cancel.sql",
     "20260907190000_terms_acceptances.sql",
     "20260907200000_terms_acceptances_grants.sql",
@@ -5045,6 +5046,16 @@
       "sharedWithOtherMigrations": [
         "function|private.field_capture_seats_allowed"
       ],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260907172826_terms_acceptances_grants",
+      "file": "20260907172826_terms_acceptances_grants.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "Duplicate of later terms_acceptances_grants apply; retained only to match live schema_migrations version from Management API.",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
     },
