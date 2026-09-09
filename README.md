@@ -332,13 +332,13 @@ email, and a 6-digit Microsoft Authenticator code. See
 | [`apps/field-ios/README.md`](apps/field-ios/README.md) | Native Field Capture / RoomPlan status |
 | [`docs/media-storage.md`](docs/media-storage.md) | Fleet media catalog and retention |
 | [`docs/synthetic-pipeline.md`](docs/synthetic-pipeline.md) | Synthetic A/V smoke path |
-| [`docs/CRM.md`](docs/CRM.md) | CRM mirror (supports job files; not the product) |
 | [`website/`](website/) | Public Work Verification site |
 | [`internal/`](internal/) | Staff accounts + analytics site (hostable) |
 
 ## What this repo is not selling
 
-Atmosphere is **not** positioned as a sales platform, project-management suite,
-or general operations OS. Those modules may remain in code for a later return;
-the shipped story is work verification: **film the day, check it against the
-scope, keep the chain of custody.**
+Atmosphere is **not** a sales platform, project-management suite, or general
+operations OS. Those products used to sit in this tree behind `ENABLE_*` flags;
+they have been removed, and the flags with them. Git history keeps them. The
+shipped story is work verification: **film the day, check it against the scope,
+keep the chain of custody.**

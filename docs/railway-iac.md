@@ -31,7 +31,7 @@ Secrets live in GitHub environment **Keys** and are pushed by
 Production Keys sync now:
 
 - sets `NODE_ENV=production`, `MEDIA_BACKEND=supabase`,
-  `ENABLE_PLATFORM_APIS=false`, `COMPUTER_USE_ENABLED=false`,
+  `COMPUTER_USE_ENABLED=false`,
   `BACKUP_ENABLED=false`
 - copies `SENTRY_DSN` **only when** the GitHub secret is present
 - **deletes** `ALLOW_MOCK_DRIVERS` if it is still on the service
@@ -45,7 +45,7 @@ unmounts them. To exercise them locally leave `NODE_ENV` unset. To mimic
 production:
 
 ```bash
-ENABLE_PLATFORM_APIS=false npm run dev --prefix backend
+npm run dev --prefix backend
 ```
 
 See `docs/production.md` § Leftover platform APIs.

@@ -110,7 +110,6 @@ test('Keys sync no longer ships ALLOW_MOCK_DRIVERS=true', () => {
     new URL('../scripts/syncGithubEnvToRailway.mjs', import.meta.url),
     'utf8',
   );
-  assert.match(sync, /ENABLE_PLATFORM_APIS/);
   assert.match(sync, /variable', 'delete', 'ALLOW_MOCK_DRIVERS'/);
   const keysBlock = sync.slice(sync.indexOf('const KEYS'), sync.indexOf('const REQUIRED'));
   assert.doesNotMatch(keysBlock, /ALLOW_MOCK_DRIVERS/);
@@ -128,7 +127,8 @@ test('each deploy job puts its own config on the upload root', () => {
   assert.match(production, /cp frontend\/railway\.toml railway\.toml/);
   assert.match(production, /cp internal\/railway\.toml railway\.toml/);
   assert.doesNotMatch(production, /ALLOW_MOCK_DRIVERS:\s*'true'/);
-  assert.match(production, /ENABLE_PLATFORM_APIS:\s*'false'/);
+  // The ENABLE_* flags went with the products they gated; nothing to sync.
+  assert.doesNotMatch(production, /ENABLE_PLATFORM_APIS/);
 
   const website = readFileSync(
     new URL('../../.github/workflows/deploy-website.yml', import.meta.url),

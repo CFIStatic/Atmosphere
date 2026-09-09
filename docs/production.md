@@ -551,37 +551,27 @@ Optional observability (no invented secrets):
   store API (`backend/src/lib/sentry.ts`). Office: `VITE_SENTRY_DSN`.
 - `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE` — optional tags.
 
-## Leftover platform APIs
+## Products that used to live here
 
-The Express process still contains sales, PM, estimator, computer-use,
-prospecting, email marketing, finance, CRM, cyber, and related routers.
-Production must not serve them.
+The Express process used to carry sales, PM, estimator, computer-use,
+prospecting, email marketing, finance, CRM, cyber, web access, backups and
+locations alongside the sold path, mounted behind `ENABLE_*` flags that kept
+them off in production.
 
-Resolver: `backend/src/lib/platformSurfaces.ts` (used by `createApp` and
-`index.ts` schedulers).
+They have been removed. `platformSurfaces.ts` and every `ENABLE_*` flag went
+with them, so there is nothing to switch on: those API paths 404 as unknown
+routes. `backend/test/soldPathHttp.test.ts` asserts that, and asserts they do
+not come back as a gated surface either.
 
-| Environment | Default | Re-enable |
-| --- | --- | --- |
-| `NODE_ENV=production` | every leftover surface **off** | `ENABLE_PLATFORM_APIS=true` (all) or `ENABLE_PLATFORM_APIS=sales,pm` (allowlist) or `ENABLE_SALES=true` (one surface) |
-| development / preview | every leftover surface **on** | `ENABLE_PLATFORM_APIS=false` to mimic production locally |
+Two things stayed because the sold path uses them:
 
-Per-surface flags (`ENABLE_SALES`, `ENABLE_PM`, `ENABLE_ESTIMATOR`,
-`ENABLE_COMPUTER`, `ENABLE_PROSPECTING`, `ENABLE_EMAIL_MARKETING`,
-`ENABLE_FINANCE`, `ENABLE_PURCHASING`, `ENABLE_WEB_ACCESS`, `ENABLE_CRM`,
-`ENABLE_CRM_SYNC`, `ENABLE_CYBER`, `ENABLE_TECHNICIAN`, `ENABLE_AI`,
-`ENABLE_INTEGRATIONS`, `ENABLE_BACKUPS`, `ENABLE_LOCATIONS`) win over the
-master switch.
+- `src/pm/` — the HomeOwner Report reads project, milestone, area, reading and
+  placement rows, and runs the drying analysis.
+- `src/ai/providers/` — the model provider layer behind video verification. The
+  learning layer that sat on top of it is gone.
 
-A gated mount answers `404` with `code: platform_surface_disabled` instead
-of disappearing silently. `/api/unsubscribe` stays mounted (CAN-SPAM).
-Cyber **monitor** middleware stays; `/api/cyber` does not.
-
-Background leftovers follow the same flags: PM scheduler, mitigation
-capture agent, computer-use WebSocket, cyber scheduler, backup scheduler.
-
-`deploy-production.yml` Keys sync sets `ENABLE_PLATFORM_APIS=false` and
-**deletes** `ALLOW_MOCK_DRIVERS` on the Railway BFF so a previous `true`
-cannot survive.
+Git history keeps the rest. `ALLOW_MOCK_DRIVERS=true` is still refused at boot
+in production.
 
 ## Onboarding schema on a fresh database
 
