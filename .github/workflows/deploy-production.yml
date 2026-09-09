@@ -190,6 +190,9 @@ jobs:
 
   app:
     name: Deploy office app
+    # Migrations run in the backend job. If they fail, the backend does not
+    # ship, and the office app must not ship against a schema that did not move.
+    needs: backend
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -313,6 +316,7 @@ jobs:
 
   internal:
     name: Deploy internal site
+    needs: backend
     runs-on: ubuntu-latest
     environment: Keys
     steps:
