@@ -18,7 +18,14 @@
 
 import { spawnSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
-import { pickRailwayDbEnv, resolveDatabaseUrl, managementApiTarget } from './lib/migrateConnection.mjs';
+import {
+  pickRailwayDbEnv,
+  resolveDatabaseUrl,
+  managementApiTarget,
+  DATABASE_URL_KEYS,
+  projectRef,
+  poolerHost,
+} from './lib/migrateConnection.mjs';
 
 const fromStdin = process.argv.includes('--stdin');
 
@@ -59,8 +66,16 @@ function writeEnv(env) {
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
+/** True only when Keys already has a fully usable connection (URL, or password+host). */
 function alreadyHasConnection() {
-  return Boolean(resolveDatabaseUrl(process.env) || managementApiTarget(process.env));
+  for (const key of DATABASE_URL_KEYS) {
+    if (String(process.env[key] || '').trim()) return true;
+  }
+  if (managementApiTarget(process.env)) return true;
+  const password = String(process.env.SUPABASE_DB_PASSWORD || process.env.POSTGRES_PASSWORD || '').trim();
+  // Password alone is not enough — without host/region we would silently dial
+  // the wrong pooler. Still copy SUPABASE_DB_HOST from Railway when missing.
+  return Boolean(password && poolerHost(process.env) && projectRef(process.env));
 }
 
 async function main() {
@@ -73,7 +88,7 @@ async function main() {
   const raw = fromStdin ? await readStdin() : railwayVariablesJson();
   if (!raw) {
     console.warn(
-      'migrate-env: could not read Railway variables. Add DATABASE_URL, SUPABASE_DB_PASSWORD, or SUPABASE_ACCESS_TOKEN to GitHub Keys.',
+      'migrate-env: could not read Railway variables. Add DATABASE_URL, SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST, or SUPABASE_ACCESS_TOKEN to GitHub Keys.',
     );
     return;
   }
@@ -87,22 +102,29 @@ async function main() {
   }
 
   const picked = pickRailwayDbEnv(parsed);
-  const keys = Object.keys(picked);
+  // Prefer Keys values that are already set; only fill gaps from Railway.
+  const gaps = {};
+  for (const [key, value] of Object.entries(picked)) {
+    if (!String(process.env[key] || '').trim()) gaps[key] = value;
+  }
+  const keys = Object.keys(gaps);
   if (keys.length === 0) {
     console.warn(
-      'migrate-env: Railway backend has no DATABASE_URL / SUPABASE_DB_PASSWORD / SUPABASE_ACCESS_TOKEN.',
+      'migrate-env: Railway backend has no additional DATABASE_URL / SUPABASE_DB_PASSWORD / SUPABASE_DB_HOST / SUPABASE_ACCESS_TOKEN to copy.',
     );
     return;
   }
 
-  const merged = { ...process.env, ...picked };
+  const merged = { ...process.env, ...gaps };
   const via = resolveDatabaseUrl(merged)?.source || (managementApiTarget(merged) ? 'SUPABASE_ACCESS_TOKEN' : null);
   if (!via) {
     console.warn(`migrate-env: copied ${keys.join(', ')} from Railway but still no usable connection.`);
+    // Still write gaps so a later step can combine Keys password + Railway host.
+    writeEnv(gaps);
     return;
   }
 
-  writeEnv(picked);
+  writeEnv(gaps);
   console.log(`migrate-env: copied ${keys.length} database secret(s) from Railway (${via}).`);
 }
 
