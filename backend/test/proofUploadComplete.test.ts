@@ -64,7 +64,9 @@ test('createUploadUrl mints part URLs for a resumable film', async () => {
     extension: 'webm',
     byteSize: 20 * 1024 * 1024,
   });
-  assert.equal(slot.path, 'org-1/job-1/party-1/2026-09-05-after.webm');
+  assert.match(slot.path, /^org-1\/job-1\/party-1\/2026-09-05-after-[a-z0-9]{6,32}\.webm$/);
+  assert.ok(slot.clipId);
+  assert.ok(slot.path.includes(slot.clipId));
   assert.ok(slot.uploadUrl.includes(slot.path));
   assert.ok(slot.parts);
   assert.equal(slot.parts?.length, 3);
@@ -173,9 +175,18 @@ test('createUploadUrl carries the clip id into the object path', async () => {
   assert.equal(slot.path, 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm');
   assert.equal(slot.clipId, 'mf3k9x2abc');
   assert.equal(slot.parts, undefined);
-  const legacy = await createUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm' });
-  assert.equal(legacy.path, 'org-1/job-1/party-1/2026-09-09-after.webm');
-  assert.equal(legacy.clipId, null);
+});
+
+test('createUploadUrl mints a clip id when the client omits one', async () => {
+  const admin = memoryAdmin();
+  const a = await createUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm' });
+  const b = await createUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm' });
+  assert.match(a.clipId, /^[a-z0-9]{6,32}$/);
+  assert.match(b.clipId, /^[a-z0-9]{6,32}$/);
+  assert.notEqual(a.clipId, b.clipId, 'two films the same day must not share an id');
+  assert.notEqual(a.path, b.path, 'two films the same day must not share a storage object');
+  assert.equal(a.path, `org-1/job-1/party-1/2026-09-09-after-${a.clipId}.webm`);
+  assert.doesNotMatch(a.path, /2026-09-09-after\.webm$/, 'never the legacy day/phase stem');
 });
 
 test('createPartUploadUrl mints one slice of a film that is still recording', async () => {
@@ -193,10 +204,14 @@ test('createPartUploadUrl mints one slice of a film that is still recording', as
   assert.equal(part.index, 3);
   assert.equal(part.maxParts, 128);
   assert.equal(part.assembleMaxBytes, 512 * 1024 * 1024);
-  await assert.rejects(
-    createPartUploadUrl(party, admin, { workDate: '2026-09-09', phase: 'after', extension: 'webm', index: 0 }),
-    'a clip id is required so streamed slices can never collide with another film',
-  );
+  const minted = await createPartUploadUrl(party, admin, {
+    workDate: '2026-09-09',
+    phase: 'after',
+    extension: 'webm',
+    index: 0,
+  });
+  assert.match(minted.clipId, /^[a-z0-9]{6,32}$/);
+  assert.ok(minted.path.includes(minted.clipId));
   await assert.rejects(
     createPartUploadUrl(party, admin, {
       workDate: '2026-09-09',

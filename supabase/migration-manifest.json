@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 137,
+    "migrationCount": 138,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -151,6 +151,7 @@
     "20260907210000_comped_field_capture_seats.sql",
     "20260907220000_atmosphere_self_serve_plans.sql",
     "20260909190000_job_proofs_many_visible_clips.sql",
+    "20260909200000_job_proofs_clip_id.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5123,6 +5124,20 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 1
+    },
+    {
+      "version": "20260909200000_job_proofs_clip_id",
+      "file": "20260909200000_job_proofs_clip_id.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proofs.clip_id",
+        "index|public.job_proofs.job_proofs_clip_id_idx",
+        "index|public.job_proofs.job_proofs_org_clip_id_uidx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
     },
     {
       "version": "20260807194500_verifier_share_kind",

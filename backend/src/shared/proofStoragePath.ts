@@ -1,7 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import { HttpError } from '../lib/errors.js';
 
 const EXTENSION = /^[a-z0-9]{2,5}$/;
-/** Phone-minted id for one recording: lowercase base36, 6–32 characters. */
+/** Phone- or server-minted id for one recording: lowercase base36, 6–32 characters. */
 export const CLIP_ID = /^[a-z0-9]{6,32}$/;
 const OWNED_PATH =
   /^([^/]+)\/([^/]+)\/([^/]+)\/(\d{4}-\d{2}-\d{2})-(before|after)(?:-([a-z0-9]{6,32}))?\.([a-z0-9]{2,5})$/;
@@ -22,13 +23,32 @@ export function normalizeClipId(raw: unknown): string | null {
 }
 
 /**
+ * Mint a clip id the same shape Field Capture uses (lowercase alnum, ≤32).
+ * Every new upload must carry one so two films the same day never share a path.
+ */
+export function mintClipId(now = Date.now()): string {
+  const stamp = now.toString(36);
+  const rand = randomBytes(8).toString('hex');
+  const id = `${stamp}${rand}`.replace(/[^a-z0-9]/g, '').slice(0, 32);
+  if (CLIP_ID.test(id)) return id;
+  // Extremely unlikely; hex+stamp always satisfies the alphabet.
+  return `c${randomBytes(8).toString('hex')}`.slice(0, 17);
+}
+
+/** Prefer the client id when valid; otherwise mint a fresh one. */
+export function resolveClipId(raw: unknown): string {
+  return normalizeClipId(raw) ?? mintClipId();
+}
+
+/**
  * The only path a job-share / field-app token may write. The party id is in
  * the folder so a leaked signed URL cannot be aimed at another job.
  *
  * With a `clipId` every recording gets its own object, so a crew can stop one
  * film and start the next on the same job the same day without the second
- * overwriting the first. Without one (older phones) the path is one object per
- * party, day and phase, and a re-upload replaces it.
+ * overwriting the first. Without one the helper still builds the legacy
+ * one-per-day stem — keep that for reading old rows. New uploads must call
+ * `resolveClipId` first so they never land on the legacy stem.
  */
 export function proofObjectPath(
   party: ProofPartyRef,
