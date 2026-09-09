@@ -42,10 +42,22 @@
     return null;
   }
 
+  /** The local calendar day a moment fell on — the day a film is filed under. */
+  function localDateISO(ms) {
+    var at = new Date(Number.isFinite(Number(ms)) ? Number(ms) : Date.now());
+    var offset = at.getTimezoneOffset() * 60 * 1000;
+    return new Date(at.getTime() - offset).toISOString().slice(0, 10);
+  }
+
   function todayISO() {
-    var now = new Date();
-    var offset = now.getTimezoneOffset() * 60 * 1000;
-    return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+    return localDateISO(Date.now());
+  }
+
+  /** One id per recording — lowercase base36, so it fits the storage path rule. */
+  function newClipId() {
+    var stamp = Date.now().toString(36);
+    var rand = Math.random().toString(36).slice(2, 10);
+    return (stamp + rand).replace(/[^a-z0-9]/g, '').slice(0, 32);
   }
 
   function isKnownDuration(value) {
@@ -322,6 +334,8 @@
   function readCapture(file, opts) {
     opts = opts || {};
     var known = opts.knownSite;
+    // A film that waited hours for signal must not be placed where the truck
+    // is now — the caller passes noPosition once the recording is old.
     var positionP =
       known && known.lat != null && known.lon != null
         ? Promise.resolve({
@@ -331,13 +345,17 @@
               accuracy: known.accuracyM != null ? known.accuracyM : null,
             },
           })
-        : currentPosition();
+        : opts.noPosition
+          ? Promise.resolve(null)
+          : currentPosition();
+    // The hash does not need the clock: start it now, not after the duration probe.
+    var hashP = hashFile(file);
     return readDuration(file).then(function (durationHint) {
       var longForm =
         (durationHint != null && durationHint > LONG_FORM_CLIENT_SECONDS) || file.size > 80 * 1000 * 1000;
       return Promise.all([
         positionP,
-        hashFile(file),
+        hashP,
         longForm
           ? Promise.resolve({ durationSeconds: durationHint, frames: [] })
           : extractFrames(file),
@@ -361,10 +379,15 @@
 
   /**
    * Record day film with camera + microphone into a Blob (webm/mp4).
+   *
+   * `opts.onChunk(blob, { mimeType, startedAt, index })` sees every chunk the
+   * recorder hands over, in order, so a streamer can send the film while the
+   * camera is still rolling. The final blob is exactly those chunks joined.
    */
   function recordDayFilm(opts) {
     opts = opts || {};
     var onTick = opts.onTick || function () {};
+    var onChunk = typeof opts.onChunk === 'function' ? opts.onChunk : null;
     var videoEl = opts.videoEl || null;
 
     var VIDEO_TYPES = [
@@ -428,7 +451,18 @@
           state.chunks = [];
           state.startedAt = Date.now();
           recorder.ondataavailable = function (ev) {
-            if (ev.data && ev.data.size > 0) state.chunks.push(ev.data);
+            if (!ev.data || !ev.data.size) return;
+            state.chunks.push(ev.data);
+            if (!onChunk) return;
+            try {
+              onChunk(ev.data, {
+                mimeType: recorder.mimeType || state.mimeType || 'video/webm',
+                startedAt: new Date(state.startedAt).toISOString(),
+                index: state.chunks.length - 1,
+              });
+            } catch (e) {
+              /* streaming is a head start; it must never touch the recording */
+            }
           };
           recorder.start(1000);
           state.timer = setInterval(function () {
@@ -472,6 +506,7 @@
               blob: blob,
               mimeType: type,
               durationSeconds: Math.max(1, Math.floor((Date.now() - state.startedAt) / 1000)),
+              startedAt: new Date(state.startedAt).toISOString(),
               hasAudio: true,
               hasVideo: true,
             });
@@ -685,6 +720,19 @@
     return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
   }
 
+  /**
+   * Trade the refresh token for a new session. A day queued at 8 AM and sent
+   * at 5 PM has outlived its one-hour access token; filing must not.
+   */
+  function refreshSession(apiBase, refreshToken) {
+    return apiJson(origin(apiBase) + '/api/auth/refresh', {
+      method: 'POST',
+      body: refreshToken ? { refreshToken: refreshToken } : {},
+    }).then(function (body) {
+      return body && body.session && body.session.accessToken ? body.session : null;
+    });
+  }
+
   /** Signed-in Field Capture user — join an office or start one. */
   function linkOffice(opts) {
     opts = opts || {};
@@ -782,11 +830,72 @@
     );
   }
 
+  /** Run `fn` over `items` with at most `size` in flight; rejects on the first failure. */
+  function runPool(items, size, fn) {
+    var list = items.slice();
+    var active = 0;
+    var failed = false;
+    return new Promise(function (resolve, reject) {
+      function launch(item) {
+        active += 1;
+        Promise.resolve()
+          .then(function () {
+            return fn(item);
+          })
+          .then(
+            function () {
+              active -= 1;
+              next();
+            },
+            function (err) {
+              if (failed) return;
+              failed = true;
+              reject(err);
+            },
+          );
+      }
+      function next() {
+        if (failed) return;
+        if (!list.length && !active) {
+          resolve();
+          return;
+        }
+        while (active < size && list.length) launch(list.shift());
+      }
+      next();
+    });
+  }
+
+  /** One signed URL for one slice of a film that is still being recorded. */
+  function mintPartUploadUrl(opts) {
+    opts = opts || {};
+    var apiBase = origin(opts.apiBase);
+    var url = opts.jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(opts.jobId) + '/proof/upload-part-url'
+      : jobShareUrl(apiBase, opts.token, '/proof/upload-part-url');
+    return apiJson(url, {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: {
+        workDate: opts.workDate || todayISO(),
+        phase: opts.phase || 'after',
+        extension: opts.extension || 'webm',
+        clipId: opts.clipId,
+        index: opts.index,
+      },
+    });
+  }
+
   /**
    * Upload day film.
    *
    * Job-share link: `{ token }` (no office login).
    * Dashboard account: `{ jobId, accessToken }` — same session as the website.
+   *
+   * A film that waited in the filing queue passes `workDate` and `recordedAt`
+   * from the day it was filmed, `facts` it already read (hash, stills, GPS)
+   * so a retry does not hash 400 MB again, and `onFacts` to keep the first
+   * read even when the PUT fails.
    */
   function uploadDayFilm(opts) {
     var token = opts.token;
@@ -797,14 +906,34 @@
     var mimeType = opts.mimeType || 'video/webm';
     var onStep = opts.onStep || function () {};
     var onProgress = opts.onProgress || function () {};
+    var onFacts = opts.onFacts || function () {};
     var storageBase = opts.storageBase || '';
     var knownSite = opts.knownSite || null;
+    var knownFacts = opts.facts && typeof opts.facts === 'object' ? opts.facts : null;
+    var workDate = /^\d{4}-\d{2}-\d{2}$/.test(String(opts.workDate || '')) ? opts.workDate : todayISO();
+    var recordedMs = Date.parse(opts.recordedAt || '');
 
     var ext = mimeType.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
     var file = new File([blob], 'field-day.' + ext, {
       type: mimeType,
-      lastModified: Date.now(),
+      lastModified: Number.isFinite(recordedMs) ? recordedMs : Date.now(),
     });
+
+    function readFacts() {
+      if (knownFacts) return Promise.resolve(knownFacts);
+      return readCapture(file, { knownSite: knownSite, noPosition: Boolean(opts.noPosition) }).then(
+        function (facts) {
+          var duration = knownDurationSeconds(facts.durationSeconds, opts.durationSeconds);
+          if (duration != null) facts.durationSeconds = duration;
+          try {
+            onFacts(facts);
+          } catch (e) {
+            /* the caller's bookkeeping must not fail the upload */
+          }
+          return facts;
+        },
+      );
+    }
 
     var uploadPath = jobId
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof/upload-url'
@@ -816,6 +945,11 @@
       ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof'
       : jobShareUrl(apiBase, token, '/proof');
     var authHeaders = accessToken ? { Authorization: 'Bearer ' + accessToken } : {};
+    // One object per recording, so the next film on this job today does not
+    // overwrite this one. Older office APIs ignore the field.
+    var clipId = CLIP_ID.test(String(opts.clipId || '')) ? String(opts.clipId) : '';
+    var stream = clipId ? streamStateOf(opts.stream) : null;
+    var onStreamAdvance = opts.onStreamAdvance || function () {};
 
     function mintSlot() {
       return apiJson(uploadPath, {
@@ -823,44 +957,167 @@
         accessToken: accessToken,
         headers: authHeaders,
         body: {
-          workDate: todayISO(),
+          workDate: workDate,
           phase: 'after',
           extension: ext,
           byteSize: file.size,
+          clipId: clipId || undefined,
         },
       });
     }
 
-    // Mint the signed URL first, then read the clip and PUT bytes together so
-    // hash/GPS/frames do not delay the storage transfer on truck signal.
-    onStep('Uploading…');
-    return mintSlot().then(function (slot) {
-      var factsP = readCapture(file, { knownSite: knownSite });
-      var putP = putFileResumable({
-        slot: slot,
-        file: file,
-        mimeType: mimeType,
-        storageBase: storageBase,
-        onStep: onStep,
-        onProgress: onProgress,
-        remint: mintSlot,
-        complete: function (current) {
-          if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
-          return apiJson(completePath, {
-            method: 'POST',
-            accessToken: accessToken,
-            headers: authHeaders,
-            body: {
-              workDate: todayISO(),
-              phase: 'after',
-              storagePath: current.path,
-              partCount: current.parts.length,
-            },
-          }).then(function () {
-            return current;
-          });
+    function mintPart(index) {
+      return mintPartUploadUrl({
+        apiBase: apiBase,
+        jobId: jobId,
+        token: token,
+        accessToken: accessToken,
+        workDate: workDate,
+        extension: ext,
+        clipId: clipId,
+        index: index,
+      });
+    }
+
+    function stitch(storagePath, partCount) {
+      return apiJson(completePath, {
+        method: 'POST',
+        accessToken: accessToken,
+        headers: authHeaders,
+        body: {
+          workDate: workDate,
+          phase: 'after',
+          storagePath: storagePath,
+          partCount: partCount,
         },
       });
+    }
+
+    /**
+     * Most of the film already landed while it was being recorded. Send the
+     * tail from `bytesDone` as further parts, two at a time, then stitch.
+     * What the office refuses to stitch (a 4xx) flags `streamFailed`, and the
+     * queue sends the whole film on its next attempt instead.
+     */
+    function uploadStreamedTail(current) {
+      var partBytes = Math.max(4096, Number(current.partBytes) || STREAM_PART_BYTES);
+      var offset = Math.max(0, Math.min(file.size, Number(current.bytesDone) || 0));
+      var index = Math.max(0, Math.floor(Number(current.partCount) || 0));
+      var head = { bytesDone: offset, partCount: index };
+      var tail = [];
+      while (offset < file.size) {
+        var end = Math.min(file.size, offset + partBytes);
+        tail.push({ index: index, start: offset, end: end, size: end - offset });
+        index += 1;
+        offset = end;
+      }
+      var total = index;
+      if (total < 2 || total > STREAM_MAX_PARTS || file.size > STREAM_MAX_BYTES) {
+        var whole = new Error('Send the whole film instead.');
+        whole.streamFailed = true;
+        return Promise.reject(whole);
+      }
+      var loaded = {};
+      var landed = {};
+      function report() {
+        var sum = 0;
+        Object.keys(loaded).forEach(function (key) {
+          sum += loaded[key];
+        });
+        onProgress(Math.max(0, Math.min(1, (head.bytesDone + sum) / file.size)));
+      }
+      function advance() {
+        // Parts may land out of order; the queue only ever hears about the
+        // contiguous prefix, so a later attempt resumes from solid ground.
+        var moved = false;
+        var next = tail.find(function (part) {
+          return part.index === head.partCount;
+        });
+        while (next && landed[next.index]) {
+          head.partCount += 1;
+          head.bytesDone += next.size;
+          moved = true;
+          next = tail.find(function (part) {
+            return part.index === head.partCount;
+          });
+        }
+        if (moved) {
+          try {
+            onStreamAdvance({ bytesDone: head.bytesDone, partCount: head.partCount });
+          } catch (e) {
+            /* bookkeeping must not fail the upload */
+          }
+        }
+      }
+      onStep('Uploading…');
+      report();
+      return runPool(tail, 2, function (part) {
+        var blob = file.slice(part.start, part.end);
+        return mintPart(part.index)
+          .then(function (slot) {
+            if (!slot || !slot.uploadUrl) throw new Error('Upload did not go through.');
+            return putBytesWithRetry(
+              slot.uploadUrl,
+              blob,
+              mimeType,
+              onStep,
+              function (ratio) {
+                loaded[part.index] = part.size * Math.max(0, Math.min(1, ratio || 0));
+                report();
+              },
+              PROOF_UPLOAD_ATTEMPTS,
+              function () {
+                return mintPart(part.index).then(function (next) {
+                  return next.uploadUrl;
+                });
+              },
+            );
+          })
+          .then(function () {
+            loaded[part.index] = part.size;
+            landed[part.index] = true;
+            advance();
+            report();
+          });
+      }).then(function () {
+        return stitch(current.path, total).then(
+          function () {
+            return { slot: { path: current.path } };
+          },
+          function (err) {
+            var status = err && typeof err.status === 'number' ? err.status : 0;
+            if (status >= 400 && status < 500 && status !== 401) err.streamFailed = true;
+            throw err;
+          },
+        );
+      });
+    }
+
+    // Mint the signed URL first, then read the clip and PUT bytes together so
+    // hash/GPS/frames do not delay the storage transfer on truck signal. A
+    // film that streamed while recording skips the mint: its head is already
+    // in storage and only the tail is left.
+    onStep('Uploading…');
+    var slotP = stream ? Promise.resolve(null) : mintSlot();
+    return slotP.then(function (slot) {
+      var factsP = readFacts();
+      var putP = stream
+        ? uploadStreamedTail(stream)
+        : putFileResumable({
+            slot: slot,
+            file: file,
+            mimeType: mimeType,
+            storageBase: storageBase,
+            onStep: onStep,
+            onProgress: onProgress,
+            remint: mintSlot,
+            complete: function (current) {
+              if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
+              return stitch(current.path, current.parts.length).then(function () {
+                return current;
+              });
+            },
+          });
 
       return Promise.all([factsP, putP]).then(function (parts) {
         var facts = parts[0];
@@ -874,7 +1131,7 @@
           accessToken: accessToken,
           headers: authHeaders,
           body: {
-            workDate: todayISO(),
+            workDate: workDate,
             phase: 'after',
             storagePath: used.path,
             byteSize: file.size,
@@ -1027,9 +1284,18 @@
     return once(putUrl);
   }
 
-  function putBytesOnce(putUrl, file, mimeType, onProgress) {
+  function putBytesOnce(putUrl, file, mimeType, onProgress, control) {
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
+      if (control && typeof control === 'object') {
+        control.abort = function () {
+          try {
+            xhr.abort();
+          } catch (e) {
+            /* already settled */
+          }
+        };
+      }
       xhr.open('PUT', putUrl);
       xhr.setRequestHeader('Content-Type', mimeType);
       xhr.upload.onprogress = function (event) {
@@ -1393,6 +1659,1061 @@
     return url.toString();
   }
 
+  /* ---------- upload while recording ----------
+     MediaRecorder hands over a chunk every second. The streamer groups them
+     into parts of ~8 MB and PUTs each one to its own signed URL while the
+     camera keeps rolling — one part at a time, strictly in order. By
+     hold-to-finish most of the film is already in storage; the queue sends
+     the tail and asks the office to stitch. This is a head start, never the
+     record of truth: any failure just stops streaming, and the queue sends
+     everything from `bytesDone` on. */
+
+  var CLIP_ID = /^[a-z0-9]{6,32}$/;
+  var STREAM_PART_BYTES = 8 * 1024 * 1024;
+  var STREAM_MAX_BYTES = 512 * 1024 * 1024;
+  var STREAM_MAX_PARTS = 128;
+  var STREAM_FINISH_WAIT_MS = 20 * 1000;
+
+  /** What the queue keeps about a film's streamed head, or null when there is none. */
+  function streamStateOf(raw) {
+    if (!raw || !raw.path || !(Number(raw.partCount) >= 1)) return null;
+    return {
+      path: String(raw.path),
+      partCount: Math.floor(Number(raw.partCount)),
+      bytesDone: Math.max(0, Math.floor(Number(raw.bytesDone) || 0)),
+      partBytes: Math.max(4096, Math.floor(Number(raw.partBytes) || STREAM_PART_BYTES)),
+    };
+  }
+
+  function createDayFilmStreamer(cfg) {
+    cfg = cfg || {};
+    var mint = cfg.mint;
+    var put = cfg.put || putBytesOnce;
+    var partBytes = Math.max(4096, Number(cfg.partBytes) || STREAM_PART_BYTES);
+    var maxBytes = Number(cfg.maxBytes) || STREAM_MAX_BYTES;
+    var maxParts = Number(cfg.maxParts) || STREAM_MAX_PARTS;
+    var mimeType = cfg.mimeType || 'video/webm';
+    var onChange = cfg.onChange || function () {};
+    var wait = cfg.wait || waitMs;
+    var timers = cfg.timers || {
+      setTimeout: function (fn, ms) {
+        return setTimeout(fn, ms);
+      },
+      clearTimeout: function (id) {
+        clearTimeout(id);
+      },
+    };
+    var finishWaitMs = Number(cfg.finishWaitMs) || STREAM_FINISH_WAIT_MS;
+
+    var pending = [];
+    var pendingBytes = 0;
+    var queue = [];
+    var landed = 0;
+    var bytesDone = 0;
+    var bytesSeen = 0;
+    var path = '';
+    var sending = null;
+    var stopped = false;
+    var broken = '';
+    var settle = null;
+
+    function snapshot() {
+      return {
+        path: path,
+        partCount: landed,
+        bytesDone: bytesDone,
+        bytesSeen: bytesSeen,
+        partBytes: partBytes,
+        inFlight: Boolean(sending),
+        broken: broken,
+      };
+    }
+
+    function changed() {
+      try {
+        onChange(snapshot());
+      } catch (e) {
+        /* a paint error must never touch the recording */
+      }
+    }
+
+    function giveUp(reason) {
+      if (broken) return;
+      broken = String(reason || 'Streaming stopped.');
+      queue = [];
+      pending = [];
+      pendingBytes = 0;
+      changed();
+    }
+
+    function finishSettled() {
+      if (!settle) return;
+      var fn = settle;
+      settle = null;
+      fn(snapshot());
+    }
+
+    function push(chunk) {
+      if (stopped || broken || !chunk || !chunk.size) return;
+      pending.push(chunk);
+      pendingBytes += chunk.size;
+      bytesSeen += chunk.size;
+      if (bytesSeen > maxBytes) {
+        giveUp('Too long to send while filming.');
+        return;
+      }
+      if (pendingBytes >= partBytes) cut();
+    }
+
+    function cut() {
+      if (!pendingBytes || broken) return;
+      var index = landed + queue.length;
+      // Leave room for the tail: the queue needs at least one more index.
+      if (index >= maxParts - 1) {
+        giveUp('Too many parts to stitch.');
+        return;
+      }
+      var blob = new Blob(pending, { type: mimeType });
+      pending = [];
+      pendingBytes = 0;
+      queue.push({ index: index, blob: blob, size: blob.size });
+      pump();
+    }
+
+    function pump() {
+      if (sending || broken || stopped || !queue.length) return;
+      var part = queue[0];
+      var control = {};
+      sending = { part: part, control: control };
+      var attempt = 0;
+      function once() {
+        return Promise.resolve()
+          .then(function () {
+            return mint(part.index);
+          })
+          .then(function (slot) {
+            if (!slot || !slot.uploadUrl) throw new Error('No upload URL.');
+            if (slot.path) path = String(slot.path);
+            return put(slot.uploadUrl, part.blob, mimeType, function () {}, control);
+          })
+          .then(function (res) {
+            if (!res || !res.ok) throw new Error('Part did not land.');
+          });
+      }
+      function landedOk() {
+        sending = null;
+        if (broken) {
+          finishSettled();
+          return;
+        }
+        // One part in flight at a time, so the landed prefix stays contiguous.
+        queue.shift();
+        landed += 1;
+        bytesDone += part.size;
+        changed();
+        if (stopped) {
+          finishSettled();
+          return;
+        }
+        pump();
+      }
+      function failed(err) {
+        attempt += 1;
+        if (attempt < 3 && !stopped && !broken) {
+          return wait(1500 * attempt).then(once).then(landedOk, failed);
+        }
+        sending = null;
+        if (!stopped) giveUp((err && err.message) || 'Streaming stopped.');
+        else changed();
+        finishSettled();
+        return undefined;
+      }
+      once().then(landedOk, failed);
+    }
+
+    /**
+     * Recording stopped. Chunks that have not landed are NOT sent from here —
+     * they are the tail the queue sends, with retries. `settled` resolves once
+     * the part in flight has landed or given up, capped so the door is never
+     * held: past the cap the PUT is aborted and the tail simply starts earlier.
+     */
+    function finish() {
+      stopped = true;
+      var snap = snapshot();
+      var settled = new Promise(function (resolve) {
+        if (!sending) {
+          resolve(snapshot());
+          return;
+        }
+        var timer = timers.setTimeout(function () {
+          if (sending && sending.control && typeof sending.control.abort === 'function') {
+            sending.control.abort();
+          }
+        }, finishWaitMs);
+        settle = function (final) {
+          timers.clearTimeout(timer);
+          resolve(final);
+        };
+      });
+      return { snapshot: snap, settled: settled };
+    }
+
+    return { push: push, finish: finish, snapshot: snapshot };
+  }
+
+  /* ---------- day films waiting for the office ----------
+     Hold-to-finish hands the film here and the crew is done: the door says
+     so, Today opens, the next day can start while this one is still going.
+     The queue files one film at a time, oldest first — full bandwidth per
+     film, so each one lands fast when signal is there — and waits, rather
+     than fails, when it is not. IndexedDB keeps the bytes so a killed tab, a
+     reload, or a dead battery does not lose the day; a phone that refuses
+     IndexedDB keeps the film in memory and the Today strip says to keep
+     Field Capture open. */
+
+  var DAY_FILM_DB_NAME = 'atm.field.dayFilms';
+  var DAY_FILM_DB_VERSION = 1;
+  var DAY_FILM_META_STORE = 'films';
+  var DAY_FILM_BYTES_STORE = 'bytes';
+  var FILING_RETRY_BASE_MS = 5000;
+  var FILING_RETRY_CAP_MS = 60 * 1000;
+  var WAITING_FOR_SIGNAL = 'Waiting for signal…';
+  /** Past this age, an unplaced film is not stamped with wherever the phone is now. */
+  var POSITION_FRESH_MS = 10 * 60 * 1000;
+
+  /** Between whole filing attempts: 5s, 10s, 20s, 40s, then every minute. */
+  function nextFilingBackoffMs(attempt) {
+    var n = Math.max(0, Math.floor(Number(attempt) || 0));
+    return Math.min(FILING_RETRY_CAP_MS, FILING_RETRY_BASE_MS * Math.pow(2, n));
+  }
+
+  function siteOf(site) {
+    if (!site || site.lat == null || site.lon == null) return null;
+    return {
+      lat: Number(site.lat),
+      lon: Number(site.lon),
+      accuracyM: site.accuracyM != null ? Number(site.accuracyM) : null,
+    };
+  }
+
+  /** One recorded day, as the queue holds it. `blob` is the film itself. */
+  function newDayFilmEntry(input) {
+    input = input || {};
+    var now = Date.now();
+    var blob = input.blob || null;
+    var draft = input.jobDraft && input.jobDraft.title ? input.jobDraft : null;
+    return {
+      id: input.id || 'film-' + now + '-' + Math.random().toString(36).slice(2, 8),
+      owner: String(input.owner || ''),
+      mode: input.mode === 'share' ? 'share' : 'account',
+      jobId: input.jobId != null ? String(input.jobId) : '',
+      jobName: String(input.jobName || ''),
+      jobDraft: draft
+        ? { title: String(draft.title), situation: String(draft.situation || '') }
+        : null,
+      blob: blob,
+      mimeType: String(input.mimeType || (blob && blob.type) || 'video/webm'),
+      byteSize:
+        blob && typeof blob.size === 'number' ? blob.size : Math.max(0, Number(input.byteSize) || 0),
+      durationSeconds: knownDurationSeconds(input.durationSeconds),
+      recordedAt: input.recordedAt || new Date(now).toISOString(),
+      workDate: input.workDate || todayISO(),
+      site: siteOf(input.site),
+      facts: input.facts || null,
+      clipId: CLIP_ID.test(String(input.clipId || '')) ? String(input.clipId) : newClipId(),
+      stream: streamStateOf(input.stream),
+      status: 'queued',
+      attempts: 0,
+      lastError: '',
+      lastStatus: 0,
+      nextAttemptAt: 0,
+      volatile: false,
+    };
+  }
+
+  function metaOf(entry) {
+    var out = {};
+    Object.keys(entry || {}).forEach(function (key) {
+      if (key === 'blob') return;
+      out[key] = entry[key];
+    });
+    return out;
+  }
+
+  function byRecordedAt(a, b) {
+    var ta = Date.parse((a && a.recordedAt) || '') || 0;
+    var tb = Date.parse((b && b.recordedAt) || '') || 0;
+    if (ta !== tb) return ta - tb;
+    return String((a && a.id) || '').localeCompare(String((b && b.id) || ''));
+  }
+
+  function isPendingFilm(entry) {
+    return Boolean(entry) && entry.status !== 'filed';
+  }
+
+  function idbOpen(idb) {
+    if (!idb || typeof idb.open !== 'function') return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var req;
+      try {
+        req = idb.open(DAY_FILM_DB_NAME, DAY_FILM_DB_VERSION);
+      } catch (e) {
+        resolve(null);
+        return;
+      }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(DAY_FILM_META_STORE)) {
+          db.createObjectStore(DAY_FILM_META_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(DAY_FILM_BYTES_STORE)) {
+          db.createObjectStore(DAY_FILM_BYTES_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = function () {
+        resolve(req.result || null);
+      };
+      req.onerror = function () {
+        resolve(null);
+      };
+      req.onblocked = function () {
+        resolve(null);
+      };
+    });
+  }
+
+  function idbRun(db, storeNames, mode, work) {
+    return new Promise(function (resolve, reject) {
+      var tx;
+      try {
+        tx = db.transaction(storeNames, mode);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      var request = null;
+      try {
+        request = work(tx) || null;
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      tx.oncomplete = function () {
+        resolve(request && 'result' in request ? request.result : null);
+      };
+      tx.onerror = function () {
+        reject(tx.error || new Error('IndexedDB transaction failed.'));
+      };
+      tx.onabort = function () {
+        reject(tx.error || new Error('IndexedDB transaction aborted.'));
+      };
+    });
+  }
+
+  /**
+   * Where day films wait. Metadata and bytes sit in separate object stores so
+   * a status change never rewrites a 400 MB film. Falls back to memory — and
+   * says so through `volatile` — when the phone will not keep a copy.
+   */
+  function openDayFilmStore(opts) {
+    opts = opts || {};
+    var memory = {};
+    var memoryBlobs = {};
+    var volatileIds = {};
+    var durable = false;
+    var idb =
+      opts.indexedDB !== undefined
+        ? opts.indexedDB
+        : typeof indexedDB !== 'undefined'
+          ? indexedDB
+          : null;
+    var dbP = idbOpen(idb).then(function (db) {
+      durable = Boolean(db);
+      return db;
+    });
+
+    function remember(entry) {
+      memory[entry.id] = metaOf(entry);
+      if (entry.blob) memoryBlobs[entry.id] = entry.blob;
+    }
+
+    function withBlob(meta) {
+      var copy = Object.assign({}, meta);
+      if (memoryBlobs[meta.id]) copy.blob = memoryBlobs[meta.id];
+      return copy;
+    }
+
+    function list() {
+      return dbP
+        .then(function (db) {
+          if (!db) return [];
+          return idbRun(db, [DAY_FILM_META_STORE], 'readonly', function (tx) {
+            return tx.objectStore(DAY_FILM_META_STORE).getAll();
+          }).then(
+            function (rows) {
+              return Array.isArray(rows) ? rows : [];
+            },
+            function () {
+              return [];
+            },
+          );
+        })
+        .then(function (rows) {
+          var out = [];
+          var seen = {};
+          rows.forEach(function (row) {
+            if (!row || !row.id) return;
+            seen[row.id] = true;
+            // What this session already knows wins over the stored copy.
+            var meta = memory[row.id] ? Object.assign(row, memory[row.id]) : row;
+            meta.volatile = false;
+            memory[row.id] = meta;
+            out.push(meta);
+          });
+          Object.keys(memory).forEach(function (id) {
+            if (seen[id]) return;
+            memory[id].volatile = true;
+            volatileIds[id] = true;
+            out.push(memory[id]);
+          });
+          out.sort(byRecordedAt);
+          return out.map(withBlob);
+        });
+    }
+
+    function save(entry) {
+      if (!entry || !entry.id) return Promise.reject(new Error('Nothing to save.'));
+      remember(entry);
+      var meta = Object.assign(metaOf(entry), { volatile: false });
+      return dbP
+        .then(function (db) {
+          if (!db) throw new Error('This phone will not keep a copy.');
+          return idbRun(db, [DAY_FILM_META_STORE, DAY_FILM_BYTES_STORE], 'readwrite', function (tx) {
+            tx.objectStore(DAY_FILM_BYTES_STORE).put({ id: entry.id, blob: entry.blob });
+            return tx.objectStore(DAY_FILM_META_STORE).put(meta);
+          });
+        })
+        .then(
+          function () {
+            entry.volatile = false;
+            if (memory[entry.id]) memory[entry.id].volatile = false;
+            delete volatileIds[entry.id];
+            return entry;
+          },
+          function () {
+            entry.volatile = true;
+            if (memory[entry.id]) memory[entry.id].volatile = true;
+            volatileIds[entry.id] = true;
+            return entry;
+          },
+        );
+    }
+
+    function update(id, patch) {
+      var meta = memory[id];
+      if (!meta) return Promise.resolve(null);
+      Object.keys(patch || {}).forEach(function (key) {
+        if (key === 'blob' || key === 'id') return;
+        meta[key] = patch[key];
+      });
+      if (volatileIds[id]) return Promise.resolve(Object.assign({}, meta));
+      var stored = Object.assign({}, meta, { volatile: false });
+      return dbP
+        .then(function (db) {
+          if (!db) return null;
+          return idbRun(db, [DAY_FILM_META_STORE], 'readwrite', function (tx) {
+            return tx.objectStore(DAY_FILM_META_STORE).put(stored);
+          });
+        })
+        .then(
+          function () {
+            return Object.assign({}, meta);
+          },
+          function () {
+            return Object.assign({}, meta);
+          },
+        );
+    }
+
+    function remove(id) {
+      delete memory[id];
+      delete memoryBlobs[id];
+      delete volatileIds[id];
+      return dbP
+        .then(function (db) {
+          if (!db) return null;
+          return idbRun(db, [DAY_FILM_META_STORE, DAY_FILM_BYTES_STORE], 'readwrite', function (tx) {
+            tx.objectStore(DAY_FILM_BYTES_STORE).delete(id);
+            return tx.objectStore(DAY_FILM_META_STORE).delete(id);
+          });
+        })
+        .then(
+          function () {},
+          function () {},
+        );
+    }
+
+    function getBlob(id) {
+      if (memoryBlobs[id]) return Promise.resolve(memoryBlobs[id]);
+      return dbP.then(function (db) {
+        if (!db) return null;
+        return idbRun(db, [DAY_FILM_BYTES_STORE], 'readonly', function (tx) {
+          return tx.objectStore(DAY_FILM_BYTES_STORE).get(id);
+        }).then(
+          function (row) {
+            var blob = row && row.blob ? row.blob : null;
+            if (blob) memoryBlobs[id] = blob;
+            return blob;
+          },
+          function () {
+            return null;
+          },
+        );
+      });
+    }
+
+    return {
+      ready: dbP.then(function () {
+        return durable;
+      }),
+      isDurable: function () {
+        return durable;
+      },
+      list: list,
+      save: save,
+      update: update,
+      remove: remove,
+      getBlob: getBlob,
+    };
+  }
+
+  /**
+   * Files day films one at a time, oldest first, and never gives up on one.
+   *
+   *   cfg.store       openDayFilmStore()
+   *   cfg.upload      function (entry, hooks) → Promise<result>   (uploadDayFilm)
+   *   cfg.resolveJob  function (entry) → Promise<jobId>           phone-only job → office id
+   *   cfg.canRun      function (entry) → boolean                  session / owner gate
+   *   cfg.isOnline    function () → boolean
+   *   cfg.onChange    function (films, reason)                    paint Today + the door
+   *   cfg.onFiled     function (entry, result)
+   *   cfg.onFailed    function (entry, err)
+   */
+  function createDayFilmQueue(cfg) {
+    cfg = cfg || {};
+    var store = cfg.store;
+    var upload = cfg.upload;
+    var resolveJob =
+      cfg.resolveJob ||
+      function (entry) {
+        return Promise.resolve(entry.jobId);
+      };
+    var canRun =
+      cfg.canRun ||
+      function () {
+        return true;
+      };
+    var isOnline =
+      cfg.isOnline ||
+      function () {
+        return typeof navigator === 'undefined' || navigator.onLine !== false;
+      };
+    var onChange = cfg.onChange || function () {};
+    var onFiled = cfg.onFiled || function () {};
+    var onFailed = cfg.onFailed || function () {};
+    var backoffMs = cfg.backoffMs || nextFilingBackoffMs;
+    var timers = cfg.timers || {
+      setTimeout: function (fn, ms) {
+        return setTimeout(fn, ms);
+      },
+      clearTimeout: function (id) {
+        clearTimeout(id);
+      },
+    };
+    var now =
+      cfg.now ||
+      function () {
+        return Date.now();
+      };
+
+    var entries = [];
+    var runtime = {};
+    var running = null;
+    var timer = null;
+    var loading = null;
+
+    function rt(entry) {
+      if (!runtime[entry.id]) runtime[entry.id] = { progress: 0, step: '' };
+      return runtime[entry.id];
+    }
+
+    function view(entry) {
+      var out = metaOf(entry);
+      var r = rt(entry);
+      out.progress = r.progress || 0;
+      out.step = r.step || '';
+      return out;
+    }
+
+    function films() {
+      return entries.map(view);
+    }
+
+    function emit(reason) {
+      try {
+        onChange(films(), reason);
+      } catch (e) {
+        /* a paint error must never stop filing */
+      }
+    }
+
+    function find(id) {
+      for (var i = 0; i < entries.length; i += 1) {
+        if (entries[i].id === id) return entries[i];
+      }
+      return null;
+    }
+
+    function drop(entry) {
+      entries = entries.filter(function (e) {
+        return e.id !== entry.id;
+      });
+      delete runtime[entry.id];
+    }
+
+    function load() {
+      if (loading) return loading;
+      loading = Promise.resolve()
+        .then(function () {
+          return store.list();
+        })
+        .then(
+          function (list) {
+            (list || []).forEach(function (row) {
+              if (!row || !row.id || find(row.id)) return;
+              // A film left "uploading" by a killed tab starts over — the
+              // signed URL is minted fresh and resumable parts pick up.
+              if (row.status === 'uploading' || row.status === 'filed') row.status = 'queued';
+              row.nextAttemptAt = 0;
+              entries.push(row);
+            });
+            entries.sort(byRecordedAt);
+            emit('load');
+            return films();
+          },
+          function () {
+            emit('load');
+            return films();
+          },
+        );
+      return loading;
+    }
+
+    /**
+     * `opts.settle`: a promise for a patch to apply before the first attempt —
+     * the streamer's final head once its in-flight part lands. The film is
+     * saved and shown at once; only sending waits, and never past the cap.
+     */
+    function enqueue(entry, opts) {
+      if (!entry || !entry.id) return Promise.reject(new Error('Nothing to file.'));
+      if (!find(entry.id)) entries.push(entry);
+      entries.sort(byRecordedAt);
+      rt(entry).step = 'Saved on this phone';
+      var settle = opts && opts.settle && typeof opts.settle.then === 'function' ? opts.settle : null;
+      if (settle) {
+        rt(entry).hold = true;
+        var release = function (patch) {
+          if (!rt(entry).hold) return;
+          rt(entry).hold = false;
+          if (patch && typeof patch === 'object') {
+            Object.keys(patch).forEach(function (key) {
+              if (key === 'id' || key === 'blob') return;
+              entry[key] = patch[key];
+            });
+            store.update(entry.id, patch);
+          }
+          emit('settled');
+          kick('settled');
+        };
+        var guard = timers.setTimeout(function () {
+          release(null);
+        }, STREAM_FINISH_WAIT_MS + 5000);
+        settle.then(
+          function (patch) {
+            timers.clearTimeout(guard);
+            release(patch);
+          },
+          function () {
+            timers.clearTimeout(guard);
+            release(null);
+          },
+        );
+      }
+      emit('enqueue');
+      var saved = Promise.resolve()
+        .then(function () {
+          return store.save(entry);
+        })
+        .then(
+          function () {
+            emit('saved');
+            return entry;
+          },
+          function () {
+            entry.volatile = true;
+            emit('saved');
+            return entry;
+          },
+        );
+      kick('enqueue');
+      return saved;
+    }
+
+    function clearTimer() {
+      if (timer) {
+        timers.clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function eligible(entry) {
+      return isPendingFilm(entry) && entry.status !== 'uploading' && !rt(entry).hold && canRun(entry);
+    }
+
+    function pickNext() {
+      var t = now();
+      for (var i = 0; i < entries.length; i += 1) {
+        var e = entries[i];
+        if (eligible(e) && (e.nextAttemptAt || 0) <= t) return e;
+      }
+      return null;
+    }
+
+    function schedule() {
+      clearTimer();
+      if (running) return;
+      var soonest = null;
+      entries.forEach(function (e) {
+        if (!eligible(e)) return;
+        var at = e.nextAttemptAt || 0;
+        if (soonest == null || at < soonest) soonest = at;
+      });
+      if (soonest == null) return;
+      timer = timers.setTimeout(
+        function () {
+          timer = null;
+          drain('timer');
+        },
+        Math.max(0, soonest - now()),
+      );
+    }
+
+    /** Try now. Signal back, app back in front, a fresh session: skip any backoff. */
+    function kick(reason) {
+      var immediate =
+        reason === 'online' ||
+        reason === 'visible' ||
+        reason === 'retry' ||
+        reason === 'session' ||
+        reason === 'remap';
+      return load().then(function () {
+        if (immediate) {
+          entries.forEach(function (e) {
+            if (eligible(e)) e.nextAttemptAt = 0;
+          });
+        }
+        drain(reason || 'kick');
+        return films();
+      });
+    }
+
+    function drain(reason) {
+      if (running) return;
+      var entry = pickNext();
+      if (!entry) {
+        schedule();
+        return;
+      }
+      if (!isOnline()) {
+        // No radio at all. Mark every due film and let the online event (or
+        // the safety interval) bring us back, rather than burn a retry on a
+        // link that is known dead.
+        var t = now();
+        entries.forEach(function (e) {
+          if (!eligible(e) || (e.nextAttemptAt || 0) > t) return;
+          e.status = 'waiting';
+          e.lastError = WAITING_FOR_SIGNAL;
+          e.lastStatus = 0;
+          e.nextAttemptAt = t + FILING_RETRY_CAP_MS;
+          rt(e).step = WAITING_FOR_SIGNAL;
+        });
+        emit('offline');
+        schedule();
+        return;
+      }
+      run(entry);
+    }
+
+    function run(entry) {
+      running = entry.id;
+      entry.status = 'uploading';
+      entry.attempts += 1;
+      entry.lastError = '';
+      entry.lastStatus = 0;
+      var r = rt(entry);
+      r.progress = 0;
+      r.step = 'Starting…';
+      var lastPainted = -1;
+      store.update(entry.id, { status: 'uploading', attempts: entry.attempts, lastError: '' });
+      emit('start');
+      var hooks = {
+        onStep: function (step) {
+          rt(entry).step = String(step || '');
+          emit('step');
+        },
+        onProgress: function (ratio) {
+          var clean = Math.max(0, Math.min(1, Number(ratio) || 0));
+          rt(entry).progress = clean;
+          if (clean >= 1 || Math.abs(clean - lastPainted) >= 0.01) {
+            lastPainted = clean;
+            emit('progress');
+          }
+        },
+        onFacts: function (facts) {
+          if (!facts) return;
+          entry.facts = facts;
+          store.update(entry.id, { facts: facts });
+        },
+        onStreamAdvance: function (advance) {
+          if (!entry.stream || !advance) return;
+          entry.stream = Object.assign({}, entry.stream, {
+            bytesDone: advance.bytesDone,
+            partCount: advance.partCount,
+          });
+          store.update(entry.id, { stream: entry.stream });
+        },
+      };
+      Promise.resolve()
+        .then(function () {
+          return resolveJob(entry);
+        })
+        .then(function (jobId) {
+          var id = jobId != null ? String(jobId) : '';
+          if (id && id !== entry.jobId) {
+            entry.jobId = id;
+            return store.update(entry.id, { jobId: id });
+          }
+          return null;
+        })
+        .then(function () {
+          return entry.blob || store.getBlob(entry.id);
+        })
+        .then(function (blob) {
+          if (!blob) {
+            var gone = new Error('This film is no longer on this phone.');
+            gone.code = 'film_missing';
+            throw gone;
+          }
+          entry.blob = blob;
+          return upload(entry, hooks);
+        })
+        .then(
+          function (result) {
+            running = null;
+            entry.status = 'filed';
+            drop(entry);
+            store.remove(entry.id);
+            emit('filed');
+            try {
+              onFiled(entry, result);
+            } catch (e) {
+              /* keep filing the rest */
+            }
+            drain('next');
+          },
+          function (err) {
+            running = null;
+            if (err && err.code === 'film_missing') {
+              // Nothing left to send: drop it rather than retry forever.
+              drop(entry);
+              store.remove(entry.id);
+              emit('lost');
+              try {
+                onFailed(entry, err);
+              } catch (e) {
+                /* keep filing the rest */
+              }
+              drain('next');
+              return;
+            }
+            entry.status = 'waiting';
+            entry.lastError = (err && err.message) || 'Upload did not go through.';
+            entry.lastStatus = err && typeof err.status === 'number' ? err.status : 0;
+            if (err && err.streamFailed && entry.stream) {
+              // The office would not stitch the streamed head: send the
+              // whole film, and do it now — nothing about signal changed.
+              entry.stream = null;
+              entry.nextAttemptAt = now();
+            } else {
+              entry.nextAttemptAt = now() + backoffMs(entry.attempts - 1);
+            }
+            rt(entry).step = entry.lastError;
+            store.update(entry.id, {
+              status: 'waiting',
+              lastError: entry.lastError,
+              lastStatus: entry.lastStatus,
+              nextAttemptAt: entry.nextAttemptAt,
+              attempts: entry.attempts,
+              stream: entry.stream,
+            });
+            emit('failed');
+            try {
+              onFailed(entry, err);
+            } catch (e) {
+              /* keep filing the rest */
+            }
+            drain('next');
+          },
+        );
+    }
+
+    /** A phone-only job got its office id: every film waiting on it follows. */
+    function remapJob(fromId, toId) {
+      var from = String(fromId || '');
+      var to = String(toId || '');
+      if (!from || !to || from === to) return Promise.resolve(0);
+      return load().then(function () {
+        var writes = [];
+        entries.forEach(function (e) {
+          if (e.jobId !== from) return;
+          e.jobId = to;
+          if (e.status === 'waiting') e.nextAttemptAt = 0;
+          writes.push(store.update(e.id, { jobId: to }));
+        });
+        return Promise.all(writes).then(function () {
+          if (writes.length) {
+            emit('remap');
+            kick('remap');
+          }
+          return writes.length;
+        });
+      });
+    }
+
+    function pending(filter) {
+      return films().filter(function (f) {
+        return isPendingFilm(f) && (!filter || filter(f));
+      });
+    }
+
+    return {
+      load: load,
+      enqueue: enqueue,
+      kick: kick,
+      retryNow: function () {
+        return kick('retry');
+      },
+      remapJob: remapJob,
+      films: films,
+      pending: pending,
+      get: function (id) {
+        var e = find(id);
+        return e ? view(e) : null;
+      },
+      isRunning: function () {
+        return Boolean(running);
+      },
+    };
+  }
+
+  function dayCount(n) {
+    return n === 1 ? '1 day' : n + ' days';
+  }
+
+  /** A server answer that will not change by itself — say it, keep trying gently. */
+  function isStuckStatus(status) {
+    var s = Number(status) || 0;
+    return s >= 400 && s < 500 && s !== 401 && s !== 408 && s !== 429;
+  }
+
+  function dayFilmRow(film, opts) {
+    var pct = Math.round((film.progress || 0) * 100);
+    var state;
+    if (film.status === 'uploading') state = 'Filing · ' + pct + '%';
+    else if (opts && opts.signedIn === false) state = 'Needs sign-in';
+    else if (opts && opts.online === false) state = 'Waiting for signal';
+    else if (isLocalJobId(film.jobId)) state = 'Creating the job';
+    else if (isStuckStatus(film.lastStatus)) state = 'Needs the office';
+    else if (film.status === 'waiting') state = 'Retrying…';
+    else state = 'Saved';
+    return {
+      id: film.id,
+      name: film.jobName || 'Job',
+      length: formatClipLength(film.durationSeconds),
+      state: state,
+    };
+  }
+
+  /**
+   * The Today strip in one line: what is on this phone, what it is doing,
+   * and — only when true — that the crew needs to keep the app open.
+   */
+  function summarizeDayFilms(films, opts) {
+    opts = opts || {};
+    var list = (Array.isArray(films) ? films : []).filter(isPendingFilm);
+    if (opts.owner != null) {
+      list = list.filter(function (f) {
+        return f.owner === opts.owner;
+      });
+    }
+    var n = list.length;
+    var out = { count: n, title: '', detail: '', progress: null, tone: 'idle', rows: [], signInLine: '' };
+    if (!n) return out;
+    var uploading = null;
+    var volatile = false;
+    var stuck = null;
+    list.forEach(function (f) {
+      if (f.status === 'uploading' && !uploading) uploading = f;
+      if (f.volatile) volatile = true;
+      if (!stuck && isStuckStatus(f.lastStatus) && f.lastError) stuck = f;
+    });
+    var days = dayCount(n);
+    out.rows = list.map(function (f) {
+      return dayFilmRow(f, opts);
+    });
+    out.signInLine =
+      n === 1
+        ? '1 day is saved on this phone. Sign in to finish filing it.'
+        : n + ' days are saved on this phone. Sign in to finish filing them.';
+    if (opts.signedIn === false) {
+      out.tone = 'warn';
+      out.title = 'Sign in to finish filing ' + days;
+      out.detail = 'Saved on this phone.';
+    } else if (uploading) {
+      var pct = Math.round((uploading.progress || 0) * 100);
+      out.tone = 'busy';
+      out.progress = uploading.progress || 0;
+      out.title = 'Filing ' + days + ' with the office';
+      out.detail = (uploading.step || 'Uploading…') + ' · ' + pct + '%';
+    } else if (opts.online === false) {
+      out.tone = 'wait';
+      out.title = days + ' saved on this phone';
+      out.detail = 'Waiting for signal. It files on its own when you are back online.';
+    } else if (stuck) {
+      out.tone = 'warn';
+      out.title = days + ' saved on this phone';
+      out.detail = stuck.lastError;
+    } else {
+      out.tone = 'wait';
+      out.title = days + ' saved on this phone';
+      out.detail = 'Filing with the office in the background.';
+    }
+    if (volatile) {
+      out.detail += ' Keep Field Capture open — this phone could not keep a copy.';
+    }
+    return out;
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     filterJobs: filterJobs,
@@ -1428,6 +2749,24 @@
     uploadDayFilm: uploadDayFilm,
     nextUploadBackoffMs: nextUploadBackoffMs,
     PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,
+    refreshSession: refreshSession,
+    localDateISO: localDateISO,
+    newClipId: newClipId,
+    CLIP_ID: CLIP_ID,
+    mintPartUploadUrl: mintPartUploadUrl,
+    createDayFilmStreamer: createDayFilmStreamer,
+    streamStateOf: streamStateOf,
+    STREAM_PART_BYTES: STREAM_PART_BYTES,
+    STREAM_MAX_BYTES: STREAM_MAX_BYTES,
+    STREAM_MAX_PARTS: STREAM_MAX_PARTS,
+    newDayFilmEntry: newDayFilmEntry,
+    openDayFilmStore: openDayFilmStore,
+    createDayFilmQueue: createDayFilmQueue,
+    summarizeDayFilms: summarizeDayFilms,
+    nextFilingBackoffMs: nextFilingBackoffMs,
+    FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
+    WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,
+    POSITION_FRESH_MS: POSITION_FRESH_MS,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
     loadAuthMe: loadAuthMe,

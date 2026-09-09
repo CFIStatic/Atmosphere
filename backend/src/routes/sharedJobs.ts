@@ -28,6 +28,7 @@ import {
 } from '../verifier/deliverPartyInvite.js';
 import {
   completeChunkedProofUpload,
+  createPartUploadUrl,
   createUploadUrl,
   recordProof,
   listPartyProofs,
@@ -1357,6 +1358,21 @@ jobShareRouter.post(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       res.json(await createUploadUrl(party, admin, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** One slice of a film still being recorded — see createPartUploadUrl. */
+jobShareRouter.post(
+  jobShareActionPattern('/proof/upload-part-url'),
+  shareLimiter,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      res.json(await createPartUploadUrl(party, admin, req.body));
     } catch (err) {
       next(err);
     }

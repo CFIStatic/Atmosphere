@@ -47,6 +47,14 @@ jobs:
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
             /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources \
             2>/dev/null || true
+          # ffmpeg is in Ubuntu's archive. GitHub-hosted runners also carry
+          # Chrome / Microsoft lists that have Hash-Sum-mismatched and failed
+          # this job before apt could install ffmpeg.
+          sudo rm -f \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources \
+            /etc/apt/sources.list.d/microsoft-prod.list \
+            /etc/apt/sources.list.d/microsoft-prod.sources
           apt_opts=(-o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=2)
           export DEBIAN_FRONTEND=noninteractive
           sudo timeout --kill-after=10 90 apt-get "${apt_opts[@]}" update
