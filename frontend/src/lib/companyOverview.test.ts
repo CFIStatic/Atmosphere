@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOverview,
   jobsNeedingAttention,
+  officePending,
   pipelineLine,
   todayLine,
 } from './companyOverview';
@@ -388,5 +389,22 @@ describe('buildOverview', () => {
     expect(model.actions).toEqual([]);
     expect(model.jobs[0].stage).toBe('waiting_on_film');
     expect(todayLine(model)).toBe('No film landed today');
+  });
+});
+
+
+describe('officePending', () => {
+  it('summarizes analysing and unread as a pending-with-the-office cue', () => {
+    expect(
+      officePending({ filmed: 2, unread: 1, failed: 0, analysing: 2, jobsFilmed: 1 }),
+    ).toEqual({
+      count: 3,
+      label: '3 clips pending with the office',
+      detail: '2 being read · 1 waiting to be read',
+    });
+  });
+
+  it('is silent when nothing is waiting on the office', () => {
+    expect(officePending({ filmed: 1, unread: 0, failed: 0, analysing: 0, jobsFilmed: 1 })).toBeNull();
   });
 });

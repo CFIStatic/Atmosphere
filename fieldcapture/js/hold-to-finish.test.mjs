@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=field-filing-queue-1/);
-assert.match(html, /js\/app\.js\?v=field-filing-queue-1/);
+assert.match(html, /js\/capture-core\.js\?v=field-pending-to-office-1/);
+assert.match(html, /js\/app\.js\?v=field-pending-to-office-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.doesNotMatch(html, /retrybtn/, 'the filing queue retries on its own — no Retry button on the door');
@@ -252,9 +252,11 @@ assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the
 assert.match(appSrc, /notifyOfficeLibraryChanged/, 'a new Field Capture job must refresh the office list');
 assert.match(appSrc, /atmosphere: 'library-changed'/);
 assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
+assert.match(coreSrc, /filingHomeVisible/, 'home only shows filing when the crew must act');
+assert.match(appSrc, /filingHomeVisible\(summary\)/, 'the home strip gates on filingHomeVisible');
 assert.match(html, /id="door-sub"/);
 assert.match(html, /id="doneline-title"/, 'the door done-line changes from Done to Uploaded as the film files');
-assert.match(html, /id="filing"/, 'Today carries a strip for days saved on this phone');
+assert.match(html, /id="filing"/, 'Today keeps a warn-only strip for filing that needs the crew');
 assert.match(html, /id="filing-title"/);
 assert.match(html, /id="filing-detail"/);
 assert.match(html, /id="filing-rows"/);
@@ -972,6 +974,12 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
     { owner: 'user:1', online: true, signedIn: true },
   );
   assert.deepEqual(localJob.rows.map((r) => r.state), ['Creating the job']);
+  assert.equal(Core.filingHomeVisible(busy), false, 'busy Uploading… is not a home banner');
+  assert.equal(Core.filingHomeVisible(offline), false, 'waiting for signal is not a home banner');
+  assert.equal(Core.filingHomeVisible(signedOut), true, 'sign-in needed stays on home');
+  assert.equal(Core.filingHomeVisible(stuck), true, 'stuck filing stays on home');
+  assert.equal(Core.filingHomeVisible(volatile), true, 'volatile keep-open stays on home');
+  assert.equal(volatile.tone, 'warn', 'volatile elevates to warn so home can show it');
 }
 
 {

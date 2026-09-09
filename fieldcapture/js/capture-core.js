@@ -2710,8 +2710,20 @@
     }
     if (volatile) {
       out.detail += ' Keep Field Capture open — this phone could not keep a copy.';
+      /* Volatile copies need the crew to keep the app open — treat as warn
+         so the home strip still surfaces even when Uploading… is hidden. */
+      out.tone = 'warn';
     }
     return out;
+  }
+
+  /**
+   * Home only shows the filing strip when the crew must act (sign-in, stuck
+   * server answer, volatile copy). Quiet Uploading… / waiting-for-signal
+   * progress stays off the home screen — the office Overview owns that.
+   */
+  function filingHomeVisible(summary) {
+    return Boolean(summary && summary.count && summary.tone === 'warn');
   }
 
   global.FieldCaptureCore = {
@@ -2763,6 +2775,7 @@
     openDayFilmStore: openDayFilmStore,
     createDayFilmQueue: createDayFilmQueue,
     summarizeDayFilms: summarizeDayFilms,
+    filingHomeVisible: filingHomeVisible,
     nextFilingBackoffMs: nextFilingBackoffMs,
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,
