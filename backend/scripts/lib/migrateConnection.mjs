@@ -108,15 +108,14 @@ export function pickRailwayDbEnv(vars) {
 }
 
 export function missingConnectionHelp() {
-  return (
-    'no database connection configured. Set DATABASE_URL (or SUPABASE_DB_PASSWORD +
-' +
-    '  SUPABASE_DB_HOST / SUPABASE_DB_REGION + SUPABASE_PROJECT_REF / SUPABASE_URL for the pooler),\n' +
-    '  or SUPABASE_ACCESS_TOKEN + project ref.\n' +
-    '  GitHub Keys currently has SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY only — those cannot\n' +
-    '  run DDL. Add DATABASE_URL, SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST, or SUPABASE_ACCESS_TOKEN\n' +
-    '  to Keys, or put one of those on the Railway backend service so the deploy can copy it.\n' +
-    '  Do not rely on a hard-coded pooler region — Atmosphere is us-east-2\n' +
-    '  (aws-0-us-east-2.pooler.supabase.com).'
-  );
+  return [
+    'no database connection configured. Set DATABASE_URL (or SUPABASE_DB_PASSWORD +',
+    '  SUPABASE_DB_HOST / SUPABASE_DB_REGION + SUPABASE_PROJECT_REF / SUPABASE_URL for the pooler),',
+    '  or SUPABASE_ACCESS_TOKEN + project ref.',
+    '  GitHub Keys currently has SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY only — those cannot',
+    '  run DDL. Add DATABASE_URL, SUPABASE_DB_PASSWORD + SUPABASE_DB_HOST, or SUPABASE_ACCESS_TOKEN',
+    '  to Keys, or put one of those on the Railway backend service so the deploy can copy it.',
+    '  Do not rely on a hard-coded pooler region — Atmosphere is us-east-2',
+    '  (aws-0-us-east-2.pooler.supabase.com).',
+  ].join('\n');
 }
