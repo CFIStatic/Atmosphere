@@ -278,11 +278,16 @@ export function serializeEvidence(input: {
       ? findings.actions
       : [];
 
+  const clipTitle =
+    typeof proof.title === 'string' && proof.title.trim() ? proof.title.trim() : null;
+
   return {
     id: proof.id,
     jobId: proof.job_id,
     jobName: input.jobName,
     jobNumber: input.jobNumber,
+    /** Short AI/human clip title for the Videos list — not the job file name. */
+    title: clipTitle,
     address: input.address ?? null,
     claimNumber: input.claimNumber ?? null,
     partyId: proof.party_id,

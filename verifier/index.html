@@ -1261,12 +1261,19 @@
       aspect-ratio: 16 / 9;
     }
     tbody tr.cliprow td.titlecell { grid-column: 2; grid-row: 1 / span 2; }
-    tbody tr.cliprow-nested td.titlecell .t { display: none; }
-    tbody tr.cliprow td.titlecell .s {
+    /* Nested clip .t is the AI/interim clip title, not the job name — keep it. */
+    tbody tr.cliprow td.titlecell .t {
       font-size: 13px;
       font-weight: 600;
       color: var(--ink);
       line-height: 1.3;
+    }
+    tbody tr.cliprow td.titlecell .s {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1.3;
+      margin-top: 2px;
     }
     tbody tr.cliprow .job-card-meta {
       display: flex;
@@ -3090,6 +3097,7 @@
       e.company,
       e.person,
       e.hash,
+      e.title,
       e.phase
     ].concat(Array.isArray(e.labels) ? e.labels : []);
   }
@@ -3348,17 +3356,55 @@
     return raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
+  function shortTimeLabel(iso) {
+    if (!iso) return '';
+    var ms = Date.parse(iso);
+    if (isNaN(ms)) return '';
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
+    } catch (err) {
+      return '';
+    }
+  }
+
+  /**
+   * Clip name under a job folder: AI title when set, else phase + time / "Video".
+   * Never repeat the job name on nested rows — that made every clip look identical.
+   */
+  function clipListLabel(e, underJob) {
+    var stored = String(e.title || '').trim();
+    if (stored) return stored;
+    var kind = clipKind(e.phase);
+    var time = shortTimeLabel(e.capturedAt || e.uploadedAt);
+    if (kind !== 'Video' && time) return kind + ' · ' + time;
+    if (kind !== 'Video') return kind;
+    if (time) return 'Video · ' + time;
+    if (underJob) return 'Video';
+    var job = JOBS[e.job] || { name: e.jobName || 'Job' };
+    return job.name || 'Video';
+  }
+
+  function storedTitleSubtitle(e, phase, underJob) {
+    var stored = String(e.title || '').trim();
+    if (stored) return phase;
+    if (underJob) return '';
+    var job = JOBS[e.job] || { name: e.jobName || '' };
+    if (clipListLabel(e, false) === (job.name || 'Video')) return phase;
+    return '';
+  }
+
   function clipRow(e, underJob) {
-    var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var status = clipStatus(e);
     var phase = clipKind(e.phase);
+    var clipName = clipListLabel(e, underJob);
     var clipDay = dayLabel(e.workDate);
+    var sub = storedTitleSubtitle(e, phase, underJob);
     return '' +
       '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
-          '<div class="t">' + esc(job.name) + '</div>' +
-          '<div class="s">' + esc(phase) + '</div>' +
+          '<div class="t">' + esc(clipName) + '</div>' +
+          (sub ? '<div class="s">' + esc(sub) + '</div>' : '') +
           '<div class="job-card-meta">' +
             '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
             (clipDay && clipDay !== '—' ? '<span class="job-card-sep">' + clipDay + '</span>' : '') +
@@ -6737,6 +6783,7 @@
       company: raw.company || '—',
       person: raw.person || raw.company || '—',
       phase: raw.phase,
+      title: raw.title || null,
       workDate: raw.workDate,
       capturedAt: raw.capturedAt,
       uploadedAt: raw.uploadedAt,
@@ -6987,7 +7034,7 @@
       var status = clipStatus(e);
       return [
         e.id, e.job, e.jobName, e.duration, e.uploadedAt, e.capturedAt,
-        e.person, e.company, e.phase, e.workDate,
+        e.person, e.company, e.phase, e.title, e.workDate,
         e.analysis && e.analysis.state,
         status.cls, status.text,
         posterIdentity(e.poster)

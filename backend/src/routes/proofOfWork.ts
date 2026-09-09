@@ -34,6 +34,7 @@ import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.j
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelForCheck, labelsForProof } from '../verifier/library.js';
+import { persistProofClipTitleIfEmpty } from '../verifier/proofClipTitle.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
@@ -809,6 +810,10 @@ async function runDayAnalysis(
     },
     ai_model: analysis.model,
   }).eq('id', film.id);
+  await finishClipTitle(admin, film.id, {
+    summary: analysis.summary,
+    phase: film.phase,
+  });
 
   await ingestPhysicalWorkFromProof(admin, { orgId: party.org_id, proofId: film.id });
   return { outcome: 'done', materialChange: null, summary: analysis.summary };
@@ -1193,6 +1198,21 @@ export async function ensureStillsAndDuration(
   return { durationSeconds, longForm, error };
 }
 
+async function finishClipTitle(
+  admin: any,
+  proofId: string,
+  source: {
+    summary?: string | null;
+    narration?: string | null;
+    narrationSummary?: string | null;
+    actions?: Array<{ action?: string | null; objectLabel?: string | null; description?: string | null; room?: string | null }> | null;
+    labels?: string[] | null;
+    phase?: string | null;
+  },
+): Promise<void> {
+  await persistProofClipTitleIfEmpty(admin, proofId, source);
+}
+
 async function finishProofActions(
   admin: any,
   job: NarrationJob,
@@ -1314,6 +1334,13 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       }),
     });
     await finishProofActions(admin, job, dictation.actions, dictation.model);
+    await finishClipTitle(admin, job.proofId, {
+      summary: dictation.narrationSummary || dictation.narrationText,
+      narration: dictation.narrationText,
+      narrationSummary: dictation.narrationSummary,
+      actions: dictation.actions,
+      phase: job.phase,
+    });
     await recordAccess(admin, {
       orgId: job.orgId,
       jobId: job.jobId,
@@ -1359,6 +1386,13 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       }),
     });
     await finishProofActions(admin, job, dictation.actions, dictation.model);
+    await finishClipTitle(admin, job.proofId, {
+      summary: dictation.narrationSummary || dictation.narrationText,
+      narration: dictation.narrationText,
+      narrationSummary: dictation.narrationSummary,
+      actions: dictation.actions,
+      phase: job.phase,
+    });
     await recordAccess(admin, {
       orgId: job.orgId,
       jobId: job.jobId,
@@ -1393,6 +1427,18 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
     }),
   });
   await finishProofActions(admin, job, narration.actions, narration.model);
+  await finishClipTitle(admin, job.proofId, {
+    narration: narration.report,
+    actions: narration.actions,
+    labels: labelsForProof({
+      phase: job.phase,
+      trade,
+      narration: { coverage: narration.coverage },
+      stageKinds: steps.map((s) => s.kind),
+      actions: narration.actions,
+    }),
+    phase: job.phase,
+  });
 
   await recordAccess(admin, {
     orgId: job.orgId,
@@ -1460,6 +1506,13 @@ async function performLongFormAnalysis(
         .slice(0, 24),
     });
     await finishProofActions(admin, job, dictation.actions, dictation.model);
+    await finishClipTitle(admin, job.proofId, {
+      summary: dictation.narrationSummary || dictation.narrationText,
+      narration: dictation.narrationText,
+      narrationSummary: dictation.narrationSummary,
+      actions: dictation.actions,
+      phase: job.phase,
+    });
     await recordAccess(admin, {
       orgId: job.orgId,
       jobId: job.jobId,
@@ -1537,6 +1590,12 @@ async function performLongFormAnalysis(
       .slice(0, 24),
   });
   await finishProofActions(admin, job, actions, result.report.model);
+  await finishClipTitle(admin, job.proofId, {
+    summary: result.report.narrative,
+    narration: result.report.narrative,
+    actions,
+    phase: job.phase,
+  });
 
   await recordAccess(admin, {
     orgId: job.orgId,
