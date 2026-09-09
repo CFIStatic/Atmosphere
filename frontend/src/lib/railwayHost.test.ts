@@ -203,28 +203,33 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(site).not.toMatch(publicHost);
   });
 
-  it('applies stripe_event_forget on the backend deploy so failed checkouts can retry', () => {
-    expect(office).toContain('node scripts/applyStripeEventForget.mjs');
+  // These used to be six assertions, one per hand-written applyXxx.mjs step,
+  // each pinning one migration into the deploy. Every migration now goes
+  // through one runner, so the guarantee is structural rather than a list that
+  // someone has to remember to extend.
+  it('applies migrations on the backend deploy, before the image ships', () => {
+    expect(office).toContain('node scripts/migrate.mjs');
+    const backendJob = office.slice(0, office.indexOf('name: Deploy office app'));
+    expect(backendJob.indexOf('node scripts/migrate.mjs')).toBeGreaterThan(-1);
+    expect(backendJob.indexOf('node scripts/migrate.mjs')).toBeLessThan(
+      backendJob.indexOf('name: Deploy backend'),
+    );
   });
 
-  it('applies stripe_sync_subscription cancel-at-period-end so seat-plan webhooks match', () => {
-    expect(office).toContain('node scripts/applyStripeCancelAtPeriodEnd.mjs');
+  it('carries no per-migration apply steps', () => {
+    // A new applyXxx.mjs step in the deploy means someone worked around the
+    // runner, and that migration would not be recorded in the ledger.
+    const perMigrationSteps = office.match(/node scripts\/apply[A-Za-z]+\.mjs/g) ?? [];
+    expect(perMigrationSteps).toEqual([]);
   });
 
-  it('applies Field Capture extra_fc_seats so seat allowance persists', () => {
-    expect(office).toContain('node scripts/applyFieldCaptureExtraSeats.mjs');
-  });
-
-  it('applies Field Capture seat-limit triggers so concurrent joins cannot over-mint', () => {
-    expect(office).toContain('node scripts/applyFieldCaptureSeatEnforce.mjs');
-  });
-
-  it('applies Atmosphere plan codes so included Field Capture seats follow the org plan', () => {
-    expect(office).toContain('node scripts/applyAtmosphereSelfServePlans.mjs');
-  });
-
-  it('applies terms_acceptances grants so ToS Continue can persist', () => {
-    expect(office).toContain('node scripts/applyTermsAcceptances.mjs');
+  it('deploys production from main only', () => {
+    // A push to any other branch used to cancel an in-flight main deploy
+    // (cancel-in-progress) and ship that branch instead.
+    const trigger = office.slice(office.indexOf('on:'), office.indexOf('jobs:'));
+    expect(trigger).toContain('- main');
+    expect(trigger).not.toMatch(/- (cursor|claude)\//);
+    expect(site.slice(site.indexOf('on:'), site.indexOf('jobs:'))).not.toMatch(/- (cursor|claude)\//);
   });
 
   it('deploys the staff site from this repo to the public BFF', () => {
