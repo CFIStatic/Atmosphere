@@ -214,6 +214,14 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(backendJob.indexOf('node scripts/migrate.mjs')).toBeLessThan(
       backendJob.indexOf('name: Deploy backend'),
     );
+    // Keys has REST credentials only. Copy a Postgres URL from Railway and
+    // install psql before the runner runs, or migrate fails closed with a
+    // "no database connection" that the next jobs then inherit.
+    expect(backendJob).toContain('loadRailwayDbEnv.mjs');
+    expect(backendJob).toContain('postgresql-client');
+    expect(backendJob.indexOf('loadRailwayDbEnv.mjs')).toBeLessThan(
+      backendJob.indexOf('node scripts/migrate.mjs'),
+    );
   });
 
   it('carries no per-migration apply steps', () => {

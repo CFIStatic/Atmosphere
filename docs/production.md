@@ -656,6 +656,19 @@ that looks unapplied for the runner to apply on the next deploy.
 Until it has run, the deploy's migrate step fails on purpose rather than replay
 the whole history over a live schema.
 
+The runner needs a real Postgres connection. `SUPABASE_URL` +
+`SUPABASE_SERVICE_ROLE_KEY` (what Keys already has) can talk to PostgREST;
+they cannot run DDL. Add one of these to the GitHub `Keys` environment, or
+put it on the Railway **Atmosphere APIs** service so the deploy can copy it:
+
+- `DATABASE_URL` / `SUPABASE_DB_URL`
+- `SUPABASE_DB_PASSWORD` (project ref is taken from `SUPABASE_URL`)
+- `SUPABASE_ACCESS_TOKEN` (Supabase Management API)
+
+The deploy and baseline workflows install `psql` and run
+`backend/scripts/loadRailwayDbEnv.mjs` before `migrate.mjs`. They still fail
+closed if none of those secrets exist anywhere.
+
 ### Checking what production actually has
 
 `reconcile-migrations.mjs` compares a live database against

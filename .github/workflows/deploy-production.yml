@@ -78,6 +78,25 @@ jobs:
       - name: Install Railway CLI
         run: bash scripts/installRailwayCli.sh
 
+      - name: Install psql
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources \
+            2>/dev/null || true
+          apt_opts=(-o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=2)
+          export DEBIAN_FRONTEND=noninteractive
+          sudo timeout --kill-after=10 90 apt-get "${apt_opts[@]}" update
+          sudo timeout --kill-after=10 120 apt-get "${apt_opts[@]}" install -y --no-install-recommends postgresql-client
+
       - name: Require Railway token
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -147,15 +166,34 @@ jobs:
       # One-time before the first run of this step: baseline the database that
       # was migrated by hand, so the runner knows what is already applied.
       #   Actions -> Baseline database migrations -> Run workflow
-      - name: Apply database migrations
+      #
+      # Keys has SUPABASE_URL + SERVICE_ROLE_KEY, which cannot run DDL. Copy a
+      # real Postgres URL from the live backend service when Keys does not
+      # have one, then fail closed if still nothing is configured.
+      - name: Load database URL from Railway
         env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
+          RAILWAY_ENVIRONMENT: production
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
+        run: node scripts/loadRailwayDbEnv.mjs
+
+      - name: Apply database migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || env.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || env.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF || env.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL || env.DATABASE_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL || env.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD || env.SUPABASE_DB_PASSWORD }}
         working-directory: backend
         run: node scripts/migrate.mjs
 

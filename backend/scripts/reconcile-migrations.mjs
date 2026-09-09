@@ -44,6 +44,7 @@ import {
   PARTIAL,
   UNVERIFIABLE,
 } from './lib/reconcile.mjs';
+import { resolveDatabaseUrl } from './lib/migrateConnection.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '../..');
@@ -64,26 +65,16 @@ function die(code, message) {
   process.exit(code);
 }
 
-function poolerUrl() {
-  const ref = process.env.SUPABASE_PROJECT_REF || refFromUrl(process.env.SUPABASE_URL || '');
-  const password = process.env.SUPABASE_DB_PASSWORD || process.env.POSTGRES_PASSWORD || '';
-  if (!ref || !password) return '';
-  const user = process.env.SUPABASE_DB_USER || `postgres.${ref}`;
-  const host = process.env.SUPABASE_DB_HOST || 'aws-0-us-east-1.pooler.supabase.com';
-  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:6543/postgres`;
-}
-
-function refFromUrl(url) {
-  const m = /^https:\/\/([a-z0-9]+)\.supabase\./i.exec(url || '');
-  return m ? m[1] : '';
-}
-
-const url = valueOf('--url') || process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || poolerUrl();
+const resolved = resolveDatabaseUrl({
+  ...process.env,
+  DATABASE_URL: valueOf('--url') || process.env.DATABASE_URL,
+});
+const url = resolved?.url || '';
 if (!url) {
   die(
     2,
     'no database connection. Pass --url, or set DATABASE_URL, or set\n' +
-      '  SUPABASE_DB_PASSWORD + SUPABASE_PROJECT_REF to use the pooler.\n' +
+      '  SUPABASE_DB_PASSWORD + SUPABASE_URL (or SUPABASE_PROJECT_REF) to use the pooler.\n' +
       '  This reads the catalogs only; it writes nothing.',
   );
 }
