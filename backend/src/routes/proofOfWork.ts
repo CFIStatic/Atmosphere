@@ -60,7 +60,7 @@ import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromPro
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
-import { assertOwnedProofStoragePath, CLIP_ID, proofObjectPath } from '../shared/proofStoragePath.js';
+import { assertOwnedProofStoragePath, CLIP_ID, proofObjectPath, resolveClipId } from '../shared/proofStoragePath.js';
 import { resolveDictationEntries, sanitizeDictationEvents } from '../shared/dictationEvents.js';
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
@@ -279,7 +279,7 @@ export async function createUploadUrl(
   body: unknown,
 ): Promise<{
   path: string;
-  clipId: string | null;
+  clipId: string;
   token: string;
   uploadUrl: string;
   chunkSize: number;
@@ -292,26 +292,27 @@ export async function createUploadUrl(
       extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
       byteSize: z.number().int().positive().max(8 * 1024 * 1024 * 1024).optional(),
       // One object per recording: a second film on the same job and day is a
-      // second film, not a replacement. Older phones omit it.
+      // second film, not a replacement. Older phones omit it — we mint below.
       clipId: z.string().regex(CLIP_ID).optional(),
     })
     .parse(body ?? {});
 
-  // Path carries the job and party so a leaked signed URL cannot be aimed at
-  // another job's folder. recordProof refuses any other storagePath.
-  const path = proofObjectPath(party, input);
+  // Always mint when the phone omits clipId — hours-long / multi-clip days
+  // must never share the legacy day-phase stem or they overwrite each other.
+  const clipId = resolveClipId(input.clipId);
+  const path = proofObjectPath(party, { ...input, clipId });
   const signed = await mintSignedUpload(admin, path);
   const plan = planProofChunks(input.byteSize ?? 0);
   const slot: {
     path: string;
-    clipId: string | null;
+    clipId: string;
     token: string;
     uploadUrl: string;
     chunkSize: number;
     parts?: ProofUploadPart[];
   } = {
     path,
-    clipId: input.clipId ?? null,
+    clipId,
     token: signed.token,
     uploadUrl: signed.signedUrl,
     chunkSize: plan.chunkSize,
@@ -342,7 +343,9 @@ const partUploadSchema = z.object({
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   phase: z.enum(['before', 'after']),
   extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
-  clipId: z.string().regex(CLIP_ID),
+  // Optional: first slice of a live recording may omit it; we mint so parts
+  // never land on the legacy day-phase stem shared by another film.
+  clipId: z.string().regex(CLIP_ID).optional(),
   index: z.number().int().min(0).max(PROOF_MAX_PARTS - 1),
 });
 
@@ -371,12 +374,13 @@ export async function createPartUploadUrl(
   assembleMaxBytes: number;
 }> {
   const input = partUploadSchema.parse(body ?? {});
-  const path = proofObjectPath(party, input);
+  const clipId = resolveClipId(input.clipId);
+  const path = proofObjectPath(party, { ...input, clipId });
   const partPath = partObjectPath(path, input.index);
   const signed = await mintSignedUpload(admin, partPath);
   return {
     path,
-    clipId: input.clipId,
+    clipId,
     index: input.index,
     partPath,
     token: signed.token,
