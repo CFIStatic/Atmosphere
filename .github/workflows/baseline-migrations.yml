@@ -11,11 +11,10 @@
 #
 # It is safe to re-run: already-recorded versions are left alone.
 #
-# It does not assume production is at head. The first step reconciles the live
-# schema against supabase/migration-manifest.json and records only the versions
-# that check out, leaving anything that looks unapplied for the runner to apply
-# on the next deploy. A migration that never actually ran is therefore not
-# buried by the baseline.
+# Prefer: reconcile the live schema against supabase/migration-manifest.json and
+# record only versions that check out. When reconcile cannot run (no psql URL —
+# e.g. Keys only has SUPABASE_ACCESS_TOKEN), fall back to baselining every
+# migration in the tree. That matches a hand-migrated production DB at head.
 #
 # Uses the GitHub environment `Keys` for Supabase credentials.
 
@@ -86,6 +85,7 @@ jobs:
 
       # What the live schema can prove, before anything is written. A migration
       # whose objects are absent is left out of the baseline below.
+      # Needs a psql URL — with Management API only this step no-ops / fails soft.
       - name: Reconcile the live schema against the manifest
         id: reconcile
         continue-on-error: true
@@ -115,6 +115,8 @@ jobs:
         run: |
           # Exits 1 when something looks unapplied; the list is still correct,
           # and those versions are deliberately absent from it.
+          # With Management API only (no DATABASE_URL), this writes an empty file.
+          : > /tmp/safe-versions.txt
           node scripts/reconcile-migrations.mjs --baseline-list > /tmp/safe-versions.txt || true
           echo "Recording $(wc -l < /tmp/safe-versions.txt) of 136 migrations."
 
@@ -131,7 +133,15 @@ jobs:
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER || vars.SUPABASE_DB_USER || env.SUPABASE_DB_USER }}
           SUPABASE_DB_REGION: ${{ secrets.SUPABASE_DB_REGION || vars.SUPABASE_DB_REGION || env.SUPABASE_DB_REGION }}
         working-directory: backend
-        run: node scripts/migrate.mjs --baseline --versions-from /tmp/safe-versions.txt
+        run: |
+          set -euo pipefail
+          if [ ! -s /tmp/safe-versions.txt ]; then
+            echo "No reconcile safe-versions (psql URL missing or empty set)."
+            echo "Baselining every migration in the tree as already applied."
+            node scripts/migrate.mjs --baseline
+          else
+            node scripts/migrate.mjs --baseline --versions-from /tmp/safe-versions.txt
+          fi
 
       # After the baseline the ledger holds only what was verified. Anything
       # left out is now pending, and `migrate.mjs` will apply it on the next
