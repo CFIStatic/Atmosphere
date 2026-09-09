@@ -359,12 +359,38 @@
     });
   }
 
+  // Plain-language status for the record screen. Recording stays visible and
+  // announced — a wake lock keeps the screen on, and a lock/background is
+  // surfaced, never hidden.
+  var RECORDING_STATUS = {
+    recording: 'Recording — keep the screen on so filming does not stop.',
+    resumed: 'Recording again.',
+    interrupted:
+      'Recording paused — your phone locked or left Field Capture. Reopen Field Capture to keep filming.',
+  };
+
+  function describeRecordingStatus(key) {
+    return Object.prototype.hasOwnProperty.call(RECORDING_STATUS, key)
+      ? RECORDING_STATUS[key]
+      : '';
+  }
+
   /**
    * Record day film with camera + microphone into a Blob (webm/mp4).
+   *
+   * Recording is meant to survive a phone that dims, auto-locks, or slips into
+   * a pocket mid-job: a screen wake lock holds the display awake for the whole
+   * take, buffered footage is flushed the moment the OS suspends capture (so
+   * nothing already filmed is lost), and the crew is told plainly when a lock
+   * pauses the camera. It ends only on the hold-to-finish "off" button — never
+   * on its own. Note the hard platform limits: no app can film while the phone
+   * is powered off, and browsers (and iOS itself) stop the camera once the app
+   * is backgrounded, so the wake lock's job is to keep that from happening.
    */
   function recordDayFilm(opts) {
     opts = opts || {};
     var onTick = opts.onTick || function () {};
+    var onStatus = opts.onStatus || function () {};
     var videoEl = opts.videoEl || null;
 
     var VIDEO_TYPES = [
@@ -389,7 +415,93 @@
       startedAt: null,
       timer: null,
       mimeType: null,
+      wakeLock: null,
+      visibilityHandler: null,
+      interrupted: false,
     };
+
+    function reportStatus(key) {
+      if (key === 'interrupted') state.interrupted = true;
+      else if (key === 'recording' || key === 'resumed') state.interrupted = false;
+      try {
+        onStatus(key);
+      } catch (e) {
+        // A screen-update callback must never take the recorder down with it.
+      }
+    }
+
+    // Keep the display awake so the OS does not auto-lock and suspend capture
+    // mid-take. Best-effort: unsupported browsers (or a request the OS denies
+    // because we are not in the foreground) must never break recording.
+    function acquireWakeLock() {
+      try {
+        if (typeof navigator === 'undefined' || !navigator.wakeLock) return;
+        navigator.wakeLock
+          .request('screen')
+          .then(function (lock) {
+            state.wakeLock = lock;
+            if (lock && typeof lock.addEventListener === 'function') {
+              lock.addEventListener('release', function () {
+                if (state.wakeLock === lock) state.wakeLock = null;
+              });
+            }
+          })
+          .catch(function () {
+            // Denied (e.g. not foreground) — recording continues without it.
+          });
+      } catch (e) {
+        // Ignore: wake lock is an enhancement, not a requirement.
+      }
+    }
+
+    function releaseWakeLock() {
+      var lock = state.wakeLock;
+      state.wakeLock = null;
+      if (!lock || typeof lock.release !== 'function') return;
+      try {
+        lock.release();
+      } catch (e) {
+        // Ignore.
+      }
+    }
+
+    function handleVisibility() {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'hidden') {
+        // Screen locked or app backgrounded: the OS suspends the camera/mic
+        // here. Flush whatever is buffered so everything filmed up to this
+        // instant is kept, and tell the crew — recording is never covert.
+        var rec = state.recorder;
+        if (rec && rec.state === 'recording' && typeof rec.requestData === 'function') {
+          try {
+            rec.requestData();
+          } catch (e) {
+            // Ignore — some browsers reject requestData while suspending.
+          }
+        }
+        reportStatus('interrupted');
+      } else if (document.visibilityState === 'visible') {
+        // Back in the foreground: wake locks drop on hide, so re-take it, and
+        // rebind the live preview if the OS tore it down.
+        acquireWakeLock();
+        if (state.recorder && videoEl && state.stream && !videoEl.srcObject) {
+          bindLivePreview(videoEl, state.stream);
+        }
+        reportStatus(state.interrupted ? 'resumed' : 'recording');
+      }
+    }
+
+    function bindLifecycle() {
+      if (typeof document === 'undefined' || state.visibilityHandler) return;
+      state.visibilityHandler = handleVisibility;
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    function unbindLifecycle() {
+      if (typeof document === 'undefined' || !state.visibilityHandler) return;
+      document.removeEventListener('visibilitychange', state.visibilityHandler);
+      state.visibilityHandler = null;
+    }
 
     return {
       start: function () {
@@ -434,6 +546,11 @@
           state.timer = setInterval(function () {
             onTick(Math.floor((Date.now() - state.startedAt) / 1000));
           }, 500);
+          // Hold the screen awake and watch for a lock/background so a day's
+          // film keeps rolling until the crew ends it with the off button.
+          bindLifecycle();
+          acquireWakeLock();
+          reportStatus('recording');
         });
       },
       stop: function () {
@@ -448,6 +565,8 @@
           var hadVideo = !!(state.stream && state.stream.getVideoTracks().length);
           recorder.onstop = function () {
             if (state.timer) clearInterval(state.timer);
+            unbindLifecycle();
+            releaseWakeLock();
             var type = recorder.mimeType || state.mimeType || 'video/webm';
             var blob = new Blob(state.chunks, { type: type });
             if (state.stream) {
@@ -1425,6 +1544,8 @@
     readCapture: readCapture,
     extractFrames: extractFrames,
     recordDayFilm: recordDayFilm,
+    describeRecordingStatus: describeRecordingStatus,
+    RECORDING_STATUS: RECORDING_STATUS,
     uploadDayFilm: uploadDayFilm,
     nextUploadBackoffMs: nextUploadBackoffMs,
     PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,

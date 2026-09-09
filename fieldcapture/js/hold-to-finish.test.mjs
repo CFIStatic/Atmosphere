@@ -138,8 +138,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=field-support-1/);
-assert.match(html, /js\/app\.js\?v=field-support-1/);
+assert.match(html, /js\/capture-core\.js\?v=resilient-record-1/);
+assert.match(html, /js\/app\.js\?v=resilient-record-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'failed uploads keep Retry on the door');
@@ -541,5 +541,42 @@ assert.match(html, /id="fc-menu-support"/);
 assert.match(html, /contact\.html/);
 assert.match(appSrc, /buildFieldCaptureSupportUrl/);
 assert.match(appSrc, /refreshFieldSupportLink/);
+
+// ---- resilient recording: keep filming through a screen-lock, stop only on the off button ----
+assert.equal(typeof Core.describeRecordingStatus, 'function');
+assert.equal(Core.describeRecordingStatus('recording'), Core.RECORDING_STATUS.recording);
+assert.match(
+  Core.describeRecordingStatus('recording'),
+  /keep the screen on/i,
+  'the record screen must ask the crew to keep the screen on',
+);
+assert.match(
+  Core.describeRecordingStatus('interrupted'),
+  /reopen field capture/i,
+  'a locked or backgrounded phone must tell the crew to reopen — not fail silently',
+);
+assert.equal(Core.describeRecordingStatus('nope'), '', 'unknown status must not invent copy');
+assert.match(
+  coreSrc,
+  /navigator\.wakeLock/,
+  'recording must hold a screen wake lock so the phone does not auto-lock mid-take',
+);
+assert.match(coreSrc, /request\('screen'\)/);
+assert.match(
+  coreSrc,
+  /visibilitychange/,
+  'the recorder must react when the phone locks or the app backgrounds',
+);
+assert.match(
+  coreSrc,
+  /requestData/,
+  'a lock must flush buffered footage so nothing already filmed is lost',
+);
+assert.match(coreSrc, /releaseWakeLock/, 'the wake lock must be released when recording stops');
+assert.match(appSrc, /onStatus: showRecStatus/, 'the record screen must show live/interrupted status');
+assert.match(appSrc, /function showRecStatus/);
+assert.match(appSrc, /Core\.describeRecordingStatus/);
+assert.match(html, /id="rec-status"/, 'the record screen needs a status line for keep-awake / paused');
+assert.match(html, /class="recnote"/);
 
 console.log('hold-to-finish OK');

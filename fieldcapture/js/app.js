@@ -701,6 +701,17 @@
     el.style.color = isErr ? 'var(--fail)' : 'var(--muted)';
   }
 
+  // Live/interrupted line on the record screen. Keeps recording overt: the
+  // crew sees it is filming, and sees plainly when a lock has paused it.
+  function showRecStatus(status) {
+    var el = $('#rec-status');
+    if (!el) return;
+    var msg = Core.describeRecordingStatus(status);
+    el.textContent = msg;
+    el.hidden = !msg;
+    el.setAttribute('data-state', status === 'interrupted' ? 'interrupted' : 'live');
+  }
+
   function paintLiveJob(payload) {
     state.job = payload;
     var title = (payload.job && payload.job.title) || 'Job';
@@ -1166,8 +1177,10 @@
         state.seconds = sec;
         $('#clock').textContent = fmt(sec);
       },
+      onStatus: showRecStatus,
     });
     setStatus('');
+    showRecStatus('recording');
     state.recorder
       .start()
       .then(function () {
