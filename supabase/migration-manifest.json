@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 141,
+    "migrationCount": 143,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -155,6 +155,8 @@
     "20260909202517_atmosphere_migrations_ledger.sql",
     "20260909214444_job_proofs_clip_id.sql",
     "20260909220422_enable_rls_atmosphere_migrations.sql",
+    "20260910165509_schema_visualizer_archive_schemas.sql",
+    "20260910165510_schema_visualizer_table_comments.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5177,6 +5179,31 @@
       "expect": [
         "rls|public.atmosphere_migrations"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260910165509_schema_visualizer_archive_schemas",
+      "file": "20260910165509_schema_visualizer_archive_schemas.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "schema|archive",
+        "schema|pm",
+        "schema|research",
+        "schema|portal"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260910165510_schema_visualizer_table_comments",
+      "file": "20260910165510_schema_visualizer_table_comments.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

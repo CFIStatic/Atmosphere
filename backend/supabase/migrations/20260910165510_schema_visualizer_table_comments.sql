@@ -1,0 +1,62 @@
+-- Atmosphere schema visualizer cleanup — STEP 2 (SAFE)
+-- COMMENT ON TABLE for core/support/pipeline tables missing comments.
+-- No moves. No drops. Idempotent.
+
+comment on table public.ai_analysis_runs is 'Vision/AI analysis runs over proof media.';
+comment on table public.analytics_staff is 'Allowlist of staff users for growth analytics console.';
+comment on table public.billing_period_jobs is 'Jobs counted toward a billing period statement.';
+comment on table public.billing_period_statements is 'Per-org billing period usage statements.';
+comment on table public.billing_plans is 'Stripe/catalog plan definitions for Atmosphere self-serve.';
+comment on table public.crm_audit_log is 'Append-oriented CRM/job mutation audit (restored after product-table drop).';
+comment on table public.crm_counters is 'Per-org monotonic counters (e.g. job numbers). Used by SQL helpers.';
+comment on table public.crm_jobs is 'Job file — primary Work Verification unit of work for an org.';
+comment on table public.crm_properties is 'Property / site attached to a job file.';
+comment on table public.device_credentials is 'Field device PIN enrollment (hash only). Used by RPC, not direct app .from().';
+comment on table public.episode_actions is 'Actions inferred or recorded on a work episode.';
+comment on table public.episode_economics is 'Cost/time economics attached to a work episode.';
+comment on table public.episode_observations is 'Observations captured for a work episode.';
+comment on table public.episode_outcomes is 'Outcomes recorded for a work episode.';
+comment on table public.episode_resources is 'People/equipment resources on a work episode.';
+comment on table public.episode_verifications is 'Verification verdicts linked to a work episode.';
+comment on table public.evidence_download_policy is 'Org/job policy for evidence download entitlements.';
+comment on table public.feature_catalog is 'Product feature catalog for analytics telemetry.';
+comment on table public.feature_usage_daily is 'Daily rollup of feature usage sessions.';
+comment on table public.feature_usage_sessions is 'Raw feature-usage session telemetry.';
+comment on table public.frame_observations is 'Per-frame observations from the verification pipeline.';
+comment on table public.human_review_decisions is 'Human reviewer decisions on review tasks.';
+comment on table public.human_review_tasks is 'Queue of human review tasks for verification.';
+comment on table public.internal_access_requests is 'Requests for internal/staff console access.';
+comment on table public.internal_staff_totp is 'TOTP secrets for internal staff console MFA.';
+comment on table public.job_acknowledgements is 'Party acknowledgements on shared job dashboard items.';
+comment on table public.job_briefs is 'Shared job brief / summary for the job file dashboard.';
+comment on table public.job_evidence_policy is 'Per-job evidence access policy (custody defaults).';
+comment on table public.job_locations is 'Geo / address locations linked to a job file.';
+comment on table public.job_proof_frames is 'Extracted frames from job_proofs video for proof analysis.';
+comment on table public.job_proof_questions is 'Human Q&A / review prompts against a proof clip.';
+comment on table public.llm_verification_runs is 'LLM verifier runs (ontology/rules) over verification videos.';
+comment on table public.media_upload_sessions is 'Resumable / staged media upload sessions into the catalog.';
+comment on table public.metering_alerts is 'Metering threshold / overage alerts.';
+comment on table public.metering_plan_versions is 'Versioned metering plan parameters.';
+comment on table public.metering_plans is 'Metering plan catalog (compute/AI allowances).';
+comment on table public.model_rate_card is 'Legacy/public AI model rate card (prefer private.ai_model_pricing).';
+comment on table public.org_billing is 'Org subscription state, seats (extra_fc_seats), Stripe customer link.';
+comment on table public.org_billing_events is 'Billing lifecycle events for analytics (plan changes, etc.).';
+comment on table public.org_metering is 'Org metering plan attachment / usage gate state.';
+comment on table public.payments is 'Stripe payment / invoice receipts for orgs.';
+comment on table public.profiles is 'User profile (display name, avatar). 1:1 with auth.users.';
+comment on table public.qualifying_workflow_types is 'Workflow types that qualify for metering/billing rules.';
+comment on table public.temporal_change_events is 'Temporal before/after change events from video compare.';
+comment on table public.usage_daily is 'Legacy daily usage rollup.';
+comment on table public.usage_events is 'Legacy usage event stream (pre token_usage_events).';
+comment on table public.verification_ai_costs is 'AI cost attribution for verification pipeline runs.';
+comment on table public.verification_audit_events is 'Audit events inside the verification pipeline.';
+comment on table public.verification_evidence is 'Evidence artifacts linked to verification results.';
+comment on table public.verification_frames is 'Frames extracted for verification_videos.';
+comment on table public.verification_results is 'Pipeline verification results / verdicts.';
+comment on table public.verification_rules is 'Rule definitions applied by the verifier.';
+comment on table public.verification_scenes is 'Scene segmentation for verification videos.';
+comment on table public.verification_usage_limits is 'Per-org limits for verification pipeline usage.';
+comment on table public.video_clips is 'Clip segmentation of verification / proof video.';
+comment on table public.video_processing_jobs is 'Durable video processing job queue (leased workers).';
+comment on table public.video_processing_steps is 'Steps within a video_processing_jobs run.';
+
