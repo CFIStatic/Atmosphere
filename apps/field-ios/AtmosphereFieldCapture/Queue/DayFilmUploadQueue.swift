@@ -54,6 +54,13 @@ final class DayFilmUploadQueue: ObservableObject {
         kick(reason: "enqueue")
     }
 
+    /// Office id arrived for a phone-only draft — films follow.
+    func remapJobId(from localId: String, to serverId: String) async {
+        _ = try? await store.remapJobId(from: localId, to: serverId)
+        entries = ((try? await store.list()) ?? []).filter(\.isPending)
+        kick(reason: "remap")
+    }
+
     func pendingSavedCount() -> Int {
         entries.filter(\.isPending).count
     }
@@ -216,12 +223,34 @@ final class DayFilmUploadQueue: ObservableObject {
     }
 
     private func uploadOne(entry: DayFilmQueueEntry, api: AtmosphereClient) async throws -> UploadResult {
+        var entry = entry
         let localURL = await store.fileURL(for: entry)
         guard FileManager.default.fileExists(atPath: localURL.path) else {
             throw APIError.http(status: 0, body: "Saved day film is missing on this phone.")
         }
+
+        // Phone-only draft → mint office job before proof routes (web pending sync).
+        if entry.mode == .account, PendingJobsStore.isLocalJobId(entry.jobId) {
+            let title = entry.jobDraft?.title ?? entry.jobName
+            let situation = entry.jobDraft?.situation
+            let server = try await api.createTodayJob(title: title, situation: situation)
+            let localId = entry.jobId
+            _ = try await store.remapJobId(from: localId, to: server.id)
+            PendingJobsStore.markSynced(localId: localId)
+            entry.jobId = server.id
+            entry.jobDraft = nil
+            entry.jobName = server.name
+            try await store.save(entry)
+            NotificationCenter.default.post(
+                name: .dayFilmQueueDidRemapJob,
+                object: nil,
+                userInfo: ["localId": localId, "serverId": server.id, "job": server]
+            )
+        }
+
         let size = try MediaUploadClient.byteSize(ofFile: localURL)
         let clipId = ClipId.resolve(entry.clipId)
+        let share = entry.mode == .share ? entry.shareToken : nil
 
         var storagePath: String
         var byteSize: Int64
@@ -237,7 +266,8 @@ final class DayFilmUploadQueue: ObservableObject {
                     phase: entry.phase,
                     fileExtension: "mp4",
                     clipId: clipId,
-                    byteSize: size
+                    byteSize: size,
+                    shareToken: share
                 )
                 let parts = begin.parts ?? []
                 if parts.count >= 2 {
@@ -247,26 +277,26 @@ final class DayFilmUploadQueue: ObservableObject {
                         workDate: entry.workDate,
                         phase: entry.phase,
                         storagePath: begin.path,
-                        partCount: parts.count
+                        partCount: parts.count,
+                        shareToken: share
                     )
                     storagePath = begin.path
                     byteSize = uploaded.byteSize
                     hash = uploaded.sha256Hex
                 } else {
-                    // Slot had no parts — mint via upload-part-url like web streamer tail.
                     let multi = try await api.uploadProofMediaMultipartViaPartUrls(
                         jobId: entry.jobId,
                         localURL: localURL,
                         workDate: entry.workDate,
                         clipId: clipId,
-                        phase: entry.phase
+                        phase: entry.phase,
+                        shareToken: share
                     )
                     storagePath = multi.storagePath
                     byteSize = multi.byteSize
                     hash = multi.sha256Hex
                 }
             } catch {
-                // 4xx stitch / part failure → whole-object fallback next attempt.
                 if case let APIError.http(status, _) = error, (400 ... 499).contains(status), status != 401 {
                     var failed = entry
                     failed.streamFailed = true
@@ -281,7 +311,8 @@ final class DayFilmUploadQueue: ObservableObject {
                 phase: entry.phase,
                 fileExtension: "mp4",
                 clipId: clipId,
-                byteSize: size
+                byteSize: size,
+                shareToken: share
             )
             let uploaded = try await api.uploadProofMedia(localURL: localURL, begin: begin)
             if let parts = begin.parts, parts.count >= 2 {
@@ -290,7 +321,8 @@ final class DayFilmUploadQueue: ObservableObject {
                     workDate: entry.workDate,
                     phase: entry.phase,
                     storagePath: begin.path,
-                    partCount: parts.count
+                    partCount: parts.count,
+                    shareToken: share
                 )
             }
             storagePath = uploaded.storagePath
@@ -312,7 +344,8 @@ final class DayFilmUploadQueue: ObservableObject {
                 lon: entry.lon,
                 accuracyM: entry.accuracyM,
                 clipId: clipId
-            )
+            ),
+            shareToken: share
         )
 
         return UploadResult(
@@ -326,4 +359,5 @@ final class DayFilmUploadQueue: ObservableObject {
 
 extension Notification.Name {
     static let dayFilmQueueDidFile = Notification.Name("atm.field.dayFilmQueueDidFile")
+    static let dayFilmQueueDidRemapJob = Notification.Name("atm.field.dayFilmQueueDidRemapJob")
 }

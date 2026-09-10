@@ -15,6 +15,11 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
     let placed: Bool
     let status: String?
     let filmed: Bool?
+    /// Phone-only draft not yet posted to the office.
+    var pending: Bool?
+    var situation: String?
+    var serverId: String?
+    var title: String?
 
     init(
         id: String,
@@ -24,7 +29,11 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         at: String,
         placed: Bool,
         status: String? = nil,
-        filmed: Bool? = nil
+        filmed: Bool? = nil,
+        pending: Bool? = nil,
+        situation: String? = nil,
+        serverId: String? = nil,
+        title: String? = nil
     ) {
         self.id = id
         self.number = number
@@ -34,6 +43,19 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         self.placed = placed
         self.status = status
         self.filmed = filmed
+        self.pending = pending
+        self.situation = situation
+        self.serverId = serverId
+        self.title = title
+    }
+
+    var isLocalDraft: Bool {
+        PendingJobsStore.isLocalJobId(id) || pending == true
+    }
+
+    var createTitle: String {
+        let t = (title ?? name).trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? "Job" : t
     }
 }
 
@@ -64,6 +86,11 @@ struct DayFilmManifest: Codable, Equatable {
     var hasVideo: Bool
     var capturedAt: Date
     var clipId: String? = nil
+}
+
+struct JobDraftPayload: Codable, Equatable {
+    var title: String
+    var situation: String
 }
 
 func formatClipLength(_ seconds: Double) -> String {

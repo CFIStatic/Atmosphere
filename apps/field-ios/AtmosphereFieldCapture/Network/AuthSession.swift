@@ -21,6 +21,7 @@ final class AuthSession: ObservableObject {
     @Published var officePreviewName: String?
     @Published private(set) var email: String?
     @Published private(set) var orgName: String?
+    @Published private(set) var orgId: String?
     @Published private(set) var fullName: String?
     @Published var lastError: String?
     /// Shown after signup when Atmosphere asked the user to confirm email first.
@@ -34,6 +35,7 @@ final class AuthSession: ObservableObject {
     private let refreshAccount = "refreshToken"
     private let emailAccount = "email"
     private let orgAccount = "orgName"
+    private let orgIdAccount = "orgId"
     private let nameAccount = "fullName"
     private let linkedFlagKey = "atmosphere.field.accountLinked"
 
@@ -129,7 +131,9 @@ final class AuthSession: ObservableObject {
             }
             if let org = result.org {
                 self.orgName = org.name
+                self.orgId = org.id
                 UserDefaults.standard.set(org.name, forKey: orgAccount)
+                UserDefaults.standard.set(org.id, forKey: orgIdAccount)
                 needsOfficeLink = false
                 showOfficeLink = false
                 pendingJoinCode = nil
@@ -208,7 +212,9 @@ final class AuthSession: ObservableObject {
             }
             if let org = result.org {
                 self.orgName = org.name
+                self.orgId = org.id
                 UserDefaults.standard.set(org.name, forKey: orgAccount)
+                UserDefaults.standard.set(org.id, forKey: orgIdAccount)
                 needsOfficeLink = false
                 showOfficeLink = false
                 pendingJoinCode = nil
@@ -239,26 +245,55 @@ final class AuthSession: ObservableObject {
         lastError = nil
     }
 
-    /// `atmosphere-field://join?code=8F3A9C2B` from the office or an invite.
-    func handleOpenURL(_ url: URL) {
-        guard url.scheme?.lowercased() == "atmosphere-field" else { return }
+    /// Join: `atmosphere-field://join?code=8F3A9C2B`
+    /// Job-share: `atmosphere-field://share?token=…` (also https app.?token=).
+    /// Returns a share token when the URL is a job-share deep link.
+    @discardableResult
+    func handleOpenURL(_ url: URL) -> String? {
+        let scheme = url.scheme?.lowercased() ?? ""
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let items = comps?.queryItems ?? []
+        let tokenFromQuery = items.first(where: { $0.name == "token" || $0.name == "share" })?.value
+
+        // Universal / https Field Capture invite: app.atmosphereteam.com/?token=
+        if scheme == "https" || scheme == "http" {
+            let host = url.host?.lowercased() ?? ""
+            if host.contains("atmosphereteam.com") || host.contains("railway.app") {
+                if let token = tokenFromQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   token.count >= 8 {
+                    return token
+                }
+            }
+            return nil
+        }
+
+        guard scheme == "atmosphere-field" else { return nil }
         let host = url.host?.lowercased()
+
+        if host == "share" || host == "job-share" || tokenFromQuery != nil {
+            if let token = tokenFromQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+               token.count >= 8 {
+                return token
+            }
+            let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if path.count >= 8 { return path }
+        }
+
         var code: String?
         if host == "join" {
-            if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
-                code = items.first(where: { $0.name == "code" })?.value
-            }
+            code = items.first(where: { $0.name == "code" })?.value
             if code == nil {
                 let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if !path.isEmpty { code = path }
             }
         }
         let trimmed = code?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
-        guard (6 ... 12).contains(trimmed.count) else { return }
+        guard (6 ... 12).contains(trimmed.count) else { return nil }
         pendingJoinCode = trimmed
         if isLinked {
             showOfficeLink = true
         }
+        return nil
     }
 
     func previewOffice(joinCode: String) async {
@@ -281,7 +316,9 @@ final class AuthSession: ObservableObject {
         do {
             let org = try await api.linkOffice(joinCode: joinCode, orgName: orgName, fullName: fullName)
             self.orgName = org.name
+            self.orgId = org.id
             UserDefaults.standard.set(org.name, forKey: orgAccount)
+            UserDefaults.standard.set(org.id, forKey: orgIdAccount)
             needsOfficeLink = false
             showOfficeLink = false
             pendingJoinCode = nil
@@ -407,6 +444,7 @@ final class AuthSession: ObservableObject {
         api.accessToken = access
         email = KeychainStore.get(account: emailAccount)
         orgName = UserDefaults.standard.string(forKey: orgAccount)
+        orgId = UserDefaults.standard.string(forKey: orgIdAccount)
         fullName = UserDefaults.standard.string(forKey: nameAccount)
         isLinked = linked && (refresh != nil || access != nil)
         needsOfficeLink = isLinked && orgName == nil
@@ -421,9 +459,11 @@ final class AuthSession: ObservableObject {
         email = me.user.email
         fullName = me.user.fullName
         orgName = me.org.name
+        orgId = me.org.id
         if let email { KeychainStore.set(email, account: emailAccount) }
         if let fullName { UserDefaults.standard.set(fullName, forKey: nameAccount) }
         UserDefaults.standard.set(me.org.name, forKey: orgAccount)
+        UserDefaults.standard.set(me.org.id, forKey: orgIdAccount)
     }
 
     private func persist(session: AtmosphereClient.SessionTokens, email: String) {
@@ -439,7 +479,9 @@ final class AuthSession: ObservableObject {
         KeychainStore.delete(account: refreshAccount)
         KeychainStore.delete(account: emailAccount)
         UserDefaults.standard.removeObject(forKey: orgAccount)
+        UserDefaults.standard.removeObject(forKey: orgIdAccount)
         UserDefaults.standard.removeObject(forKey: nameAccount)
+        PendingJobsStore.clear()
         UserDefaults.standard.set(false, forKey: linkedFlagKey)
         api.accessToken = nil
         api.refreshToken = nil
@@ -452,6 +494,7 @@ final class AuthSession: ObservableObject {
         confirmationNotice = nil
         email = nil
         orgName = nil
+        orgId = nil
         fullName = nil
     }
 

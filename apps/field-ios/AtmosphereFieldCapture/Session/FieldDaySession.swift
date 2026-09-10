@@ -19,40 +19,166 @@ final class FieldDaySession: ObservableObject {
     @Published var activeClipId: String?
     @Published var doorFilmId: String?
     @Published var filingDetail: String = ""
+    /// Job-share token mode (no office login) — web `?token=` / LIVE.
+    @Published var shareToken: String?
+    @Published var isShareMode: Bool = false
+    @Published var shareCompany: String?
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
     let uploadQueue = DayFilmUploadQueue.shared
 
+    private var pendingSyncTask: Task<Void, Never>?
+
     func bindUploadQueue(api: AtmosphereClient) {
         uploadQueue.bind(api: api)
     }
 
     func loadToday(api: AtmosphereClient) async {
+        if isShareMode, let token = shareToken {
+            await loadShareToday(api: api, token: token)
+            return
+        }
+        loadingJobs = true
+        lastError = nil
+        defer { loadingJobs = false }
+        let pending = PendingJobsStore.read()
+        do {
+            let list = try await api.todayJobs()
+            jobs = PendingJobsStore.merge(serverJobs: list, pendingJobs: pending)
+            if activeJobId == nil || !jobs.contains(where: { $0.id == activeJobId }) {
+                activeJobId = jobs.first?.id
+            }
+            syncPendingJobs(api: api)
+        } catch {
+            if AtmosphereClient.isUnreachable(error), !pending.isEmpty {
+                jobs = PendingJobsStore.merge(serverJobs: [], pendingJobs: pending)
+                if activeJobId == nil {
+                    activeJobId = jobs.first?.id
+                }
+                lastError = "Showing saved jobs on this phone — office list will refresh with signal."
+            } else {
+                lastError = error.localizedDescription
+                jobs = PendingJobsStore.merge(serverJobs: [], pendingJobs: pending)
+            }
+        }
+    }
+
+    func loadShareToday(api: AtmosphereClient, token: String) async {
         loadingJobs = true
         lastError = nil
         defer { loadingJobs = false }
         do {
-            let list = try await api.todayJobs()
-            jobs = list
-            if activeJobId == nil || !list.contains(where: { $0.id == activeJobId }) {
-                activeJobId = list.first?.id
-            }
+            _ = try? await api.exchangeShareToken(token)
+            let payload = try await api.loadShareJob(token: token)
+            let job = api.shareJobAsExpected(payload, token: token)
+            shareCompany = payload.you?.company
+            jobs = [job]
+            activeJobId = job.id
+            isShareMode = true
+            shareToken = token
         } catch {
             lastError = error.localizedDescription
             jobs = []
         }
     }
 
+    func enterShareMode(token: String, api: AtmosphereClient) async {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 8 else {
+            lastError = "This share link is missing a token."
+            return
+        }
+        isShareMode = true
+        shareToken = trimmed
+        phase = .today
+        await loadShareToday(api: api, token: trimmed)
+    }
+
+    func exitShareMode() {
+        isShareMode = false
+        shareToken = nil
+        shareCompany = nil
+        jobs = []
+        activeJobId = nil
+        phase = .today
+    }
+
+    /// Persist a phone draft (offline-capable) and select it — web new-job flow.
+    func adoptDraftJob(_ draft: ExpectedJob, startRecording: Bool) async {
+        PendingJobsStore.upsert(draft)
+        if !jobs.contains(where: { $0.id == draft.id }) {
+            jobs.insert(draft, at: 0)
+        } else {
+            jobs = jobs.map { $0.id == draft.id ? draft : $0 }
+        }
+        activeJobId = draft.id
+        lastError = nil
+        if startRecording {
+            await startDay()
+        }
+    }
+
+    /// Background office POST for phone-only drafts; remaps film queue ids.
+    func syncPendingJobs(api: AtmosphereClient) {
+        guard !isShareMode else { return }
+        pendingSyncTask?.cancel()
+        pendingSyncTask = Task { [weak self] in
+            guard let self else { return }
+            let queue = PendingJobsStore.read().filter {
+                PendingJobsStore.isLocalJobId($0.id) && ($0.serverId == nil)
+            }
+            for local in queue {
+                if Task.isCancelled { return }
+                do {
+                    let server = try await api.createTodayJob(
+                        title: local.createTitle,
+                        situation: local.situation
+                    )
+                    await self.remapLocalJob(localId: local.id, serverJob: server)
+                    PendingJobsStore.markSynced(localId: local.id)
+                } catch {
+                    // Transient — upload queue / next Today refresh will retry.
+                    if !AtmosphereClient.isUnreachable(error) {
+                        // Keep draft; surface soft error only when nothing else is wrong.
+                        if self.lastError == nil {
+                            self.lastError = "Couldn’t sync a new job yet — it stays on this phone."
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func remapLocalJob(localId: String, serverJob: ExpectedJob) async {
+        let wasFilmed = jobs.first(where: { $0.id == localId })?.filmed == true
+        let listed = ExpectedJob(
+            id: serverJob.id,
+            number: serverJob.number,
+            name: serverJob.name,
+            address: serverJob.address,
+            at: serverJob.at,
+            placed: serverJob.placed,
+            status: serverJob.status,
+            filmed: wasFilmed ? true : serverJob.filmed,
+            pending: false,
+            situation: serverJob.situation,
+            serverId: serverJob.id,
+            title: serverJob.title
+        )
+        jobs = jobs.map { $0.id == localId ? listed : $0 }
+        if activeJobId == localId { activeJobId = listed.id }
+        await uploadQueue.remapJobId(from: localId, to: listed.id)
+    }
+
     func startDay() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job for today. Create or schedule a job in the Atmosphere dashboard first."
+            lastError = "No job for today. Tap + to start a new job, or ask the office to put you on one."
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }
-        // Fresh clip id per recording — same-day multi-film must not share a stem.
         activeClipId = ClipId.mint()
         do {
             try await recorder.prepare()
@@ -108,7 +234,13 @@ final class FieldDaySession: ObservableObject {
             let workDate = Self.todayStamp()
             let clipId = ClipId.resolve(activeClipId)
             activeClipId = clipId
-            let jobName = jobs.first(where: { $0.id == jobId })?.name ?? jobId
+            let job = jobs.first(where: { $0.id == jobId })
+            let jobName = job?.name ?? jobId
+            let draft: JobDraftPayload? = PendingJobsStore.isLocalJobId(jobId)
+                ? JobDraftPayload(title: job?.createTitle ?? jobName, situation: job?.situation ?? "")
+                : nil
+            let mode: DayFilmQueueEntry.Mode = isShareMode ? .share : .account
+            let token = isShareMode ? shareToken : nil
 
             let entry = try await DayFilmQueueStore.shared.persistFilm(
                 from: url,
@@ -119,61 +251,69 @@ final class FieldDaySession: ObservableObject {
                 durationSeconds: durationSeconds,
                 lat: locator.coordinate?.latitude,
                 lon: locator.coordinate?.longitude,
-                accuracyM: nil
+                accuracyM: nil,
+                mode: mode,
+                shareToken: token,
+                jobDraft: draft
             )
             doorFilmId = entry.id
             await uploadQueue.enqueuePersisted(entry)
 
-            // Optional RoomPlan twin — never blocks filing; runs after local save.
+            // Optional RoomPlan twin — never blocks filing; skip in share mode
+            // (geometry needs org auth).
             var geometrySessionId: String?
             var twinId: String?
-            roomPlan.detectCapabilities()
-            await roomPlan.captureRooms()
-            do {
-                let geo = try await api.openGeometrySession(
-                    lidarAvailable: roomPlan.lidarAvailable,
-                    label: "Field day \(workDate)",
-                    videoRef: entry.fileName
-                )
-                geometrySessionId = geo.session.id
-                twinId = geo.twin.id
-                let rooms = roomPlan.asIngestRooms()
-                if !rooms.isEmpty {
-                    try await api.ingestGeometry(
-                        sessionId: geo.session.id,
-                        body: .init(
-                            source: "roomplan",
-                            rooms: rooms,
-                            mesh: nil,
-                            videoRef: entry.fileName,
-                            work: nil
-                        )
+            if !isShareMode {
+                roomPlan.detectCapabilities()
+                await roomPlan.captureRooms()
+                do {
+                    let geo = try await api.openGeometrySession(
+                        lidarAvailable: roomPlan.lidarAvailable,
+                        label: "Field day \(workDate)",
+                        videoRef: entry.fileName
                     )
-                    twinRooms = rooms.map {
-                        TwinRoomSummary(
-                            id: $0.name,
-                            name: $0.name,
-                            detail: $0.floorAreaSqFt.map { "\($0) SF" }
-                                ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                    geometrySessionId = geo.session.id
+                    twinId = geo.twin.id
+                    let rooms = roomPlan.asIngestRooms()
+                    if !rooms.isEmpty {
+                        try await api.ingestGeometry(
+                            sessionId: geo.session.id,
+                            body: .init(
+                                source: "roomplan",
+                                rooms: rooms,
+                                mesh: nil,
+                                videoRef: entry.fileName,
+                                work: nil
+                            )
                         )
+                        twinRooms = rooms.map {
+                            TwinRoomSummary(
+                                id: $0.name,
+                                name: $0.name,
+                                detail: $0.floorAreaSqFt.map { "\($0) SF" }
+                                    ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                            )
+                        }
+                    } else {
+                        twinRooms = [
+                            TwinRoomSummary(
+                                id: "pending",
+                                name: "Twin pending measure",
+                                detail: "Video + audio saved · RoomPlan pass when available"
+                            ),
+                        ]
                     }
-                } else {
+                } catch {
                     twinRooms = [
                         TwinRoomSummary(
-                            id: "pending",
-                            name: "Twin pending measure",
-                            detail: "Video + audio saved · RoomPlan pass when available"
+                            id: "skip",
+                            name: "Twin deferred",
+                            detail: "Day film is saved; twin measure can retry later"
                         ),
                     ]
                 }
-            } catch {
-                twinRooms = [
-                    TwinRoomSummary(
-                        id: "skip",
-                        name: "Twin deferred",
-                        detail: "Day film is saved; twin measure can retry later"
-                    ),
-                ]
+            } else {
+                twinRooms = []
             }
 
             let byteSize = entry.byteSize
@@ -195,9 +335,10 @@ final class FieldDaySession: ObservableObject {
             doorChecks = savedDoorChecks(jobName: jobName, clipId: clipId, twinId: twinId)
             filingDetail = "Saved on this phone — filing to the office…"
             recorder.teardown()
-            // Temp recorder file can go; durable copy is in the queue store.
             try? FileManager.default.removeItem(at: url)
             phase = .door
+            // Kick pending job sync so films can remap off local-* ids.
+            if !isShareMode { syncPendingJobs(api: api) }
         } catch {
             lastError = error.localizedDescription
             phase = .door
@@ -261,7 +402,6 @@ final class FieldDaySession: ObservableObject {
         elapsedSeconds = 0
         lastError = nil
         doorFilmId = nil
-        // Keep activeJobId so a later Start still knows the job; clear clip.
         activeClipId = nil
     }
 

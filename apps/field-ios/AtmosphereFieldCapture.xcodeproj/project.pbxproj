@@ -34,6 +34,10 @@
 		AFC00000000000000000021C /* DayFilmQueueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011C /* DayFilmQueueModels.swift */; };
 		AFC00000000000000000021D /* DayFilmQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011D /* DayFilmQueueStore.swift */; };
 		AFC00000000000000000021E /* DayFilmUploadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011E /* DayFilmUploadQueue.swift */; };
+		AFC00000000000000000021F /* PendingJobsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011F /* PendingJobsStore.swift */; };
+		AFC000000000000000000220 /* NewJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000120 /* NewJobView.swift */; };
+		AFC000000000000000000221 /* SupportLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000121 /* SupportLinks.swift */; };
+		AFC000000000000000000222 /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000122 /* SafariView.swift */; };
 		AFC000000000000000000215 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000115 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -68,6 +72,10 @@
 		AFC00000000000000000011C /* DayFilmQueueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmQueueModels.swift; sourceTree = "<group>"; };
 		AFC00000000000000000011D /* DayFilmQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmQueueStore.swift; sourceTree = "<group>"; };
 		AFC00000000000000000011E /* DayFilmUploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmUploadQueue.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011F /* PendingJobsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingJobsStore.swift; sourceTree = "<group>"; };
+		AFC000000000000000000120 /* NewJobView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewJobView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000121 /* SupportLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportLinks.swift; sourceTree = "<group>"; };
+		AFC000000000000000000122 /* SafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -107,6 +115,7 @@
 				AFC000000000000000000015 /* Geometry */,
 				AFC000000000000000000016 /* Network */,
 				AFC00000000000000000001B /* Queue */,
+				AFC00000000000000000001C /* Store */,
 				AFC000000000000000000017 /* Session */,
 				AFC000000000000000000018 /* UI */,
 				AFC000000000000000000019 /* Theme */,
@@ -116,6 +125,14 @@
 				AFC000000000000000000114 /* FieldCapture.entitlements */,
 			);
 			path = AtmosphereFieldCapture;
+			sourceTree = "<group>";
+		};
+		AFC00000000000000000001C /* Store */ = {
+			isa = PBXGroup;
+			children = (
+				AFC00000000000000000011F /* PendingJobsStore.swift */,
+			);
+			path = Store;
 			sourceTree = "<group>";
 		};
 		AFC00000000000000000001B /* Queue */ = {
@@ -161,6 +178,7 @@
 				AFC000000000000000000108 /* AuthSession.swift */,
 				AFC000000000000000000109 /* ApiConfig.swift */,
 				AFC00000000000000000010A /* KeychainStore.swift */,
+				AFC000000000000000000121 /* SupportLinks.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -177,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				AFC00000000000000000010C /* TodayView.swift */,
+				AFC000000000000000000120 /* NewJobView.swift */,
 				AFC00000000000000000010D /* SignInView.swift */,
 				AFC000000000000000000118 /* JoinCrewView.swift */,
 				AFC000000000000000000119 /* ElevateSplashView.swift */,
@@ -185,6 +204,7 @@
 				AFC00000000000000000011A /* TermsAcknowledgmentView.swift */,
 				AFC00000000000000000010E /* RecordingView.swift */,
 				AFC00000000000000000010F /* DoorView.swift */,
+				AFC000000000000000000122 /* SafariView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -303,6 +323,10 @@
 				AFC00000000000000000021C /* DayFilmQueueModels.swift in Sources */,
 				AFC00000000000000000021D /* DayFilmQueueStore.swift in Sources */,
 				AFC00000000000000000021E /* DayFilmUploadQueue.swift in Sources */,
+				AFC00000000000000000021F /* PendingJobsStore.swift in Sources */,
+				AFC000000000000000000220 /* NewJobView.swift in Sources */,
+				AFC000000000000000000221 /* SupportLinks.swift in Sources */,
+				AFC000000000000000000222 /* SafariView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -25,15 +25,26 @@ One source tree: `fieldcapture/`. Both Docker images (standalone FC + office fro
 | Multipart / stitch | `upload-part-url` + `upload-complete` (and slot `parts`) | Same; long films prefer multipart, else whole PUT |
 | Survive kill | Yes | Yes — queue reloads on launch / foreground |
 
-## Still open (C4+)
+## Phase C4–C6 (this branch)
 
-- Create job + Places + offline drafts (C4)
-- Job-share `?token=` / universal link (C5)
-- Account → Support / Settings / theme (C6)
-- Offline Today cache + filing strip polish (C7)
+| Area | Web | iOS |
+|---|---|---|
+| New job | `s-new-job` name + note | `NewJobView` + **+** on Today |
+| Places autocomplete | `/api/field-app/places/*` | Wired when `places/status` configured; optional site address |
+| Offline drafts | `atm.field.pendingJobs` + remap | `PendingJobsStore` + film-queue remap on office create |
+| Job-share | `?token=` exchange + share proof | `atmosphere-field://share?token=` / https `?token=` → share mode + share proof routes |
+| Account Support | contact URL + context | Account → Support (`SupportLinks`) |
+| Account Settings | Platform `/settings` iframe | SafariView → `platform.atmosphereteam.com/settings` |
+| Theme | light/dark `atm-theme` | Same key; adaptive `FieldTheme` tokens |
+
+## Still open (C7+)
+
+- Offline Today cache of last server list / me (C7) — drafts already survive offline
+- Filing strip polish parity (C7)
 - Tighten BFF-first / reduce silent Supabase proof path (C8)
 - Live stream-while-recording parts (web MediaRecorder chunks); iOS post-finish multipart covers long films; optional live streamer later
 - True `URLSessionConfiguration.background` app-delegate handoff for multi-GB while suspended
+- Universal Links entitlement for app.atmosphereteam.com (custom scheme works today)
 
 ## Native-only (intentional)
 
