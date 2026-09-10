@@ -300,6 +300,18 @@ The script now ignores those retry lines, website deploys stamp
 `website/.railway-up-stamp` so a retry rebuilds, and `website-start.sh`
 boots through the nginx image entrypoint (same as the staff site).
 
+A third failure mode (watch-path skip loop): GitHub Autodeploy often already
+SUCCESS-deploys Corporate Website from the same `main` push. The Actions
+`railway up` then uploads identical `website/**` content, Railway prints
+`no changes detected in watch paths`, and older `railwayUp.sh` treated that
+as failure and retried 8×15 minutes. The stamp must not be gitignored —
+Railway CLI upload excludes gitignored files, so an ignored stamp never
+invalidates `watchPatterns`. On skip, the script now checks for a SUCCESS
+deploy matching `HEAD` (or caps stamp retries) and exits 0 when the site is
+already correct; real healthcheck failures still fail the job. Website stamp
+deploys also cap `RAILWAY_UP_ATTEMPTS` at 3 inside `railwayUp.sh` even when
+the workflow still exports 8.
+
 Fix, once, on the `website` service:
 
 1. Settings → **Config-as-code** → Config File = `/website/railway.toml`.

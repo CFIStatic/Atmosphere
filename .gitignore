@@ -3,8 +3,9 @@ node_modules/
 
 # Vite cache (website dev server)
 website/.vite/
-# Written by deploy-website.yml so Railway retries actually rebuild.
-website/.railway-up-stamp
+# website/.railway-up-stamp is written by deploy-website.yml (CI-only,
+# untracked). Do not gitignore it: Railway CLI upload excludes gitignored
+# files, so an ignored stamp never invalidates website/** watchPatterns.
 .pnp
 .pnp.js
 

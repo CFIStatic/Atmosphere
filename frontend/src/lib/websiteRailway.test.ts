@@ -80,6 +80,12 @@ describe('Railway corporate-website image', () => {
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");
     expect(resolver).toContain("'corporate website': ['corporate website', 'website']");
+
+    // Stamp must reach the Railway CLI upload (not gitignored) so watchPatterns
+    // can invalidate; keep it out of the nginx image context.
+    const gitignore = read('.gitignore');
+    expect(gitignore).not.toMatch(/^website\/\.railway-up-stamp\s*$/m);
+    expect(read('.dockerignore')).toContain('website/.railway-up-stamp');
   });
 
   it('applies nginx + GET /health onto the Railway service from CI', () => {
@@ -234,5 +240,15 @@ describe('Railway corporate-website image', () => {
     const up = read('backend/scripts/railwayUp.sh');
     expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');
     expect(up).not.toMatch(/grep -qi 'failed with service unavailable'/);
+  });
+
+  it('treats watch-path skip as success when HEAD is already SUCCESS-deployed', () => {
+    const up = read('backend/scripts/railwayUp.sh');
+    expect(up).toContain('service_already_deployed_for_head');
+    expect(up).toContain('railway deployment list');
+    expect(up).toContain('max_skip_retries');
+    expect(up).toContain('content already matches watch paths');
+    expect(up).toContain('autodeploy race');
+    expect(up).toContain('Capping website railway up attempts at 3');
   });
 });

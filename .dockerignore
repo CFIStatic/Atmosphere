@@ -10,3 +10,5 @@ docs
 **/.env
 **/.env.*
 !.env.example
+# CI-only stamp for railway up watch-path invalidation; not needed in images.
+website/.railway-up-stamp
