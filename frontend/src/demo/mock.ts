@@ -10,7 +10,6 @@
  * Nothing here ships in a normal build: `main.tsx` only imports this module
  * when VITE_DEMO is set, so production bundles never contain it.
  */
-import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
 import { isLiveFirstPath } from './liveFirst';
 import { jobSharePagePath } from '../lib/jobSharePath';
 import type {
@@ -34,7 +33,6 @@ import type {
   PmOverview,
   PmSettingsResponse,
   Profile,
-  TechnicianCapabilities,
   TokenUsageReport,
   UsageDay,
   UsageEvent,
@@ -1793,26 +1791,6 @@ const SUPPLIER_STATUS: Array<Record<string, any>> = [
 const poTotal = (lines: Array<Record<string, any>>) =>
   Math.round(lines.reduce((sum, l) => sum + l.quantity * (l.unitPrice ?? 0), 0) * 100) / 100;
 
-/**
- * Saving an estimate on the Estimating tab registers it as a purchasing
- * source, so "Order the materials" lands on a takeoff that exists — the same
- * automatic flow the live backend gets from both features reading
- * estimator_estimates.
- */
-function registerDemoEstimateSource(estimateId: string) {
-  if (!PURCHASING_SOURCES.some((s) => s.estimateId === estimateId)) {
-    PURCHASING_SOURCES.unshift({
-      estimateId,
-      jobName: DEMO_ESTIMATE.assessment?.propertyAddress ?? 'Demo estimate',
-      claimNumber: DEMO_ESTIMATE.assessment?.claimNumber ?? null,
-      total: DEMO_ESTIMATE.lineItems.reduce((sum: number, l: any) => sum + (l.rcv ?? 0), 0),
-      createdAt: new Date().toISOString(),
-    });
-  }
-  TAKEOFFS[estimateId] = DEMO_ESTIMATE_TAKEOFF;
-  TAKEOFF_LINES[estimateId] = DEMO_ESTIMATE_TAKEOFF.lines;
-}
-
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1866,9 +1844,6 @@ const COMPUTER_STATUS: ComputerStatus = {
   limits: { maxSteps: 60, runTimeoutMs: 600000 },
 };
 
-const TECH_CAPABILITIES: TechnicianCapabilities = {
-  assistant: true, transcription: true, maxAudioUploadBytes: 26_214_400,
-};
 
 /** Symbility connection — stateful so the demo connect flow actually connects. */
 /** The filming shot list, phase-worded like the backend's captureGuide.ts. */
@@ -2366,7 +2341,6 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/pm\/overview$/, () => ({ body: PM_OVERVIEW })],
   ['GET', /^\/api\/pm\/settings$/, () => ({ body: PM_SETTINGS_RESPONSE })],
 
-  ['GET', /^\/api\/technician\/capabilities$/, () => ({ body: TECH_CAPABILITIES })],
 
   ['GET', /^\/api\/web-access\/connections$/, () => ({ body: { connections: WEB_CONNECTIONS } })],
   ['GET', /^\/api\/web-access\/runs$/, () => ({ body: { runs: WEB_RUNS } })],
@@ -3857,22 +3831,6 @@ const routes: Array<[string, RegExp, Handler]> = [
     const record = PROOF_DAYS[m[1]];
     const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);
     return { body: { summary: day?.aiSummary ?? null, findings: day?.aiFindings ?? null, model: 'claude' } };
-  }],
-
-  /* ------------------------------------------- estimating (demo pipeline) */
-  // The estimate is the backend's own demo output, frozen at build time — the
-  // Estimating tab builds it, saves it, and hands it to Purchase orders, the
-  // same loop the live product runs.
-  ['GET', /^\/api\/mitigation\/demo-sources$/, () => ({ body: { sources: DEMO_ESTIMATE_SOURCES } })],
-  ['POST', /^\/api\/mitigation\/build$/, () => ({
-    body: { estimate: DEMO_ESTIMATE, priceListConnected: false },
-  })],
-  ['POST', /^\/api\/mitigation\/estimates$/, () => {
-    registerDemoEstimateSource('est-demo-1');
-    return {
-      status: 201,
-      body: { estimateId: 'est-demo-1', jobId: DEMO_ESTIMATE.jobId, estimate: DEMO_ESTIMATE },
-    };
   }],
 
   /* ------------------------------------------- purchasing */

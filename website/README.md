@@ -4,6 +4,9 @@ The marketing site for Atmosphere — a static, dependency-free suite of pages t
 extends the product's design language (paper surfaces, warm ink, one terracotta
 accent, monospace as the "audit record" voice). Positioned written for service contractors of every trade.
 
+**Naming:** Atmosphere = product; Work Verification = the activity; Jettx LLC =
+holding/legal/billing only; Platform = office app; Field Capture = crew app.
+
 ## Pages
 
 | File              | Page                                                        |
@@ -20,7 +23,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — Starter / Work Verification / Scale, extra seats, Chest Mount |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
-| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Integrity agent, billing |
+| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, Evidence Platform, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — software engineering and sales roles, hiring process, application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
@@ -68,9 +71,9 @@ published.
 
 ## Homepage focus
 
-The homepage sells Work Verification only (Field Capture + Evidence Platform).
-The Estimator / recovered-invoice counter is not on the homepage — do not add
-an Estimator CTA there while that later product is out of scope.
+The homepage sells **Atmosphere** Work Verification only (Field Capture +
+Evidence Platform). Do not market computer-use, Integrity agent, or Estimator
+as live products — those pages are redirects or legacy stubs only.
 
 ## Forms (frontend + backend)
 

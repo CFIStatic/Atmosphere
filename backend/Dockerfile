@@ -27,8 +27,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV HOST=0.0.0.0
-ENV COMPUTER_USE_ENABLED=false
-ENV BACKUP_ENABLED=false
 ENV FRONTEND_ORIGIN=https://app.atmosphereteam.com
 # ffmpeg is optional but required for proof sparse-frame extraction.
 RUN apt-get update \

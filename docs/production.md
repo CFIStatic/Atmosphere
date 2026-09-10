@@ -2,9 +2,30 @@
 
 Atmosphere’s sold path is **intake → invite → Field Capture → Verifier →
 evidence share**. This document is the checklist to run that path safely.
-Sales, PM, estimator, and computer-use modules may stay in the tree; they
-are **unmounted in production** unless an operator opts in (see
-[Leftover platform APIs](#leftover-platform-apis)).
+Former sales, estimator, computer-use, prospecting, and CRM surfaces are
+**gone from the tree** — those API paths 404 (see
+[Products that used to live here](#products-that-used-to-live-here)).
+
+## Naming
+
+| Name | Role |
+| --- | --- |
+| **Atmosphere** | Product name (customer-facing brand) |
+| **Work Verification** | What we do — the activity / sold path — not a co-equal brand |
+| **Jettx LLC** | Holding company only (Stripe entity, legal, seed accounts) |
+| **Platform** | Office app (Railway / host alias for the Verifier console) |
+| **Field Capture** | Crew app (phone capture + job invite) |
+
+Railway service aliases (document once; do not invent parallel names):
+
+| Alias | What it is |
+| --- | --- |
+| `Atmosphere APIs` | BFF (override with `RAILWAY_SERVICE`) |
+| `Atmosphere-web` / Platform | Office console nginx |
+| `website` / Corporate Website | Marketing site |
+| `Internal Growth Metrics` | Staff analytics site |
+| `api.upstream` (repo root) | Private-mesh `API_UPSTREAM` for office + marketing |
+| `internal/api.upstream` | Public BFF HTTPS host — staff nginx 504s on the private mesh |
 
 ## Railway auto-deploy
 
@@ -558,8 +579,7 @@ Escape hatches (explicit only):
 - `ALLOW_MOCK_DRIVERS=true` is **refused** in production. It used to be
   synced onto Railway by `deploy-production.yml`; that is gone. Delete the
   variable on the BFF service if a stale `true` remains, or the process
-  will not start. Mock leftover drivers are allowed only while those
-  surfaces stay gated off.
+  will not start.
 
 Optional observability (no invented secrets):
 
@@ -864,7 +884,7 @@ Lint is still noisy across the monorepo; `npm run verify` remains the local bar.
 
 - Merging the two migration trees into one (tracked as follow-up; inventory
   script prevents silent drift).
-- Leftover (sales/PM/estimator) `createAdminClient()` sites — those APIs are
+- Former (sales/PM/estimator) `createAdminClient()` sites — those APIs are
   gated off in production.
 - Real S3 multipart driver (stub only; no AWS credential env vars in Keys).
 - Kafka / SQS. The outbox is still `video_processing_jobs` + `job_proofs`

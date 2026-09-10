@@ -16,7 +16,6 @@ import {
   GaugeIcon,
   LogOutIcon,
   MenuIcon,
-  MicIcon,
   SearchIcon,
   SettingsIcon,
   SpinnerIcon,
@@ -36,7 +35,6 @@ const JUMP_TARGETS = (() => {
       }
     }
   }
-  seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
   return [...seen.values()];
 })();
 

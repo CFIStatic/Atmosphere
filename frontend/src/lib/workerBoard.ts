@@ -28,10 +28,10 @@ export interface CrewBoardRow {
   jobs: Array<{ jobId: string; title: string; jobNumber: number | null; status: string }>;
 }
 
-/** Film from the job's invite when one exists; otherwise the in-console capture app. */
+/** Film from the job's invite when one exists; otherwise the Field Capture overview. */
 export function workerFilmHref(sharePath: string | null | undefined): string {
   const path = sharePath?.trim();
-  return path ? path : '/technician';
+  return path ? path : '/field';
 }
 
 function cardFromSummary(

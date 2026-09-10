@@ -12,8 +12,6 @@ import { fileURLToPath } from 'node:url';
 const KEYS = [
   'NODE_ENV',
   'MEDIA_BACKEND',
-  'COMPUTER_USE_ENABLED',
-  'BACKUP_ENABLED',
   'SENTRY_DSN',
   'HOST',
   'PORT',

@@ -39,9 +39,6 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 const JobsPage = lazy(() => import('./pages/JobsPage').then((m) => ({ default: m.JobsPage })));
-const TechnicianPage = lazy(() =>
-  import('./pages/TechnicianPage').then((m) => ({ default: m.TechnicianPage })),
-);
 const HomeownerReportPage = lazy(() =>
   import('./pages/HomeownerReportPage').then((m) => ({ default: m.HomeownerReportPage })),
 );
@@ -372,19 +369,6 @@ export default function App() {
             <Route path="/shared" element={<SharedJobsRedirect />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
-          {/* The technician app. Open to every onboarded member — a project
-              manager reviewing a job needs the same capture tools a field
-              technician does. */}
-          <Route
-            path="/technician"
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <TechnicianPage />
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          />
 
           <Route path="/billing" element={<BillingSettingsRedirect />} />
 
