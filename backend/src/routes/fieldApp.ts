@@ -262,16 +262,11 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
 });
 
 async function orgTimezone(
-  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
-  orgId: string,
+  _supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  _orgId: string,
 ): Promise<string> {
-  const { data } = await supabase
-    .from('pm_automation_settings')
-    .select('timezone')
-    .eq('org_id', orgId)
-    .maybeSingle();
-  const zone = (data as { timezone?: string } | null)?.timezone?.trim();
-  return zone || DEFAULT_FIELD_TIMEZONE;
+  // pm_automation_settings dropped — Field Capture uses the default timezone.
+  return DEFAULT_FIELD_TIMEZONE;
 }
 
 /**

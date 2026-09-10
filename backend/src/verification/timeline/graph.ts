@@ -135,41 +135,19 @@ export function createUpdateProjectGraphHandler(): (
 }
 
 async function upsertRelation(
-  ctx: PipelineContext,
-  fromId: string,
-  toId: string,
-  relation: string,
+  _ctx: PipelineContext,
+  _fromId: string,
+  _toId: string,
+  _relation: string,
 ): Promise<number> {
-  const { data: existing } = await ctx.supabase
-    .from('workflow_relationships')
-    .select('id')
-    .eq('from_event_id', fromId)
-    .eq('to_event_id', toId)
-    .eq('relation', relation)
-    .maybeSingle();
-  if (existing) return 0;
-  const { error } = await ctx.supabase.from('workflow_relationships').insert({
-    id: randomUUID(),
-    org_id: ctx.orgId,
-    job_id: ctx.jobId,
-    from_event_id: fromId,
-    to_event_id: toId,
-    relation,
-    confidence: 0.8,
-    provenance: { source: 'auto_sequence' },
-  });
-  if (error) {
-    // Unique race — treat as already present
-    if (/duplicate|unique/i.test(error.message)) return 0;
-    throw new Error(error.message);
-  }
-  return 1;
+  // workflow_relationships dropped
+  return 0;
 }
 
 export async function linkOutcome(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  opts: {
+  _supabase: any,
+  _opts: {
     orgId: string;
     jobId: string;
     timelineEventId?: string | null;
@@ -181,35 +159,6 @@ export async function linkOutcome(
     payload?: Record<string, unknown>;
   },
 ): Promise<string> {
-  const id = randomUUID();
-  const { error } = await supabase.from('outcome_records').insert({
-    id,
-    org_id: opts.orgId,
-    job_id: opts.jobId,
-    timeline_event_id: opts.timelineEventId ?? null,
-    result_id: opts.resultId ?? null,
-    outcome_type: opts.outcomeType,
-    external_ref: opts.externalRef ?? null,
-    amount_cents: opts.amountCents ?? null,
-    occurred_at: opts.occurredAt ?? null,
-    payload: opts.payload ?? {},
-  });
-  if (error) throw new Error(error.message);
-
-  if (opts.timelineEventId) {
-    // Outcome link is recorded on the outcome row + audit; do not invent
-    // self-referential workflow edges.
-  }
-
-  await appendAuditEvent(supabase, {
-    orgId: opts.orgId,
-    jobId: opts.jobId,
-    resultId: opts.resultId ?? null,
-    eventType: 'outcome.linked',
-    entityType: 'outcome_record',
-    entityId: id,
-    payload: { outcomeType: opts.outcomeType, timelineEventId: opts.timelineEventId ?? null },
-  });
-
-  return id;
+  // outcome_records dropped
+  return randomUUID();
 }

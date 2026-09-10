@@ -26,8 +26,6 @@ import {
   includedFcSeatsFromMetadata,
   parseAtmospherePlanCode,
 } from '../lib/stripeCatalog.js';
-import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
-import { mentionWebhookSchema } from '../pm/validation.js';
 import {
   claimStripeEvent,
   releaseStripeEventClaim,
@@ -151,11 +149,10 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
   // Credits first: a failure here must retry, so it happens before anything
   // that could swallow the error.
   if (purchaseId) {
-    const { error } = await admin.rpc('complete_credit_purchase', {
-      p_purchase_id: purchaseId,
-      p_provider_ref: paymentIntentId ?? session.id,
-    });
-    if (error) throw new Error(`credit grant failed: ${error.message}`);
+    // complete_credit_purchase / credit_* tables dropped — record payment only.
+    console.warn(
+      `[stripe] ignoring legacy credit purchase ${purchaseId}; credit wallet removed`,
+    );
   }
 
   // Pull the charge so the history row carries a receipt link and card detail.
@@ -409,56 +406,7 @@ async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void
  * payload's orgId, which the bridge is entrusted to set correctly for the
  * tenant it serves.
  */
-webhookRouter.post('/atmosphere-mention', async (req: Request, res: Response) => {
-  if (!config.pm.mentionWebhookSecret) {
-    console.error('[mention] webhook received but ATMOSPHERE_MENTION_WEBHOOK_SECRET is not set');
-    res.status(503).json({ error: 'Webhook not configured', code: 'webhook_unconfigured' });
-    return;
-  }
-
-  const raw = Buffer.isBuffer(req.body)
-    ? req.body
-    : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
-
-  const signature =
-    (req.headers['x-atmosphere-signature'] as string | undefined) ||
-    (req.headers['x-hub-signature-256'] as string | undefined);
-
-  if (!verifyMentionSignature(raw, signature, config.pm.mentionWebhookSecret)) {
-    res.status(401).json({ error: 'Invalid signature', code: 'invalid_signature' });
-    return;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.toString('utf8'));
-  } catch {
-    res.status(400).json({ error: 'Invalid JSON', code: 'invalid_json' });
-    return;
-  }
-
-  const payload = mentionWebhookSchema.safeParse(parsed);
-  if (!payload.success) {
-    res.status(400).json({
-      error: 'Invalid payload',
-      code: 'invalid_payload',
-      details: payload.error.flatten(),
-    });
-    return;
-  }
-
-  try {
-    const admin = adminClient();
-    const result = await ingestMention(admin, payload.data);
-    res.json({
-      received: true,
-      duplicate: result.duplicate,
-      communicationId: result.communication.id,
-      projectId: result.matchedProjectId,
-      approvalId: result.approvalId,
-    });
-  } catch (err) {
-    console.error('[mention] handler failed:', err);
-    res.status(500).json({ error: 'Webhook handler failed', code: 'webhook_failed' });
-  }
+webhookRouter.post('/atmosphere-mention', async (_req: Request, res: Response) => {
+  // pm_communications / pm_approvals / pm_projects dropped — mention intake gone.
+  res.status(410).json({ error: 'Mention intake removed', code: 'pm_gone' });
 });

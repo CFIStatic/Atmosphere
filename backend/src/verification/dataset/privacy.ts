@@ -6,7 +6,6 @@
  * Original media is never destroyed here.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { PipelineContext } from '../pipeline/orchestrator.js';
 import type { PrivacyStatus } from './eligibility.js';
 
@@ -50,19 +49,7 @@ export function createPrivacyScanHandler(): (
     }
 
     const detected = scanTextForPrivacy(texts);
-    for (const finding of detected) {
-      await ctx.supabase.from('privacy_findings').insert({
-        id: randomUUID(),
-        org_id: ctx.orgId,
-        video_id: ctx.videoId,
-        finding_type: finding.type,
-        confidence: 0.7,
-        detection_model: 'text_pattern_v1',
-        region: { snippet: finding.snippet },
-        action_taken: 'flagged',
-        review_status: 'open',
-      });
-    }
+    // privacy_findings table dropped; findings stay in-memory for status only.
 
     const status = privacyStatusFromFindings(detected.length);
     await ctx.supabase

@@ -115,8 +115,8 @@ export function evaluateDatasetEligibility(input: EligibilityInput): Eligibility
 
 export async function upsertRightsManifest(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  opts: {
+  _supabase: any,
+  _opts: {
     orgId: string;
     jobId?: string | null;
     videoId?: string | null;
@@ -124,59 +124,20 @@ export async function upsertRightsManifest(
     rights: RightsManifestInput;
   },
 ): Promise<string> {
-  const row = {
-    org_id: opts.orgId,
-    job_id: opts.jobId ?? null,
-    video_id: opts.videoId ?? null,
-    result_id: opts.resultId ?? null,
-    category: opts.rights.category,
-    operational_processing: opts.rights.operationalProcessing ?? true,
-    internal_improvement: opts.rights.internalImprovement ?? false,
-    evaluation_allowed: opts.rights.evaluationAllowed ?? false,
-    training_allowed: opts.rights.trainingAllowed ?? false,
-    third_party_transfer: opts.rights.thirdPartyTransfer ?? false,
-    derivative_allowed: opts.rights.derivativeAllowed ?? false,
-    deidentification_allowed: opts.rights.deidentificationAllowed ?? false,
-    policy_version: opts.rights.policyVersion ?? 'v1',
-    revoked_at: opts.rights.revokedAt ?? null,
-  };
-
-  const { data, error } = await supabase
-    .from('rights_manifests')
-    .insert(row)
-    .select('id')
-    .single();
-  if (error) throw new Error(error.message);
-  return data.id as string;
+  // rights_manifests dropped
+  return 'rights-gone';
 }
 
 export async function recordEligibilityDecision(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  opts: {
+  _supabase: any,
+  _opts: {
     orgId: string;
     resultId: string;
     videoId?: string | null;
     decision: EligibilityResult;
   },
 ): Promise<void> {
-  await supabase.from('eligibility_decisions').insert({
-    org_id: opts.orgId,
-    result_id: opts.resultId,
-    video_id: opts.videoId ?? null,
-    eligible: opts.decision.eligible,
-    reasons: opts.decision.reasons,
-    rights_category: opts.decision.rightsCategory,
-    privacy_status: opts.decision.privacyStatus,
-    policy_version: opts.decision.policyVersion,
-  });
-  await supabase
-    .from('verification_results')
-    .update({
-      dataset_eligible: opts.decision.eligible,
-      eligibility_reason: opts.decision.reasons.join(',') || null,
-      privacy_status: opts.decision.privacyStatus,
-    })
-    .eq('id', opts.resultId)
-    .eq('org_id', opts.orgId);
+  // eligibility_decisions dropped
+  return;
 }

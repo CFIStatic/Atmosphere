@@ -17,23 +17,19 @@ import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/st
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
 import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
-import { checkoutInvoiceCreationFields, loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
+import { loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
 import { loadTokenUsageReport, type TokenUsageRange } from '../metering/tokenUsage.js';
 import {
   billingError,
   serializeBalance,
   serializeOverview,
-  serializePack,
   serializePlan,
-  serializeRate,
 } from '../lib/billing.js';
 import {
   billingSettingsSchema,
-  completePurchaseSchema,
   extraSeatCheckoutSchema,
   onboardingCheckoutSchema,
   setPlanSchema,
-  startPurchaseSchema,
 } from '../lib/validation.js';
 
 export const billingRouter = Router();
@@ -52,19 +48,19 @@ billingRouter.get('/catalog', async (_req: Request, res: Response, next: NextFun
   try {
     const supabase = createAnonClient();
 
-    const [plans, packs, rates] = await Promise.all([
-      supabase.from('billing_plans').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('credit_packs').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('model_rate_card').select('*').eq('is_active', true).order('sort_order'),
-    ]);
+    // credit_packs + model_rate_card dropped — pricing via private.model_costs / quote_usage.
+    const plans = await supabase
+      .from('billing_plans')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order');
 
-    const failure = plans.error ?? packs.error ?? rates.error;
-    if (failure) throw new HttpError(500, failure.message, 'catalog_failed');
+    if (plans.error) throw new HttpError(500, plans.error.message, 'catalog_failed');
 
     res.json({
       plans: (plans.data ?? []).map(serializePlan),
-      packs: (packs.data ?? []).map(serializePack),
-      rateCard: (rates.data ?? []).map(serializeRate),
+      packs: [],
+      rateCard: [],
       // Lets the UI show a "confirm payment" affordance only where the dev
       // provider can actually settle a charge without a real processor.
       paymentProvider: config.billing.paymentProvider,
@@ -177,28 +173,12 @@ billingRouter.patch('/settings', async (req: Request, res: Response, next: NextF
  * GET /api/billing/ledger
  * Append-only credit history: grants, purchases, usage draw-downs, expirations.
  */
-billingRouter.get('/ledger', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.get('/ledger', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await supabase
-      .from('credit_ledger')
-      .select('id, entry_type, bucket, amount_nanos, description, created_at')
-      .eq('org_id', req.orgId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw new HttpError(500, error.message, 'ledger_failed');
-
-    res.json({
-      entries: (data ?? []).map((e: any) => ({
-        id: e.id,
-        entryType: e.entry_type,
-        bucket: e.bucket,
-        amountNanos: toNanos(e.amount_nanos),
-        description: e.description,
-        createdAt: e.created_at,
-      })),
+    // credit_ledger dropped
+    res.status(410).json({
+      error: 'Legacy credit wallet removed. Use Stripe subscription / metering.',
+      code: 'credit_wallet_gone',
     });
   } catch (err) {
     next(err);
@@ -206,30 +186,12 @@ billingRouter.get('/ledger', async (req: Request, res: Response, next: NextFunct
 });
 
 /** GET /api/billing/purchases — top-up history. */
-billingRouter.get('/purchases', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.get('/purchases', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const supabase = createUserClient(req.accessToken!);
-    const { data, error } = await supabase
-      .from('credit_purchases')
-      .select('id, pack_code, credits_nanos, bonus_nanos, amount_cents, status, provider, is_auto_reload, created_at, completed_at')
-      .eq('org_id', req.orgId)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (error) throw new HttpError(500, error.message, 'purchases_failed');
-
-    res.json({
-      purchases: (data ?? []).map((p: any) => ({
-        id: p.id,
-        packCode: p.pack_code,
-        creditsNanos: toNanos(p.credits_nanos),
-        bonusNanos: toNanos(p.bonus_nanos),
-        amountCents: p.amount_cents,
-        status: p.status,
-        provider: p.provider,
-        isAutoReload: p.is_auto_reload,
-        createdAt: p.created_at,
-        completedAt: p.completed_at,
-      })),
+    // credit_purchases dropped
+    res.status(410).json({
+      error: 'Legacy credit wallet removed. Use Stripe subscription / metering.',
+      code: 'credit_wallet_gone',
     });
   } catch (err) {
     next(err);
@@ -249,81 +211,12 @@ billingRouter.get('/purchases', async (req: Request, res: Response, next: NextFu
  * purchase through the confirm route below so the flow is exercisable
  * end-to-end.
  */
-billingRouter.post('/purchases', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/purchases', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const { packCode, amountCents } = startPurchaseSchema.parse(req.body);
-    const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await supabase.rpc('start_credit_purchase', {
-      p_org: req.orgId,
-      p_pack_code: packCode ?? null,
-      p_amount_cents: amountCents ?? null,
-      p_provider: config.billing.paymentProvider,
-      p_is_auto_reload: false,
-    });
-    if (error) throw billingError(error);
-
-    const row = data as any;
-
-    // With Stripe configured, hand back a hosted checkout URL. The credits are
-    // granted by the webhook once the payment settles — landing back on the
-    // success URL proves nothing, so nothing is granted here.
-    let checkoutUrl: string | null = null;
-    if (config.billing.paymentProvider === 'stripe') {
-      const customerId = await ensureCustomer(supabase, req.orgId!, {
-        email: req.user!.email,
-        orgName: await orgName(supabase, req.orgId!),
-      });
-
-      const session = await stripeClient().checkout.sessions.create(
-        {
-          mode: 'payment',
-          customer: customerId,
-          ...checkoutInvoiceCreationFields('payment'),
-          success_url: config.stripe.successUrl,
-          cancel_url: config.stripe.cancelUrl,
-          client_reference_id: req.orgId,
-          // Read back on the webhook to attribute the payment and find the
-          // purchase it settles.
-          metadata: { org_id: req.orgId!, purchase_id: row.id },
-          payment_intent_data: {
-            metadata: { org_id: req.orgId!, purchase_id: row.id },
-            // Makes Stripe email a receipt for this charge.
-            receipt_email: req.user!.email ?? undefined,
-            description: 'Atmosphere usage credits',
-          },
-          line_items: [
-            {
-              quantity: 1,
-              price_data: {
-                currency: 'usd',
-                unit_amount: row.amount_cents,
-                product_data: {
-                  name: 'Atmosphere usage credits',
-                  description: `${formatCreditLabel(row)} of usage credits`,
-                },
-              },
-            },
-          ],
-        },
-        { idempotencyKey: stripeIdempotencyKey('credit-purchase', row.id) },
-      );
-      checkoutUrl = session.url;
-    }
-
-    res.status(201).json({
-      purchase: {
-        id: row.id,
-        packCode: row.pack_code,
-        creditsNanos: toNanos(row.credits_nanos),
-        bonusNanos: toNanos(row.bonus_nanos),
-        amountCents: row.amount_cents,
-        status: row.status,
-        provider: row.provider,
-      },
-      checkoutUrl,
-      // The dev provider settles in-app; Stripe settles by redirect + webhook.
-      requiresConfirmation: config.billing.paymentProvider === 'dev',
+    // start_credit_purchase / credit_packs dropped
+    res.status(410).json({
+      error: 'Legacy credit wallet removed. Use Stripe subscription / metering.',
+      code: 'credit_wallet_gone',
     });
   } catch (err) {
     next(err);
@@ -768,13 +661,6 @@ async function orgName(supabase: ReturnType<typeof createUserClient>, orgId: str
   return (data?.name as string | undefined) ?? null;
 }
 
-/** "$100" / "$103 (incl. $3 bonus)" for the Stripe line item. */
-function formatCreditLabel(row: any): string {
-  const credits = toNanos(row.credits_nanos) / 1_000_000_000;
-  const bonus = toNanos(row.bonus_nanos) / 1_000_000_000;
-  return bonus > 0 ? `$${credits + bonus} (incl. $${bonus} bonus)` : `$${credits}`;
-}
-
 /**
  * POST /api/billing/purchases/:id/confirm
  *
@@ -782,31 +668,12 @@ function formatCreditLabel(row: any): string {
  * — production credits are minted by the provider's webhook, authenticated with
  * the service-role key, never by a browser request.
  */
-billingRouter.post('/purchases/:id/confirm', async (req: Request, res: Response, next: NextFunction) => {
+billingRouter.post('/purchases/:id/confirm', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    if (config.billing.paymentProvider !== 'dev') {
-      throw badRequest(
-        'Purchases are settled by the payment provider, not by the client.',
-        'confirmation_not_supported',
-      );
-    }
-
-    const { purchaseId } = completePurchaseSchema.parse({ purchaseId: req.params.id });
-    const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await supabase.rpc('complete_credit_purchase', {
-      p_purchase_id: purchaseId,
-      p_provider_ref: `dev_${purchaseId}`,
-    });
-    if (error) throw billingError(error);
-
-    const row = data as any;
-    res.json({
-      purchaseId: row.purchase_id,
-      status: row.status,
-      duplicate: Boolean(row.duplicate),
-      creditedNanos: toNanos(row.credited_nanos ?? 0),
-      balance: serializeBalance(row.balance),
+    // complete_credit_purchase dropped
+    res.status(410).json({
+      error: 'Legacy credit wallet removed. Use Stripe subscription / metering.',
+      code: 'credit_wallet_gone',
     });
   } catch (err) {
     next(err);
