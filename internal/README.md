@@ -1,9 +1,14 @@
 # Atmosphere Internal — staff data platform
 
-A separately hosted website for Atmosphere staff. **Hosted builds always talk
-to the live BFF.** There is no demo-data button and no fixture payload in the
-production image. nginx reverse-proxies `/api` to the Atmosphere backend, so
-sign-in is a real session cookie and every number is a real RPC.
+A separately hosted website for Atmosphere staff (Jettx LLC ops). **Hosted
+builds always talk to the live BFF.** There is no demo-data button and no
+fixture payload in the production image. nginx reverse-proxies `/api` to the
+Atmosphere backend, so sign-in is a real session cookie and every number is a
+real RPC.
+
+This is not customer-facing product marketing. Atmosphere is the product; Work
+Verification is the sold activity; Platform / Field Capture are the office and
+crew apps. Integrity agent / computer-use / estimator are not live surfaces.
 
 | Page | Live source | Who |
 | --- | --- | --- |

@@ -52,8 +52,8 @@ describe('workerFilmHref', () => {
   });
 
   it('falls back to in-console capture', () => {
-    expect(workerFilmHref(null)).toBe('/technician');
-    expect(workerFilmHref('')).toBe('/technician');
+    expect(workerFilmHref(null)).toBe('/field');
+    expect(workerFilmHref('')).toBe('/field');
   });
 });
 

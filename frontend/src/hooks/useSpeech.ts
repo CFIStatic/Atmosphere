@@ -9,8 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   whole of the "talk back at users" half, no server involved.
  * - **Speech recognition** is Chrome/Edge only. Safari and Firefox ship nothing
  *   usable, and those are half the phones on a job site — so `recognitionSupported`
- *   exists to let the caller fall back to recording a clip and posting it to
- *   `/api/technician/transcribe` instead.
+ *   exists to let the caller fall back to recording a clip for server-side
+ *   transcription when that endpoint is available.
  */
 
 /* ---- Minimal Web Speech typings (not in lib.dom) ---- */

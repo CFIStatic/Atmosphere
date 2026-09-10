@@ -9,7 +9,7 @@ const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..
 describe('office rail routes', () => {
   it('keeps Overview, Start a job, Dashboard, and Job Files inside the permanent office shell', () => {
     const start = appSrc.indexOf('<OperationsShell');
-    const end = appSrc.indexOf('path="/technician"');
+    const end = appSrc.indexOf('path="/billing"');
     const shell = appSrc.slice(start, end);
     expect(shell).toContain('path="/field"');
     expect(shell).not.toContain('WorkerDashboardPage');

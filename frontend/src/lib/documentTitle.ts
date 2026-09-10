@@ -19,7 +19,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/intake': 'Start a job',
   '/job-progress': 'Job file',
   '/jobs': 'Job Files',
-  '/technician': 'Field capture',
   '/settings': 'Settings',
   '/field': 'Overview',
   '/my-jobs': 'My jobs',
