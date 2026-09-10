@@ -9,6 +9,15 @@
   var SAFE_HASH_BYTES = 512 * 1024 * 1024;
   /** Pocket-proof: the day film stops only after a continuous 5s hold. */
   var HOLD_TO_FINISH_MS = 5000;
+  /**
+   * Day-film quality cap (~720p / ~24–30fps / ~2 Mbps). Keep mic.
+   * Mirrored in backend/src/media/capturePolicy.ts PREFERRED_DAY_FILM.
+   */
+  var DAY_FILM_MAX_WIDTH = 1280;
+  var DAY_FILM_MAX_HEIGHT = 720;
+  var DAY_FILM_FPS_IDEAL = 30;
+  var DAY_FILM_FPS_MIN = 24;
+  var DAY_FILM_VIDEO_BITS_PER_SECOND = 2000000;
   var LIVE_OFFICE_ORIGIN = 'https://platform.atmosphereteam.com';
   var FIELD_CAPTURE_HOST = /^field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
   var FIELD_CAPTURE_CUSTOM = /^(?:www\.)?app\.atmosphereteam\.com$/i;
@@ -377,6 +386,31 @@
     });
   }
 
+
+  /**
+   * getUserMedia constraints for day film — ~720p, ~30fps, rear camera, mic on.
+   * Used by recordDayFilm and by app.js (gesture-time acquire before POST).
+   */
+  function dayFilmGetUserMediaConstraints() {
+    return {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: DAY_FILM_MAX_WIDTH, max: DAY_FILM_MAX_WIDTH },
+        height: { ideal: DAY_FILM_MAX_HEIGHT, max: DAY_FILM_MAX_HEIGHT },
+        // ideal/max only — a hard min can OverconstrainedError on odd devices
+        frameRate: { ideal: DAY_FILM_FPS_IDEAL, max: DAY_FILM_FPS_IDEAL },
+      },
+      audio: true,
+    };
+  }
+
+  /** MediaRecorder options — mime + ~2 Mbps video budget. */
+  function dayFilmRecorderOptions(mimeType) {
+    var opts = { videoBitsPerSecond: DAY_FILM_VIDEO_BITS_PER_SECOND };
+    if (mimeType) opts.mimeType = mimeType;
+    return opts;
+  }
+
   /**
    * Record day film with camera + microphone into a Blob (webm/mp4).
    *
@@ -423,10 +457,7 @@
           ? Promise.resolve(opts.stream)
           : !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia
             ? Promise.reject(new Error('This browser cannot record video + audio.'))
-            : navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' } },
-                audio: true,
-              });
+            : navigator.mediaDevices.getUserMedia(dayFilmGetUserMediaConstraints());
         return acquire.then(function (stream) {
           if (!stream.getAudioTracks().length) {
             stream.getTracks().forEach(function (t) {
@@ -444,9 +475,16 @@
           bindLivePreview(videoEl, stream);
           var mime = pickMime();
           state.mimeType = mime || '';
-          var recorder = mime
-            ? new MediaRecorder(stream, { mimeType: mime })
-            : new MediaRecorder(stream);
+          var recorderOpts = dayFilmRecorderOptions(mime || null);
+          var recorder;
+          try {
+            recorder = new MediaRecorder(stream, recorderOpts);
+          } catch (e) {
+            /* Older engines may reject videoBitsPerSecond — retry mime-only. */
+            recorder = mime
+              ? new MediaRecorder(stream, { mimeType: mime })
+              : new MediaRecorder(stream);
+          }
           state.recorder = recorder;
           state.chunks = [];
           state.startedAt = Date.now();
@@ -2728,6 +2766,13 @@
 
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
+    DAY_FILM_MAX_WIDTH: DAY_FILM_MAX_WIDTH,
+    DAY_FILM_MAX_HEIGHT: DAY_FILM_MAX_HEIGHT,
+    DAY_FILM_FPS_IDEAL: DAY_FILM_FPS_IDEAL,
+    DAY_FILM_FPS_MIN: DAY_FILM_FPS_MIN,
+    DAY_FILM_VIDEO_BITS_PER_SECOND: DAY_FILM_VIDEO_BITS_PER_SECOND,
+    dayFilmGetUserMediaConstraints: dayFilmGetUserMediaConstraints,
+    dayFilmRecorderOptions: dayFilmRecorderOptions,
     filterJobs: filterJobs,
     isLocalJobId: isLocalJobId,
     draftFieldJob: draftFieldJob,
