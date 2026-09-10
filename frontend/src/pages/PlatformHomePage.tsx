@@ -309,17 +309,28 @@ function ActionList({
   if (model.openCount === 0) {
     return (
       <div className="px-3 py-8 text-center sm:px-5 sm:py-10">
-        <p className="text-sm font-medium text-ink-800">No job files yet</p>
+        <p className="text-sm font-medium text-ink-800">First job still open</p>
         <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">
-          Start a job — publish a brief, invite the crew, and this page will fill with what needs a
-          decision.
+          Create a job here, then film it in Field Capture on the phone with the same login. Videos
+          land back on this dashboard.
         </p>
+        <ol className="mx-auto mt-4 max-w-sm space-y-1.5 text-left text-xs text-ink-600">
+          <li>
+            <span className="font-semibold text-ink-800">1.</span> Start a job (name is enough)
+          </li>
+          <li>
+            <span className="font-semibold text-ink-800">2.</span> Open Field Capture on the phone
+          </li>
+          <li>
+            <span className="font-semibold text-ink-800">3.</span> Record the first film for that job
+          </li>
+        </ol>
         <Link
           to="/intake"
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500"
         >
           <BoltIcon width={14} height={14} />
-          Start a job
+          Start your first job
         </Link>
       </div>
     );

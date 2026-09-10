@@ -322,7 +322,26 @@ describe('SignupPage', () => {
     });
     expect(apiMocks.createOrg).toHaveBeenCalled();
     const destination = String(queueRedirect.mock.calls[0]?.[0] ?? '');
-    expect(destination).toMatch(/^\//);
+    expect(destination).toBe('/intake');
     expect(destination).not.toMatch(/[?&]tour=/);
+  });
+
+  it('sends a paid Stripe return to Start a job, not the empty dashboard', async () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith('/intake');
+    });
   });
 });

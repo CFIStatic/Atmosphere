@@ -128,7 +128,7 @@ export function SetupBillingStep({
         title="Billing ready"
         subtitle={
           status.complete
-            ? 'Your payment method is on file.'
+            ? 'Your payment method is on file — next, create a job and film in Field Capture.'
             : 'Your organization handles billing separately.'
         }
       >
@@ -162,7 +162,7 @@ export function SetupBillingStep({
     catalog[1]!;
 
   return (
-    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, then add a payment method.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then start your first job.">
       {error && (
         <div
           role="alert"

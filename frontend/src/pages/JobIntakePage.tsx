@@ -9,6 +9,7 @@ import {
   type IntakeProposal,
 } from '../lib/api';
 import { jobFilePath } from '../lib/jobFileAsk';
+import { fieldCaptureOpenUrl } from '../lib/firstRun';
 import {
   INTAKE_SAMPLE,
   isInviteEmail,
@@ -225,8 +226,7 @@ export function JobIntakePage() {
 
   const invitedCount = selectedCount + externals.length;
 
-  async function copyLink(path: string, id: string) {
-    const url = `${window.location.origin}${path}`;
+  async function copyText(url: string, id: string) {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
@@ -234,6 +234,10 @@ export function JobIntakePage() {
     } catch {
       setError('Could not copy — select the link and copy it yourself.');
     }
+  }
+
+  async function copyLink(path: string, id: string) {
+    await copyText(`${window.location.origin}${path}`, id);
   }
 
   const invites = result?.invites ?? [];
@@ -247,10 +251,10 @@ export function JobIntakePage() {
         {phone ? (
           <div className="min-w-0 shrink-0">
             <h1 className="text-xl font-bold tracking-tight text-ink-900">Start a job</h1>
-            <p className="mt-1 text-[13px] leading-snug text-ink-600">This job is on the dashboard.</p>
+            <p className="mt-1 text-[13px] leading-snug text-ink-600">Next: film the first day in Field Capture.</p>
           </div>
         ) : (
-          <PageHeader title="Start a job" description="This job is on the dashboard." />
+          <PageHeader title="Start a job" description="Next: film the first day in Field Capture." />
         )}
         <div
           className={cn(
@@ -289,8 +293,51 @@ export function JobIntakePage() {
                 : homeownerShare
                   ? ' · homeowner job-file link created'
                   : ''}
-              {phone ? '.' : '. It is on your job progress dashboard now.'}
+              {phone ? '.' : '. Open Field Capture on the phone to film it.'}
             </p>
+          </div>
+
+          <div className={cn('rounded-xl glass-card', phone ? 'p-3.5' : 'p-5')}>
+            <h3 className="text-sm font-semibold text-ink-900">Film in Field Capture</h3>
+            <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
+              {phone
+                ? 'Same login as Platform. Open Field Capture, pick this job, and record.'
+                : 'Use the same email and password on the phone. Open Field Capture, pick this job, and record the first film.'}
+            </p>
+            <div className={cn('flex min-w-0 items-center gap-2', phone ? 'mt-3' : 'mt-4')}>
+              <a
+                href={fieldCaptureOpenUrl(
+                  invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
+                    result.fieldCapturePath ||
+                    null,
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-brand-700 underline-offset-2 hover:underline"
+              >
+                {fieldCaptureOpenUrl(
+                  invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
+                    result.fieldCapturePath ||
+                    null,
+                )}
+              </a>
+              <button
+                type="button"
+                onClick={() =>
+                  void copyText(
+                    fieldCaptureOpenUrl(
+                      invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
+                        result.fieldCapturePath ||
+                        null,
+                    ),
+                    'fc-open',
+                  )
+                }
+                className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
+              >
+                {copiedId === 'fc-open' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
 
           {invites.length > 0 && (
@@ -298,8 +345,8 @@ export function JobIntakePage() {
             <h3 className="text-sm font-semibold text-ink-900">Invites</h3>
             <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
               {phone
-                ? 'Teammates get a capture link. Outside workers get an Atmosphere email.'
-                : 'Teammates get a capture link. Subcontractors get an Atmosphere email — if they already have an account the job shows there; if not, the email prompts them to create one.'}
+                ? 'Each person gets a Field Capture link for this job.'
+                : 'Each person gets a Field Capture link. Outside workers also get an Atmosphere email when mail is configured.'}
             </p>
             <ul className={cn('space-y-3', phone ? 'mt-3' : 'mt-4')}>
               {invites.map((inv) => (
@@ -336,15 +383,26 @@ export function JobIntakePage() {
                   </p>
                   <div className="mt-2 flex min-w-0 items-center gap-2">
                     <a
-                      href={inv.sharePath}
+                      href={
+                        inv.fieldCapturePath
+                          ? fieldCaptureOpenUrl(inv.fieldCapturePath)
+                          : inv.sharePath
+                      }
+                      target={inv.fieldCapturePath ? '_blank' : undefined}
+                      rel={inv.fieldCapturePath ? 'noreferrer' : undefined}
                       className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-brand-700 underline-offset-2 hover:underline"
                     >
-                      {window.location.origin}
-                      {inv.sharePath}
+                      {inv.fieldCapturePath
+                        ? fieldCaptureOpenUrl(inv.fieldCapturePath)
+                        : `${window.location.origin}${inv.sharePath}`}
                     </a>
                     <button
                       type="button"
-                      onClick={() => void copyLink(inv.sharePath, inv.id)}
+                      onClick={() =>
+                        void (inv.fieldCapturePath
+                          ? copyText(fieldCaptureOpenUrl(inv.fieldCapturePath), inv.id)
+                          : copyLink(inv.sharePath, inv.id))
+                      }
                       className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
                     >
                       {copiedId === inv.id ? 'Copied' : 'Copy'}
@@ -364,11 +422,26 @@ export function JobIntakePage() {
                 : 'flex flex-wrap gap-3 pb-8',
             )}
           >
+            <a
+              href={fieldCaptureOpenUrl(
+                invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
+                  result.fieldCapturePath ||
+                  null,
+              )}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                'inline-flex items-center justify-center rounded-lg bg-brand-600 text-sm font-semibold text-ink-900',
+                phone ? 'w-full px-4 py-3' : 'px-4 py-2',
+              )}
+            >
+              Open Field Capture
+            </a>
             <button
               type="button"
               className={cn(
-                'rounded-lg bg-brand-600 text-sm font-semibold text-ink-900',
-                phone ? 'w-full px-4 py-3' : 'px-4 py-2',
+                'rounded-lg text-sm font-medium text-ink-700',
+                phone ? 'w-full px-4 py-2.5' : 'px-4 py-2',
               )}
               onClick={() =>
                 navigate(jobFilePath(result.job.id, { title: result.job.title, number: result.job.jobNumber }))

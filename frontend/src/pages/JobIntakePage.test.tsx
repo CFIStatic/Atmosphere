@@ -140,8 +140,9 @@ describe('JobIntakePage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Job created — capture invited' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('/shared/tok-1', { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Film in Field Capture' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /app\.atmosphereteam\.com/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('Left intake')).toBeNull();
     expect(api.approveIntake).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -239,6 +240,7 @@ describe('JobIntakePage', () => {
       await screen.findByRole('heading', { name: 'Job created — capture invited' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Field Capture' }).className).toMatch(/w-full/);
     expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
     expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
   });
@@ -280,6 +282,8 @@ describe('JobIntakePage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Job created' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Invites' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Film in Field Capture' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Field Capture' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open this job file' })).toBeInTheDocument();
     expect(api.approveIntake).toHaveBeenCalledWith(
       expect.objectContaining({

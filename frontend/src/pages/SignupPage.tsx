@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
+import { firstRunDestination } from '../lib/firstRun';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
@@ -30,11 +31,14 @@ export function SignupPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
+  const platformHome = PLATFORM_HOME[getPlatform()];
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
     (location.state as { from?: string } | null)?.from,
-    PLATFORM_HOME[getPlatform()],
+    platformHome,
   );
+  /** After billing, land on Start a job unless a specific deep link was requested. */
+  const afterSetupTo = firstRunDestination(redirectTo, platformHome);
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
@@ -152,7 +156,7 @@ export function SignupPage() {
   const formValid = accountValid && workspaceValid && termsValid;
 
   function enterApp() {
-    queueRedirect(redirectTo);
+    queueRedirect(afterSetupTo);
   }
 
   async function continueAfterWorkspace() {
@@ -269,7 +273,7 @@ export function SignupPage() {
           subtitle={
             mode === 'join'
               ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
-              : 'You are creating this company as Global Admin. Invite Employees afterward from Settings.'
+              : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
           }
         >
           {user?.email && !submitting && (
@@ -430,9 +434,9 @@ export function SignupPage() {
 
       {step === 2 && membership && (
         <SetupBillingStep
-          redirectTo={redirectTo}
+          redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
-          nextLabel="Enter Atmosphere"
+          nextLabel="Start your first job"
           onComplete={enterApp}
         />
       )}
