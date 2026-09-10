@@ -7,7 +7,9 @@ describe('setupWizardCopy', () => {
     expect(copy.heading).toBe('Create your company');
     expect(copy.steps.map((s) => s.title)).toEqual(['Account & workspace', 'Set up billing']);
     expect(copy.lede).toMatch(/Global Admin/i);
+    expect(copy.lede).toMatch(/Field Capture/i);
     expect(copy.steps[0]?.detail).toMatch(/login and company name/i);
+    expect(copy.steps[1]?.detail).toMatch(/Field Capture/i);
     expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
     expect(copy.steps[0]?.detail).not.toMatch(/company type/i);
     expect(copy.steps[0]?.detail).toMatch(/Global Admin/i);

@@ -24,7 +24,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 2 as const,
     title: 'Set up billing',
-    detail: 'Choose Starter, Work Verification, or Scale, then add a payment method.',
+    detail: 'Pick a plan and add a card — next you start a job and film in Field Capture.',
   },
 ] as const;
 
@@ -51,7 +51,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   }
   return {
     heading: 'Create your company',
-    lede: 'You are the Global Admin. Create the workspace, set up billing, then invite everyone else.',
+    lede: 'You are the Global Admin. Create the workspace, pick a plan, start a job, then film the first day in Field Capture.',
     steps: SETUP_WIZARD_STEPS,
   };
 }

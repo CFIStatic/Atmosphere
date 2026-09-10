@@ -122,10 +122,22 @@ export function JobsPage() {
       {jobs === null ? (
         <PanelSpinner label="Loading jobs" />
       ) : visible.length === 0 ? (
-        <EmptyState
-          title={query ? 'No job files match that search.' : 'No job files yet.'}
-          hint={query ? undefined : 'Start a job from the rail and it will show up here.'}
-        />
+        query ? (
+          <EmptyState title="No job files match that search." />
+        ) : (
+          <div className="rounded-xl border border-dashed border-line px-6 py-12 text-center">
+            <p className="text-sm font-medium text-ink-800">No job files yet</p>
+            <p className="mt-1 text-sm text-ink-500">
+              Start a job, then film it in Field Capture — that is the first-run loop.
+            </p>
+            <Link
+              to="/intake"
+              className="mt-4 inline-flex items-center justify-center rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-brand-500"
+            >
+              Start your first job
+            </Link>
+          </div>
+        )
       ) : (
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
           {visible.map((job) => (
