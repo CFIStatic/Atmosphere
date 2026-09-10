@@ -24,7 +24,13 @@ import {
   postSignOutToFieldCapture,
 } from '../lib/fieldEmbed';
 import { preferFresherProfile } from '../lib/preferFresherProfile';
-import { publicTermsStatus, termsRequired, type TermsStatus } from '../lib/terms';
+import {
+  clearSessionTermsAccepted,
+  markSessionTermsAccepted,
+  publicTermsStatus,
+  termsRequired,
+  type TermsStatus,
+} from '../lib/terms';
 
 function rememberSession(session?: { accessToken?: string; refreshToken?: string } | null): void {
   if (!session?.accessToken && !session?.refreshToken) return;
@@ -190,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If the project auto-confirms, a session is set and the user is logged in.
       let membership: Membership | null = null;
       setTerms(res.terms ?? publicTermsStatus());
+      markSessionTermsAccepted(acceptedTermsVersion);
       if (!res.needsEmailConfirmation && res.user) {
         rememberSession(res.session);
         explicitAuthRef.current = true;
@@ -223,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { terms: nextTerms } = await api.acceptTerms(acceptedTermsVersion);
         setTerms(nextTerms);
+        markSessionTermsAccepted(acceptedTermsVersion);
         await loadMembership();
       } finally {
         setTermsLoading(false);
@@ -252,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout();
     } finally {
       clearFieldEmbedSession();
+      clearSessionTermsAccepted();
       postSignOutToFieldCapture();
       setUser(null);
       setMembership(null);
