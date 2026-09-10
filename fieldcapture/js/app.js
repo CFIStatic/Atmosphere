@@ -717,10 +717,14 @@
          recording even if the office POST is offline. */
       var media =
         navigator.mediaDevices && navigator.mediaDevices.getUserMedia
-          ? navigator.mediaDevices.getUserMedia({
-              video: { facingMode: { ideal: 'environment' } },
-              audio: true,
-            })
+          ? navigator.mediaDevices.getUserMedia(
+              Core.dayFilmGetUserMediaConstraints
+                ? Core.dayFilmGetUserMediaConstraints()
+                : {
+                    video: { facingMode: { ideal: 'environment' } },
+                    audio: true,
+                  },
+            )
           : Promise.reject(new Error('This browser cannot record video + audio.'));
 
       media

@@ -18,6 +18,28 @@ const Core = sandbox.FieldCaptureCore;
 assert.equal(typeof Core.bindLivePreview, 'function', 'iPhone preview needs bindLivePreview');
 assert.equal(Core.HOLD_TO_FINISH_MS, 5000, 'hold-to-finish must be 5 seconds');
 
+assert.equal(Core.DAY_FILM_MAX_WIDTH, 1280, 'day film long edge capped at 1280');
+assert.equal(Core.DAY_FILM_MAX_HEIGHT, 720, 'day film short edge capped at 720');
+assert.equal(Core.DAY_FILM_VIDEO_BITS_PER_SECOND, 2000000, 'day film ~2 Mbps');
+assert.equal(typeof Core.dayFilmGetUserMediaConstraints, 'function');
+assert.equal(typeof Core.dayFilmRecorderOptions, 'function');
+{
+  const gUM = Core.dayFilmGetUserMediaConstraints();
+  assert.equal(gUM.audio, true, 'day film keeps microphone');
+  assert.equal(gUM.video.width.ideal, 1280);
+  assert.equal(gUM.video.width.max, 1280);
+  assert.equal(gUM.video.height.ideal, 720);
+  assert.equal(gUM.video.height.max, 720);
+  assert.equal(gUM.video.frameRate.ideal, 30);
+  assert.equal(gUM.video.frameRate.max, 30);
+  const rec = Core.dayFilmRecorderOptions('video/webm');
+  assert.equal(rec.videoBitsPerSecond, 2000000);
+  assert.equal(rec.mimeType, 'video/webm');
+}
+assert.match(coreSrc, /videoBitsPerSecond/, 'MediaRecorder must request a video bitrate');
+assert.match(coreSrc, /dayFilmGetUserMediaConstraints\(\)/, 'recordDayFilm uses shared constraints');
+assert.match(appSrc, /dayFilmGetUserMediaConstraints/, 'app.js acquires camera with day-film caps');
+
 const fakeVideo = {
   attributes: {},
   setAttribute(name, value) { this.attributes[name] = value; },

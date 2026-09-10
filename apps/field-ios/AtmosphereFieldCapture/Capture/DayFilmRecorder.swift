@@ -6,6 +6,8 @@ import Foundation
  *
  * Audio is not optional. The office Verifier plays this file with soundtrack;
  * AI stills are extracted server-side without stripping the stored audio track.
+ *
+ * Quality cap (see backend `PREFERRED_DAY_FILM`): ~720p, ~30 fps, ~2 Mbps video.
  */
 @MainActor
 final class DayFilmRecorder: NSObject, ObservableObject {
@@ -51,7 +53,12 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         }
 
         session.beginConfiguration()
-        session.sessionPreset = .high
+        // Cap at 720p (not .high / 1080p+) — matches PREFERRED_DAY_FILM.
+        if session.canSetSessionPreset(.hd1280x720) {
+            session.sessionPreset = .hd1280x720
+        } else {
+            session.sessionPreset = .medium
+        }
 
         session.inputs.forEach { session.removeInput($0) }
         session.outputs.forEach { session.removeOutput($0) }
@@ -88,15 +95,18 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         session.addOutput(movieOutput)
 
         // Prefer AAC audio + H.264 in QuickTime/MP4. Portrait so the filed
-        // film matches the live preview the crew watches.
+        // film matches the live preview the crew watches. Cap encode ~2 Mbps.
         if let connection = movieOutput.connection(with: .video) {
             if connection.isVideoStabilizationSupported {
                 connection.preferredVideoStabilizationMode = .auto
             }
             Self.applyPortraitOrientation(to: connection)
+            Self.applyDayFilmOutputSettings(to: movieOutput, connection: connection)
         }
 
         session.commitConfiguration()
+
+        Self.lockFrameRate(device: videoDevice, fps: Self.targetFrameRate)
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -145,6 +155,44 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         timer = nil
         session.stopRunning()
         status = .idle
+    }
+
+    /// ~720p / ~30 fps / ~2 Mbps — see backend `PREFERRED_DAY_FILM`.
+    static let targetFrameRate: Double = 30
+    static let targetVideoBitsPerSecond: Int = 2_000_000
+
+    /// Prefer ~30 fps when the active format supports it (falls back silently).
+    static func lockFrameRate(device: AVCaptureDevice, fps: Double) {
+        let ranges = device.activeFormat.videoSupportedFrameRateRanges
+        guard ranges.contains(where: { $0.minFrameRate <= fps && fps <= $0.maxFrameRate }) else {
+            return
+        }
+        do {
+            try device.lockForConfiguration()
+            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            device.unlockForConfiguration()
+        } catch {
+            // Keep whatever the preset chose; recording must still start.
+        }
+    }
+
+    /// H.264 + average bitrate on the movie-file output (best-effort).
+    static func applyDayFilmOutputSettings(
+        to output: AVCaptureMovieFileOutput,
+        connection: AVCaptureConnection
+    ) {
+        let compression: [String: Any] = [
+            AVVideoAverageBitRateKey: targetVideoBitsPerSecond,
+            AVVideoExpectedSourceFrameRateKey: Int(targetFrameRate),
+            AVVideoMaxKeyFrameIntervalKey: Int(targetFrameRate),
+        ]
+        let settings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoCompressionPropertiesKey: compression,
+        ]
+        output.setOutputSettings(settings, for: connection)
     }
 
     /// iPhone is portrait-locked; keep the movie track the same way up as the finder.

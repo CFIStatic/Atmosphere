@@ -42,14 +42,31 @@ export function assertAudiovisualPolicy(input: {
   }
 }
 
-/** Preferred container/codecs for App Store + web day film. */
+/**
+ * Preferred container/codecs + quality caps for App Store + web day film.
+ *
+ * Target: ~720p, ~24–30 fps, ~2 Mbps video, microphone kept (A/V).
+ * Clients should treat these as ideals — devices negotiate downward.
+ */
 export const PREFERRED_DAY_FILM = {
+  /** Long edge / short edge for 720p (portrait phones may swap axes). */
+  maxWidth: 1280,
+  maxHeight: 720,
+  /** Soft fps band — prefer 30, allow 24. */
+  frameRateIdeal: 30,
+  frameRateMin: 24,
+  /** Video encode budget in bits/sec (MediaRecorder / AVFoundation). */
+  videoBitsPerSecond: 2_000_000,
   ios: {
     fileType: 'mp4' as const,
     videoCodec: 'h264' as const,
     audioCodec: 'aac' as const,
     /** AVFoundation must enable audio device input alongside video. */
     captureAudio: true,
+    /** AVCaptureSession.Preset.hd1280x720 */
+    sessionPreset: 'hd1280x720' as const,
+    videoBitsPerSecond: 2_000_000,
+    frameRate: 30,
   },
   web: {
     mimeCandidates: [
@@ -57,6 +74,17 @@ export const PREFERRED_DAY_FILM = {
       'video/webm;codecs=vp8,opus',
       'video/mp4', // Safari — typically AAC audio when mic tracks present
     ],
-    getUserMedia: { video: true, audio: true },
+    /** Ideal constraints — mirrored in fieldcapture/js/capture-core.js. */
+    getUserMedia: {
+      video: {
+        facingMode: { ideal: 'environment' as const },
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        // ideal/max only in constraints; frameRateMin documents the soft floor
+        frameRate: { ideal: 30, max: 30 },
+      },
+      audio: true,
+    },
+    videoBitsPerSecond: 2_000_000,
   },
 };

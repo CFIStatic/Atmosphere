@@ -50,7 +50,7 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 
 1. Sign in (`POST /api/auth/login`) **or** open `?token=`
 2. Load today’s jobs (`GET /api/field-app/today`) or the shared job
-3. `getUserMedia({ video, audio: true })` + live `<video>` preview + `MediaRecorder` (mic required; iPhone needs playsinline + play())
+3. `getUserMedia` (~720p / ~30fps) + live `<video>` preview + `MediaRecorder` (~2 Mbps, mic required; iPhone needs playsinline + play())
 4. While the camera rolls, the film **streams to the office in parts**
    (`POST …/proof/upload-part-url` → `PUT` each ~8 MB slice as it fills)
 5. Hold 5 seconds to finish → the film is **saved on the phone** (IndexedDB)
