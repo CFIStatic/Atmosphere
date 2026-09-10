@@ -448,7 +448,6 @@ drop table if exists public.zip_centroids cascade;
 -- 8. Legacy credit-era usage ledger + public rate card (sold path uses
 --    token_usage_events + private.model_costs via quote_usage).
 -- ---------------------------------------------------------------------------
-drop view if exists public.usage_daily cascade;
 drop table if exists public.usage_daily cascade;
 drop table if exists public.usage_events cascade;
 drop table if exists public.model_rate_card cascade;
