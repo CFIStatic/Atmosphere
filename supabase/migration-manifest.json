@@ -156,7 +156,7 @@
     "20260909214444_job_proofs_clip_id.sql",
     "20260909220422_enable_rls_atmosphere_migrations.sql",
     "20260910165509_schema_visualizer_archive_schemas.sql",
-    "20260910165509_schema_visualizer_table_comments.sql",
+    "20260910165510_schema_visualizer_table_comments.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5199,8 +5199,8 @@
       "dropsCount": 0
     },
     {
-      "version": "20260910165509_schema_visualizer_table_comments",
-      "file": "20260910165509_schema_visualizer_table_comments.sql",
+      "version": "20260910165510_schema_visualizer_table_comments",
+      "file": "20260910165510_schema_visualizer_table_comments.sql",
       "structurallyVerifiable": false,
       "indistinguishableReason": "creates no durable object",
       "expect": [],
