@@ -10,6 +10,7 @@ import {
   PIPELINE_META,
   buildOverview,
   emptyPulse,
+  officeFailed,
   officePending,
   todayLine,
   type OverviewAction,
@@ -104,6 +105,10 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
     () => (loaded ? officePending(model.today) : null),
     [loaded, model.today],
   );
+  const failed = useMemo(
+    () => (loaded ? officeFailed(model.today) : null),
+    [loaded, model.today],
+  );
 
   return (
     <div
@@ -127,10 +132,19 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
         )}
       </div>
 
+      {failed ? (
+        <OfficeFailedBanner
+          failed={failed}
+          compact={phone}
+          onOpen={() => setStage('needs_review')}
+        />
+      ) : null}
+
       {pending ? (
         <OfficePendingBanner
           pending={pending}
           compact={phone}
+          tightTop={Boolean(failed)}
           onOpen={() => setStage('being_read')}
         />
       ) : null}
@@ -183,14 +197,47 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
 }
 
 
+function OfficeFailedBanner({
+  failed,
+  compact,
+  onOpen,
+}: {
+  failed: NonNullable<ReturnType<typeof officeFailed>>;
+  compact: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="office-failed"
+      onClick={onOpen}
+      className={cn(
+        'flex w-full items-start gap-3 rounded-xl border border-danger-200 bg-danger-50 text-left transition hover:bg-danger-50/80',
+        compact ? 'mt-3 shrink-0 px-3 py-2.5' : 'mt-6 px-4 py-3.5 sm:px-5',
+      )}
+      aria-label={failed.label}
+    >
+      <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-danger-600" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink-900">{failed.label}</span>
+        <span className="mt-0.5 block text-[13px] text-ink-600">{failed.detail}</span>
+      </span>
+      <span className="mt-0.5 shrink-0 text-xs font-medium text-danger-600">Retry</span>
+    </button>
+  );
+}
+
 function OfficePendingBanner({
   pending,
   compact,
   onOpen,
+  tightTop,
 }: {
   pending: NonNullable<ReturnType<typeof officePending>>;
   compact: boolean;
   onOpen: () => void;
+  /** When a failed banner already sits above, shrink the top gap. */
+  tightTop?: boolean;
 }) {
   return (
     <button
@@ -199,7 +246,9 @@ function OfficePendingBanner({
       onClick={onOpen}
       className={cn(
         'flex w-full items-start gap-3 rounded-xl border border-caution-200 bg-caution-50 text-left transition hover:bg-caution-50/80',
-        compact ? 'mt-3 shrink-0 px-3 py-2.5' : 'mt-6 px-4 py-3.5 sm:px-5',
+        compact
+          ? cn('shrink-0 px-3 py-2.5', tightTop ? 'mt-2' : 'mt-3')
+          : cn('px-4 py-3.5 sm:px-5', tightTop ? 'mt-3' : 'mt-6'),
       )}
       aria-label={pending.label}
     >

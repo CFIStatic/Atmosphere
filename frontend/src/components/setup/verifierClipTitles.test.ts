@@ -33,3 +33,13 @@ describe('Videos list clip titles', () => {
     );
   });
 });
+
+describe('verifier failed reading retry', () => {
+  it('exposes Try reading again for failed Scope of Work readings in org mode', () => {
+    expect(verifierHtml).toContain('data-retry-read');
+    expect(verifierHtml).toContain('Try reading again');
+    expect(verifierHtml).toContain("/retry-read");
+    expect(verifierHtml).toContain('function retryClipReading');
+  });
+});
+

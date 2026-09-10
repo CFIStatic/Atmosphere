@@ -436,6 +436,7 @@ export function todayLine(model: OverviewModel): string {
  * Office-visible pending film from the proof pulse: clips recently filed that
  * are still analysing or waiting to be read. Phone-local Uploading… is not
  * visible here until recordProof — this is the dashboard stand-in.
+ * Failed reads use officeFailed() so they stay danger-obvious, not caution.
  */
 export function officePending(today: OverviewModel['today']): {
   count: number;
@@ -451,5 +452,24 @@ export function officePending(today: OverviewModel['today']): {
     count,
     label: count === 1 ? '1 clip pending with the office' : `${count} clips pending with the office`,
     detail: parts.join(' · '),
+  };
+}
+
+/**
+ * Failed office reads — the yellow pending banner deliberately excludes these.
+ * Phone Overview has no Today stats card, so without this cue a failed-only
+ * pulse is easy to miss until someone opens Do this next.
+ */
+export function officeFailed(today: OverviewModel['today']): {
+  count: number;
+  label: string;
+  detail: string;
+} | null {
+  const count = today.failed;
+  if (count <= 0) return null;
+  return {
+    count,
+    label: count === 1 ? '1 clip failed to read' : `${count} clips failed to read`,
+    detail: 'Open Needs a look to retry the reading on the job file.',
   };
 }

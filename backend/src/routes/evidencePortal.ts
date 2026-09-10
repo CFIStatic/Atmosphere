@@ -237,6 +237,36 @@ function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
   return true;
 }
 
+/**
+ * Manual retry after auto-kick + one process retry already gave up.
+ * Clears in-process gates, re-queues narration, and starts a fresh read.
+ */
+async function forceRetryClipRead(admin: any, orgId: string, item: any): Promise<any> {
+  if (!admin || !item?.id) return item;
+  kickedThisProcess.delete(item.id);
+  retriedThisProcess.delete(item.id);
+  await admin
+    .from('job_proofs')
+    .update({
+      narration_status: 'queued',
+      narration_error: null,
+      analysis_status: 'queued',
+      analysis_error: null,
+    })
+    .eq('id', item.id);
+  const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
+  kickedThisProcess.add(item.id);
+  void queueProofTranscript(admin, item.id).catch(() => undefined);
+  void ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch((err) => {
+    console.warn('[library] clip retry failed:', err instanceof Error ? err.message : err);
+  });
+  const fresh = (await reloadEvidenceItem(admin, orgId, item.id)) ?? {
+    ...item,
+    analysisState: 'queued',
+  };
+  return { ...fresh, analysisState: 'queued' };
+}
+
 /** Dashboard open is enough — do not wait for someone to click the clip. */
 function kickUnreadLibraryReads(admin: any, orgId: string, items: any[]): number {
   if (!admin) return 0;
@@ -747,6 +777,40 @@ evidencePortalRouter.get(
       ]);
 
       res.json({ item, custody, frames });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
+/**
+ * POST /api/evidence-portal/evidence/:proofId/retry-read
+ *
+ * Failed / skipped Scope of Work readings only got one automatic process
+ * retry. This is the office button that tries again after that.
+ */
+evidencePortalRouter.post(
+  '/evidence/:proofId/retry-read',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId } = await requireOrgContext(req);
+      const { data: proof, error } = await supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'evidence_failed');
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const items = await assembleLibrary(supabase, orgId, [proof]);
+      const admin = writerForJob(
+        { orgId, jobId: (proof as any).job_id },
+        supabase,
+      ).raw;
+      const item = await forceRetryClipRead(admin, orgId, items[0]);
+      res.json({ item });
     } catch (err) {
       next(err);
     }

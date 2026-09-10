@@ -1549,6 +1549,18 @@
   }
   .analysis-status[data-status="failed"] .analysis-status-title { color: var(--fail); }
   .analysis-status .alog-wait { margin: 0; }
+  .analysis-retry {
+    margin-top: 10px; display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12.5px;
+    font-weight: 650; cursor: pointer;
+  }
+  .analysis-retry:hover { border-color: var(--ink-3); }
+  .analysis-retry[disabled] { opacity: 0.55; cursor: default; }
+  .analysis-status[data-status="failed"] .analysis-retry {
+    border-color: color-mix(in srgb, var(--fail) 35%, var(--line));
+    color: var(--fail);
+  }
   .analysis-skel { display: grid; gap: 8px; margin-bottom: 10px; }
   .analysis-skel span {
     display: block; height: 10px; border-radius: 6px;
@@ -4994,7 +5006,7 @@
     }
     if (a.state === 'failed') {
       if (pill) pill.textContent = 'Failed';
-      el.innerHTML = '<p style="color:var(--fail)">The dictation failed after retries. The footage itself is unaffected and can be re-read from the platform.</p>';
+      el.innerHTML = '<p style="color:var(--fail)">The dictation failed after retries. The footage itself is unaffected — use Try reading again under Scope of Work.</p>';
       return;
     }
     if (a.state === 'skipped' || a.state === 'none' || !a.state) {
@@ -5541,20 +5553,31 @@
   function renderAnalysisStatus(item, a) {
     var state = a.state || 'none';
     var failed = state === 'failed';
-    var pending = state === 'queued' || state === 'skipped' || state === 'none' || !state;
-    var title = failed ? 'Reading failed' : state === 'queued' ? 'Reading this clip' : 'No reading yet';
+    var skipped = state === 'skipped';
+    var pending = state === 'queued' || skipped || state === 'none' || !state;
+    var title = failed
+      ? 'Reading failed'
+      : state === 'queued'
+        ? 'Reading this clip'
+        : skipped
+          ? 'Reading skipped'
+          : 'No reading yet';
     var wait = a.reason || item.analysisError ||
       (failed
-        ? 'The reading failed after retries. The footage itself is unaffected.'
-        : state === 'skipped'
-          ? 'This clip could not be read. Open it again to retry, or check that a vision model key is on the server.'
+        ? 'The reading failed after retries. The footage itself is unaffected — try again below.'
+        : skipped
+          ? 'This clip could not be read. Try again below, or check that a vision model key is on the server.'
           : 'What the model sees will land here when the reading finishes.');
     var html = '<div class="analysis-status" data-status="' + (failed ? 'failed' : 'pending') + '">';
-    if (pending && !failed) {
+    if (pending && !failed && !skipped) {
       html += '<div class="analysis-skel" aria-hidden="true"><span></span><span></span><span></span></div>';
     }
     html += '<p class="analysis-status-title">' + esc(title) + '</p>';
-    html += '<p class="footnote alog-wait">' + esc(wait) + '</p></div>';
+    html += '<p class="footnote alog-wait">' + esc(wait) + '</p>';
+    if ((failed || skipped) && ORG_MODE) {
+      html += '<button type="button" class="analysis-retry" data-retry-read="' + esc(item.id) + '">Try reading again</button>';
+    }
+    html += '</div>';
     return html;
   }
 
@@ -6727,6 +6750,18 @@
   $('#d-close').addEventListener('click', function () { closePreview(); });
   var dBack = document.getElementById('d-back');
   if (dBack) dBack.addEventListener('click', function () { closePreview(); });
+  var detailRoot = document.getElementById('detail');
+  if (detailRoot) {
+    detailRoot.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-retry-read]') : null;
+      if (!btn) return;
+      ev.preventDefault();
+      var id = btn.getAttribute('data-retry-read');
+      var item = (state.open && state.open.id === id) ? state.open :
+        EVIDENCE.filter(function (e) { return e.id === id; })[0];
+      if (item) retryClipReading(item);
+    });
+  }
   var liquidGlass = document.querySelector('#detail .liquid-glass');
   if (liquidGlass) liquidGlass.addEventListener('click', function () { closePreview(); });
   document.addEventListener('keydown', function (e) {
@@ -6873,11 +6908,53 @@
     return settled;
   }
 
+  /** Office button after auto-kick + one process retry already gave up. */
+  function retryClipReading(item) {
+    if (!item || !ORG_MODE) return Promise.resolve(null);
+    var btn = document.querySelector('[data-retry-read="' + item.id + '"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Retrying…';
+    }
+    if (item._watchReading) {
+      clearInterval(item._watchReading);
+      item._watchReading = null;
+    }
+    return apiFetch('/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/retry-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then(function (r) {
+      if (!r.ok) throw new Error('retry');
+      return r.json();
+    }).then(function (payload) {
+      var mapped = payload && payload.item ? mapRemoteItem(payload.item, item.job) : null;
+      if (mapped) applyRemoteReading(item, mapped);
+      else {
+        item.analysisState = 'queued';
+        item.analysis = Object.assign({}, item.analysis || {}, { state: 'queued', reason: null });
+      }
+      if (state.open && state.open.id === item.id) {
+        renderDictation(item);
+        renderAnalysis(item);
+        if (state.tab === 'integrity') setTab('integrity');
+      }
+      watchRemoteReading(item);
+      return item;
+    }).catch(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Try reading again';
+      }
+      return null;
+    });
+  }
+
   /** Analysis reads the video. Keep asking the server until that reading lands. */
   function watchRemoteReading(item) {
     if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
     var next = item.analysis && item.analysis.state;
-    if (next === 'failed') return;
+    if (next === 'failed' || next === 'skipped') return;
     var tries = 0;
     item._watchReading = setInterval(function () {
       tries += 1;
