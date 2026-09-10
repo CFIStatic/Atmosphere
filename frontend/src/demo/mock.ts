@@ -75,7 +75,7 @@ const user = (): AuthUser => ({
   metadata: {},
 });
 
-const TERMS_VERSION = '2026-09-07';
+const TERMS_VERSION = '2026-09-10';
 const termsStatus = () => ({
   required: !state.termsAccepted,
   currentVersion: TERMS_VERSION,
@@ -1904,7 +1904,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { user: user(), terms: termsStatus() } };
   }],
   ['POST', /^\/api\/auth\/signup$/, (_m, b) => {
-    if (b.acceptedTermsVersion !== '2026-09-07') {
+    if (b.acceptedTermsVersion !== '2026-09-10') {
       return { status: 400, body: { error: 'Acknowledge the Terms of Service to continue.', code: 'terms_required' } };
     }
     state.signedIn = true; state.onboarded = false; state.fullName = null; state.avatarUrl = null;

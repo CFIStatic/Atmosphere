@@ -143,6 +143,12 @@ export function BillingSection() {
             ) : (
               <PlanPrice monthlyCents={sub.baseMonthlyFeeCents} className="mt-2" />
             )}
+            {!complimentary ? (
+              <p className="mt-2 text-xs text-ink-500">
+                Prices increase 10% annually on your plan anniversary (30-day notice). Includes seats and
+                usage.
+              </p>
+            ) : null}
           </div>
         </div>
 

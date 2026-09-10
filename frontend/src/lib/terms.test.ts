@@ -8,7 +8,7 @@ import {
 
 describe('terms version helpers', () => {
   it('matches the September 7 2026 public Terms of Use', () => {
-    expect(CURRENT_TERMS_VERSION).toBe('2026-09-07');
+    expect(CURRENT_TERMS_VERSION).toBe('2026-09-10');
     expect(TERMS_PUBLIC_URL).toBe('https://atmosphereteam.com/terms');
   });
 

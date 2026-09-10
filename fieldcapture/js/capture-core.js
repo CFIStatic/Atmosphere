@@ -740,7 +740,7 @@
     });
   }
 
-  var CURRENT_TERMS_VERSION = '2026-09-07';
+  var CURRENT_TERMS_VERSION = '2026-09-10';
 
   function loadAuthMe(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/auth/me', { accessToken: accessToken });
