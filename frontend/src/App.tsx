@@ -69,8 +69,8 @@ function TermsGate({ children }: { children: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <FullScreenSpinner />;
-  // Soft skip when this session already acknowledged the current Terms on login
-  // (version bumps still force re-ack via CURRENT_TERMS_VERSION mismatch).
+  // Soft skip when this session already acknowledged the current Terms (signup /
+  // modal accept). Version bumps still force re-ack via CURRENT_TERMS_VERSION mismatch.
   if (
     !user ||
     !needsTermsAcceptance ||

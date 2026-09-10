@@ -17,13 +17,11 @@ import {
   isFieldEmbedQuery,
   waitForParentFieldSession,
 } from '../lib/fieldEmbed';
-import { CURRENT_TERMS_VERSION } from '../lib/terms';
-import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
-  const { user, loading, membership, membershipLoading, login, unlockWithPin, logout, acceptTerms } =
+  const { user, loading, membership, membershipLoading, login, unlockWithPin, logout } =
     useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -44,7 +42,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [termsAcknowledged, setTermsAcknowledged] = useState(false);
 
   // --- PIN unlock -----------------------------------------------------------
   const [pinEnrolled, setPinEnrolled] = useState(false);
@@ -130,7 +127,7 @@ export function LoginPage() {
 
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
-  const canSubmit = emailValid && passwordValid && termsAcknowledged && !submitting;
+  const canSubmit = emailValid && passwordValid && !submitting;
   const pinUnlock = showPin && !user;
 
   function rejectPin(message: string) {
@@ -173,12 +170,8 @@ export function LoginPage() {
         await logout();
       }
       const nextMembership = await login(email.trim(), password);
-      // Record ToS once at login so the post-login TermsAcknowledgment gate does not repeat.
-      try {
-        await acceptTerms(CURRENT_TERMS_VERSION);
-      } catch {
-        // If the API fails, TermsGate still blocks until acceptance succeeds or version matches.
-      }
+      // Terms are acknowledged at signup (Create company). Version bumps still
+      // surface via TermsGate / TermsAcknowledgment — not a checkbox on every login.
       queueRedirect(postAuthDestination(nextMembership, redirectTo));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -373,12 +366,6 @@ export function LoginPage() {
                       </button>
                     </div>
                   </div>
-
-                  <TermsAckCheckbox
-                    id="login-tos"
-                    checked={termsAcknowledged}
-                    onChange={setTermsAcknowledged}
-                  />
 
                   <button
                     type="submit"

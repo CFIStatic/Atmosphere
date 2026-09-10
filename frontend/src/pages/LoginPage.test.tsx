@@ -22,7 +22,6 @@ const authState = vi.hoisted(() => ({
   login: vi.fn(),
   unlockWithPin: vi.fn(),
   logout: vi.fn(),
-  acceptTerms: vi.fn(),
 }));
 
 const queueRedirect = vi.hoisted(() => vi.fn());
@@ -78,7 +77,6 @@ describe('LoginPage', () => {
     authState.login.mockReset();
     authState.unlockWithPin.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
-    authState.acceptTerms.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
     pinStatus.mockReset().mockResolvedValue({ enrolled: false, lockedUntil: null });
     delete document.documentElement.dataset.fieldEmbed;
@@ -198,41 +196,33 @@ describe('LoginPage', () => {
     renderLogin('/login?switch=1');
     await user.type(screen.getByLabelText('Email'), 'new@acme.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
       expect(authState.login).toHaveBeenCalledWith('new@acme.com', 'password1');
     });
-    expect(authState.acceptTerms).toHaveBeenCalledWith('2026-09-10');
     expect(authState.logout).toHaveBeenCalledTimes(1);
     expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(
       authState.login.mock.invocationCallOrder[0]!,
     );
   });
 
-  it('requires Terms acknowledgment before Sign in and records acceptance', async () => {
+  it('does not show a Terms checkbox on Sign in (ack happens at create-account)', async () => {
     const user = userEvent.setup();
     authState.login.mockResolvedValue({ org: { id: 'org-1', name: 'Acme' } });
 
     renderLogin();
+    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Terms of Service' })).toBeNull();
+
     await user.type(screen.getByLabelText('Email'), 'new@acme.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
-    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
-      'href',
-      'https://atmosphereteam.com/terms',
-    );
-
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
       expect(authState.login).toHaveBeenCalledWith('new@acme.com', 'password1');
     });
-    expect(authState.acceptTerms).toHaveBeenCalledWith('2026-09-10');
     expect(queueRedirect).toHaveBeenCalled();
   });
 });
