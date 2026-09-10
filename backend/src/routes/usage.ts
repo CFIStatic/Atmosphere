@@ -4,7 +4,7 @@ import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
-import { HttpError, forbidden } from '../lib/errors.js';
+import { forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import { billingError, serializeBalance } from '../lib/billing.js';
 import { quoteUsageSchema, recordUsageSchema } from '../lib/validation.js';
@@ -132,35 +132,10 @@ usageRouter.post('/record', meterLimiter, async (req: Request, res: Response, ne
 });
 
 /** GET /api/usage/events — recent metered calls. */
-usageRouter.get('/events', async (req: Request, res: Response, next: NextFunction) => {
+usageRouter.get('/events', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await supabase
-      .from('usage_events')
-      .select(
-        'id, model_id, feature, input_tokens, output_tokens, cache_write_5m_tokens, cache_write_1h_tokens, cache_read_tokens, is_batch, price_nanos, created_at',
-      )
-      .eq('org_id', req.orgId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw new HttpError(500, error.message, 'usage_events_failed');
-
-    res.json({
-      events: (data ?? []).map((e: any) => ({
-        id: e.id,
-        modelId: e.model_id,
-        feature: e.feature,
-        inputTokens: Number(e.input_tokens),
-        outputTokens: Number(e.output_tokens),
-        cacheTokens:
-          Number(e.cache_write_5m_tokens) + Number(e.cache_write_1h_tokens) + Number(e.cache_read_tokens),
-        isBatch: e.is_batch,
-        priceNanos: toNanos(e.price_nanos),
-        createdAt: e.created_at,
-      })),
-    });
+    // events table dropped — sold path uses token_usage_events / metering.
+    res.json({ events: [] });
   } catch (err) {
     next(err);
   }
@@ -171,31 +146,10 @@ usageRouter.get('/events', async (req: Request, res: Response, next: NextFunctio
  * Pre-aggregated daily totals for the usage chart. Reads the rollup table
  * maintained by trigger, so this never scans the raw event stream.
  */
-usageRouter.get('/daily', async (req: Request, res: Response, next: NextFunction) => {
+usageRouter.get('/daily', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const supabase = createUserClient(req.accessToken!);
-
-    const { data, error } = await supabase
-      .from('usage_daily')
-      .select('day, model_id, events, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, price_nanos')
-      .eq('org_id', req.orgId)
-      .gte('day', since)
-      .order('day', { ascending: true });
-    if (error) throw new HttpError(500, error.message, 'usage_daily_failed');
-
-    res.json({
-      days: (data ?? []).map((d: any) => ({
-        day: d.day,
-        modelId: d.model_id,
-        events: Number(d.events),
-        inputTokens: Number(d.input_tokens),
-        outputTokens: Number(d.output_tokens),
-        cacheTokens: Number(d.cache_write_tokens) + Number(d.cache_read_tokens),
-        priceNanos: toNanos(d.price_nanos),
-      })),
-    });
+    // daily table dropped — sold path uses token_usage_events / metering.
+    res.json({ days: [] });
   } catch (err) {
     next(err);
   }

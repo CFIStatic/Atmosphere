@@ -8,13 +8,11 @@ import { orgRouter } from './routes/org.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { telemetryRouter } from './routes/telemetry.js';
 import { profileRouter } from './routes/profile.js';
-import { auditRouter } from './routes/audit.js';
 import { jobsRouter } from './routes/jobs.js';
 import { memoryRouter } from './routes/memory.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { meteringRouter } from './routes/metering.js';
-import { portalRouter } from './portal/routes.js';
 import { webhookRouter } from './routes/webhooks.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { placesRouter } from './routes/places.js';
@@ -32,7 +30,6 @@ import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
-import { geometryRouter } from './routes/geometry.js';
 import { legalRouter } from './routes/legal.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
@@ -123,7 +120,8 @@ export function createApp(): Express {
   // signature can no longer be verified. (The chooser below then skips it:
   // body-parser leaves an already-parsed request alone.)
   app.use('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }));
-  // Same posture for @atmosphere mention bridges (iMessage / WhatsApp / Signal).
+  // Mention webhook raw parser kept only if route remains; PM tables are gone.
+  // Route itself returns 410 below in webhooks.ts.
   app.use(
     '/api/webhooks/atmosphere-mention',
     express.raw({ type: 'application/json', limit: '1mb' }),
@@ -160,7 +158,7 @@ export function createApp(): Express {
   app.use('/api/legal', legalRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
-  app.use('/api/audit', auditRouter);
+  // /api/audit unmounted — agent_runs ledger dropped (non-sold-path).
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/billing', billingRouter);
@@ -185,8 +183,7 @@ export function createApp(): Express {
   // reason: the person clicking is a subcontractor who never had an account,
   // and a shared job record that requires signing in is not shared.
   app.use('/api/job-share', jobShareRouter);
-  // HomeOwner Report: staff management + tokenized guest access.
-  app.use('/api/portal', portalRouter);
+  // /api/portal unmounted — homeowner_portal_* + pm_* dropped (non-sold-path).
   // Also outside auth, and for a sharper version of the same reason: this is
   // where a subcontractor turns a pile of per-job links from several general
   // contractors into one list. They hold a session of their own, not a seat
@@ -199,8 +196,7 @@ export function createApp(): Express {
   app.use('/api/media/video', mediaVideoRouter);
   // Fleet catalog: many ≤24h objects in object storage (hot/warm/cold).
   app.use('/api/media/catalog', mediaCatalogRouter);
-  // App Store Field Capture: RoomPlan/ARKit/LiDAR rooms + video → property twin.
-  app.use('/api/geometry', geometryRouter);
+  // /api/geometry unmounted — property_twins / geometry_capture_sessions dropped.
   // Deliberately outside every auth middleware: the person clicking is a
   // recipient who never had an account, and an unsubscribe link that requires
   // signing in is not one. An old mail still has to work (CAN-SPAM).

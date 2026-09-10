@@ -73,6 +73,9 @@ const REMOVED_PATHS = [
   '/api/xactimate',
   '/api/symbility',
   '/api/crm-sync',
+  '/api/portal',
+  '/api/geometry',
+  '/api/audit',
 ];
 
 test('removed product APIs are gone, not gated', async () => {

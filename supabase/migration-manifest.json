@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 143,
+    "migrationCount": 144,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -157,6 +157,7 @@
     "20260909220422_enable_rls_atmosphere_migrations.sql",
     "20260910165509_schema_visualizer_archive_schemas.sql",
     "20260910165510_schema_visualizer_table_comments.sql",
+    "20260910190000_drop_unused_non_sold_path_tables.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5207,6 +5208,16 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20260910190000_drop_unused_non_sold_path_tables",
+      "file": "20260910190000_drop_unused_non_sold_path_tables.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 80
     },
     {
       "version": "20260807194500_verifier_share_kind",

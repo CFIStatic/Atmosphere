@@ -283,13 +283,9 @@ verificationRouter.get('/jobs/:jobId/workflow', async (req, res, next) => {
   try {
     const { orgId, supabase } = orgReq(req);
     const jobId = z.string().uuid().parse(req.params.jobId);
-    const { data, error } = await supabase
-      .from('workflow_relationships')
-      .select('id, from_event_id, to_event_id, relation, confidence, provenance, created_at')
-      .eq('org_id', orgId)
-      .eq('job_id', jobId);
-    if (error) throw new Error(error.message);
-    res.json({ jobId, relationships: data ?? [] });
+    // workflow_relationships dropped
+    void orgId; void supabase;
+    res.json({ jobId, relationships: [] });
   } catch (err) {
     next(toHttp(err));
   }
@@ -322,19 +318,14 @@ verificationRouter.post('/jobs/:jobId/outcomes', async (req, res, next) => {
 verificationRouter.get('/ontology', async (req, res, next) => {
   try {
     const { supabase } = orgReq(req);
-    const [activities, states, materials, equipment, damage] = await Promise.all([
-      supabase.from('work_ontology_activities').select('id, trade_id, name, description, version'),
-      supabase.from('work_ontology_states').select('id, name, kind, version'),
-      supabase.from('work_ontology_materials').select('id, name, version'),
-      supabase.from('work_ontology_equipment').select('id, name, version'),
-      supabase.from('work_ontology_damage_types').select('id, name, version'),
-    ]);
+    // work_ontology_* dropped
+    void supabase;
     res.json({
-      activities: activities.data ?? [],
-      states: states.data ?? [],
-      materials: materials.data ?? [],
-      equipment: equipment.data ?? [],
-      damageTypes: damage.data ?? [],
+      activities: [],
+      states: [],
+      materials: [],
+      equipment: [],
+      damageTypes: [],
     });
   } catch (err) {
     next(toHttp(err));
@@ -413,14 +404,10 @@ verificationRouter.get('/datasets/versions/:versionId/examples', async (req, res
   try {
     const { orgId, supabase } = orgReq(req);
     const versionId = z.string().uuid().parse(req.params.versionId);
-    const { data, error } = await supabase
-      .from('dataset_examples')
-      .select('id, split, task_type, quality_score, privacy_status, canonical, created_at')
-      .eq('org_id', orgId)
-      .eq('dataset_version_id', versionId)
-      .order('created_at', { ascending: true });
-    if (error) throw new Error(error.message);
-    res.json({ examples: data ?? [] });
+    // dataset_* tables dropped
+    void orgId; void supabase; void versionId;
+    res.json({ examples: [] });
+
   } catch (err) {
     next(toHttp(err));
   }

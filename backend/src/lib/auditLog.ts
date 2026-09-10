@@ -199,36 +199,11 @@ function fail(scope: string, message: string): AuditResult<never> {
 
 /** Opens a run and returns its id. */
 export async function startRun(
-  supabase: SupabaseClient | null,
-  input: StartRunInput,
+  _supabase: SupabaseClient | null,
+  _input: StartRunInput,
 ): Promise<AuditResult<{ id: string }>> {
-  if (!supabase) return fail('startRun', 'no audit writer available');
-  try {
-    const { data, error } = await supabase
-      .from('agent_runs')
-      .insert({
-        org_id: input.orgId,
-        agent_key: input.agentKey,
-        agent_label: clip(input.agentLabel, LIMITS.agentLabel),
-        actor_type: input.actorType ?? 'user',
-        actor_user_id: input.actorUserId ?? null,
-        actor_label: clip(input.actorLabel, LIMITS.actorLabel),
-        parent_run_id: input.parentRunId ?? null,
-        title: clip(input.title, LIMITS.title) ?? 'Untitled run',
-        status: input.status ?? 'running',
-        input: preparePayload(input.input),
-        source_table: input.sourceTable ?? null,
-        source_id: input.sourceId ?? null,
-        started_at: input.startedAt ?? new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (error) return fail('startRun', error.message);
-    return { ok: true, data: { id: data.id as string } };
-  } catch (err) {
-    return fail('startRun', err instanceof Error ? err.message : 'unexpected failure');
-  }
+  // agent_runs dropped — /api/audit unmounted; soft-fail leftover callers.
+  return fail('startRun', 'agent_runs_gone');
 }
 
 /** Appends one step to a run's trace. */
@@ -244,109 +219,31 @@ export async function recordStep(
   return { ok: true, data: results.data[0] };
 }
 
-/**
- * Appends several steps in one round trip.
- *
- * Steps without an explicit `seq` are numbered by a database trigger, which
- * reads the current maximum per run — so a batch has to number itself, or every
- * row in it would claim the same position and all but one would be rejected.
- */
+/** Appends several steps in one round trip. */
 export async function recordSteps(
-  supabase: SupabaseClient | null,
-  runId: string,
-  steps: StepInput[],
+  _supabase: SupabaseClient | null,
+  _runId: string,
+  _steps: StepInput[],
 ): Promise<AuditResult<{ id: string; seq: number }[]>> {
-  if (!supabase) return fail('recordSteps', 'no audit writer available');
-  if (!steps.length) return { ok: true, data: [] };
-
-  try {
-    let nextSeq: number | null = null;
-    if (steps.length > 1 && steps.some((step) => step.seq === undefined)) {
-      const { data } = await supabase
-        .from('agent_run_steps')
-        .select('seq')
-        .eq('run_id', runId)
-        .order('seq', { ascending: false })
-        .limit(1);
-      nextSeq = ((data?.[0]?.seq as number | undefined) ?? 0) + 1;
-    }
-
-    const rows = steps.map((step, index) => ({
-      run_id: runId,
-      seq: step.seq ?? (nextSeq === null ? undefined : nextSeq + index),
-      type: step.type ?? 'event',
-      action: clip(step.action, LIMITS.action),
-      detail: clip(step.detail, LIMITS.detail),
-      target: clip(step.target, LIMITS.target),
-      payload: preparePayload(step.payload),
-      status: step.status ?? (step.error ? 'error' : 'ok'),
-      error: clip(step.error, LIMITS.error),
-      started_at: step.startedAt ?? null,
-      finished_at: step.finishedAt ?? null,
-      duration_ms: step.durationMs ?? null,
-    }));
-
-    const { data, error } = await supabase.from('agent_run_steps').insert(rows).select('id, seq');
-    if (error) return fail('recordSteps', error.message);
-    return { ok: true, data: (data ?? []) as { id: string; seq: number }[] };
-  } catch (err) {
-    return fail('recordSteps', err instanceof Error ? err.message : 'unexpected failure');
-  }
+  return fail('recordSteps', 'agent_run_steps_gone');
 }
 
-/**
- * Closes a run.
- *
- * Token counters are absolute totals, not deltas: the database refuses to let
- * them fall, so a caller that reports a running total on every update stays
- * consistent while one reporting deltas would not.
- */
+/** Closes a run. */
 export async function finishRun(
-  supabase: SupabaseClient | null,
-  runId: string,
-  outcome: FinishRunInput,
+  _supabase: SupabaseClient | null,
+  _runId: string,
+  _outcome: FinishRunInput,
 ): Promise<AuditResult> {
-  if (!supabase) return fail('finishRun', 'no audit writer available');
-  try {
-    const patch: Record<string, unknown> = {
-      status: outcome.status,
-      finished_at: outcome.finishedAt ?? new Date().toISOString(),
-    };
-    if (outcome.summary !== undefined) patch.summary = clip(outcome.summary, LIMITS.summary);
-    if (outcome.result !== undefined) patch.result = preparePayload(outcome.result);
-    if (outcome.error !== undefined) patch.error = clip(outcome.error, LIMITS.error);
-    if (outcome.inputTokens !== undefined) patch.input_tokens = Math.max(0, outcome.inputTokens);
-    if (outcome.outputTokens !== undefined) patch.output_tokens = Math.max(0, outcome.outputTokens);
-
-    const { error } = await supabase.from('agent_runs').update(patch).eq('id', runId);
-    if (error) return fail('finishRun', error.message);
-    return { ok: true };
-  } catch (err) {
-    return fail('finishRun', err instanceof Error ? err.message : 'unexpected failure');
-  }
+  return fail('finishRun', 'agent_runs_gone');
 }
 
 /** Reports progress on a run without closing it. */
 export async function updateRun(
-  supabase: SupabaseClient | null,
-  runId: string,
-  patch: { status?: RunStatus; summary?: string | null; inputTokens?: number; outputTokens?: number },
+  _supabase: SupabaseClient | null,
+  _runId: string,
+  _patch: { status?: RunStatus; summary?: string | null; inputTokens?: number; outputTokens?: number },
 ): Promise<AuditResult> {
-  if (!supabase) return fail('updateRun', 'no audit writer available');
-  try {
-    const body: Record<string, unknown> = {};
-    if (patch.status !== undefined) body.status = patch.status;
-    if (patch.summary !== undefined) body.summary = clip(patch.summary, LIMITS.summary);
-    if (patch.inputTokens !== undefined) body.input_tokens = Math.max(0, patch.inputTokens);
-    if (patch.outputTokens !== undefined) body.output_tokens = Math.max(0, patch.outputTokens);
-    if (!Object.keys(body).length) return { ok: true };
-
-    const { error } = await supabase.from('agent_runs').update(body).eq('id', runId);
-    if (error) return fail('updateRun', error.message);
-    return { ok: true };
-  } catch (err) {
-    return fail('updateRun', err instanceof Error ? err.message : 'unexpected failure');
-  }
+  return fail('updateRun', 'agent_runs_gone');
 }
 
 /**
