@@ -164,8 +164,12 @@ exposes a fallback hostname (`https://website-production-7e3f.up.railway.app`)
 — do not put that host in sitemap, robots, or Open Graph.
 
 `.github/workflows/deploy-website.yml` ships this directory there on every
-push to `main` that touches `website/`. GitHub Pages is an optional second
-host and is **not enabled** on the repo today. See `docs/production.md` →
+push to `main` that touches `website/`. GitHub Autodeploy may already ship
+the same commit; `railwayUp.sh` treats a watch-path skip as success when a
+SUCCESS deploy already matches `HEAD` (the CI stamp
+`website/.railway-up-stamp` is untracked and must not be gitignored, or it
+never reaches the upload). GitHub Pages is an optional second host and is
+**not enabled** on the repo today. See `docs/production.md` →
 "Get the corporate website working" to attach the custom domain.
 
 The first Pages run enables Pages on the repo; if the token lacks permission
