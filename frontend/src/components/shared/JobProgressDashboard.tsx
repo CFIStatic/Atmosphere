@@ -4,58 +4,19 @@ import { ProofOfWork } from './ProofOfWork';
 import { SpinnerIcon } from '../icons';
 import {
   buildJobProgressStory,
+  buildUpToSpeedSummary,
   type StoryItem,
   type StoryTone,
 } from './jobProgressStory';
 import { siteLine } from '../../lib/jobFileAsk';
 
 /**
- * The job record as a timeline: what is happening now, what has already
- * happened on site, and what is still ahead.
+ * Homeowner-clear job progress: up to speed → meter → attention →
+ * happening / finished / still to do. Shared by office /job-progress and
+ * guest /progress/:token. Does not own Ask/chat chrome.
  */
 
-function headline(input: {
-  happeningNow: number;
-  daysLogged: number;
-  attention: number;
-  donePct: number;
-}): { title: string; detail: string; tone: StoryTone } {
-  if (input.attention > 0) {
-    return {
-      title: 'Needs your attention',
-      detail: `${input.attention} item${input.attention === 1 ? '' : 's'} waiting on a decision before work can continue smoothly.`,
-      tone: 'danger',
-    };
-  }
-  if (input.happeningNow > 0) {
-    return {
-      title: 'Work happening on site',
-      detail: 'Crews are on site or a work item is in progress. End-of-day video will land here when they finish.',
-      tone: 'caution',
-    };
-  }
-  if (input.daysLogged === 0) {
-    return {
-      title: 'Waiting for the first update',
-      detail: 'Nothing has been filmed yet. What is queued to do is listed under What’s next.',
-      tone: 'neutral',
-    };
-  }
-  if (input.donePct >= 90) {
-    return {
-      title: 'Nearly complete',
-      detail: `${input.donePct}% of the tracked work is done.`,
-      tone: 'success',
-    };
-  }
-  return {
-    title: 'Work is moving forward',
-    detail: `${input.daysLogged} day${input.daysLogged === 1 ? '' : 's'} of field updates on record.`,
-    tone: 'success',
-  };
-}
-
-const HEADLINE_STYLE: Record<StoryTone, string> = {
+const SUMMARY_STYLE: Record<StoryTone, string> = {
   success: 'border-success-200 bg-success-50 text-success-700',
   caution: 'border-caution-200 bg-caution-50 text-caution-700',
   danger: 'border-danger-200 bg-danger-50 text-danger-700',
@@ -97,7 +58,7 @@ function StorySection({
 }: {
   id: string;
   title: string;
-  hint: string;
+  hint?: string;
   items: StoryItem[];
   empty: string;
   footer?: ReactNode;
@@ -105,7 +66,7 @@ function StorySection({
   return (
     <section id={id} className="rounded-xl glass-card p-5 scroll-mt-4">
       <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-      <p className="mt-0.5 text-xs text-ink-500">{hint}</p>
+      {hint ? <p className="mt-0.5 text-xs text-ink-500">{hint}</p> : null}
       {items.length === 0 ? (
         <p className="mt-4 rounded-lg border border-line px-4 py-6 text-center text-sm text-ink-600">
           {empty}
@@ -198,11 +159,9 @@ export function JobProgressDashboard({
     [record.scope, record.risks, proof],
   );
 
-  const daysLoggedComputed = proof?.counts.days ?? 0;
   const verifiedDaysComputed = proof?.days.filter((d) => d.payable || d.accepted).length ?? 0;
   const inProgressComputed = proof?.days.filter((d) => !d.hasAfter && d.hasBefore).length ?? 0;
 
-  const daysLogged = metricsOverride?.daysLogged ?? daysLoggedComputed;
   const verifiedDays = metricsOverride?.verifiedDays ?? verifiedDaysComputed;
   const inProgress = metricsOverride?.inProgress ?? inProgressComputed;
 
@@ -226,13 +185,7 @@ export function JobProgressDashboard({
         ? Math.round((doneCount / trackedCount) * 100)
         : 0;
 
-  const attentionCount = story.happening.filter((i) => i.kind === 'attention').length;
-  const status = headline({
-    happeningNow: happeningCount,
-    daysLogged,
-    attention: attentionCount,
-    donePct,
-  });
+  const summary = useMemo(() => buildUpToSpeedSummary(story), [story]);
   const siteAddress = siteLine(record);
 
   const nextItems =
@@ -277,15 +230,20 @@ export function JobProgressDashboard({
           </div>
         ) : (
           <>
-            <div className={`mt-5 rounded-xl border px-4 py-3.5 ${HEADLINE_STYLE[status.tone]}`}>
-              <p className="text-base font-semibold">{status.title}</p>
-              <p className="mt-0.5 text-sm opacity-90">{status.detail}</p>
+            <div
+              className={`mt-5 rounded-xl border px-4 py-3.5 ${SUMMARY_STYLE[summary.tone]}`}
+              data-testid="job-progress-up-to-speed"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Up to speed</p>
+              <p className="mt-1 text-sm sm:text-base font-medium leading-relaxed">{summary.text}</p>
             </div>
 
             {trackedCount > 0 && (
-              <div className="mt-5">
+              <div className="mt-5" data-testid="job-progress-meter">
                 <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="font-medium text-ink-800">Overall progress</span>
+                  <span className="font-medium text-ink-800">
+                    {doneCount} of {trackedCount} complete
+                  </span>
                   <span className="tabular-nums font-semibold text-ink-900">{donePct}%</span>
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-paper-200">
@@ -295,49 +253,41 @@ export function JobProgressDashboard({
                   />
                 </div>
                 <p className="mt-1.5 text-xs text-ink-500">
-                  {doneCount} of {trackedCount} work items done
+                  {happeningCount} happening · {doneCount} finished · {nextItems.length || nextCount}{' '}
+                  still to do
                   {story.exclusionCount > 0
                     ? ` · ${story.exclusionCount} out of scope`
                     : ''}
                 </p>
               </div>
             )}
-
-            <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
-              {(
-                [
-                  ['happening', 'Happening now', happeningCount, happeningCount > 0 ? 'text-caution-600' : 'text-ink-900'],
-                  ['happened', 'Already done', doneCount, 'text-success-600'],
-                  ['next', 'Still ahead', nextItems.length || nextCount, 'text-ink-900'],
-                ] as const
-              ).map(([target, label, value, valueClass]) => (
-                <div key={target} className="rounded-lg border border-line bg-paper-50/40 px-2 py-3">
-                  <dt className="text-xs text-ink-500">
-                    <a href={`#${target}`} className="hover:text-ink-800">
-                      {label}
-                    </a>
-                  </dt>
-                  <dd className={`mt-0.5 text-2xl font-semibold tabular-nums ${valueClass}`}>{value}</dd>
-                </div>
-              ))}
-            </dl>
           </>
         )}
       </section>
 
       {!loading && (
         <>
+          {story.attention.length > 0 ? (
+            <StorySection
+              id="attention"
+              title="Needs your attention"
+              hint="Decisions or issues that should be handled before work continues smoothly."
+              items={story.attention}
+              empty=""
+            />
+          ) : null}
+
           <StorySection
             id="happening"
             title="Happening now"
-            hint="Crews on site, work in progress, and anything that needs a decision today."
+            hint="Crews on site and work in progress."
             items={story.happening}
-            empty="Nothing on site right now. Crews have not started filming, and nothing is waiting on a decision."
+            empty="Nothing on site right now."
           />
 
           <StorySection
             id="happened"
-            title="What happened"
+            title="Already finished"
             hint="Verified days and work that is already done."
             items={story.happened}
             empty="Nothing completed yet. Each day, crews film before they start and again when they finish — those days will show up here."
@@ -356,10 +306,10 @@ export function JobProgressDashboard({
 
           <StorySection
             id="next"
-            title="What’s next"
+            title="Still to do"
             hint="Work that has not started yet, in the order it is queued."
             items={nextItems}
-            empty="Nothing left on the list — remaining work will show here if the scope grows."
+            empty="Nothing left on the list."
             footer={
               story.exclusionCount > 0 ? (
                 <p className="mt-3 text-xs text-ink-500">

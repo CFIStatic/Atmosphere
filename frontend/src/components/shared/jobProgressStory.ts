@@ -13,6 +13,8 @@ export type StoryItem = {
 };
 
 export type JobProgressStory = {
+  /** Blockers / warnings that need a homeowner or office decision. */
+  attention: StoryItem[];
   happening: StoryItem[];
   happened: StoryItem[];
   next: StoryItem[];
@@ -21,6 +23,12 @@ export type JobProgressStory = {
   /** Happened + happening + next work items (exclusions omitted). */
   trackedCount: number;
   exclusionCount: number;
+};
+
+export type UpToSpeedSummary = {
+  /** One or two plain sentences for a homeowner. */
+  text: string;
+  tone: StoryTone;
 };
 
 type ScopeLike = Pick<JobScopeItem, 'id' | 'state' | 'title' | 'detail' | 'reason'>;
@@ -133,8 +141,96 @@ function bucketForScope(state: ScopeState, verdict: string | undefined): 'happen
   return 'next';
 }
 
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? one : many;
+}
+
 /**
- * Split a job into happening now / already done / still ahead.
+ * One or two plain sentences so a homeowner is brought up to speed.
+ * Leads with attention when something needs a decision.
+ */
+export function buildUpToSpeedSummary(story: JobProgressStory): UpToSpeedSummary {
+  const sentences: string[] = [];
+  let tone: StoryTone = 'neutral';
+
+  const dangerAttention = story.attention.filter((i) => i.tone === 'danger');
+  if (dangerAttention.length > 0) {
+    const first = dangerAttention[0].title;
+    sentences.push(
+      dangerAttention.length === 1
+        ? `Needs your attention: ${first}.`
+        : `Needs your attention: ${first} (+${dangerAttention.length - 1} more).`,
+    );
+    tone = 'danger';
+  } else if (story.attention.length > 0) {
+    const first = story.attention[0].title;
+    sentences.push(
+      story.attention.length === 1
+        ? `Worth a look: ${first}.`
+        : `Worth a look: ${first} (+${story.attention.length - 1} more).`,
+    );
+    tone = 'caution';
+  }
+
+  const progressBits: string[] = [];
+  if (story.trackedCount > 0) {
+    progressBits.push(
+      `Crews finished ${story.doneCount} of ${story.trackedCount} work ${plural(story.trackedCount, 'item', 'items')}`,
+    );
+    if (tone === 'neutral' && story.doneCount > 0) tone = 'success';
+  } else if (story.happened.length === 0 && story.happening.length === 0) {
+    progressBits.push('Nothing has been filmed yet');
+  } else if (story.happened.length > 0) {
+    progressBits.push(
+      `${story.happened.length} field ${plural(story.happened.length, 'update is', 'updates are')} on record`,
+    );
+    if (tone === 'neutral') tone = 'success';
+  }
+
+  const onSiteNow = story.happening.filter((i) => i.kind === 'day');
+  const inProgressScope = story.happening.filter((i) => i.kind === 'scope');
+  if (onSiteNow.length > 0) {
+    progressBits.push(
+      onSiteNow.length === 1
+        ? `${onSiteNow[0].title} is on site now`
+        : `${onSiteNow.length} crews are on site right now`,
+    );
+    if (tone === 'neutral' || tone === 'success') tone = 'caution';
+  } else if (inProgressScope.length > 0) {
+    progressBits.push(
+      inProgressScope.length === 1
+        ? `In progress: ${inProgressScope[0].title}`
+        : `${inProgressScope.length} work items are in progress`,
+    );
+    if (tone === 'neutral' || tone === 'success') tone = 'caution';
+  } else if (story.trackedCount > 0 || story.happened.length > 0) {
+    progressBits.push('Nothing is on site today');
+    if (story.next.length > 0) {
+      const nextTitle = story.next[0].title;
+      const more = story.next.length > 1 ? ` (+${story.next.length - 1} more)` : '';
+      progressBits.push(`Next up: ${nextTitle}${more}`);
+    }
+  } else if (story.next.length > 0) {
+    const nextTitle = story.next[0].title;
+    const more = story.next.length > 1 ? ` (+${story.next.length - 1} more)` : '';
+    progressBits.push(`Next up: ${nextTitle}${more}`);
+  }
+
+  if (progressBits.length > 0) {
+    // Fold progress + now/next into one sentence so the banner stays to ~2 lines.
+    const joined =
+      progressBits.length === 1
+        ? `${progressBits[0]}.`
+        : `${progressBits[0]}. ${progressBits.slice(1).join('. ')}.`.replace(/\.\./g, '.');
+    sentences.push(joined);
+  }
+
+  const text = sentences.slice(0, 2).join(' ').trim();
+  return { text: text || 'Checking the latest job updates.', tone };
+}
+
+/**
+ * Split a job into attention / happening now / already done / still ahead.
  * Exclusions stay out of the timeline — they are constraints, not work.
  */
 export function buildJobProgressStory(input: {
@@ -142,6 +238,7 @@ export function buildJobProgressStory(input: {
   days: DayLike[];
   risks: RiskLike[];
 }): JobProgressStory {
+  const attention: StoryItem[] = [];
   const happening: StoryItem[] = [];
   const happened: StoryItem[] = [];
   const next: StoryItem[] = [];
@@ -150,7 +247,7 @@ export function buildJobProgressStory(input: {
 
   for (const risk of input.risks) {
     if (risk.level !== 'blocker' && risk.level !== 'warn') continue;
-    happening.push({
+    attention.push({
       id: `attention:${risk.key ?? risk.title}`,
       title: risk.title,
       detail: risk.action,
@@ -186,10 +283,12 @@ export function buildJobProgressStory(input: {
   if (input.scope.length === 0) {
     for (const [titleKey, v] of verdicts) {
       if (knownTitles.has(titleKey)) continue;
-      const title = [...(input.days.flatMap((d) => [
-        ...(d.aiFindings?.scopeVerdicts ?? []).map((x) => x.title),
-        ...(d.aiFindings?.scopeTouched ?? []),
-      ]))].find((t) => norm(t) === titleKey);
+      const title = [
+        ...input.days.flatMap((d) => [
+          ...(d.aiFindings?.scopeVerdicts ?? []).map((x) => x.title),
+          ...(d.aiFindings?.scopeTouched ?? []),
+        ]),
+      ].find((t) => norm(t) === titleKey);
       if (!title) continue;
       const synthetic: ScopeLike = {
         id: `from-proof:${titleKey}`,
@@ -214,11 +313,10 @@ export function buildJobProgressStory(input: {
   const doneCount =
     trackedFromScope > 0 ? scopeHappened : finishedDays.filter((d) => d.accepted || d.payable).length;
   const trackedCount =
-    trackedFromScope > 0
-      ? trackedFromScope
-      : onSiteDays.length + finishedDays.length;
+    trackedFromScope > 0 ? trackedFromScope : onSiteDays.length + finishedDays.length;
 
   return {
+    attention,
     happening,
     happened,
     next,
