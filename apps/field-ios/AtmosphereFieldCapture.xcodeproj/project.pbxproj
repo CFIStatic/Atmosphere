@@ -30,6 +30,10 @@
 		AFC000000000000000000211 /* AtmosphereBarsMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000111 /* AtmosphereBarsMark.swift */; };
 		AFC000000000000000000212 /* FieldModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000112 /* FieldModels.swift */; };
 		AFC000000000000000000213 /* AtmosphereFieldCaptureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000101 /* AtmosphereFieldCaptureApp.swift */; };
+		AFC00000000000000000021B /* ClipId.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011B /* ClipId.swift */; };
+		AFC00000000000000000021C /* DayFilmQueueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011C /* DayFilmQueueModels.swift */; };
+		AFC00000000000000000021D /* DayFilmQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011D /* DayFilmQueueStore.swift */; };
+		AFC00000000000000000021E /* DayFilmUploadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011E /* DayFilmUploadQueue.swift */; };
 		AFC000000000000000000215 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000115 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +64,10 @@
 		AFC000000000000000000112 /* FieldModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldModels.swift; sourceTree = "<group>"; };
 		AFC000000000000000000113 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AFC000000000000000000114 /* FieldCapture.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FieldCapture.entitlements; sourceTree = "<group>"; };
+		AFC00000000000000000011B /* ClipId.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipId.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011C /* DayFilmQueueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmQueueModels.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011D /* DayFilmQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmQueueStore.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011E /* DayFilmUploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmUploadQueue.swift; sourceTree = "<group>"; };
 		AFC000000000000000000115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -98,6 +106,7 @@
 				AFC000000000000000000014 /* Location */,
 				AFC000000000000000000015 /* Geometry */,
 				AFC000000000000000000016 /* Network */,
+				AFC00000000000000000001B /* Queue */,
 				AFC000000000000000000017 /* Session */,
 				AFC000000000000000000018 /* UI */,
 				AFC000000000000000000019 /* Theme */,
@@ -107,6 +116,16 @@
 				AFC000000000000000000114 /* FieldCapture.entitlements */,
 			);
 			path = AtmosphereFieldCapture;
+			sourceTree = "<group>";
+		};
+		AFC00000000000000000001B /* Queue */ = {
+			isa = PBXGroup;
+			children = (
+				AFC00000000000000000011C /* DayFilmQueueModels.swift */,
+				AFC00000000000000000011D /* DayFilmQueueStore.swift */,
+				AFC00000000000000000011E /* DayFilmUploadQueue.swift */,
+			);
+			path = Queue;
 			sourceTree = "<group>";
 		};
 		AFC000000000000000000013 /* Capture */ = {
@@ -183,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				AFC000000000000000000112 /* FieldModels.swift */,
+				AFC00000000000000000011B /* ClipId.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -279,6 +299,10 @@
 				AFC000000000000000000210 /* FieldTheme.swift in Sources */,
 				AFC000000000000000000211 /* AtmosphereBarsMark.swift in Sources */,
 				AFC000000000000000000212 /* FieldModels.swift in Sources */,
+				AFC00000000000000000021B /* ClipId.swift in Sources */,
+				AFC00000000000000000021C /* DayFilmQueueModels.swift in Sources */,
+				AFC00000000000000000021D /* DayFilmQueueStore.swift in Sources */,
+				AFC00000000000000000021E /* DayFilmUploadQueue.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

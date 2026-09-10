@@ -102,8 +102,9 @@ AtmosphereFieldCapture/
   Location/SiteLocator.swift
   Geometry/RoomPlanBridge.swift     # RoomPlan hook → twin ingest
   Network/AtmosphereClient.swift    # /api/media/catalog + /api/geometry
-  Network/MediaUploadClient.swift   # signed PUT / multipart
-  Session/FieldDaySession.swift     # today → record → door → upload
+  Network/MediaUploadClient.swift   # signed PUT / multipart (+ disk stream)
+  Queue/DayFilmUploadQueue.swift    # durable save-first filing (web IndexedDB parity)
+  Session/FieldDaySession.swift     # today → record → door (upload async)
   UI/TodayView.swift · SignInView.swift · SignUpView.swift · OfficeLinkView.swift
   UI/RecordingView.swift · DoorView.swift
   Theme/FieldTheme.swift
@@ -116,7 +117,8 @@ AtmosphereFieldCapture/
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
 4. The recording screen is a live rear-camera finder (what you see is what is being recorded). The iOS Simulator has no camera.
-5. Hold **Finish the day** for 5 seconds — proof upload into that job → optional RoomPlan twin.
+5. Hold **Finish the day** for 5 seconds — film is **saved on phone first**, door opens, filing runs in the background (survives kill). Optional RoomPlan twin after save.
+6. Door: **Record another** (same job) or **Back to Home Screen**.
 
 AI dictation and twin review stay in the **office Verifier**.
 
@@ -131,7 +133,7 @@ environment variable when intentionally testing a local BFF.
 1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
 3. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
-4. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
+4. Day film: mint client `clipId` → durable local queue → `upload-url` / `upload-part-url` (+ `upload-complete` for long films) → `POST …/proof`
 5. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
@@ -153,5 +155,6 @@ In-app header uses `AtmosphereBarsMark`.
 ## Still to wire in Xcode
 
 - UIKit host for `RoomCaptureViewController` → real room list + USDZ
-- Background `URLSession` for multi‑GB day uploads on poor signal
+- True background `URLSession` app-delegate handoff while the app is suspended (large PUTs already stream from disk with forever-retry queue)
 - App Store Connect listing, TestFlight, privacy nutrition labels
+- Phase C4+: create job / Places, job-share links, account Support/Settings — see `docs/field-capture-ios-parity.md`

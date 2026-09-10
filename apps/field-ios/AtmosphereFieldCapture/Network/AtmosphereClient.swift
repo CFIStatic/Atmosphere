@@ -324,28 +324,67 @@ final class AtmosphereClient: ObservableObject {
         return try await todayJobsViaSupabase()
     }
 
-    struct ProofUploadUrlResponse: Decodable {
-        let path: String
+    struct ProofUploadPart: Decodable {
+        let index: Int
+        let start: Int64?
+        let end: Int64?
+        let path: String?
         let token: String?
         let uploadUrl: String
+    }
+
+    struct ProofUploadUrlResponse: Decodable {
+        let path: String
+        let clipId: String?
+        let token: String?
+        let uploadUrl: String
+        let chunkSize: Int?
+        let parts: [ProofUploadPart]?
+    }
+
+    struct ProofPartUploadUrlResponse: Decodable {
+        let path: String
+        let clipId: String?
+        let index: Int
+        let partPath: String?
+        let token: String?
+        let uploadUrl: String
+        let maxParts: Int?
+        let assembleMaxBytes: Int64?
+    }
+
+    struct ProofUploadCompleteResponse: Decodable {
+        let path: String
+        let byteSize: Int64?
     }
 
     func beginJobProofUpload(
         jobId: String,
         workDate: String,
         phase: String = "after",
-        fileExtension: String = "mp4"
+        fileExtension: String = "mp4",
+        clipId: String? = nil,
+        byteSize: Int64? = nil
     ) async throws -> ProofUploadUrlResponse {
         struct Body: Encodable {
             let workDate: String
             let phase: String
             let `extension`: String
+            let clipId: String?
+            let byteSize: Int64?
         }
+        let resolvedClip = ClipId.resolve(clipId)
         if usesBFF {
             do {
                 return try await post(
                     path: "/api/field-app/jobs/\(jobId)/proof/upload-url",
-                    body: Body(workDate: workDate, phase: phase, extension: fileExtension)
+                    body: Body(
+                        workDate: workDate,
+                        phase: phase,
+                        extension: fileExtension,
+                        clipId: resolvedClip,
+                        byteSize: byteSize
+                    )
                 )
             } catch {
                 if !Self.isUnreachable(error) { throw error }
@@ -355,12 +394,97 @@ final class AtmosphereClient: ObservableObject {
             jobId: jobId,
             workDate: workDate,
             phase: phase,
-            fileExtension: fileExtension
+            fileExtension: fileExtension,
+            clipId: resolvedClip
+        )
+    }
+
+    /// Mint one signed URL for one slice (web `upload-part-url` / live streamer).
+    func beginJobProofPartUpload(
+        jobId: String,
+        workDate: String,
+        phase: String = "after",
+        fileExtension: String = "mp4",
+        clipId: String,
+        index: Int
+    ) async throws -> ProofPartUploadUrlResponse {
+        struct Body: Encodable {
+            let workDate: String
+            let phase: String
+            let `extension`: String
+            let clipId: String
+            let index: Int
+        }
+        return try await post(
+            path: "/api/field-app/jobs/\(jobId)/proof/upload-part-url",
+            body: Body(
+                workDate: workDate,
+                phase: phase,
+                extension: fileExtension,
+                clipId: ClipId.resolve(clipId),
+                index: index
+            )
+        )
+    }
+
+    /// Stitch `.parts/0000…` onto the final storage path after multipart PUTs.
+    func completeJobProofUpload(
+        jobId: String,
+        workDate: String,
+        phase: String = "after",
+        storagePath: String,
+        partCount: Int
+    ) async throws -> ProofUploadCompleteResponse {
+        struct Body: Encodable {
+            let workDate: String
+            let phase: String
+            let storagePath: String
+            let partCount: Int
+        }
+        return try await post(
+            path: "/api/field-app/jobs/\(jobId)/proof/upload-complete",
+            body: Body(
+                workDate: workDate,
+                phase: phase,
+                storagePath: storagePath,
+                partCount: partCount
+            )
         )
     }
 
     /// PUT to a BFF signed URL, or POST straight into the Atmosphere storage bucket.
-    func uploadProofMedia(localURL: URL, begin: ProofUploadUrlResponse) async throws -> (byteSize: Int64, sha256Hex: String) {
+    /// When `begin.parts` has 2+ slices (long film), uploads parts then stitches
+    /// via `upload-complete` — same contract as web Field Capture.
+    func uploadProofMedia(localURL: URL, begin: ProofUploadUrlResponse) async throws -> (byteSize: Int64, sha256Hex: String, storagePath: String) {
+        let size = try MediaUploadClient.byteSize(ofFile: localURL)
+        let hex = try MediaUploadClient.sha256Hex(ofFile: localURL)
+        let parts = begin.parts ?? []
+        if parts.count >= 2, size <= Int64(MediaUploadClient.maxAssembleBytes) {
+            let ordered = parts.sorted { $0.index < $1.index }
+            for part in ordered {
+                guard let partURL = URL(string: part.uploadUrl) else {
+                    throw APIError.http(status: 0, body: "Bad upload part URL")
+                }
+                let start = part.start ?? 0
+                let endExclusive: Int64
+                if let end = part.end {
+                    // Server range is inclusive end.
+                    endExclusive = end + 1
+                } else {
+                    let chunk = Int64(begin.chunkSize ?? MediaUploadClient.defaultPartBytes)
+                    endExclusive = min(size, start + chunk)
+                }
+                try await MediaUploadClient.uploadFileRange(
+                    localURL: localURL,
+                    range: start ..< endExclusive,
+                    uploadURL: partURL,
+                    headers: ["Content-Type": "application/octet-stream"]
+                )
+            }
+            // Caller must know jobId to stitch — return path; stitch is separate.
+            return (size, hex, begin.path)
+        }
+
         guard let uploadURL = URL(string: begin.uploadUrl) else {
             throw APIError.http(status: 0, body: "Bad upload URL")
         }
@@ -378,12 +502,61 @@ final class AtmosphereClient: ObservableObject {
             }
             headers["x-upsert"] = "true"
         }
-        return try await MediaUploadClient.uploadFile(
+        try await MediaUploadClient.putFile(
             localURL: localURL,
             uploadURL: uploadURL,
             method: isDirectStoragePost ? "POST" : "PUT",
             headers: headers
         )
+        return (size, hex, begin.path)
+    }
+
+    /// Full multipart path when the slot has no pre-minted `parts` but the film
+    /// is long: mint each slice via `upload-part-url`, PUT, then `upload-complete`.
+    func uploadProofMediaMultipartViaPartUrls(
+        jobId: String,
+        localURL: URL,
+        workDate: String,
+        clipId: String,
+        phase: String = "after",
+        fileExtension: String = "mp4",
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> (byteSize: Int64, sha256Hex: String, storagePath: String, partCount: Int) {
+        let size = try MediaUploadClient.byteSize(ofFile: localURL)
+        let hex = try MediaUploadClient.sha256Hex(ofFile: localURL)
+        let ranges = MediaUploadClient.partRanges(byteSize: size)
+        guard ranges.count >= 2 else {
+            throw APIError.http(status: 0, body: "Film is too small for multipart.")
+        }
+        var storagePath = ""
+        for (index, range) in ranges.enumerated() {
+            let minted = try await beginJobProofPartUpload(
+                jobId: jobId,
+                workDate: workDate,
+                phase: phase,
+                fileExtension: fileExtension,
+                clipId: clipId,
+                index: index
+            )
+            storagePath = minted.path
+            guard let partURL = URL(string: minted.uploadUrl) else {
+                throw APIError.http(status: 0, body: "Bad upload part URL")
+            }
+            try await MediaUploadClient.uploadFileRange(
+                localURL: localURL,
+                range: range,
+                uploadURL: partURL
+            )
+            onProgress?(Double(index + 1) / Double(ranges.count))
+        }
+        _ = try await completeJobProofUpload(
+            jobId: jobId,
+            workDate: workDate,
+            phase: phase,
+            storagePath: storagePath,
+            partCount: ranges.count
+        )
+        return (size, hex, storagePath, ranges.count)
     }
 
     struct ProofRecordBody: Encodable {
@@ -397,6 +570,8 @@ final class AtmosphereClient: ObservableObject {
         var lat: Double?
         var lon: Double?
         var accuracyM: Double?
+        /// Echoed for clients/logs; server binds clip from storagePath.
+        var clipId: String?
     }
 
     struct ProofRecordResponse: Decodable {
@@ -1013,14 +1188,23 @@ final class AtmosphereClient: ObservableObject {
         jobId: String,
         workDate: String,
         phase: String,
-        fileExtension: String
+        fileExtension: String,
+        clipId: String
     ) async throws -> ProofUploadUrlResponse {
         let membership = try await requireMembership()
         let party = try await ensureFieldParty(orgId: membership.org_id, jobId: jobId)
-        let path = "\(membership.org_id)/\(jobId)/\(party.id)/\(workDate)-\(phase).\(fileExtension)"
+        let resolved = ClipId.resolve(clipId)
+        let path = "\(membership.org_id)/\(jobId)/\(party.id)/\(workDate)-\(phase)-\(resolved).\(fileExtension)"
         let uploadUrl = supabaseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             + "/storage/v1/object/job-proofs/" + path
-        return ProofUploadUrlResponse(path: path, token: nil, uploadUrl: uploadUrl)
+        return ProofUploadUrlResponse(
+            path: path,
+            clipId: resolved,
+            token: nil,
+            uploadUrl: uploadUrl,
+            chunkSize: nil,
+            parts: nil
+        )
     }
 
     private func completeProofViaSupabase(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {

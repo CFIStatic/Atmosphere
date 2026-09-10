@@ -408,6 +408,10 @@ Fix:
 4. Office fallback stays
    `https://platform.atmosphereteam.com/fieldcapture/`.
 
+iOS Field Capture parity vs this web SoT: `docs/field-capture-ios-parity.md`
+(app.* remains canonical; one `fieldcapture/` build for Railway FC + Platform
+embed; do not delete the embed).
+
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
 [Monorepos](https://docs.railway.com/deployments/monorepo).

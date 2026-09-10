@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DoorView: View {
     @EnvironmentObject private var session: FieldDaySession
+    @State private var recordingAnother = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,14 +59,22 @@ struct DoorView: View {
                     .cornerRadius(12)
 
                     if let m = session.manifest {
-                        Text("hasAudio=\(m.hasAudio) · \(formatClipLength(m.durationSeconds)) · media \(m.mediaId ?? "—")")
-                            .font(FieldTheme.mono)
-                            .font(.system(size: 11))
-                            .foregroundStyle(FieldTheme.faint)
+                        Text(
+                            "hasAudio=\(m.hasAudio) · \(formatClipLength(m.durationSeconds)) · clip \(m.clipId ?? "—") · media \(m.mediaId ?? "filing…")"
+                        )
+                        .font(FieldTheme.mono)
+                        .font(.system(size: 11))
+                        .foregroundStyle(FieldTheme.faint)
+                    }
+
+                    if !session.filingDetail.isEmpty {
+                        Text(session.filingDetail)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FieldTheme.muted)
                     }
 
                     if session.uploading {
-                        ProgressView("Uploading day film…")
+                        ProgressView("Saving day film…")
                     }
 
                     if let err = session.lastError {
@@ -90,17 +99,53 @@ struct DoorView: View {
                 .padding(18)
             }
 
-            Button("Back to Home Screen") {
-                session.backToToday()
+            VStack(spacing: 10) {
+                if session.canRecordAnother {
+                    Button {
+                        recordingAnother = true
+                        Task {
+                            await session.recordAnother()
+                            recordingAnother = false
+                        }
+                    } label: {
+                        Text(recordingAnother ? "Opening camera…" : "Record another")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(FieldTheme.panel)
+                            .foregroundStyle(FieldTheme.ink)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line, lineWidth: 1.5))
+                            .cornerRadius(12)
+                    }
+                    .disabled(recordingAnother || session.uploading)
+                }
+
+                Button("Back to Home Screen") {
+                    session.backToToday()
+                }
+                .font(.system(size: 16, weight: .bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(FieldTheme.ink)
+                .foregroundStyle(FieldTheme.bg)
+                .cornerRadius(12)
             }
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(FieldTheme.ink)
-            .foregroundStyle(FieldTheme.bg)
-            .cornerRadius(12)
             .padding(18)
         }
         .background(FieldTheme.bg)
+        .onReceive(NotificationCenter.default.publisher(for: .dayFilmQueueDidFile)) { note in
+            guard let filmId = session.doorFilmId,
+                  let filedId = note.userInfo?["entryId"] as? String,
+                  filedId == filmId
+            else { return }
+            session.applyFiledNotification(
+                proofId: note.userInfo?["proofId"] as? String,
+                storagePath: note.userInfo?["storagePath"] as? String,
+                byteSize: note.userInfo?["byteSize"] as? Int64
+            )
+        }
+        .onReceive(session.uploadQueue.$filingStep) { _ in
+            session.refreshFilingDetailFromQueue()
+        }
     }
 }
