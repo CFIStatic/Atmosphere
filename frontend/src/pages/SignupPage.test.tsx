@@ -88,7 +88,11 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
+    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
+      'href',
+      'https://atmosphereteam.com/terms',
+    );
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
@@ -98,7 +102,7 @@ describe('SignupPage', () => {
     expect(screen.queryByText('You are in')).toBeNull();
   });
 
-  it('enables Continue once account and company fields are filled — no Terms checkbox here', async () => {
+  it('does not enable Continue until the Terms checkbox is checked', async () => {
     const user = userEvent.setup();
     renderSignup();
 
@@ -109,7 +113,8 @@ describe('SignupPage', () => {
       target: { value: 'New Person Co' },
     });
 
-    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
@@ -123,6 +128,7 @@ describe('SignupPage', () => {
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
     expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
@@ -187,7 +193,8 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'New Person Co' },
     });
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
