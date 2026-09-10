@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CURRENT_TERMS_VERSION,
   TERMS_PUBLIC_URL,
+  clearSessionTermsAccepted,
+  markSessionTermsAccepted,
   publicTermsStatus,
+  sessionTermsAcceptedForCurrent,
   termsRequired,
 } from './terms';
 
@@ -38,5 +41,16 @@ describe('terms version helpers', () => {
   it('starts unsigned visitors as required', () => {
     expect(publicTermsStatus().required).toBe(true);
     expect(publicTermsStatus().currentVersion).toBe(CURRENT_TERMS_VERSION);
+  });
+
+  it('tracks per-tab acknowledgment for the current Terms version only', () => {
+    clearSessionTermsAccepted();
+    expect(sessionTermsAcceptedForCurrent()).toBe(false);
+    markSessionTermsAccepted(CURRENT_TERMS_VERSION);
+    expect(sessionTermsAcceptedForCurrent()).toBe(true);
+    markSessionTermsAccepted('1999-01-01');
+    expect(sessionTermsAcceptedForCurrent()).toBe(false);
+    clearSessionTermsAccepted();
+    expect(sessionTermsAcceptedForCurrent()).toBe(false);
   });
 });

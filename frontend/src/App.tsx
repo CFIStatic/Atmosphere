@@ -12,6 +12,7 @@ import {
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TermsAcknowledgment } from './components/TermsAcknowledgment';
+import { sessionTermsAcceptedForCurrent } from './lib/terms';
 import { ApiError } from './lib/api';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { api } from './lib/api';
@@ -45,6 +46,7 @@ const JobProgressGuestPage = lazy(() =>
 
 const TERMS_EXEMPT_PREFIXES = [
   '/login',
+  '/signup',
   '/forgot-password',
   '/reset-password',
   '/guest',
@@ -67,7 +69,14 @@ function TermsGate({ children }: { children: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <FullScreenSpinner />;
-  if (!user || !needsTermsAcceptance || isTermsExemptPath(location.pathname)) {
+  // Soft skip when this session already acknowledged the current Terms on login
+  // (version bumps still force re-ack via CURRENT_TERMS_VERSION mismatch).
+  if (
+    !user ||
+    !needsTermsAcceptance ||
+    isTermsExemptPath(location.pathname) ||
+    sessionTermsAcceptedForCurrent()
+  ) {
     return <>{children}</>;
   }
 

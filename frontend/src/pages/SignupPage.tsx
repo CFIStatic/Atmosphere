@@ -7,7 +7,11 @@ import { firstRunDestination } from '../lib/firstRun';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
-import { PlanPrice } from '../components/billing/AtmospherePlanPicker';
+import { AtmospherePlanPicker } from '../components/billing/AtmospherePlanPicker';
+import {
+  ATMOSPHERE_SELF_SERVE_PLANS,
+  parseAtmospherePlanCode,
+} from '../lib/atmospherePlans';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
 import {
@@ -19,7 +23,6 @@ import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 import { CURRENT_TERMS_VERSION } from '../lib/terms';
-import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const JOIN_CODE_RE = /^[A-Za-z0-9]{6,12}$/;
@@ -62,12 +65,13 @@ export function SignupPage() {
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
+  const [selectedPlan, setSelectedPlan] = useState(() =>
+    parseAtmospherePlanCode(searchParams.get('plan')),
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [termsAcknowledged, setTermsAcknowledged] = useState(false);
-
   const existingSession = Boolean(user) && !membership;
   const creatingNewAccount = !existingSession;
 
@@ -152,8 +156,7 @@ export function SignupPage() {
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const workspaceValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
   const accountValid = creatingNewAccount ? nameValid && emailValid && passwordValid : true;
-  const termsValid = creatingNewAccount ? termsAcknowledged : true;
-  const formValid = accountValid && workspaceValid && termsValid;
+  const formValid = accountValid && workspaceValid;
 
   function enterApp() {
     queueRedirect(afterSetupTo);
@@ -276,23 +279,6 @@ export function SignupPage() {
               : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
           }
         >
-          {user?.email && !submitting && (
-            <p className="mt-6 text-sm text-ink-600">
-              You&apos;re signed in as{' '}
-              <span className="font-medium text-ink-900">{user.email}</span>.
-              {existingSession
-                ? ' Name the company below to finish setup, or '
-                : ' Creating a new account will switch you to that login, or '}
-              <button
-                type="button"
-                onClick={() => logout()}
-                className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
-              >
-                sign out
-              </button>{' '}
-              first.
-            </p>
-          )}
           {accountNotice && (
             <div
               role="status"
@@ -417,14 +403,6 @@ export function SignupPage() {
               </Field>
             )}
 
-            {creatingNewAccount && (
-              <TermsAckCheckbox
-                id="signup-tos"
-                checked={termsAcknowledged}
-                onChange={setTermsAcknowledged}
-              />
-            )}
-
             <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
               {submitting ? 'Setting up…' : 'Continue'}
             </PrimaryButton>
@@ -446,12 +424,29 @@ export function SignupPage() {
           step={2}
           intent={orgIntent}
           title="Set up billing"
-          subtitle="Add a payment method to activate the workspace."
+          subtitle="Choose a plan, then finish company setup to add a payment method."
         >
-          <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
-            <p className="text-[15px] font-semibold tracking-tight text-ink-900">Work Verification</p>
-            <PlanPrice monthlyCents={84_900} />
+          <div className="mt-6">
+            <AtmospherePlanPicker
+              plans={ATMOSPHERE_SELF_SERVE_PLANS}
+              value={selectedPlan}
+              onChange={(code) => {
+                setSelectedPlan(code);
+                setSearchParams(
+                  (prev) => {
+                    const params = new URLSearchParams(prev);
+                    params.set('step', '2');
+                    params.set('plan', code);
+                    return params;
+                  },
+                  { replace: true },
+                );
+              }}
+            />
           </div>
+          <p className="mt-3 text-sm text-ink-600">
+            Extra Field Capture seats are $125/mo each. AI/token usage is billed the day it is used.
+          </p>
           <div className="mt-7 flex justify-end">
             <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>
           </div>

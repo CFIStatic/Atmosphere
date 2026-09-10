@@ -88,11 +88,7 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    expect(screen.getByLabelText(/I acknowledge and agree to the/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
-      'href',
-      'https://atmosphereteam.com/terms',
-    );
+    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Account & workspace' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set up billing' })).toBeInTheDocument();
@@ -102,7 +98,7 @@ describe('SignupPage', () => {
     expect(screen.queryByText('You are in')).toBeNull();
   });
 
-  it('does not enable Continue until the Terms checkbox is checked', async () => {
+  it('enables Continue once account and company fields are filled — no Terms checkbox here', async () => {
     const user = userEvent.setup();
     renderSignup();
 
@@ -113,8 +109,7 @@ describe('SignupPage', () => {
       target: { value: 'New Person Co' },
     });
 
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
@@ -124,7 +119,10 @@ describe('SignupPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Set up billing' }));
     expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
-    expect(screen.getByText(/\/ month/)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
+    expect(screen.getAllByText('/ month')).toHaveLength(3);
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Account & workspace' }));
@@ -151,7 +149,8 @@ describe('SignupPage', () => {
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByLabelText('Company name')).toBeInTheDocument();
-    expect(screen.getByText('jane@acme.com')).toBeInTheDocument();
+    expect(screen.queryByText(/You're signed in as/i)).toBeNull();
+    expect(screen.queryByText(/Creating a new account will switch/i)).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Account ready' })).toBeNull();
   });
@@ -188,8 +187,7 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Company name'), {
       target: { value: 'New Person Co' },
     });
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {

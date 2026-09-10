@@ -25,3 +25,32 @@ export function publicTermsStatus(): TermsStatus {
     url: TERMS_PUBLIC_URL,
   };
 }
+
+const SESSION_TERMS_ACK_KEY = 'atmosphere.termsAckVersion';
+
+/** Record that this browser tab acknowledged the current Terms (login / accept). */
+export function markSessionTermsAccepted(version: string = CURRENT_TERMS_VERSION): void {
+  try {
+    sessionStorage.setItem(SESSION_TERMS_ACK_KEY, version);
+  } catch {
+    /* private mode / blocked storage */
+  }
+}
+
+/** True when this tab already acknowledged the live Terms version. */
+export function sessionTermsAcceptedForCurrent(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_TERMS_ACK_KEY) === CURRENT_TERMS_VERSION;
+  } catch {
+    return false;
+  }
+}
+
+export function clearSessionTermsAccepted(): void {
+  try {
+    sessionStorage.removeItem(SESSION_TERMS_ACK_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
