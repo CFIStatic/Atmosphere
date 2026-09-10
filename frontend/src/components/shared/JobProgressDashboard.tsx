@@ -11,9 +11,10 @@ import {
 import { siteLine } from '../../lib/jobFileAsk';
 
 /**
- * Homeowner-clear job progress: up to speed → meter → attention →
- * happening / finished / still to do. Shared by office /job-progress and
- * guest /progress/:token. Does not own Ask/chat chrome.
+ * Homeowner-clear job progress: one status + progress card, then a single
+ * Now / Done / Left brief (with a compact Needs attention strip when needed).
+ * Shared by office /job-progress and guest /progress/:token.
+ * Does not own Ask/chat chrome.
  */
 
 const SUMMARY_STYLE: Record<StoryTone, string> = {
@@ -32,7 +33,7 @@ const BADGE_STYLE: Record<StoryTone, string> = {
 
 function StoryRow({ item }: { item: StoryItem }) {
   return (
-    <li className="px-4 py-3.5">
+    <li className="px-3 py-2.5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-ink-900">{item.title}</p>
@@ -48,31 +49,27 @@ function StoryRow({ item }: { item: StoryItem }) {
   );
 }
 
-function StorySection({
+/** Tight section inside one continuous brief — not a separate glass card. */
+function BriefSection({
   id,
   title,
-  hint,
   items,
   empty,
   footer,
 }: {
   id: string;
   title: string;
-  hint?: string;
   items: StoryItem[];
   empty: string;
   footer?: ReactNode;
 }) {
   return (
-    <section id={id} className="rounded-xl glass-card p-5 scroll-mt-4">
-      <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-      {hint ? <p className="mt-0.5 text-xs text-ink-500">{hint}</p> : null}
+    <section id={id} className="scroll-mt-4 py-3 first:pt-0 last:pb-0">
+      <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
       {items.length === 0 ? (
-        <p className="mt-4 rounded-lg border border-line px-4 py-6 text-center text-sm text-ink-600">
-          {empty}
-        </p>
+        <p className="mt-1.5 text-sm text-ink-500">{empty}</p>
       ) : (
-        <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+        <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
           {items.map((item) => (
             <StoryRow key={item.id} item={item} />
           ))}
@@ -231,18 +228,17 @@ export function JobProgressDashboard({
         ) : (
           <>
             <div
-              className={`mt-5 rounded-xl border px-4 py-3.5 ${SUMMARY_STYLE[summary.tone]}`}
+              className={`${showIdentity ? 'mt-5' : ''} rounded-xl border px-4 py-3.5 ${SUMMARY_STYLE[summary.tone]}`}
               data-testid="job-progress-up-to-speed"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Up to speed</p>
-              <p className="mt-1 text-sm sm:text-base font-medium leading-relaxed">{summary.text}</p>
+              <p className="text-sm sm:text-base font-medium leading-relaxed">{summary.text}</p>
             </div>
 
             {trackedCount > 0 && (
-              <div className="mt-5" data-testid="job-progress-meter">
+              <div className="mt-4" data-testid="job-progress-meter">
                 <div className="mb-2 flex items-center justify-between text-sm">
                   <span className="font-medium text-ink-800">
-                    {doneCount} of {trackedCount} complete
+                    {doneCount} of {trackedCount} done
                   </span>
                   <span className="tabular-nums font-semibold text-ink-900">{donePct}%</span>
                 </div>
@@ -252,13 +248,6 @@ export function JobProgressDashboard({
                     style={{ width: `${Math.max(donePct, donePct > 0 ? 2 : 0)}%` }}
                   />
                 </div>
-                <p className="mt-1.5 text-xs text-ink-500">
-                  {happeningCount} happening · {doneCount} finished · {nextItems.length || nextCount}{' '}
-                  still to do
-                  {story.exclusionCount > 0
-                    ? ` · ${story.exclusionCount} out of scope`
-                    : ''}
-                </p>
               </div>
             )}
           </>
@@ -266,37 +255,40 @@ export function JobProgressDashboard({
       </section>
 
       {!loading && (
-        <>
+        <div className="rounded-xl glass-card px-5 py-4 sm:px-6 divide-y divide-line">
           {story.attention.length > 0 ? (
-            <StorySection
+            <div
               id="attention"
-              title="Needs your attention"
-              hint="Decisions or issues that should be handled before work continues smoothly."
-              items={story.attention}
-              empty=""
-            />
+              className="scroll-mt-4 pb-3"
+              data-testid="job-progress-needs-attention"
+            >
+              <h3 className="text-sm font-semibold text-danger-700">Needs attention</h3>
+              <ul className="mt-2 divide-y divide-line rounded-lg border border-danger-200 bg-danger-50/40">
+                {story.attention.map((item) => (
+                  <StoryRow key={item.id} item={item} />
+                ))}
+              </ul>
+            </div>
           ) : null}
 
-          <StorySection
+          <BriefSection
             id="happening"
-            title="Happening now"
-            hint="Crews on site and work in progress."
+            title="Now"
             items={story.happening}
-            empty="Nothing on site right now."
+            empty="Nothing on site."
           />
 
-          <StorySection
+          <BriefSection
             id="happened"
-            title="Already finished"
-            hint="Verified days and work that is already done."
+            title="Done"
             items={story.happened}
-            empty="Nothing completed yet. Each day, crews film before they start and again when they finish — those days will show up here."
+            empty="Nothing finished yet."
             footer={
               showProofOfWork && !alwaysShowRecordings && (proof?.days.length ?? 0) > 5 ? (
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((v) => !v)}
-                  className="mt-3 text-sm font-medium text-brand-600 hover:text-brand-700"
+                  className="mt-2 text-sm font-medium text-brand-600 hover:text-brand-700"
                 >
                   {historyOpen ? 'Hide full history' : `Show all ${proof?.days.length} days`}
                 </button>
@@ -304,22 +296,21 @@ export function JobProgressDashboard({
             }
           />
 
-          <StorySection
+          <BriefSection
             id="next"
-            title="Still to do"
-            hint="Work that has not started yet, in the order it is queued."
+            title="Left"
             items={nextItems}
-            empty="Nothing left on the list."
+            empty="Nothing left."
             footer={
               story.exclusionCount > 0 ? (
-                <p className="mt-3 text-xs text-ink-500">
+                <p className="mt-2 text-xs text-ink-500">
                   {story.exclusionCount} item{story.exclusionCount === 1 ? ' is' : 's are'} out of
                   scope and should not be done. See job setup for the do-not list.
                 </p>
               ) : null
             }
           />
-        </>
+        </div>
       )}
 
       {showProofOfWork && (alwaysShowRecordings || historyOpen) && proof && (

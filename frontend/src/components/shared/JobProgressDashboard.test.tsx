@@ -98,12 +98,12 @@ const proof: ProofResponse = {
   siteKnown: true,
 };
 
-describe('JobProgressDashboard homeowner clarity', () => {
+describe('JobProgressDashboard even simpler', () => {
   beforeEach(() => {
     jobProofs.mockReset();
   });
 
-  it('shows up-to-speed, meter, attention, and the three timeline sections without the old jump grid', async () => {
+  it('shows one status sentence + progress, then Needs attention / Now / Done / Left — no dashboard chrome', async () => {
     render(
       <JobProgressDashboard
         jobId="job-1"
@@ -113,24 +113,33 @@ describe('JobProgressDashboard homeowner clarity', () => {
       />,
     );
 
-    expect(await screen.findByTestId('job-progress-up-to-speed')).toHaveTextContent(
-      /Needs your attention: Sub has not accepted the scope/,
-    );
-    expect(screen.getByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 complete/);
-    expect(screen.getByRole('heading', { name: 'Needs your attention' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Happening now' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Already finished' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Still to do' })).toBeInTheDocument();
-    expect(screen.getByText('Nothing on site right now.')).toBeInTheDocument();
+    const status = await screen.findByTestId('job-progress-up-to-speed');
+    expect(status).toHaveTextContent(/Needs your attention: Sub has not accepted the scope/);
+    expect(status).not.toHaveTextContent(/Up to speed/i);
+
+    expect(screen.getByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
+    // Demoted 3-stat jump line is gone
+    expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/happening/);
+    expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/still to do/i);
+
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Done' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Left' })).toBeInTheDocument();
+    expect(screen.getByText('Nothing on site.')).toBeInTheDocument();
+
+    // Old #390 titles / chrome
+    expect(screen.queryByText('Up to speed')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Happening now' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Already finished' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Still to do' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Needs your attention' })).not.toBeInTheDocument();
     expect(screen.queryByText('Overall progress')).not.toBeInTheDocument();
-    expect(screen.queryByText('What’s next')).not.toBeInTheDocument();
-    expect(screen.queryByText('What happened')).not.toBeInTheDocument();
-    // No three big jump-stat cards
     expect(screen.queryByText('Already done')).not.toBeInTheDocument();
     expect(screen.queryByText('Still ahead')).not.toBeInTheDocument();
   });
 
-  it('omits Needs your attention when there are no blockers or warnings', async () => {
+  it('omits Needs attention when there are no blockers or warnings', async () => {
     render(
       <JobProgressDashboard
         jobId="job-1"
@@ -143,6 +152,7 @@ describe('JobProgressDashboard homeowner clarity', () => {
     expect(await screen.findByTestId('job-progress-up-to-speed')).toHaveTextContent(
       /Crews finished 1 of 2 work items/,
     );
-    expect(screen.queryByRole('heading', { name: 'Needs your attention' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-progress-needs-attention')).not.toBeInTheDocument();
   });
 });

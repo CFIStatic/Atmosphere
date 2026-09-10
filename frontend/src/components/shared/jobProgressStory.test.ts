@@ -39,7 +39,7 @@ function day(partial: Partial<ProofDay> & Pick<ProofDay, 'partyId' | 'workDate'>
 }
 
 describe('buildJobProgressStory', () => {
-  it('puts unused scope in Still to do and blockers in Needs attention', () => {
+  it('puts unused scope in Left and blockers in Needs attention', () => {
     const story = buildJobProgressStory({
       scope: [
         scope({ id: '1', title: 'Extract standing water', state: 'included' }),
@@ -93,7 +93,7 @@ describe('buildJobProgressStory', () => {
     expect(story.attention).toEqual([]);
   });
 
-  it('files verified days and completed scope under Already finished', () => {
+  it('files verified days and completed scope under Done', () => {
     const story = buildJobProgressStory({
       scope: [
         scope({ id: '1', title: 'Tear off and replace roof', state: 'included' }),
