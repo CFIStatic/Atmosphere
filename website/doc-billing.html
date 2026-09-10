@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="How Atmosphere billing works — Starter, Work Verification, and Scale plans, extra Field Capture seats, and usage billed the day it’s used." />
+  <meta name="description" content="Starter, Work Verification, and Scale — how Field Capture seats work on invite, Usage page, invoices, upgrades, and same-day AI usage." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Billing &amp; usage · Atmosphere Docs</title>
   <meta property="og:title" content="Billing &amp; usage · Atmosphere Docs" />
-  <meta property="og:description" content="How Atmosphere billing works — Starter, Work Verification, and Scale plans, extra Field Capture seats, and usage billed the day it’s used." />
+  <meta property="og:description" content="Starter, Work Verification, and Scale — how Field Capture seats work on invite, Usage page, invoices, upgrades, and same-day AI usage." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -45,7 +45,7 @@
       <div class="nav-item">
         <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="docs.html">Documentation <span>How to use Work Verification in depth</span></a>
           <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
           <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
           <a href="security.html">Security <span>The model, by construction</span></a>
@@ -106,50 +106,56 @@
       <a href="doc-troubleshooting.html">Troubleshooting</a>
       <div class="grp mono">Products</div>
       <a href="doc-field.html">Field Capture</a>
-      <a href="doc-web-access.html">Integrity check</a>
+      <a href="doc-web-access.html">Evidence Platform</a>
       <div class="grp mono">Account</div>
       <a class="active" href="doc-billing.html">Billing &amp; usage</a>
   </aside>
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
     <h1>Billing &amp; usage</h1>
-    <p class="lede">Monthly Atmosphere plan, extra Field Capture seats, and usage billed the day it’s used — not raw LLM tokens on your invoice.</p>
+    <p class="lede">How Work Verification billing works — plans and Field Capture seats, the Usage page, invoices, upgrades, and same-day AI usage. Not raw LLM tokens on your invoice.</p>
     <ul>
       <li>Field Capture + Evidence Platform on every plan</li>
       <li>Starter $399/mo (1 seat) · Work Verification $849/mo (3 seats) · Scale $1,999/mo (10 seats)</li>
-      <li>Additional Field Capture accounts are $125/mo each</li>
-      <li>AI/token usage is billed the day it is used</li>
+      <li>Additional Field Capture seats are $125/mo each</li>
+      <li>AI usage is billed the day it is used</li>
+      <li>Enterprise = contact sales only</li>
     </ul>
 
 <h2>Three billing layers</h2>
 <ol>
-<li><strong>Platform plan</strong> — Field Capture and the Evidence Platform. Starter includes <strong>1</strong> Field Capture account, Work Verification includes <strong>3</strong>, Scale includes <strong>10</strong>. Work Verification is the default at signup.</li>
-<li><strong>Extra Field Capture seats — $125/month each</strong> — additional accounts beyond the seats included with your plan. Invites past the limit add a seat.</li>
-<li><strong>Usage — billed the day it’s used</strong> — AI and token analysis is charged when the work runs (coalesced per organization). You see a usage line, not token counts, model names, or a per-job dollar rate.</li>
+<li><strong>Platform plan</strong> — Field Capture and the Evidence Platform. Starter includes <strong>1</strong> Field Capture seat, Work Verification includes <strong>3</strong>, Scale includes <strong>10</strong>. Work Verification is the default at signup.</li>
+<li><strong>Extra Field Capture seats — $125/month each</strong> — accounts beyond the seats included with your plan. When you invite someone past the limit, that invite adds a seat.</li>
+<li><strong>Usage — billed the day it’s used</strong> — AI reading, dictation, and Ask are charged when the work runs (coalesced per organization). You see a usage line, not token counts, model names, or a per-job dollar rate.</li>
 </ol>
-
 <p>The <a href="hardware.html">Field Capture Chest Mount</a> is an optional one-time hardware add-on ($49.99), not part of the monthly subscription. See <a href="pricing.html">pricing</a> for the public rate card.</p>
 
-<h2>What you see in the app</h2>
+<h2>How seats work on invite</h2>
+<p>Your plan’s included seats are the Field Capture accounts you can put on phones without an extra line item. Office reviewers on the Evidence Platform still sit inside the same organization; what the catalog meters as “seats” for self-serve plans is Field Capture capacity.</p>
+<p>When you invite a crew member and you are already at the included count, the Platform adds an extra seat at $125/mo (or prompts you to upgrade). Removing access frees capacity for the next invite according to how your billing period is settled — check Usage before you assume a seat is free mid-cycle.</p>
+
+<h2>Usage page, invoices, and receipts</h2>
 <p>Open <strong>Usage</strong> in the product to see:</p>
 <ul>
 <li>Field Capture seats on the current plan (included + extras)</li>
 <li>Usage billed the day it ran</li>
 <li>Receipts for the subscription, extra seats, and same-day usage invoices</li>
 </ul>
-<p>Token spend on Settings → Billing is what you are charged. Usage invoices settle through Stripe the day the work runs.</p>
+<p>Keep a current payment method on file under Settings → Billing. Usage invoices settle through Stripe the day the work runs. Historical invoices keep the pricing snapshot from when the period closed — changing plans later does not rewrite old receipts.</p>
 
-<h2>Configurable plans</h2>
-<p>Seat counts follow the org’s Atmosphere plan (Starter 1 / Work Verification 3 / Scale 10). Enterprise terms are arranged with sales — there is no self-serve Enterprise SKU. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans change later. The published catalog is Starter ($399/mo), Work Verification ($849/mo), Scale ($1,999/mo), extra Field Capture seats ($125/mo), same-day AI usage, and the Chest Mount ($49.99). A leftover seat/credit catalog still has API handlers so existing Stripe events do not break — it is not shown in the app.</p>
+<h2>Upgrade (or change) plan</h2>
+<p>Move between Starter, Work Verification, and Scale when seat needs change. Enterprise terms are arranged with sales — there is no self-serve Enterprise SKU. The published catalog is Starter ($399/mo), Work Verification ($849/mo), Scale ($1,999/mo), extra Field Capture seats ($125/mo), same-day AI usage, and the Chest Mount ($49.99).</p>
 
-<h2>Legacy credit ledger</h2>
-<p>Some agent paths still draw from the prepaid credit ledger during migration. That path is legacy. New workflows record internal usage events and bill the day the work runs.</p>
+<h2>Legacy credit ledger (not the current path)</h2>
+<div class="callout">Prepaid credit packs and an empty “credit balance” are <strong>not</strong> how Work Verification bills today. New workflows record usage events and bill the day the work runs. If you still see a leftover credit ledger from an older agent path, do not buy packs to “unpause” anything — open Usage, confirm your plan and payment method, and contact Support if something is blocked.</div>
+<p>Some API handlers still exist so old Stripe events do not break; that catalog is not shown as the path forward in the app.</p>
 
     <div class="doc-pager">
-      <a class="prev" href="doc-web-access.html"><span class="dir mono">&larr; PREVIOUS</span>Integrity check</a>
+      <a class="prev" href="doc-web-access.html"><span class="dir mono">&larr; PREVIOUS</span>Evidence Platform</a>
     </div>
   </article>
 </div>
+
 
 </main>
 <!-- page:end -->

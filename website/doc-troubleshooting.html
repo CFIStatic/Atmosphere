@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="When something misbehaves — sign-in, join codes, stuck runs, connections, billing — start here." />
+  <meta name="description" content="Fix sign-in, PIN, join codes, Field Capture camera/GPS/upload issues, Videos list quirks, seats and payment — with job and video ids for Support." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Troubleshooting · Atmosphere Docs</title>
   <meta property="og:title" content="Troubleshooting · Atmosphere Docs" />
-  <meta property="og:description" content="When something misbehaves — sign-in, join codes, stuck runs, connections, billing — start here." />
+  <meta property="og:description" content="Fix sign-in, PIN, join codes, Field Capture camera/GPS/upload issues, Videos list quirks, seats and payment — with job and video ids for Support." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -45,7 +45,7 @@
       <div class="nav-item">
         <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="docs.html">Documentation <span>How to use Work Verification in depth</span></a>
           <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
           <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
           <a href="security.html">Security <span>The model, by construction</span></a>
@@ -106,47 +106,62 @@
       <a class="active" href="doc-troubleshooting.html">Troubleshooting</a>
       <div class="grp mono">Products</div>
       <a href="doc-field.html">Field Capture</a>
-      <a href="doc-web-access.html">Integrity check</a>
+      <a href="doc-web-access.html">Evidence Platform</a>
       <div class="grp mono">Account</div>
       <a href="doc-billing.html">Billing &amp; usage</a>
   </aside>
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Guides</div>
     <h1>Troubleshooting</h1>
-    <p class="lede">When something misbehaves — sign-in, join codes, stuck runs, connections, billing — start here.</p>
+    <p class="lede">When something misbehaves — sign-in, join codes, Field Capture camera/GPS/upload, Videos list quirks, seats and payment — start here.</p>
 
 <h2>Signing in</h2>
-<h3>My password isn't working</h3>
-<p>Use <strong>Forgot password</strong> on the sign-in screen. A reset link arrives by email, and the token exchange happens on the server — if the link has expired, request a fresh one rather than retrying it.</p>
-<h3>My PIN doesn't work on this phone</h3>
+<h3>My password isn’t working</h3>
+<p>Use <strong>Forgot password</strong> on the sign-in screen. A reset link arrives by email; the token exchange happens on the server. If the link expired, request a fresh one rather than retrying it.</p>
+<h3>My PIN doesn’t work on this phone</h3>
 <p>That is the PIN doing its job: it is bound to the single device you enrolled it on. On any other device, sign in with your password, then enroll a PIN there too if you want one.</p>
+
 <h2>Organizations and join codes</h2>
 <h3>The join code is rejected</h3>
-<p>Codes are exact — check for a mistyped character first. If it still fails, the code may have been rotated; ask whoever runs your organization to read it to you from their dashboard.</p>
+<p>Codes are exact — check for a mistyped character first. If it still fails, the code may have been rotated; ask whoever runs your organization to read it from Settings.</p>
 <h3>I created a second organization by mistake</h3>
-<p>Sign out, sign back in, and join the right organization with its code. Ask us via the contact page to remove the empty one.</p>
-<h2>Runs and agents</h2>
-<h3>A run failed or seems stuck</h3>
-<p>Open the run in the audit trail and replay it — the record shows the exact step where it stopped and what the agent saw there. Most failures are the outside system changing (a portal login page moved, a session expired); reconnect the site and run it again.</p>
-<h3>The Integrity agent flagged something</h3>
-<p>Working as intended. The Integrity agent corrects only what is safe and asks about everything else — answer its question and the run completes. It never guesses on your behalf.</p>
-<h3>Web Access can't reach a site</h3>
-<p>Portals change. If a connected site stops working, re-connect it (credentials may have rotated or the portal added a verification step). The run record shows precisely where access stopped.</p>
-<h2>Computer use</h2>
-<h3>The agent won't connect to my machine</h3>
-<p>Three things to check, in order:</p>
+<p>Sign out, sign back in, and join the right organization with its code. Ask us via the <a href="contact.html">contact</a> page to remove the empty one.</p>
+<div class="callout">Do not post the org join code publicly. Prefer a single-job partner link when an outside crew only needs one address.</div>
+
+<h2>Field Capture</h2>
+<h3>Camera or microphone won’t start</h3>
 <ol>
-<li>The agent command is running on the machine, and the machine is awake.</li>
-<li>The network allows <strong>outbound</strong> HTTPS/WebSocket traffic — the agent only dials out, so no inbound port or port-forward is ever needed.</li>
-<li>The Anthropic API key in Settings is valid — it is how the agent sees the screen.</li>
+<li>Check OS permissions for camera and mic for Field Capture (or the browser, if you are on a web capture link).</li>
+<li>Close other apps that hold the camera.</li>
+<li>Restart the app and open the job again before recording.</li>
 </ol>
-<h2>Billing</h2>
-<h3>Work is paused</h3>
-<p>Almost always an empty credit balance — Atmosphere never spends money you haven't loaded. Buy a pack (or turn on auto-reload in Settings &rarr; Billing so this stops happening), and paused runs resume; nothing in your record is lost while paused. If the balance isn't the problem, check that your subscription payment method is current.</p>
+<h3>Location / GPS looks wrong</h3>
+<p>Door checks compare capture location to the property. Enable location for the app, wait for a fix outdoors if you can, and avoid filming the “before” from miles away in the yard of a different job. If GPS was off during capture, say so when you contact Support — the finding is still recorded honestly.</p>
+<h3>Upload stuck or pending forever</h3>
+<ol>
+<li>Confirm network (try site Wi‑Fi or a stable phone hotspot).</li>
+<li>Leave Field Capture open until pending uploads clear; background upload still needs a chance to finish.</li>
+<li>Do not delete the local video until the Platform Videos list shows it.</li>
+<li>If it still stalls, note the <strong>job id</strong> and retry when you have better signal — then contact Support with that job id.</li>
+</ol>
+
+<h2>Evidence Platform — Videos</h2>
+<h3>A video is missing</h3>
+<p>Confirm the crew filmed against the correct job and that upload left pending on the phone. Hard-refresh the Platform. Check Overview for processing items. If the phone still shows a failed upload, finish it there first.</p>
+<h3>Two videos show the same title or the same preview</h3>
+<p>Hard-refresh first. Each upload should be its own row with a unique title and matching preview. If duplicates persist after refresh, contact Support with the <strong>job id</strong> and both <strong>video ids</strong> — do not re-film over the “wrong” one until we confirm what landed.</p>
+<h3>Dictation or Ask hasn’t appeared</h3>
+<p>Door checks run first; reading follows. Large videos take longer. If checks are done and reading never starts, send the job id and video id via Support. AI usage for completed reading is billed the day it runs — see <a href="doc-billing.html">Billing &amp; usage</a>.</p>
+
+<h2>Billing and seats</h2>
+<h3>I can’t invite another Field Capture user</h3>
+<p>You may be at the seat limit for your plan (Starter 1 · Work Verification 3 · Scale 10). Invites past the included seats add a seat at <strong>$125/mo</strong>, or upgrade the plan. Open Usage / Billing in the Platform to see included vs. extra seats and the payment method on file.</p>
 <h3>A charge looks wrong</h3>
-<p>Every token is metered from the model provider's own response and lands in the append-only ledger — read it by run, by agent, and by platform. If the ledger and your invoice disagree, that is a bug: send us both.</p>
+<p>Plans, extra seats, and same-day AI usage invoices settle through Stripe. Open Usage for receipts. If an invoice and what you see in Usage disagree, send us both — that is a bug worth a human.</p>
+<p>Prepaid credit packs are <strong>not</strong> the current path for Work Verification. If you still see a legacy credit balance somewhere, it is not how new usage bills; contact us rather than buying packs to “unpause agents.”</p>
+
 <h2>Still stuck?</h2>
-<p><a href="contact.html">Write to us</a> with the <strong>run ID from the audit trail</strong> if the problem involves a run — it lets us replay exactly what you saw, which is usually the whole diagnosis.</p>
+<p><a href="contact.html">Write to us</a> with the <strong>job id</strong> and <strong>video id</strong> when the problem involves footage or a job file. That lets us open the same record you see — much more useful than a screenshot alone.</p>
 
     <div class="doc-pager">
       <a class="prev" href="doc-recipes.html"><span class="dir mono">&larr; PREVIOUS</span>Guides &amp; recipes</a>
@@ -154,6 +169,7 @@
     </div>
   </article>
 </div>
+
 
 </main>
 <!-- page:end -->
