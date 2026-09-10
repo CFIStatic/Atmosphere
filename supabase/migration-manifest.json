@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 143,
+    "migrationCount": 144,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -157,6 +157,7 @@
     "20260909220422_enable_rls_atmosphere_migrations.sql",
     "20260910165509_schema_visualizer_archive_schemas.sql",
     "20260910165510_schema_visualizer_table_comments.sql",
+    "20260910180000_schema_visualizer_move_dead_to_archive.sql",
     "20260807194500_verifier_share_kind.sql"
   ],
   "migrations": [
@@ -5204,6 +5205,31 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "creates no durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260910180000_schema_visualizer_move_dead_to_archive",
+      "file": "20260910180000_schema_visualizer_move_dead_to_archive.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|archive.eligibility_decisions",
+        "table|archive.estimator_jobs",
+        "table|archive.export_jobs",
+        "table|archive.export_manifests",
+        "table|archive.frame_embeddings",
+        "table|archive.outcome_records",
+        "table|archive.privacy_findings",
+        "table|archive.project_timeline_events",
+        "table|archive.provenance_records",
+        "table|archive.rights_manifests",
+        "table|archive.verification_eval_examples",
+        "table|archive.verification_eval_runs",
+        "table|archive.verification_prompts",
+        "table|archive.workflow_relationships"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
