@@ -9,11 +9,6 @@ import {
 } from '../src/media/catalog.js';
 import { MemoryMediaStorage } from '../src/media/driver.js';
 import {
-  createTwin,
-  resetGeometryStoreForTests,
-} from '../src/geometry/store.js';
-import { ingestMeasurementsOntoTwin, summarizeTwin } from '../src/geometry/twin.js';
-import {
   ffmpegAvailable,
   makeSyntheticDayClip,
   probeHasAudio,
@@ -21,7 +16,6 @@ import {
 } from './helpers/syntheticAv.js';
 
 process.env.MEDIA_STORE = 'memory';
-process.env.GEOMETRY_STORE = 'memory';
 
 const hasFfmpeg = ffmpegAvailable();
 
@@ -149,28 +143,4 @@ test('media catalog accepts A/V day film and rejects silent field_day_video', as
       }),
     (e: unknown) => e instanceof Error && (e as { code?: string }).code === 'audio_required',
   );
-});
-
-test('twin ingest from synthetic measure + video ref is metric and ready', async () => {
-  resetGeometryStoreForTests();
-  const twin = await createTwin({
-    orgId: 'org-synth',
-    jobId: 'job-synth',
-    label: 'Synthetic site',
-    primarySource: 'roomplan',
-  });
-  const updated = await ingestMeasurementsOntoTwin(twin.id, {
-    source: 'roomplan',
-    rooms: [
-      { name: 'Room A', lengthFt: 12, widthFt: 10, heightFt: 8, confidence: 0.9 },
-      { name: 'Room B', floorAreaSqFt: 80, heightFt: 8 },
-    ],
-    videoRef: 'media-synth-day-1',
-    work: [{ label: 'Demo flood cut', status: 'done' }],
-  });
-  const summary = summarizeTwin(updated);
-  assert.equal(summary.metric, true);
-  assert.equal(summary.roomCount, 2);
-  assert.equal(summary.videoCount, 1);
-  assert.equal(summary.status, 'ready');
 });

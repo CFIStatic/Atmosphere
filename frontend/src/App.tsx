@@ -39,9 +39,6 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 const JobsPage = lazy(() => import('./pages/JobsPage').then((m) => ({ default: m.JobsPage })));
-const HomeownerReportPage = lazy(() =>
-  import('./pages/HomeownerReportPage').then((m) => ({ default: m.HomeownerReportPage })),
-);
 const JobProgressGuestPage = lazy(() =>
   import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
 );
@@ -52,7 +49,6 @@ const TERMS_EXEMPT_PREFIXES = [
   '/reset-password',
   '/guest',
   '/shared/',
-  '/report/',
   '/progress-view',
   '/progress/',
 ];
@@ -326,7 +322,6 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Tokenized HomeOwner Report — no staff session required. */}
-          <Route path="/report/:token" element={<HomeownerReportPage />} />
           {/* Read-only job file for homeowners, counsel, banks — no login. */}
           <Route path="/progress-view" element={<JobProgressGuestPage />} />
           <Route path="/progress/:token" element={<JobProgressGuestPage />} />

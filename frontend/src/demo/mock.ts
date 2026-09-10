@@ -30,8 +30,6 @@ import type {
   MemoryEvent,
   MemoryStats,
   OrgMember,
-  PmOverview,
-  PmSettingsResponse,
   Profile,
   TokenUsageReport,
   UsageDay,
@@ -555,61 +553,6 @@ const TOKEN_USAGE = (): TokenUsageReport => {
     ],
   };
 };
-
-/* --------------------------------------------------------------------- pm */
-
-const PM_SETTINGS = {
-  orgId: 'org-1', enabled: true, timezone: 'America/Chicago', digestHour: 7,
-  readingIntervalHours: 24, dryingStallDays: 2, dryingProgressMinPct: 5,
-  equipmentIdleHours: 48, staleProjectDays: 4, milestoneLeadDays: 3,
-  maxProjectsPerCrew: 4, disabledRules: [], autoCreateTasks: true,
-};
-
-const pmProject = (id: string, num: string, name: string, phase: PmOverview['projects'][0]['project']['phase'], workType: 'mitigation' | 'construction', city: string): PmOverview['projects'][0]['project'] => ({
-  id, orgId: 'org-1', projectNumber: num, name, description: null, workType,
-  lossType: workType === 'mitigation' ? 'water' : 'storm', status: 'active', phase,
-  priority: 'high', pmUserId: 'demo-user-1', customerName: null, customerPhone: null,
-  customerEmail: null, addressLine1: null, city, region: 'TX', carrier: 'Alliance Mutual',
-  claimNumber: 'CLM-88412', adjusterName: 'R. Calloway', scheduledStartAt: '2026-07-24T13:00:00Z',
-  targetCompletionAt: '2026-08-08T00:00:00Z', startedAt: '2026-07-24T13:20:00Z',
-  completedAt: null, createdAt: '2026-07-24T15:02:00Z', updatedAt: '2026-08-01T12:20:00Z',
-});
-
-const PM_OVERVIEW: PmOverview = {
-  settings: PM_SETTINGS,
-  role: 'project_manager', canManage: true, writingEnabled: true,
-  counts: { projects: 3, critical: 1, warn: 2, mine: 2 },
-  alerts: [
-    { id: 'al-1', projectId: 'pm-1', ruleKey: 'drying_stalled', severity: 'critical', category: 'drying', title: 'Drying stalled — master bedroom subfloor', detail: 'Moisture dropped only 1.1% in the last 48 hours against a 5% floor.', suggestedAction: 'Add one LGR dehumidifier or reassess the drying chamber.', status: 'open', occurrences: 2, firstSeenAt: '2026-07-31T07:00:00Z', lastSeenAt: '2026-08-01T07:00:00Z', facts: {}, project: { id: 'pm-1', projectNumber: 'P-1041', name: 'Meridian Ave — water loss' } },
-    { id: 'al-2', projectId: 'pm-1', ruleKey: 'reading_overdue', severity: 'warn', category: 'drying', title: 'Moisture reading overdue — dining room', detail: 'Last reading 26 hours ago against a 24-hour interval.', suggestedAction: 'Ask the crew on site for a reading pass.', status: 'open', occurrences: 1, firstSeenAt: '2026-08-01T07:00:00Z', lastSeenAt: '2026-08-01T07:00:00Z', facts: {}, project: { id: 'pm-1', projectNumber: 'P-1041', name: 'Meridian Ave — water loss' } },
-    { id: 'al-3', projectId: 'pm-3', ruleKey: 'doc_blocking_invoice', severity: 'warn', category: 'documentation', title: 'Invoice blocked — signed work authorization missing', detail: 'Harbor Point cannot invoice until the authorization is on file.', suggestedAction: 'Request the signature during tomorrow’s containment setup.', status: 'open', occurrences: 3, firstSeenAt: '2026-07-30T07:00:00Z', lastSeenAt: '2026-08-01T07:00:00Z', facts: {}, project: { id: 'pm-3', projectNumber: 'P-1042', name: 'Harbor Point Condos — mold remediation' } },
-  ],
-  projects: [
-    { project: pmProject('pm-1', 'P-1041', 'Meridian Ave — water loss', 'mitigation', 'mitigation', 'Austin'), health: { score: 62, band: 'at_risk', reasons: [{ weight: 3, text: 'Drying stalled in one area' }, { weight: 1, text: 'Reading overdue' }] }, openTasks: 5, overdueTasks: 1, crewCount: 3, daysSinceActivity: 0, drying: { openAreas: 3, areasAtGoal: 1, areasOverdue: 1, areasStalled: 1, daysDrying: 8, allAreasAtGoal: false }, documentation: { completionPct: 78, invoiceReady: false, blocking: 1 } },
-    { project: pmProject('pm-2', 'P-1038', 'Cedar Ridge — storm rebuild', 'rebuild' as PmOverview['projects'][0]['project']['phase'], 'construction', 'Round Rock'), health: { score: 88, band: 'good', reasons: [] }, openTasks: 7, overdueTasks: 0, crewCount: 2, daysSinceActivity: 0, drying: null, documentation: { completionPct: 92, invoiceReady: true, blocking: 0 } },
-    { project: pmProject('pm-3', 'P-1042', 'Harbor Point Condos — mold remediation', 'scheduled', 'mitigation', 'Austin'), health: { score: 74, band: 'watch', reasons: [{ weight: 2, text: 'Blocking document missing' }] }, openTasks: 5, overdueTasks: 0, crewCount: 1, daysSinceActivity: 1, drying: null, documentation: { completionPct: 40, invoiceReady: false, blocking: 1 } },
-  ],
-  crew: [
-    { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', projectCount: 2, allocationPct: 120, openTaskCount: 7, overdueTaskCount: 1, projectNumbers: ['P-1041', 'P-1042'] },
-    { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', projectCount: 2, allocationPct: 150, openTaskCount: 4, overdueTaskCount: 0, projectNumbers: ['P-1041', 'P-1042'] },
-    { userId: 'u-priya', email: 'priya@ortizrestoration.com', fullName: 'Priya Shah', role: 'sales', projectCount: 1, allocationPct: 60, openTaskCount: 3, overdueTaskCount: 0, projectNumbers: ['P-1038'] },
-  ],
-  members: MEMBERS.map((m) => ({ userId: m.userId, email: m.email, fullName: m.fullName, role: m.role })),
-};
-
-const PM_SETTINGS_RESPONSE: PmSettingsResponse = {
-  settings: PM_SETTINGS,
-  rules: [
-    { key: 'drying_stalled', label: 'Drying stalled', description: 'Moisture is not falling fast enough against the configured floor.', category: 'drying', scope: 'project' },
-    { key: 'reading_overdue', label: 'Reading overdue', description: 'An area has gone past the reading interval without a new reading.', category: 'drying', scope: 'project' },
-    { key: 'doc_blocking_invoice', label: 'Invoice blocked by documentation', description: 'A blocking document is missing on a project otherwise ready to bill.', category: 'documentation', scope: 'project' },
-    { key: 'equipment_idle', label: 'Equipment idle', description: 'Deployed equipment has been idle past the configured window.', category: 'equipment', scope: 'org' },
-    { key: 'project_stale', label: 'Project stale', description: 'No activity on an active project past the configured number of days.', category: 'activity', scope: 'project' },
-  ],
-  canManage: true,
-  writingEnabled: true,
-};
-
 /* ------------------------------------------------------- web access & co. */
 
 const WEB_CONNECTIONS: WebConnection[] = [
@@ -1940,7 +1883,7 @@ function emptySharedRecord(
   };
 }
 
-const XACTIMATE_STATUS: XactimateStatus = {
+const DEMO_XACT_STATUS: XactimateStatus = {
   connected: false, sessionActive: false, driver: 'mock', storageAvailable: true,
   webAutomationEnabled: false, username: null, scopes: [], storageMode: 'session',
   grantedAt: null, expiresAt: null, priceListId: null, availableScopes: [],
@@ -2338,8 +2281,6 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/usage\/daily$/, () => ({ body: { days: USAGE_DAYS } })],
   ['GET', /^\/api\/billing\/token-usage$/, () => ({ body: TOKEN_USAGE() })],
 
-  ['GET', /^\/api\/pm\/overview$/, () => ({ body: PM_OVERVIEW })],
-  ['GET', /^\/api\/pm\/settings$/, () => ({ body: PM_SETTINGS_RESPONSE })],
 
 
   ['GET', /^\/api\/web-access\/connections$/, () => ({ body: { connections: WEB_CONNECTIONS } })],
@@ -4364,7 +4305,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     body: { sandbox: true, modelAvailable: true, credentialStorageAvailable: true, canManageCredentials: true, maxPhotosPerRun: 24, credentials: [] },
   })],
   ['GET', /^\/api\/estimator\/runs$/, () => ({ body: { runs: [] } })],
-  ['GET', /^\/api\/xactimate\/status$/, () => ({ body: XACTIMATE_STATUS })],
+  ['GET', /^\/api\/xactimate\/status$/, () => ({ body: DEMO_XACT_STATUS })],
 
   /* ------------------------------------------- symbility */
   ['GET', /^\/api\/symbility\/status$/, () => ({

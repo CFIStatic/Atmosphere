@@ -49,7 +49,7 @@ export const verificationConfig = {
     | 'google'
     | 'anthropic'
     | 'openai',
-  escalationModel: process.env.VERIFICATION_ESCALATION_MODEL ?? 'claude-sonnet-4-20250514',
+  escalationModel: process.env.VERIFICATION_ESCALATION_MODEL ?? 'claude-sonnet-5',
   promptVersion: process.env.VERIFICATION_PROMPT_VERSION ?? 'v1',
 
   /** Confidence / escalation. */
