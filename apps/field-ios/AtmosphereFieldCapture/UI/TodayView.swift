@@ -4,7 +4,14 @@ struct TodayView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
+    @AppStorage("atm-theme") private var themeRaw = AppearancePreference.light.rawValue
     @State private var jobQuery = ""
+    @State private var showNewJob = false
+    @State private var safariURL: URL?
+
+    private var appearance: AppearancePreference {
+        AppearancePreference(rawValue: themeRaw) ?? .light
+    }
 
     private var visibleJobs: [ExpectedJob] {
         let q = jobQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -37,6 +44,20 @@ struct TodayView: View {
                         TextField("Search jobs", text: $jobQuery)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                        if !session.isShareMode {
+                            Button {
+                                showNewJob = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(FieldTheme.accent)
+                                    .frame(width: 32, height: 32)
+                                    .background(FieldTheme.panel)
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(FieldTheme.line))
+                                    .cornerRadius(8)
+                            }
+                            .accessibilityLabel("Start recording a new job")
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 11)
@@ -56,7 +77,11 @@ struct TodayView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("Nothing assigned to you yet. Ask the office to put you on a job, then pull to refresh.")
+                            Text(
+                                session.isShareMode
+                                    ? "This share link has no job, or it expired."
+                                    : "Nothing assigned yet. Tap + to start a new job, or ask the office to put you on one."
+                            )
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if visibleJobs.isEmpty {
@@ -70,8 +95,18 @@ struct TodayView: View {
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(job.name).font(.system(size: 14, weight: .semibold))
-                                        Text(job.address)
+                                        HStack(spacing: 6) {
+                                            Text(job.name).font(.system(size: 14, weight: .semibold))
+                                            if job.isLocalDraft {
+                                                Text("On phone")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundStyle(FieldTheme.accent)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .overlay(Capsule().stroke(FieldTheme.accent.opacity(0.4)))
+                                            }
+                                        }
+                                        Text(job.address.isEmpty ? " " : job.address)
                                             .font(.system(size: 12))
                                             .foregroundStyle(FieldTheme.muted)
                                     }
@@ -98,7 +133,7 @@ struct TodayView: View {
                         }
                     }
 
-                    if let warn = auth.restoreWarning {
+                    if let warn = auth.restoreWarning, !session.isShareMode {
                         Text(warn)
                             .font(.system(size: 13))
                             .foregroundStyle(FieldTheme.muted)
@@ -129,6 +164,18 @@ struct TodayView: View {
             }
             .padding(18)
         }
+        .sheet(isPresented: $showNewJob) {
+            NewJobView()
+                .environmentObject(session)
+                .environmentObject(api)
+        }
+        .sheet(item: Binding(
+            get: { safariURL.map { IdentifiedURL(url: $0) } },
+            set: { safariURL = $0?.url }
+        )) { item in
+            SafariView(url: item.url)
+                .ignoresSafeArea()
+        }
     }
 
     private var header: some View {
@@ -138,28 +185,60 @@ struct TodayView: View {
                 Text("Atmosphere")
                     .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(FieldTheme.ink)
-                Text(auth.orgName ?? "Field Capture")
+                Text(
+                    session.isShareMode
+                        ? (session.shareCompany ?? "Shared job")
+                        : (auth.orgName ?? "Field Capture")
+                )
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
                     .lineLimit(1)
             }
             Spacer()
             Menu {
-                if let name = auth.fullName, !name.isEmpty {
-                    Text(name)
-                } else if let email = auth.email, !email.hasSuffix("@field.atmosphere.app") {
-                    Text(email)
-                }
-                if let office = auth.orgName {
-                    Text("Office: \(office)")
-                }
-                Button("Link to office account") {
-                    auth.beginOfficeLink()
-                }
-                Button("Disconnect this phone", role: .destructive) {
-                    Task {
-                        await auth.disconnectAccount()
-                        session.jobs = []
+                if session.isShareMode {
+                    Text(session.shareCompany ?? "Job share")
+                    Button("Leave shared job", role: .destructive) {
+                        session.exitShareMode()
+                        if auth.isLinked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
+                            Task { await session.loadToday(api: api) }
+                        }
+                    }
+                } else {
+                    if let name = auth.fullName, !name.isEmpty {
+                        Text(name)
+                    } else if let email = auth.email, !email.hasSuffix("@field.atmosphere.app") {
+                        Text(email)
+                    }
+                    if let office = auth.orgName {
+                        Text("Office: \(office)")
+                    }
+                    Button(appearance.toggleLabel) {
+                        var next = appearance
+                        next.toggle()
+                        themeRaw = next.rawValue
+                    }
+                    Button("Settings") {
+                        safariURL = SupportLinks.platformSettingsURL
+                    }
+                    Button("Support") {
+                        safariURL = SupportLinks.supportURL(
+                            email: auth.email,
+                            name: auth.fullName,
+                            orgName: auth.orgName,
+                            orgId: auth.orgId,
+                            path: "ios/field-capture/today"
+                        )
+                    }
+                    Button("Link to office account") {
+                        auth.beginOfficeLink()
+                    }
+                    Button("Disconnect this phone", role: .destructive) {
+                        Task {
+                            await auth.disconnectAccount()
+                            session.jobs = []
+                            PendingJobsStore.clear()
+                        }
                     }
                 }
             } label: {
@@ -173,4 +252,9 @@ struct TodayView: View {
         .background(FieldTheme.panel)
         .overlay(alignment: .bottom) { FieldTheme.line.frame(height: 1) }
     }
+}
+
+private struct IdentifiedURL: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
 }

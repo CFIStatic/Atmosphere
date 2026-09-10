@@ -8,12 +8,15 @@ import SwiftUI
  * as the office Platform. Later launches open straight to Today; day films
  * land in that org’s evidence library. Filing uses a durable on-device queue
  * (save-first, forever retry) matching web Field Capture.
+ *
+ * Job-share: `atmosphere-field://share?token=` or https app.?token= (C5).
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
     @StateObject private var api: AtmosphereClient
     @StateObject private var auth: AuthSession
     @StateObject private var session = FieldDaySession()
+    @AppStorage("atm-theme") private var themeRaw = AppearancePreference.light.rawValue
 
     init() {
         let client = AtmosphereClient.fromEnvironment()
@@ -23,13 +26,17 @@ struct AtmosphereFieldCaptureApp: App {
         _auth = StateObject(wrappedValue: sessionAuth)
     }
 
+    private var appearance: AppearancePreference {
+        AppearancePreference(rawValue: themeRaw) ?? .light
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
                 .environmentObject(api)
                 .environmentObject(auth)
-                .preferredColorScheme(.light)
+                .preferredColorScheme(appearance.colorScheme)
                 .task {
                     auth.bindAPIRefresh()
                     session.bindUploadQueue(api: api)
@@ -38,6 +45,28 @@ struct AtmosphereFieldCaptureApp: App {
                         await session.loadToday(api: api)
                     }
                     await session.uploadQueue.reloadAndKick(reason: "launch")
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .dayFilmQueueDidRemapJob)) { note in
+                    guard let localId = note.userInfo?["localId"] as? String,
+                          let serverId = note.userInfo?["serverId"] as? String
+                    else { return }
+                    if let job = note.userInfo?["job"] as? ExpectedJob {
+                        Task { @MainActor in
+                            await session.remapLocalJob(localId: localId, serverJob: job)
+                        }
+                    } else if session.activeJobId == localId {
+                        session.activeJobId = serverId
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .dayFilmQueueDidFile)) { note in
+                    let proofId = note.userInfo?["proofId"] as? String
+                    let storagePath = note.userInfo?["storagePath"] as? String
+                    let byteSize = note.userInfo?["byteSize"] as? Int64
+                    session.applyFiledNotification(
+                        proofId: proofId,
+                        storagePath: storagePath,
+                        byteSize: byteSize
+                    )
                 }
         }
     }
@@ -55,7 +84,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if !auth.isLinked {
+            if session.isShareMode {
+                shareStack
+            } else if !auth.isLinked {
                 if showSignUp {
                     SignUpView(onSignIn: { showSignUp = false })
                 } else if showJoinCrew {
@@ -71,15 +102,7 @@ struct RootView: View {
             } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()
             } else {
-                switch session.phase {
-                case .today:
-                    TodayView()
-                case .recording:
-                    RecordingView()
-                        .ignoresSafeArea()
-                case .door:
-                    DoorView()
-                }
+                linkedStack
             }
         }
         .background((session.phase == .recording ? Color.black : FieldTheme.bg).ignoresSafeArea())
@@ -93,10 +116,16 @@ struct RootView: View {
         .onAppear {
             cameFromConnect = !auth.isLinked || auth.needsOfficeLink
         }
-        // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
         .onChange(of: scenePhase) { phase in
             if phase == .active {
-                Task { await session.uploadQueue.reloadAndKick(reason: "foreground") }
+                Task {
+                    await session.uploadQueue.reloadAndKick(reason: "foreground")
+                    if session.isShareMode {
+                        /* keep share job */
+                    } else if auth.isLinked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
+                        session.syncPendingJobs(api: api)
+                    }
+                }
             }
         }
         .onReceive(auth.$isLinked.dropFirst()) { linked in
@@ -118,11 +147,40 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            auth.handleOpenURL(url)
+            if let shareToken = auth.handleOpenURL(url) {
+                Task { await session.enterShareMode(token: shareToken, api: api) }
+                return
+            }
             if !auth.isLinked, let code = auth.pendingJoinCode, !code.isEmpty {
                 showSignUp = false
                 showJoinCrew = true
             }
+        }
+    }
+
+    @ViewBuilder
+    private var linkedStack: some View {
+        switch session.phase {
+        case .today:
+            TodayView()
+        case .recording:
+            RecordingView()
+                .ignoresSafeArea()
+        case .door:
+            DoorView()
+        }
+    }
+
+    @ViewBuilder
+    private var shareStack: some View {
+        switch session.phase {
+        case .today:
+            TodayView()
+        case .recording:
+            RecordingView()
+                .ignoresSafeArea()
+        case .door:
+            DoorView()
         }
     }
 

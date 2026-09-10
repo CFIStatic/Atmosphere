@@ -52,6 +52,21 @@ actor DayFilmQueueStore {
         return rows[idx]
     }
 
+    /// Remap every film waiting on a phone-only draft id onto the office job id.
+    @discardableResult
+    func remapJobId(from localId: String, to serverId: String) throws -> Int {
+        guard localId != serverId else { return 0 }
+        var rows = try list()
+        var count = 0
+        for i in rows.indices where rows[i].jobId == localId {
+            rows[i].jobId = serverId
+            rows[i].jobDraft = nil
+            count += 1
+        }
+        if count > 0 { try writeIndex(rows) }
+        return count
+    }
+
     func remove(id: String) throws {
         var rows = try list()
         if let entry = rows.first(where: { $0.id == id }) {
@@ -77,7 +92,10 @@ actor DayFilmQueueStore {
         durationSeconds: Double,
         lat: Double?,
         lon: Double?,
-        accuracyM: Double?
+        accuracyM: Double?,
+        mode: DayFilmQueueEntry.Mode = .account,
+        shareToken: String? = nil,
+        jobDraft: JobDraftPayload? = nil
     ) throws -> DayFilmQueueEntry {
         let id = "film-\(Int(Date().timeIntervalSince1970 * 1000))-\(String(UInt16.random(in: 0 ... .max), radix: 16))"
         let fileName = "\(id).mp4"
@@ -119,7 +137,10 @@ actor DayFilmQueueStore {
             nextAttemptAt: 0,
             streamBytesDone: 0,
             streamPartCount: 0,
-            streamFailed: false
+            streamFailed: false,
+            mode: mode,
+            shareToken: shareToken,
+            jobDraft: jobDraft
         )
         try save(entry)
         return entry

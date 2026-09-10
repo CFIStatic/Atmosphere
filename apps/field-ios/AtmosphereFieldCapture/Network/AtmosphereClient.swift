@@ -324,6 +324,168 @@ final class AtmosphereClient: ObservableObject {
         return try await todayJobsViaSupabase()
     }
 
+    struct CreateJobResponse: Decodable {
+        let job: ExpectedJob
+    }
+
+    /// POST /api/field-app/jobs — create a job from the phone (web createTodayJob).
+    func createTodayJob(title: String, situation: String?) async throws -> ExpectedJob {
+        struct Body: Encodable {
+            let title: String
+            let situation: String?
+        }
+        let res: CreateJobResponse = try await post(
+            path: "/api/field-app/jobs",
+            body: Body(
+                title: title,
+                situation: (situation?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                    ? situation : nil
+            )
+        )
+        return res.job
+    }
+
+    struct PlacesStatus: Decodable {
+        let configured: Bool?
+        let provider: String?
+        let google: Bool?
+    }
+
+    struct PlaceSuggestion: Decodable, Identifiable, Equatable {
+        var id: String { placeId }
+        let placeId: String
+        let description: String
+        let mainText: String?
+        let secondaryText: String?
+    }
+
+    struct PlacesAutocompleteResponse: Decodable {
+        let suggestions: [PlaceSuggestion]
+        let configured: Bool?
+        let provider: String?
+    }
+
+    struct PlaceAddress: Decodable {
+        let formatted: String?
+        let addressLine1: String?
+        let city: String?
+        let region: String?
+        let postalCode: String?
+        let country: String?
+        let placeId: String?
+        let lat: Double?
+        let lng: Double?
+
+        var displayLine: String {
+            let formatted = self.formatted?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !formatted.isEmpty { return formatted }
+            return [addressLine1, city, region]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ", ")
+        }
+    }
+
+    struct PlacesDetailsResponse: Decodable {
+        let address: PlaceAddress
+        let configured: Bool?
+        let provider: String?
+    }
+
+    func placesStatus() async throws -> PlacesStatus {
+        try await get(path: "/api/field-app/places/status")
+    }
+
+    func placesAutocomplete(input: String, sessionToken: String?) async throws -> [PlaceSuggestion] {
+        struct Body: Encodable {
+            let input: String
+            let sessionToken: String?
+        }
+        let res: PlacesAutocompleteResponse = try await post(
+            path: "/api/field-app/places/autocomplete",
+            body: Body(input: input, sessionToken: sessionToken)
+        )
+        return res.suggestions
+    }
+
+    func placesDetails(placeId: String, sessionToken: String?) async throws -> PlaceAddress {
+        struct Body: Encodable {
+            let placeId: String
+            let sessionToken: String?
+        }
+        let res: PlacesDetailsResponse = try await post(
+            path: "/api/field-app/places/details",
+            body: Body(placeId: placeId, sessionToken: sessionToken)
+        )
+        return res.address
+    }
+
+    // MARK: - Job share (no office login)
+
+    struct ShareExchangeResponse: Decodable {
+        let ok: Bool?
+        struct You: Decodable {
+            let company: String?
+            let trade: String?
+            let role: String?
+        }
+        let you: You?
+    }
+
+    struct ShareJobPayload: Decodable {
+        struct You: Decodable {
+            let company: String?
+            let trade: String?
+            let role: String?
+        }
+        struct Job: Decodable {
+            let jobNumber: Int?
+            let title: String?
+            let claimNumber: String?
+            let scheduledStart: String?
+            let id: String?
+        }
+        let you: You?
+        let job: Job?
+    }
+
+    private func jobSharePath(token: String, suffix: String = "") -> String {
+        let enc = token.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? token
+        return "/api/job-share/\(enc)\(suffix)"
+    }
+
+    func exchangeShareToken(_ token: String) async throws -> ShareExchangeResponse {
+        struct Body: Encodable { let token: String }
+        return try await post(path: "/api/job-share/exchange", body: Body(token: token), authed: false)
+    }
+
+    func loadShareJob(token: String) async throws -> ShareJobPayload {
+        try await send(path: jobSharePath(token: token), method: "GET", bodyData: nil, authed: false)
+    }
+
+    func shareJobAsExpected(_ payload: ShareJobPayload, token: String) -> ExpectedJob {
+        let title = payload.job?.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Job"
+        let num = payload.job?.jobNumber.map { "#\($0)" } ?? ""
+        let claim = payload.job?.claimNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let addr: String
+        if let claim, !claim.isEmpty {
+            addr = "Claim \(claim)"
+        } else {
+            addr = "Shared job"
+        }
+        let id = payload.job?.id?.nilIfEmpty ?? "share:\(token.prefix(12))"
+        return ExpectedJob(
+            id: id,
+            number: num,
+            name: num.isEmpty ? title : "\(num) · \(title)",
+            address: addr,
+            at: "Today",
+            placed: true,
+            status: nil,
+            filmed: false
+        )
+    }
+
     struct ProofUploadPart: Decodable {
         let index: Int
         let start: Int64?
@@ -364,7 +526,8 @@ final class AtmosphereClient: ObservableObject {
         phase: String = "after",
         fileExtension: String = "mp4",
         clipId: String? = nil,
-        byteSize: Int64? = nil
+        byteSize: Int64? = nil,
+        shareToken: String? = nil
     ) async throws -> ProofUploadUrlResponse {
         struct Body: Encodable {
             let workDate: String
@@ -374,17 +537,25 @@ final class AtmosphereClient: ObservableObject {
             let byteSize: Int64?
         }
         let resolvedClip = ClipId.resolve(clipId)
+        let body = Body(
+            workDate: workDate,
+            phase: phase,
+            extension: fileExtension,
+            clipId: resolvedClip,
+            byteSize: byteSize
+        )
+        if let shareToken, !shareToken.isEmpty {
+            return try await post(
+                path: jobSharePath(token: shareToken, suffix: "/proof/upload-url"),
+                body: body,
+                authed: false
+            )
+        }
         if usesBFF {
             do {
                 return try await post(
                     path: "/api/field-app/jobs/\(jobId)/proof/upload-url",
-                    body: Body(
-                        workDate: workDate,
-                        phase: phase,
-                        extension: fileExtension,
-                        clipId: resolvedClip,
-                        byteSize: byteSize
-                    )
+                    body: body
                 )
             } catch {
                 if !Self.isUnreachable(error) { throw error }
@@ -406,7 +577,8 @@ final class AtmosphereClient: ObservableObject {
         phase: String = "after",
         fileExtension: String = "mp4",
         clipId: String,
-        index: Int
+        index: Int,
+        shareToken: String? = nil
     ) async throws -> ProofPartUploadUrlResponse {
         struct Body: Encodable {
             let workDate: String
@@ -415,15 +587,23 @@ final class AtmosphereClient: ObservableObject {
             let clipId: String
             let index: Int
         }
+        let body = Body(
+            workDate: workDate,
+            phase: phase,
+            extension: fileExtension,
+            clipId: ClipId.resolve(clipId),
+            index: index
+        )
+        if let shareToken, !shareToken.isEmpty {
+            return try await post(
+                path: jobSharePath(token: shareToken, suffix: "/proof/upload-part-url"),
+                body: body,
+                authed: false
+            )
+        }
         return try await post(
             path: "/api/field-app/jobs/\(jobId)/proof/upload-part-url",
-            body: Body(
-                workDate: workDate,
-                phase: phase,
-                extension: fileExtension,
-                clipId: ClipId.resolve(clipId),
-                index: index
-            )
+            body: body
         )
     }
 
@@ -433,7 +613,8 @@ final class AtmosphereClient: ObservableObject {
         workDate: String,
         phase: String = "after",
         storagePath: String,
-        partCount: Int
+        partCount: Int,
+        shareToken: String? = nil
     ) async throws -> ProofUploadCompleteResponse {
         struct Body: Encodable {
             let workDate: String
@@ -441,14 +622,22 @@ final class AtmosphereClient: ObservableObject {
             let storagePath: String
             let partCount: Int
         }
+        let body = Body(
+            workDate: workDate,
+            phase: phase,
+            storagePath: storagePath,
+            partCount: partCount
+        )
+        if let shareToken, !shareToken.isEmpty {
+            return try await post(
+                path: jobSharePath(token: shareToken, suffix: "/proof/upload-complete"),
+                body: body,
+                authed: false
+            )
+        }
         return try await post(
             path: "/api/field-app/jobs/\(jobId)/proof/upload-complete",
-            body: Body(
-                workDate: workDate,
-                phase: phase,
-                storagePath: storagePath,
-                partCount: partCount
-            )
+            body: body
         )
     }
 
@@ -520,6 +709,7 @@ final class AtmosphereClient: ObservableObject {
         clipId: String,
         phase: String = "after",
         fileExtension: String = "mp4",
+        shareToken: String? = nil,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> (byteSize: Int64, sha256Hex: String, storagePath: String, partCount: Int) {
         let size = try MediaUploadClient.byteSize(ofFile: localURL)
@@ -536,7 +726,8 @@ final class AtmosphereClient: ObservableObject {
                 phase: phase,
                 fileExtension: fileExtension,
                 clipId: clipId,
-                index: index
+                index: index,
+                shareToken: shareToken
             )
             storagePath = minted.path
             guard let partURL = URL(string: minted.uploadUrl) else {
@@ -554,7 +745,8 @@ final class AtmosphereClient: ObservableObject {
             workDate: workDate,
             phase: phase,
             storagePath: storagePath,
-            partCount: ranges.count
+            partCount: ranges.count,
+            shareToken: shareToken
         )
         return (size, hex, storagePath, ranges.count)
     }
@@ -581,7 +773,14 @@ final class AtmosphereClient: ObservableObject {
         let proof: Proof?
     }
 
-    func completeJobProof(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
+    func completeJobProof(jobId: String, body: ProofRecordBody, shareToken: String? = nil) async throws -> ProofRecordResponse {
+        if let shareToken, !shareToken.isEmpty {
+            return try await post(
+                path: jobSharePath(token: shareToken, suffix: "/proof"),
+                body: body,
+                authed: false
+            )
+        }
         if usesBFF {
             do {
                 return try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)

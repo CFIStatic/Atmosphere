@@ -84,7 +84,7 @@ Open the printed `/fieldcapture/` URL in Safari, then Share → Add to Home Scre
 **Create an account or sign in** on first install (same email/password as the
 Atmosphere website). Link the phone to the office with the join code from
 Atmosphere → Settings → Organization (**Link to office account**), or start a
-new office from the phone. A join link `atmosphere-field://join?code=…` opens
+new office from the phone. A join link `atmosphere-field://join?code=…` or job-share `atmosphere-field://share?token=…` opens
 that screen. Tokens stay in Keychain — later launches skip connect and open
 Today. Day films file into `job_proofs` for that org. Disconnect only from
 Account → Disconnect.
@@ -157,4 +157,4 @@ In-app header uses `AtmosphereBarsMark`.
 - UIKit host for `RoomCaptureViewController` → real room list + USDZ
 - True background `URLSession` app-delegate handoff while the app is suspended (large PUTs already stream from disk with forever-retry queue)
 - App Store Connect listing, TestFlight, privacy nutrition labels
-- Phase C4+: create job / Places, job-share links, account Support/Settings — see `docs/field-capture-ios-parity.md`
+- Phase C7+: offline Today cache polish, filing strip, BFF-first tightening — see `docs/field-capture-ios-parity.md`
