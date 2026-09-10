@@ -6,7 +6,8 @@ import SwiftUI
  *
  * Connect the crew once on first install with the same email and password
  * as the office Platform. Later launches open straight to Today; day films
- * land in that org’s evidence library.
+ * land in that org’s evidence library. Filing uses a durable on-device queue
+ * (save-first, forever retry) matching web Field Capture.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
@@ -31,10 +32,12 @@ struct AtmosphereFieldCaptureApp: App {
                 .preferredColorScheme(.light)
                 .task {
                     auth.bindAPIRefresh()
+                    session.bindUploadQueue(api: api)
                     await auth.restore()
                     if auth.isLinked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
                         await session.loadToday(api: api)
                     }
+                    await session.uploadQueue.reloadAndKick(reason: "launch")
                 }
         }
     }
@@ -44,6 +47,7 @@ struct RootView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSignUp = false
     @State private var showJoinCrew = false
     @State private var showElevate = false
@@ -90,6 +94,11 @@ struct RootView: View {
             cameFromConnect = !auth.isLinked || auth.needsOfficeLink
         }
         // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                Task { await session.uploadQueue.reloadAndKick(reason: "foreground") }
+            }
+        }
         .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked, !auth.needsOfficeLink, !auth.needsTermsAcceptance {
                 playElevateIfComingFromConnect()

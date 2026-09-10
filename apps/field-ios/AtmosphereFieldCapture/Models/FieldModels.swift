@@ -63,6 +63,7 @@ struct DayFilmManifest: Codable, Equatable {
     var hasAudio: Bool
     var hasVideo: Bool
     var capturedAt: Date
+    var clipId: String? = nil
 }
 
 func formatClipLength(_ seconds: Double) -> String {

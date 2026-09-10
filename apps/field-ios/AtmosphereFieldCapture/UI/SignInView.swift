@@ -13,6 +13,7 @@ struct SignInView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
+    @State private var pendingSaved = 0
 
     var body: some View {
         ScrollView {
@@ -40,6 +41,17 @@ struct SignInView: View {
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
+
+                if pendingSaved > 0 {
+                    Text(
+                        pendingSaved == 1
+                            ? "1 day film saved on this phone — sign in to finish filing."
+                            : "\(pendingSaved) day films saved on this phone — sign in to finish filing."
+                    )
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FieldTheme.ink)
+                    .padding(.top, 4)
+                }
 
                 VStack(spacing: 10) {
                     TextField("Email", text: $email)
@@ -126,5 +138,12 @@ struct SignInView: View {
             .padding(22)
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .task {
+            pendingSaved = DayFilmUploadQueue.shared.pendingSavedCount()
+            if pendingSaved == 0 {
+                let n = (try? await DayFilmQueueStore.shared.pendingCount()) ?? 0
+                pendingSaved = n
+            }
+        }
     }
 }
