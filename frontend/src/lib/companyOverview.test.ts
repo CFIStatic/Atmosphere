@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOverview,
   jobsNeedingAttention,
+  officeFailed,
   officePending,
   pipelineLine,
   todayLine,
@@ -406,5 +407,26 @@ describe('officePending', () => {
 
   it('is silent when nothing is waiting on the office', () => {
     expect(officePending({ filmed: 1, unread: 0, failed: 0, analysing: 0, jobsFilmed: 1 })).toBeNull();
+  });
+
+  it('does not treat failed reads as pending — those use officeFailed', () => {
+    expect(officePending({ filmed: 0, unread: 0, failed: 2, analysing: 0, jobsFilmed: 0 })).toBeNull();
+  });
+});
+
+describe('officeFailed', () => {
+  it('makes failed reads obvious for Overview (including phone, which has no Today card)', () => {
+    expect(officeFailed({ filmed: 1, unread: 0, failed: 2, analysing: 0, jobsFilmed: 1 })).toEqual({
+      count: 2,
+      label: '2 clips failed to read',
+      detail: 'Open Needs a look to retry the reading on the job file.',
+    });
+    expect(officeFailed({ filmed: 0, unread: 1, failed: 1, analysing: 0, jobsFilmed: 0 })?.label).toBe(
+      '1 clip failed to read',
+    );
+  });
+
+  it('is silent when nothing failed', () => {
+    expect(officeFailed({ filmed: 2, unread: 1, failed: 0, analysing: 1, jobsFilmed: 1 })).toBeNull();
   });
 });

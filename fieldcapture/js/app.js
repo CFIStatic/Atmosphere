@@ -1571,18 +1571,46 @@
     if (!stepEl) return;
     var ratio = film.status === 'uploading' ? film.progress || 0 : 0;
     var pct = Math.round(ratio * 100);
+    var stuck =
+      film.status === 'waiting' &&
+      Core.isStuckStatus &&
+      Core.isStuckStatus(film.lastStatus) &&
+      film.lastError;
     var step;
     if (film.status === 'uploading') step = film.step || 'Uploading…';
     else if (!sessionUsable()) step = 'Sign in to finish filing';
     else if (navigator.onLine === false) step = Core.WAITING_FOR_SIGNAL || 'Waiting for signal…';
-    else if (film.status === 'waiting') step = film.lastError || 'Retrying…';
+    else if (stuck) step = film.lastError;
+    else if (film.status === 'waiting') step = film.lastError || 'Upload interrupted — retrying…';
     else step = film.step || 'Saved on this phone';
     stepEl.textContent = step;
-    stepEl.style.color = '';
+    stepEl.style.color = stuck ? '#c43b2a' : '';
     if (pctEl) pctEl.textContent = film.status === 'uploading' ? pct + '%' : '';
-    if (bar) bar.style.width = pct + '%';
-    if (film.volatile) {
+    if (bar) bar.style.width = film.status === 'uploading' ? pct + '%' : stuck ? '0%' : pct + '%';
+    if (stuck) {
+      setDoorSub('Upload did not go through. The recording is still on this phone.');
+      setDoneline(
+        'Upload failed.',
+        film.lastError
+          ? film.lastError + ' Tap Retry upload — or ask the office for help.'
+          : 'Tap Retry upload when signal is better — or ask the office for help.',
+      );
+      $('#doneline').classList.add('on');
+      showHomeAction({ retry: true });
+    } else if (film.volatile) {
       setDoorSub('Saved. Keep Field Capture open until this files — this phone could not keep a copy.');
+      showHomeAction({ retry: false });
+    } else if (film.status === 'waiting') {
+      setDoorSub('Saved. Filing with the office — retrying on its own.');
+      showHomeAction({ retry: true });
+    } else if (film.status === 'uploading') {
+      setDoorSub('Saved. You can start the next one.');
+      setDoneline(
+        'Done.',
+        'Saved on this phone and filing with the office on its own. You can start the next one now.',
+      );
+      $('#doneline').classList.add('on');
+      showHomeAction({ retry: false });
     }
   }
 
@@ -1605,11 +1633,14 @@
    * straight from here) and Back to Home Screen (pick another job). The
    * film just finished is already saved and filing; neither waits on it.
    */
-  function showHomeAction() {
+  function showHomeAction(opts) {
+    opts = opts || {};
     var done = $('#donebtn');
     if (done) done.classList.add('on');
     var next = $('#nextbtn');
     if (next) next.classList.toggle('on', canRecordAgain());
+    var retry = $('#retrybtn');
+    if (retry) retry.classList.toggle('on', Boolean(opts.retry));
   }
 
   function canRecordAgain() {
@@ -2244,6 +2275,23 @@
       });
     }
   })();
+  when('#retrybtn', function () {
+    if (!filmQueue) return;
+    setDoorSub('Retrying upload…');
+    var retry = $('#retrybtn');
+    if (retry) {
+      retry.classList.add('on');
+      retry.textContent = 'Retrying…';
+      retry.disabled = true;
+    }
+    Promise.resolve(filmQueue.retryNow()).finally(function () {
+      if (retry) {
+        retry.disabled = false;
+        retry.textContent = 'Retry upload';
+      }
+    });
+  });
+
   when('#nextbtn', function (btn) {
     btn.addEventListener('click', recordAnother);
   });

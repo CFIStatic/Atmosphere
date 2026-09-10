@@ -2821,6 +2821,7 @@
     createDayFilmQueue: createDayFilmQueue,
     summarizeDayFilms: summarizeDayFilms,
     filingHomeVisible: filingHomeVisible,
+    isStuckStatus: isStuckStatus,
     nextFilingBackoffMs: nextFilingBackoffMs,
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,
