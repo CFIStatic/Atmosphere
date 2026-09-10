@@ -599,10 +599,8 @@ with them, so there is nothing to switch on: those API paths 404 as unknown
 routes. `backend/test/soldPathHttp.test.ts` asserts that, and asserts they do
 not come back as a gated surface either.
 
-Two things stayed because the sold path uses them:
+One thing stayed because the sold path uses it:
 
-- `src/pm/` — the HomeOwner Report reads project, milestone, area, reading and
-  placement rows, and runs the drying analysis.
 - `src/ai/providers/` — the model provider layer behind video verification. The
   learning layer that sat on top of it is gone.
 
