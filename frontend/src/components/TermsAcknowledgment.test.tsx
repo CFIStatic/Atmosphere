@@ -29,7 +29,7 @@ describe('TermsAckCheckbox', () => {
     expect(continueBtn).toBeEnabled();
 
     await user.click(continueBtn);
-    expect(onAccept).toHaveBeenCalledWith('2026-09-07');
+    expect(onAccept).toHaveBeenCalledWith('2026-09-10');
   });
 
   it('labels the checkbox as an explicit acknowledgment', () => {

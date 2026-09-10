@@ -20,45 +20,50 @@ export function AtmospherePlanPicker({
   disabled?: boolean;
 }) {
   return (
-    <fieldset className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-3">
-      <legend className="sr-only">Atmosphere plan</legend>
-      {plans.map((plan) => {
-        const selected = plan.code === value;
-        const seats = fieldCaptureSeatLabel(plan.includedFcSeats);
-        return (
-          <label
-            key={plan.code}
-            className={cn(
-              'relative flex h-full min-h-[13.5rem] cursor-pointer flex-col rounded-xl border-2 p-4 transition',
-              selected
-                ? 'border-brand-500 bg-brand-50 shadow-sm'
-                : 'border-line bg-paper-50 hover:border-brand-200',
-              disabled && 'cursor-not-allowed opacity-60',
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={plan.code}
-              checked={selected}
-              disabled={disabled}
-              onChange={() => onChange(plan.code)}
-              className="sr-only"
-            />
-            <span className="flex h-6 items-center">
-              <span className={cn(BADGE_CLASS, !plan.recommended && 'invisible')} aria-hidden={!plan.recommended}>
-                Recommended
+    <div>
+      <fieldset className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-3">
+        <legend className="sr-only">Atmosphere plan</legend>
+        {plans.map((plan) => {
+          const selected = plan.code === value;
+          const seats = fieldCaptureSeatLabel(plan.includedFcSeats);
+          return (
+            <label
+              key={plan.code}
+              className={cn(
+                'relative flex h-full min-h-[13.5rem] cursor-pointer flex-col rounded-xl border-2 p-4 transition',
+                selected
+                  ? 'border-brand-500 bg-brand-50 shadow-sm'
+                  : 'border-line bg-paper-50 hover:border-brand-200',
+                disabled && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={plan.code}
+                checked={selected}
+                disabled={disabled}
+                onChange={() => onChange(plan.code)}
+                className="sr-only"
+              />
+              <span className="flex h-6 items-center">
+                <span className={cn(BADGE_CLASS, !plan.recommended && 'invisible')} aria-hidden={!plan.recommended}>
+                  Recommended
+                </span>
               </span>
-            </span>
-            <span className="mt-2 truncate text-[15px] font-semibold leading-5 tracking-tight text-ink-900 whitespace-nowrap">
-              {plan.name}
-            </span>
-            <PlanPrice monthlyCents={plan.monthlyCents} stacked />
-            <span className="mt-auto pt-3 text-sm leading-5 text-ink-600">{seats}</span>
-          </label>
-        );
-      })}
-    </fieldset>
+              <span className="mt-2 truncate text-[15px] font-semibold leading-5 tracking-tight text-ink-900 whitespace-nowrap">
+                {plan.name}
+              </span>
+              <PlanPrice monthlyCents={plan.monthlyCents} stacked />
+              <span className="mt-auto pt-3 text-sm leading-5 text-ink-600">{seats}</span>
+            </label>
+          );
+        })}
+      </fieldset>
+      <p className="mt-3 text-xs text-ink-500">
+        Prices increase 10% annually on your plan anniversary (30-day notice). Includes seats and usage.
+      </p>
+    </div>
   );
 }
 

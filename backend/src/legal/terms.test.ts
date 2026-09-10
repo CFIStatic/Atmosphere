@@ -22,7 +22,7 @@ const storeSrc = readFileSync(
 
 describe('terms versioning', () => {
   it('treats the September 7 2026 Terms of Use as the live version', () => {
-    assert.equal(CURRENT_TERMS_VERSION, '2026-09-07');
+    assert.equal(CURRENT_TERMS_VERSION, '2026-09-10');
     assert.equal(TERMS_PUBLIC_URL, 'https://atmosphereteam.com/terms');
   });
 
@@ -47,7 +47,7 @@ describe('terms versioning', () => {
   it('clears the gate when the recorded version matches the live revision', () => {
     const status = termsStatus({
       termsVersion: CURRENT_TERMS_VERSION,
-      acceptedAt: '2026-09-07T12:00:00.000Z',
+      acceptedAt: '2026-09-10T12:00:00.000Z',
     });
     assert.equal(status.required, false);
     assert.equal(hasAcceptedCurrentTerms(CURRENT_TERMS_VERSION), true);

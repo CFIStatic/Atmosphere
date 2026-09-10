@@ -193,7 +193,7 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
-      expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1', '2026-09-07');
+      expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1', '2026-09-10');
     });
     expect(authState.logout).toHaveBeenCalledTimes(1);
     expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(

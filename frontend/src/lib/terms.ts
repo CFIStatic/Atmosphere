@@ -1,5 +1,5 @@
 /** Live Terms of Service revision — keep in lockstep with backend/src/legal/terms.ts. */
-export const CURRENT_TERMS_VERSION = '2026-09-07';
+export const CURRENT_TERMS_VERSION = '2026-09-10';
 export const TERMS_PUBLIC_URL = 'https://atmosphereteam.com/terms';
 export const PRIVACY_PUBLIC_URL = 'https://atmosphereteam.com/privacy';
 

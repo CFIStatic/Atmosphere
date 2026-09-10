@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere pricing — Starter $399/mo (1 Field Capture seat), Work Verification $849/mo (3 seats), Scale $1,999/mo (10 seats). Extra seats $125/mo. Usage billed the day it’s used."  />
+  <meta name="description" content="Atmosphere pricing — Starter $399/mo, Work Verification $849/mo, Scale $1,999/mo. Extra seats $125/mo. Usage billed same-day. Prices increase 10% annually on your plan anniversary."  />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Pricing · Atmosphere</title>
   <meta property="og:title" content="Pricing · Atmosphere" />
-  <meta property="og:description" content="Atmosphere pricing — Starter $399/mo (1 Field Capture seat), Work Verification $849/mo (3 seats), Scale $1,999/mo (10 seats). Extra seats $125/mo. Usage billed the day it’s used." />
+  <meta property="og:description" content="Atmosphere pricing — Starter $399/mo, Work Verification $849/mo, Scale $1,999/mo. Extra seats $125/mo. Usage billed same-day. Prices increase 10% annually on your plan anniversary." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="https://atmosphereteam.com/assets/og.png" />
@@ -20,7 +20,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/site.css?v=20260907-pricing" />
   <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark')p=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',p);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"Every self-serve plan includes Field Capture and the Evidence Platform. Starter is $399/mo with 1 Field Capture account. Work Verification is $849/mo with 3 accounts. Scale is $1,999/mo with 10 accounts. Extra accounts are $125/mo each. Usage is billed the day it is used."}},{"@type":"Question","name":"How is usage billed?","acceptedAnswer":{"@type":"Answer","text":"Usage (AI and token analysis) is billed the day it is used. You are not billed on a per-job dollar rate, and you are not billed directly on LLM tokens or model names."}},{"@type":"Question","name":"How many Field Capture accounts are included?","acceptedAnswer":{"@type":"Answer","text":"Starter includes 1 Field Capture account, Work Verification includes 3, and Scale includes 10. Additional accounts are $125 per month each."}},{"@type":"Question","name":"What is the Field Capture Chest Mount?","acceptedAnswer":{"@type":"Answer","text":"An optional one-time hardware add-on at $49.99. It ships in 2–5 days. Field Capture software does not require the mount."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody."}},{"@type":"Question","name":"Can plans be customized?","acceptedAnswer":{"@type":"Answer","text":"Enterprise terms are arranged with sales. Self-serve plans are Starter, Work Verification, and Scale."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"Every self-serve plan includes Field Capture and the Evidence Platform. Starter is $399/mo with 1 Field Capture account. Work Verification is $849/mo with 3 accounts. Scale is $1,999/mo with 10 accounts. Extra accounts are $125/mo each. Usage is billed the day it is used."}},{"@type":"Question","name":"How is usage billed?","acceptedAnswer":{"@type":"Answer","text":"Usage (AI and token analysis) is billed the day it is used. You are not billed on a per-job dollar rate, and you are not billed directly on LLM tokens or model names."}},{"@type":"Question","name":"How many Field Capture accounts are included?","acceptedAnswer":{"@type":"Answer","text":"Starter includes 1 Field Capture account, Work Verification includes 3, and Scale includes 10. Additional accounts are $125 per month each."}},{"@type":"Question","name":"What is the Field Capture Chest Mount?","acceptedAnswer":{"@type":"Answer","text":"An optional one-time hardware add-on at $49.99. It ships in 2–5 days. Field Capture software does not require the mount."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody."}},{"@type":"Question","name":"Can plans be customized?","acceptedAnswer":{"@type":"Answer","text":"Enterprise terms are arranged with sales. Self-serve plans are Starter, Work Verification, and Scale."}},{"@type":"Question","name":"Do prices increase over time?","acceptedAnswer":{"@type":"Answer","text":"Yes. Monthly plan fees, extra Field Capture seats, and usage rates increase by 10% each year on the anniversary of your paid plan start, with 30 days advance notice by email. The one-time Chest Mount hardware purchase is excluded."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security."}}]}</script>
 </head>
 <body>
 
@@ -187,6 +187,15 @@
       <a href="#" data-app-path="/settings?section=billing">billing page</a>
       shows the current plan, included seats, and receipts.
     </p>
+    <div class="pricing-callout" style="margin-top: 24px;">
+      <h3>Annual price increase</h3>
+      <p>
+        Monthly plan fees, extra Field Capture seats, and usage rates increase
+        <strong>10% each year</strong> on the anniversary of your paid plan start,
+        with <strong>30 days advance notice</strong> by email. The one-time
+        Chest Mount hardware purchase is excluded.
+      </p>
+    </div>
   </div>
 </section>
 
@@ -429,6 +438,16 @@
         <p>
           Self-serve plans are Starter, Work Verification, and Scale. For more seats or
           custom terms, <a href="contact.html">contact us</a> for Enterprise.
+        </p>
+      </details>
+      <details>
+        <summary>Do prices increase over time?</summary>
+        <p>
+          Yes. Monthly plan fees, extra Field Capture seats, and usage rates
+          increase by <strong>10% each year</strong> on the anniversary of your
+          paid plan start, with <strong>30 days advance notice</strong> by email.
+          The one-time Chest Mount hardware purchase is excluded.
+          See the <a href="terms.html">Terms of Use</a> (Fees and Modifications).
         </p>
       </details>
       <details>
