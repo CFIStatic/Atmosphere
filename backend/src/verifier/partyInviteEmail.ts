@@ -6,11 +6,9 @@ import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
  * Sent by Atmosphere (Resend), not from the inviting company's mailbox.
  * The org is named in the body so the recipient knows who the job is for.
  *
- * Recipients without an Atmosphere account are asked to create one
- * with this exact address so the job stays with their others.
- *
- * The capture link opens the invited job (job file + film) without a
- * login. It must not dump a signed-in office user onto their jobs dashboard.
+ * Primary open is Field Capture (app.atmosphereteam.com): existing accounts
+ * sign in there; new recipients get a create-account prompt. The office
+ * /shared link stays a secondary "job file on the web" fallback.
  */
 
 export function partyInviteEmail(input: {
@@ -21,13 +19,13 @@ export function partyInviteEmail(input: {
   recipientName?: string | null;
   recipientEmail: string;
   recipientHasAccount: boolean;
-  /** The app's public origin, when configured. */
+  /** Platform / office origin for signup + optional web job-file link. */
   origin?: string | null;
-  /** Share path, e.g. /shared/<token>?email=… */
+  /** Office share path, e.g. /shared/<token>?email=… (secondary). */
   path: string;
   /** Signup URL when the recipient has no account yet. */
   signupPath?: string | null;
-  /** Field Capture web / phone app link for the same job token. */
+  /** Field Capture web / phone app link for the same job token (primary). */
   fieldCaptureUrl?: string | null;
 }): { subject: string; text: string; html: string } {
   const org = input.orgName.trim() || 'a contractor';
@@ -35,9 +33,11 @@ export function partyInviteEmail(input: {
   const job = input.jobTitle?.trim() || null;
   const site = input.siteAddress?.trim() || null;
   const who = input.recipientName?.trim() || null;
-  const link = absoluteUrl(input.origin, input.path);
+  const officeLink = absoluteUrl(input.origin, input.path);
   const signup = input.signupPath ? absoluteUrl(input.origin, input.signupPath) : null;
   const fieldCapture = input.fieldCaptureUrl?.trim() || null;
+  const primary = fieldCapture || officeLink;
+  const primaryIsFieldCapture = Boolean(fieldCapture);
 
   const subject = job
     ? `${org} invited you to capture: ${job}`
@@ -53,13 +53,15 @@ export function partyInviteEmail(input: {
   if (site) textLines.push(`Site: ${site}`);
   textLines.push(
     '',
-    'Open your job on your phone (no login required to start):',
+    primaryIsFieldCapture
+      ? 'Open in Field Capture (sign in if you have an account, or create one):'
+      : 'Open your job on your phone:',
     '',
-    `  ${link}`,
+    `  ${primary}`,
     '',
   );
-  if (fieldCapture) {
-    textLines.push('Or open it in Field Capture (web or the iPhone app):', '', `  ${fieldCapture}`, '');
+  if (primaryIsFieldCapture && officeLink !== primary) {
+    textLines.push('Job file on the web:', '', `  ${officeLink}`, '');
   }
 
   if (!input.recipientHasAccount) {
@@ -74,9 +76,9 @@ export function partyInviteEmail(input: {
 
   textLines.push(
     '',
-    'On the job page you will:',
+    'On the job you will:',
     '  1. Open the job file (scope, do-nots, brief, recordings)',
-    '  2. Film the day (on the page or in Field Capture)',
+    '  2. Film the day in Field Capture',
     '',
     'Opening the invite (and filing a recording) records that you have seen the current scope.',
     '',
@@ -111,6 +113,17 @@ export function partyInviteEmail(input: {
            : ''
        }`;
 
+  const primaryLabel = primaryIsFieldCapture ? 'Open in Field Capture' : 'Open job on phone';
+  const secondaryBlock =
+    primaryIsFieldCapture && officeLink !== primary
+      ? `<p style="margin:12px 0 0;">
+            <a href="${escapeAttr(officeLink)}"
+               style="color:#b45309;font-weight:600;text-decoration:underline;">
+              Job file on the web
+            </a>
+          </p>`
+      : '';
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <body style="margin:0;padding:0;background:#f4f1ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
@@ -124,26 +137,18 @@ export function partyInviteEmail(input: {
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             ${who ? `Hi ${escapeHtml(who)},` : 'Hi,'}
-            open the link on your phone to review the job file and film the day.
+            open Field Capture to review the job file and film the day.
           </p>
           ${metaRows ? `<table role="presentation" style="margin:20px 0 0;width:100%;">${metaRows}</table>` : ''}
           <p style="margin:24px 0 0;">
-            <a href="${escapeAttr(link)}"
+            <a href="${escapeAttr(primary)}"
                style="display:inline-block;background:#ea580c;color:#1c1917;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
-              Open job on phone
+              ${primaryLabel}
             </a>
           </p>
-          ${
-            fieldCapture
-              ? `<p style="margin:12px 0 0;">
-            <a href="${escapeAttr(fieldCapture)}"
-               style="color:#b45309;font-weight:600;text-decoration:underline;">
-              Open in Field Capture
-            </a>
-          </p>`
-              : ''
-          }
-          ${accountBlock ? `\n          ${accountBlock}` : ''}
+          ${secondaryBlock}
+          ${accountBlock ? `
+          ${accountBlock}` : ''}
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             If you were not expecting this, ignore it — nothing happens until the link is opened.
           </p>

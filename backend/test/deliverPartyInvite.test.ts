@@ -13,6 +13,10 @@ test('Field Capture invite links keep the job-share token on web and phone', () 
   );
   assert.equal(
     fieldCaptureInviteUrl('tok123'),
-    `${LIVE_FIELD_CAPTURE_ORIGIN}/?token=tok123`,
+    `${LIVE_FIELD_CAPTURE_ORIGIN}/?token=tok123&account=1`,
+  );
+  assert.equal(
+    fieldCaptureInviteUrl('tok123', { email: 'crew@example.com' }),
+    `${LIVE_FIELD_CAPTURE_ORIGIN}/?token=tok123&email=crew%40example.com&account=1`,
   );
 });

@@ -23,9 +23,18 @@ export function fieldCaptureInvitePath(token: string): string {
   return `/fieldcapture/index.html?token=${encodeURIComponent(token)}`;
 }
 
-export function fieldCaptureInviteUrl(token: string, origin = LIVE_FIELD_CAPTURE_ORIGIN): string {
-  const trimmed = origin.replace(/\/$/, '');
-  return `${trimmed}/?token=${encodeURIComponent(token)}`;
+export function fieldCaptureInviteUrl(
+  token: string,
+  options?: { email?: string | null; origin?: string },
+): string {
+  const origin = (options?.origin ?? LIVE_FIELD_CAPTURE_ORIGIN).replace(/\/$/, '');
+  const params = new URLSearchParams();
+  params.set('token', token);
+  const email = options?.email?.trim().toLowerCase();
+  if (email) params.set('email', email);
+  // Account gate: sign-in / create-account before the shared job opens.
+  params.set('account', '1');
+  return `${origin}/?${params.toString()}`;
 }
 
 export async function deliverPartyInvite(input: {
@@ -99,7 +108,7 @@ export async function deliverPartyInvite(input: {
       origin,
       path: sharePath,
       signupPath: `/signup?email=${emailParam}`,
-      fieldCaptureUrl: fieldCaptureInviteUrl(input.token),
+      fieldCaptureUrl: fieldCaptureInviteUrl(input.token, { email }),
     });
     const result = await sendSystemMail({
       to: email,

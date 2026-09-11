@@ -37,6 +37,10 @@
   var STORAGE_BASE = params.get('storage') || '';
   var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
+  var INVITE_EMAIL = (params.get('email') || '').trim();
+  /* Invite emails set account=1 so recipients land on sign-in / create-account
+     before the shared job opens — existing sessions skip straight to the job. */
+  var REQUIRE_ACCOUNT = params.get('account') === '1';
   var ACCESS_KEY = 'atm.field.accessToken';
   var REFRESH_KEY = 'atm.field.refreshToken';
 
@@ -1105,6 +1109,20 @@
   function bootAccount() {
     document.body.setAttribute('data-mode', 'account');
     readStoredSession();
+    if (INVITE_EMAIL) {
+      when('#login-email', function (input) {
+        if (!input.value) input.value = INVITE_EMAIL;
+      });
+    }
+    when('#signup-link', function (link) {
+      if (!Core.resolveOfficeHref) return;
+      var signupPath = '/signup';
+      var qs = new URLSearchParams();
+      if (INVITE_EMAIL) qs.set('email', INVITE_EMAIL);
+      if (TOKEN) qs.set('intent', 'join');
+      var q = qs.toString();
+      link.href = Core.resolveOfficeHref(signupPath) + (q ? '?' + q : '');
+    });
     when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     when('#password-toggle', function (toggle) {
       toggle.addEventListener('click', function () {
@@ -1140,6 +1158,9 @@
               throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) {
+              return enterLiveMode();
+            }
             return finishAccountConnect();
           })
           .catch(function (err) {
@@ -2362,7 +2383,20 @@
     }, 15000);
   })();
 
-  if (LIVE) {
+  if (LIVE && REQUIRE_ACCOUNT) {
+    readStoredSession();
+    if (state.accessToken) {
+      enterLiveMode();
+    } else {
+      bootAccount();
+      showLoginError('');
+      setStatus(
+        INVITE_EMAIL
+          ? 'Sign in or create an account to open this job.'
+          : 'Sign in or create an account to open this invite.',
+      );
+    }
+  } else if (LIVE) {
     enterLiveMode();
   } else if (DEMO) {
     bootDemo();
