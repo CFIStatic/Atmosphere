@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { config } from '../config.js';
 import {
@@ -188,7 +188,7 @@ mediaCatalogRouter.delete(
   '/objects/:id',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId } = await requireOrgContext(req);
+      const { orgId, userId } = await requireGlobalAdmin(req);
       const media = await softDeleteMedia(String(req.params.id), orgId, userId);
       res.json({ ok: true, media: { id: media.id, state: media.state, deletedAt: media.deletedAt } });
     } catch (err) {

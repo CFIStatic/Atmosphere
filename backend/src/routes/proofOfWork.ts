@@ -4,7 +4,11 @@ import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
+import {
+  assertGlobalAdminCanDeleteVideo,
+  scheduledPurgeAt,
+} from '../lib/videoDeletePolicy.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
@@ -3083,19 +3087,44 @@ export async function setEvidenceHold(req: Request, res: Response, next: NextFun
 
 /**
  * DELETE /api/operations/shared/:jobId/evidence/:proofId
- * Hide a clip from the customer library. The vault keeps the file.
+ * Global Admin only. Queue the clip for permanent purge in 30 days.
  */
 export async function deleteEvidence(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
-    const now = new Date().toISOString();
+    const { orgId, userId, role, supabase } = await requireOrgContext(req);
+    assertGlobalAdminCanDeleteVideo(role);
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const purgeAt = scheduledPurgeAt(now);
     // SELECT policies hide deleted_at rows. Postgres treats that as an implicit
     // WITH CHECK on UPDATE, so a user-JWT stamp fails with an RLS error.
-    // Service role bypasses it; the caller is already an org member here.
+    // Service role bypasses it; the caller is already a Global Admin here.
     const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
+    const { data: existing, error: existingErr } = await writer
+      .from('job_proofs')
+      .select('id, legal_hold')
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .eq('id', req.params.proofId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (existingErr) throw new HttpError(400, existingErr.message, 'delete_failed');
+    if (!existing) throw new HttpError(404, 'Evidence not found', 'proof_not_found');
+    if ((existing as { legal_hold?: boolean | null }).legal_hold) {
+      throw new HttpError(
+        409,
+        'On legal hold — this clip cannot be deleted while the hold stands.',
+        'legal_hold',
+      );
+    }
+
     const { data, error } = await writer
       .from('job_proofs')
-      .update({ deleted_at: now, deleted_by: userId })
+      .update({
+        deleted_at: nowIso,
+        deleted_by: userId,
+        scheduled_purge_at: purgeAt,
+      })
       .eq('org_id', orgId)
       .eq('job_id', req.params.jobId)
       .eq('id', req.params.proofId)
@@ -3112,7 +3141,7 @@ export async function deleteEvidence(req: Request, res: Response, next: NextFunc
       jobId: req.params.jobId,
       proofId: req.params.proofId,
       action: 'deleted',
-      detail: 'Customer deleted this clip from their library. The vault still holds it.',
+      detail: `Global Admin queued permanent deletion for ${purgeAt}.`,
       ...actor,
     });
     await recordUserAction({
@@ -3122,10 +3151,55 @@ export async function deleteEvidence(req: Request, res: Response, next: NextFunc
       action: 'video.deleted',
       resourceType: 'proof',
       resourceId: req.params.proofId,
+      detail: { jobId: req.params.jobId, scheduledPurgeAt: purgeAt },
+    });
+
+    res.json({ ok: true, deletedAt: nowIso, scheduledPurgeAt: purgeAt });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/operations/shared/:jobId/evidence/:proofId/restore
+ * Global Admin only. Cancel a pending deletion before the purge window elapses.
+ */
+export async function restoreEvidence(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireGlobalAdmin(req);
+    const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
+    const { data, error } = await writer
+      .from('job_proofs')
+      .update({ deleted_at: null, deleted_by: null, scheduled_purge_at: null })
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .eq('id', req.params.proofId)
+      .not('deleted_at', 'is', null)
+      .select('id')
+      .maybeSingle();
+    if (error) throw new HttpError(400, error.message, 'restore_failed');
+    if (!data) throw new HttpError(404, 'Pending deletion not found', 'proof_not_found');
+
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      proofId: req.params.proofId,
+      action: 'restored',
+      detail: 'Global Admin cancelled pending deletion.',
+      ...actor,
+    });
+    await recordUserAction({
+      actorUserId: userId,
+      actorLabel: actor.actorLabel,
+      orgId,
+      action: 'video.restored',
+      resourceType: 'proof',
+      resourceId: req.params.proofId,
       detail: { jobId: req.params.jobId },
     });
 
-    res.json({ ok: true, deletedAt: now });
+    res.json({ ok: true, restored: true });
   } catch (err) {
     next(err);
   }

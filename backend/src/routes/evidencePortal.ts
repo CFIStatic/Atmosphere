@@ -5,6 +5,7 @@ import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
+import { isGlobalAdmin } from '../lib/productRoles.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -69,7 +70,7 @@ const PORTAL_PROOF_SELECT =
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
   'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels, ' +
   'title, clip_id, narration, narration_text, narration_status, narration_error, actions, ' +
-  'transcript_status, transcript_text, device_metadata';
+  'transcript_status, transcript_text, device_metadata, deleted_at, deleted_by, scheduled_purge_at';
 
 export const evidencePortalRouter = Router();
 
@@ -572,7 +573,7 @@ evidencePortalRouter.use(requireAuth);
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { q } = z.object({ q: z.string().max(120).optional() }).parse(req.query);
-    const { supabase, orgId } = await requireOrgContext(req);
+    const { supabase, orgId, role } = await requireOrgContext(req);
     const { data, error } = await supabase
       .from('job_proofs')
       .select(PORTAL_PROOF_SELECT)
@@ -582,7 +583,29 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');
 
-    let items = await assembleLibrary(supabase, orgId, data ?? []);
+    let proofRows = (data ?? []) as any[];
+    // Global Admins also see clips queued for the 30-day purge so they can restore.
+    if (isGlobalAdmin(role)) {
+      const writer = writerForOrg(orgId, supabase).raw;
+      const { data: pending, error: pendingErr } = await writer
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .not('scheduled_purge_at', 'is', null)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(200);
+      if (pendingErr) {
+        console.warn('[library] pending purge list failed:', pendingErr.message);
+      } else {
+        const seen = new Set(proofRows.map((p) => p.id as string));
+        for (const row of (pending ?? []) as any[]) {
+          if (!seen.has(row.id)) proofRows.push(row);
+        }
+      }
+    }
+
+    let items = await assembleLibrary(supabase, orgId, proofRows);
 
     // Job files exist before any clip does — Start a job should show the
     // name on the Dashboard so footage has a folder to land in.

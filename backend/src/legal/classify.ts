@@ -75,6 +75,13 @@ const RULES: Rule[] = [
   },
   {
     method: 'POST',
+    pattern: new RegExp(`^/api/operations/shared/(${UUID})/evidence/(${UUID})/restore/?$`),
+    action: 'video.restored',
+    resourceType: 'proof',
+    resourceParam: 2,
+  },
+  {
+    method: 'POST',
     pattern: new RegExp(`^/api/operations/shared/(${UUID})/evidence/(${UUID})/hold/?$`),
     action: 'evidence.hold_changed',
     resourceType: 'proof',

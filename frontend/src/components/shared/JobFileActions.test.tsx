@@ -6,6 +6,10 @@ const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
 const deleteJobFile = vi.fn();
 
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ membership: { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } } }),
+}));
+
 vi.mock('../../lib/api', () => ({
   api: {
     renameJobFile: (...args: unknown[]) => renameJobFile(...args),
