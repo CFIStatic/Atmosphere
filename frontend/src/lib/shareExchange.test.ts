@@ -4,7 +4,7 @@ import { exchangeShareToken, guestPathAfterExchange } from './shareExchange';
 describe('guestPathAfterExchange', () => {
   it('strips token query keys and keeps ask=1', () => {
     expect(guestPathAfterExchange('progress', '?token=abc&ask=1')).toBe(
-      '/progress-view?ask=1',
+      '/progress?ask=1',
     );
     expect(guestPathAfterExchange('job', '?email=a%40b.com')).toBe(
       '/guest?email=a%40b.com',

@@ -60,7 +60,7 @@ export function JobProgressGuestPage() {
   }, [token]);
 
   const invitedEmail = view?.share.recipientEmail?.trim().toLowerCase() || null;
-  const progressPath = token ? `/progress/${encodeURIComponent(token)}` : '/progress-view';
+  const progressPath = token ? `/progress/${encodeURIComponent(token)}` : '/progress';
 
   async function claimAndOpen() {
     if (!token || claiming) return;
@@ -154,8 +154,7 @@ export function JobProgressGuestPage() {
       <div className="shrink-0 border-b border-line bg-paper-0 px-6 py-3">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-ink-700">
-            Keep this job in an Atmosphere account — email and password only. No payment, no Field
-            Capture seat.
+            Want to come back later? Save this job with an email and password.
           </p>
           <div className="flex flex-wrap gap-2">
             {user ? (
@@ -173,7 +172,7 @@ export function JobProgressGuestPage() {
                   to={signupLink}
                   className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0"
                 >
-                  Create login
+                  Save this job
                 </Link>
                 <Link
                   to={loginLink}

@@ -51,8 +51,7 @@ const TERMS_EXEMPT_PREFIXES = [
   '/reset-password',
   '/guest',
   '/shared/',
-  '/progress-view',
-  '/progress/',
+  '/progress',
 ];
 
 function isTermsExemptPath(pathname: string): boolean {
@@ -338,9 +337,11 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Tokenized HomeOwner Report — no staff session required. */}
-          {/* Read-only job file for homeowners, counsel, banks — no login. */}
+          {/* Read-only job file for homeowners, counsel, banks — no login.
+              /progress = cookied guest session; /progress/:token = emailed link.
+              /progress-view kept as an alias for older links. */}
           <Route path="/progress-view" element={<JobProgressGuestPage />} />
+          <Route path="/progress" element={<JobProgressGuestPage />} />
           <Route path="/progress/:token" element={<JobProgressGuestPage />} />
 
           <Route

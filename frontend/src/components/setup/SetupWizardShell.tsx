@@ -23,7 +23,8 @@ export function SetupWizardShell({
   children: ReactNode;
 }) {
   const copy = setupWizardCopy(intent);
-  const wide = step === 2;
+  const isHomeowner = intent === 'homeowner';
+  const wide = step === 2 && !isHomeowner;
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
@@ -39,12 +40,14 @@ export function SetupWizardShell({
           <div
             className={cn(
               'grid gap-10 lg:items-start',
-              wide
-                ? 'lg:grid-cols-[minmax(16rem,19rem)_minmax(0,1fr)] lg:gap-10'
-                : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:gap-14',
+              isHomeowner
+                ? 'max-w-md mx-auto'
+                : wide
+                  ? 'lg:grid-cols-[minmax(16rem,19rem)_minmax(0,1fr)] lg:gap-10'
+                  : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:gap-14',
             )}
           >
-            <div className="hidden lg:block">
+            <div className={isHomeowner ? 'hidden' : 'hidden lg:block'}>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
                 Get started
               </p>

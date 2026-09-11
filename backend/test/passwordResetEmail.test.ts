@@ -23,7 +23,7 @@ describe('passwordResetEmail', () => {
     assert.ok(html.includes('token_hash=abc'));
     assert.ok(
       html.includes(
-        'href="https://atmosphere-web-production.up.railway.app/reset-password?token_hash=abc&amp;type=recovery"',
+        `href="${LIVE_OFFICE_ORIGIN}/reset-password?token_hash=abc&amp;type=recovery"`,
       ),
     );
     assert.ok(!text.includes('localhost'));

@@ -165,7 +165,7 @@ describe('JobProgressGuestPage', () => {
     expect(
       await screen.findByText('The north slope is stripped to decking.'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Create login' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Save this job' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();

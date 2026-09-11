@@ -294,14 +294,14 @@ export function SignupPage() {
           intent={orgIntent}
           title={
             isHomeowner
-              ? 'Create your login'
+              ? 'Save this job'
               : mode === 'join'
                 ? 'Account & join code'
                 : 'Account & workspace'
           }
           subtitle={
             isHomeowner
-              ? 'Email and password only — no payment, no Field Capture seat. You will open the shared job file next.'
+              ? 'Email and password. That is it.'
               : mode === 'join'
                 ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
                 : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
@@ -354,7 +354,7 @@ export function SignupPage() {
                 </Field>
                 )}
 
-                <Field label="Work email" htmlFor="signup-email">
+                <Field label={isHomeowner ? 'Email' : 'Work email'} htmlFor="signup-email">
                   <input
                     id="signup-email"
                     type="email"
@@ -362,7 +362,7 @@ export function SignupPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={isHomeowner ? 'you@email.com' : 'you@company.com'}
                     className={inputClass}
                   />
                 </Field>
@@ -377,7 +377,7 @@ export function SignupPage() {
                       minLength={8}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Choose a strong password"
+                      placeholder={isHomeowner ? 'At least 8 characters' : 'Choose a strong password'}
                       className={`${inputClass} pr-11`}
                     />
                     <button
@@ -442,7 +442,7 @@ export function SignupPage() {
             )}
 
             <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
-              {submitting ? 'Setting up…' : isHomeowner ? 'Create login' : 'Continue'}
+              {submitting ? 'Saving…' : isHomeowner ? 'Save this job' : 'Continue'}
             </PrimaryButton>
           </form>
         </SetupStepCard>
@@ -491,9 +491,11 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      <p className="mt-6 text-center text-xs text-ink-400">
-        Passwords are encrypted, never stored in plain text, and never seen by this page.
-      </p>
+      {!isHomeowner && (
+        <p className="mt-6 text-center text-xs text-ink-400">
+          Passwords are encrypted, never stored in plain text, and never seen by this page.
+        </p>
+      )}
     </SetupWizardShell>
   );
 }

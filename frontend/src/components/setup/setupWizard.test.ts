@@ -2,14 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { initialSetupStep, setupWizardCopy } from './setupWizard';
 
 describe('setupWizardCopy', () => {
-  it('uses homeowner quick-login copy without Field Capture film pitch', () => {
+  it('uses a one-step homeowner save-job flow without contractor copy', () => {
     const copy = setupWizardCopy('homeowner');
-    expect(copy.heading).toMatch(/job progress/i);
-    expect(copy.lede).toMatch(/no payment/i);
+    expect(copy.heading).toMatch(/Save this job/i);
+    expect(copy.lede).toMatch(/email and password/i);
     expect(copy.lede).not.toMatch(/film the first day/i);
-    expect(copy.steps[0]?.title).toMatch(/Create your login/i);
+    expect(copy.lede).not.toMatch(/Field Capture/i);
+    expect(copy.lede).not.toMatch(/no payment/i);
+    expect(copy.steps).toHaveLength(1);
+    expect(copy.steps[0]?.title).toMatch(/Save this job/i);
     expect(copy.steps[0]?.detail).toMatch(/email and password/i);
-    expect(copy.steps[0]?.detail).toMatch(/no Field Capture seat/i);
+    expect(copy.steps[0]?.detail).not.toMatch(/Field Capture/i);
   });
 
   it('uses Global Admin create-company copy', () => {

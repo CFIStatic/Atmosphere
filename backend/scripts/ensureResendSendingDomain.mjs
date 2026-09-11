@@ -63,6 +63,25 @@ function printRecords(records) {
   console.log('Until the sending domain is verified, Resend only delivers to the account owner.');
 }
 
+
+// Click/open tracking rewrites links through a tracking host — Yahoo/Gmail
+// treat that as phishing-adjacent. Keep both OFF on the invite domain.
+async function forceTrackingOff(domainId, domainName) {
+  const updated = await resend(`/domains/${domainId}`, {
+    method: 'PATCH',
+    body: { open_tracking: false, click_tracking: false },
+  });
+  if (!updated.ok) {
+    console.warn(
+      `Could not disable Resend tracking on ${domainName} (${updated.status}):`,
+      JSON.stringify(updated.json).slice(0, 300),
+    );
+    console.warn('Turn click + open tracking OFF manually: https://resend.com/domains');
+    return;
+  }
+  console.log(`Resend tracking OFF for ${domainName} (open_tracking=false, click_tracking=false).`);
+}
+
 const listed = await resend('/domains');
 if (!listed.ok) {
   if (listed.status === 401 && /restricted/i.test(JSON.stringify(listed.json))) {
@@ -122,6 +141,7 @@ const got = await resend(`/domains/${domain.id}`);
 const status = got.json?.status ?? domain.status ?? 'unknown';
 const records = got.json?.records ?? domain.records ?? [];
 console.log(`Resend ${TARGET} status: ${status}`);
+await forceTrackingOff(domain.id, TARGET);
 printRecords(records);
 
 if (status !== 'verified') {
