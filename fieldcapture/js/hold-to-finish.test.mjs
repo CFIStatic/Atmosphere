@@ -116,7 +116,7 @@ assert.match(html, /Field Capture<small>/);
 assert.match(html, /Platform<small>/);
 assert.match(
   appSrc,
-  /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-office' \|\| id === 's-platform'/,
+  /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-platform'/,
   'the Field Capture / Platform bar returns after sign-in and on the office pane',
 );
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');

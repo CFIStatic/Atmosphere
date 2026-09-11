@@ -106,43 +106,6 @@ export const resetPasswordSchema = z
   });
 
 /**
- * The most-guessed 4-digit PINs. With a device-bound PIN an attacker who steals
- * an unlocked-but-locked device gets 5 attempts before lockout — which is
- * harmless against a random PIN but close to a coin flip if the user picked
- * 1234. Rejecting the popular set is what keeps that attempt budget meaningless.
- */
-const COMMON_PINS = new Set([
-  '1234', '1111', '0000', '1212', '7777', '1004', '2000', '4444', '2222', '6969',
-  '9999', '3333', '5555', '6666', '1122', '1313', '8888', '4321', '2001', '1010',
-  '2580', '0852', '1230', '1984', '2011', '1112', '1379', '1999', '2020', '2468',
-]);
-
-function isSequential(pin: string): boolean {
-  let ascending = true;
-  let descending = true;
-  for (let i = 1; i < pin.length; i += 1) {
-    const delta = pin.charCodeAt(i) - pin.charCodeAt(i - 1);
-    if (delta !== 1) ascending = false;
-    if (delta !== -1) descending = false;
-  }
-  return ascending || descending;
-}
-
-export const pinSchema = z.object({
-  pin: z
-    .string({ required_error: 'PIN is required' })
-    .regex(/^\d{4}$/, 'Your PIN must be exactly 4 digits')
-    .refine((pin) => !COMMON_PINS.has(pin), 'That PIN is too easy to guess — pick another')
-    .refine((pin) => new Set(pin).size > 1, 'Your PIN cannot be the same digit four times')
-    .refine((pin) => !isSequential(pin), 'Your PIN cannot be four digits in a row'),
-});
-
-/** Unlock only needs the shape to be right — no strength rules on the way in. */
-export const pinUnlockSchema = z.object({
-  pin: z.string({ required_error: 'PIN is required' }).regex(/^\d{4}$/, 'Enter your 4-digit PIN'),
-});
-
-/**
  * Body of a password change made from Settings by a signed-in user. The current
  * password is required: a live session alone must not be enough to rewrite the
  * credential, or an unattended browser becomes a full account takeover.
@@ -245,9 +208,10 @@ const usageIntentsSchema = z
   });
 
 /**
- * Website signup asks for a company name (or a join code). Creating an org
- * makes the caller Global Admin (bill payer); joining with a code makes them
- * an Employee. Contractor type defaults to "other" until set elsewhere.
+ * Website signup asks for a company name, or joins via a pending email
+ * invite. Creating an org makes the caller Global Admin (bill payer);
+ * joining makes them an Employee. Contractor type defaults to "other"
+ * until set elsewhere.
  */
 export const WEBSITE_SIGNUP_CREATE_ONBOARDING = {
   role: 'global_admin',
@@ -287,11 +251,6 @@ export const updateOrgProfileSchema = z.object({
 });
 
 export const joinOrgSchema = z.object({
-  joinCode: z
-    .string({ required_error: 'Join code is required' })
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
   // Joiners cannot mint the bill-payer seat from the request body. A pending
   // Global Admin invite is applied in the join route (and by the remap trigger).
   role: roleSchema
@@ -319,16 +278,10 @@ const crewFullNameField = z
       }),
   );
 
-const officeJoinCodeField = z
-  .string({ required_error: 'Join code is required' })
-  .trim()
-  .toUpperCase()
-  .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code');
-
 /**
  * Field Capture (iOS) account creation. Same email/password rules as website
- * signup, plus either an office join code or a new office name so the phone
- * can file day films into an organization on the first launch.
+ * signup. A pending org invite for the email joins that office; otherwise
+ * an optional office name starts a new company.
  */
 /** Field Capture joining an existing office — Employee seat, not bill payer. */
 export const FIELD_APP_ONBOARDING = {
@@ -346,72 +299,33 @@ export const FIELD_APP_CREATE_ONBOARDING = {
   usageIntents: ['field_work', 'billing'],
 } as const;
 
-export const fieldRegisterSchema = z
-  .object({
-    email: emailField,
-    password: passwordField,
-    fullName: crewFullNameField.optional(),
-    joinCode: officeJoinCodeField.optional(),
-    orgName: z
-      .string()
-      .trim()
-      .min(2, 'Organization name is too short')
-      .max(80, 'Organization name is too long')
-      .optional(),
-    acceptedTermsVersion: acceptedTermsVersionField,
-  })
-  .refine((value) => Boolean(value.joinCode || value.orgName), {
-    message: 'Enter an office join code or a new office name.',
-    path: ['joinCode'],
-  })
-  .refine((value) => !(value.joinCode && value.orgName), {
-    message: 'Choose either a join code or a new office name, not both.',
-    path: ['orgName'],
-  });
-
-export type FieldRegisterInput = z.infer<typeof fieldRegisterSchema>;
-
-/** Signed-in Field Capture user linking this phone to an office. */
-export const fieldOfficeSchema = z
-  .object({
-    fullName: crewFullNameField.optional(),
-    joinCode: officeJoinCodeField.optional(),
-    orgName: z
-      .string()
-      .trim()
-      .min(2, 'Organization name is too short')
-      .max(80, 'Organization name is too long')
-      .optional(),
-  })
-  .refine((value) => Boolean(value.joinCode || value.orgName), {
-    message: 'Enter an office join code or a new office name.',
-    path: ['joinCode'],
-  })
-  .refine((value) => !(value.joinCode && value.orgName), {
-    message: 'Choose either a join code or a new office name, not both.',
-    path: ['orgName'],
-  });
-
-export type FieldOfficeInput = z.infer<typeof fieldOfficeSchema>;
-
-/** Confirm an office join code before attaching the Field Capture login. */
-export const fieldOfficePreviewSchema = z.object({
-  joinCode: officeJoinCodeField,
-});
-
-export type FieldOfficePreviewInput = z.infer<typeof fieldOfficePreviewSchema>;
-
-/**
- * Field Capture crew connect: first and last name plus the office join code.
- * No email or password — the office assigns work to that name.
- */
-export const fieldJoinSchema = z.object({
-  fullName: crewFullNameField,
-  joinCode: officeJoinCodeField,
+export const fieldRegisterSchema = z.object({
+  email: emailField,
+  password: passwordField,
+  fullName: crewFullNameField.optional(),
+  orgName: z
+    .string()
+    .trim()
+    .min(2, 'Organization name is too short')
+    .max(80, 'Organization name is too long')
+    .optional(),
   acceptedTermsVersion: acceptedTermsVersionField,
 });
 
-export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
+export type FieldRegisterInput = z.infer<typeof fieldRegisterSchema>;
+
+/** Signed-in Field Capture user joining by invite email, or starting an office. */
+export const fieldOfficeSchema = z.object({
+  fullName: crewFullNameField.optional(),
+  orgName: z
+    .string()
+    .trim()
+    .min(2, 'Organization name is too short')
+    .max(80, 'Organization name is too long')
+    .optional(),
+});
+
+export type FieldOfficeInput = z.infer<typeof fieldOfficeSchema>;
 
 /**
  * Field Capture: start a job from the phone, then record.

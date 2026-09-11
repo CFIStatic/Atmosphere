@@ -3,13 +3,11 @@ import SwiftUI
 /**
  * Same email + password as the office Platform.
  *
- * This is the Field Capture login. Crew who only have an office invite
- * code can still switch to JoinCrewView.
+ * This is the Field Capture login.
  */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     var onCreateAccount: () -> Void = {}
-    var onJoinWithCode: () -> Void = {}
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
@@ -121,15 +119,6 @@ struct SignInView: View {
                 }
                 .disabled(busy)
                 .padding(.top, 4)
-
-                Button(action: onJoinWithCode) {
-                    Text("Join with an office invite code")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(FieldTheme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                }
-                .disabled(busy)
 
                 Text("After this, you won’t be asked again on this phone.")
                     .font(.system(size: 12))

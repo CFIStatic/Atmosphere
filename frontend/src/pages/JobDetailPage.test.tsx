@@ -237,7 +237,7 @@ describe('JobDetailPage', () => {
     expect(screen.queryByRole('tab', { name: 'Crew' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'History' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Job Files/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('JobDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Job Files/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Overview')).not.toBeInTheDocument();

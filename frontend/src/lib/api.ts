@@ -2700,19 +2700,11 @@ export const api = {
       body: JSON.stringify({ email, password, acceptedTermsVersion }),
     }),
 
-  /** Field Capture iOS — name + office join code (no email). */
-  fieldJoin: (input: { fullName: string; joinCode: string; acceptedTermsVersion: string }) =>
-    request<AuthResponse>('/api/field-app/join', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-
-  /** Field Capture iOS — create the website account and join or start an office. */
+  /** Field Capture iOS — create the website account and join by invite or start an office. */
   fieldRegister: (input: {
     email: string;
     password: string;
     fullName?: string;
-    joinCode?: string;
     orgName?: string;
     acceptedTermsVersion: string;
   }) =>
@@ -2721,18 +2713,11 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  /** Field Capture iOS — link an already-signed-in login to an office. */
-  fieldLinkOffice: (input: { joinCode?: string; orgName?: string; fullName?: string }) =>
+  /** Field Capture iOS — join by pending invite, or start an office by name. */
+  fieldLinkOffice: (input: { orgName?: string; fullName?: string }) =>
     request<{ org: Org }>('/api/field-app/office', {
       method: 'POST',
       body: JSON.stringify(input),
-    }),
-
-  /** Field Capture iOS — confirm a join code before attaching this login. */
-  fieldPreviewOffice: (joinCode: string) =>
-    request<{ org: { name: string; joinCode: string } }>('/api/field-app/office/preview', {
-      method: 'POST',
-      body: JSON.stringify({ joinCode }),
     }),
 
   /** Jobs this person can film today — assigned crew first, else open jobs. */
@@ -2800,26 +2785,6 @@ export const api = {
 
   removeAvatar: () => request<{ profile: Profile }>('/api/profile/avatar', { method: 'DELETE' }),
 
-  // ---- Device PIN ----
-  pinStatus: () =>
-    request<{ enrolled: boolean; lockedUntil?: string | null }>('/api/auth/pin/status', {
-      method: 'GET',
-    }),
-
-  pinEnroll: (pin: string) =>
-    request<{ ok: boolean }>('/api/auth/pin/enroll', {
-      method: 'POST',
-      body: JSON.stringify({ pin }),
-    }),
-
-  pinUnlock: (pin: string) =>
-    request<{ user: AuthUser; terms?: TermsStatus }>('/api/auth/pin/unlock', {
-      method: 'POST',
-      body: JSON.stringify({ pin }),
-    }),
-
-  pinDisable: () => request<{ ok: boolean }>('/api/auth/pin/disable', { method: 'POST' }),
-
   // ---- Organization / onboarding ----
   getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),
 
@@ -2847,10 +2812,10 @@ export const api = {
       body: JSON.stringify({ name, role, workType, contractorType, usageIntents }),
     }),
 
-  joinOrg: (joinCode: string, role: MemberRole, workType: WorkType, usageIntents: UsageIntent[]) =>
+  joinOrg: (role: MemberRole, workType: WorkType, usageIntents: UsageIntent[]) =>
     request<{ org: Org }>('/api/org/join', {
       method: 'POST',
-      body: JSON.stringify({ joinCode, role, workType, usageIntents }),
+      body: JSON.stringify({ role, workType, usageIntents }),
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
@@ -3255,7 +3220,7 @@ export const api = {
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
   createOrgInvite: (input: { email: string; role?: MemberRole; note?: string }) =>
-    request<{ invite: OrgInvite; emailed: boolean; joinCode: string }>('/api/org/invites', {
+    request<{ invite: OrgInvite; emailed: boolean }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

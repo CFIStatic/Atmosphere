@@ -112,24 +112,21 @@ final class AtmosphereClient: ObservableObject {
         let email: String
         let password: String
         let fullName: String?
-        let joinCode: String?
         let orgName: String?
         let acceptedTermsVersion: String
     }
 
-    /// Create the same Atmosphere account the website uses, then join or start an office.
+    /// Create the same Atmosphere account the website uses, then join by invite.
     func registerAccount(
         email: String,
         password: String,
         fullName: String?,
-        joinCode: String?,
-        orgName: String?
+        orgName: String? = nil
     ) async throws -> AuthResponse {
         let body = RegisterBody(
             email: email,
             password: password,
             fullName: fullName,
-            joinCode: joinCode,
             orgName: orgName,
             acceptedTermsVersion: Self.currentTermsVersion
         )
@@ -142,7 +139,6 @@ final class AtmosphereClient: ObservableObject {
                         email: email,
                         password: password,
                         fullName: fullName,
-                        joinCode: joinCode,
                         orgName: orgName
                     )
                 }
@@ -151,7 +147,6 @@ final class AtmosphereClient: ObservableObject {
                         email: email,
                         password: password,
                         fullName: fullName,
-                        joinCode: joinCode,
                         orgName: orgName
                     )
                 }
@@ -162,48 +157,8 @@ final class AtmosphereClient: ObservableObject {
             email: email,
             password: password,
             fullName: fullName,
-            joinCode: joinCode,
             orgName: orgName
         )
-    }
-
-    struct OfficePreview: Decodable {
-        let name: String
-        let joinCode: String?
-    }
-
-    func previewOffice(joinCode: String) async throws -> OfficePreview {
-        struct Body: Encodable { let joinCode: String }
-        struct Res: Decodable { let org: OfficePreview }
-        if usesBFF {
-            do {
-                let res: Res = try await post(
-                    path: "/api/field-app/office/preview",
-                    body: Body(joinCode: joinCode),
-                    authed: false
-                )
-                return res.org
-            } catch {
-                if !Self.isUnreachable(error) { throw error }
-            }
-        }
-        return try await previewOfficeViaSupabase(joinCode: joinCode)
-    }
-
-    private struct JoinCrewBody: Encodable {
-        let fullName: String
-        let joinCode: String
-        let acceptedTermsVersion: String
-    }
-
-    /// Crew connect: name + office invite code. No email or password.
-    func joinCrew(fullName: String, joinCode: String) async throws -> AuthResponse {
-        let body = JoinCrewBody(
-            fullName: fullName,
-            joinCode: joinCode,
-            acceptedTermsVersion: Self.currentTermsVersion
-        )
-        return try await post(path: "/api/field-app/join", body: body, authed: false)
     }
 
     func authMe() async throws -> AuthMe {
@@ -220,13 +175,13 @@ final class AtmosphereClient: ObservableObject {
         return res.terms
     }
 
-    func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
+    /// Join an office by pending email invite, or start one when `orgName` is set.
+    func linkOffice(orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
         struct Body: Encodable {
-            let joinCode: String?
             let orgName: String?
             let fullName: String?
         }
-        let body = Body(joinCode: joinCode, orgName: orgName, fullName: fullName)
+        let body = Body(orgName: orgName, fullName: fullName)
         if usesBFF {
             do {
                 let res: OfficeResponse = try await post(path: "/api/field-app/office", body: body)
@@ -238,7 +193,7 @@ final class AtmosphereClient: ObservableObject {
                 if !Self.isUnreachable(error) { throw error }
             }
         }
-        return try await linkOfficeViaSupabase(joinCode: joinCode, orgName: orgName, fullName: fullName)
+        return try await linkOfficeViaSupabase(orgName: orgName, fullName: fullName)
     }
 
     private struct OfficeResponse: Decodable {
@@ -982,7 +937,6 @@ final class AtmosphereClient: ObservableObject {
         email: String,
         password: String,
         fullName: String?,
-        joinCode: String?,
         orgName: String?
     ) async throws -> AuthResponse {
         struct SignupBody: Encodable {
@@ -1005,7 +959,7 @@ final class AtmosphereClient: ObservableObject {
         accessToken = result.session?.accessToken
         refreshToken = result.session?.refreshToken
         do {
-            let org = try await linkOfficeViaBFF(joinCode: joinCode, orgName: orgName, fullName: fullName)
+            let org = try await linkOfficeViaBFF(orgName: orgName, fullName: fullName)
             return AuthResponse(
                 user: result.user,
                 session: result.session,
@@ -1029,52 +983,50 @@ final class AtmosphereClient: ObservableObject {
         }
     }
 
-    private func linkOfficeViaBFF(joinCode: String?, orgName: String?, fullName: String?) async throws -> FieldOrg {
+    private func linkOfficeViaBFF(orgName: String?, fullName: String?) async throws -> FieldOrg {
         if let fullName, !fullName.isEmpty {
             struct ProfileBody: Encodable { let fullName: String }
             struct ProfileRes: Decodable { let profile: ProfileRow? }
             let _: ProfileRes = try await post(path: "/api/profile", body: ProfileBody(fullName: fullName))
         }
-        if let joinCode, !joinCode.isEmpty {
-            struct JoinBody: Encodable {
-                let joinCode: String
+        if let orgName, !orgName.isEmpty {
+            struct CreateBody: Encodable {
+                let name: String
                 let role: String
                 let workType: String
+                let contractorType: String
                 let usageIntents: [String]
             }
             let res: OfficeResponse = try await post(
-                path: "/api/org/join",
-                body: JoinBody(
-                    joinCode: joinCode,
+                path: "/api/org",
+                body: CreateBody(
+                    name: orgName,
                     role: "field_technician",
                     workType: "construction",
+                    contractorType: "other",
                     usageIntents: ["field_work"]
                 )
             )
             guard let org = res.org else {
-                throw APIError.http(status: 400, body: "That join code did not match any organization.")
+                throw APIError.http(status: 400, body: "Could not start that office.")
             }
             return org
         }
-        struct CreateBody: Encodable {
-            let name: String
+        struct JoinBody: Encodable {
             let role: String
             let workType: String
-            let contractorType: String
             let usageIntents: [String]
         }
         let res: OfficeResponse = try await post(
-            path: "/api/org",
-            body: CreateBody(
-                name: orgName ?? "",
-                role: "field_technician",
+            path: "/api/org/join",
+            body: JoinBody(
+                role: "employee",
                 workType: "construction",
-                contractorType: "other",
                 usageIntents: ["field_work"]
             )
         )
         guard let org = res.org else {
-            throw APIError.http(status: 400, body: "Could not start that office.")
+            throw APIError.http(status: 400, body: "Ask your Global Admin to invite this email.")
         }
         return org
     }
@@ -1083,7 +1035,6 @@ final class AtmosphereClient: ObservableObject {
         email: String,
         password: String,
         fullName: String?,
-        joinCode: String?,
         orgName: String?
     ) async throws -> AuthResponse {
         let created = try await signupViaSupabase(email: email, password: password)
@@ -1094,7 +1045,6 @@ final class AtmosphereClient: ObservableObject {
         refreshToken = created.session?.refreshToken
         do {
             let org = try await linkOfficeViaSupabase(
-                joinCode: joinCode,
                 orgName: orgName,
                 fullName: fullName
             )
@@ -1121,28 +1071,7 @@ final class AtmosphereClient: ObservableObject {
         }
     }
 
-    private func previewOfficeViaSupabase(joinCode: String) async throws -> OfficePreview {
-        struct Body: Encodable { let p_code: String }
-        struct Row: Decodable {
-            let name: String?
-            let join_code: String?
-        }
-        let data = try await supabaseRestData(
-            path: "/rest/v1/rpc/preview_org_by_join_code",
-            method: "POST",
-            json: Body(p_code: joinCode.uppercased())
-        )
-        if let row = try? decoder.decode(Row.self, from: data), let name = row.name?.nilIfEmpty {
-            return OfficePreview(name: name, joinCode: row.join_code ?? joinCode)
-        }
-        if let rows = try? decoder.decode([Row].self, from: data), let name = rows.first?.name?.nilIfEmpty {
-            return OfficePreview(name: name, joinCode: rows.first?.join_code ?? joinCode)
-        }
-        throw APIError.http(status: 400, body: "That join code did not match any organization.")
-    }
-
     private func linkOfficeViaSupabase(
-        joinCode: String?,
         orgName: String?,
         fullName: String?
     ) async throws -> FieldOrg {
@@ -1160,17 +1089,11 @@ final class AtmosphereClient: ObservableObject {
                 extraHeaders: ["Prefer": "resolution=merge-duplicates,return=representation"]
             )
         }
-        if let joinCode, !joinCode.isEmpty {
-            struct Join: Encodable {
-                let p_code: String
-                let p_role: String
-                let p_work_type: String
-            }
-            let org = try await supabaseRpcOrg(
-                path: "/rest/v1/rpc/join_org",
-                json: Join(p_code: joinCode.uppercased(), p_role: "field_technician", p_work_type: "construction")
+        guard let orgName, !orgName.isEmpty else {
+            throw APIError.http(
+                status: 400,
+                body: "Ask your Global Admin to invite this email, then try again."
             )
-            return org
         }
         struct Create: Encodable {
             let p_name: String
@@ -1179,7 +1102,7 @@ final class AtmosphereClient: ObservableObject {
         }
         let org = try await supabaseRpcOrg(
             path: "/rest/v1/rpc/create_org",
-            json: Create(p_name: orgName ?? "", p_role: "field_technician", p_work_type: "construction")
+            json: Create(p_name: orgName, p_role: "field_technician", p_work_type: "construction")
         )
         struct Contractor: Encodable { let p_contractor_type: String }
         do {

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError } from '../lib/api';
+import { ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
 import { isHomeownerViewerPath } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
@@ -10,7 +10,6 @@ import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
 import {
   adoptDestination,
@@ -54,7 +53,7 @@ function NoOrgLoginRedirect({ fallback, intent }: { fallback: string; intent: st
 }
 
 export function LoginPage() {
-  const { user, loading, membership, membershipLoading, login, unlockWithPin, logout } =
+  const { user, loading, membership, membershipLoading, login, logout } =
     useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -75,39 +74,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // --- PIN unlock -----------------------------------------------------------
-  const [pinEnrolled, setPinEnrolled] = useState(false);
-  const [showPin, setShowPin] = useState(false);
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinShake, setPinShake] = useState(false);
-  const [pinSubmitting, setPinSubmitting] = useState(false);
-  const shakeTimer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (fieldEmbed) return;
-    let cancelled = false;
-    api
-      .pinStatus()
-      .then((status) => {
-        if (cancelled) return;
-        setPinEnrolled(status.enrolled);
-        const locked = status.lockedUntil ? new Date(status.lockedUntil) > new Date() : false;
-        setShowPin(status.enrolled && !locked);
-        if (locked) {
-          setPinError('Too many incorrect PINs. Sign in with your password to continue.');
-        }
-      })
-      .catch(() => {
-        /* PIN is an optional convenience — fall back to the password form. */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fieldEmbed]);
-
-  useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 
   useEffect(() => {
     if (!fieldEmbed || user || switchAccount) return;
@@ -164,36 +130,6 @@ export function LoginPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const canSubmit = emailValid && passwordValid && !submitting;
-  const pinUnlock = showPin && !user;
-
-  function rejectPin(message: string) {
-    setPinError(message);
-    setPin('');
-    setPinShake(true);
-    window.clearTimeout(shakeTimer.current);
-    shakeTimer.current = window.setTimeout(() => setPinShake(false), 450);
-  }
-
-  async function handlePinComplete(entered: string) {
-    setPinSubmitting(true);
-    setPinError(null);
-    try {
-      const membership = await unlockWithPin(entered);
-      queueRedirect(await destinationAfterLogin(membership, redirectTo, searchParams.get('intent')));
-    } catch (err) {
-      if (err instanceof ApiError) {
-        rejectPin(err.message);
-        if (err.code === 'pin_revoked' || err.code === 'pin_not_enrolled') {
-          setPinEnrolled(false);
-          setShowPin(false);
-        }
-      } else {
-        rejectPin('Something went wrong. Please try again.');
-      }
-    } finally {
-      setPinSubmitting(false);
-    }
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -236,59 +172,6 @@ export function LoginPage() {
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
           <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
-            {pinUnlock ? (
-              <>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">
-                  This device
-                </p>
-                <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Enter your PIN</h1>
-                <p className="mt-1.5 text-sm text-ink-600">
-                  Use the 4-digit PIN you set up on this device.
-                </p>
-
-                {pinError && (
-                  <div
-                    role="alert"
-                    className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-center text-sm text-danger-700"
-                  >
-                    {pinError}
-                  </div>
-                )}
-
-                <div className="mt-8">
-                  <PinPad
-                    value={pin}
-                    onChange={setPin}
-                    onComplete={handlePinComplete}
-                    disabled={pinSubmitting}
-                    shake={pinShake}
-                    autoFocus
-                  />
-                </div>
-
-                <div className="mt-6 flex min-h-[1.5rem] items-center justify-center">
-                  {pinSubmitting && (
-                    <span className="flex items-center gap-2 text-sm text-brand-600">
-                      <SpinnerIcon className="animate-spin" width={16} height={16} />
-                      Signing in…
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPin(false);
-                    setPin('');
-                    setPinError(null);
-                  }}
-                  className="mt-2 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-                >
-                  Use password instead
-                </button>
-              </>
-            ) : (
-              <>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">
                   Workspace
                 </p>
@@ -417,19 +300,6 @@ export function LoginPage() {
                   </button>
                 </form>
 
-                {pinEnrolled && !user && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPin(true);
-                      setPinError(null);
-                    }}
-                    className="mt-3 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-                  >
-                    Use your PIN instead
-                  </button>
-                )}
-
                 <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
                   Don&apos;t have an account?{' '}
                   <Link
@@ -439,8 +309,6 @@ export function LoginPage() {
                     Create an account
                   </Link>
                 </div>
-              </>
-            )}
           </div>
 
           <p className="mt-6 text-center text-xs text-ink-400">

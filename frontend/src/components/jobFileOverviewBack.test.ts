@@ -42,7 +42,8 @@ describe('job file chrome has no Overview back', () => {
   it('keeps Job Files back on JobDetailPage and never labels it Overview', () => {
     const src = read('../pages/JobDetailPage.tsx');
     expect(src).toContain('back={back}');
-    expect(src).toContain('Job Files');
+    expect(src).toContain('Dashboard');
+    expect(src).toContain('/verifier-library');
     expect(src).not.toMatch(/>\s*Overview\s*</);
     expect(src).not.toMatch(/navigate\(['"]\/field['"]\)/);
     expect(src).not.toMatch(/to=['"]\/field['"]/);

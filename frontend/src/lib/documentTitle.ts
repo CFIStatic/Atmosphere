@@ -18,7 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/verifier-library': 'Dashboard',
   '/intake': 'Start a job',
   '/job-progress': 'Job file',
-  '/jobs': 'Job Files',
+  '/jobs': 'Dashboard',
   '/settings': 'Settings',
   '/field': 'Overview',
   '/my-jobs': 'My jobs',

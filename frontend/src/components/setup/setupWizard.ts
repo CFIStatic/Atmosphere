@@ -31,8 +31,8 @@ export const SETUP_WIZARD_STEPS = [
 const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
-    title: 'Account & join code',
-    detail: 'Create a login with the invited email, then enter the join code.',
+    title: 'Join your team',
+    detail: 'Create a login with the invited email.',
   },
   {
     step: 2 as const,
@@ -61,7 +61,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
       heading: 'Join your team',
-      lede: 'Your Global Admin invited you — create a login and enter the join code.',
+      lede: 'Your Global Admin invited you — create a login with the invited email.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
@@ -75,7 +75,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'capture') {
     return {
       heading: 'Create your account',
-      lede: 'Email and password. Then Field Capture opens this job — no join code, no workspace.',
+      lede: 'Email and password. Then Field Capture opens this job — no workspace.',
       steps: CAPTURE_WIZARD_STEPS,
     };
   }

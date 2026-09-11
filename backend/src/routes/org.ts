@@ -329,19 +329,18 @@ orgRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * POST /api/org/join
- * Link the caller to an existing organization. Requires a pending invite for
- * this email — the join code alone is not enough.
+ * Link the caller to an existing organization. Requires a pending invite
+ * for this email.
  */
 orgRouter.post('/join', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { joinCode, workType, usageIntents } = joinOrgSchema.parse(req.body);
+    const { workType, usageIntents } = joinOrgSchema.parse(req.body);
     const supabase = await ensureProfile(req);
     const invite = await requirePendingOrgInvite({
-      joinCode,
       email: req.user?.email,
     });
     const { data, error } = await supabase.rpc('join_org', {
-      p_code: joinCode,
+      p_code: invite.joinCode,
       p_role: invite.role,
       p_work_type: workType,
     });
@@ -410,7 +409,7 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
  *
  * The person's auth login stays — they just lose this workspace until
  * someone invites that address again. Pending invites for the same email
- * are withdrawn so the join code alone cannot walk them back in.
+ * are withdrawn so they cannot walk back in without a new invite.
  */
 orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -573,16 +572,14 @@ const createInviteSchema = z.object({
  * Only the Global Admin may invite people onto org seats. Invited workers on a
  * single job are invited from the job file (job-share), not here.
  *
- * The email is best-effort. No connected mailbox is the common case on day
- * one, and the response says so plainly so the UI can hand over the code to
- * send some other way — a failed invite email must not read as a failed
- * invite.
+ *     The email is best-effort. No connected mailbox is the common case on day
+ * one. A failed invite email must not read as a failed invite.
  */
 orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createInviteSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
-    const { orgId, name, joinCode, role: callerRole } = await orgForInvites(supabase, req.user!.id);
+    const { orgId, name, role: callerRole } = await orgForInvites(supabase, req.user!.id);
     if (!isGlobalAdmin(callerRole)) {
       throw new HttpError(
         403,
@@ -624,9 +621,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
 
     // Global erasure tombstones outrank a workplace invitation like they
     // outrank everything else: somebody who asked to be forgotten does not get
-    // email from this platform, full stop. The invite itself stands — the code
-    // can be handed over in person — and the reason is kept generic on purpose,
-    // because "this address is on an erasure list" is itself a disclosure.
+    // email from this platform, full stop. The invite itself stands, and the
+    // reason is kept generic on purpose, because "this address is on an
+    // erasure list" is itself a disclosure.
     let emailed = false;
     const admin = unscopedAdminOrNull();
     let erased = false;
@@ -644,7 +641,6 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       const mail = inviteEmail({
         orgName: name,
         inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
-        joinCode,
         inviteEmailAddress: email,
         origin: publicAppOrigin(),
         fieldCaptureOrigin: LIVE_FIELD_CAPTURE_ORIGIN,
@@ -672,9 +668,6 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         createdAt: (invite as any).created_at,
       },
       emailed,
-      // Handed back so the screen can offer "copy the code" the moment the
-      // email could not go — not as a fallback the person has to hunt for.
-      joinCode,
     });
   } catch (err) {
     next(err);

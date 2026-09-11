@@ -43,25 +43,22 @@ export function parseSignupIntent(raw: string | null | undefined): SignupIntent 
   return 'create';
 }
 
-/** Build /signup with optional email, return path, join code, and create vs. join intent. */
+/** Build /signup with optional email, return path, and create vs. join intent. */
 export function signupHref(options?: {
   next?: string;
   email?: string;
   intent?: SignupIntent;
-  code?: string;
   token?: string;
 }): string {
   const params = new URLSearchParams();
   const next = options?.next ? safeAuthRedirect(options.next) : null;
   const email = options?.email?.trim();
-  const code = options?.code?.trim().toUpperCase();
   const token = options?.token?.trim();
   if (next) params.set('next', next);
   if (email) params.set('email', email);
   if (options?.intent === 'join' || options?.intent === 'homeowner' || options?.intent === 'capture') {
     params.set('intent', options.intent);
   }
-  if (code) params.set('code', code);
   if (token) params.set('token', token);
   const qs = params.toString();
   return qs ? `/signup?${qs}` : '/signup';

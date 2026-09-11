@@ -109,7 +109,6 @@ Atmosphere/
 │   └── src/lib/platforms.ts       Visible: Verification + Field only
 ├── verifier/                 Evidence portal (static HTML)
 │   ├── index.html            Clips, integrity, AI vs human, custody
-│   └── twin.html             Property twin / floor sketch (office)
 ├── fieldcapture/             Crew capture app (static)
 │   ├── index.html
 │   └── js/capture-core.js    Record, hash, GPS, upload

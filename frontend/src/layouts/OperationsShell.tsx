@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { DashboardSearchBar } from '../components/DashboardSearchBar';
 import { HeaderAccountChip } from '../components/HeaderAccountChip';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { MenuIcon } from '../components/icons';
@@ -8,20 +7,17 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useT } from '../lib/i18n';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
-import { JobFilesSearchContext } from './jobFilesSearch';
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; Overview, Start a job, Dashboard, Job Files, and Settings
+ * the screen; Overview, Start a job, Dashboard, and Settings
  * render beside the same anchored rail. The account chip (name, org, avatar)
  * lives in the top-right of these React pages because the verifier top bar is
  * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
  * menu — same as Dashboard. Support lives there too. The rail itself only has Settings.
  *
  * Every rail-only tab uses Dashboard's 72px top bar so the hairline under
- * the Atmosphere wordmark continues straight across into the page. Job Files
- * also reuses the search field and placeholder; the list itself has no
- * second title or filter row.
+ * the Atmosphere wordmark continues straight across into the page.
  *
  * On a phone — including the Field Capture 480px web frame — the office rail
  * becomes a hamburger drawer. The account chip stays in the top-right of
@@ -32,16 +28,10 @@ export function OperationsShell() {
   const t = useT();
   const { pathname } = useLocation();
   const isLibrary = pathname === '/verifier-library';
-  const isJobsList = pathname === '/jobs';
   const isJobFile = isJobFilePath(pathname);
   const phone = usePhoneShell();
-  const [jobSearch, setJobSearch] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   useFeatureTimer('verifier_library', isLibrary);
-
-  useEffect(() => {
-    if (!isJobsList) setJobSearch('');
-  }, [isJobsList]);
 
   useEffect(() => {
     setRailOpen(false);
@@ -73,65 +63,52 @@ export function OperationsShell() {
         />
       )}
       {!isLibrary && (
-        <JobFilesSearchContext.Provider value={{ query: jobSearch, setQuery: setJobSearch }}>
-          <main
+        <main
+          className={
+            isJobFile
+              ? phone
+                ? 'flex h-full flex-col overflow-hidden'
+                : 'operations-main flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
+              : phone
+                ? 'flex h-full flex-col overflow-hidden'
+                : 'operations-main min-h-screen'
+          }
+        >
+          <header
+            className={
+              phone
+                ? 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
+                : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
+            }
+          >
+            {phone && (
+              <button
+                type="button"
+                onClick={() => setRailOpen(true)}
+                aria-label={t('nav.open')}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-ink-700 hover:bg-paper-200"
+              >
+                <MenuIcon width={22} height={22} />
+              </button>
+            )}
+            <div className="ms-auto shrink-0">
+              <HeaderAccountChip />
+            </div>
+          </header>
+          <div
             className={
               isJobFile
                 ? phone
-                  ? 'flex h-full flex-col overflow-hidden'
-                  : 'operations-main flex min-h-screen flex-col lg:h-screen lg:overflow-hidden'
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                  : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
                 : phone
-                  ? 'flex h-full flex-col overflow-hidden'
-                  : 'operations-main min-h-screen'
+                  ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-3 py-3'
+                  : 'px-4 py-6 sm:px-6'
             }
           >
-            <header
-              className={
-                phone
-                  ? isJobsList
-                    ? 'sticky top-0 z-30 flex min-h-14 min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
-                    : 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
-                  : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
-              }
-            >
-              {phone && (
-                <button
-                  type="button"
-                  onClick={() => setRailOpen(true)}
-                  aria-label={t('nav.open')}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-ink-700 hover:bg-paper-200"
-                >
-                  <MenuIcon width={22} height={22} />
-                </button>
-              )}
-              {isJobsList && (
-                <DashboardSearchBar
-                  value={jobSearch}
-                  onChange={setJobSearch}
-                  aria-label="Search job files"
-                  className={phone ? 'order-last basis-full' : undefined}
-                />
-              )}
-              {isJobsList && !phone && <div className="flex-1" />}
-              <div className="ms-auto shrink-0">
-                <HeaderAccountChip />
-              </div>
-            </header>
-            <div
-              className={
-                isJobFile
-                  ? phone
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                    : 'flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden'
-                  : phone
-                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-3 py-3'
-                    : 'px-4 py-6 sm:px-6'
-              }
-            >
-              <Outlet context={{ chrome: 'operations' as const }} />
-            </div>
-          </main>
-        </JobFilesSearchContext.Provider>
+            <Outlet context={{ chrome: 'operations' as const }} />
+          </div>
+        </main>
       )}
     </div>
   );

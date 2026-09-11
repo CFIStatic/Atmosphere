@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,7 @@ import { isJobFilePath } from './jobFilePath';
 const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../App.tsx'), 'utf8');
 
 describe('office rail routes', () => {
-  it('keeps Overview, Start a job, Dashboard, and Job Files inside the permanent office shell', () => {
+  it('keeps Overview, Start a job, Dashboard, and the job file inside the office shell', () => {
     const start = appSrc.indexOf('<OperationsShell');
     const end = appSrc.indexOf('path="/billing"');
     const shell = appSrc.slice(start, end);
@@ -16,10 +16,19 @@ describe('office rail routes', () => {
     expect(shell).toContain('path="/intake"');
     expect(shell).toContain('path="/verifier-library"');
     expect(shell).toContain('path="/jobs"');
+    expect(shell).toContain('Navigate to="/verifier-library"');
     expect(shell).toContain('JobFileFromProfileRedirect');
     expect(shell).toContain('path="/job-progress"');
     expect(shell).toContain('element={<SharedDashboardPage />}');
     expect(shell).not.toContain('element={<JobDetailPage />}');
+  });
+
+  it('keeps the job file page and does not ship the Job Files list', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    expect(existsSync(resolve(here, '../pages/SharedDashboardPage.tsx'))).toBe(true);
+    expect(existsSync(resolve(here, '../pages/JobsPage.tsx'))).toBe(false);
+    expect(appSrc).not.toContain('JobsPage');
+    expect(appSrc).toContain('element={<SharedDashboardPage />}');
   });
 
   it('does not put a Field Capture / Platform bar on the office console', () => {
@@ -100,17 +109,7 @@ describe('office rail width', () => {
   });
 });
 
-describe('Job Files search chrome', () => {
-  it('puts the Dashboard search field in the 72px office top bar', () => {
-    const shell = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
-      'utf8',
-    );
-    expect(shell).toContain('DashboardSearchBar');
-    expect(shell).toContain('h-[72px]');
-    expect(shell).toContain("pathname === '/jobs'");
-  });
-
+describe('office top bar', () => {
   it('uses the Dashboard 72px top bar on every rail-only office tab', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const shell = readFileSync(resolve(here, './OperationsShell.tsx'), 'utf8');
@@ -123,13 +122,13 @@ describe('Job Files search chrome', () => {
     expect(verifier).toMatch(/\.topbar\s*\{[^}]*height:\s*72px/);
   });
 
-  it('lets the phone search field use the leftover top-bar width', () => {
+  it('lets the phone page scroll without a second jobs-list search row', () => {
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
-    expect(shell).toContain('{isJobsList && !phone && <div className="flex-1" />}');
-    expect(shell).toContain("className={phone ? 'order-last basis-full' : undefined}");
+    expect(shell).not.toContain('DashboardSearchBar');
+    expect(shell).not.toContain('isJobsList');
     expect(shell).toContain('overflow-x-hidden');
   });
 

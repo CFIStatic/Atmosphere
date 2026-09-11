@@ -66,7 +66,6 @@ describe('InvitePanel', () => {
     createOrgInvite.mockResolvedValue({
       invite: { id: 'inv-1', email: 'crew@example.com', role: 'employee', status: 'pending' },
       emailed: true,
-      joinCode: 'ABC123',
     });
 
     render(<InvitePanel />);

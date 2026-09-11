@@ -4,7 +4,7 @@
 The preview inlines the shared stylesheet, stacks every page's content into
 route containers, and swaps cross-page links for a tiny hash router — so the
 whole suite can be reviewed as a single HTML file with working navigation.
-404.html is deliberately excluded: it has no route to be "not found" from.
+404 uses the generic nginx response — there is no custom not-found page.
 
 Usage: python3 build-preview.py <output-file>
 """

@@ -724,15 +724,6 @@
     return href + (href.indexOf('?') >= 0 ? '&' : '?') + 'v=no-overview-back-2';
   }
 
-  /** Name + office invite code. No email or password. */
-  function joinCrew(fullName, joinCode, apiBase) {
-    return apiJson(origin(apiBase) + '/api/field-app/join', {
-      method: 'POST',
-      body: { fullName: fullName, joinCode: joinCode },
-    });
-  }
-
-  /** Same email + password as the Atmosphere dashboard. */
   function loginWithPassword(email, password, apiBase) {
     return apiJson(origin(apiBase) + '/api/auth/login', {
       method: 'POST',
@@ -783,11 +774,10 @@
     });
   }
 
-  /** Signed-in Field Capture user — join an office or start one. */
+  /** Signed-in Field Capture user — join by pending invite, or start an office. */
   function linkOffice(opts) {
     opts = opts || {};
     var body = {};
-    if (opts.joinCode) body.joinCode = opts.joinCode;
     if (opts.orgName) body.orgName = opts.orgName;
     if (opts.fullName) body.fullName = opts.fullName;
     return apiJson(origin(opts.apiBase) + '/api/field-app/office', {
@@ -2843,7 +2833,6 @@
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,
     POSITION_FRESH_MS: POSITION_FRESH_MS,
-    joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
     signupWithPassword: signupWithPassword,
     loadAuthMe: loadAuthMe,

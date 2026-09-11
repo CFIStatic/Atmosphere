@@ -16,13 +16,13 @@ export interface InviteRow {
 /**
  * Which pending invites have been answered by somebody actually joining.
  *
- * Joining happens through the code, not through the invite — the join flow
- * has no idea an invite row exists. So the two are reconciled after the fact,
- * by address: a pending invite whose email now belongs to a member is done.
+ * Joining happens through the invited email, not a public code. The join
+ * flow looks up a pending org_invites row for that address. The two are
+ * reconciled after the fact by address: a pending invite whose email now
+ * belongs to a member is done.
  *
  * Only pending rows move. A revoked invite followed by the person joining
- * anyway (they still had the code — revoking is bookkeeping, not access
- * control) stays revoked, because "we withdrew the invitation and they came in
+ * anyway stays revoked, because "we withdrew the invitation and they came in
  * regardless" is exactly the sequence worth being able to see.
  */
 export function invitesAnsweredBy(invites: InviteRow[], memberEmails: string[]): string[] {
@@ -39,25 +39,23 @@ export function invitesAnsweredBy(invites: InviteRow[], memberEmails: string[]):
  * body so the recipient knows who asked — but the mail does not come from
  * their inbox.
  *
- * Plain text, short, built around sign up + join code. The code appears on its
- * own line because it will be read off a phone and typed into a laptop.
+ * Plain text, short, built around sign up with the invited email.
  */
 export function inviteEmail(input: {
   orgName: string;
   inviterName: string | null;
-  joinCode: string;
   /** Address the invite was sent to — baked into the signup link. */
   inviteEmailAddress?: string | null;
   /** The app's public origin, when configured. Without it the steps still work. */
   origin?: string | null;
-  /** Field Capture web host — same join code, phone-sized app. */
+  /** Field Capture web host — same login, phone-sized app. */
   fieldCaptureOrigin?: string | null;
   note?: string | null;
 }): { subject: string; text: string; html: string } {
   const inviter = input.inviterName?.trim() || null;
   const org = input.orgName.trim() || 'a team';
   const inviteEmailAddress = input.inviteEmailAddress?.trim().toLowerCase() || null;
-  const signupParams = new URLSearchParams({ intent: 'join', code: input.joinCode });
+  const signupParams = new URLSearchParams({ intent: 'join' });
   if (inviteEmailAddress) signupParams.set('email', inviteEmailAddress);
   const signupPath = `/signup?${signupParams.toString()}`;
   const lines: string[] = [
@@ -85,13 +83,10 @@ export function inviteEmail(input: {
       `     Or open Field Capture on the web: ${input.fieldCaptureOrigin}`,
     );
   }
-  lines.push('  2. Enter this join code when asked:', '');
-  lines.push(`      ${input.joinCode}`, '');
   lines.push(
-    'Only people your Global Admin invited can join — the code alone is not enough.',
+    '  2. Use that same email and password on Field Capture.',
     '',
-    'On the Field Capture iPhone app, sign in (or create the account there),',
-    'then enter the same join code when asked to connect to the office.',
+    'Only people your Global Admin invited can join.',
     '',
   );
   lines.push(
@@ -124,10 +119,6 @@ export function inviteEmail(input: {
           </p>`
               : ''
           }
-          <p style="margin:20px 0 0;font-size:13px;color:#78716c;">Join code</p>
-          <p style="margin:4px 0 0;font-size:22px;font-weight:700;letter-spacing:0.04em;color:#1c1917;">
-            ${escapeHtml(input.joinCode)}
-          </p>
           ${
             signup
               ? `<p style="margin:24px 0 0;">

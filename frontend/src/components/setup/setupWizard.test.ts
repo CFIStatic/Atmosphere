@@ -31,15 +31,17 @@ describe('setupWizardCopy', () => {
   it('keeps an invite-only join path', () => {
     const copy = setupWizardCopy('join');
     expect(copy.heading).toBe('Join your team');
-    expect(copy.steps.map((s) => s.title)).toEqual(['Account & join code', 'Set up billing']);
-    expect(copy.steps[0]?.detail).toMatch(/join code/i);
+    expect(copy.steps.map((s) => s.title)).toEqual(['Join your team', 'Set up billing']);
+    expect(copy.steps[0]?.detail).toMatch(/invited email/i);
+    expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
     expect(copy.lede).toMatch(/Global Admin invited/i);
   });
 
   it('uses a one-step capture-invite account with no join code', () => {
     const copy = setupWizardCopy('capture');
     expect(copy.heading).toBe('Create your account');
-    expect(copy.lede).toMatch(/no join code/i);
+    expect(copy.lede).toMatch(/Field Capture opens this job/i);
+    expect(copy.lede).not.toMatch(/join code/i);
     expect(copy.lede).not.toMatch(/Global Admin/i);
     expect(copy.steps).toHaveLength(1);
     expect(copy.steps[0]?.title).toBe('Create your account');

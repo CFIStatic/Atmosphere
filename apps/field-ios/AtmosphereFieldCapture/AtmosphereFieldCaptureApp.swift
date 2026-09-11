@@ -78,7 +78,6 @@ struct RootView: View {
     @EnvironmentObject private var api: AtmosphereClient
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSignUp = false
-    @State private var showJoinCrew = false
     @State private var showElevate = false
     @State private var cameFromConnect = false
 
@@ -89,18 +88,13 @@ struct RootView: View {
             } else if !auth.isLinked {
                 if showSignUp {
                     SignUpView(onSignIn: { showSignUp = false })
-                } else if showJoinCrew {
-                    JoinCrewView(onDashboardLogin: { showJoinCrew = false })
                 } else {
-                    SignInView(
-                        onCreateAccount: { showSignUp = true },
-                        onJoinWithCode: { showJoinCrew = true }
-                    )
+                    SignInView(onCreateAccount: { showSignUp = true })
                 }
             } else if auth.needsTermsAcceptance {
                 TermsAcknowledgmentView()
-            } else if auth.needsOfficeLink || auth.showOfficeLink {
-                OfficeLinkView()
+            } else if auth.needsOfficeLink {
+                OfficeInviteJoinView()
             } else {
                 linkedStack
             }
@@ -135,13 +129,13 @@ struct RootView: View {
             }
         }
         .onReceive(auth.$needsOfficeLink.dropFirst()) { needsOffice in
-            if auth.isLinked, !needsOffice, !auth.showOfficeLink, !auth.needsTermsAcceptance {
+            if auth.isLinked, !needsOffice, !auth.needsTermsAcceptance {
                 playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onReceive(auth.$needsTermsAcceptance.dropFirst()) { needsTerms in
-            if auth.isLinked, !needsTerms, !auth.needsOfficeLink, !auth.showOfficeLink {
+            if auth.isLinked, !needsTerms, !auth.needsOfficeLink {
                 playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
@@ -149,11 +143,6 @@ struct RootView: View {
         .onOpenURL { url in
             if let shareToken = auth.handleOpenURL(url) {
                 Task { await session.enterShareMode(token: shareToken, api: api) }
-                return
-            }
-            if !auth.isLinked, let code = auth.pendingJoinCode, !code.isEmpty {
-                showSignUp = false
-                showJoinCrew = true
             }
         }
     }
@@ -188,5 +177,85 @@ struct RootView: View {
         guard cameFromConnect else { return }
         cameFromConnect = false
         showElevate = true
+    }
+}
+
+/// Signed in, but this email is not in an office yet. Join via a pending invite.
+struct OfficeInviteJoinView: View {
+    @EnvironmentObject private var auth: AuthSession
+    @State private var busy = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 10) {
+                AtmosphereBarsMark(size: 28)
+                Text("Atmosphere")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(FieldTheme.ink)
+            }
+            .padding(.top, 36)
+
+            Text("Field Capture")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(FieldTheme.muted)
+
+            Text("Joining your office")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(FieldTheme.ink)
+                .padding(.top, 10)
+
+            Text("Atmosphere looks up a pending invite for this email. Ask your Global Admin to invite you if this screen stays here.")
+                .font(.system(size: 14))
+                .foregroundStyle(FieldTheme.muted)
+
+            if busy {
+                ProgressView()
+                    .padding(.top, 8)
+            }
+
+            if let err = auth.lastError, !err.isEmpty {
+                Text(err)
+                    .font(.system(size: 13))
+                    .foregroundStyle(FieldTheme.rec)
+            }
+
+            Button {
+                busy = true
+                Task {
+                    await auth.joinOfficeByInvite()
+                    busy = false
+                }
+            } label: {
+                Text("Try again")
+                    .font(.system(size: 16, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(FieldTheme.ink)
+                    .foregroundStyle(FieldTheme.bg)
+                    .cornerRadius(12)
+            }
+            .disabled(busy)
+
+            Button {
+                Task { await auth.disconnectAccount() }
+            } label: {
+                Text("Sign out")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(FieldTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .disabled(busy)
+
+            Spacer()
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(FieldTheme.bg.ignoresSafeArea())
+        .task {
+            busy = true
+            await auth.joinOfficeByInvite()
+            busy = false
+        }
     }
 }

@@ -4,21 +4,15 @@ import Foundation
  * One-time platform account link for Field Capture.
  *
  * Connect when the app is first installed; tokens live in Keychain and the
- * phone stays signed in across launches. Crew connect with name + office
- * email and password — only again if they explicitly disconnect.
+ * phone stays signed in across launches. Crew sign in with the same email
+ * and password as the office Platform — only again if they explicitly disconnect.
  */
 @MainActor
 final class AuthSession: ObservableObject {
     /// True after the phone has been linked (Keychain has a refresh token).
     @Published private(set) var isLinked = false
-    /// Signed in but not yet a member of an office — show the join/create screen.
+    /// Signed in but not yet a member of an office — join via a pending email invite.
     @Published private(set) var needsOfficeLink = false
-    /// User opened Link to office from Account, or a join-code deep link arrived.
-    @Published private(set) var showOfficeLink = false
-    /// Join code from a deep link or the Account flow, prefilled on the link screen.
-    @Published var pendingJoinCode: String?
-    /// Office name returned by preview, when the typed code matches.
-    @Published var officePreviewName: String?
     @Published private(set) var email: String?
     @Published private(set) var orgName: String?
     @Published private(set) var orgId: String?
@@ -38,6 +32,7 @@ final class AuthSession: ObservableObject {
     private let orgIdAccount = "orgId"
     private let nameAccount = "fullName"
     private let linkedFlagKey = "atmosphere.field.accountLinked"
+    private var joiningOffice = false
 
     let api: AtmosphereClient
 
@@ -108,49 +103,6 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// First-install crew connect — name + office invite code.
-    func joinCrew(fullName: String, joinCode: String) async {
-        lastError = nil
-        confirmationNotice = nil
-        do {
-            let result = try await api.joinCrew(fullName: fullName, joinCode: joinCode)
-            guard let session = result.session else {
-                throw APIError.http(
-                    status: 0,
-                    body: "Connected, but no session came back. Try again in a moment."
-                )
-            }
-            persist(session: session, email: result.user?.email ?? "")
-            UserDefaults.standard.set(true, forKey: linkedFlagKey)
-            isLinked = true
-            needsTermsAcceptance = false
-            let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedName.isEmpty {
-                self.fullName = trimmedName
-                UserDefaults.standard.set(trimmedName, forKey: nameAccount)
-            }
-            if let org = result.org {
-                self.orgName = org.name
-                self.orgId = org.id
-                UserDefaults.standard.set(org.name, forKey: orgAccount)
-                UserDefaults.standard.set(org.id, forKey: orgIdAccount)
-                needsOfficeLink = false
-                showOfficeLink = false
-                pendingJoinCode = nil
-                officePreviewName = nil
-                lastError = nil
-            } else if let orgError = result.orgError, !orgError.isEmpty {
-                needsOfficeLink = true
-                lastError = orgError
-            } else {
-                await refreshProfileOrMarkOffice()
-            }
-        } catch {
-            lastError = Self.friendlyCreateError(error)
-            isLinked = KeychainStore.get(account: refreshAccount) != nil
-        }
-    }
-
     /// First-install (or re-connect) only — same email/password as the website.
     func connectAccount(email: String, password: String) async {
         lastError = nil
@@ -177,9 +129,7 @@ final class AuthSession: ObservableObject {
     func createAccount(
         email: String,
         password: String,
-        fullName: String,
-        joinCode: String?,
-        orgName: String?
+        fullName: String
     ) async {
         lastError = nil
         confirmationNotice = nil
@@ -187,9 +137,7 @@ final class AuthSession: ObservableObject {
             let result = try await api.registerAccount(
                 email: email,
                 password: password,
-                fullName: fullName.isEmpty ? nil : fullName,
-                joinCode: joinCode,
-                orgName: orgName
+                fullName: fullName.isEmpty ? nil : fullName
             )
             if result.needsEmailConfirmation == true {
                 confirmationNotice = result.message
@@ -216,8 +164,6 @@ final class AuthSession: ObservableObject {
                 UserDefaults.standard.set(org.name, forKey: orgAccount)
                 UserDefaults.standard.set(org.id, forKey: orgIdAccount)
                 needsOfficeLink = false
-                showOfficeLink = false
-                pendingJoinCode = nil
                 lastError = nil
             } else if let orgError = result.orgError, !orgError.isEmpty {
                 needsOfficeLink = true
@@ -231,21 +177,6 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// Open the office-link screen from Account, even if this phone is already connected.
-    func beginOfficeLink() {
-        lastError = nil
-        officePreviewName = nil
-        showOfficeLink = true
-    }
-
-    func cancelOfficeLink() {
-        if needsOfficeLink { return }
-        showOfficeLink = false
-        officePreviewName = nil
-        lastError = nil
-    }
-
-    /// Join: `atmosphere-field://join?code=8F3A9C2B`
     /// Job-share: `atmosphere-field://share?token=…` (also https app.?token=).
     /// Returns a share token when the URL is a job-share deep link.
     @discardableResult
@@ -279,53 +210,26 @@ final class AuthSession: ObservableObject {
             if path.count >= 8 { return path }
         }
 
-        var code: String?
-        if host == "join" {
-            code = items.first(where: { $0.name == "code" })?.value
-            if code == nil {
-                let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                if !path.isEmpty { code = path }
-            }
-        }
-        let trimmed = code?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
-        guard (6 ... 12).contains(trimmed.count) else { return nil }
-        pendingJoinCode = trimmed
-        if isLinked {
-            showOfficeLink = true
-        }
         return nil
     }
 
-    func previewOffice(joinCode: String) async {
-        let code = joinCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard (6 ... 12).contains(code.count) else {
-            officePreviewName = nil
-            return
-        }
-        do {
-            let preview = try await api.previewOffice(joinCode: code)
-            officePreviewName = preview.name
-        } catch {
-            officePreviewName = nil
-        }
-    }
-
-    /// Join or start an office after the login already exists on this phone.
-    func linkOffice(joinCode: String?, orgName: String?) async {
+    /// Join an office using a pending Global Admin invite for this email.
+    func joinOfficeByInvite() async {
+        guard !joiningOffice else { return }
+        joiningOffice = true
         lastError = nil
+        defer { joiningOffice = false }
         do {
-            let org = try await api.linkOffice(joinCode: joinCode, orgName: orgName, fullName: fullName)
+            let org = try await api.linkOffice(orgName: nil, fullName: fullName)
             self.orgName = org.name
             self.orgId = org.id
             UserDefaults.standard.set(org.name, forKey: orgAccount)
             UserDefaults.standard.set(org.id, forKey: orgIdAccount)
             needsOfficeLink = false
-            showOfficeLink = false
-            pendingJoinCode = nil
-            officePreviewName = nil
             await refreshProfileOrMarkOffice()
         } catch {
             lastError = Self.friendlyCreateError(error)
+            needsOfficeLink = true
         }
     }
 
@@ -359,10 +263,14 @@ final class AuthSession: ObservableObject {
                 needsTermsAcceptance = true
                 lastError = nil
             } else if isNoOrganization(error) {
-                needsOfficeLink = true
+                if !joiningOffice {
+                    await joinOfficeByInvite()
+                } else {
+                    needsOfficeLink = true
+                }
             } else {
                 restoreWarning =
-                    "Signed in with your dashboard account. If jobs don’t appear, link this login to the office."
+                    "Signed in with your dashboard account. If jobs don’t appear, ask your Global Admin to invite this email."
             }
         }
     }
@@ -488,9 +396,6 @@ final class AuthSession: ObservableObject {
         isLinked = false
         needsOfficeLink = false
         needsTermsAcceptance = false
-        showOfficeLink = false
-        pendingJoinCode = nil
-        officePreviewName = nil
         confirmationNotice = nil
         email = nil
         orgName = nil

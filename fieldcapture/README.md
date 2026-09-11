@@ -122,7 +122,7 @@ Older phones without a clip id still use the one-object-per-day path, where
 a re-upload replaces the day's film; the office accepts both.
 
 AI dictation stays in the **Verifier**. Twin / RoomPlan stays in the **App Store**
-build and office `verifier/twin.html` — not marketing copy on the crew home.
+build — not marketing copy on the crew home.
 
 ## Files
 

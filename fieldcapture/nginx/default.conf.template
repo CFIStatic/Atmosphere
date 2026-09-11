@@ -2,8 +2,8 @@
 # substituted at container start (NGINX_ENVSUBST_FILTER). Every other $var
 # is nginx's own.
 #
-# Crews open this origin, type a name + office join code, and the page POSTs
-# /api/field-app/join. That must reach the Atmosphere BFF — a static-only
+# Crews open this origin and sign in with the same email and password as
+# the office. POSTs to /api must reach the Atmosphere BFF — a static-only
 # nginx answers POST with 405 HTML, which the app surfaces as "Request failed."
 
 server {

@@ -27,12 +27,11 @@ holding/legal/billing only; Platform = office app; Field Capture = crew app.
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — software engineering and sales roles, hiring process, application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
-| `signin.html`     | Sign in — email/password plus the device-bound PIN          |
+| `signin.html`     | Sign in — email and password                                  |
 | `signup.html`     | Create your organization — onboarding walkthrough and form  |
 | `investors.html`  | Investors — invite-only data-room sign-in (under Company)   |
 | `privacy.html`    | Privacy policy — plain-language draft pending counsel       |
 | `terms.html`      | Terms of service — plain-language draft pending counsel     |
-| `404.html`        | Not found — a run receipt that comes up empty               |
 
 Shared assets live in `assets/site.css` (design tokens + components, light and
 dark themes) and `assets/site.js` (receipt replay + the careers form).
@@ -142,9 +141,6 @@ Support under Buy is a dark secondary button to the contact form
 (`contact.html?note=…` hardware intake). Mailto is never checkout.
 If checkout URL overrides are empty, Buy shows a disabled
 “Checkout coming online” state.
-A printable setup card lives at `hardware-setup-card.html` and
-`assets/field-capture-setup-card.pdf` (digital guide is emailed after
-purchase; we do not currently ship a printed card).
 
 Every public page carries Open Graph / Twitter meta, a canonical URL, and
 `og:url` on `https://atmosphereteam.com/...`. The share card is
