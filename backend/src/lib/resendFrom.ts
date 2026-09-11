@@ -1,14 +1,21 @@
 /**
  * Resend From for Atmosphere transactional mail.
  *
- * Production always sends as hello@invites.jettx.ai (verified subdomain with
- * DKIM + SES return-path). Reply-To stays jack@jettx.ai (same org) — set in
- * systemMail, not here. onboarding@resend.dev is a non-prod last resort only.
+ * Production sends as hello@invites.atmosphereteam.com (verified subdomain with
+ * DKIM + SES return-path). Reply-To defaults to hello@atmosphereteam.com (same
+ * org) — set in systemMail, not here. invites.jettx.ai remains an accepted
+ * legacy sending domain during migration. onboarding@resend.dev is a non-prod
+ * last resort only.
  */
 
 export const RESEND_ONBOARDING_FROM = 'onboarding@resend.dev';
-export const RESEND_VERIFIED_DOMAIN = 'invites.jettx.ai';
-export const RESEND_VERIFIED_FROM = 'hello@invites.jettx.ai';
+export const RESEND_VERIFIED_DOMAIN = 'invites.atmosphereteam.com';
+export const RESEND_VERIFIED_FROM = 'hello@invites.atmosphereteam.com';
+/** Legacy Jettx Resend subdomain — still accepted via RESEND_FROM_EMAIL. */
+export const RESEND_LEGACY_DOMAIN = 'invites.jettx.ai';
+export const RESEND_LEGACY_FROM = 'hello@invites.jettx.ai';
+
+const ALLOWED_SENDING_DOMAINS = new Set([RESEND_VERIFIED_DOMAIN, RESEND_LEGACY_DOMAIN]);
 
 export type ResendDomain = {
   id?: string;
@@ -36,27 +43,43 @@ export function emailDomain(address: string): string {
   return trimmed.slice(at + 1);
 }
 
-/** Pin RESEND_FROM_EMAIL when it is on invites.jettx.ai; else the verified From. */
+function isAllowedSendingDomain(domain: string): boolean {
+  return ALLOWED_SENDING_DOMAINS.has(domain);
+}
+
+/**
+ * Pin RESEND_FROM_EMAIL when it is on invites.atmosphereteam.com or legacy
+ * invites.jettx.ai; else the primary Atmosphere verified From.
+ */
 export function resendFromAddress(configuredFrom?: string | null): string {
   const envFrom = (process.env.RESEND_FROM_EMAIL ?? '').trim();
-  if (emailDomain(envFrom) === RESEND_VERIFIED_DOMAIN) return envFrom;
+  if (isAllowedSendingDomain(emailDomain(envFrom))) return envFrom;
   const configured = (configuredFrom ?? '').trim();
-  if (emailDomain(configured) === RESEND_VERIFIED_DOMAIN) return configured;
+  if (isAllowedSendingDomain(emailDomain(configured))) return configured;
   return RESEND_VERIFIED_FROM;
 }
 
 /**
- * From addresses to try. Always hello@invites.jettx.ai first.
- * onboarding@resend.dev only when allowOnboardingFallback (non-production).
+ * From addresses to try. Atmosphere first, then legacy invites.jettx.ai when
+ * the primary is rejected for sender restriction. onboarding@resend.dev only
+ * when allowOnboardingFallback (non-production).
  */
 export function resendFromCandidates(input: {
   configuredFrom?: string | null;
   allowOnboardingFallback: boolean;
 }): string[] {
   const primary = resendFromAddress(input.configuredFrom);
-  if (!input.allowOnboardingFallback) return [primary];
-  if (primary.toLowerCase() === RESEND_ONBOARDING_FROM) return [primary];
-  return [primary, RESEND_ONBOARDING_FROM];
+  const out: string[] = [primary];
+  // Legacy Jettx — migration fallback if Atmosphere domain is not yet verified.
+  if (emailDomain(primary) !== RESEND_LEGACY_DOMAIN) {
+    out.push(RESEND_LEGACY_FROM);
+  }
+  if (input.allowOnboardingFallback) {
+    if (!out.some((a) => a.toLowerCase() === RESEND_ONBOARDING_FROM)) {
+      out.push(RESEND_ONBOARDING_FROM);
+    }
+  }
+  return out;
 }
 
 export function isResendOnboardingFrom(address: string): boolean {

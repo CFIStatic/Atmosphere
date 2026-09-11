@@ -76,7 +76,7 @@ export function assertProductionReady(): void {
 
   if (!process.env.RESEND_FROM_EMAIL?.trim() && !config.careers.fromEmail) {
     warnings.push(
-      'RESEND_FROM_EMAIL unset — pin hello@invites.jettx.ai for transactional mail (see docs/email-deliverability.md).',
+      'RESEND_FROM_EMAIL unset — pin hello@invites.atmosphereteam.com for transactional mail (see docs/email-deliverability.md).',
     );
   }
   const smtpReady = Boolean(

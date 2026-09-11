@@ -1,8 +1,8 @@
 /**
  * Headers and sender rules that keep Atmosphere mail out of junk.
  *
- * Inbox placement is mostly DNS (SPF / DKIM / DMARC on jettx.ai). This
- * module is the part the app controls: a unique entity id so Gmail does
+ * Inbox placement is mostly DNS (SPF / DKIM / DMARC on atmosphereteam.com).
+ * This module is the part the app controls: a unique entity id so Gmail does
  * not thread every invite together, Auto-Submitted so filters treat OTPs
  * as transactional, and a From / Reply-To pair that stays inside the same
  * organizational domain.
@@ -18,8 +18,9 @@ export type MailKind = 'transactional' | 'marketing';
 const MULTI_PART_PUBLIC_SUFFIXES = new Set(['co.uk', 'com.au', 'co.nz', 'com.br', 'co.jp']);
 
 /**
- * Cheap eTLD+1. `.ai` is a normal TLD (jettx.ai), not a two-label suffix.
- * invites.jettx.ai and jack@jettx.ai are the same organization.
+ * Cheap eTLD+1. `.ai` / `.com` are normal TLDs (not two-label suffixes).
+ * invites.atmosphereteam.com and hello@atmosphereteam.com are the same org;
+ * invites.jettx.ai and jack@jettx.ai likewise (legacy).
  */
 export function organizationalDomain(host: string): string {
   const parts = host
@@ -53,8 +54,9 @@ export function formatFromHeader(
 
 /**
  * Keep Reply-To on the same org as From so filters do not treat the
- * message as a spoof. jack@jettx.ai on hello@invites.jettx.ai is fine.
- * A yahoo.com Reply-To on a jettx.ai From is not.
+ * message as a spoof. hello@atmosphereteam.com on hello@invites.atmosphereteam.com
+ * is fine. jack@jettx.ai on an Atmosphere From is not (different org) and
+ * alignedReplyTo will drop it.
  */
 export function alignedReplyTo(
   fromAddress: string,
@@ -127,17 +129,15 @@ export interface DnsAuthFinding {
 }
 
 /**
- * Score the public jettx.ai records that decide inbox vs junk.
- * The live zone (2026-09) is missing DMARC on both apex and invites,
- * and has no Google Workspace DKIM — that is why jack@jettx.ai lands
- * in spam when it goes out through Gmail SMTP.
+ * Score the public atmosphereteam.com records that decide inbox vs junk.
+ * Apex SPF is owned by Cloudflare Email Routing — do not add Resend there.
+ * Resend authenticates on send.invites.atmosphereteam.com only.
  */
 export function evaluateEmailAuthDns(input: {
   apexTxt: string[];
   apexDmarc: string[];
   invitesDmarc: string[];
   invitesDkim: string[];
-  googleDkim: string[];
   sendInvitesSpf: string[];
 }): DnsAuthFinding[] {
   const findings: DnsAuthFinding[] = [];
@@ -147,8 +147,8 @@ export function evaluateEmailAuthDns(input: {
     name: 'apex-spf',
     ok: apexHasSpf,
     detail: apexHasSpf
-      ? 'jettx.ai publishes SPF.'
-      : 'jettx.ai has no SPF record.',
+      ? 'atmosphereteam.com publishes SPF (Cloudflare Email Routing — do not add Resend).'
+      : 'atmosphereteam.com has no SPF record.',
   });
 
   const dmarc = input.apexDmarc.find((t) => /\bv=DMARC1\b/i.test(t));
@@ -156,9 +156,9 @@ export function evaluateEmailAuthDns(input: {
     name: 'apex-dmarc',
     ok: Boolean(dmarc),
     detail: dmarc
-      ? `_dmarc.jettx.ai is ${dmarc}`
-      : 'jettx.ai has no DMARC record. Gmail, Yahoo, and Outlook treat unauthenticated mail as junk.',
-    fix: dmarc ? undefined : `TXT  _dmarc  ${recommendedDmarcTxt('jack@jettx.ai')}`,
+      ? `_dmarc.atmosphereteam.com is ${dmarc}`
+      : 'atmosphereteam.com has no DMARC record. Gmail, Yahoo, and Outlook treat unauthenticated mail as junk.',
+    fix: dmarc ? undefined : `TXT  _dmarc  ${recommendedDmarcTxt('hello@atmosphereteam.com')}`,
   });
 
   const invitesDmarc = input.invitesDmarc.find((t) => /\bv=DMARC1\b/i.test(t));
@@ -166,11 +166,11 @@ export function evaluateEmailAuthDns(input: {
     name: 'invites-dmarc',
     ok: Boolean(invitesDmarc),
     detail: invitesDmarc
-      ? `_dmarc.invites.jettx.ai is ${invitesDmarc}`
-      : 'invites.jettx.ai (Resend From) has no DMARC record.',
+      ? `_dmarc.invites.atmosphereteam.com is ${invitesDmarc}`
+      : 'invites.atmosphereteam.com (Resend From) has no DMARC record.',
     fix: invitesDmarc
       ? undefined
-      : `TXT  _dmarc.invites  ${recommendedDmarcTxt('jack@jettx.ai')}`,
+      : `TXT  _dmarc.invites  ${recommendedDmarcTxt('hello@atmosphereteam.com')}`,
   });
 
   const dkim = input.invitesDkim.find((t) => /\bp=/.test(t));
@@ -178,20 +178,8 @@ export function evaluateEmailAuthDns(input: {
     name: 'invites-dkim',
     ok: Boolean(dkim),
     detail: dkim
-      ? 'resend._domainkey.invites.jettx.ai is published.'
-      : 'resend._domainkey.invites.jettx.ai is missing — Resend DKIM will fail.',
-  });
-
-  const googleDkim = input.googleDkim.some((t) => /\bp=[A-Za-z0-9]/i.test(t));
-  findings.push({
-    name: 'google-dkim',
-    ok: googleDkim,
-    detail: googleDkim
-      ? 'Google Workspace DKIM is published.'
-      : 'google._domainkey.jettx.ai is missing. Mail sent as jack@jettx.ai through Gmail / Workspace SMTP fails DKIM and lands in junk.',
-    fix: googleDkim
-      ? undefined
-      : 'Google Admin → Apps → Gmail → Authenticate email → Generate new record → publish the TXT at google._domainkey.',
+      ? 'resend._domainkey.invites.atmosphereteam.com is published.'
+      : 'resend._domainkey.invites.atmosphereteam.com is missing — Resend DKIM will fail.',
   });
 
   const sendSpf = input.sendInvitesSpf.some((t) => /\bv=spf1\b/i.test(t));
@@ -199,8 +187,8 @@ export function evaluateEmailAuthDns(input: {
     name: 'resend-return-path-spf',
     ok: sendSpf,
     detail: sendSpf
-      ? 'send.invites.jettx.ai publishes SPF for Amazon SES (Resend).'
-      : 'send.invites.jettx.ai has no SPF; the Resend return-path will fail.',
+      ? 'send.invites.atmosphereteam.com publishes SPF for Amazon SES (Resend).'
+      : 'send.invites.atmosphereteam.com has no SPF; the Resend return-path will fail.',
   });
 
   return findings;

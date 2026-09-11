@@ -560,8 +560,9 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
 | `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB) |
-| `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
-| `RESEND_API_KEY` + `RESEND_FROM_EMAIL=hello@invites.jettx.ai` (SMTP optional) | Atmosphere invites / OTPs / resets. From `hello@invites.jettx.ai`, Reply-To `jack@jettx.ai`. See [`docs/email-deliverability.md`](./email-deliverability.md). |
+| `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `hello@atmosphereteam.com` |
+| `CAREERS_FROM_EMAIL` | Reply-To for transactional mail — default `hello@atmosphereteam.com` |
+| `RESEND_API_KEY` + `RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com` (SMTP optional) | Atmosphere invites / OTPs / resets. From `hello@invites.atmosphereteam.com`, Reply-To `hello@atmosphereteam.com`. See [`docs/email-deliverability.md`](./email-deliverability.md). |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
 
 Strongly recommended:

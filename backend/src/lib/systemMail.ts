@@ -23,7 +23,7 @@ import {
 /**
  * Platform mail — Atmosphere sends it (invites, OTPs, resets, contact/careers).
  *
- *   1. Resend as hello@invites.jettx.ai (Reply-To jack@jettx.ai).
+ *   1. Resend as hello@invites.atmosphereteam.com (Reply-To hello@atmosphereteam.com).
  *   2. SMTP only when Resend is unset / SYSTEM_MAIL_DRIVER=smtp and the
  *      SMTP account can authenticate the From domain.
  *   3. File log sink in development when neither is configured.
@@ -38,7 +38,9 @@ function driverOverride(): string {
 }
 
 function defaultReplyTo(): string | null {
-  const reply = (config.careers.toEmail || 'jack@jettx.ai').trim();
+  // CAREERS_FROM is the Reply-To for transactional mail. Must be same org as
+  // From (atmosphereteam.com) or alignedReplyTo strips it.
+  const reply = (config.careers.fromEmail || 'hello@atmosphereteam.com').trim();
   return reply || null;
 }
 
@@ -214,7 +216,7 @@ async function sendViaResend(input: {
     if (result.ok) {
       if (isResendOnboardingFrom(from)) {
         console.warn(
-          '[system-mail] delivered via onboarding@resend.dev — only the Resend account owner receives this. Set RESEND_FROM_EMAIL=hello@invites.jettx.ai and verify invites.jettx.ai.',
+          '[system-mail] delivered via onboarding@resend.dev — only the Resend account owner receives this. Set RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com and verify invites.atmosphereteam.com.',
         );
       }
       return result;
@@ -228,14 +230,14 @@ async function sendViaResend(input: {
 
   if (last?.body && isResendSenderRestriction(last.status ?? 0, last.body)) {
     console.error(
-      `[system-mail] Resend rejected ${froms.join(' → ')}. Verify invites.jettx.ai and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.`,
+      `[system-mail] Resend rejected ${froms.join(' → ')}. Verify invites.atmosphereteam.com and set RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com.`,
     );
   }
   return {
     ok: false,
     why:
       last?.why ??
-      'The email could not be sent. Verify invites.jettx.ai on Resend and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.',
+      'The email could not be sent. Verify invites.atmosphereteam.com on Resend and set RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com.',
   };
 }
 
