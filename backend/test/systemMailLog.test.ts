@@ -19,10 +19,10 @@ describe('systemMail log sink', () => {
     process.chdir(tmp);
     process.env.SYSTEM_MAIL_DRIVER = 'log';
     delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM_EMAIL;
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;
-    delete process.env.CAREERS_FROM_EMAIL;
   });
 
   after(async () => {
@@ -65,7 +65,7 @@ describe('systemMail Resend', () => {
   before(() => {
     process.env.SYSTEM_MAIL_DRIVER = 'resend';
     process.env.RESEND_API_KEY = 're_test_invite';
-    process.env.CAREERS_FROM_EMAIL = 'jack@jettx.ai';
+    process.env.RESEND_FROM_EMAIL = 'hello@invites.jettx.ai';
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;
@@ -75,6 +75,7 @@ describe('systemMail Resend', () => {
     globalThis.fetch = originalFetch;
     delete process.env.SYSTEM_MAIL_DRIVER;
     delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM_EMAIL;
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
   });
@@ -155,16 +156,14 @@ describe('systemMail Resend', () => {
     assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
   });
 
-  it('falls back to jack@jettx.ai only if hello@invites.jettx.ai is rejected', async () => {
+  it('falls back to onboarding@resend.dev only in non-prod when verified From is rejected', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     let emailPosts = 0;
     mockFetch(async (url) => {
+      // Send path no longer lists domains; still tolerate a domains call.
       if (url.includes('/domains')) {
-        return new Response(
-          JSON.stringify({ data: [{ id: 'd1', name: 'jettx.ai', status: 'verified' }] }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
       }
       emailPosts += 1;
       if (emailPosts === 1) {
@@ -189,7 +188,7 @@ describe('systemMail Resend', () => {
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
     assert.equal(emailCalls.length, 2);
     assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
-    assert.match(String((emailCalls[1]!.body as { from: string }).from), /jack@jettx\.ai/);
+    assert.match(String((emailCalls[1]!.body as { from: string }).from), /onboarding@resend\.dev/);
   });
 
   it('prefers Resend over SMTP when both are configured', async () => {

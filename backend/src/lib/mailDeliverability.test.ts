@@ -6,7 +6,6 @@ import {
   evaluateEmailAuthDns,
   formatFromHeader,
   organizationalDomain,
-  preferResendOverSmtp,
   recommendedDmarcTxt,
   sameOrganization,
   smtpFromMatchesAccount,
@@ -89,8 +88,6 @@ describe('deliverability headers', () => {
 
 describe('transport order', () => {
   it('prefers Resend over SMTP unless the driver forces SMTP', () => {
-    assert.equal(preferResendOverSmtp({ resendApiKey: 're_x' }), true);
-    assert.equal(preferResendOverSmtp({ resendApiKey: 're_x', driver: 'smtp' }), false);
     assert.deepEqual(
       systemMailTransportOrder({
         resendReady: true,

@@ -3,7 +3,7 @@ import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
 /**
  * Field Capture / subcontractor job invitation.
  *
- * Sent by Atmosphere (platform SMTP), not from the inviting company's mailbox.
+ * Sent by Atmosphere (Resend), not from the inviting company's mailbox.
  * The org is named in the body so the recipient knows who the job is for.
  *
  * Recipients without an Atmosphere account are asked to create one

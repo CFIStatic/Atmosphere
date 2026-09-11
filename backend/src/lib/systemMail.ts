@@ -16,43 +16,21 @@ import {
   fetchResendDomains,
   isResendOnboardingFrom,
   isResendSenderRestriction,
-  pickResendFromAddressForList,
+  resendFromAddress,
   resendFromCandidates,
 } from './resendFrom.js';
 
 /**
- * Platform mail — Atmosphere sends it.
+ * Platform mail — Atmosphere sends it (invites, OTPs, resets, contact/careers).
  *
- * Job invites, claim codes, and other "come into the system" messages go out
- * from our authenticated sending domain, not from a customer's connected
- * Gmail/Microsoft mailbox. Campaigns still send as the customer when they
- * connect one; invites do not wait on that.
- *
- * Delivery order (inbox placement, not historical habit):
- *   1. Resend API (RESEND_API_KEY). From is hello@invites.jettx.ai — the
- *      domain with DKIM + SES return-path. Reply-To stays jack@jettx.ai
- *      when that address is the same org. Never uses onboarding@resend.dev
- *      in production (that address only reaches the Resend account owner).
- *   2. SMTP only when Resend is unset, or SYSTEM_MAIL_DRIVER=smtp, and only
- *      when the SMTP account can authenticate the From domain. Sending
- *      jack@jettx.ai through a Yahoo/Gmail SMTP login is what put Atmosphere
- *      mail in junk.
- *   3. File log sink in development (or SYSTEM_MAIL_DRIVER=log) so Approve &
- *      invite still delivers a readable invite when SMTP/Resend are unset
+ *   1. Resend as hello@invites.jettx.ai (Reply-To jack@jettx.ai).
+ *   2. SMTP only when Resend is unset / SYSTEM_MAIL_DRIVER=smtp and the
+ *      SMTP account can authenticate the From domain.
+ *   3. File log sink in development when neither is configured.
  */
 
 function fromAddress(): string {
-  // RESEND_FROM_EMAIL wins when it is on the verified sending domain so
-  // operators can pin hello@invites.jettx.ai without fighting CAREERS_FROM.
-  const resendFrom = (process.env.RESEND_FROM_EMAIL ?? '').trim();
-  if (resendFrom.toLowerCase().endsWith('@invites.jettx.ai')) return resendFrom;
-  return (
-    process.env.CAREERS_FROM_EMAIL ||
-    process.env.EMAIL_MARKETING_FROM ||
-    process.env.SMTP_USER ||
-    config.careers.fromEmail ||
-    RESEND_VERIFIED_FROM
-  ).trim();
+  return resendFromAddress();
 }
 
 function driverOverride(): string {
@@ -64,11 +42,7 @@ function defaultReplyTo(): string | null {
   return reply || null;
 }
 
-/**
- * When neither SMTP nor Resend is wired, development still needs a working
- * invite path. The log sink writes .eml-ish files under backend/.mail/ so
- * operators can open the invite, and returns ok so the product flow continues.
- */
+/** Dev file sink when SMTP/Resend are unset (or SYSTEM_MAIL_DRIVER=log). */
 export function logMailEnabled(): boolean {
   const driver = driverOverride();
   if (driver === 'log') return true;
@@ -80,7 +54,6 @@ function mailFrom(): string {
   return fromAddress() || RESEND_VERIFIED_FROM;
 }
 
-/** SMTP credentials that sendSystemMail will actually use for this From. */
 function smtpUsableForFrom(from: string): boolean {
   if (!smtpConfigured()) return false;
   if (driverOverride() === 'smtp') return true;
@@ -93,23 +66,7 @@ export function systemMailConfigured(): boolean {
   return smtpUsableForFrom(mailFrom());
 }
 
-/** Preferred Resend/SMTP From after verified-domain remapping (no network). */
-export function preferredSystemMailFrom(): string {
-  const configured = mailFrom();
-  if (process.env.RESEND_API_KEY?.trim()) {
-    return pickResendFromAddressForList(configured, {
-      ok: false,
-      restricted: true,
-      domains: [],
-    });
-  }
-  return configured;
-}
-
-/**
- * Readiness detail for /api/ready — reports transport + preferred From.
- * When the API key can list domains, includes verification status (never keys).
- */
+/** Readiness detail for /api/ready — transport + preferred From (never keys). */
 export async function mailReadyCheck(): Promise<{
   ok: boolean;
   detail: string;
@@ -119,8 +76,8 @@ export async function mailReadyCheck(): Promise<{
   }
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (apiKey) {
+    const from = resendFromAddress();
     const listed = await fetchResendDomains(apiKey);
-    const from = pickResendFromAddressForList(mailFrom(), listed);
     if (listed.ok) {
       const domains =
         listed.domains.length > 0
@@ -239,15 +196,10 @@ async function sendViaResend(input: {
   if (!apiKey) {
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
-  const listed = await fetchResendDomains(apiKey);
-  // Dev-only onboarding fallback: that From only reaches the Resend account
-  // owner. Using it in production would mark invites emailed=true while crew
-  // never see the message.
-  const allowOnboardingFallback = !config.isProduction;
+  // No domains-list round-trip on send — From is always the verified subdomain.
   const froms = resendFromCandidates({
     configuredFrom: input.from,
-    listed,
-    allowOnboardingFallback,
+    allowOnboardingFallback: !config.isProduction,
   });
 
   let last: { ok: false; why: string; status?: number; body?: string } | null = null;
@@ -276,7 +228,7 @@ async function sendViaResend(input: {
 
   if (last?.body && isResendSenderRestriction(last.status ?? 0, last.body)) {
     console.error(
-      `[system-mail] Resend rejected ${froms.join(' → ')}. invites.jettx.ai is the verified sending domain.`,
+      `[system-mail] Resend rejected ${froms.join(' → ')}. Verify invites.jettx.ai and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.`,
     );
   }
   return {
@@ -291,15 +243,9 @@ export async function sendSystemMail(input: {
   to: string;
   subject: string;
   text: string;
-  /** Optional HTML alternate — clients that support it show this. */
   html?: string | null;
-  /** Optional reply-to (e.g. the inviting office contact). */
   replyTo?: string | null;
-  /**
-   * Contact / careers forms must keep the visitor's inbox as Reply-To so
-   * a reply reaches them. Invite / OTP mail aligns Reply-To to the From
-   * org so a yahoo.com Reply-To on a jettx.ai From does not look spoofed.
-   */
+  /** Contact/careers keep the visitor inbox as Reply-To. */
   keepReplyTo?: boolean;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();

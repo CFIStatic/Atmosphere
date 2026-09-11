@@ -2,19 +2,12 @@ import { config } from '../config.js';
 import { sendSystemMail, systemMailConfigured } from './systemMail.js';
 import type { CareersApplication } from './validation.js';
 
-/**
- * Delivery for careers applications: one email per application to the hiring
- * inbox (CAREERS_TO_EMAIL), sent through the same authenticated Atmosphere
- * mail path as invites (Resend first, SMTP only when it can sign jettx.ai).
- */
-
-export { getTransporter, smtpConfigured } from './smtpTransport.js';
+/** Careers applications → hiring inbox via sendSystemMail (Resend). */
 
 export function careersMailConfigured(): boolean {
   return systemMailConfigured() && Boolean(config.careers.toEmail);
 }
 
-/** Render the application as a plain-text email body. */
 export function renderApplicationEmail(app: CareersApplication): string {
   return [
     `Role:  ${app.role}`,
@@ -31,7 +24,6 @@ export function renderApplicationEmail(app: CareersApplication): string {
     .join('\n');
 }
 
-/** Send one application to the hiring inbox. Throws on transport failure. */
 export async function sendApplicationEmail(app: CareersApplication): Promise<void> {
   const result = await sendSystemMail({
     to: config.careers.toEmail,
