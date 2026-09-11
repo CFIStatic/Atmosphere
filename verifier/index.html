@@ -1880,9 +1880,13 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg>
     Share
   </button>
-  <button role="menuitem" data-act="delete" class="danger">
+  <button role="menuitem" data-act="delete" class="danger" id="rowmenu-delete">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
     Delete
+  </button>
+  <button role="menuitem" data-act="restore" id="rowmenu-restore" hidden>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+    Restore
   </button>
   <button role="menuitem" data-act="save">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5V14M8 10.5l4 4 4-4M4.5 17.5v1.6A1.9 1.9 0 0 0 6.4 21h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.6"/></svg>
@@ -1918,7 +1922,7 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
     Open full record
   </button>
-  <button role="menuitem" data-job-act="delete" class="danger">
+  <button role="menuitem" data-job-act="delete" class="danger" id="jobmenu-delete">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
     Delete
   </button>
@@ -3949,6 +3953,13 @@
     closeJobMenu();
     menuFor = id; menuBtn = btn;
     btn.setAttribute('aria-expanded', 'true');
+    var clip = EVIDENCE.filter(function (e) { return e.id === id; })[0];
+    var pending = !!(clip && clip.pendingDeletion);
+    var admin = !ORG_MODE || isSessionGlobalAdmin();
+    var delBtn = document.getElementById('rowmenu-delete');
+    var restoreBtn = document.getElementById('rowmenu-restore');
+    if (delBtn) delBtn.hidden = !admin || pending;
+    if (restoreBtn) restoreBtn.hidden = !(ORG_MODE && isSessionGlobalAdmin() && pending);
     menuEl.hidden = false;
     var r = btn.getBoundingClientRect();
     var mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
@@ -3977,6 +3988,8 @@
     closeJobMenu();
     jobMenuFor = jobKey; jobMenuBtn = btn;
     btn.setAttribute('aria-expanded', 'true');
+    var jdel = document.getElementById('jobmenu-delete');
+    if (jdel) jdel.hidden = ORG_MODE && !isSessionGlobalAdmin();
     jobMenuEl.hidden = false;
     var r = btn.getBoundingClientRect();
     var mw = jobMenuEl.offsetWidth, mh = jobMenuEl.offsetHeight;
@@ -4052,6 +4065,10 @@
     }
 
     if (act === 'delete') {
+      if (ORG_MODE && !isSessionGlobalAdmin()) {
+        toast('Only a Global Admin can delete a video.');
+        return;
+      }
       // The hold outranks the click, exactly as it outranks the retention
       // schedule. The refusal is the feature.
       if (item.hold && item.hold.on) {
@@ -4059,6 +4076,15 @@
         return;
       }
       deleteLibraryClip(item);
+      return;
+    }
+
+    if (act === 'restore') {
+      if (!isSessionGlobalAdmin()) {
+        toast('Only a Global Admin can restore a video.');
+        return;
+      }
+      restoreLibraryClip(item);
       return;
     }
 
@@ -4360,6 +4386,10 @@
 
   function deleteLibraryClip(item) {
     if (!item || !item.id) return;
+    if (ORG_MODE && !isSessionGlobalAdmin()) {
+      toast('Only a Global Admin can delete a video.');
+      return;
+    }
     if (item._remote && ORG_MODE && item.job) {
       apiFetch('/api/operations/shared/' + encodeURIComponent(item.job) + '/evidence/' + encodeURIComponent(item.id), {
         method: 'DELETE'
@@ -4372,8 +4402,13 @@
           toast((res.body && (res.body.error || res.body.message)) || 'Could not delete that clip.');
           return;
         }
-        applyDeletedClip(item.id);
-        toast('Removed from the library.');
+        item.pendingDeletion = true;
+        item.deletedAt = res.body && res.body.deletedAt;
+        item.scheduledPurgeAt = res.body && res.body.scheduledPurgeAt;
+        render();
+        counts();
+        notifyLibraryChanged();
+        toast('Queued for permanent deletion in 30 days. You can restore until then.');
       }).catch(function (err) {
         toast(err && err.message ? err.message : 'Could not delete that clip.');
       });
@@ -4381,6 +4416,35 @@
     }
     applyDeletedClip(item.id);
     toast('Removed from this library view.');
+  }
+
+  function restoreLibraryClip(item) {
+    if (!item || !item.id || !item.job) return;
+    if (!isSessionGlobalAdmin()) {
+      toast('Only a Global Admin can restore a video.');
+      return;
+    }
+    apiFetch('/api/operations/shared/' + encodeURIComponent(item.job) + '/evidence/' + encodeURIComponent(item.id) + '/restore', {
+      method: 'POST'
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; }).catch(function () {
+        return { ok: r.ok, body: {} };
+      });
+    }).then(function (res) {
+      if (!res.ok) {
+        toast((res.body && (res.body.error || res.body.message)) || 'Could not restore that clip.');
+        return;
+      }
+      item.pendingDeletion = false;
+      item.deletedAt = null;
+      item.scheduledPurgeAt = null;
+      render();
+      counts();
+      notifyLibraryChanged();
+      toast('Deletion cancelled — clip is back in the library.');
+    }).catch(function (err) {
+      toast(err && err.message ? err.message : 'Could not restore that clip.');
+    });
   }
 
   function applyDuplicatedJob(payload) {
@@ -6553,6 +6617,7 @@
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
+    if (u.role !== undefined) SESSION_ROLE = u.role || null;
     if (typeof officeAccessToken === 'function' && typeof loadOrgLibrary === 'function') {
       var token = officeAccessToken();
       if (!SHARE_TOKEN && token && (!libraryLoaded || token !== lastLibraryToken)) {
@@ -6586,7 +6651,8 @@
           email: email,
           initials: initialsFrom(fullName, email),
           avatarUrl: avatarUrl,
-          orgName: orgName || null
+          orgName: orgName || null,
+          role: (membership && membership.role) || null
         }
       }, 'api');
     });
@@ -6810,6 +6876,12 @@
   // Inside the platform the same page hydrates with the org's whole library —
   // no token, the signed-in session is the credential.
   var ORG_MODE = false;
+  var SESSION_ROLE = null;
+  function isSessionGlobalAdmin() {
+    var r = SESSION_ROLE || '';
+    return r === 'global_admin' || r === 'office_manager' || r === 'executive';
+  }
+
 
   function mapRemoteItem(raw, jobKey) {
     var reading = raw.analysis || {};
@@ -6846,6 +6918,9 @@
       analysisError: raw.analysisError || null,
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
+      pendingDeletion: Boolean(raw.pendingDeletion),
+      deletedAt: raw.deletedAt || null,
+      scheduledPurgeAt: raw.scheduledPurgeAt || null,
       checks: raw.checks || [],
       analysis: hasReading
         ? {

@@ -96,13 +96,15 @@ describe('Dashboard clip delete', () => {
     expect(verifierHtml).toMatch(/if \(act === 'delete'\)[\s\S]*deleteLibraryClip\(item\)/);
   });
 
-  it('lets the hide stamp survive job_proofs RLS', () => {
+  it('lets the hide stamp survive job_proofs RLS and queues a 30-day purge', () => {
     expect(softDeleteRlsSql).toContain('deleted_at is null or deleted_by = auth.uid()');
     expect(softDeleteRlsSql).toContain('drop policy if exists job_proofs_select');
     expect(deleteEvidenceSrc).toContain('writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw');
     expect(deleteEvidenceSrc).toMatch(
-      /export async function deleteEvidence[\s\S]*const writer = writerForJob/,
+      /export async function deleteEvidence[\s\S]*assertGlobalAdminCanDeleteVideo/,
     );
+    expect(deleteEvidenceSrc).toMatch(/scheduled_purge_at:\s*purgeAt/);
+    expect(deleteEvidenceSrc).toContain('export async function restoreEvidence');
   });
 
   it('tells the office shell so Overview can drop the clip', () => {
@@ -122,7 +124,7 @@ describe('Dashboard clip delete', () => {
     dom.window.close();
   });
 
-  it('hides a live clip through DELETE without a confirm or RLS toast', async () => {
+  it('queues a live clip for 30-day purge when Global Admin deletes', async () => {
     const deletes: string[] = [];
     const { dom, confirmCalls } = bootVerifier({
       url: 'https://atmosphere.test/verifier/',
@@ -151,22 +153,95 @@ describe('Dashboard clip delete', () => {
         }
         if (init?.method === 'DELETE' && url.includes(`/evidence/${CLIP_ID}`)) {
           deletes.push(url);
-          return jsonResponse({ ok: true, deletedAt: '2026-09-02T01:00:00.000Z' });
+          return jsonResponse({
+            ok: true,
+            deletedAt: '2026-09-02T01:00:00.000Z',
+            scheduledPurgeAt: '2026-10-02T01:00:00.000Z',
+          });
         }
         return Promise.reject(new Error(`unexpected fetch ${url}`));
       }) as typeof fetch,
     });
 
     await waitForRow(dom.window.document, CLIP_ID);
+    dom.window.postMessage(
+      {
+        atmosphere: 'session',
+        user: {
+          name: 'Admin',
+          email: 'admin@example.com',
+          initials: 'A',
+          orgName: 'Jettx',
+          role: 'global_admin',
+        },
+      },
+      '*',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
     deleteClipFromMenu(dom.window.document, CLIP_ID);
     expect(confirmCalls()).toBe(0);
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(deletes).toEqual([
       `/api/operations/shared/${encodeURIComponent('job-1')}/evidence/${encodeURIComponent(CLIP_ID)}`,
     ]);
-    expect(dom.window.document.querySelector(`tr[data-id="${CLIP_ID}"]`)).toBeNull();
-    expect(dom.window.document.getElementById('toast')?.textContent).toBe('Removed from the library.');
+    // Pending deletion stays visible so Global Admin can restore.
+    expect(dom.window.document.querySelector(`tr[data-id="${CLIP_ID}"]`)).not.toBeNull();
+    expect(dom.window.document.getElementById('toast')?.textContent).toMatch(/Queued for permanent deletion/);
     expect(dom.window.document.getElementById('toast')?.textContent).not.toMatch(/row-level security/i);
+    dom.window.close();
+  });
+
+  it('hides delete for employees on the live dashboard', async () => {
+    const { dom } = bootVerifier({
+      url: 'https://atmosphere.test/verifier/',
+      fetchImpl: ((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/evidence-portal/library')) {
+          return jsonResponse({
+            jobs: [{ jobId: 'job-1', jobName: 'Cedar Ridge — storm damage' }],
+            items: [
+              {
+                id: CLIP_ID,
+                jobId: 'job-1',
+                jobName: 'Cedar Ridge — storm damage',
+                person: 'Tech',
+                company: 'Jettx LLC',
+                phase: 'after',
+                workDate: '2026-09-01',
+                capturedAt: '2026-09-01T12:00:00Z',
+                uploadedAt: '2026-09-01T12:05:00Z',
+                durationSeconds: 60,
+                analysisState: 'done',
+                analysis: { summary: 'Recorded walkthrough.' },
+              },
+            ],
+          });
+        }
+        return Promise.reject(new Error(`unexpected fetch ${url}`));
+      }) as typeof fetch,
+    });
+    await waitForRow(dom.window.document, CLIP_ID);
+    dom.window.postMessage(
+      {
+        atmosphere: 'session',
+        user: {
+          name: 'Employee',
+          email: 'crew@example.com',
+          initials: 'E',
+          orgName: 'Jettx',
+          role: 'employee',
+        },
+      },
+      '*',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const row = dom.window.document.querySelector(`tr[data-id="${CLIP_ID}"]`) as HTMLElement;
+    const kebab = row.querySelector('.kebab') as HTMLButtonElement;
+    kebab.dispatchEvent(new kebab.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));
+    const del = dom.window.document.querySelector(
+      '#rowmenu button[data-act="delete"]',
+    ) as HTMLButtonElement | null;
+    expect(del?.hidden).toBe(true);
     dom.window.close();
   });
 });

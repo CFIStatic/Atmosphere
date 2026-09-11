@@ -2,7 +2,8 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
+import { scheduledPurgeAt } from '../lib/videoDeletePolicy.js';
 import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -53,6 +54,7 @@ import {
   jobDisputes,
   setEvidenceHold,
   deleteEvidence,
+  restoreEvidence,
   recordAccess,
 } from './proofOfWork.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
@@ -460,7 +462,7 @@ const deleteJobFileSchema = z.object({
  */
 sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const { orgId, userId, supabase } = await requireGlobalAdmin(req);
     const { title } = deleteJobFileSchema.parse(req.body ?? {});
 
     const { data: job, error: readError } = await supabase
@@ -554,9 +556,10 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
       usedTombstone = true;
     }
 
+    const purgeAt = scheduledPurgeAt(new Date(now));
     const { data: proofs } = await writer
       .from('job_proofs')
-      .update({ deleted_at: now, deleted_by: userId })
+      .update({ deleted_at: now, deleted_by: userId, scheduled_purge_at: purgeAt })
       .eq('org_id', orgId)
       .eq('job_id', job.id)
       .is('deleted_at', null)
@@ -1496,6 +1499,7 @@ sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody-export', evidence
 sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
 sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
 sharedJobsRouter.delete('/shared/:jobId/evidence/:proofId', deleteEvidence);
+sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/restore', restoreEvidence);
 sharedJobsRouter.get('/shared/:jobId/legal-hold', getJobLegalHold);
 sharedJobsRouter.post('/shared/:jobId/legal-hold', setJobLegalHold);
 sharedJobsRouter.post('/shared/:jobId/legal-hold/release', releaseJobHold);

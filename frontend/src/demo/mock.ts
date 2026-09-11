@@ -3499,8 +3499,13 @@ const routes: Array<[string, RegExp, Handler]> = [
     SHARED_RECORDS[id] = record;
     return { body: record };
   }],
-  ['DELETE', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)$/, () => ({
-    body: { ok: true, deletedAt: new Date().toISOString() },
+  ['DELETE', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)$/, () => {
+    const deletedAt = new Date().toISOString();
+    const scheduledPurgeAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    return { body: { ok: true, deletedAt, scheduledPurgeAt } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)\/restore$/, () => ({
+    body: { ok: true, restored: true },
   })],
   ['DELETE', /^\/api\/operations\/shared\/([\w-]+)$/, (m, b) => {
     const id = m[1];

@@ -345,6 +345,9 @@ export function serializeEvidence(input: {
     materialChange,
     flagged: needsAttention({ integrity, analysis, materialChange }),
     legalHold: Boolean(proof.legal_hold),
+    deletedAt: proof.deleted_at ?? null,
+    scheduledPurgeAt: proof.scheduled_purge_at ?? null,
+    pendingDeletion: Boolean(proof.deleted_at && proof.scheduled_purge_at),
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:

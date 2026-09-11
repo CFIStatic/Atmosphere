@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type SharedJobSummary } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
+import { isGlobalAdmin } from '../../domain/productRoles';
 import { jobFileDeleteNameMatches, suggestedDuplicateTitle } from '../../lib/jobFileCopy';
 import { notifyLibraryChanged } from '../../lib/libraryChanged';
 import { SpinnerIcon } from '../icons';
@@ -37,6 +39,8 @@ export function JobFileActions({
   onDeleted?: () => void;
   onShare: () => void;
 }) {
+  const { membership } = useAuth();
+  const canDelete = isGlobalAdmin(membership?.role);
   const [mode, setMode] = useState<Mode>(null);
   const [draft, setDraft] = useState(title);
   const [busy, setBusy] = useState(false);
@@ -130,13 +134,15 @@ export function JobFileActions({
         >
           Share with homeowner
         </button>
-        <button
-          type="button"
-          onClick={() => setMode('delete')}
-          className="rounded-lg border border-danger-200 px-3.5 py-2 text-sm font-semibold text-danger-600 transition hover:bg-danger-50"
-        >
-          Delete
-        </button>
+        {canDelete ? (
+          <button
+            type="button"
+            onClick={() => setMode('delete')}
+            className="rounded-lg border border-danger-200 px-3.5 py-2 text-sm font-semibold text-danger-600 transition hover:bg-danger-50"
+          >
+            Delete
+          </button>
+        ) : null}
       </div>
 
       {mode && (

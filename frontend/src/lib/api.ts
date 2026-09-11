@@ -3447,9 +3447,15 @@ export const api = {
     }),
 
   deleteEvidence: (jobId: string, proofId: string) =>
-    request<{ ok: boolean; deletedAt: string }>(
+    request<{ ok: boolean; deletedAt: string; scheduledPurgeAt: string }>(
       `/api/operations/shared/${jobId}/evidence/${proofId}`,
       { method: 'DELETE' },
+    ),
+
+  restoreEvidence: (jobId: string, proofId: string) =>
+    request<{ ok: boolean; restored: boolean }>(
+      `/api/operations/shared/${jobId}/evidence/${proofId}/restore`,
+      { method: 'POST' },
     ),
 
   jobLegalHold: (jobId: string) =>

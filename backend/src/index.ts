@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
+import { startProofPurgeSweep, stopProofPurgeSweep } from './shared/proofPurgeSweep.js';
 import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { initSentry } from './lib/sentry.js';
@@ -43,6 +44,7 @@ const server = app.listen(config.port, host, () => {
   // WORKER_ROLE=http skips claiming so a dedicated queue replica can drain.
   if (runSoldPathWorkers) {
     startProofAnalysisSweep();
+    startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
   }
@@ -55,6 +57,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     // Subsystems that hold resources the process should not simply drop.
     stopVerificationLeaseSweep();
     stopProofAnalysisSweep();
+    stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     server.close(() => process.exit(0));
   });
