@@ -3557,10 +3557,16 @@ export const api = {
     ),
 
   progressShareGrants: () =>
-    request<{ grants: Array<{ orgId: string; jobId: string; path: string }> }>(
-      '/api/progress-share/grants',
-      { method: 'GET' },
-    ),
+    request<{
+      grants: Array<{
+        orgId: string;
+        jobId: string;
+        path: string;
+        orgName?: string;
+        jobTitle?: string;
+        status?: string | null;
+      }>;
+    }>('/api/progress-share/grants', { method: 'GET' }),
 
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),

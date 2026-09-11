@@ -30,9 +30,12 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
+const progressShareGrants = vi.hoisted(() => vi.fn(async () => ({ grants: [] as unknown[] })));
+
 vi.mock('../lib/api', () => ({
   api: {
     pinStatus: () => pinStatus(),
+    progressShareGrants: () => progressShareGrants(),
   },
   ApiError: class ApiError extends Error {
     status = 401;
@@ -53,6 +56,8 @@ function renderLogin(initialEntry = '/login') {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/verifier-library" element={<div>Workspace home</div>} />
         <Route path="/signup" element={<div>Signup</div>} />
+        <Route path="/my-job-files" element={<div>Your job files hub</div>} />
+        <Route path="/progress/:token" element={<div>Progress job</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -79,6 +84,7 @@ describe('LoginPage', () => {
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
     pinStatus.mockReset().mockResolvedValue({ enrolled: false, lockedUntil: null });
+    progressShareGrants.mockReset().mockResolvedValue({ grants: [] });
     delete document.documentElement.dataset.fieldEmbed;
   });
 
@@ -121,14 +127,35 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('button', { name: 'Continue to workspace' })).toBeNull();
   });
 
-  it('sends a signed-in customer without a workspace to finish setup', () => {
+  it('sends a signed-in customer without a workspace to finish setup', async () => {
     authState.user = signedInUser;
     authState.membership = null;
 
     renderLogin();
 
-    expect(screen.getByText('Signup')).toBeInTheDocument();
+    expect(await screen.findByText('Signup')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
+  });
+
+  it('sends a grant-only account to Your job files instead of office Overview', async () => {
+    authState.user = signedInUser;
+    authState.membership = null;
+    progressShareGrants.mockResolvedValue({ grants: [{ jobId: 'job-1' }] });
+
+    renderLogin();
+
+    expect(await screen.findByText('Your job files hub')).toBeInTheDocument();
+    expect(screen.queryByText('Signup')).toBeNull();
+  });
+
+  it('keeps a progress deep link for a leftover grant-only session', async () => {
+    authState.user = signedInUser;
+    authState.membership = null;
+    progressShareGrants.mockResolvedValue({ grants: [{ jobId: 'job-1' }] });
+
+    renderLogin('/login?next=%2Fprogress%2Ftok123');
+
+    expect(await screen.findByText('Progress job')).toBeInTheDocument();
   });
 
   it('honors ?next= when a leftover session is already signed in', () => {

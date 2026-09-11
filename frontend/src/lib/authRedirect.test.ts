@@ -58,6 +58,12 @@ describe('signupHref', () => {
       '/signup?email=a%40b.co&intent=join',
     );
   });
+
+  it('keeps intent=homeowner on save-this-job links', () => {
+    expect(signupHref({ intent: 'homeowner', email: 'a@b.co', next: '/progress/tok' })).toBe(
+      '/signup?next=%2Fprogress%2Ftok&email=a%40b.co&intent=homeowner',
+    );
+  });
 });
 
 describe('parseSignupIntent', () => {
