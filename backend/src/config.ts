@@ -235,16 +235,16 @@ export const config = {
     toEmail:
       process.env.CONTACT_TO_EMAIL ??
       process.env.CAREERS_TO_EMAIL ??
-      'jack@jettx.ai',
+      'hello@atmosphereteam.com',
   },
 
   careers: {
     // Where job applications from the corporate site's careers page land.
-    toEmail: process.env.CAREERS_TO_EMAIL ?? 'jack@jettx.ai',
-    // Legacy SMTP envelope hint. Transactional From is hello@invites.jettx.ai
-    // via RESEND_FROM_EMAIL (see systemMail / resendFrom).
+    toEmail: process.env.CAREERS_TO_EMAIL ?? 'hello@atmosphereteam.com',
+    // Reply-To for transactional mail + legacy SMTP envelope hint.
+    // Transactional From is hello@invites.atmosphereteam.com via RESEND_FROM_EMAIL.
     fromEmail:
-      process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? 'jack@jettx.ai',
+      process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? 'hello@atmosphereteam.com',
     // SMTP transport. Leave unset and /api/careers/apply still accepts and
     // logs applications in development, but refuses in production so a deploy
     // that forgot to configure mail fails loudly instead of eating applicants.

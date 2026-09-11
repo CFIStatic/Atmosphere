@@ -87,24 +87,27 @@ Both site forms are wired end to end through one JS helper in `assets/site.js`:
 
 Both validate with zod, drop honeypot submissions, rate-limit to 5/hour per IP,
 and share Atmosphere mail (`backend/src/lib/systemMail.ts`) — Resend first,
-SMTP only when the account can authenticate `jettx.ai`.
+SMTP only when the account can authenticate `atmosphereteam.com`.
 
 Configure delivery with environment variables on the backend:
 
 | Variable             | Meaning                                              |
 | -------------------- | ---------------------------------------------------- |
-| `CAREERS_TO_EMAIL`   | Where applications land (default `jack@jettx.ai`)    |
-| `CAREERS_FROM_EMAIL` | Reply-To / configured From (defaults to `jack@jettx.ai`) |
-| `RESEND_API_KEY`     | Preferred. Sends as `hello@invites.jettx.ai`         |
+| `CAREERS_TO_EMAIL`   | Where applications land (default `hello@atmosphereteam.com`) |
+| `CONTACT_TO_EMAIL`   | Contact form inbox (default `hello@atmosphereteam.com`) |
+| `CAREERS_FROM_EMAIL` | Reply-To for transactional mail (default `hello@atmosphereteam.com`) |
+| `RESEND_API_KEY`     | Preferred. Sends as `hello@invites.atmosphereteam.com` |
+| `RESEND_FROM_EMAIL`  | Pin `hello@invites.atmosphereteam.com`               |
 | `SMTP_HOST`          | SMTP fallback hostname                               |
 | `SMTP_PORT`          | Port (default `587`)                                 |
 | `SMTP_SECURE`        | `true` for implicit TLS (port 465)                   |
 | `SMTP_USER`          | SMTP username                                        |
 | `SMTP_PASS`          | SMTP password / app password                         |
 
-See `docs/email-deliverability.md` for the GoDaddy DMARC + Google DKIM records
-required so `jettx.ai` mail is not junked. Without Resend or SMTP, development
-accepts and logs applications; production returns 503.
+See `docs/email-deliverability.md` for Resend + Cloudflare DNS (verify
+`invites.atmosphereteam.com`, click tracking off, do not put Resend in apex
+SPF). Without Resend or SMTP, development accepts and logs applications;
+production returns 503.
 
 The site assumes it is served on the same origin as the backend (`/api/...`).
 Hosted elsewhere? Set `data-api="https://your-backend"` on the form in

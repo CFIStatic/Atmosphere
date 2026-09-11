@@ -2,22 +2,22 @@
 /**
  * Make job-invite email actually leave Resend.
  *
- * Production already has RESEND_API_KEY and CAREERS_FROM_EMAIL=jack@jettx.ai.
- * Resend still rejects that From until jettx.ai is a verified domain (DKIM +
- * return-path on a send. subdomain, which does not disturb Google Workspace MX
- * on the apex). This script:
+ * Production should have RESEND_API_KEY and
+ * RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com.
+ * Resend rejects that From until invites.atmosphereteam.com is a verified
+ * domain (DKIM + return-path on a send. subdomain). Apex SPF/MX stay with
+ * Cloudflare Email Routing — do not add Resend there. This script:
  *   1. Lists domains on the Keys Resend account
- *   2. Creates jettx.ai if it is missing
- *   3. Prints the DNS records to add at GoDaddy
+ *   2. Creates invites.atmosphereteam.com if it is missing
+ *   3. Prints the DNS records to add in Cloudflare
  *   4. Triggers verification (no-op until DNS exists)
  *
  * Never fails the deploy — missing key or API errors log and exit 0.
- * Jack verified `invites.jettx.ai` in the Resend dashboard. App mail sends as
- * hello@invites.jettx.ai. This script still tries to list/create the domain
- * when the API key is not send-only.
  */
 const apiKey = process.env.RESEND_API_KEY?.trim();
-const TARGET = (process.env.RESEND_SENDING_DOMAIN ?? 'invites.jettx.ai').trim().toLowerCase();
+const TARGET = (process.env.RESEND_SENDING_DOMAIN ?? 'invites.atmosphereteam.com')
+  .trim()
+  .toLowerCase();
 
 if (!apiKey) {
   console.warn('RESEND_API_KEY unset — skip Resend domain ensure.');
@@ -44,7 +44,7 @@ function printRecords(records) {
     return;
   }
   console.log('');
-  console.log(`Add these DNS records at GoDaddy for ${TARGET} (nameservers ns07/ns08.domaincontrol.com):`);
+  console.log(`Add these DNS records in Cloudflare for ${TARGET}:`);
   console.log('  Type   Name                         Value');
   for (const rec of records) {
     const type = String(rec.type ?? '').padEnd(6);
@@ -54,7 +54,11 @@ function printRecords(records) {
     console.log(`  ${type} ${name} ${rec.value ?? ''}${priority}${status}`);
   }
   console.log('');
-  console.log('After DNS is in place, job invites can send to any crew inbox as hello@invites.jettx.ai.');
+  console.log(
+    'After DNS is in place, job invites can send to any crew inbox as hello@invites.atmosphereteam.com.',
+  );
+  console.log('Turn Resend click tracking OFF on this domain.');
+  console.log('Do not put Resend in apex SPF — Cloudflare Email Routing owns apex SPF/MX.');
   console.log('Also add DMARC (see docs/email-deliverability.md) — without it Gmail/Yahoo junk the mail.');
   console.log('Until the sending domain is verified, Resend only delivers to the account owner.');
 }
@@ -65,10 +69,10 @@ if (!listed.ok) {
     console.warn(
       'Resend API key is send-only — it can send mail but cannot create domains.',
     );
-    console.warn('Verify jettx.ai in the Resend dashboard: https://resend.com/domains');
     console.warn(
-      'Add the DKIM + send.jettx.ai MX/TXT records at GoDaddy (ns07/ns08.domaincontrol.com).',
+      'Verify invites.atmosphereteam.com in the Resend dashboard: https://resend.com/domains',
     );
+    console.warn('Add the DKIM + send.invites return-path records in Cloudflare DNS.');
     console.warn(
       'Until that domain is verified, Resend only delivers to the account owner (onboarding@resend.dev).',
     );

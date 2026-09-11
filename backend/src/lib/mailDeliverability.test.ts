@@ -13,53 +13,75 @@ import {
 } from './mailDeliverability.js';
 
 describe('organizational domain', () => {
-  it('treats invites.jettx.ai as the same org as jettx.ai', () => {
+  it('treats invites.atmosphereteam.com as the same org as atmosphereteam.com', () => {
+    assert.equal(organizationalDomain('invites.atmosphereteam.com'), 'atmosphereteam.com');
+    assert.equal(organizationalDomain('send.invites.atmosphereteam.com'), 'atmosphereteam.com');
+    assert.equal(organizationalDomain('atmosphereteam.com'), 'atmosphereteam.com');
+    assert.ok(sameOrganization('hello@invites.atmosphereteam.com', 'hello@atmosphereteam.com'));
+    assert.ok(!sameOrganization('hello@invites.atmosphereteam.com', 'jackcyganiak@yahoo.com'));
+  });
+
+  it('still treats invites.jettx.ai as the same org as jettx.ai (legacy)', () => {
     assert.equal(organizationalDomain('invites.jettx.ai'), 'jettx.ai');
-    assert.equal(organizationalDomain('send.invites.jettx.ai'), 'jettx.ai');
-    assert.equal(organizationalDomain('jettx.ai'), 'jettx.ai');
     assert.ok(sameOrganization('hello@invites.jettx.ai', 'jack@jettx.ai'));
-    assert.ok(!sameOrganization('hello@invites.jettx.ai', 'jackcyganiak@yahoo.com'));
+    assert.ok(!sameOrganization('hello@invites.atmosphereteam.com', 'jack@jettx.ai'));
   });
 });
 
 describe('aligned Reply-To', () => {
-  it('keeps jack@jettx.ai on a hello@invites.jettx.ai From', () => {
+  it('keeps hello@atmosphereteam.com on a hello@invites.atmosphereteam.com From', () => {
     assert.equal(
-      alignedReplyTo('hello@invites.jettx.ai', 'jack@jettx.ai'),
-      'jack@jettx.ai',
+      alignedReplyTo('hello@invites.atmosphereteam.com', 'hello@atmosphereteam.com'),
+      'hello@atmosphereteam.com',
     );
   });
 
-  it('drops a consumer inbox Reply-To on a jettx.ai From', () => {
+  it('drops jack@jettx.ai Reply-To on an Atmosphere From (different org)', () => {
     assert.equal(
-      alignedReplyTo('hello@invites.jettx.ai', 'jackcyganiak@yahoo.com'),
+      alignedReplyTo('hello@invites.atmosphereteam.com', 'jack@jettx.ai'),
+      null,
+    );
+  });
+
+  it('drops a consumer inbox Reply-To on an Atmosphere From', () => {
+    assert.equal(
+      alignedReplyTo('hello@invites.atmosphereteam.com', 'jackcyganiak@yahoo.com'),
       null,
     );
   });
 
   it('reads the address out of a display-name Reply-To', () => {
     assert.equal(
-      alignedReplyTo('hello@invites.jettx.ai', '"Jack" <jack@jettx.ai>'),
-      '"Jack" <jack@jettx.ai>',
+      alignedReplyTo('hello@invites.atmosphereteam.com', '"Atmosphere" <hello@atmosphereteam.com>'),
+      '"Atmosphere" <hello@atmosphereteam.com>',
     );
   });
 });
 
 describe('From header / SMTP match', () => {
   it('formats Atmosphere <addr>', () => {
-    assert.equal(formatFromHeader('hello@invites.jettx.ai'), 'Atmosphere <hello@invites.jettx.ai>');
+    assert.equal(
+      formatFromHeader('hello@invites.atmosphereteam.com'),
+      'Atmosphere <hello@invites.atmosphereteam.com>',
+    );
   });
 
   it('refuses to claim SMTP can authenticate a foreign From', () => {
-    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'jackcyganiak@yahoo.com'), false);
-    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'jack@jettx.ai'), true);
-    assert.equal(smtpFromMatchesAccount('hello@invites.jettx.ai', 'jack@jettx.ai'), true);
+    assert.equal(smtpFromMatchesAccount('hello@atmosphereteam.com', 'jackcyganiak@yahoo.com'), false);
+    assert.equal(smtpFromMatchesAccount('hello@atmosphereteam.com', 'hello@atmosphereteam.com'), true);
+    assert.equal(
+      smtpFromMatchesAccount('hello@invites.atmosphereteam.com', 'hello@atmosphereteam.com'),
+      true,
+    );
   });
 
   it('treats SES / Postmark / SendGrid SMTP logins as able to sign From', () => {
-    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'AKIAIOSFODNN7EXAMPLE'), true);
-    assert.equal(smtpFromMatchesAccount('jack@jettx.ai', 'apikey'), true);
-    assert.equal(smtpFromMatchesAccount('hello@invites.jettx.ai', 'server-token-without-at'), true);
+    assert.equal(smtpFromMatchesAccount('hello@atmosphereteam.com', 'AKIAIOSFODNN7EXAMPLE'), true);
+    assert.equal(smtpFromMatchesAccount('hello@atmosphereteam.com', 'apikey'), true);
+    assert.equal(
+      smtpFromMatchesAccount('hello@invites.atmosphereteam.com', 'server-token-without-at'),
+      true,
+    );
   });
 });
 
@@ -109,13 +131,12 @@ describe('transport order', () => {
 });
 
 describe('DNS auth scoring', () => {
-  it('flags the live jettx.ai holes: no DMARC, no Google DKIM', () => {
+  it('flags missing DMARC on atmosphereteam.com', () => {
     const findings = evaluateEmailAuthDns({
-      apexTxt: ['v=spf1 include:_spf.google.com ~all'],
+      apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
       apexDmarc: [],
       invitesDmarc: [],
       invitesDkim: ['p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC'],
-      googleDkim: [],
       sendInvitesSpf: ['v=spf1 include:amazonses.com ~all'],
     });
     const byName = Object.fromEntries(findings.map((f) => [f.name, f]));
@@ -123,18 +144,16 @@ describe('DNS auth scoring', () => {
     assert.equal(byName['apex-dmarc']?.ok, false);
     assert.equal(byName['invites-dmarc']?.ok, false);
     assert.equal(byName['invites-dkim']?.ok, true);
-    assert.equal(byName['google-dkim']?.ok, false);
     assert.equal(byName['resend-return-path-spf']?.ok, true);
     assert.match(byName['apex-dmarc']?.fix ?? '', /v=DMARC1/);
   });
 
   it('passes a fully authenticated zone', () => {
     const findings = evaluateEmailAuthDns({
-      apexTxt: ['v=spf1 include:_spf.google.com ~all'],
-      apexDmarc: [recommendedDmarcTxt('jack@jettx.ai')],
-      invitesDmarc: [recommendedDmarcTxt('jack@jettx.ai')],
+      apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
+      apexDmarc: [recommendedDmarcTxt('hello@atmosphereteam.com')],
+      invitesDmarc: [recommendedDmarcTxt('hello@atmosphereteam.com')],
       invitesDkim: ['v=DKIM1; k=rsa; p=MIIBIjAN'],
-      googleDkim: ['v=DKIM1; k=rsa; p=MIIBIjAN'],
       sendInvitesSpf: ['v=spf1 include:amazonses.com ~all'],
     });
     assert.ok(findings.every((f) => f.ok));

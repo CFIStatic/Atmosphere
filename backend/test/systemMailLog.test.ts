@@ -65,7 +65,7 @@ describe('systemMail Resend', () => {
   before(() => {
     process.env.SYSTEM_MAIL_DRIVER = 'resend';
     process.env.RESEND_API_KEY = 're_test_invite';
-    process.env.RESEND_FROM_EMAIL = 'hello@invites.jettx.ai';
+    process.env.RESEND_FROM_EMAIL = 'hello@invites.atmosphereteam.com';
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;
@@ -99,7 +99,7 @@ describe('systemMail Resend', () => {
     }) as typeof fetch;
   }
 
-  it('sends as hello@invites.jettx.ai when no listed domain is verified', async () => {
+  it('sends as hello@invites.atmosphereteam.com when no listed domain is verified', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     mockFetch(async (url) => {
@@ -118,26 +118,31 @@ describe('systemMail Resend', () => {
     assert.equal(result.ok, true);
     const send = calls.find((c) => c.url.includes('/emails'));
     assert.ok(send);
-    assert.match(String((send!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(
+      String((send!.body as { from: string }).from),
+      /hello@invites\.atmosphereteam\.com/,
+    );
     const payload = send!.body as {
       from: string;
       reply_to?: string;
       headers?: Record<string, string>;
       tags?: Array<{ name: string; value: string }>;
     };
-    assert.equal(payload.reply_to, 'jack@jettx.ai');
+    assert.equal(payload.reply_to, 'hello@atmosphereteam.com');
     assert.equal(payload.headers?.['Auto-Submitted'], 'auto-generated');
     assert.ok(payload.headers?.['X-Entity-Ref-ID']);
     assert.ok(payload.tags?.some((t) => t.name === 'category' && t.value === 'transactional'));
   });
 
-  it('prefers hello@invites.jettx.ai even when domains list claims apex verified', async () => {
+  it('prefers hello@invites.atmosphereteam.com even when domains list claims apex verified', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     mockFetch(async (url) => {
       if (url.includes('/domains')) {
         return new Response(
-          JSON.stringify({ data: [{ id: 'd1', name: 'jettx.ai', status: 'verified' }] }),
+          JSON.stringify({
+            data: [{ id: 'd1', name: 'atmosphereteam.com', status: 'verified' }],
+          }),
           { status: 200 },
         );
       }
@@ -153,10 +158,13 @@ describe('systemMail Resend', () => {
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
     assert.equal(emailCalls.length, 1);
-    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(
+      String((emailCalls[0]!.body as { from: string }).from),
+      /hello@invites\.atmosphereteam\.com/,
+    );
   });
 
-  it('falls back to onboarding@resend.dev only in non-prod when verified From is rejected', async () => {
+  it('falls back to legacy Jettx then onboarding@resend.dev only in non-prod', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     let emailPosts = 0;
@@ -166,11 +174,13 @@ describe('systemMail Resend', () => {
         return new Response(JSON.stringify({ data: [] }), { status: 200 });
       }
       emailPosts += 1;
-      if (emailPosts === 1) {
+      if (emailPosts <= 2) {
+        const domain =
+          emailPosts === 1 ? 'invites.atmosphereteam.com' : 'invites.jettx.ai';
         return new Response(
           JSON.stringify({
             statusCode: 403,
-            message: 'The invites.jettx.ai domain is not verified. Please verify a domain',
+            message: `The ${domain} domain is not verified. Please verify a domain`,
           }),
           { status: 403 },
         );
@@ -186,9 +196,16 @@ describe('systemMail Resend', () => {
     });
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
-    assert.equal(emailCalls.length, 2);
-    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
-    assert.match(String((emailCalls[1]!.body as { from: string }).from), /onboarding@resend\.dev/);
+    assert.equal(emailCalls.length, 3);
+    assert.match(
+      String((emailCalls[0]!.body as { from: string }).from),
+      /hello@invites\.atmosphereteam\.com/,
+    );
+    assert.match(
+      String((emailCalls[1]!.body as { from: string }).from),
+      /hello@invites\.jettx\.ai/,
+    );
+    assert.match(String((emailCalls[2]!.body as { from: string }).from), /onboarding@resend\.dev/);
   });
 
   it('prefers Resend over SMTP when both are configured', async () => {
@@ -216,10 +233,13 @@ describe('systemMail Resend', () => {
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
     assert.equal(emailCalls.length, 1);
-    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(
+      String((emailCalls[0]!.body as { from: string }).from),
+      /hello@invites\.atmosphereteam\.com/,
+    );
   });
 
-  it('send-only API key sends as hello@invites.jettx.ai', async () => {
+  it('send-only API key sends as hello@invites.atmosphereteam.com', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     mockFetch(async (url) => {
@@ -245,6 +265,9 @@ describe('systemMail Resend', () => {
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
     assert.equal(emailCalls.length, 1);
-    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(
+      String((emailCalls[0]!.body as { from: string }).from),
+      /hello@invites\.atmosphereteam\.com/,
+    );
   });
 });
