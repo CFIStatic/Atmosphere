@@ -86,13 +86,13 @@ describe('emailDomain / sender restriction', () => {
 });
 
 describe('resendFromCandidates', () => {
-  it('tries Atmosphere then legacy Jettx in production', () => {
+  it('uses Atmosphere only in production — no Jettx fallback', () => {
     assert.deepEqual(
       resendFromCandidates({
         configuredFrom: 'hello@atmosphereteam.com',
         allowOnboardingFallback: false,
       }),
-      [RESEND_VERIFIED_FROM, RESEND_LEGACY_FROM],
+      [RESEND_VERIFIED_FROM],
     );
   });
 
@@ -102,11 +102,11 @@ describe('resendFromCandidates', () => {
         configuredFrom: 'hello@atmosphereteam.com',
         allowOnboardingFallback: true,
       }),
-      [RESEND_VERIFIED_FROM, RESEND_LEGACY_FROM, RESEND_ONBOARDING_FROM],
+      [RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM],
     );
   });
 
-  it('does not duplicate legacy when RESEND_FROM_EMAIL is already Jettx', () => {
+  it('honors an explicit legacy RESEND_FROM_EMAIL pin without adding extras', () => {
     const prev = process.env.RESEND_FROM_EMAIL;
     process.env.RESEND_FROM_EMAIL = RESEND_LEGACY_FROM;
     try {

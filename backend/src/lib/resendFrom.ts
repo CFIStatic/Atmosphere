@@ -60,9 +60,10 @@ export function resendFromAddress(configuredFrom?: string | null): string {
 }
 
 /**
- * From addresses to try. Atmosphere first, then legacy invites.jettx.ai when
- * the primary is rejected for sender restriction. onboarding@resend.dev only
- * when allowOnboardingFallback (non-production).
+ * From addresses to try. Always Atmosphere (or an explicit RESEND_FROM_EMAIL
+ * pin). Do NOT fall back to invites.jettx.ai — that mixed From/footer and
+ * landed invites in junk. onboarding@resend.dev only when
+ * allowOnboardingFallback (non-production).
  */
 export function resendFromCandidates(input: {
   configuredFrom?: string | null;
@@ -70,10 +71,6 @@ export function resendFromCandidates(input: {
 }): string[] {
   const primary = resendFromAddress(input.configuredFrom);
   const out: string[] = [primary];
-  // Legacy Jettx — migration fallback if Atmosphere domain is not yet verified.
-  if (emailDomain(primary) !== RESEND_LEGACY_DOMAIN) {
-    out.push(RESEND_LEGACY_FROM);
-  }
   if (input.allowOnboardingFallback) {
     if (!out.some((a) => a.toLowerCase() === RESEND_ONBOARDING_FROM)) {
       out.push(RESEND_ONBOARDING_FROM);
