@@ -12,12 +12,12 @@ import {
   systemMailTransportOrder,
 } from './mailDeliverability.js';
 import {
-  RESEND_ONBOARDING_FROM,
   RESEND_VERIFIED_FROM,
   fetchResendDomains,
+  isResendOnboardingFrom,
   isResendSenderRestriction,
   pickResendFromAddressForList,
-  uniqueResendFroms,
+  resendFromCandidates,
 } from './resendFrom.js';
 
 /**
@@ -31,8 +31,8 @@ import {
  * Delivery order (inbox placement, not historical habit):
  *   1. Resend API (RESEND_API_KEY). From is hello@invites.jettx.ai — the
  *      domain with DKIM + SES return-path. Reply-To stays jack@jettx.ai
- *      when that address is the same org. Falls back to
- *      onboarding@resend.dev only if Resend still rejects the From.
+ *      when that address is the same org. Never uses onboarding@resend.dev
+ *      in production (that address only reaches the Resend account owner).
  *   2. SMTP only when Resend is unset, or SYSTEM_MAIL_DRIVER=smtp, and only
  *      when the SMTP account can authenticate the From domain. Sending
  *      jack@jettx.ai through a Yahoo/Gmail SMTP login is what put Atmosphere
@@ -42,12 +42,16 @@ import {
  */
 
 function fromAddress(): string {
+  // RESEND_FROM_EMAIL wins when it is on the verified sending domain so
+  // operators can pin hello@invites.jettx.ai without fighting CAREERS_FROM.
+  const resendFrom = (process.env.RESEND_FROM_EMAIL ?? '').trim();
+  if (resendFrom.toLowerCase().endsWith('@invites.jettx.ai')) return resendFrom;
   return (
     process.env.CAREERS_FROM_EMAIL ||
     process.env.EMAIL_MARKETING_FROM ||
     process.env.SMTP_USER ||
     config.careers.fromEmail ||
-    'jack@jettx.ai'
+    RESEND_VERIFIED_FROM
   ).trim();
 }
 
@@ -73,7 +77,7 @@ export function logMailEnabled(): boolean {
 }
 
 function mailFrom(): string {
-  return fromAddress() || 'jack@jettx.ai';
+  return fromAddress() || RESEND_VERIFIED_FROM;
 }
 
 /** SMTP credentials that sendSystemMail will actually use for this From. */
@@ -87,6 +91,55 @@ export function systemMailConfigured(): boolean {
   if (logMailEnabled()) return true;
   if (process.env.RESEND_API_KEY?.trim()) return true;
   return smtpUsableForFrom(mailFrom());
+}
+
+/** Preferred Resend/SMTP From after verified-domain remapping (no network). */
+export function preferredSystemMailFrom(): string {
+  const configured = mailFrom();
+  if (process.env.RESEND_API_KEY?.trim()) {
+    return pickResendFromAddressForList(configured, {
+      ok: false,
+      restricted: true,
+      domains: [],
+    });
+  }
+  return configured;
+}
+
+/**
+ * Readiness detail for /api/ready — reports transport + preferred From.
+ * When the API key can list domains, includes verification status (never keys).
+ */
+export async function mailReadyCheck(): Promise<{
+  ok: boolean;
+  detail: string;
+}> {
+  if (!systemMailConfigured()) {
+    return { ok: false, detail: 'unconfigured' };
+  }
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (apiKey) {
+    const listed = await fetchResendDomains(apiKey);
+    const from = pickResendFromAddressForList(mailFrom(), listed);
+    if (listed.ok) {
+      const domains =
+        listed.domains.length > 0
+          ? listed.domains.map((d) => `${d.name}:${d.status}`).join(',')
+          : 'none';
+      return { ok: true, detail: `resend from=${from} domains=${domains}` };
+    }
+    if (listed.restricted) {
+      return { ok: true, detail: `resend from=${from} (send-only key)` };
+    }
+    return { ok: true, detail: `resend from=${from} (domains list unavailable)` };
+  }
+  if (smtpUsableForFrom(mailFrom())) {
+    return { ok: true, detail: `smtp from=${mailFrom()}` };
+  }
+  if (logMailEnabled()) {
+    return { ok: true, detail: 'log' };
+  }
+  return { ok: false, detail: 'unconfigured' };
 }
 
 async function sendViaLog(input: {
@@ -187,8 +240,15 @@ async function sendViaResend(input: {
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
   const listed = await fetchResendDomains(apiKey);
-  const picked = pickResendFromAddressForList(input.from, listed);
-  const froms = uniqueResendFroms(picked, RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM);
+  // Dev-only onboarding fallback: that From only reaches the Resend account
+  // owner. Using it in production would mark invites emailed=true while crew
+  // never see the message.
+  const allowOnboardingFallback = !config.isProduction;
+  const froms = resendFromCandidates({
+    configuredFrom: input.from,
+    listed,
+    allowOnboardingFallback,
+  });
 
   let last: { ok: false; why: string; status?: number; body?: string } | null = null;
   for (const from of froms) {
@@ -199,7 +259,14 @@ async function sendViaResend(input: {
       ? input.replyTo?.trim() || null
       : alignedReplyTo(from, input.replyTo);
     const result = await postResend({ ...input, apiKey, from, replyTo });
-    if (result.ok) return result;
+    if (result.ok) {
+      if (isResendOnboardingFrom(from)) {
+        console.warn(
+          '[system-mail] delivered via onboarding@resend.dev — only the Resend account owner receives this. Set RESEND_FROM_EMAIL=hello@invites.jettx.ai and verify invites.jettx.ai.',
+        );
+      }
+      return result;
+    }
     last = result;
     if (!result.status || !isResendSenderRestriction(result.status, result.body ?? '')) {
       break;
@@ -212,7 +279,12 @@ async function sendViaResend(input: {
       `[system-mail] Resend rejected ${froms.join(' → ')}. invites.jettx.ai is the verified sending domain.`,
     );
   }
-  return { ok: false, why: last?.why ?? 'The email could not be sent.' };
+  return {
+    ok: false,
+    why:
+      last?.why ??
+      'The email could not be sent. Verify invites.jettx.ai on Resend and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.',
+  };
 }
 
 export async function sendSystemMail(input: {

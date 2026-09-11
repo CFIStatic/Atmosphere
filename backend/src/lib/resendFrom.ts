@@ -73,12 +73,19 @@ export function pickResendFromAddress(
 
   const configured = configuredFrom.trim();
   const configuredDomain = emailDomain(configured);
+
+  // Prefer invites.jettx.ai whenever it is verified — even if the apex also
+  // appears verified. Resend has listed jettx.ai as verified while still
+  // rejecting jack@jettx.ai ("domain is not verified").
+  if (verified.includes(RESEND_VERIFIED_DOMAIN)) {
+    return remapToVerifiedSendingDomain(configured);
+  }
+
   if (configured && configuredDomain && verified.includes(configuredDomain)) {
     return configured;
   }
 
   const preferred =
-    verified.find((name) => name === RESEND_VERIFIED_DOMAIN) ??
     verified.find((name) => name === 'jettx.ai') ??
     verified.find((name) => name.endsWith('.jettx.ai')) ??
     verified.find((name) => name === 'atmosphereteam.com') ??
@@ -109,6 +116,32 @@ export function uniqueResendFroms(...addresses: string[]): string[] {
     out.push(address);
   }
   return out;
+}
+
+/**
+ * From addresses to try, in order. Always leads with the known-good
+ * invites.jettx.ai address so a stale "apex verified" domains response does
+ * not burn a round-trip (or confuse operators) on jack@jettx.ai.
+ *
+ * onboarding@resend.dev only reaches the Resend account owner — never use it
+ * in production or the product will claim "emailed" while crew get nothing.
+ */
+export function resendFromCandidates(input: {
+  configuredFrom: string;
+  listed: ResendDomainList;
+  allowOnboardingFallback: boolean;
+}): string[] {
+  const verified = remapToVerifiedSendingDomain(input.configuredFrom);
+  const picked = pickResendFromAddressForList(input.configuredFrom, input.listed);
+  const ordered = uniqueResendFroms(verified, picked);
+  if (input.allowOnboardingFallback) {
+    return uniqueResendFroms(...ordered, RESEND_ONBOARDING_FROM);
+  }
+  return ordered;
+}
+
+export function isResendOnboardingFrom(address: string): boolean {
+  return address.trim().toLowerCase() === RESEND_ONBOARDING_FROM;
 }
 
 export function isResendSenderRestriction(status: number, body: string): boolean {

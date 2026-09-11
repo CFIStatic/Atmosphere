@@ -14,6 +14,27 @@ Check what is live:
 npm run check:email-auth --prefix backend
 ```
 
+
+## Sold-path email inventory
+
+| Type | Code path | From (Resend) | Notes |
+| --- | --- | --- | --- |
+| Platform / org invites | `routes/org.ts` → `sendSystemMail` | `hello@invites.jettx.ai` | Returns `emailed: false` on failure; UI says so |
+| Field Capture / job party invites | `deliverPartyInvite.ts` | same | Start a job + Add people |
+| Progress / job-file share | `evidencePortal.ts` + `progressShareEmail` | same | Hard-fails (`email_not_sent`) if mail fails |
+| Evidence share notify | `evidencePortal.ts` + `shareEmail` | same | Share kept; `emailed` flag truthful |
+| Password reset | `auth/sendPasswordReset.ts` | same | Atmosphere mails the link (not Supabase Auth) |
+| Field claim OTP | `routes/fieldIdentity.ts` | same | Email channel only (SMS not wired) |
+| Contact form | `contactMail.ts` | same | `keepReplyTo` visitor address |
+| Careers apply | `careersMail.ts` | same | Same transport |
+| Billing receipts | Stripe Customer emails | Stripe | **Not** Atmosphere/Resend — enable in Stripe Dashboard |
+
+**Transport order:** Resend (`RESEND_API_KEY`) → SMTP only if From matches the SMTP account → file log sink in development (`SYSTEM_MAIL_DRIVER=log` or unset SMTP/Resend).
+
+**Domain fallback:** production always tries `hello@invites.jettx.ai` first (verified subdomain). It never treats `onboarding@resend.dev` as a production success path (that address only reaches the Resend account owner). Reply-To stays `jack@jettx.ai` when it is the same org.
+
+**Prod verify:** `GET /api/ready` → `checks.mail.detail` should look like `resend from=hello@invites.jettx.ai …`. Then send one org invite or job party invite to `jack@jettx.ai` and confirm inbox delivery (not spam).
+
 ---
 
 ## What is wrong today
@@ -65,8 +86,9 @@ fails DKIM and is a junk candidate.
   verified on the Resend account. **Reply-To** stays `jack@jettx.ai` (same org).
 - Transactional sends set `Auto-Submitted: auto-generated` and a unique
   `X-Entity-Ref-ID` so Gmail does not thread every invite together.
-- Marketing / sales sends add one-click `List-Unsubscribe` and no longer
-  default From to `onboarding@resend.dev` (that address is a spam magnet).
+- Marketing / sales sends add one-click `List-Unsubscribe`. Production never
+  falls back to `onboarding@resend.dev` (that address only reaches the Resend
+  account owner and would falsely mark invites as emailed).
 - Contact and careers forms use the same authenticated path.
 
 Turn click tracking **off** on the Resend domain (`invites.jettx.ai` →

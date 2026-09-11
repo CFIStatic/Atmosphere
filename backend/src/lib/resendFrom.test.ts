@@ -1,18 +1,30 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  RESEND_ONBOARDING_FROM,
   RESEND_VERIFIED_FROM,
   emailDomain,
   isResendSenderRestriction,
   pickResendFromAddress,
   pickResendFromAddressForList,
+  resendFromCandidates,
 } from './resendFrom.js';
 
 describe('pickResendFromAddress', () => {
-  it('keeps jack@jettx.ai when that apex domain is verified', () => {
+  it('keeps jack@jettx.ai when only the apex domain is verified', () => {
     assert.equal(
       pickResendFromAddress('jack@jettx.ai', [{ name: 'jettx.ai', status: 'verified' }]),
       'jack@jettx.ai',
+    );
+  });
+
+  it('prefers hello@invites.jettx.ai when both apex and invites are verified', () => {
+    assert.equal(
+      pickResendFromAddress('jack@jettx.ai', [
+        { name: 'jettx.ai', status: 'verified' },
+        { name: 'invites.jettx.ai', status: 'verified' },
+      ]),
+      RESEND_VERIFIED_FROM,
     );
   });
 
@@ -101,6 +113,45 @@ describe('pickResendFromAddressForList', () => {
         domains: [],
       }),
       RESEND_VERIFIED_FROM,
+    );
+  });
+});
+
+describe('resendFromCandidates', () => {
+  it('leads with hello@invites.jettx.ai even when pick would use the apex', () => {
+    assert.deepEqual(
+      resendFromCandidates({
+        configuredFrom: 'jack@jettx.ai',
+        listed: {
+          ok: true,
+          restricted: false,
+          domains: [{ name: 'jettx.ai', status: 'verified' }],
+        },
+        allowOnboardingFallback: false,
+      }),
+      [RESEND_VERIFIED_FROM, 'jack@jettx.ai'],
+    );
+  });
+
+  it('omits onboarding@resend.dev when production forbids it', () => {
+    assert.deepEqual(
+      resendFromCandidates({
+        configuredFrom: 'jack@jettx.ai',
+        listed: { ok: false, restricted: true, domains: [] },
+        allowOnboardingFallback: false,
+      }),
+      [RESEND_VERIFIED_FROM],
+    );
+  });
+
+  it('allows onboarding@resend.dev only as a last-resort non-prod fallback', () => {
+    assert.deepEqual(
+      resendFromCandidates({
+        configuredFrom: 'jack@jettx.ai',
+        listed: { ok: false, restricted: true, domains: [] },
+        allowOnboardingFallback: true,
+      }),
+      [RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM],
     );
   });
 });

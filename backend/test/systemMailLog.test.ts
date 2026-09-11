@@ -130,7 +130,7 @@ describe('systemMail Resend', () => {
     assert.ok(payload.tags?.some((t) => t.name === 'category' && t.value === 'transactional'));
   });
 
-  it('sends as jack@jettx.ai when that domain is verified', async () => {
+  it('prefers hello@invites.jettx.ai even when domains list claims apex verified', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     mockFetch(async (url) => {
@@ -150,12 +150,12 @@ describe('systemMail Resend', () => {
       text: 'Open the link',
     });
     assert.equal(result.ok, true);
-    const send = calls.find((c) => c.url.includes('/emails'));
-    assert.ok(send);
-    assert.match(String((send!.body as { from: string }).from), /jack@jettx\.ai/);
+    const emailCalls = calls.filter((c) => c.url.includes('/emails'));
+    assert.equal(emailCalls.length, 1);
+    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
   });
 
-  it('retries hello@invites.jettx.ai when jack@jettx.ai is rejected', async () => {
+  it('falls back to jack@jettx.ai only if hello@invites.jettx.ai is rejected', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     let emailPosts = 0;
@@ -171,7 +171,7 @@ describe('systemMail Resend', () => {
         return new Response(
           JSON.stringify({
             statusCode: 403,
-            message: 'The jettx.ai domain is not verified. Please verify a domain',
+            message: 'The invites.jettx.ai domain is not verified. Please verify a domain',
           }),
           { status: 403 },
         );
@@ -188,8 +188,8 @@ describe('systemMail Resend', () => {
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
     assert.equal(emailCalls.length, 2);
-    assert.match(String((emailCalls[0]!.body as { from: string }).from), /jack@jettx\.ai/);
-    assert.match(String((emailCalls[1]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(String((emailCalls[0]!.body as { from: string }).from), /hello@invites\.jettx\.ai/);
+    assert.match(String((emailCalls[1]!.body as { from: string }).from), /jack@jettx\.ai/);
   });
 
   it('prefers Resend over SMTP when both are configured', async () => {
