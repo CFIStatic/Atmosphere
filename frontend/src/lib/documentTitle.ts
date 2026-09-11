@@ -22,6 +22,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/settings': 'Settings',
   '/field': 'Overview',
   '/my-jobs': 'My jobs',
+  '/my-job-files': 'Your job files',
   '/shared': 'Shared job',
   '/report': 'Report',
   '/progress': 'Job file',
@@ -45,10 +46,13 @@ export function documentTitleFor(pathname: string, search = ''): string {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
 
   if (pathname === '/signup' || pathname.startsWith('/signup/')) {
+    const intent = parseSignupIntent(params.get('intent'));
     const page =
-      parseSignupIntent(params.get('intent')) === 'join'
+      intent === 'join'
         ? 'Join your team'
-        : 'Create your organization';
+        : intent === 'homeowner'
+          ? 'Save this job'
+          : 'Create your organization';
     return `${page} · ${APP_NAME}`;
   }
 

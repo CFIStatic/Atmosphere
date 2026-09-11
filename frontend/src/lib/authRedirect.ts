@@ -55,7 +55,9 @@ export function signupHref(options?: {
   const code = options?.code?.trim().toUpperCase();
   if (next) params.set('next', next);
   if (email) params.set('email', email);
-  if (options?.intent === 'join') params.set('intent', 'join');
+  if (options?.intent === 'join' || options?.intent === 'homeowner') {
+    params.set('intent', options.intent);
+  }
   if (code) params.set('code', code);
   const qs = params.toString();
   return qs ? `/signup?${qs}` : '/signup';

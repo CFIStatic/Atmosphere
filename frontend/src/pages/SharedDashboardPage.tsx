@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
 import {
   api,
@@ -23,6 +23,8 @@ import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOption
 import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useAuth } from '../context/AuthContext';
+import { HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
 
 type HandoffState = {
   freshJob?: SharedJobSummary;
@@ -108,6 +110,7 @@ function placeholderRecord(
 }
 
 export function SharedDashboardPage() {
+  const { membership } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -146,6 +149,7 @@ export function SharedDashboardPage() {
 
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
+  const grantViewer = viewerOnly || (!membership && Boolean(requestedJob));
 
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
@@ -296,7 +300,15 @@ export function SharedDashboardPage() {
       <PageHeader
         title={record?.job.title ?? 'Job'}
         action={
-          record && !viewerOnly ? (
+          grantViewer ? (
+            <Link
+              to={HOMEOWNER_HUB_PATH}
+              className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              data-testid="your-job-files"
+            >
+              Your job files
+            </Link>
+          ) : record && !viewerOnly ? (
             <JobFileActions
               jobId={record.job.id}
               title={record.job.title}

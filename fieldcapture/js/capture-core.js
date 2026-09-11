@@ -785,6 +785,11 @@
     });
   }
 
+  /** After invite account=1 sign-in: several jobs → Today; one job can deep-open. */
+  function preferTodayAfterInviteSignIn(jobs) {
+    return Array.isArray(jobs) && jobs.length > 1;
+  }
+
   function loadTodayJobs(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/field-app/today', { accessToken: accessToken }).then(
       function (body) {
@@ -2841,6 +2846,7 @@
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
+    preferTodayAfterInviteSignIn: preferTodayAfterInviteSignIn,
     createTodayJob: createTodayJob,
     placesStatus: placesStatus,
     placesAutocomplete: placesAutocomplete,

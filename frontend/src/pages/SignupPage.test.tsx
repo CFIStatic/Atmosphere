@@ -349,4 +349,56 @@ describe('SignupPage', () => {
       expect(queueRedirect).toHaveBeenCalledWith('/intake');
     });
   });
+
+  it('sends a homeowner save-job account to the hub when there is no job link', async () => {
+    const user = userEvent.setup();
+    authState.signup.mockResolvedValue({
+      needsEmailConfirmation: false,
+      membership: null,
+      user: { id: 'user-h', email: 'home@example.com', emailConfirmed: true },
+    });
+    authState.refreshMembership.mockResolvedValue(null);
+
+    renderSignup('/signup?intent=homeowner');
+    expect(screen.getByRole('heading', { level: 2, name: 'Save this job' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Company name')).toBeNull();
+
+    await user.type(screen.getByLabelText('Email'), 'home@example.com');
+    await user.type(screen.getByLabelText('Password'), 'password1');
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(
+      screen
+        .getAllByRole('button', { name: 'Save this job' })
+        .find((el) => (el as HTMLButtonElement).type === 'submit')!,
+    );
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith('/my-job-files');
+    });
+    expect(apiMocks.createOrg).not.toHaveBeenCalled();
+  });
+
+  it('keeps a progress deep link after homeowner signup', async () => {
+    const user = userEvent.setup();
+    authState.signup.mockResolvedValue({
+      needsEmailConfirmation: false,
+      membership: null,
+      user: { id: 'user-h', email: 'home@example.com', emailConfirmed: true },
+    });
+    authState.refreshMembership.mockResolvedValue(null);
+
+    renderSignup('/signup?intent=homeowner&next=%2Fprogress%2Ftok123');
+    await user.type(screen.getByLabelText('Email'), 'home@example.com');
+    await user.type(screen.getByLabelText('Password'), 'password1');
+    await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
+    await user.click(
+      screen
+        .getAllByRole('button', { name: 'Save this job' })
+        .find((el) => (el as HTMLButtonElement).type === 'submit')!,
+    );
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith('/progress/tok123');
+    });
+  });
 });

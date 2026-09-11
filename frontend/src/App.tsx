@@ -31,8 +31,11 @@ import { OperationsShell } from './layouts/OperationsShell';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
 import { MyJobsPage } from './pages/MyJobsPage';
+import { MyJobFilesPage } from './pages/MyJobFilesPage';
 import { getPlatform } from './lib/usePlatform';
 import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
+import { HOMEOWNER_HUB_PATH, isHomeownerHubPath } from './lib/homeownerHub';
+import { resolveNoOrgDestination } from './lib/postAuth';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
@@ -124,6 +127,7 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
   const jobProgressViewer =
     location.pathname === '/job-progress' || location.pathname.startsWith('/jobs/');
+  const homeownerHub = isHomeownerHubPath(location.pathname);
 
   if (membershipLoading) return <FullScreenSpinner />;
   if (!membership) {
@@ -131,14 +135,9 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     // Platform. A null office membership is a finished read, not a hang.
     if (fieldEmbed) return <RequireBillingSetup>{children}</RequireBillingSetup>;
     // Homeowners who claimed a progress share open /job-progress without an org.
-    if (jobProgressViewer) return <>{children}</>;
+    if (jobProgressViewer || homeownerHub) return <>{children}</>;
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
-    return (
-      <Navigate
-        to={`/signup?next=${encodeURIComponent(returnPath)}`}
-        replace
-      />
-    );
+    return <NoOrgOfficeRedirect from={returnPath} />;
   }
   return <RequireBillingSetup>{children}</RequireBillingSetup>;
 }
@@ -152,7 +151,9 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
   const jobProgressViewer =
     !membership &&
-    (location.pathname === '/job-progress' || location.pathname.startsWith('/jobs/'));
+    (location.pathname === '/job-progress' ||
+      location.pathname.startsWith('/jobs/') ||
+      isHomeownerHubPath(location.pathname));
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +214,24 @@ function BillingSettingsRedirect() {
   const checkout = params.get('checkout');
   if (checkout) next.set('checkout', checkout);
   return <Navigate to={`/settings?${next.toString()}`} replace />;
+}
+
+/** Grant-only accounts hit office Overview — send them to the hub when grants exist. */
+function NoOrgOfficeRedirect({ from }: { from: string }) {
+  const [to, setTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveNoOrgDestination(from).then((dest) => {
+      if (!cancelled) setTo(dest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [from]);
+
+  if (!to) return <FullScreenSpinner />;
+  return <Navigate to={to} replace />;
 }
 
 /** For the onboarding route: if already onboarded, skip straight to the dashboard. */
@@ -331,6 +350,18 @@ export default function App() {
               the org guards too: the list spans organizations the sub is a
               member of none of. */}
           <Route path="/my-jobs" element={<MyJobsPage />} />
+
+          {/* Homeowner / grant-only hub. Same isolation as /my-jobs: the list
+              spans vendors the person is a member of none of. Atmosphere auth
+              is required; they are not org_members and do not use a seat. */}
+          <Route
+            path={HOMEOWNER_HUB_PATH}
+            element={
+              <ProtectedRoute>
+                <MyJobFilesPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}

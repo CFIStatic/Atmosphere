@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { firstRunDestination } from '../lib/firstRun';
+import { homeownerAfterSignup } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
@@ -254,12 +255,12 @@ export function SignupPage() {
         }
         // Homeowner quick account: email + password only — claim progress share next.
         if (orgIntent === 'homeowner') {
-          queueRedirect(redirectTo);
+          queueRedirect(homeownerAfterSignup(redirectTo));
           return;
         }
       }
       if (orgIntent === 'homeowner') {
-        queueRedirect(redirectTo);
+        queueRedirect(homeownerAfterSignup(redirectTo));
         return;
       }
       await completeWorkspace();

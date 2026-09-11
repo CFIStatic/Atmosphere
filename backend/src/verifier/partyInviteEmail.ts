@@ -40,13 +40,14 @@ export function partyInviteEmail(input: {
   const primaryIsFieldCapture = Boolean(fieldCapture);
 
   const subject = job
-    ? `${org} invited you to capture: ${job}`
-    : `${org} invited you to capture a job on Atmosphere`;
+    ? `Capture on Atmosphere · ${job}`
+    : 'You are invited to capture on Atmosphere';
 
   const textLines: string[] = [
     who ? `Hi ${who},` : 'Hi,',
     '',
-    `${org} invited you to capture work on Atmosphere.`,
+    'You are invited to capture work on Atmosphere.',
+    `From: ${org}`,
   ];
   if (inviter) textLines.push(`Requested by: ${inviter}`);
   if (job) textLines.push(`Job: ${job}`);
@@ -88,6 +89,7 @@ export function partyInviteEmail(input: {
   );
 
   const metaRows = [
+    row('From', escapeHtml(org)),
     inviter ? row('Requested by', escapeHtml(inviter)) : '',
     job ? row('Job', escapeHtml(job)) : '',
     site ? row('Site', escapeHtml(site)) : '',
@@ -133,11 +135,12 @@ export function partyInviteEmail(input: {
         <tr><td>
           ${atmosphereWordmarkHtml()}
           <h1 style="margin:16px 0 0;font-size:22px;line-height:1.3;color:#1c1917;">
-            ${escapeHtml(org)} invited you to capture a job
+            Capture a job on Atmosphere
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             ${who ? `Hi ${escapeHtml(who)},` : 'Hi,'}
             open Field Capture to review the job file and film the day.
+            From ${escapeHtml(org)}.
           </p>
           ${metaRows ? `<table role="presentation" style="margin:20px 0 0;width:100%;">${metaRows}</table>` : ''}
           <p style="margin:24px 0 0;">

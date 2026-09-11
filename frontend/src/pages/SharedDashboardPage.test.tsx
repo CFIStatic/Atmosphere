@@ -15,9 +15,15 @@ vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
 }));
 
+const authMembership = vi.hoisted(() => ({
+  current: { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } } as
+    | { role: string; org: { id: string; name: string } }
+    | null,
+}));
+
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    membership: { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } },
+    membership: authMembership.current,
   }),
 }));
 
@@ -100,6 +106,7 @@ const record = {
 describe('SharedDashboardPage job file identity', () => {
   beforeEach(() => {
     localStorage.clear();
+    authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
     usePhoneShell.mockReturnValue(false);
     sharedJobs.mockReset();
     sharedJob.mockReset();
@@ -297,5 +304,20 @@ describe('SharedDashboardPage job file identity', () => {
     await user.click(screen.getByRole('tab', { name: 'Ask' }));
     expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
+  });
+
+  it('links a grant viewer back to Your job files', async () => {
+    authMembership.current = null;
+    sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('your-job-files')).toHaveAttribute('href', '/my-job-files');
+    expect(screen.getByRole('link', { name: 'Your job files' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share with homeowner' })).not.toBeInTheDocument();
   });
 });

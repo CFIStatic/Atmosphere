@@ -3,9 +3,10 @@ import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
+import { isHomeownerViewerPath } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
-import { postAuthDestination } from '../lib/postAuth';
+import { postAuthDestination, resolveNoOrgDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -19,6 +20,38 @@ import {
 } from '../lib/fieldEmbed';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function destinationAfterLogin(
+  membership: Parameters<typeof postAuthDestination>[0],
+  fallback: string,
+  intent: string | null,
+) {
+  if (membership) return postAuthDestination(membership, fallback);
+  return resolveNoOrgDestination(fallback, { intent });
+}
+
+function NoOrgLoginRedirect({ fallback, intent }: { fallback: string; intent: string | null }) {
+  const [to, setTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveNoOrgDestination(fallback, { intent }).then((dest) => {
+      if (!cancelled) setTo(dest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fallback, intent]);
+
+  if (!to) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+        <SpinnerIcon className="animate-spin" width={28} height={28} />
+      </div>
+    );
+  }
+  return <Navigate to={to} replace />;
+}
 
 export function LoginPage() {
   const { user, loading, membership, membershipLoading, login, unlockWithPin, logout } =
@@ -111,7 +144,10 @@ export function LoginPage() {
   // marketing Sign in — and made people click through an extra step they
   // already completed. ?switch=1 keeps the form for an explicit account change.
   if (user && !switchAccount) {
-    return <Navigate to={postAuthDestination(membership, redirectTo)} replace />;
+    if (membership) {
+      return <Navigate to={postAuthDestination(membership, redirectTo)} replace />;
+    }
+    return <NoOrgLoginRedirect fallback={redirectTo} intent={searchParams.get('intent')} />;
   }
 
   if (fieldEmbed && !switchAccount) {
@@ -143,7 +179,7 @@ export function LoginPage() {
     setPinError(null);
     try {
       const membership = await unlockWithPin(entered);
-      queueRedirect(postAuthDestination(membership, redirectTo));
+      queueRedirect(await destinationAfterLogin(membership, redirectTo, searchParams.get('intent')));
     } catch (err) {
       if (err instanceof ApiError) {
         rejectPin(err.message);
@@ -172,7 +208,7 @@ export function LoginPage() {
       const nextMembership = await login(email.trim(), password);
       // Terms are acknowledged at signup (Create company). Version bumps still
       // surface via TermsGate / TermsAcknowledgment — not a checkbox on every login.
-      queueRedirect(postAuthDestination(nextMembership, redirectTo));
+      queueRedirect(await destinationAfterLogin(nextMembership, redirectTo, searchParams.get('intent')));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -181,10 +217,14 @@ export function LoginPage() {
   }
 
   function continueSignedIn() {
-    queueRedirect(postAuthDestination(membership, redirectTo));
+    void destinationAfterLogin(membership, redirectTo, searchParams.get('intent')).then(queueRedirect);
   }
 
-  const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
+  const createAccountHref = signupHref({
+    next: redirectTo,
+    email: email.trim() || undefined,
+    intent: isHomeownerViewerPath(redirectTo) ? 'homeowner' : undefined,
+  });
 
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">

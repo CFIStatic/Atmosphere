@@ -3163,6 +3163,28 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   /* ------------------------------------------- progress shares (guest) */
+  ['GET', /^\/api\/progress-share\/grants$/, () => ({
+    body: {
+      grants: [
+        {
+          orgId: 'org-1',
+          jobId: 'job-1038',
+          orgName: 'Ortiz Restoration',
+          jobTitle: 'Cedar Ridge — storm damage',
+          status: 'in_progress',
+          path: '/job-progress?job=job-1038',
+        },
+        {
+          orgId: 'org-demo-2',
+          jobId: 'job-1041',
+          orgName: 'Jettx LLC',
+          jobTitle: 'Kitchen rebuild',
+          status: 'open',
+          path: '/job-progress?job=job-1041',
+        },
+      ],
+    },
+  })],
   ['GET', /^\/api\/progress-share\/([\w-]+)$/, (m) => {
     const token = m[1];
     const share = VERIFIER_SHARES.find(
