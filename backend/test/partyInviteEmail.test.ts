@@ -15,11 +15,17 @@ const base = {
   signupPath: '/signup?email=alex%40riogrande.example',
 };
 
-test('the capture link is absolute when an origin is configured, and on its own line', () => {
-  const { text } = partyInviteEmail(base);
+test('without Field Capture URL the office share stays the primary absolute link', () => {
+  const { text, html } = partyInviteEmail(base);
   assert.ok(
     text.includes(
       '\n  https://app.atmosphere.example/shared/tok123?email=alex%40riogrande.example\n',
+    ),
+  );
+  assert.ok(html.includes('Open job on phone'));
+  assert.ok(
+    html.includes(
+      'href="https://app.atmosphere.example/shared/tok123?email=alex%40riogrande.example"',
     ),
   );
 });
@@ -35,17 +41,11 @@ test('Atmosphere sends the invite; the org is named, not the From party', () => 
   assert.ok(text.includes('Requested by: Dana Ortiz'));
   assert.ok(text.includes('Site: 1842 Meridian Ave, Austin, TX 78702'));
   assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
-  assert.ok(html.includes('Open job on phone'));
   assert.ok(html.includes('Ortiz Restoration'));
   assert.ok(html.includes('#A8A29E'));
   assert.ok(html.includes('#F2670C'));
   assert.ok(html.includes('Atmosphere'));
   assert.ok(!html.includes('text-transform:uppercase;color:#b45309'));
-  assert.ok(
-    html.includes(
-      'href="https://app.atmosphere.example/shared/tok123?email=alex%40riogrande.example"',
-    ),
-  );
   assert.ok(!html.includes('Or paste this link'));
   assert.ok(!html.includes('You already have an Atmosphere account'));
   assert.ok(!html.includes(base.recipientEmail));
@@ -67,15 +67,22 @@ test('an existing account gets no account copy; a missing one gets create-with-t
   assert.ok(!not.text.includes('You already have an Atmosphere account'));
 });
 
-test('Field Capture web and phone get the same job token as the office link', () => {
+test('Field Capture is the primary CTA when a fieldCaptureUrl is set', () => {
   const { text, html } = partyInviteEmail({
     ...base,
-    fieldCaptureUrl: 'https://field-capture-production.up.railway.app/?token=tok123',
+    fieldCaptureUrl: 'https://app.atmosphereteam.com/?token=tok123&email=alex%40riogrande.example&account=1',
   });
-  assert.match(text, /open it in Field Capture/);
-  assert.match(text, /field-capture-production\.up\.railway\.app\/\?token=tok123/);
-  assert.match(html, /Open in Field Capture/);
-  assert.match(html, /field-capture-production\.up\.railway\.app\/\?token=tok123/);
+  assert.match(text, /Open in Field Capture/);
+  assert.match(text, /app\.atmosphereteam\.com\/\?token=tok123/);
+  assert.match(html, />\s*Open in Field Capture\s*</);
+  assert.match(
+    html,
+    /href="https:\/\/app\.atmosphereteam\.com\/\?token=tok123&amp;email=alex%40riogrande\.example&amp;account=1"/,
+  );
+  assert.match(html, /Job file on the web/);
+  assert.match(html, /shared\/tok123/);
+  assert.doesNotMatch(html, /Open job on phone/);
+  assert.doesNotMatch(html, /Open in Field Capture<\/a>\s*<\/p>\s*<p[^>]*>\s*<a[^>]*>\s*Open in Field Capture/);
 });
 
 test('no unsubscribe footer — and the ignore path is stated', () => {
@@ -93,7 +100,7 @@ test('sub invite stays film-oriented (distinct from homeowner progress mail)', (
   assert.match(text, /Film the day/i);
   assert.match(text, /Open the job file/i);
   assert.match(html, /Open in Field Capture/);
-  assert.match(html, /Open job on phone/);
+  assert.match(html, /Job file on the web/);
   assert.match(html, /job file and film the day/i);
   assert.match(text, /atmosphereteam\.com/);
   assert.doesNotMatch(text, /jettx\.ai/);
