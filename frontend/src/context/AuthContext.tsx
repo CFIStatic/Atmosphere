@@ -51,7 +51,7 @@ interface AuthContextValue {
   membershipLoading: boolean; // true while resolving membership for a known user
   profile: Profile | null; // display name etc.; null until loaded
   login: (email: string, password: string) => Promise<Membership | null>;
-  signup: (email: string, password: string) => Promise<SignupResult>;
+  signup: (email: string, password: string, acceptedTermsVersion: string) => Promise<SignupResult>;
   /** Adopt a session the backend just established (e.g. after a password reset). */
   adoptUser: (user: AuthUser) => Promise<Membership | null>;
   logout: () => Promise<void>;
