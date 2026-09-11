@@ -360,13 +360,17 @@ describe('SignupPage', () => {
     authState.refreshMembership.mockResolvedValue(null);
 
     renderSignup('/signup?intent=homeowner');
-    expect(screen.getByRole('heading', { name: 'Save this job' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Save this job' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 
     await user.type(screen.getByLabelText('Email'), 'home@example.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
     await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
-    await user.click(screen.getByRole('button', { name: 'Save this job' }));
+    await user.click(
+      screen
+        .getAllByRole('button', { name: 'Save this job' })
+        .find((el) => (el as HTMLButtonElement).type === 'submit')!,
+    );
 
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalledWith('/my-job-files');
@@ -387,7 +391,11 @@ describe('SignupPage', () => {
     await user.type(screen.getByLabelText('Email'), 'home@example.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
     await user.click(screen.getByLabelText(/I acknowledge and agree to the/i));
-    await user.click(screen.getByRole('button', { name: 'Save this job' }));
+    await user.click(
+      screen
+        .getAllByRole('button', { name: 'Save this job' })
+        .find((el) => (el as HTMLButtonElement).type === 'submit')!,
+    );
 
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalledWith('/progress/tok123');

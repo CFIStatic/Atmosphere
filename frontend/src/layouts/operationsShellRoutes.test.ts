@@ -34,13 +34,13 @@ describe('office rail routes', () => {
 describe('homeowner hub', () => {
   it('keeps Your job files outside the office shell and away from /my-jobs', () => {
     expect(appSrc).toContain('path={HOMEOWNER_HUB_PATH}');
-    expect(appSrc).toContain('element={<MyJobFilesPage />}');
+    expect(appSrc).toContain('<MyJobFilesPage />');
     const start = appSrc.indexOf('<OperationsShell');
     const end = appSrc.indexOf('path="/billing"');
     const shell = appSrc.slice(start, end);
     expect(shell).not.toContain('MyJobFilesPage');
     expect(appSrc).toContain('path="/my-jobs"');
-    expect(appSrc.indexOf('MyJobFilesPage')).toBeGreaterThan(0);
+    expect(appSrc.indexOf('MyJobFilesPage')).toBeLessThan(start);
   });
 });
 

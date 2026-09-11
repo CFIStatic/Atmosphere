@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { grantStatusLabel, HOMEOWNER_HUB_PATH } from '../lib/homeownerHub';
+import { grantStatusLabel } from '../lib/homeownerHub';
 import { useAuth } from '../context/AuthContext';
 import { SpinnerIcon } from '../components/icons';
 
