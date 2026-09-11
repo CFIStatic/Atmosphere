@@ -37,10 +37,13 @@ test('without an origin the path still goes out rather than nothing', () => {
 
 test('Atmosphere sends the invite; the org is named, not the From party', () => {
   const { text, subject, html } = partyInviteEmail(base);
-  assert.ok(text.includes('Ortiz Restoration invited you to capture work on Atmosphere.'));
+  assert.ok(text.includes('You are invited to capture work on Atmosphere.'));
+  assert.ok(text.includes('From: Ortiz Restoration'));
   assert.ok(text.includes('Requested by: Dana Ortiz'));
   assert.ok(text.includes('Site: 1842 Meridian Ave, Austin, TX 78702'));
-  assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
+  assert.equal(subject, 'Capture on Atmosphere · 1842 Meridian Ave — water loss');
+  assert.doesNotMatch(subject, /^Ortiz Restoration invited/);
+  assert.ok(html.includes('Capture a job on Atmosphere'));
   assert.ok(html.includes('Ortiz Restoration'));
   assert.ok(html.includes('#A8A29E'));
   assert.ok(html.includes('#F2670C'));

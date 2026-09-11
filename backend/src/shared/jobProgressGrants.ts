@@ -19,6 +19,55 @@ export type JobProgressGrant = {
   recipientEmail: string;
 };
 
+/** Grants API / hub row — job title and vendor name, not just ids. */
+export type JobProgressGrantView = JobProgressGrant & {
+  orgName: string;
+  jobTitle: string;
+  status: string | null;
+  path: string;
+};
+
+export function jobProgressPath(jobId: string): string {
+  return `/job-progress?job=${encodeURIComponent(jobId)}`;
+}
+
+/** Merge grant rows with job + org lookups. Missing titles stay generic. */
+export function presentJobProgressGrants(
+  grants: JobProgressGrant[],
+  jobs: Array<{ id: string; title?: string | null; status?: string | null }>,
+  orgs: Array<{ id: string; name?: string | null }>,
+): JobProgressGrantView[] {
+  const jobById = new Map(jobs.map((job) => [job.id, job]));
+  const orgById = new Map(orgs.map((org) => [org.id, org]));
+  return grants.map((grant) => {
+    const job = jobById.get(grant.jobId);
+    const org = orgById.get(grant.orgId);
+    return {
+      ...grant,
+      orgName: org?.name?.trim() || 'Contractor',
+      jobTitle: job?.title?.trim() || 'Job',
+      status: job?.status ?? null,
+      path: jobProgressPath(grant.jobId),
+    };
+  });
+}
+
+export async function enrichJobProgressGrants(
+  admin: SupabaseClient,
+  grants: JobProgressGrant[],
+): Promise<JobProgressGrantView[]> {
+  if (!grants.length) return [];
+  const jobIds = [...new Set(grants.map((g) => g.jobId))];
+  const orgIds = [...new Set(grants.map((g) => g.orgId))];
+  const [{ data: jobs, error: jobsError }, { data: orgs, error: orgsError }] = await Promise.all([
+    admin.from('crm_jobs').select('id, title, status').in('id', jobIds),
+    admin.from('orgs').select('id, name').in('id', orgIds),
+  ]);
+  if (jobsError) throw new HttpError(500, jobsError.message, 'grants_jobs_failed');
+  if (orgsError) throw new HttpError(500, orgsError.message, 'grants_orgs_failed');
+  return presentJobProgressGrants(grants, (jobs ?? []) as any[], (orgs ?? []) as any[]);
+}
+
 export type SharedJobAccess =
   | (OrgContext & { access: 'org'; readOnly?: false })
   | {
@@ -147,7 +196,7 @@ export async function claimProgressShareForUser(input: {
   return {
     orgId: (share as any).org_id as string,
     jobId,
-    path: `/job-progress?job=${encodeURIComponent(jobId)}`,
+    path: jobProgressPath(jobId),
   };
 }
 

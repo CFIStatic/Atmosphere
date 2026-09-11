@@ -13,8 +13,11 @@ test('progressShareEmail — homeowner view progress, not Field Capture', () => 
     expiresAt: '2026-10-01T00:00:00Z',
   });
 
-  assert.match(subject, /Priya Shah at Ortiz Restoration/);
+  assert.match(subject, /Job file on Atmosphere/);
   assert.match(subject, /Cedar Ridge/);
+  assert.doesNotMatch(subject, /^Priya Shah at Ortiz Restoration/);
+  assert.match(text, /There is a job file for you on Atmosphere/);
+  assert.match(text, /From: Priya Shah at Ortiz Restoration/);
   assert.ok(text.includes('\n  https://platform.atmosphereteam.com/progress/tok123\n'));
   assert.match(text, /View progress/i);
   assert.match(text, /Save this job/i);
@@ -24,6 +27,8 @@ test('progressShareEmail — homeowner view progress, not Field Capture', () => 
   assert.doesNotMatch(text, /Open in Field Capture/i);
   assert.doesNotMatch(text, /film the day/i);
   assert.doesNotMatch(text, /jettx\.ai/i);
+  assert.match(html, /A job file on Atmosphere/);
+  assert.match(html, /From Priya Shah at Ortiz Restoration/);
   assert.match(html, /View progress/);
   assert.match(html, /Save this job/);
   assert.match(html, /https:\/\/platform\.atmosphereteam\.com\/progress\/tok123/);

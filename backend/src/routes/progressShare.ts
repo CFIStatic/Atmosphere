@@ -15,7 +15,11 @@ import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { claimProgressShareForUser, listJobProgressGrants } from '../shared/jobProgressGrants.js';
+import {
+  claimProgressShareForUser,
+  enrichJobProgressGrants,
+  listJobProgressGrants,
+} from '../shared/jobProgressGrants.js';
 
 /**
  * Guest access to a read-only job file.
@@ -208,12 +212,18 @@ progressShareRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const admin = unscopedAdminOrNull() ?? requireAdmin();
-      const grants = await listJobProgressGrants(admin, req.user!.id);
+      const grants = await enrichJobProgressGrants(
+        admin,
+        await listJobProgressGrants(admin, req.user!.id),
+      );
       res.json({
         grants: grants.map((g) => ({
           orgId: g.orgId,
           jobId: g.jobId,
-          path: `/job-progress?job=${encodeURIComponent(g.jobId)}`,
+          orgName: g.orgName,
+          jobTitle: g.jobTitle,
+          status: g.status,
+          path: g.path,
         })),
       });
     } catch (err) {
