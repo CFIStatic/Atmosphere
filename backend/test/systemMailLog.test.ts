@@ -164,7 +164,7 @@ describe('systemMail Resend', () => {
     );
   });
 
-  it('falls back to legacy Jettx then onboarding@resend.dev only in non-prod', async () => {
+  it('falls back to onboarding@resend.dev only in non-prod (no Jettx From)', async () => {
     const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
     resetResendDomainCache();
     let emailPosts = 0;
@@ -174,13 +174,12 @@ describe('systemMail Resend', () => {
         return new Response(JSON.stringify({ data: [] }), { status: 200 });
       }
       emailPosts += 1;
-      if (emailPosts <= 2) {
-        const domain =
-          emailPosts === 1 ? 'invites.atmosphereteam.com' : 'invites.jettx.ai';
+      if (emailPosts === 1) {
         return new Response(
           JSON.stringify({
             statusCode: 403,
-            message: `The ${domain} domain is not verified. Please verify a domain`,
+            message:
+              'The invites.atmosphereteam.com domain is not verified. Please verify a domain',
           }),
           { status: 403 },
         );
@@ -196,16 +195,12 @@ describe('systemMail Resend', () => {
     });
     assert.equal(result.ok, true);
     const emailCalls = calls.filter((c) => c.url.includes('/emails'));
-    assert.equal(emailCalls.length, 3);
+    assert.equal(emailCalls.length, 2);
     assert.match(
       String((emailCalls[0]!.body as { from: string }).from),
       /hello@invites\.atmosphereteam\.com/,
     );
-    assert.match(
-      String((emailCalls[1]!.body as { from: string }).from),
-      /hello@invites\.jettx\.ai/,
-    );
-    assert.match(String((emailCalls[2]!.body as { from: string }).from), /onboarding@resend\.dev/);
+    assert.match(String((emailCalls[1]!.body as { from: string }).from), /onboarding@resend\.dev/);
   });
 
   it('prefers Resend over SMTP when both are configured', async () => {
