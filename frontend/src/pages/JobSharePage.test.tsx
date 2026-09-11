@@ -74,6 +74,34 @@ describe('JobSharePage', () => {
     expect(urls.some((url) => url.includes('/api/job-share/exchange'))).toBe(true);
   });
 
+
+  it('offers film and job file after implicit Accept (not film-only)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/shared/tok']}>
+        <Routes>
+          <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('invite-actions')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute('href', '#film-today');
+    expect(screen.getByRole('link', { name: 'Open job file' })).toHaveAttribute('href', '#job-file');
+    expect(screen.getByTestId('job-file')).toBeInTheDocument();
+    expect(screen.getByTestId('film-today')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Job file' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Film the day' })).toBeInTheDocument();
+    expect(screen.getByTestId('open-field-capture')).toHaveAttribute(
+      'href',
+      expect.stringContaining('token=tok'),
+    );
+    expect(screen.getByRole('link', { name: 'Open in Field Capture' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('token=tok'),
+    );
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+  });
+
   it('shows blockers without an Accept button when not clear to work', async () => {
     vi.stubGlobal(
       'fetch',
