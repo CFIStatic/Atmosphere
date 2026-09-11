@@ -35,11 +35,11 @@ describe('resendFromAddress', () => {
     }
   });
 
-  it('honors RESEND_FROM_EMAIL on the legacy invites.jettx.ai subdomain', () => {
+  it('ignores RESEND_FROM_EMAIL on legacy invites.jettx.ai — Atmosphere only', () => {
     const prev = process.env.RESEND_FROM_EMAIL;
     process.env.RESEND_FROM_EMAIL = 'hello@invites.jettx.ai';
     try {
-      assert.equal(resendFromAddress(), 'hello@invites.jettx.ai');
+      assert.equal(resendFromAddress(), RESEND_VERIFIED_FROM);
     } finally {
       if (prev === undefined) delete process.env.RESEND_FROM_EMAIL;
       else process.env.RESEND_FROM_EMAIL = prev;
@@ -106,13 +106,13 @@ describe('resendFromCandidates', () => {
     );
   });
 
-  it('honors an explicit legacy RESEND_FROM_EMAIL pin without adding extras', () => {
+  it('ignores a Jettx RESEND_FROM_EMAIL pin and stays on Atmosphere', () => {
     const prev = process.env.RESEND_FROM_EMAIL;
     process.env.RESEND_FROM_EMAIL = RESEND_LEGACY_FROM;
     try {
       assert.deepEqual(
         resendFromCandidates({ allowOnboardingFallback: false }),
-        [RESEND_LEGACY_FROM],
+        [RESEND_VERIFIED_FROM],
       );
     } finally {
       if (prev === undefined) delete process.env.RESEND_FROM_EMAIL;

@@ -3,19 +3,20 @@
  *
  * Production sends as hello@invites.atmosphereteam.com (verified subdomain with
  * DKIM + SES return-path). Reply-To defaults to hello@atmosphereteam.com (same
- * org) — set in systemMail, not here. invites.jettx.ai remains an accepted
- * legacy sending domain during migration. onboarding@resend.dev is a non-prod
- * last resort only.
+ * org) — set in systemMail, not here. invites.jettx.ai is NOT an allowed From
+ * anymore (junk signal when mixed with Atmosphere branding). onboarding@resend.dev
+ * is a non-prod last resort only.
  */
 
 export const RESEND_ONBOARDING_FROM = 'onboarding@resend.dev';
 export const RESEND_VERIFIED_DOMAIN = 'invites.atmosphereteam.com';
 export const RESEND_VERIFIED_FROM = 'hello@invites.atmosphereteam.com';
-/** Legacy Jettx Resend subdomain — still accepted via RESEND_FROM_EMAIL. */
+/** @deprecated Kept for tests/docs only — never used as a From candidate. */
 export const RESEND_LEGACY_DOMAIN = 'invites.jettx.ai';
+/** @deprecated Kept for tests/docs only — never used as a From candidate. */
 export const RESEND_LEGACY_FROM = 'hello@invites.jettx.ai';
 
-const ALLOWED_SENDING_DOMAINS = new Set([RESEND_VERIFIED_DOMAIN, RESEND_LEGACY_DOMAIN]);
+const ALLOWED_SENDING_DOMAINS = new Set([RESEND_VERIFIED_DOMAIN]);
 
 export type ResendDomain = {
   id?: string;
@@ -48,8 +49,8 @@ function isAllowedSendingDomain(domain: string): boolean {
 }
 
 /**
- * Pin RESEND_FROM_EMAIL when it is on invites.atmosphereteam.com or legacy
- * invites.jettx.ai; else the primary Atmosphere verified From.
+ * Pin RESEND_FROM_EMAIL only when it is on invites.atmosphereteam.com.
+ * Jettx / other domains are ignored — always Atmosphere verified From.
  */
 export function resendFromAddress(configuredFrom?: string | null): string {
   const envFrom = (process.env.RESEND_FROM_EMAIL ?? '').trim();
@@ -60,9 +61,8 @@ export function resendFromAddress(configuredFrom?: string | null): string {
 }
 
 /**
- * From addresses to try. Always Atmosphere (or an explicit RESEND_FROM_EMAIL
- * pin). Do NOT fall back to invites.jettx.ai — that mixed From/footer and
- * landed invites in junk. onboarding@resend.dev only when
+ * From addresses to try. Atmosphere only (or an explicit Atmosphere
+ * RESEND_FROM_EMAIL pin). onboarding@resend.dev only when
  * allowOnboardingFallback (non-production).
  */
 export function resendFromCandidates(input: {
@@ -78,7 +78,6 @@ export function resendFromCandidates(input: {
   }
   return out;
 }
-
 export function isResendOnboardingFrom(address: string): boolean {
   return address.trim().toLowerCase() === RESEND_ONBOARDING_FROM;
 }
