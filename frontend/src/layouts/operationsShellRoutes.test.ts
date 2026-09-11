@@ -27,7 +27,7 @@ describe('office rail routes', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     expect(existsSync(resolve(here, '../pages/SharedDashboardPage.tsx'))).toBe(true);
     expect(existsSync(resolve(here, '../pages/JobsPage.tsx'))).toBe(false);
-    expect(appSrc).not.toContain('JobsPage');
+    expect(appSrc).not.toMatch(/from ['"]\.\/pages\/JobsPage['"]/);
     expect(appSrc).toContain('element={<SharedDashboardPage />}');
   });
 

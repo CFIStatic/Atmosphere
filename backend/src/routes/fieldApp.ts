@@ -145,6 +145,13 @@ fieldAppRouter.post(
   },
 );
 
+fieldAppRouter.all('/join', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found', code: 'not_found' });
+});
+fieldAppRouter.all('/office/preview', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found', code: 'not_found' });
+});
+
 fieldAppRouter.use(requireAuth);
 
 const limiter = rateLimit({
