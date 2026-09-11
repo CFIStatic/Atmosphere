@@ -33,11 +33,13 @@ export function loginHref(next?: string): string {
   return qs ? `/login?${qs}` : '/login';
 }
 
-export type SignupIntent = 'create' | 'join';
+export type SignupIntent = 'create' | 'join' | 'homeowner';
 
-/** Create a new organization, or link this login to an existing office account. */
+/** Create a new organization, join one, or homeowner quick login (no workspace). */
 export function parseSignupIntent(raw: string | null | undefined): SignupIntent {
-  return raw === 'join' ? 'join' : 'create';
+  if (raw === 'join') return 'join';
+  if (raw === 'homeowner') return 'homeowner';
+  return 'create';
 }
 
 /** Build /signup with optional email, return path, join code, and create vs. join intent. */

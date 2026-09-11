@@ -7,16 +7,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
 
 describe('Dashboard job-file share', () => {
-  it('is just an email field and Send invite — no label, expiry, or copy-link form', () => {
-    expect(verifierHtml).toContain("return 'Share this job file'");
+  it('is a homeowner email field — progress share, not Field Capture', () => {
+    expect(verifierHtml).toContain("return 'Share with homeowner'");
     expect(verifierHtml).toContain('data-jf-tab="share"');
-    expect(verifierHtml).toMatch(/data-jf-tab="share"[\s\S]*?>Share file</);
+    expect(verifierHtml).toMatch(/data-jf-tab="share"[\s\S]*?>Share with homeowner</);
 
     expect(verifierHtml).toContain('id="jf-share-form"');
     expect(verifierHtml).toContain(
-      '<label><span>Email</span><input name="email" type="email" required autocomplete="email" placeholder="homeowner@example.com" /></label>',
+      '<label><span>Homeowner email</span><input name="email" type="email" required autocomplete="email" placeholder="homeowner@example.com" /></label>',
     );
-    expect(verifierHtml).toContain('>Send invite</button>');
+    expect(verifierHtml).toContain('>Send homeowner invite</button>');
+    expect(verifierHtml).toContain('Not a film invite');
+    expect(verifierHtml).not.toContain('Open in Field Capture');
 
     expect(verifierHtml).not.toContain('Who is this for?');
     expect(verifierHtml).not.toContain('Email them (optional)');

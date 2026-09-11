@@ -74,7 +74,7 @@ describe('JobSharePage', () => {
     expect(urls.some((url) => url.includes('/api/job-share/exchange'))).toBe(true);
   });
 
-  it('still asks them to accept when they are not clear to work', async () => {
+  it('shows blockers without an Accept button when not clear to work', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo) => {
@@ -86,9 +86,9 @@ describe('JobSharePage', () => {
           JSON.stringify({
             ...SHARE_VIEW,
             clear: false,
-            because: 'They accepted revision 1; the job is on 2.',
+            because: '1 item waiting on an answer.',
             currentRevision: 2,
-            acknowledgedRevision: 1,
+            acknowledgedRevision: 2,
           }),
           { status: 200 },
         );
@@ -104,6 +104,8 @@ describe('JobSharePage', () => {
     );
 
     expect(await screen.findByText('Not clear to work yet')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
+    expect(screen.getByText('1 item waiting on an answer.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Your name')).not.toBeInTheDocument();
   });
 });

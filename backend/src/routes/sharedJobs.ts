@@ -3,7 +3,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { adminForPartyToken, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
+import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
   JOB_SHARE_COOKIE,
@@ -23,9 +23,15 @@ import {
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { jobShareActionPattern, jobSharePagePath, readJobShareToken } from '../lib/jobSharePath.js';
 import {
+  actorLabelFor,
   deliverPartyInvite,
   fieldCaptureInvitePath,
 } from '../verifier/deliverPartyInvite.js';
+import { acknowledgeShareRevision, ackDisplayName } from '../shared/acknowledgeShareRevision.js';
+import { progressShareEmail } from '../verifier/progressShareEmail.js';
+import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { findJobProgressGrant, listJobProgressGrants } from '../shared/jobProgressGrants.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -167,7 +173,44 @@ async function loadRecord(supabase: any, orgId: string, jobId: string) {
  */
 sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    let orgId: string;
+    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    try {
+      const ctx = await requireOrgContext(req);
+      orgId = ctx.orgId;
+      supabase = ctx.supabase;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const grants = await listJobProgressGrants(admin, req.user!.id);
+      if (!grants.length) throw err;
+      const jobIds = grants.map((g) => g.jobId);
+      const { data: jobs } = await admin
+        .from('crm_jobs')
+        .select('id, job_number, title, status')
+        .in('id', jobIds);
+      const byId = new Map(((jobs ?? []) as any[]).map((j) => [j.id as string, j]));
+      res.json({
+        jobs: grants.map((g) => {
+          const job = byId.get(g.jobId);
+          return {
+            jobId: g.jobId,
+            jobNumber: job?.job_number ?? null,
+            title: (job?.title as string) ?? 'Job',
+            status: (job?.status as string) ?? null,
+            parties: 0,
+            currentRevision: null,
+            behind: 0,
+            awaiting: 0,
+            exclusions: 0,
+            access: 'viewer' as const,
+          };
+        }),
+        counts: { jobs: grants.length, parties: 0, blockers: 0, awaiting: 0 },
+        access: 'viewer',
+      });
+      return;
+    }
 
     const { data: jobs, error: jobsError } = await supabase
       .from('crm_jobs')
@@ -261,11 +304,29 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
 /** GET /api/operations/shared/:jobId — the record itself. */
 sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    let orgId: string;
+    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    let access: 'org' | 'viewer' = 'org';
+    try {
+      const ctx = await requireOrgContext(req);
+      orgId = ctx.orgId;
+      supabase = ctx.supabase;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const grant = await findJobProgressGrant(admin, req.user!.id, req.params.jobId);
+      if (!grant) throw err;
+      orgId = grant.orgId;
+      supabase = admin as typeof supabase;
+      access = 'viewer';
+    }
+
     const record = await loadRecord(supabase, orgId, req.params.jobId);
     if (!record.job || record.job.deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
-    if (await jobFileIsTombstoned(writerForJob({ orgId, jobId: record.job.id }, supabase).raw, orgId, record.job.id)) {
-      throw new HttpError(404, 'No such job.', 'job_not_found');
+    if (access === 'org') {
+      if (await jobFileIsTombstoned(writerForJob({ orgId, jobId: record.job.id }, supabase).raw, orgId, record.job.id)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
     }
 
     const currentRevision = record.briefs[0]?.revision ?? null;
@@ -274,6 +335,12 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
       const best = ackByParty.get(ack.party_id) ?? 0;
       if (ack.revision > best) ackByParty.set(ack.party_id, ack.revision);
     }
+
+    // Viewers see the job file without contractor money / private thread chatter.
+    const scope = access === 'viewer'
+      ? record.scope.map((item: any) => ({ ...item, amount: null }))
+      : record.scope;
+    const messages = access === 'viewer' ? [] : record.messages;
 
     res.json({
       job: {
@@ -292,28 +359,33 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
         createdAt: b.created_at,
       })),
       currentRevision,
-      parties: record.parties.map((party) => {
-        const acked = ackByParty.get(party.id) ?? null;
-        return {
-          ...party,
-          acknowledgedRevision: acked,
-          ...clearToWork({
-            party,
+      parties: access === 'viewer'
+        ? []
+        : record.parties.map((party) => {
+            const acked = ackByParty.get(party.id) ?? null;
+            return {
+              ...party,
+              acknowledgedRevision: acked,
+              ...clearToWork({
+                party,
+                scope: record.scope,
+                acknowledgedRevision: acked,
+                currentRevision,
+              }),
+            };
+          }),
+      scope,
+      money: access === 'viewer' ? { approved: 0, pending: 0, unpricedApprovals: 0 } : scopeMoney(record.scope),
+      messages,
+      risks: access === 'viewer'
+        ? []
+        : assessJob({
+            parties: record.parties,
             scope: record.scope,
-            acknowledgedRevision: acked,
+            acknowledgements: record.acks,
             currentRevision,
           }),
-        };
-      }),
-      scope: record.scope,
-      money: scopeMoney(record.scope),
-      messages: record.messages,
-      risks: assessJob({
-        parties: record.parties,
-        scope: record.scope,
-        acknowledgements: record.acks,
-        currentRevision,
-      }),
+      access,
     });
   } catch (err) {
     next(err);
@@ -755,6 +827,73 @@ sharedJobsRouter.post(
       const party = data as any;
       const token = typeof party?.access_token === 'string' ? party.access_token : '';
       const email = typeof party?.email === 'string' ? party.email : input.email ?? null;
+      const role = input.role ?? 'subcontractor';
+
+      // Homeowners / adjusters get a progress (job-file) invite — never Field Capture.
+      if (email && (role === 'owner' || role === 'adjuster')) {
+        if (!systemMailConfigured()) {
+          throw new HttpError(
+            503,
+            'Atmosphere mail is not configured, so the homeowner invite was not sent.',
+            'mail_not_configured',
+          );
+        }
+        const { data: job } = await supabase
+          .from('crm_jobs')
+          .select('title')
+          .eq('org_id', orgId)
+          .eq('id', req.params.jobId)
+          .maybeSingle();
+        const { data: share, error: shareError } = await supabase
+          .from('verifier_shares')
+          .insert({
+            org_id: orgId,
+            job_id: req.params.jobId,
+            created_by: userId,
+            label: email,
+            recipient_email: email,
+            share_kind: 'progress',
+          })
+          .select('id, access_token, expires_at')
+          .single();
+        if (shareError) throw new HttpError(400, shareError.message, 'share_failed');
+        const sharePath = `/progress/${(share as any).access_token}`;
+        const [{ data: org }, sharerName] = await Promise.all([
+          supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+          actorLabelFor(supabase, userId),
+        ]);
+        const mail = progressShareEmail({
+          orgName: (org as any)?.name ?? 'An Atmosphere member',
+          sharerName,
+          jobTitle: (job as any)?.title ?? null,
+          recipientEmail: email,
+          origin: publicAppOrigin(),
+          path: sharePath,
+          expiresAt: (share as any)?.expires_at ?? null,
+        });
+        const result = await sendSystemMail({
+          to: email,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
+        });
+        if (!result.ok) {
+          await supabase
+            .from('verifier_shares')
+            .update({ revoked_at: new Date().toISOString() })
+            .eq('id', (share as any).id);
+          throw new HttpError(502, result.why || 'The invite email could not be sent.', 'email_not_sent');
+        }
+        res.status(201).json({
+          party,
+          emailed: true,
+          sharePath,
+          fieldCapturePath: null,
+          progressShare: true,
+        });
+        return;
+      }
+
       let emailed = false;
       if (email && token) {
         const { data: job } = await supabase
@@ -1093,9 +1232,24 @@ jobShareRouter.get('/session', shareLimiter, async (req: Request, res: Response,
     const record = await loadRecord(admin, party.org_id, party.job_id);
     if (!record.job) throw new HttpError(404, 'This job no longer exists.', 'job_not_found');
     const currentRevision = record.briefs[0]?.revision ?? null;
-    const mine = record.acks
+    let mine = record.acks
       .filter((a) => a.party_id === party.id)
       .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
+    if (currentRevision !== null && (mine === null || mine < currentRevision)) {
+      const acked = await acknowledgeShareRevision({
+        admin,
+        orgId: party.org_id,
+        jobId: party.job_id,
+        partyId: party.id,
+        revision: currentRevision,
+        acknowledgedName: ackDisplayName(party),
+      });
+      if (acked !== null) mine = acked;
+    }
+    await admin
+      .from('job_parties')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', party.id);
     res.json({
       you: { company: party.company, trade: party.trade, role: party.role },
       job: {
@@ -1164,7 +1318,10 @@ jobShareRouter.post(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       const input = z
-        .object({ name: z.string().trim().min(1).max(160), revision: z.number().int().min(1) })
+        .object({
+          name: z.string().trim().max(160).optional(),
+          revision: z.number().int().min(1),
+        })
         .parse(req.body ?? {});
 
       const { data: brief } = await admin
@@ -1192,7 +1349,7 @@ jobShareRouter.post(
         job_id: party.job_id,
         party_id: party.id,
         revision: current,
-        acknowledged_name: input.name,
+        acknowledged_name: (input.name && input.name.trim()) || ackDisplayName(party),
       });
       // The unique index makes a double-click harmless rather than an error.
       if (error && error.code !== '23505') {
@@ -1400,7 +1557,23 @@ jobShareRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
-      res.status(201).json(await recordProof(party, admin, req.body));
+      const result = await recordProof(party, admin, req.body);
+      const { data: brief } = await admin
+        .from('job_briefs')
+        .select('revision')
+        .eq('job_id', party.job_id)
+        .order('revision', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      await acknowledgeShareRevision({
+        admin,
+        orgId: party.org_id,
+        jobId: party.job_id,
+        partyId: party.id,
+        revision: (brief as any)?.revision ?? null,
+        acknowledgedName: ackDisplayName(party),
+      });
+      res.status(201).json(result);
     } catch (err) {
       next(err);
     }
@@ -1438,9 +1611,28 @@ jobShareRouter.get(
       if (!record.job) throw new HttpError(404, 'This job no longer exists.', 'job_not_found');
 
       const currentRevision = record.briefs[0]?.revision ?? null;
-      const mine = record.acks
+      let mine = record.acks
         .filter((a) => a.party_id === party.id)
         .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
+
+      // Opening the invite is acceptance — no name / Accept button ceremony.
+      if (currentRevision !== null && (mine === null || mine < currentRevision)) {
+        const acked = await acknowledgeShareRevision({
+          admin,
+          orgId: party.org_id,
+          jobId: party.job_id,
+          partyId: party.id,
+          revision: currentRevision,
+          acknowledgedName: ackDisplayName(party),
+        });
+        if (acked !== null) mine = acked;
+      }
+
+      // Touch last_seen so the office sees the open.
+      await admin
+        .from('job_parties')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', party.id);
 
       res.json({
         you: { company: party.company, trade: party.trade, role: party.role },

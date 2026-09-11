@@ -219,12 +219,12 @@ export function clearToWork(input: {
     return { clear: false, because: 'No scope has been published yet.' };
   }
   if (input.acknowledgedRevision === null) {
-    return { clear: false, because: 'They have not accepted the scope.' };
+    return { clear: false, because: 'They have not opened the current scope yet.' };
   }
   if (input.acknowledgedRevision < input.currentRevision) {
     return {
       clear: false,
-      because: `They accepted revision ${input.acknowledgedRevision}; the job is on ${input.currentRevision}.`,
+      because: `They last opened revision ${input.acknowledgedRevision}; the job is on ${input.currentRevision}.`,
     };
   }
 
@@ -238,7 +238,7 @@ export function clearToWork(input: {
     };
   }
 
-  return { clear: true, because: `Accepted revision ${input.currentRevision}. Nothing outstanding.` };
+  return { clear: true, because: `Opened revision ${input.currentRevision}. Nothing outstanding.` };
 }
 
 /**

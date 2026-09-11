@@ -190,7 +190,7 @@ test('clear to work means accepted the current facts with nothing outstanding', 
 
   assert.deepEqual(
     clearToWork({ party: party(), scope, acknowledgedRevision: 3, currentRevision: 3 }),
-    { clear: true, because: 'Accepted revision 3. Nothing outstanding.' },
+    { clear: true, because: 'Opened revision 3. Nothing outstanding.' },
   );
 
   assert.equal(

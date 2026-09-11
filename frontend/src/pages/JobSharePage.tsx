@@ -24,9 +24,8 @@ import type { CaptureGuide } from '../lib/api';
  * they came here to do and will scroll to find; the scope is the thing they
  * would not have read otherwise.
  *
- * Nothing here can be edited afterwards. Accepting a revision or filing a
- * video is an entry in a record, which is the point of the whole feature
- * and worth the cost of not being able to take it back.
+ * Nothing here can be edited afterwards. Opening the invite (or filing a
+ * video) records the current revision for the office — no Accept button.
  */
 
 const shareApi = jobShareApiPath;
@@ -86,8 +85,6 @@ export function JobSharePage() {
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -117,22 +114,6 @@ export function JobSharePage() {
     void load();
   }, [load]);
 
-  async function accept() {
-    if (!view?.currentRevision || !name.trim()) return;
-    setBusy('accept');
-    try {
-      await call(shareApi(token, '/accept'), {
-        method: 'POST',
-        body: JSON.stringify({ name, revision: view.currentRevision }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not record that.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const today = todayISO();
   const todaysDay = days.find((d) => d.workDate === today);
 
@@ -156,37 +137,12 @@ export function JobSharePage() {
 
       {view && (
         <>
-          {/* Only when they are not clear: the accept step has to sit above
-              the scope so a crew member cannot start work without seeing it. */}
+          {/* Blockers only (e.g. proposed scope waiting on an answer). Opening
+              the invite already records the current revision — no Accept button. */}
           {!view.clear && (
             <section className="mt-4 rounded-xl border border-caution-200 bg-caution-50 px-4 py-3">
               <p className="text-sm font-semibold text-caution-600">Not clear to work yet</p>
               <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
-
-              {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
-                <div className="mt-3">
-                  <p className="text-xs text-ink-700">
-                    Read the scope below, then put your name to it. This records that you have seen
-                    revision {view.currentRevision}.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Your name"
-                      className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-                    />
-                    <button
-                      onClick={() => void accept()}
-                      disabled={busy === 'accept' || !name.trim()}
-                      className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-                    >
-                      {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-                      Accept
-                    </button>
-                  </div>
-                </div>
-              )}
             </section>
           )}
 

@@ -3,9 +3,9 @@ import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
 /**
  * Homeowner (and counsel / bank / adjuster) job-file share email.
  *
- * Unlike evidence shares, this link opens without an Atmosphere account —
- * the recipient should not need to sign up to see the job file and every
- * recording. The email says that plainly.
+ * Opens a progress link on the office host (platform.atmosphereteam.com).
+ * After a quick email + password account, they claim the job and land on
+ * /job-progress — never Field Capture capture/film copy.
  */
 export function progressShareEmail(input: {
   orgName: string;
@@ -21,34 +21,36 @@ export function progressShareEmail(input: {
   const from = sharer ? `${sharer} at ${input.orgName}` : input.orgName;
   const job = input.jobTitle?.trim() || null;
   const viewLink = absoluteUrl(input.origin, input.path);
-  const askLink = withAsk(viewLink);
+  const emailParam = input.recipientEmail
+    ? `email=${encodeURIComponent(input.recipientEmail.trim().toLowerCase())}`
+    : '';
+  const accountLink = absoluteUrl(
+    input.origin,
+    `/signup?intent=homeowner${emailParam ? `&${emailParam}` : ''}&next=${encodeURIComponent(input.path)}`,
+  );
 
   const lines: string[] = [
-    `${from} shared a job file with you on Atmosphere.`,
+    `${from} shared a job file with you so you can view progress on Atmosphere.`,
     '',
   ];
   if (job) lines.push(`Job: ${job}`, '');
 
-  lines.push('View the job file:', '', `  ${viewLink}`, '');
-  lines.push('Ask a question about this job:', '', `  ${askLink}`, '');
-
+  lines.push('View job progress:', '', `  ${viewLink}`, '');
   lines.push(
-    'No account is required — View opens the job file and every recording',
-    '(brief, do-not lines, scope, and the day-by-day films). Ask answers from',
-    'that same file.',
+    'To keep this job in your account, create a quick Atmosphere login',
+    '(email and password only — no payment, no Field Capture seat):',
+    '',
+    `  ${accountLink}`,
+    '',
   );
-  lines.push('');
 
   if (input.expiresAt) {
-    lines.push(`The links expire on ${input.expiresAt.slice(0, 10)}.`);
+    lines.push(`The link expires on ${input.expiresAt.slice(0, 10)}.`);
   } else {
-    lines.push(`The links stay live until ${input.orgName} revokes them.`);
+    lines.push(`The link stays live until ${input.orgName} revokes it.`);
   }
 
-  lines.push(
-    '',
-    'If you were not expecting this, you can ignore it — nothing happens until a link is opened.',
-  );
+  lines.push('', '— Atmosphere · atmosphereteam.com');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -64,25 +66,30 @@ export function progressShareEmail(input: {
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             ${job ? `Job: <strong>${escapeHtml(job)}</strong>. ` : ''}
-            No account is required — View the job file and every recording, or Ask a question from the file.
+            View progress on the job file — brief, do-not lines, scope, and day-by-day recordings.
           </p>
           <p style="margin:24px 0 0;">
             <a href="${escapeAttr(viewLink)}"
                style="display:inline-block;background:#ea580c;color:#1c1917;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
-              View job file
+              View job progress
             </a>
-            <a href="${escapeAttr(askLink)}"
-               style="display:inline-block;margin-left:10px;background:#1c1917;color:#fffdf8;font-weight:700;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:10px;">
-              Ask this job
+          </p>
+          <p style="margin:16px 0 0;font-size:14px;line-height:1.5;color:#3f3a34;">
+            Prefer to keep it in an account? Create a quick login with email and password only
+            (no payment).
+            <a href="${escapeAttr(accountLink)}" style="color:#b45309;font-weight:600;text-decoration:underline;">
+              Create your login
             </a>
           </p>
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             ${
               input.expiresAt
-                ? `The links expire on ${escapeHtml(input.expiresAt.slice(0, 10))}.`
-                : `The links stay live until ${escapeHtml(input.orgName)} revokes them.`
+                ? `The link expires on ${escapeHtml(input.expiresAt.slice(0, 10))}.`
+                : `The link stays live until ${escapeHtml(input.orgName)} revokes it.`
             }
-            If you were not expecting this, ignore it.
+          </p>
+          <p style="margin:16px 0 0;font-size:11px;line-height:1.4;color:#78716c;">
+            Sent by Atmosphere · atmosphereteam.com
           </p>
         </td></tr>
       </table>
@@ -92,15 +99,10 @@ export function progressShareEmail(input: {
 </html>`;
 
   return {
-    subject: `${from} shared a job file${job ? ` for ${job}` : ''} on Atmosphere`,
+    subject: `${from} shared a job file${job ? ` for ${job}` : ''} — view progress`,
     text: lines.join('\n'),
     html,
   };
-}
-
-function withAsk(viewLink: string): string {
-  if (/[?&]ask=/.test(viewLink)) return viewLink;
-  return viewLink.includes('?') ? `${viewLink}&ask=1` : `${viewLink}?ask=1`;
 }
 
 function absoluteUrl(origin: string | null | undefined, path: string): string {
