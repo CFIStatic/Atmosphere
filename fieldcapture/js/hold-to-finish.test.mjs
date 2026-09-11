@@ -1258,4 +1258,9 @@ assert.match(appSrc, /when\('#nextbtn'/, 'Record another lives on the door');
   await flush();
 }
 
+assert.equal(typeof Core.preferTodayAfterInviteSignIn, 'function');
+assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }, { id: 'b' }]), true);
+assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }]), false);
+assert.match(appSrc, /openInviteAfterAccountSignIn/, 'account=1 sign-in can prefer Today');
+
 console.log('hold-to-finish OK');

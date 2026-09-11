@@ -920,6 +920,22 @@
     bootLive(preloaded);
   }
 
+  function openInviteAfterAccountSignIn() {
+    if (!TOKEN) return finishAccountConnect();
+    if (!Core.loadTodayJobs) return enterLiveMode();
+    return Core.loadTodayJobs(API_BASE, state.accessToken).then(
+      function (jobs) {
+        if (Core.preferTodayAfterInviteSignIn && Core.preferTodayAfterInviteSignIn(jobs)) {
+          return finishAccountConnect();
+        }
+        return enterLiveMode();
+      },
+      function () {
+        return enterLiveMode();
+      },
+    );
+  }
+
   function showBlockedMsg(message) {
     var el = $('#blocked-msg');
     if (!el) return;
@@ -1159,7 +1175,7 @@
             }
             writeStoredSession(session.accessToken, session.refreshToken);
             if (TOKEN) {
-              return enterLiveMode();
+              return openInviteAfterAccountSignIn();
             }
             return finishAccountConnect();
           })
