@@ -12,43 +12,25 @@ import {
   systemMailTransportOrder,
 } from './mailDeliverability.js';
 import {
-  RESEND_ONBOARDING_FROM,
   RESEND_VERIFIED_FROM,
   fetchResendDomains,
+  isResendOnboardingFrom,
   isResendSenderRestriction,
-  pickResendFromAddressForList,
-  uniqueResendFroms,
+  resendFromAddress,
+  resendFromCandidates,
 } from './resendFrom.js';
 
 /**
- * Platform mail — Atmosphere sends it.
+ * Platform mail — Atmosphere sends it (invites, OTPs, resets, contact/careers).
  *
- * Job invites, claim codes, and other "come into the system" messages go out
- * from our authenticated sending domain, not from a customer's connected
- * Gmail/Microsoft mailbox. Campaigns still send as the customer when they
- * connect one; invites do not wait on that.
- *
- * Delivery order (inbox placement, not historical habit):
- *   1. Resend API (RESEND_API_KEY). From is hello@invites.jettx.ai — the
- *      domain with DKIM + SES return-path. Reply-To stays jack@jettx.ai
- *      when that address is the same org. Falls back to
- *      onboarding@resend.dev only if Resend still rejects the From.
- *   2. SMTP only when Resend is unset, or SYSTEM_MAIL_DRIVER=smtp, and only
- *      when the SMTP account can authenticate the From domain. Sending
- *      jack@jettx.ai through a Yahoo/Gmail SMTP login is what put Atmosphere
- *      mail in junk.
- *   3. File log sink in development (or SYSTEM_MAIL_DRIVER=log) so Approve &
- *      invite still delivers a readable invite when SMTP/Resend are unset
+ *   1. Resend as hello@invites.jettx.ai (Reply-To jack@jettx.ai).
+ *   2. SMTP only when Resend is unset / SYSTEM_MAIL_DRIVER=smtp and the
+ *      SMTP account can authenticate the From domain.
+ *   3. File log sink in development when neither is configured.
  */
 
 function fromAddress(): string {
-  return (
-    process.env.CAREERS_FROM_EMAIL ||
-    process.env.EMAIL_MARKETING_FROM ||
-    process.env.SMTP_USER ||
-    config.careers.fromEmail ||
-    'jack@jettx.ai'
-  ).trim();
+  return resendFromAddress();
 }
 
 function driverOverride(): string {
@@ -60,11 +42,7 @@ function defaultReplyTo(): string | null {
   return reply || null;
 }
 
-/**
- * When neither SMTP nor Resend is wired, development still needs a working
- * invite path. The log sink writes .eml-ish files under backend/.mail/ so
- * operators can open the invite, and returns ok so the product flow continues.
- */
+/** Dev file sink when SMTP/Resend are unset (or SYSTEM_MAIL_DRIVER=log). */
 export function logMailEnabled(): boolean {
   const driver = driverOverride();
   if (driver === 'log') return true;
@@ -73,10 +51,9 @@ export function logMailEnabled(): boolean {
 }
 
 function mailFrom(): string {
-  return fromAddress() || 'jack@jettx.ai';
+  return fromAddress() || RESEND_VERIFIED_FROM;
 }
 
-/** SMTP credentials that sendSystemMail will actually use for this From. */
 function smtpUsableForFrom(from: string): boolean {
   if (!smtpConfigured()) return false;
   if (driverOverride() === 'smtp') return true;
@@ -87,6 +64,39 @@ export function systemMailConfigured(): boolean {
   if (logMailEnabled()) return true;
   if (process.env.RESEND_API_KEY?.trim()) return true;
   return smtpUsableForFrom(mailFrom());
+}
+
+/** Readiness detail for /api/ready — transport + preferred From (never keys). */
+export async function mailReadyCheck(): Promise<{
+  ok: boolean;
+  detail: string;
+}> {
+  if (!systemMailConfigured()) {
+    return { ok: false, detail: 'unconfigured' };
+  }
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (apiKey) {
+    const from = resendFromAddress();
+    const listed = await fetchResendDomains(apiKey);
+    if (listed.ok) {
+      const domains =
+        listed.domains.length > 0
+          ? listed.domains.map((d) => `${d.name}:${d.status}`).join(',')
+          : 'none';
+      return { ok: true, detail: `resend from=${from} domains=${domains}` };
+    }
+    if (listed.restricted) {
+      return { ok: true, detail: `resend from=${from} (send-only key)` };
+    }
+    return { ok: true, detail: `resend from=${from} (domains list unavailable)` };
+  }
+  if (smtpUsableForFrom(mailFrom())) {
+    return { ok: true, detail: `smtp from=${mailFrom()}` };
+  }
+  if (logMailEnabled()) {
+    return { ok: true, detail: 'log' };
+  }
+  return { ok: false, detail: 'unconfigured' };
 }
 
 async function sendViaLog(input: {
@@ -186,9 +196,11 @@ async function sendViaResend(input: {
   if (!apiKey) {
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
-  const listed = await fetchResendDomains(apiKey);
-  const picked = pickResendFromAddressForList(input.from, listed);
-  const froms = uniqueResendFroms(picked, RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM);
+  // No domains-list round-trip on send — From is always the verified subdomain.
+  const froms = resendFromCandidates({
+    configuredFrom: input.from,
+    allowOnboardingFallback: !config.isProduction,
+  });
 
   let last: { ok: false; why: string; status?: number; body?: string } | null = null;
   for (const from of froms) {
@@ -199,7 +211,14 @@ async function sendViaResend(input: {
       ? input.replyTo?.trim() || null
       : alignedReplyTo(from, input.replyTo);
     const result = await postResend({ ...input, apiKey, from, replyTo });
-    if (result.ok) return result;
+    if (result.ok) {
+      if (isResendOnboardingFrom(from)) {
+        console.warn(
+          '[system-mail] delivered via onboarding@resend.dev — only the Resend account owner receives this. Set RESEND_FROM_EMAIL=hello@invites.jettx.ai and verify invites.jettx.ai.',
+        );
+      }
+      return result;
+    }
     last = result;
     if (!result.status || !isResendSenderRestriction(result.status, result.body ?? '')) {
       break;
@@ -209,25 +228,24 @@ async function sendViaResend(input: {
 
   if (last?.body && isResendSenderRestriction(last.status ?? 0, last.body)) {
     console.error(
-      `[system-mail] Resend rejected ${froms.join(' → ')}. invites.jettx.ai is the verified sending domain.`,
+      `[system-mail] Resend rejected ${froms.join(' → ')}. Verify invites.jettx.ai and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.`,
     );
   }
-  return { ok: false, why: last?.why ?? 'The email could not be sent.' };
+  return {
+    ok: false,
+    why:
+      last?.why ??
+      'The email could not be sent. Verify invites.jettx.ai on Resend and set RESEND_FROM_EMAIL=hello@invites.jettx.ai.',
+  };
 }
 
 export async function sendSystemMail(input: {
   to: string;
   subject: string;
   text: string;
-  /** Optional HTML alternate — clients that support it show this. */
   html?: string | null;
-  /** Optional reply-to (e.g. the inviting office contact). */
   replyTo?: string | null;
-  /**
-   * Contact / careers forms must keep the visitor's inbox as Reply-To so
-   * a reply reaches them. Invite / OTP mail aligns Reply-To to the From
-   * org so a yahoo.com Reply-To on a jettx.ai From does not look spoofed.
-   */
+  /** Contact/careers keep the visitor inbox as Reply-To. */
   keepReplyTo?: boolean;
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();

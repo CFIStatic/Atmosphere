@@ -12,7 +12,6 @@ import { randomUUID } from 'node:crypto';
 import { emailDomain } from './resendFrom.js';
 
 export const PLATFORM_FROM_NAME = 'Atmosphere';
-export const SENDER_IDENTITY_LINE = 'Sent by Atmosphere · jettx.ai';
 
 export type MailKind = 'transactional' | 'marketing';
 
@@ -207,19 +206,7 @@ export function evaluateEmailAuthDns(input: {
   return findings;
 }
 
-/**
- * Resend is the authenticated path (DKIM on invites.jettx.ai, SES return-path).
- * SMTP is only first when an operator forces SYSTEM_MAIL_DRIVER=smtp.
- */
-export function preferResendOverSmtp(input: {
-  driver?: string | null;
-  resendApiKey?: string | null;
-}): boolean {
-  const driver = (input.driver ?? '').trim().toLowerCase();
-  if (driver === 'smtp' || driver === 'log' || driver === 'off') return false;
-  return Boolean(input.resendApiKey?.trim());
-}
-
+/** Resend first unless SYSTEM_MAIL_DRIVER forces smtp/log. */
 export type MailTransport = 'resend' | 'smtp' | 'log';
 
 export function systemMailTransportOrder(input: {

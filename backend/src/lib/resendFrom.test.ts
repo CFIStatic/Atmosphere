@@ -1,57 +1,48 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  RESEND_ONBOARDING_FROM,
   RESEND_VERIFIED_FROM,
   emailDomain,
   isResendSenderRestriction,
-  pickResendFromAddress,
-  pickResendFromAddressForList,
+  resendFromAddress,
+  resendFromCandidates,
 } from './resendFrom.js';
 
-describe('pickResendFromAddress', () => {
-  it('keeps jack@jettx.ai when that apex domain is verified', () => {
-    assert.equal(
-      pickResendFromAddress('jack@jettx.ai', [{ name: 'jettx.ai', status: 'verified' }]),
-      'jack@jettx.ai',
-    );
+describe('resendFromAddress', () => {
+  it('always uses hello@invites.jettx.ai by default', () => {
+    const prev = process.env.RESEND_FROM_EMAIL;
+    delete process.env.RESEND_FROM_EMAIL;
+    try {
+      assert.equal(resendFromAddress('jack@jettx.ai'), RESEND_VERIFIED_FROM);
+      assert.equal(resendFromAddress(null), RESEND_VERIFIED_FROM);
+      assert.equal(resendFromAddress('hello@invites.jettx.ai'), RESEND_VERIFIED_FROM);
+    } finally {
+      if (prev === undefined) delete process.env.RESEND_FROM_EMAIL;
+      else process.env.RESEND_FROM_EMAIL = prev;
+    }
   });
 
-  it('sends as hello@invites.jettx.ai when that subdomain is verified', () => {
-    assert.equal(
-      pickResendFromAddress('jack@jettx.ai', [
-        { name: 'invites.jettx.ai', status: 'verified' },
-      ]),
-      RESEND_VERIFIED_FROM,
-    );
+  it('honors RESEND_FROM_EMAIL on the verified subdomain', () => {
+    const prev = process.env.RESEND_FROM_EMAIL;
+    process.env.RESEND_FROM_EMAIL = 'ops@invites.jettx.ai';
+    try {
+      assert.equal(resendFromAddress('jack@jettx.ai'), 'ops@invites.jettx.ai');
+    } finally {
+      if (prev === undefined) delete process.env.RESEND_FROM_EMAIL;
+      else process.env.RESEND_FROM_EMAIL = prev;
+    }
   });
 
-  it('does not send as jack@jettx.ai when only a send subdomain is verified', () => {
-    assert.equal(
-      pickResendFromAddress('jack@jettx.ai', [
-        { name: 'send.jettx.ai', status: 'verified' },
-      ]),
-      'invites@send.jettx.ai',
-    );
-  });
-
-  it('uses the verified invites subdomain when nothing is listed as verified', () => {
-    assert.equal(
-      pickResendFromAddress('jack@jettx.ai', [
-        { name: 'jettx.ai', status: 'not_started' },
-      ]),
-      RESEND_VERIFIED_FROM,
-    );
-    assert.equal(pickResendFromAddress('jack@jettx.ai', []), RESEND_VERIFIED_FROM);
-  });
-
-  it('prefers invites.jettx.ai over an unrelated verified domain', () => {
-    assert.equal(
-      pickResendFromAddress('office@other.test', [
-        { name: 'unrelated.com', status: 'verified' },
-        { name: 'invites.jettx.ai', status: 'verified' },
-      ]),
-      RESEND_VERIFIED_FROM,
-    );
+  it('ignores RESEND_FROM_EMAIL on an unverified domain', () => {
+    const prev = process.env.RESEND_FROM_EMAIL;
+    process.env.RESEND_FROM_EMAIL = 'jack@jettx.ai';
+    try {
+      assert.equal(resendFromAddress(), RESEND_VERIFIED_FROM);
+    } finally {
+      if (prev === undefined) delete process.env.RESEND_FROM_EMAIL;
+      else process.env.RESEND_FROM_EMAIL = prev;
+    }
   });
 });
 
@@ -81,26 +72,24 @@ describe('emailDomain / sender restriction', () => {
   });
 });
 
-describe('pickResendFromAddressForList', () => {
-  it('uses hello@invites.jettx.ai when the API key cannot list domains', () => {
-    assert.equal(
-      pickResendFromAddressForList('jack@jettx.ai', {
-        ok: false,
-        restricted: true,
-        domains: [],
+describe('resendFromCandidates', () => {
+  it('is only hello@invites.jettx.ai in production', () => {
+    assert.deepEqual(
+      resendFromCandidates({
+        configuredFrom: 'jack@jettx.ai',
+        allowOnboardingFallback: false,
       }),
-      RESEND_VERIFIED_FROM,
+      [RESEND_VERIFIED_FROM],
     );
   });
 
-  it('uses hello@invites.jettx.ai when the list succeeds with no verified domain', () => {
-    assert.equal(
-      pickResendFromAddressForList('jack@jettx.ai', {
-        ok: true,
-        restricted: false,
-        domains: [],
+  it('allows onboarding@resend.dev only as a last-resort non-prod fallback', () => {
+    assert.deepEqual(
+      resendFromCandidates({
+        configuredFrom: 'jack@jettx.ai',
+        allowOnboardingFallback: true,
       }),
-      RESEND_VERIFIED_FROM,
+      [RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM],
     );
   });
 });

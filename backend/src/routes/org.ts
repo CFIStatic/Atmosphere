@@ -657,6 +657,9 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         text: mail.text,
         html: mail.html,
       });
+      if (!result.ok) {
+        console.warn(`[org-invite] email to ${email} failed: ${result.why}`);
+      }
       emailed = result.ok;
     }
 

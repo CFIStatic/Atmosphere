@@ -6,7 +6,7 @@ import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { resolveWorkerRole, shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { smtpConfigured } from '../lib/smtpTransport.js';
-import { systemMailConfigured } from '../lib/systemMail.js';
+import { mailReadyCheck } from '../lib/systemMail.js';
 
 export const healthRouter = Router();
 
@@ -66,14 +66,14 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
     ok: Boolean(config.frontendOrigins.length && config.device.pepper),
     detail: config.isProduction ? 'production' : 'development',
   };
-  checks.mail = {
-    ok: systemMailConfigured(),
-    detail: process.env.RESEND_API_KEY?.trim()
-      ? 'resend'
-      : smtpConfigured()
-        ? 'smtp'
-        : 'unconfigured',
-  };
+  checks.mail = await withTimeout(
+    mailReadyCheck(),
+    2_500,
+    {
+      ok: Boolean(process.env.RESEND_API_KEY?.trim() || smtpConfigured()),
+      detail: 'timeout checking mail',
+    },
+  );
   const vision = visionProviderLabel();
   checks.vision = {
     ok: vision !== 'unconfigured',

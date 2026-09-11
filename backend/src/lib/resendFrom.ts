@@ -1,11 +1,9 @@
 /**
- * Resend will not deliver as jack@jettx.ai until that apex domain is verified.
- * The live Resend account has `invites.jettx.ai` verified, so job invites send
- * as hello@invites.jettx.ai (Reply-To stays jack@jettx.ai).
+ * Resend From for Atmosphere transactional mail.
  *
- * The Keys `RESEND_API_KEY` is send-only — listing/creating domains returns
- * 401 restricted_api_key. We therefore keep the verified subdomain as a known
- * From, and only fall back to onboarding@resend.dev if Resend still rejects it.
+ * Production always sends as hello@invites.jettx.ai (verified subdomain with
+ * DKIM + SES return-path). Reply-To stays jack@jettx.ai (same org) — set in
+ * systemMail, not here. onboarding@resend.dev is a non-prod last resort only.
  */
 
 export const RESEND_ONBOARDING_FROM = 'onboarding@resend.dev';
@@ -38,77 +36,31 @@ export function emailDomain(address: string): string {
   return trimmed.slice(at + 1);
 }
 
-function isVerified(status: string): boolean {
-  return String(status).trim().toLowerCase() === 'verified';
-}
-
-/** Map an apex/workspace address onto the verified Resend sending domain. */
-export function remapToVerifiedSendingDomain(configuredFrom: string): string {
+/** Pin RESEND_FROM_EMAIL when it is on invites.jettx.ai; else the verified From. */
+export function resendFromAddress(configuredFrom?: string | null): string {
   const envFrom = (process.env.RESEND_FROM_EMAIL ?? '').trim();
-  if (envFrom && emailDomain(envFrom) === RESEND_VERIFIED_DOMAIN) return envFrom;
-  const configured = configuredFrom.trim();
+  if (emailDomain(envFrom) === RESEND_VERIFIED_DOMAIN) return envFrom;
+  const configured = (configuredFrom ?? '').trim();
   if (emailDomain(configured) === RESEND_VERIFIED_DOMAIN) return configured;
   return RESEND_VERIFIED_FROM;
 }
 
-function fromForVerifiedDomain(name: string, configuredFrom: string): string {
-  if (name === RESEND_VERIFIED_DOMAIN) {
-    return remapToVerifiedSendingDomain(configuredFrom);
-  }
-  return `invites@${name}`;
-}
-
 /**
- * Pick a From address Resend will actually accept.
- * Verifying `invites.jettx.ai` does not authorize `jack@jettx.ai` — the
- * local-part domain has to match the verified name.
+ * From addresses to try. Always hello@invites.jettx.ai first.
+ * onboarding@resend.dev only when allowOnboardingFallback (non-production).
  */
-export function pickResendFromAddress(
-  configuredFrom: string,
-  domains: ResendDomain[],
-): string {
-  const verified = domains
-    .filter((d) => d.name && isVerified(d.status))
-    .map((d) => d.name.trim().toLowerCase());
-
-  const configured = configuredFrom.trim();
-  const configuredDomain = emailDomain(configured);
-  if (configured && configuredDomain && verified.includes(configuredDomain)) {
-    return configured;
-  }
-
-  const preferred =
-    verified.find((name) => name === RESEND_VERIFIED_DOMAIN) ??
-    verified.find((name) => name === 'jettx.ai') ??
-    verified.find((name) => name.endsWith('.jettx.ai')) ??
-    verified.find((name) => name === 'atmosphereteam.com') ??
-    verified.find((name) => name.endsWith('.atmosphereteam.com')) ??
-    verified[0];
-
-  if (preferred) return fromForVerifiedDomain(preferred, configured);
-  return remapToVerifiedSendingDomain(configured);
+export function resendFromCandidates(input: {
+  configuredFrom?: string | null;
+  allowOnboardingFallback: boolean;
+}): string[] {
+  const primary = resendFromAddress(input.configuredFrom);
+  if (!input.allowOnboardingFallback) return [primary];
+  if (primary.toLowerCase() === RESEND_ONBOARDING_FROM) return [primary];
+  return [primary, RESEND_ONBOARDING_FROM];
 }
 
-/** Send-only API keys cannot list domains; still use the verified subdomain. */
-export function pickResendFromAddressForList(
-  configuredFrom: string,
-  listed: ResendDomainList,
-): string {
-  if (listed.ok) return pickResendFromAddress(configuredFrom, listed.domains);
-  return remapToVerifiedSendingDomain(configuredFrom);
-}
-
-export function uniqueResendFroms(...addresses: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of addresses) {
-    const address = raw.trim();
-    const key = address.toLowerCase();
-    if (!address || seen.has(key)) continue;
-    seen.add(key);
-    out.push(address);
-  }
-  return out;
+export function isResendOnboardingFrom(address: string): boolean {
+  return address.trim().toLowerCase() === RESEND_ONBOARDING_FROM;
 }
 
 export function isResendSenderRestriction(status: number, body: string): boolean {
@@ -125,6 +77,7 @@ export function isResendSenderRestriction(status: number, body: string): boolean
   return looksLikeSender;
 }
 
+/** Domains list for /api/ready only — send path does not need it. */
 export async function fetchResendDomains(apiKey: string): Promise<ResendDomainList> {
   if (domainCache && Date.now() - domainCache.at < DOMAIN_CACHE_MS) {
     return domainCache;

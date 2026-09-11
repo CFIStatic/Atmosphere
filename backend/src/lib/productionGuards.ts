@@ -74,9 +74,9 @@ export function assertProductionReady(): void {
     }
   }
 
-  if (!config.careers.fromEmail) {
+  if (!process.env.RESEND_FROM_EMAIL?.trim() && !config.careers.fromEmail) {
     warnings.push(
-      'CAREERS_FROM_EMAIL (or SMTP_USER) is unset — Atmosphere cannot send invites or OTPs until a from-address is configured.',
+      'RESEND_FROM_EMAIL unset — pin hello@invites.jettx.ai for transactional mail (see docs/email-deliverability.md).',
     );
   }
   const smtpReady = Boolean(
