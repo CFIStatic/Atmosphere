@@ -84,6 +84,13 @@ test('Field Capture is the primary CTA when a fieldCaptureUrl is set', () => {
   );
   assert.match(html, /Job file on the web/);
   assert.match(html, /shared\/tok123/);
+  const needsAccount = partyInviteEmail({
+    ...base,
+    recipientHasAccount: false,
+    fieldCaptureUrl: 'https://app.atmosphereteam.com/?token=tok123&email=alex%40riogrande.example&account=1',
+  });
+  assert.match(needsAccount.html, /href="https:\/\/app\.atmosphereteam\.com\/\?token=tok123/);
+  assert.doesNotMatch(needsAccount.html, /\/signup\?email=/);
   assert.doesNotMatch(html, /Open job on phone/);
   assert.doesNotMatch(html, /Open in Field Capture<\/a>\s*<\/p>\s*<p[^>]*>\s*<a[^>]*>\s*Open in Field Capture/);
 });

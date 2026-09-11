@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
-import { firstRunDestination } from '../lib/firstRun';
+import { captureAfterSignup, firstRunDestination } from '../lib/firstRun';
 import { homeownerAfterSignup } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -159,13 +159,15 @@ export function SignupPage() {
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const isHomeowner = orgIntent === 'homeowner';
-  const workspaceValid = isHomeowner
+  const isCapture = orgIntent === 'capture';
+  const isInviteeAccount = isHomeowner || isCapture;
+  const workspaceValid = isInviteeAccount
     ? true
     : mode === 'join'
       ? joinCodeValid
       : orgName.trim().length >= 2;
   const accountValid = creatingNewAccount
-    ? (isHomeowner ? emailValid && passwordValid : nameValid && emailValid && passwordValid)
+    ? (isInviteeAccount ? emailValid && passwordValid : nameValid && emailValid && passwordValid)
     : true;
   const termsValid = creatingNewAccount ? termsAcknowledged : true;
   const formValid = accountValid && workspaceValid && termsValid;
@@ -258,9 +260,21 @@ export function SignupPage() {
           queueRedirect(homeownerAfterSignup(redirectTo));
           return;
         }
+        if (orgIntent === 'capture') {
+          window.location.assign(
+            captureAfterSignup(searchParams.get('token'), email.trim() || searchParams.get('email')),
+          );
+          return;
+        }
       }
       if (orgIntent === 'homeowner') {
         queueRedirect(homeownerAfterSignup(redirectTo));
+        return;
+      }
+      if (orgIntent === 'capture') {
+        window.location.assign(
+          captureAfterSignup(searchParams.get('token'), email.trim() || searchParams.get('email')),
+        );
         return;
       }
       await completeWorkspace();
@@ -294,18 +308,22 @@ export function SignupPage() {
           step={1}
           intent={orgIntent}
           title={
-            isHomeowner
-              ? 'Save this job'
-              : mode === 'join'
-                ? 'Account & join code'
-                : 'Account & workspace'
+            isCapture
+              ? 'Create your account'
+              : isHomeowner
+                ? 'Save this job'
+                : mode === 'join'
+                  ? 'Account & join code'
+                  : 'Account & workspace'
           }
           subtitle={
-            isHomeowner
-              ? 'Email and password. That is it.'
-              : mode === 'join'
-                ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
-                : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
+            isCapture
+              ? 'Email and password. Then Field Capture opens this job.'
+              : isHomeowner
+                ? 'Email and password. That is it.'
+                : mode === 'join'
+                  ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
+                  : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
           }
         >
           {accountNotice && (
@@ -338,7 +356,7 @@ export function SignupPage() {
           <form onSubmit={handleSetupSubmit} noValidate className="mt-6 space-y-4">
             {creatingNewAccount && (
               <>
-                {!isHomeowner && (
+                {!isInviteeAccount && (
                 <Field label="Your name" htmlFor="signup-name">
                   <input
                     id="signup-name"
@@ -355,7 +373,7 @@ export function SignupPage() {
                 </Field>
                 )}
 
-                <Field label={isHomeowner ? 'Email' : 'Work email'} htmlFor="signup-email">
+                <Field label={isInviteeAccount ? 'Email' : 'Work email'} htmlFor="signup-email">
                   <input
                     id="signup-email"
                     type="email"
@@ -363,7 +381,7 @@ export function SignupPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={isHomeowner ? 'you@email.com' : 'you@company.com'}
+                    placeholder={isInviteeAccount ? 'you@email.com' : 'you@company.com'}
                     className={inputClass}
                   />
                 </Field>
@@ -378,7 +396,7 @@ export function SignupPage() {
                       minLength={8}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder={isHomeowner ? 'At least 8 characters' : 'Choose a strong password'}
+                      placeholder={isInviteeAccount ? 'At least 8 characters' : 'Choose a strong password'}
                       className={`${inputClass} pr-11`}
                     />
                     <button
@@ -394,7 +412,7 @@ export function SignupPage() {
               </>
             )}
 
-            {!isHomeowner && (mode === 'create' ? (
+            {!isInviteeAccount && (mode === 'create' ? (
               <Field label="Company name" htmlFor="org-name">
                 <input
                   id="org-name"
@@ -443,7 +461,7 @@ export function SignupPage() {
             )}
 
             <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
-              {submitting ? 'Saving…' : isHomeowner ? 'Save this job' : 'Continue'}
+              {submitting ? 'Saving…' : isCapture ? 'Create account' : isHomeowner ? 'Save this job' : 'Continue'}
             </PrimaryButton>
           </form>
         </SetupStepCard>
@@ -492,7 +510,7 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {!isHomeowner && (
+      {!isInviteeAccount && (
         <p className="mt-6 text-center text-xs text-ink-400">
           Passwords are encrypted, never stored in plain text, and never seen by this page.
         </p>

@@ -23,7 +23,7 @@ export function SetupWizardShell({
   children: ReactNode;
 }) {
   const copy = setupWizardCopy(intent);
-  const isHomeowner = intent === 'homeowner';
+  const isHomeowner = intent === 'homeowner' || intent === 'capture';
   const wide = step === 2 && !isHomeowner;
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">

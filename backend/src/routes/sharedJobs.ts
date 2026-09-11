@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { assertInviteeAccount } from '../shared/inviteeJobAccess.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { scheduledPurgeAt } from '../lib/videoDeletePolicy.js';
 import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
@@ -1514,10 +1515,12 @@ sharedJobsRouter.post('/shared/:jobId/legal-hold/release', releaseJobHold);
 jobShareRouter.post(
   jobShareActionPattern('/proof/upload-url'),
   shareLimiter,
+  requireAuth,
   attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
       res.json(await createUploadUrl(party, admin, req.body));
     } catch (err) {
       next(err);
@@ -1529,10 +1532,12 @@ jobShareRouter.post(
 jobShareRouter.post(
   jobShareActionPattern('/proof/upload-part-url'),
   shareLimiter,
+  requireAuth,
   attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
       res.json(await createPartUploadUrl(party, admin, req.body));
     } catch (err) {
       next(err);
@@ -1543,10 +1548,12 @@ jobShareRouter.post(
 jobShareRouter.post(
   jobShareActionPattern('/proof/upload-complete'),
   shareLimiter,
+  requireAuth,
   attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
       res.json(await completeChunkedProofUpload(party, admin, req.body));
     } catch (err) {
       next(err);
@@ -1557,10 +1564,12 @@ jobShareRouter.post(
 jobShareRouter.post(
   jobShareActionPattern('/proof'),
   shareLimiter,
+  requireAuth,
   attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
       const result = await recordProof(party, admin, req.body);
       const { data: brief } = await admin
         .from('job_briefs')

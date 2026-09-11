@@ -5,6 +5,11 @@ import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { unscopedAdmin, writerForOrg } from '../lib/scopedAdmin.js';
+import {
+  claimInvitedPartiesForUser,
+  normalizeInviteEmail,
+  partiesInvitedToEmail,
+} from '../shared/inviteeJobAccess.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
@@ -230,36 +235,120 @@ fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFun
 /** GET /api/field-app/me — who is signed in and which org receives uploads. */
 fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, role, userId, supabase } = await requireOrgContext(req);
-    const { data: org } = await supabase
-      .from('orgs')
-      .select('id, name')
-      .eq('id', orgId)
-      .maybeSingle();
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, avatar_url')
-      .eq('id', userId)
-      .maybeSingle();
-    const row = profile as { full_name?: string; avatar_url?: string | null } | null;
-
-    res.json({
-      user: {
-        id: userId,
-        email: req.user?.email ?? null,
-        fullName: row?.full_name ?? null,
-        avatarUrl: isDisplayableAvatarUrl(row?.avatar_url) ? (row?.avatar_url ?? null) : null,
-      },
-      org: {
-        id: orgId,
-        name: (org as { name?: string } | null)?.name ?? 'Organization',
-        role,
-      },
-    });
+    const userId = req.user!.id;
+    try {
+      const ctx = await requireOrgContext(req);
+      const { data: org } = await ctx.supabase
+        .from('orgs')
+        .select('id, name')
+        .eq('id', ctx.orgId)
+        .maybeSingle();
+      const { data: profile } = await ctx.supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+      const row = profile as { full_name?: string; avatar_url?: string | null } | null;
+      res.json({
+        user: {
+          id: userId,
+          email: req.user?.email ?? null,
+          fullName: row?.full_name ?? null,
+          avatarUrl: isDisplayableAvatarUrl(row?.avatar_url) ? (row?.avatar_url ?? null) : null,
+        },
+        org: {
+          id: ctx.orgId,
+          name: (org as { name?: string } | null)?.name ?? 'Organization',
+          role: ctx.role,
+        },
+      });
+      return;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+      res.json({
+        user: {
+          id: userId,
+          email: req.user?.email ?? null,
+          fullName: null,
+          avatarUrl: null,
+        },
+        org: null,
+      });
+    }
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * Capture invitees are not org_members. Today is every live party invite
+ * emailed to this account — never another recipient, never the vendor's list.
+ */
+async function listInviteeToday(req: Request) {
+  const email = normalizeInviteEmail(req.user?.email);
+  const timeZone = DEFAULT_FIELD_TIMEZONE;
+  const day = todayKey(new Date(), timeZone);
+  if (!email || !req.user) return { jobs: [], today: day, access: 'invitee' as const };
+
+  const admin = unscopedAdmin();
+  await claimInvitedPartiesForUser(admin, req.user);
+
+  const { data: parties } = await admin
+    .from('job_parties')
+    .select('job_id, email, access_token, revoked_at')
+    .eq('email', email)
+    .is('revoked_at', null);
+  const mine = partiesInvitedToEmail(
+    ((parties ?? []) as Array<{
+      job_id: string;
+      email?: string | null;
+      access_token: string;
+      revoked_at?: string | null;
+    }>),
+    email,
+  );
+  const jobIds = [...new Set(mine.map((p) => p.job_id))];
+  if (!jobIds.length) return { jobs: [], today: day, access: 'invitee' as const };
+
+  const { data: jobs } = await admin
+    .from('crm_jobs')
+    .select('id, job_number, title, status, scheduled_start, property_id')
+    .in('id', jobIds)
+    .is('deleted_at', null);
+
+  const tokenByJob = new Map<string, string>();
+  for (const party of mine) {
+    if (party.access_token && !tokenByJob.has(party.job_id)) {
+      tokenByJob.set(party.job_id, party.access_token);
+    }
+  }
+
+  const inputs: TodayJobInput[] = ((jobs ?? []) as any[]).map((j) => ({
+    id: j.id as string,
+    jobNumber: (j.job_number as number | null) ?? null,
+    title: (j.title as string | null) ?? null,
+    status: (j.status as string | null) ?? null,
+    scheduledStart: (j.scheduled_start as string | null) ?? null,
+    propertyId: (j.property_id as string | null) ?? null,
+  }));
+  const picked = pickTodayJobs(inputs, [], day, timeZone);
+  const out = picked.map((j) => {
+    const token = tokenByJob.get(j.id) ?? null;
+    return {
+      id: j.id,
+      number: j.jobNumber != null ? `#${j.jobNumber}` : '',
+      name: j.title || 'Job',
+      address: '',
+      at: formatTodayAt(j.scheduledStart, false, timeZone),
+      status: j.status ?? null,
+      placed: true,
+      filmed: false,
+      reason: j.reason,
+      sharePath: token ? jobSharePagePath(token, email) : null,
+    };
+  });
+  return { jobs: out, today: day, access: 'invitee' as const };
+}
 
 async function orgTimezone(
   _supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
@@ -279,7 +368,19 @@ async function orgTimezone(
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
+    let orgId: string;
+    let userId: string;
+    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    try {
+      const ctx = await requireOrgContext(req);
+      orgId = ctx.orgId;
+      userId = ctx.userId;
+      supabase = ctx.supabase;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.code !== 'no_organization') throw err;
+      res.json(await listInviteeToday(req));
+      return;
+    }
     const timeZone = await orgTimezone(supabase, orgId);
     const day = todayKey(new Date(), timeZone);
 

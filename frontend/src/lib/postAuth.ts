@@ -45,6 +45,7 @@ export async function resolveNoOrgDestination(
   const next = safeAuthRedirect(fallback);
   if (next && isHomeownerViewerPath(next)) return next;
   if (options?.intent === 'homeowner') return HOMEOWNER_HUB_PATH;
+  if (options?.intent === 'capture') return fallback;
   try {
     const lookup = options?.lookupGrants ?? (() => api.progressShareGrants());
     const { grants } = await lookup();

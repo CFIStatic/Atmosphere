@@ -34,8 +34,8 @@ export function partyInviteEmail(input: {
   const site = input.siteAddress?.trim() || null;
   const who = input.recipientName?.trim() || null;
   const officeLink = absoluteUrl(input.origin, input.path);
-  const signup = input.signupPath ? absoluteUrl(input.origin, input.signupPath) : null;
   const fieldCapture = input.fieldCaptureUrl?.trim() || null;
+  const signup = fieldCapture || (input.signupPath ? absoluteUrl(input.origin, input.signupPath) : null);
   const primary = fieldCapture || officeLink;
   const primaryIsFieldCapture = Boolean(fieldCapture);
 

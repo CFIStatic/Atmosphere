@@ -2,6 +2,10 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { adminForPartyToken, unscopedAdmin } from '../lib/scopedAdmin.js';
+import { claimInvitedPartiesForUser } from '../shared/inviteeJobAccess.js';
+import { bearerAccessToken } from '../middleware/requireAuth.js';
+import { createAnonClient } from '../lib/supabase.js';
+import { config } from '../config.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { HttpError } from '../lib/errors.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
@@ -443,16 +447,44 @@ fieldIdentityRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const db = admin();
-      const { identity } = await identityForSession(db, req.headers.authorization);
-      const list = await listForIdentity(db, identity.id);
-      res.json({
-        identity: {
-          displayName: identity.display_name,
-          contact: displayContact({ channel: identity.channel, address: identity.address }),
-          channel: identity.channel,
-        },
-        ...list,
-      });
+      try {
+        const { identity } = await identityForSession(db, req.headers.authorization);
+        const list = await listForIdentity(db, identity.id);
+        res.json({
+          identity: {
+            displayName: identity.display_name,
+            contact: displayContact({ channel: identity.channel, address: identity.address }),
+            channel: identity.channel,
+          },
+          ...list,
+        });
+        return;
+      } catch (err) {
+        if (
+          !(err instanceof HttpError) ||
+          !['no_session', 'bad_session', 'expired_session', 'revoked_session'].includes(err.code ?? '')
+        ) {
+          throw err;
+        }
+        const access =
+          bearerAccessToken(req) ||
+          (typeof req.cookies?.[config.cookies.accessTokenName] === 'string'
+            ? String(req.cookies[config.cookies.accessTokenName])
+            : '');
+        if (!access) throw err;
+        const { data, error } = await createAnonClient().auth.getUser(access);
+        if (error || !data.user?.email) throw err;
+        const claimed = await claimInvitedPartiesForUser(db, data.user);
+        const list = await listForIdentity(db, claimed.identityId);
+        res.json({
+          identity: {
+            displayName: data.user.email,
+            contact: data.user.email,
+            channel: 'email',
+          },
+          ...list,
+        });
+      }
     } catch (err) {
       next(err);
     }
