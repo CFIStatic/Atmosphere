@@ -52,7 +52,9 @@ export function documentTitleFor(pathname: string, search = ''): string {
         ? 'Join your team'
         : intent === 'homeowner'
           ? 'Save this job'
-          : 'Create your organization';
+          : intent === 'capture'
+            ? 'Create your account'
+            : 'Create your organization';
     return `${page} · ${APP_NAME}`;
   }
 

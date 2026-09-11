@@ -64,12 +64,19 @@ describe('signupHref', () => {
       '/signup?next=%2Fprogress%2Ftok&email=a%40b.co&intent=homeowner',
     );
   });
+
+  it('keeps capture-invite signup off the join-code path', () => {
+    expect(signupHref({ intent: 'capture', email: 'a@b.co', token: 'tok123' })).toBe(
+      '/signup?email=a%40b.co&intent=capture&token=tok123',
+    );
+  });
 });
 
 describe('parseSignupIntent', () => {
   it('treats join as linking to the office account', () => {
     expect(parseSignupIntent('join')).toBe('join');
     expect(parseSignupIntent('homeowner')).toBe('homeowner');
+    expect(parseSignupIntent('capture')).toBe('capture');
   });
 
   it('defaults everything else to creating an organization', () => {

@@ -740,6 +740,18 @@
     });
   }
 
+  /** Capture-invite account: email + password + terms. No join code, no org. */
+  function signupWithPassword(email, password, apiBase, acceptedTermsVersion) {
+    return apiJson(origin(apiBase) + '/api/auth/signup', {
+      method: 'POST',
+      body: {
+        email: email,
+        password: password,
+        acceptedTermsVersion: acceptedTermsVersion || CURRENT_TERMS_VERSION,
+      },
+    });
+  }
+
   var CURRENT_TERMS_VERSION = '2026-09-10';
 
   function loadAuthMe(apiBase, accessToken) {
@@ -2833,6 +2845,7 @@
     POSITION_FRESH_MS: POSITION_FRESH_MS,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
+    signupWithPassword: signupWithPassword,
     loadAuthMe: loadAuthMe,
     acceptTerms: acceptTerms,
     CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,

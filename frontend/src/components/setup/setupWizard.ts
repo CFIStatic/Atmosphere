@@ -49,6 +49,14 @@ const HOMEOWNER_WIZARD_STEPS = [
   },
 ] as const;
 
+const CAPTURE_WIZARD_STEPS = [
+  {
+    step: 1 as const,
+    title: 'Create your account',
+    detail: 'Email and password — then open Field Capture for this job.',
+  },
+] as const;
+
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
@@ -62,6 +70,13 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
       heading: 'Save this job',
       lede: 'Pick an email and password so you can open this job file again anytime.',
       steps: HOMEOWNER_WIZARD_STEPS,
+    };
+  }
+  if (intent === 'capture') {
+    return {
+      heading: 'Create your account',
+      lede: 'Email and password. Then Field Capture opens this job — no join code, no workspace.',
+      steps: CAPTURE_WIZARD_STEPS,
     };
   }
   return {

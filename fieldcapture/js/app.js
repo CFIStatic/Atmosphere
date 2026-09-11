@@ -1059,13 +1059,13 @@
     paintFieldAccount({
       name: (me.user && (me.user.fullName || me.user.email)) || 'You',
       email: (me.user && me.user.email) || '',
-      org: (me.org && me.org.name) || 'Office',
+      org: (me.org && me.org.name) || (TOKEN ? 'Field Capture' : 'Office'),
       orgName: (me.org && me.org.name) || '',
       orgId: (me.org && me.org.id) || '',
       avatarUrl: (me.user && me.user.avatarUrl) || null,
       account: true,
     });
-    showJobAdd(true);
+    showJobAdd(Boolean(me.org && me.org.id));
     renderExpect(state.jobs);
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
@@ -1130,15 +1130,61 @@
         if (!input.value) input.value = INVITE_EMAIL;
       });
     }
+    function showSignupError(message) {
+      var el = $('#signup-err');
+      if (!el) return;
+      if (!message) {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+      }
+      el.hidden = false;
+      el.textContent = message;
+    }
+
+    function showCaptureSignup(on) {
+      var login = $('#login-form');
+      var signup = $('#signup-form');
+      if (login) login.hidden = Boolean(on);
+      if (signup) signup.hidden = !on;
+      showLoginError('');
+      showSignupError('');
+      if (on && INVITE_EMAIL) {
+        when('#signup-email', function (input) {
+          input.value = INVITE_EMAIL;
+          input.readOnly = true;
+        });
+      }
+    }
+
     when('#signup-link', function (link) {
+      if (TOKEN || REQUIRE_ACCOUNT) {
+        link.href = '#create-account';
+        link.addEventListener('click', function (event) {
+          event.preventDefault();
+          showCaptureSignup(true);
+        });
+        return;
+      }
       if (!Core.resolveOfficeHref) return;
-      var signupPath = '/signup';
       var qs = new URLSearchParams();
       if (INVITE_EMAIL) qs.set('email', INVITE_EMAIL);
-      if (TOKEN) qs.set('intent', 'join');
       var q = qs.toString();
-      link.href = Core.resolveOfficeHref(signupPath) + (q ? '?' + q : '');
+      link.href = Core.resolveOfficeHref('/signup') + (q ? '?' + q : '');
     });
+    when('#signin-toggle', function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        showCaptureSignup(false);
+      });
+    });
+    var signupTos = $('#signup-tos');
+    var signupBtn = $('#signup-btn');
+    if (signupTos && signupBtn) {
+      signupTos.addEventListener('change', function () {
+        signupBtn.disabled = !signupTos.checked;
+      });
+    }
     when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     when('#password-toggle', function (toggle) {
       toggle.addEventListener('click', function () {
@@ -1185,6 +1231,7 @@
               return;
             }
             if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
               showOfficeLink();
               return;
             }
@@ -1193,6 +1240,64 @@
           })
           .then(function () {
             btn.disabled = false;
+          });
+      });
+    }
+    var signupForm = $('#signup-form');
+    if (signupForm) {
+      signupForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var email = ($('#signup-email') && $('#signup-email').value || '').trim();
+        var password = ($('#signup-password') && $('#signup-password').value || '');
+        var tos = $('#signup-tos');
+        var btn = $('#signup-btn');
+        showSignupError('');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showSignupError('Enter a valid email address.');
+          return;
+        }
+        if (INVITE_EMAIL && email.toLowerCase() !== INVITE_EMAIL.toLowerCase()) {
+          showSignupError('Create the account with the invited email: ' + INVITE_EMAIL);
+          return;
+        }
+        if (password.length < 8) {
+          showSignupError('Password must be at least 8 characters.');
+          return;
+        }
+        if (!tos || !tos.checked) {
+          showSignupError('Acknowledge the Terms of Service to continue.');
+          return;
+        }
+        if (!Core.signupWithPassword) {
+          showSignupError('Could not create an account on this phone. Sign in instead.');
+          return;
+        }
+        btn.disabled = true;
+        Core.signupWithPassword(email, password, API_BASE, Core.CURRENT_TERMS_VERSION)
+          .then(function (res) {
+            if (res && res.needsEmailConfirmation) {
+              throw new Error(res.message || 'Check your email to confirm this account, then sign in.');
+            }
+            var session = (res && res.session) || {};
+            if (!session.accessToken) {
+              throw new Error('Account created. Sign in with that email and password.');
+            }
+            writeStoredSession(session.accessToken, session.refreshToken);
+            if (TOKEN) return openInviteAfterAccountSignIn();
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            if (isTermsRequired(err)) {
+              showTermsGate();
+              return;
+            }
+            if (isNoOrganization(err) && TOKEN) {
+              return openInviteAfterAccountSignIn();
+            }
+            showSignupError(err.message || 'Could not create an account. Sign in if you already have one.');
+          })
+          .then(function () {
+            if (btn && tos) btn.disabled = !tos.checked;
           });
       });
     }
@@ -1282,6 +1387,7 @@
           })
           .catch(function (err) {
             if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
               showOfficeLink();
               return;
             }
@@ -1318,6 +1424,7 @@
           return;
         }
         if (isNoOrganization(err)) {
+          if (TOKEN) return openInviteAfterAccountSignIn();
           showOfficeLink();
           return;
         }
@@ -1342,6 +1449,11 @@
 
   function startLiveDay(stream) {
     if (stream && typeof stream.getTracks !== 'function') stream = undefined;
+    if (LIVE && !state.accessToken) {
+      bootAccount();
+      setStatus('Sign in or create an account to record.', true);
+      return;
+    }
     if (state.account && !state.activeJobId) {
       setStatus('No open job to file this day against.', true);
       return;
@@ -1441,14 +1553,14 @@
               apiBase: API_BASE,
               jobId: LIVE ? undefined : rec.jobId,
               token: LIVE ? TOKEN || undefined : undefined,
-              accessToken: LIVE ? undefined : accessToken,
+              accessToken: accessToken,
               workDate: workDate,
               extension: extension,
               clipId: rec.clipId,
               index: index,
             });
           };
-          return LIVE ? call(undefined) : withSession(call);
+          return LIVE ? withSession(call) : withSession(call);
         },
       });
     }
@@ -1818,7 +1930,6 @@
         onProgress: hooks.onProgress,
       });
     }
-    if (isShare) return attempt(undefined);
     return withSession(attempt);
   }
 
@@ -2399,7 +2510,7 @@
     }, 15000);
   })();
 
-  if (LIVE && REQUIRE_ACCOUNT) {
+  if (LIVE) {
     readStoredSession();
     if (state.accessToken) {
       enterLiveMode();
@@ -2412,8 +2523,6 @@
           : 'Sign in or create an account to open this invite.',
       );
     }
-  } else if (LIVE) {
-    enterLiveMode();
   } else if (DEMO) {
     bootDemo();
   } else if (params.get('elevate') === '1') {

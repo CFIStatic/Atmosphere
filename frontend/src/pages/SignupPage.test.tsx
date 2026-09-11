@@ -401,4 +401,16 @@ describe('SignupPage', () => {
       expect(queueRedirect).toHaveBeenCalledWith('/progress/tok123');
     });
   });
+
+  it('creates a capture-invite account without a join code or workspace', async () => {
+    renderSignup('/signup?intent=capture&email=jack%40roitechai.com&token=tok123');
+    expect(screen.getByRole('heading', { level: 2, name: 'Create your account' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Join code')).toBeNull();
+    expect(screen.queryByLabelText('Company name')).toBeNull();
+    expect(screen.queryByText(/Global Admin/i)).toBeNull();
+    expect(screen.queryByText(/ACCOUNT & JOIN CODE/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument();
+    expect(apiMocks.createOrg).not.toHaveBeenCalled();
+    expect(apiMocks.joinOrg).not.toHaveBeenCalled();
+  });
 });

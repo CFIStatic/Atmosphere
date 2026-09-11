@@ -44,7 +44,7 @@ export function fieldCaptureOpenUrl(path?: string | null): string {
     const qs = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
     const token = new URLSearchParams(qs).get('token');
     if (token) {
-      return `${FIELD_CAPTURE_WEB_ORIGIN}/?token=${encodeURIComponent(token)}`;
+      return fieldCaptureInviteOpenUrl(token, new URLSearchParams(qs).get('email'));
     }
   } catch {
     /* fall through */
@@ -53,4 +53,20 @@ export function fieldCaptureOpenUrl(path?: string | null): string {
     return `${FIELD_CAPTURE_WEB_ORIGIN}${raw.replace(/^\/fieldcapture\/?/, '/')}`;
   }
   return FIELD_CAPTURE_WEB_ORIGIN;
+}
+
+/** After capture-invite signup: classic Field Capture for that token, or the app host. */
+export function captureAfterSignup(token?: string | null, email?: string | null): string {
+  const invite = (token ?? '').trim();
+  return invite ? fieldCaptureInviteOpenUrl(invite, email) : FIELD_CAPTURE_WEB_ORIGIN;
+}
+
+/** Classic Field Capture invite: token + email + account gate. */
+export function fieldCaptureInviteOpenUrl(token: string, email?: string | null): string {
+  const params = new URLSearchParams();
+  params.set('token', token.trim());
+  const address = email?.trim().toLowerCase();
+  if (address) params.set('email', address);
+  params.set('account', '1');
+  return `${FIELD_CAPTURE_WEB_ORIGIN}/?${params.toString()}`;
 }

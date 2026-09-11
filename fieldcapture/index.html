@@ -932,7 +932,30 @@
         </button>
         <p class="auth-foot">
           Don&apos;t have an account?
-          <a id="signup-link" href="/signup">Create an account</a>
+          <a id="signup-link" href="#create-account">Create an account</a>
+        </p>
+      </form>
+      <form class="auth-form" id="signup-form" hidden novalidate>
+        <label for="signup-name">Your name
+          <input id="signup-name" name="name" type="text" autocomplete="name" placeholder="First and last name" />
+        </label>
+        <label for="signup-email">Email
+          <input id="signup-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="you@company.com" />
+        </label>
+        <label for="signup-password">Password
+          <input id="signup-password" name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" />
+        </label>
+        <label class="tos-ack" for="signup-tos">
+          <input id="signup-tos" type="checkbox" />
+          <span>I acknowledge and agree to the <a href="https://atmosphereteam.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and have read the <a href="https://atmosphereteam.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <p class="auth-err" id="signup-err" hidden></p>
+        <button class="daybtn" type="submit" id="signup-btn" disabled>
+          <span class="lbl">Create account</span>
+        </button>
+        <p class="auth-foot">
+          Already have an account?
+          <a id="signin-toggle" href="#signin">Sign in</a>
         </p>
       </form>
     </div>
@@ -1081,7 +1104,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=field-upload-clarity-1"></script>
-<script src="js/app.js?v=field-upload-clarity-1"></script>
+<script src="js/capture-core.js?v=capture-invite-account-1"></script>
+<script src="js/app.js?v=capture-invite-account-1"></script>
 </body>
 </html>

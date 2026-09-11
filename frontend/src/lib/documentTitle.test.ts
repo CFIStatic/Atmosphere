@@ -23,6 +23,7 @@ describe('documentTitleFor', () => {
     expect(documentTitleFor('/signup')).toBe('Create your organization · Atmosphere');
     expect(documentTitleFor('/signup', '?intent=join')).toBe('Join your team · Atmosphere');
     expect(documentTitleFor('/signup', '?intent=homeowner')).toBe('Save this job · Atmosphere');
+    expect(documentTitleFor('/signup', '?intent=capture')).toBe('Create your account · Atmosphere');
     expect(documentTitleFor('/my-job-files')).toBe('Your job files · Atmosphere');
   });
 });

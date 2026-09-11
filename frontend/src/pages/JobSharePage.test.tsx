@@ -56,8 +56,11 @@ describe('JobSharePage', () => {
     expect(screen.queryByText('Ask before you do it')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send it' })).not.toBeInTheDocument();
     expect(screen.getByText("What's happening")).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Start film' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Film before you start/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start film' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open in Field Capture' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('app.atmosphereteam.com'),
+    );
   });
 
   it('POSTs a long-enough invite token to /exchange', async () => {
@@ -85,19 +88,26 @@ describe('JobSharePage', () => {
     );
 
     expect(await screen.findByTestId('invite-actions')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute('href', '#film-today');
+    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('https://app.atmosphereteam.com/?token=tok'),
+    );
+    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('account=1'),
+    );
     expect(screen.getByRole('link', { name: 'Open job file' })).toHaveAttribute('href', '#job-file');
     expect(screen.getByTestId('job-file')).toBeInTheDocument();
     expect(screen.getByTestId('film-today')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Job file' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Film the day' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What to film' })).toBeInTheDocument();
     expect(screen.getByTestId('open-field-capture')).toHaveAttribute(
       'href',
       expect.stringContaining('token=tok'),
     );
-    expect(screen.getByRole('link', { name: 'Open in Field Capture' })).toHaveAttribute(
+    expect(screen.getAllByRole('link', { name: 'Open in Field Capture' })[0]).toHaveAttribute(
       'href',
-      expect.stringContaining('token=tok'),
+      expect.stringContaining('account=1'),
     );
     expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
   });
