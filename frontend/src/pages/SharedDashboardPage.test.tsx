@@ -15,6 +15,12 @@ vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
 }));
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    membership: { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } },
+  }),
+}));
+
 const usePhoneShell = vi.fn(() => false);
 
 vi.mock('../lib/usePhoneShell', () => ({
