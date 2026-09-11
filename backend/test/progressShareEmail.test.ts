@@ -13,26 +13,23 @@ test('progressShareEmail — homeowner view progress, not Field Capture', () => 
     expiresAt: '2026-10-01T00:00:00Z',
   });
 
-  assert.match(subject, /job file/i);
-  assert.match(subject, /view progress/i);
+  assert.match(subject, /Priya Shah at Ortiz Restoration/);
   assert.match(subject, /Cedar Ridge/);
   assert.ok(text.includes('\n  https://platform.atmosphereteam.com/progress/tok123\n'));
-  assert.match(text, /View job progress/i);
-  assert.match(text, /email and password/i);
-  assert.match(text, /no payment/i);
-  assert.match(text, /atmosphereteam\.com/i);
-  assert.match(text, /no Field Capture seat/i);
+  assert.match(text, /View progress/i);
+  assert.match(text, /Save this job/i);
+  assert.match(text, /email \+ password/i);
+  assert.doesNotMatch(text, /Field Capture/i);
+  assert.doesNotMatch(text, /no payment/i);
   assert.doesNotMatch(text, /Open in Field Capture/i);
   assert.doesNotMatch(text, /film the day/i);
-  assert.doesNotMatch(text, /invited you to capture/i);
   assert.doesNotMatch(text, /jettx\.ai/i);
-  assert.doesNotMatch(text, /No account is required/i);
-  assert.match(html, /View job progress/);
-  assert.match(html, /Create your login/);
+  assert.match(html, /View progress/);
+  assert.match(html, /Save this job/);
   assert.match(html, /https:\/\/platform\.atmosphereteam\.com\/progress\/tok123/);
   assert.match(html, /intent=homeowner/);
-  assert.doesNotMatch(html, /Open in Field Capture/i);
-  assert.doesNotMatch(html, /film the day/i);
+  assert.doesNotMatch(html, /Field Capture/i);
+  assert.doesNotMatch(html, /Create your login/);
   assert.doesNotMatch(html, /jettx\.ai/i);
 });
 

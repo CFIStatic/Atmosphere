@@ -44,13 +44,8 @@ const JOIN_WIZARD_STEPS = [
 const HOMEOWNER_WIZARD_STEPS = [
   {
     step: 1 as const,
-    title: 'Create your login',
-    detail: 'Email and password only — no payment, no Field Capture seat.',
-  },
-  {
-    step: 2 as const,
-    title: 'Open the job file',
-    detail: 'You will land on job progress after you create your login.',
+    title: 'Save this job',
+    detail: 'Email and password — then you are in.',
   },
 ] as const;
 
@@ -64,8 +59,8 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   }
   if (intent === 'homeowner') {
     return {
-      heading: 'View your job progress',
-      lede: 'Create a quick Atmosphere login to keep this shared job file. No payment and no Field Capture seat.',
+      heading: 'Save this job',
+      lede: 'Pick an email and password so you can open this job file again anytime.',
       steps: HOMEOWNER_WIZARD_STEPS,
     };
   }

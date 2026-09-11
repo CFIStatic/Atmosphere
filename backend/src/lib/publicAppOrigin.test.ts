@@ -20,18 +20,29 @@ describe('publicAppOrigin', () => {
     );
   });
 
-  it('prefers the live Railway office over the unmapped custom domain', () => {
+  it('skips production Railway and Field Capture — stamps platform instead', () => {
     assert.equal(
       publicAppOrigin([
         'https://app.atmosphereteam.com',
         'https://atmosphere-web-production.up.railway.app',
       ]),
-      LIVE_OFFICE_ORIGIN,
+      LIVE_CUSTOM_APP_ORIGIN,
     );
   });
 
-  it('uses the Railway office when FRONTEND_ORIGIN is only the future custom domain', () => {
-    assert.equal(publicAppOrigin(['https://app.atmosphereteam.com']), LIVE_OFFICE_ORIGIN);
+  it('still stamps a non-production Railway office (staging/preview)', () => {
+    assert.equal(
+      publicAppOrigin([
+        'https://app.atmosphereteam.com',
+        'https://atmosphere-web-staging.up.railway.app',
+      ]),
+      'https://atmosphere-web-staging.up.railway.app',
+    );
+  });
+
+  it('falls back to platform.atmosphereteam.com when FRONTEND_ORIGIN is only Field Capture', () => {
+    assert.equal(publicAppOrigin(['https://app.atmosphereteam.com']), LIVE_CUSTOM_APP_ORIGIN);
+    assert.equal(LIVE_OFFICE_ORIGIN, LIVE_CUSTOM_APP_ORIGIN);
   });
 
   it('keeps a mapped https origin that is not the future custom domain', () => {

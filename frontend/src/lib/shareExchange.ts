@@ -7,7 +7,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export const JOB_SHARE_GUEST_PATH = '/guest';
-export const PROGRESS_SHARE_GUEST_PATH = '/progress-view';
+export const PROGRESS_SHARE_GUEST_PATH = '/progress';
 
 export async function exchangeShareToken(
   kind: 'job' | 'progress',

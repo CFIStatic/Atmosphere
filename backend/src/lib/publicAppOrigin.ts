@@ -7,11 +7,12 @@ import {
 } from './previewOrigins.js';
 
 /**
- * Live office console. Prefer platform.atmosphereteam.com when it is listed;
- * fall back to the Railway office so invite mail still opens a real host.
- * CORS already allows both.
+ * Live office console stamped into invite / share / reset emails.
+ * Always the custom Platform host — never a *.up.railway.app URL.
+ * Railway office origins remain valid for CORS / local browsing via
+ * FRONTEND_ORIGIN, but mail must open platform.atmosphereteam.com.
  */
-export const LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+export const LIVE_OFFICE_ORIGIN = LIVE_CUSTOM_APP_ORIGIN;
 export { LIVE_CUSTOM_APP_ORIGIN, LIVE_CUSTOM_FIELD_CAPTURE_ORIGIN };
 
 /** Live Field Capture web host (custom domain on the Field Capture service). */
@@ -39,14 +40,22 @@ export function publicAppOrigin(origins: string[] = config.frontendOrigins): str
   const custom = cleaned.find((o) => isAtmosphereCustomAppOrigin(o));
   if (custom) return stripSlash(custom);
 
-  const railway = cleaned.find((o) => isAtmosphereRailwayWebOrigin(o));
+  // Staging / preview Railway office hosts are fine to stamp. The live
+  // production Railway hostname must never appear in invite mail now that
+  // platform.atmosphereteam.com is the public office — fall through to it.
+  const railway = cleaned.find(
+    (o) =>
+      isAtmosphereRailwayWebOrigin(o) &&
+      !/^https:\/\/atmosphere-web-production\.up\.railway\.app\/?$/i.test(o),
+  );
   if (railway) return stripSlash(railway);
 
   const mappedHttps = cleaned.find(
     (o) =>
       /^https:\/\//i.test(o) &&
       !/localhost|127\.0\.0\.1/i.test(o) &&
-      !UNMAPPED_INTENDED_APP.test(o),
+      !UNMAPPED_INTENDED_APP.test(o) &&
+      !isAtmosphereRailwayWebOrigin(o),
   );
   if (mappedHttps) return stripSlash(mappedHttps);
 
