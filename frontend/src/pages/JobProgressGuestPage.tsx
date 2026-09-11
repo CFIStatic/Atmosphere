@@ -1,25 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, type JobScopeItem, type ProgressShareGuestView, type SharedJobRecord } from '../lib/api';
 import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
+import { loginHref, signupHref } from '../lib/authRedirect';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Read-only job file for third parties — homeowners, attorneys, banks,
- * insurance companies. The token in the URL is the credential; no login.
- * They see the brief, do-nots, scope, and every recording on the file,
- * and can Ask the same file. The emailed Ask link opens ?ask=1.
+ * insurance companies. The token in the URL is the credential.
+ *
+ * After a quick email + password account (no payment / no Field Capture seat),
+ * they claim this share and open the same /job-progress UI the office uses.
  */
 
 export function JobProgressGuestPage() {
   const { token = '' } = useParams();
   const [searchParams] = useSearchParams();
   const openAsk = searchParams.get('ask') === '1';
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [view, setView] = useState<ProgressShareGuestView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -51,6 +58,31 @@ export function JobProgressGuestPage() {
       cancelled = true;
     };
   }, [token]);
+
+  const invitedEmail = view?.share.recipientEmail?.trim().toLowerCase() || null;
+  const progressPath = token ? `/progress/${encodeURIComponent(token)}` : '/progress-view';
+
+  async function claimAndOpen() {
+    if (!token || claiming) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const res = await api.claimProgressShare(token);
+      navigate(res.path, { replace: true });
+    } catch (err) {
+      setClaimError(err instanceof ApiError ? err.message : 'Could not open this job in your account.');
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authLoading || !user || !token || !view) return;
+    const sessionEmail = user.email?.trim().toLowerCase() || '';
+    if (!invitedEmail || sessionEmail !== invitedEmail) return;
+    void claimAndOpen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, token, view, invitedEmail]);
 
   const exclusions = useMemo(
     () => (view?.scope ?? []).filter((item) => item.state === 'excluded'),
@@ -92,6 +124,13 @@ export function JobProgressGuestPage() {
     );
   }
 
+  const signupLink = signupHref({
+    intent: 'homeowner',
+    email: invitedEmail ?? undefined,
+    next: progressPath,
+  });
+  const loginLink = loginHref(progressPath);
+
   return (
     <div className="cx-aurora flex h-svh flex-col bg-paper-100">
       <header className="shrink-0 border-b border-line bg-paper-0/90 backdrop-blur">
@@ -111,6 +150,47 @@ export function JobProgressGuestPage() {
           </div>
         </div>
       </header>
+
+      <div className="shrink-0 border-b border-line bg-paper-0 px-6 py-3">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink-700">
+            Keep this job in an Atmosphere account — email and password only. No payment, no Field
+            Capture seat.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {user ? (
+              <button
+                type="button"
+                onClick={() => void claimAndOpen()}
+                disabled={claiming}
+                className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 disabled:opacity-50"
+              >
+                {claiming ? 'Opening…' : 'Open in my account'}
+              </button>
+            ) : (
+              <>
+                <Link
+                  to={signupLink}
+                  className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0"
+                >
+                  Create login
+                </Link>
+                <Link
+                  to={loginLink}
+                  className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink-800"
+                >
+                  Sign in
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+        {claimError && (
+          <p role="alert" className="mx-auto mt-2 max-w-3xl text-sm text-danger-600">
+            {claimError}
+          </p>
+        )}
+      </div>
 
       <JobFileAskChrome
         jobId={view.job.id}

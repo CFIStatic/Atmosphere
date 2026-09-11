@@ -68,9 +68,8 @@ export const JOB_PARTY_TRADE_OPTIONS = SERVICE_TRADE_OPTIONS.filter(
   (t) => t.value !== 'general_contractor',
 );
 
+/** Crew / GC on a job. Homeowners use progress share — never this list. */
 export const JOB_PARTY_ROLE_OPTIONS = [
-  { value: 'owner' as const, label: 'Homeowner' },
-  { value: 'adjuster' as const, label: 'Adjuster' },
   { value: 'general_contractor' as const, label: 'General contractor' },
 ];
 

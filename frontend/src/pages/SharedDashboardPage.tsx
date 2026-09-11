@@ -145,6 +145,7 @@ export function SharedDashboardPage() {
   const [shareFormOpen, setShareFormOpen] = useState(false);
 
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
+  const viewerOnly = record?.access === 'viewer';
 
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
@@ -295,7 +296,7 @@ export function SharedDashboardPage() {
       <PageHeader
         title={record?.job.title ?? 'Job'}
         action={
-          record ? (
+          record && !viewerOnly ? (
             <JobFileActions
               jobId={record.job.id}
               title={record.job.title}
@@ -398,6 +399,7 @@ export function SharedDashboardPage() {
             <JobProgressDashboard
               jobId={record.job.id}
               record={record}
+              readOnly={viewerOnly}
               showProofOfWork={false}
               showIdentity={false}
               initialProof={
@@ -412,11 +414,14 @@ export function SharedDashboardPage() {
               }
             />
 
+            {!viewerOnly && (
             <div className="mt-4 space-y-4">
               <ProofOfWork jobId={record.job.id} heading="Videos and analysis" showCollectionAsk={false} />
               <EvidenceLocker jobId={record.job.id} />
             </div>
+            )}
 
+            {!viewerOnly && (
             <details className="mt-4 rounded-xl glass-card group">
               <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center justify-between gap-2">
@@ -452,6 +457,7 @@ export function SharedDashboardPage() {
                 <Thread record={record} onPosted={() => void openJob(record.job.id)} />
               </div>
             </details>
+            )}
           </div>
         </>
       ) : (

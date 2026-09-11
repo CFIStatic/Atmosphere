@@ -113,10 +113,11 @@ export function ShareJobProgressPanel({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 id="share-job-title" className="text-base font-semibold text-ink-900">
-            Invite by email
+            Share with homeowner
           </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            We email View and Ask links for this job file and every recording. No account needed.
+            Email a job-progress link. They can create a quick email + password login — no payment,
+            no Field Capture seat. Not a film invite.
           </p>
         </div>
         {modal ? (
@@ -150,7 +151,7 @@ export function ShareJobProgressPanel({
       {creating && (
         <form onSubmit={create} className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-xs font-medium text-ink-700">Email</span>
+            <span className="text-xs font-medium text-ink-700">Homeowner email</span>
             <input
               required
               type="email"
@@ -167,7 +168,7 @@ export function ShareJobProgressPanel({
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-            Send invite
+            Send homeowner invite
           </button>
         </form>
       )}

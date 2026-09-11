@@ -1908,11 +1908,11 @@
   </button>
   <button role="menuitem" data-job-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>
-    Share this job file
+    Share with homeowner
   </button>
-  <button role="menuitem" data-job-act="invite">
+  <button role="menuitem" data-job-act="invite" title="Invite crew to film">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-    Invite people
+    Invite to film
   </button>
   <button role="menuitem" data-job-act="record">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
@@ -1935,8 +1935,8 @@
       </button>
     </div>
     <div class="jf-tabs" role="tablist">
-      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Share file</button>
-      <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Add people</button>
+      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Share with homeowner</button>
+      <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Invite to film</button>
     </div>
     <div class="jf-body" id="jf-body"></div>
   </div>
@@ -3560,8 +3560,6 @@
     { value: 'other', label: 'Other service trade' }
   ];
   var JOB_PARTY_ROLES = [
-    { value: 'owner', label: 'Homeowner' },
-    { value: 'adjuster', label: 'Adjuster' },
     { value: 'general_contractor', label: 'General contractor' }
   ];
 
@@ -3765,10 +3763,10 @@
       : '<div class="t fname">' + nameInner + '</div>';
     var acts =
       '<span class="job-acts">' +
-        '<button type="button" class="job-act" data-job-act="invite" title="Invite people" aria-label="Invite people to ' + esc(job.name) + '">' +
+        '<button type="button" class="job-act" data-job-act="invite" title="Invite crew to film" aria-label="Invite crew to film on ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
         '</button>' +
-        '<button type="button" class="job-act" data-job-act="share" title="Share this job file" aria-label="Share ' + esc(job.name) + '">' +
+        '<button type="button" class="job-act" data-job-act="share" title="Share with homeowner" aria-label="Share with homeowner for ' + esc(job.name) + '">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>' +
         '</button>' +
         '<button type="button" class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(job.name) + '">' +
@@ -4156,7 +4154,8 @@
   }
 
   function jobFileSheetTitle(tab) {
-    if (tab === 'invite') return 'Add people to this job';
+    if (tab === 'invite') return 'Invite a crew to film';
+    if (tab === 'share') return 'Share with homeowner';
     if (tab === 'rename') return 'Rename this job file';
     if (tab === 'duplicate') return 'Duplicate this job file';
     if (tab === 'delete') return 'Delete this job file';
@@ -4281,7 +4280,7 @@
     }
     if (jobSheet.tab === 'invite') {
       body.innerHTML =
-        '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Atmosphere emails the same capture link for the web office and Field Capture.</p>' +
+        '<p class="jf-note">Invite a trade or crew to film this job. Atmosphere emails a Field Capture link. Homeowners use <strong>Share with homeowner</strong> instead — they get a job-progress link, not a film invite.</p>' +
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
         (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
           (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
@@ -4301,10 +4300,11 @@
       return;
     }
     body.innerHTML =
+      '<p class="jf-note">Email the homeowner a link to view this job file and progress. They can create a quick email + password login — no payment, no Field Capture seat. Not a film invite.</p>' +
       (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
       '<form id="jf-share-form">' +
-        '<label><span>Email</span><input name="email" type="email" required autocomplete="email" placeholder="homeowner@example.com" /></label>' +
-        '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Send invite</button>' +
+        '<label><span>Homeowner email</span><input name="email" type="email" required autocomplete="email" placeholder="homeowner@example.com" /></label>' +
+        '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Send homeowner invite</button>' +
       '</form>' +
       (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) + '</div>' : '') +
       shareListHtml(b);

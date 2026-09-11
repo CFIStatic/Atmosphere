@@ -41,12 +41,32 @@ const JOIN_WIZARD_STEPS = [
   },
 ] as const;
 
+const HOMEOWNER_WIZARD_STEPS = [
+  {
+    step: 1 as const,
+    title: 'Create your login',
+    detail: 'Email and password only — no payment, no Field Capture seat.',
+  },
+  {
+    step: 2 as const,
+    title: 'Open the job file',
+    detail: 'You will land on job progress after you create your login.',
+  },
+] as const;
+
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
       heading: 'Join your team',
       lede: 'Your Global Admin invited you — create a login and enter the join code.',
       steps: JOIN_WIZARD_STEPS,
+    };
+  }
+  if (intent === 'homeowner') {
+    return {
+      heading: 'View your job progress',
+      lede: 'Create a quick Atmosphere login to keep this shared job file. No payment and no Field Capture seat.',
+      steps: HOMEOWNER_WIZARD_STEPS,
     };
   }
   return {

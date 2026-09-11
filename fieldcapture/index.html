@@ -421,6 +421,18 @@
   .erow-empty { border-style: dashed; background: transparent; }
   .erow .warnpin { font-size: 11px; color: var(--warn); }
   .erow .filmedpin { font-size: 11px; color: var(--pass); }
+  .job-file-link {
+    margin: 14px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted, #78716c);
+  }
+  .job-file-link a {
+    font-weight: 650;
+    color: var(--brand, #ea580c);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
   .erow .pendingpin { font-size: 11px; color: var(--muted); }
 
   /* ---------- days saved on this phone, filing in the background ----------
@@ -851,6 +863,12 @@
         <p class="hint" id="job-hint">Tap a job to select it. You can add more video any time.</p>
         <div class="joblist" id="expect" role="listbox" aria-label="Jobs"></div>
       </div>
+
+      <!-- Invite token path: film here AND open the job file (scope / brief / recordings). -->
+      <p class="job-file-link" id="job-file-link" hidden>
+        <a id="job-file-href" href="#">Open job file</a>
+        <span> — scope, do-nots, brief, and recordings for this job.</span>
+      </p>
 
       <p class="lede" id="live-status" hidden></p>
     </div>

@@ -148,7 +148,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Rename' }));
     const field = screen.getByLabelText(/^Name$/i);

@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 144,
+    "migrationCount": 145,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -86,6 +86,7 @@
     "20260807090000_purchase_orders.sql",
     "20260807170000_usage_metering_billing_v2.sql",
     "20260807190000_symbility_connections.sql",
+    "20260807194500_verifier_share_kind.sql",
     "20260808090000_job_locations.sql",
     "20260808090001_work_episodes.sql",
     "20260809090000_verifier_shares.sql",
@@ -158,7 +159,7 @@
     "20260910165509_schema_visualizer_archive_schemas.sql",
     "20260910165510_schema_visualizer_table_comments.sql",
     "20260910190000_drop_unused_non_sold_path_tables.sql",
-    "20260807194500_verifier_share_kind.sql"
+    "20260911010000_job_progress_grants.sql"
   ],
   "migrations": [
     {
@@ -2719,6 +2720,18 @@
       "dropsCount": 0
     },
     {
+      "version": "20260807194500_verifier_share_kind",
+      "file": "20260807194500_verifier_share_kind.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.verifier_shares.share_kind"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
       "version": "20260808090000_job_locations",
       "file": "20260808090000_job_locations.sql",
       "structurallyVerifiable": true,
@@ -5220,12 +5233,25 @@
       "dropsCount": 80
     },
     {
-      "version": "20260807194500_verifier_share_kind",
-      "file": "20260807194500_verifier_share_kind.sql",
+      "version": "20260911010000_job_progress_grants",
+      "file": "20260911010000_job_progress_grants.sql",
       "structurallyVerifiable": true,
       "indistinguishableReason": null,
       "expect": [
-        "column|public.verifier_shares.share_kind"
+        "column|public.job_progress_grants.created_at",
+        "column|public.job_progress_grants.id",
+        "column|public.job_progress_grants.job_id",
+        "column|public.job_progress_grants.org_id",
+        "column|public.job_progress_grants.recipient_email",
+        "column|public.job_progress_grants.share_id",
+        "column|public.job_progress_grants.user_id",
+        "index|public.job_progress_grants.job_progress_grants_job_user",
+        "index|public.job_progress_grants.job_progress_grants_org_idx",
+        "index|public.job_progress_grants.job_progress_grants_pkey",
+        "index|public.job_progress_grants.job_progress_grants_user_idx",
+        "policy|public.job_progress_grants.job_progress_grants_select_own",
+        "rls|public.job_progress_grants",
+        "table|public.job_progress_grants"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

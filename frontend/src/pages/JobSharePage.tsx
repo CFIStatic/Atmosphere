@@ -7,6 +7,7 @@ import { signupHref } from '../lib/authRedirect';
 import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
 import { exchangeShareToken, guestPathAfterExchange } from '../lib/shareExchange';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
+import { fieldCaptureOpenUrl } from '../lib/firstRun';
 import type { CaptureGuide } from '../lib/api';
 
 /**
@@ -14,19 +15,16 @@ import type { CaptureGuide } from '../lib/api';
  *
  * Opened from a link in a text message, on a phone, standing in a doorway at
  * the end of a long day. That is the entire design brief and it rules out most
- * of what a web app normally does: no sign-in, no navigation, no settings. One
- * page, three things on it, and the first thing visible is what they must not
- * touch.
+ * of what a web app normally does: no sign-in, no settings. One page with two
+ * clear jobs after the invite opens (Accept is implicit):
+ *
+ *   1. Film the day — on this page or in Field Capture
+ *   2. Open the job file — scope, brief, do-nots, and recordings
  *
  * Ordering is the design. A sub reads the top of the screen and starts working,
- * so the top of the screen is the exclusions — then anything waiting on an
- * answer, then the ordinary scope. Filming comes last because it is the thing
- * they came here to do and will scroll to find; the scope is the thing they
- * would not have read otherwise.
- *
- * Nothing here can be edited afterwards. Accepting a revision or filing a
- * video is an entry in a record, which is the point of the whole feature
- * and worth the cost of not being able to take it back.
+ * so jump links name both paths, then exclusions / scope (the job file), then
+ * filming. Opening the invite (or filing a video) records the current revision
+ * for the office — no Accept button.
  */
 
 const shareApi = jobShareApiPath;
@@ -86,8 +84,6 @@ export function JobSharePage() {
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -117,22 +113,6 @@ export function JobSharePage() {
     void load();
   }, [load]);
 
-  async function accept() {
-    if (!view?.currentRevision || !name.trim()) return;
-    setBusy('accept');
-    try {
-      await call(shareApi(token, '/accept'), {
-        method: 'POST',
-        body: JSON.stringify({ name, revision: view.currentRevision }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not record that.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const today = todayISO();
   const todaysDay = days.find((d) => d.workDate === today);
 
@@ -156,113 +136,155 @@ export function JobSharePage() {
 
       {view && (
         <>
-          {/* Only when they are not clear: the accept step has to sit above
-              the scope so a crew member cannot start work without seeing it. */}
+          {/* Dual path after implicit Accept: film AND the job file. */}
+          <nav
+            className="mt-4 grid grid-cols-2 gap-2"
+            aria-label="Invite actions"
+            data-testid="invite-actions"
+          >
+            <a
+              href="#film-today"
+              className="rounded-xl border border-brand-300 bg-brand-50 px-3 py-3 text-center text-sm font-semibold text-ink-900"
+            >
+              Film the day
+            </a>
+            <a
+              href="#job-file"
+              className="rounded-xl border border-line bg-paper-0 px-3 py-3 text-center text-sm font-semibold text-ink-900"
+            >
+              Open job file
+            </a>
+          </nav>
+          <p className="mt-2 text-xs text-ink-600">
+            Opening this invite records the current scope for the office. You can film here or in{' '}
+            <a
+              href={fieldCaptureOpenUrl(`/?token=${encodeURIComponent(token)}`)}
+              className="font-medium text-brand-600 hover:underline"
+              data-testid="open-field-capture"
+            >
+              Field Capture
+            </a>
+            .
+          </p>
+
+          {/* Blockers only (e.g. proposed scope waiting on an answer). Opening
+              the invite already records the current revision — no Accept button. */}
           {!view.clear && (
             <section className="mt-4 rounded-xl border border-caution-200 bg-caution-50 px-4 py-3">
               <p className="text-sm font-semibold text-caution-600">Not clear to work yet</p>
               <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
-
-              {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
-                <div className="mt-3">
-                  <p className="text-xs text-ink-700">
-                    Read the scope below, then put your name to it. This records that you have seen
-                    revision {view.currentRevision}.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Your name"
-                      className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-                    />
-                    <button
-                      onClick={() => void accept()}
-                      disabled={busy === 'accept' || !name.trim()}
-                      className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-                    >
-                      {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-                      Accept
-                    </button>
-                  </div>
-                </div>
-              )}
             </section>
           )}
 
-          {/* Exclusions first, always. Somebody reading this on a phone reads
-              the top of the screen and starts working. */}
-          <section className="mt-5">
-            <h2 className="text-base font-semibold text-ink-900">What to do — and not do</h2>
-            <ul className="mt-2 space-y-2">
-              {view.scope.map((item) => (
-                <li key={item.id} className={`rounded-lg border px-3 py-2.5 ${STATE_STYLE[item.state]}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm text-ink-900">
-                      {item.state === 'excluded' && (
-                        <span className="mr-1.5 font-bold text-danger-600">DO NOT</span>
+          {/* Job file: scope / brief / recordings sold-path for subs (view + film). */}
+          <section id="job-file" className="mt-5 scroll-mt-4" data-testid="job-file">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-base font-semibold text-ink-900">Job file</h2>
+              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">
+                Scope · brief · recordings
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-ink-600">
+              What to do, what not to do, site facts, and every day already on file.
+            </p>
+
+            {/* Exclusions first, always. Somebody reading this on a phone reads
+                the top of the screen and starts working. */}
+            <div className="mt-3">
+              <h3 className="text-sm font-semibold text-ink-900">What to do — and not do</h3>
+              <ul className="mt-2 space-y-2">
+                {view.scope.map((item) => (
+                  <li key={item.id} className={`rounded-lg border px-3 py-2.5 ${STATE_STYLE[item.state]}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-ink-900">
+                        {item.state === 'excluded' && (
+                          <span className="mr-1.5 font-bold text-danger-600">DO NOT</span>
+                        )}
+                        {item.title}
+                      </p>
+                      {item.amount !== null && (
+                        <span className="shrink-0 text-xs tabular-nums text-ink-700">
+                          ${item.amount.toLocaleString()}
+                        </span>
                       )}
-                      {item.title}
-                    </p>
-                    {item.amount !== null && (
-                      <span className="shrink-0 text-xs tabular-nums text-ink-700">
-                        ${item.amount.toLocaleString()}
-                      </span>
+                    </div>
+                    {item.reason && <p className="mt-0.5 text-xs text-ink-600">{item.reason}</p>}
+                    {item.detail && <p className="mt-0.5 text-xs text-ink-600">{item.detail}</p>}
+                    {item.state === 'proposed' && (
+                      <p className="mt-1 text-xs font-medium text-caution-600">
+                        Asked — do not start this until it comes back approved.
+                      </p>
                     )}
-                  </div>
-                  {item.reason && <p className="mt-0.5 text-xs text-ink-600">{item.reason}</p>}
-                  {item.detail && <p className="mt-0.5 text-xs text-ink-600">{item.detail}</p>}
-                  {item.state === 'proposed' && (
-                    <p className="mt-1 text-xs font-medium text-caution-600">
-                      Asked — do not start this until it comes back approved.
-                    </p>
-                  )}
-                </li>
-              ))}
-              {view.scope.length === 0 && (
-                <li className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink-600">
-                  Nothing written down yet. Ask below before you start anything.
-                </li>
-              )}
-            </ul>
-          </section>
-
-          {view.brief && (
-            <section className="mt-5 rounded-xl border border-line bg-paper-0 p-4">
-              <h2 className="text-base font-semibold text-ink-900">Site facts</h2>
-              <dl className="mt-2 space-y-1">
-                {Object.entries(view.brief.facts ?? {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between gap-3 text-xs">
-                    <dt className="shrink-0 text-ink-500">{key}</dt>
-                    <dd className="text-right text-ink-800">{value}</dd>
-                  </div>
+                  </li>
                 ))}
-              </dl>
-            </section>
-          )}
+                {view.scope.length === 0 && (
+                  <li className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink-600">
+                    Nothing written down yet. Ask the office before you start anything.
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            {view.brief && (
+              <div className="mt-4 rounded-xl border border-line bg-paper-0 p-4">
+                <h3 className="text-sm font-semibold text-ink-900">Site facts</h3>
+                <dl className="mt-2 space-y-1">
+                  {Object.entries(view.brief.facts ?? {}).map(([key, value]) => (
+                    <div key={key} className="flex justify-between gap-3 text-xs">
+                      <dt className="shrink-0 text-ink-500">{key}</dt>
+                      <dd className="text-right text-ink-800">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {view.brief.note && (
+                  <p className="mt-2 text-xs text-ink-700">{view.brief.note}</p>
+                )}
+              </div>
+            )}
+
+            {view.messages.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-ink-900">On the record</h3>
+                <ol className="mt-2 space-y-2">
+                  {view.messages.slice(0, 20).map((message) => (
+                    <li key={message.id} className="rounded-lg border border-line bg-paper-0 px-3 py-2">
+                      <p className="text-xs font-medium text-ink-700">{message.author_label}</p>
+                      <p className="mt-0.5 text-sm text-ink-800">{message.body}</p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {days.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-ink-900">Recordings on file</h3>
+                <ul className="mt-2 space-y-1.5">
+                  {days.slice(0, 10).map((day) => (
+                    <li key={day.workDate} className="flex items-baseline justify-between gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-xs">
+                      <span className="text-ink-700">
+                        {new Date(`${day.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                      <span className={day.problems.length ? 'text-danger-600' : 'text-ink-500'}>
+                        {day.problems.length ? day.problems[0] : day.summary}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
 
           <ProofSection
             token={token}
             today={today}
             todaysDay={todaysDay}
-            days={days}
             onDone={load}
           />
-
-          {view.messages.length > 0 && (
-            <section className="mt-5">
-              <h2 className="text-base font-semibold text-ink-900">On the record</h2>
-              <ol className="mt-2 space-y-2">
-                {view.messages.slice(0, 20).map((message) => (
-                  <li key={message.id} className="rounded-lg border border-line bg-paper-0 px-3 py-2">
-                    <p className="text-xs font-medium text-ink-700">{message.author_label}</p>
-                    <p className="mt-0.5 text-sm text-ink-800">{message.body}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
-
         </>
       )}
     </div>
@@ -309,13 +331,11 @@ function ProofSection({
   token,
   today,
   todaysDay,
-  days,
   onDone,
 }: {
   token: string;
   today: string;
   todaysDay: ProofDay | undefined;
-  days: ProofDay[];
   onDone: () => Promise<void>;
 }) {
   const [uploading, setUploading] = useState<'before' | 'after' | null>(null);
@@ -472,12 +492,18 @@ function ProofSection({
     </button>
   );
 
+  const fieldCaptureHref = fieldCaptureOpenUrl(`/?token=${encodeURIComponent(token)}`);
+
   return (
-    <section className="mt-5 rounded-xl border border-line bg-paper-0 p-4">
+    <section
+      id="film-today"
+      className="mt-5 scroll-mt-4 rounded-xl border border-line bg-paper-0 p-4"
+      data-testid="film-today"
+    >
       <CameraInput phase="before" />
       <CameraInput phase="after" />
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Today's video</h2>
+        <h2 className="text-base font-semibold text-ink-900">Film the day</h2>
         <span className="flex gap-1.5 text-[10.5px] font-semibold">
           <span
             className={`rounded-full px-2 py-0.5 ${hasBefore ? 'bg-success-50 text-success-600' : 'bg-paper-200/60 text-ink-500'}`}
@@ -497,6 +523,13 @@ function ProofSection({
           : `The ${guidePhase} video — one continuous clip, about ${
               guide ? Math.max(1, Math.round(guide.targetSeconds / 60)) : 2
             } min, location on.`}
+      </p>
+      <p className="mt-2 text-xs text-ink-600">
+        Prefer the phone app?{' '}
+        <a href={fieldCaptureHref} className="font-medium text-brand-600 hover:underline">
+          Open in Field Capture
+        </a>
+        {' '}— same job, same token.
       </p>
 
       {/* The guide and the button are one path: steps down a single rail,
@@ -566,24 +599,6 @@ function ProofSection({
         </p>
       )}
 
-      {days.length > 0 && (
-        <ul className="mt-4 space-y-1.5">
-          {days.slice(0, 10).map((day) => (
-            <li key={day.workDate} className="flex items-baseline justify-between gap-2 text-xs">
-              <span className="text-ink-700">
-                {new Date(`${day.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-              <span className={day.problems.length ? 'text-danger-600' : 'text-ink-500'}>
-                {day.problems.length ? day.problems[0] : day.summary}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }

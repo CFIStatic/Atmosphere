@@ -7,6 +7,10 @@ const progressShareGuest = vi.fn();
 const progressShareVideo = vi.fn();
 const progressShareAsk = vi.fn();
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: null, loading: false }),
+}));
+
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
   return {
@@ -147,7 +151,7 @@ describe('JobProgressGuestPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the job file, do-nots, and every recording without asking for an account', async () => {
+  it('shows the job file, do-nots, recordings, and optional create-login CTAs', async () => {
     renderGuest();
 
     expect(await screen.findByText('Job file')).toBeInTheDocument();
@@ -161,8 +165,8 @@ describe('JobProgressGuestPage', () => {
     expect(
       await screen.findByText('The north slope is stripped to decking.'),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/sign in/i)).toBeNull();
-    expect(screen.queryByText(/create.*account/i)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Create login' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();

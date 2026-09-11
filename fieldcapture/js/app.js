@@ -371,6 +371,29 @@
     });
   }
 
+  /**
+   * Invite / live token: Field Capture films the day; the office /shared link
+   * is the job file (scope, brief, recordings). Signed-in office jobs already
+   * open Platform — hide this row there.
+   */
+  function paintJobFileLink(sharePath) {
+    var row = $('#job-file-link');
+    var href = $('#job-file-href');
+    if (!row || !href) return;
+    if (!LIVE || !sharePath || sharePath === '/guest') {
+      row.hidden = true;
+      href.removeAttribute('href');
+      return;
+    }
+    var officeHref = Core.resolveOfficeHref
+      ? Core.resolveOfficeHref(sharePath)
+      : sharePath;
+    href.href = officeHref;
+    href.target = '_blank';
+    href.rel = 'noopener noreferrer';
+    row.hidden = false;
+  }
+
   function bindJobSearch() {
     var input = $('#job-search');
     if (!input || input.getAttribute('data-bound') === '1') return;
@@ -852,17 +875,19 @@
       org: 'Field Capture',
       account: false,
     });
+    var sharePath = TOKEN ? '/shared/' + TOKEN : '/guest';
     renderExpect([
       {
         name: (num ? num + ' · ' : '') + title,
         addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
         at: 'Today',
         placed: true,
-        sharePath: TOKEN ? '/shared/' + TOKEN : '/guest',
+        sharePath: sharePath,
       },
     ]);
     showJobAdd(false);
-    setStatus('Ready — pick a job.');
+    paintJobFileLink(sharePath);
+    setStatus('Ready — film here, or open the job file for scope and recordings.');
     when('#daybtn', function (btn) { btn.disabled = false; });
     state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
     if (filmQueue) filmQueue.kick('session');
@@ -907,6 +932,7 @@
     show('s-blocked');
     showFieldAccount(false);
     showJobAdd(false);
+    paintJobFileLink('');
     showBlockedMsg('');
     /* Days saved on this phone are the reason to sign back in. */
     if (filmQueue) paintFiling(filmQueue.films(), 'blocked');

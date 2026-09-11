@@ -52,7 +52,17 @@ async function waitFor(document: Document, selector: string) {
   throw new Error(`${selector} never rendered`);
 }
 
-describe('Dashboard job-file add people', () => {
+describe('Dashboard job-file invite to film', () => {
+  it('does not offer Homeowner on Invite to film — that is Share with homeowner', () => {
+    expect(verifierHtml).toContain('Invite to film');
+    expect(verifierHtml).toContain('Share with homeowner');
+    expect(verifierHtml).toMatch(/Invite a trade or crew to film this job/);
+    const roles = verifierHtml.match(/var JOB_PARTY_ROLES = \[[\s\S]*?\];/);
+    expect(roles).not.toBeNull();
+    expect(roles![0]).not.toContain("value: 'owner'");
+    expect(roles![0]).not.toContain('Homeowner');
+  });
+
   it('confirms the emailed invite without showing the Field Capture URL', () => {
     const paintInvite = verifierHtml.match(
       /if \(jobSheet\.tab === 'invite'\) \{[\s\S]*?return;\n    \}/,

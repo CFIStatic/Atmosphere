@@ -83,3 +83,21 @@ test('no unsubscribe footer — and the ignore path is stated', () => {
   assert.ok(!/unsubscribe/i.test(text));
   assert.ok(text.includes('you can ignore it'));
 });
+
+test('sub invite stays film-oriented (distinct from homeowner progress mail)', () => {
+  const { text, html, subject } = partyInviteEmail({
+    ...base,
+    fieldCaptureUrl: 'https://field.example/?token=tok123',
+  });
+  assert.match(subject, /capture/i);
+  assert.match(text, /Film the day/i);
+  assert.match(text, /Open the job file/i);
+  assert.match(html, /Open in Field Capture/);
+  assert.match(html, /Open job on phone/);
+  assert.match(html, /job file and film the day/i);
+  assert.match(text, /atmosphereteam\.com/);
+  assert.doesNotMatch(text, /jettx\.ai/);
+  assert.doesNotMatch(text, /Accept the brief/);
+  assert.doesNotMatch(text, /no Field Capture seat/i);
+  assert.doesNotMatch(subject, /view progress/i);
+});

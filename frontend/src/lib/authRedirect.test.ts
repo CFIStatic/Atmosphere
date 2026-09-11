@@ -63,6 +63,7 @@ describe('signupHref', () => {
 describe('parseSignupIntent', () => {
   it('treats join as linking to the office account', () => {
     expect(parseSignupIntent('join')).toBe('join');
+    expect(parseSignupIntent('homeowner')).toBe('homeowner');
   });
 
   it('defaults everything else to creating an organization', () => {

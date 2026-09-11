@@ -695,6 +695,8 @@ export interface SharedJobRecord {
     created_at: string;
   }>;
   risks: JobRisk[];
+  /** Homeowner progress-share claim — read-only, not an org seat. */
+  access?: 'org' | 'viewer';
 }
 
 /* ---- Proof of work ------------------------------------------------------- */
@@ -3540,6 +3542,18 @@ export const api = {
     request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }>(
       `/api/progress-share/${encodeURIComponent(token)}/ask`,
       { method: 'POST', body: JSON.stringify({ question }) },
+    ),
+
+  claimProgressShare: (token: string) =>
+    request<{ ok: boolean; orgId: string; jobId: string; path: string }>(
+      `/api/progress-share/${encodeURIComponent(token)}/claim`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+
+  progressShareGrants: () =>
+    request<{ grants: Array<{ orgId: string; jobId: string; path: string }> }>(
+      '/api/progress-share/grants',
+      { method: 'GET' },
     ),
 
   revokeEvidenceShare: (id: string) =>

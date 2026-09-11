@@ -57,20 +57,21 @@ describe('ShareJobProgressPanel', () => {
   it('is just an email field and a send button — no label, expiry, or copy link', async () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
-    expect(await screen.findByRole('heading', { name: 'Invite by email' })).toBeInTheDocument();
-    expect(screen.getByText(/View and Ask links/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Share with homeowner' })).toBeInTheDocument();
+    expect(screen.getByText(/job-progress link/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not a film invite/i)).toBeInTheDocument();
     expect(screen.getByText('jack@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy link/i })).toBeNull();
     expect(screen.queryByLabelText(/who is this for/i)).toBeNull();
     expect(screen.queryByLabelText(/link expires/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /create share/i })).toBeNull();
 
-    const email = screen.getByLabelText(/^email$/i);
+    const email = screen.getByLabelText(/homeowner email/i);
     expect(email).toHaveAttribute('type', 'email');
     expect(email).toHaveAttribute('required');
     expect(email).toHaveClass('glass-field');
 
-    const submit = screen.getByRole('button', { name: /send invite/i });
+    const submit = screen.getByRole('button', { name: /send homeowner invite/i });
     expect(submit).toBeDisabled();
     expect(submit.className).toContain('bg-ink-900');
   });
@@ -80,8 +81,8 @@ describe('ShareJobProgressPanel', () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
     await screen.findByText('jack@example.com');
-    await user.type(screen.getByLabelText(/^email$/i), 'jordan@example.com');
-    await user.click(screen.getByRole('button', { name: /send invite/i }));
+    await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send homeowner invite/i }));
 
     expect(await screen.findByText('Invite sent to jordan@example.com.')).toBeInTheDocument();
     expect(screen.queryByText('/progress/new-token')).toBeNull();
@@ -103,8 +104,8 @@ describe('ShareJobProgressPanel', () => {
     render(<ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />);
 
     await screen.findByText('jack@example.com');
-    await user.type(screen.getByLabelText(/^email$/i), 'jordan@example.com');
-    await user.click(screen.getByRole('button', { name: /send invite/i }));
+    await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send homeowner invite/i }));
 
     expect(
       await screen.findByText('Atmosphere mail is not configured, so the invite was not sent.'),

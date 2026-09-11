@@ -5,6 +5,7 @@ import { HttpError } from '../lib/errors.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireOrgContext } from '../lib/orgContext.js';
+import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
@@ -2200,7 +2201,7 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     res.json(await buildJobProofPayload(supabase, orgId, req.params.jobId));
   } catch (err) {
     next(err);
@@ -2586,7 +2587,30 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
  */
 export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
+    // Resolve after we know the job — proof rows carry job_id.
+    let orgId: string;
+    let userId: string;
+    let supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'];
+    try {
+      const ctx = await requireOrgContext(req);
+      orgId = ctx.orgId;
+      userId = ctx.userId;
+      supabase = ctx.supabase;
+    } catch (err) {
+      // Peek job_id with admin, then verify grant.
+      const adminPeek = unscopedAdminOrNull();
+      if (!adminPeek) throw err;
+      const { data: peek } = await adminPeek
+        .from('job_proofs')
+        .select('job_id, org_id')
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!peek) throw err;
+      const ctx = await resolveOrgOrViewerAccess(req, (peek as any).job_id);
+      orgId = ctx.orgId;
+      userId = ctx.userId;
+      supabase = ctx.supabase;
+    }
     const { data: proof } = await supabase
       .from('job_proofs')
       .select('storage_path, job_id, work_date, phase')

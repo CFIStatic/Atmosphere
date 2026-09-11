@@ -9,7 +9,7 @@ import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
  * Recipients without an Atmosphere account are asked to create one
  * with this exact address so the job stays with their others.
  *
- * The capture link opens the invited job (scope, accept, film) without a
+ * The capture link opens the invited job (job file + film) without a
  * login. It must not dump a signed-in office user onto their jobs dashboard.
  */
 
@@ -75,13 +75,14 @@ export function partyInviteEmail(input: {
   textLines.push(
     '',
     'On the job page you will:',
-    '  1. Review the scope and “do not” lines',
-    '  2. Accept the brief',
-    '  3. Film the day (video + microphone)',
+    '  1. Open the job file (scope, do-nots, brief, recordings)',
+    '  2. Film the day (on the page or in Field Capture)',
+    '',
+    'Opening the invite (and filing a recording) records that you have seen the current scope.',
     '',
     'If you were not expecting this, you can ignore it — nothing happens until the link is opened.',
     '',
-    '— Atmosphere · jettx.ai',
+    '— Atmosphere · atmosphereteam.com',
   );
 
   const metaRows = [
@@ -123,7 +124,7 @@ export function partyInviteEmail(input: {
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
             ${who ? `Hi ${escapeHtml(who)},` : 'Hi,'}
-            open the link on your phone to review the scope, accept the brief, and film the day.
+            open the link on your phone to review the job file and film the day.
           </p>
           ${metaRows ? `<table role="presentation" style="margin:20px 0 0;width:100%;">${metaRows}</table>` : ''}
           <p style="margin:24px 0 0;">
@@ -147,7 +148,7 @@ export function partyInviteEmail(input: {
             If you were not expecting this, ignore it — nothing happens until the link is opened.
           </p>
           <p style="margin:16px 0 0;font-size:11px;line-height:1.4;color:#78716c;">
-            Sent by Atmosphere · jettx.ai
+            Sent by Atmosphere · atmosphereteam.com
           </p>
         </td></tr>
       </table>

@@ -157,8 +157,15 @@ export function SignupPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
-  const workspaceValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
-  const accountValid = creatingNewAccount ? nameValid && emailValid && passwordValid : true;
+  const isHomeowner = orgIntent === 'homeowner';
+  const workspaceValid = isHomeowner
+    ? true
+    : mode === 'join'
+      ? joinCodeValid
+      : orgName.trim().length >= 2;
+  const accountValid = creatingNewAccount
+    ? (isHomeowner ? emailValid && passwordValid : nameValid && emailValid && passwordValid)
+    : true;
   const termsValid = creatingNewAccount ? termsAcknowledged : true;
   const formValid = accountValid && workspaceValid && termsValid;
 
@@ -245,6 +252,15 @@ export function SignupPage() {
           await continueAfterWorkspace();
           return;
         }
+        // Homeowner quick account: email + password only — claim progress share next.
+        if (orgIntent === 'homeowner') {
+          queueRedirect(redirectTo);
+          return;
+        }
+      }
+      if (orgIntent === 'homeowner') {
+        queueRedirect(redirectTo);
+        return;
       }
       await completeWorkspace();
     } catch (err) {
@@ -276,11 +292,19 @@ export function SignupPage() {
         <SetupStepCard
           step={1}
           intent={orgIntent}
-          title={mode === 'join' ? 'Account & join code' : 'Account & workspace'}
+          title={
+            isHomeowner
+              ? 'Create your login'
+              : mode === 'join'
+                ? 'Account & join code'
+                : 'Account & workspace'
+          }
           subtitle={
-            mode === 'join'
-              ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
-              : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
+            isHomeowner
+              ? 'Email and password only — no payment, no Field Capture seat. You will open the shared job file next.'
+              : mode === 'join'
+                ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
+                : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
           }
         >
           {accountNotice && (
@@ -313,6 +337,7 @@ export function SignupPage() {
           <form onSubmit={handleSetupSubmit} noValidate className="mt-6 space-y-4">
             {creatingNewAccount && (
               <>
+                {!isHomeowner && (
                 <Field label="Your name" htmlFor="signup-name">
                   <input
                     id="signup-name"
@@ -327,6 +352,7 @@ export function SignupPage() {
                     className={inputClass}
                   />
                 </Field>
+                )}
 
                 <Field label="Work email" htmlFor="signup-email">
                   <input
@@ -367,7 +393,7 @@ export function SignupPage() {
               </>
             )}
 
-            {mode === 'create' ? (
+            {!isHomeowner && (mode === 'create' ? (
               <Field label="Company name" htmlFor="org-name">
                 <input
                   id="org-name"
@@ -405,7 +431,7 @@ export function SignupPage() {
                   </button>
                 </p>
               </Field>
-            )}
+            ))}
 
             {creatingNewAccount && (
               <TermsAckCheckbox
@@ -416,7 +442,7 @@ export function SignupPage() {
             )}
 
             <PrimaryButton type="submit" disabled={!formValid || submitting} loading={submitting}>
-              {submitting ? 'Setting up…' : 'Continue'}
+              {submitting ? 'Setting up…' : isHomeowner ? 'Create login' : 'Continue'}
             </PrimaryButton>
           </form>
         </SetupStepCard>

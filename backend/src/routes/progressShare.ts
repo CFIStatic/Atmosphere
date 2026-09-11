@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { adminForJob, requireAdmin } from '../lib/scopedAdmin.js';
+import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
   PROGRESS_SHARE_COOKIE,
@@ -14,6 +14,8 @@ import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
+import { requireAuth } from '../middleware/requireAuth.js';
+import { claimProgressShareForUser, listJobProgressGrants } from '../shared/jobProgressGrants.js';
 
 /**
  * Guest access to a read-only job file.
@@ -177,6 +179,48 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
     next(err);
   }
 }
+
+/**
+ * POST /api/progress-share/:token/claim
+ * Signed-in homeowner with matching email claims the job for /job-progress.
+ */
+progressShareRouter.post(
+  '/:token/claim',
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const claimed = await claimProgressShareForUser({
+        token: req.params.token,
+        userId: req.user!.id,
+        userEmail: req.user!.email,
+      });
+      res.json({ ok: true, ...claimed });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /api/progress-share/grants — jobs this account can open at /job-progress. */
+progressShareRouter.get(
+  '/grants',
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const grants = await listJobProgressGrants(admin, req.user!.id);
+      res.json({
+        grants: grants.map((g) => ({
+          orgId: g.orgId,
+          jobId: g.jobId,
+          path: `/job-progress?job=${encodeURIComponent(g.jobId)}`,
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /api/progress-share/:token — read-only job progress for third parties. */
 progressShareRouter.get('/:token', sendProgressGuest);

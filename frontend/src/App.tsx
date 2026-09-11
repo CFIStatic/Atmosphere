@@ -123,12 +123,16 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
   const location = useLocation();
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
+  const jobProgressViewer =
+    location.pathname === '/job-progress' || location.pathname.startsWith('/jobs/');
 
   if (membershipLoading) return <FullScreenSpinner />;
   if (!membership) {
     // Embed sessions skip the workspace wizard so Field Capture can open
     // Platform. A null office membership is a finished read, not a hang.
     if (fieldEmbed) return <RequireBillingSetup>{children}</RequireBillingSetup>;
+    // Homeowners who claimed a progress share open /job-progress without an org.
+    if (jobProgressViewer) return <>{children}</>;
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate
@@ -143,29 +147,33 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
 /** Org creators must finish Stripe before the dashboard; joiners skip when not required. */
 function RequireBillingSetup({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { membership } = useAuth();
   const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
+  const jobProgressViewer =
+    !membership &&
+    (location.pathname === '/job-progress' || location.pathname.startsWith('/jobs/'));
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const status = await api.getBillingOnboarding();
-        if (cancelled) return;
-        if (fieldEmbed) {
-          setGate('ready');
+        if (fieldEmbed || jobProgressViewer) {
+          if (!cancelled) setGate('ready');
           return;
         }
+        const status = await api.getBillingOnboarding();
+        if (cancelled) return;
         setGate(status.required && !status.complete ? 'blocked' : 'ready');
       } catch {
-        if (!cancelled) setGate(fieldEmbed ? 'ready' : 'error');
+        if (!cancelled) setGate(fieldEmbed || jobProgressViewer ? 'ready' : 'error');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [fieldEmbed]);
+  }, [fieldEmbed, jobProgressViewer]);
 
   if (gate === 'loading') return <FullScreenSpinner />;
   if (gate === 'error') {
