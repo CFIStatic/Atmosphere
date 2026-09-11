@@ -283,7 +283,6 @@ export function JobSharePage() {
             token={token}
             today={today}
             todaysDay={todaysDay}
-            days={days}
             onDone={load}
           />
         </>
@@ -332,13 +331,11 @@ function ProofSection({
   token,
   today,
   todaysDay,
-  days,
   onDone,
 }: {
   token: string;
   today: string;
   todaysDay: ProofDay | undefined;
-  days: ProofDay[];
   onDone: () => Promise<void>;
 }) {
   const [uploading, setUploading] = useState<'before' | 'after' | null>(null);
