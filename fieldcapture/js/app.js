@@ -1082,7 +1082,26 @@
     );
     show('s-home');
     beginAccountFiling(me);
+    claimShareFilmsForAccount();
     warmPlatformFrame();
+  }
+
+  /**
+   * Share-invite films were saved as owner share:<jobId>. After account
+   * sign-in they never match state.owner (user:<id>), so claim them onto
+   * this session when the job is still on Today.
+   */
+  function claimShareFilmsForAccount() {
+    if (!filmQueue) return Promise.resolve(0);
+    if (!state.owner || state.owner.indexOf('user:') !== 0) return Promise.resolve(0);
+    if (!sessionUsable()) return Promise.resolve(0);
+    return filmQueue.claimSession({
+      owner: state.owner,
+      mode: 'account',
+      accept: function (f) {
+        return f.mode === 'share' && f.jobId && jobById(f.jobId);
+      },
+    });
   }
 
   /**
@@ -2293,11 +2312,7 @@
       /* Films still filing are not lost by signing out — they wait on this
          phone for the same crew — but the crew should know they have not
          reached the office yet. */
-      var waiting = filmQueue
-        ? filmQueue.pending(function (f) {
-            return f.owner === state.owner;
-          })
-        : [];
+      var waiting = filmQueue ? filmQueue.pending() : [];
       if (waiting.length) {
         var n = waiting.length;
         var ok = window.confirm(
