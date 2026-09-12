@@ -170,8 +170,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=pending-upload-asap-1/);
-assert.match(html, /js\/app\.js\?v=pending-upload-asap-1/);
+assert.match(html, /js\/capture-core\.js\?v=pending-upload-resume-1/);
+assert.match(html, /js\/app\.js\?v=pending-upload-resume-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -228,6 +228,21 @@ assert.match(
   appSrc,
   /filmQueue\.remapJob\(localId, listed\.id\)/,
   'a local-to-office remap must move every waiting film onto that office job',
+);
+assert.match(
+  coreSrc,
+  /claimSession:\s*claimSession/,
+  'day-film queue must expose claimSession for share→account resume',
+);
+assert.match(
+  appSrc,
+  /function claimShareFilmsForAccount/,
+  'account home must claim share-owner films onto the signed-in session',
+);
+assert.match(
+  appSrc,
+  /claimShareFilmsForAccount\(\)/,
+  'enterAccountHome must claim share films once Today jobs are known',
 );
 {
   const openFrom = appSrc.indexOf('function openNewJobForm');
@@ -460,9 +475,10 @@ assert.match(
   const to = appSrc.indexOf('var whoBtn = ');
   assert.ok(from >= 0 && to > from, 'signOutFieldAccount must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /filmQueue\.pending/, 'sign-out must check for films still filing');
+  assert.match(src, /filmQueue\.pending\(\)/, 'sign-out must count every pending film on this phone');
   assert.match(src, /window\.confirm/, 'sign-out with films still filing asks first');
   assert.match(src, /still filing with the office/);
+  assert.match(src, /stay saved on this phone/);
 }
 {
   const from = appSrc.indexOf('function captureSession');
@@ -953,6 +969,48 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   await flush();
   assert.equal(uploads.length, 1, "another crew's film stays on the phone for them");
   assert.equal(queue.pending((f) => f.owner === 'user:2').length, 1);
+}
+
+{
+  // Share-invite films claim into the account session after sign-in.
+  let owner = 'user:1';
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    canRun: (e) => e.owner === owner && e.mode === 'account',
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const shareFilm = Core.newDayFilmEntry({
+    owner: 'share:job-a', mode: 'share', jobId: 'job-a', blob: fakeBlob(10),
+  });
+  await queue.enqueue(shareFilm);
+  await flush();
+  assert.equal(uploads.length, 0, 'share owner does not match account canRun yet');
+  assert.equal(queue.get(shareFilm.id).mode, 'share');
+  const claimed = await queue.claimSession({
+    owner: 'user:1',
+    mode: 'account',
+    accept: (f) => f.mode === 'share' && f.jobId === 'job-a',
+  });
+  await flush();
+  assert.equal(claimed, 1);
+  assert.equal(uploads.length, 1, 'claim kicks upload with claimed owner/mode');
+  assert.equal(uploads[0].entry.owner, 'user:1');
+  assert.equal(uploads[0].entry.mode, 'account');
+  const saved = (await store.list())[0];
+  assert.equal(saved.owner, 'user:1', 'claim is durable on the phone');
+  assert.equal(saved.mode, 'account');
+  uploads[0].d.resolve(okResult);
+  await flush();
 }
 
 {

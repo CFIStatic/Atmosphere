@@ -2459,7 +2459,8 @@
         reason === 'visible' ||
         reason === 'retry' ||
         reason === 'session' ||
-        reason === 'remap'
+        reason === 'remap' ||
+        reason === 'claim'
       );
     }
 
@@ -2652,6 +2653,41 @@
       });
     }
 
+    /**
+     * After sign-in, adopt pending films that belong with this session
+     * (e.g. share-invite days whose job is still on Today).
+     */
+    function claimSession(opts) {
+      opts = opts || {};
+      var owner = String(opts.owner || '');
+      var mode = opts.mode === 'share' ? 'share' : 'account';
+      var accept = typeof opts.accept === 'function' ? opts.accept : null;
+      if (!owner || !accept) return Promise.resolve(0);
+      return load().then(function () {
+        var writes = [];
+        entries.forEach(function (e) {
+          if (!isPendingFilm(e)) return;
+          if (!accept(e)) return;
+          if (e.owner === owner && e.mode === mode) return;
+          e.owner = owner;
+          e.mode = mode;
+          var patch = { owner: owner, mode: mode };
+          if (e.status === 'waiting') {
+            e.nextAttemptAt = 0;
+            patch.nextAttemptAt = 0;
+          }
+          writes.push(store.update(e.id, patch));
+        });
+        return Promise.all(writes).then(function () {
+          if (writes.length) {
+            emit('claim');
+            kick('claim');
+          }
+          return writes.length;
+        });
+      });
+    }
+
     function pending(filter) {
       return films().filter(function (f) {
         return isPendingFilm(f) && (!filter || filter(f));
@@ -2666,6 +2702,7 @@
         return kick('retry');
       },
       remapJob: remapJob,
+      claimSession: claimSession,
       films: films,
       pending: pending,
       get: function (id) {
