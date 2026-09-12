@@ -200,6 +200,34 @@ export async function claimProgressShareForUser(input: {
   };
 }
 
+
+/** Stamp last_accessed_at when a grant viewer opens the job file. Best-effort. */
+export async function touchJobProgressGrantAccess(
+  admin: SupabaseClient,
+  userId: string,
+  jobId: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from('job_progress_grants')
+    .update({ last_accessed_at: now })
+    .eq('user_id', userId)
+    .eq('job_id', jobId)
+    .select('share_id')
+    .maybeSingle();
+  if (error) {
+    if (missingGrantsTable(error)) return;
+    // Column missing on an old DB — ignore; roster still works without stamps.
+    if (/last_accessed_at|schema cache/i.test(`${error.message ?? ''} ${error.code ?? ''}`)) return;
+    return;
+  }
+  const shareId = (data as any)?.share_id as string | null | undefined;
+  if (!shareId) return;
+  // Keep share last_opened_at in sync for the invite list; do not bump open_count
+  // (that counts guest link exchanges, not every authenticated refresh).
+  await admin.from('verifier_shares').update({ last_opened_at: now }).eq('id', shareId);
+}
+
 /** Org member, or a homeowner who claimed a progress share for this job. */
 export async function resolveOrgOrViewerAccess(
   req: Request,

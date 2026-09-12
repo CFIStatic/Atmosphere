@@ -192,6 +192,13 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     assert.equal(library.status, 401);
     assert.equal(library.body.code, 'unauthorized');
 
+    const roster = await json(
+      url,
+      '/api/operations/shared/00000000-0000-4000-8000-000000000001/access-roster',
+    );
+    assert.equal(roster.status, 401);
+    assert.equal(roster.body.code, 'unauthorized');
+
     const field = await json(url, '/api/field-app/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

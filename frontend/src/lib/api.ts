@@ -699,6 +699,27 @@ export interface SharedJobRecord {
   access?: 'org' | 'viewer';
 }
 
+
+export type JobAccessKind = 'homeowner' | 'field_capture';
+
+export interface JobAccessPerson {
+  id: string;
+  kind: JobAccessKind;
+  name: string | null;
+  email: string | null;
+  accessType: string;
+  grantedByName: string | null;
+  grantedByEmail: string | null;
+  grantedAt: string | null;
+  lastAccessedAt: string | null;
+  state: 'live' | 'revoked' | 'expired' | 'claimed';
+}
+
+export interface JobAccessRoster {
+  people: JobAccessPerson[];
+}
+
+
 /* ---- Proof of work ------------------------------------------------------- */
 
 export type ProofCheckVerdict = 'pass' | 'fail' | 'unknown';
@@ -3139,6 +3160,9 @@ export const api = {
 
   sharedJob: (jobId: string) =>
     request<SharedJobRecord>(`/api/operations/shared/${jobId}`, { method: 'GET' }),
+
+  jobAccessRoster: (jobId: string) =>
+    request<JobAccessRoster>(`/api/operations/shared/${jobId}/access-roster`, { method: 'GET' }),
 
   renameJobFile: (jobId: string, title: string) =>
     request<{

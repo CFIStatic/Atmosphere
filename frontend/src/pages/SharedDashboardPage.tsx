@@ -13,6 +13,7 @@ import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
+import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
@@ -425,6 +426,12 @@ export function SharedDashboardPage() {
                   : undefined
               }
             />
+
+            {!viewerOnly && (
+              <div className="mt-4">
+                <JobAccessRoster jobId={record.job.id} />
+              </div>
+            )}
 
             {!viewerOnly && (
             <div className="mt-4 space-y-4">
