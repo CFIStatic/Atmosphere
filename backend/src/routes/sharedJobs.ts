@@ -33,7 +33,12 @@ import { acknowledgeShareRevision, ackDisplayName } from '../shared/acknowledgeS
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
-import { findJobProgressGrant, listJobProgressGrants } from '../shared/jobProgressGrants.js';
+import {
+  findJobProgressGrant,
+  listJobProgressGrants,
+  touchJobProgressGrantAccess,
+} from '../shared/jobProgressGrants.js';
+import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -330,6 +335,10 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
       if (await jobFileIsTombstoned(writerForJob({ orgId, jobId: record.job.id }, supabase).raw, orgId, record.job.id)) {
         throw new HttpError(404, 'No such job.', 'job_not_found');
       }
+    } else {
+      // Homeowner opened /job-progress — stamp last accessed on the grant.
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      await touchJobProgressGrantAccess(admin, req.user!.id, req.params.jobId);
     }
 
     const currentRevision = record.briefs[0]?.revision ?? null;
@@ -394,6 +403,118 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     next(err);
   }
 });
+
+/**
+ * GET /api/operations/shared/:jobId/access-roster
+ * Office view: everyone with job-progress / Field Capture access, last open, grantor.
+ * Org members only — homeowners (viewer grants) do not see the full roster.
+ */
+sharedJobsRouter.get(
+  '/shared/:jobId/access-roster',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const { orgId, supabase } = await requireOrgContext(req);
+
+      const { data: job, error: jobError } = await supabase
+        .from('crm_jobs')
+        .select('id, deleted_at')
+        .eq('org_id', orgId)
+        .eq('id', jobId)
+        .maybeSingle();
+      if (jobError) throw new HttpError(500, jobError.message, 'job_lookup_failed');
+      if (!job || (job as any).deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
+      if (await jobFileIsTombstoned(writerForJob({ orgId, jobId }, supabase).raw, orgId, jobId)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
+
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const [sharesRes, partiesRes, grantsRes] = await Promise.all([
+        supabase
+          .from('verifier_shares')
+          .select(
+            'id, label, recipient_email, created_by, created_at, expires_at, revoked_at, last_opened_at, open_count, share_kind',
+          )
+          .eq('org_id', orgId)
+          .eq('job_id', jobId)
+          .eq('share_kind', 'progress')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('job_parties')
+          .select(
+            'id, company, trade, contact_name, email, role, created_by, created_at, invited_at, last_seen_at, revoked_at',
+          )
+          .eq('org_id', orgId)
+          .eq('job_id', jobId)
+          .order('created_at', { ascending: true }),
+        admin
+          .from('job_progress_grants')
+          .select('id, user_id, share_id, recipient_email, created_at, last_accessed_at')
+          .eq('org_id', orgId)
+          .eq('job_id', jobId),
+      ]);
+
+      if (sharesRes.error) throw new HttpError(500, sharesRes.error.message, 'shares_failed');
+      if (partiesRes.error) throw new HttpError(500, partiesRes.error.message, 'parties_failed');
+      let grants = (grantsRes.data ?? []) as any[];
+      if (grantsRes.error) {
+        const blob = `${grantsRes.error.message ?? ''} ${grantsRes.error.code ?? ''}`;
+        if (/job_progress_grants|does not exist|schema cache|last_accessed_at/i.test(blob)) {
+          // Retry without last_accessed_at if the column is not applied yet.
+          const retry = await admin
+            .from('job_progress_grants')
+            .select('id, user_id, share_id, recipient_email, created_at')
+            .eq('org_id', orgId)
+            .eq('job_id', jobId);
+          if (retry.error) {
+            if (/job_progress_grants|does not exist|schema cache/i.test(
+              `${retry.error.message ?? ''} ${retry.error.code ?? ''}`,
+            )) {
+              grants = [];
+            } else {
+              throw new HttpError(500, retry.error.message, 'grants_failed');
+            }
+          } else {
+            grants = ((retry.data ?? []) as any[]).map((g) => ({ ...g, last_accessed_at: null }));
+          }
+        } else {
+          throw new HttpError(500, grantsRes.error.message, 'grants_failed');
+        }
+      }
+
+      const granterIds = [
+        ...new Set(
+          [
+            ...((sharesRes.data ?? []) as any[]).map((s) => s.created_by),
+            ...((partiesRes.data ?? []) as any[]).map((p) => p.created_by),
+            ...grants.map((g) => g.user_id),
+          ].filter(Boolean),
+        ),
+      ] as string[];
+
+      let profiles: any[] = [];
+      if (granterIds.length) {
+        const { data: profileRows, error: profileError } = await admin
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', granterIds);
+        if (profileError) throw new HttpError(500, profileError.message, 'profiles_failed');
+        profiles = (profileRows ?? []) as any[];
+      }
+
+      const people = presentJobAccessRoster({
+        shares: (sharesRes.data ?? []) as any[],
+        parties: (partiesRes.data ?? []) as any[],
+        grants: grants as any[],
+        profiles,
+      });
+
+      res.json({ people });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 const jobTitleSchema = z.object({
   title: z

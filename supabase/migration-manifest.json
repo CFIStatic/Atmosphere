@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 146,
+    "migrationCount": 147,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -160,7 +160,8 @@
     "20260910165510_schema_visualizer_table_comments.sql",
     "20260910190000_drop_unused_non_sold_path_tables.sql",
     "20260911010000_job_progress_grants.sql",
-    "20260911120000_job_proofs_scheduled_purge.sql"
+    "20260911120000_job_proofs_scheduled_purge.sql",
+    "20260912160000_job_progress_grants_last_accessed.sql"
   ],
   "migrations": [
     {
@@ -5266,6 +5267,19 @@
       "expect": [
         "column|public.job_proofs.scheduled_purge_at",
         "index|public.job_proofs.job_proofs_scheduled_purge_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260912160000_job_progress_grants_last_accessed",
+      "file": "20260912160000_job_progress_grants_last_accessed.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_progress_grants.last_accessed_at",
+        "index|public.job_progress_grants.job_progress_grants_last_accessed_idx"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
