@@ -58,7 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'delivery',
     label: 'Delivery',
     items: [
-      { key: 'jobs', label: 'Jobs', to: '/jobs', icon: Building2 },
+      { key: 'jobs', label: 'Jobs', to: '/verifier-library', icon: Building2 },
       { key: 'schedule', label: 'Schedule', to: '/schedule', icon: CalendarDays },
       { key: 'estimates', label: 'Estimates', to: '/estimates', icon: FileText },
       { key: 'customers', label: 'Customers', to: '/customers', icon: Users },

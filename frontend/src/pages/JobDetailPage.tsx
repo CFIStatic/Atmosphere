@@ -100,8 +100,8 @@ export function JobDetailPage() {
     return (
       <div className="mx-auto max-w-lg pt-10">
         <ErrorNote message={error} />
-        <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-600 hover:text-brand-700">
-          ← Back to Job Files
+        <Link to="/verifier-library" className="mt-4 inline-block text-sm text-brand-600 hover:text-brand-700">
+          ← Back to Dashboard
         </Link>
       </div>
     );
@@ -268,11 +268,11 @@ export function JobDetailPage() {
 
   const back = (
     <Link
-      to="/jobs"
+      to="/verifier-library"
       className="mb-2 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800 lg:mb-4"
     >
       <ChevronLeftIcon width={16} height={16} />
-      Job Files
+      Dashboard
     </Link>
   );
 

@@ -27,7 +27,6 @@ import { CURRENT_TERMS_VERSION } from '../lib/terms';
 import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const JOIN_CODE_RE = /^[A-Za-z0-9]{6,12}$/;
 
 type OrgMode = 'create' | 'join';
 
@@ -66,7 +65,6 @@ export function SignupPage() {
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
-  const [joinCode, setJoinCode] = useState(() => (searchParams.get('code') ?? '').toUpperCase());
   const [selectedPlan, setSelectedPlan] = useState(() =>
     parseAtmospherePlanCode(searchParams.get('plan')),
   );
@@ -97,11 +95,6 @@ export function SignupPage() {
   useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
-
-  useEffect(() => {
-    const fromLink = (searchParams.get('code') ?? '').toUpperCase();
-    if (fromLink && JOIN_CODE_RE.test(fromLink)) setJoinCode(fromLink);
-  }, [searchParams]);
 
   useEffect(() => {
     if (loading || !user || !membership) return;
@@ -157,14 +150,13 @@ export function SignupPage() {
   const nameValid = fullName.trim().length >= 2;
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
-  const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const isHomeowner = orgIntent === 'homeowner';
   const isCapture = orgIntent === 'capture';
   const isInviteeAccount = isHomeowner || isCapture;
   const workspaceValid = isInviteeAccount
     ? true
     : mode === 'join'
-      ? joinCodeValid
+      ? true
       : orgName.trim().length >= 2;
   const accountValid = creatingNewAccount
     ? (isInviteeAccount ? emailValid && passwordValid : nameValid && emailValid && passwordValid)
@@ -210,7 +202,6 @@ export function SignupPage() {
 
     if (mode === 'join') {
       await api.joinOrg(
-        joinCode.trim().toUpperCase(),
         'employee',
         SETUP_DEFAULTS.workType,
         usageIntents.length ? usageIntents : ['field_work', 'exploring'],
@@ -313,7 +304,7 @@ export function SignupPage() {
               : isHomeowner
                 ? 'Save this job'
                 : mode === 'join'
-                  ? 'Account & join code'
+                  ? 'Join your team'
                   : 'Account & workspace'
           }
           subtitle={
@@ -322,7 +313,7 @@ export function SignupPage() {
               : isHomeowner
                 ? 'Email and password. That is it.'
                 : mode === 'join'
-                  ? 'Use the invite from your Global Admin — create the account with the invited email, then enter the join code.'
+                  ? 'Use the invite from your Global Admin — create the account with the invited email.'
                   : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
           }
         >
@@ -430,26 +421,16 @@ export function SignupPage() {
                 </p>
               </Field>
             ) : (
-              <Field label="Join code" htmlFor="join-code">
-                <input
-                  id="join-code"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. 8F3A9C2B"
-                  autoCapitalize="characters"
-                  className={`${inputClass} font-mono tracking-widest`}
-                />
-                <p className="mt-2 text-xs text-ink-500">
-                  Starting a new company as Global Admin?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMode('create')}
-                    className="font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    Name a workspace
-                  </button>
-                </p>
-              </Field>
+              <p className="text-sm text-ink-600">
+                Use the invited email. Your Global Admin already sent the invite.{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('create')}
+                  className="font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Starting a new company as Global Admin?
+                </button>
+              </p>
             ))}
 
             {creatingNewAccount && (

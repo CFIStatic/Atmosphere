@@ -52,7 +52,6 @@ interface AuthContextValue {
   profile: Profile | null; // display name etc.; null until loaded
   login: (email: string, password: string) => Promise<Membership | null>;
   signup: (email: string, password: string, acceptedTermsVersion: string) => Promise<SignupResult>;
-  unlockWithPin: (pin: string) => Promise<Membership | null>;
   /** Adopt a session the backend just established (e.g. after a password reset). */
   adoptUser: (user: AuthUser) => Promise<Membership | null>;
   logout: () => Promise<void>;
@@ -213,17 +212,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadMembership],
   );
 
-  const unlockWithPin = useCallback(
-    async (pin: string) => {
-      const { user, terms: nextTerms } = await api.pinUnlock(pin);
-      explicitAuthRef.current = true;
-      setUser(user);
-      setTerms(nextTerms ?? publicTermsStatus());
-      return loadMembership();
-    },
-    [loadMembership],
-  );
-
   const acceptTerms = useCallback(
     async (acceptedTermsVersion: string) => {
       setTermsLoading(true);
@@ -279,7 +267,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile,
       login,
       signup,
-      unlockWithPin,
       adoptUser,
       logout,
       refreshMembership: loadMembership,
@@ -296,7 +283,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       login,
       signup,
-      unlockWithPin,
       adoptUser,
       logout,
       loadMembership,

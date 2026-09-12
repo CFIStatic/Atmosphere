@@ -230,9 +230,6 @@ struct TodayView: View {
                             path: "ios/field-capture/today"
                         )
                     }
-                    Button("Link to office account") {
-                        auth.beginOfficeLink()
-                    }
                     Button("Disconnect this phone", role: .destructive) {
                         Task {
                             await auth.disconnectAccount()

@@ -192,7 +192,7 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     assert.equal(library.status, 401);
     assert.equal(library.body.code, 'unauthorized');
 
-    const field = await json(url, '/api/field-app/join', {
+    const field = await json(url, '/api/field-app/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}',

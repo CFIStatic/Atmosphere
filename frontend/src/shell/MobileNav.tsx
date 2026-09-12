@@ -73,7 +73,7 @@ export function MobileNav({
 const BOTTOM_ITEMS: { key: NavKey; label: string; to: string; icon: typeof Gauge }[] = [
   { key: 'overview', label: 'Overview', to: '/overview', icon: Gauge },
   { key: 'my-work', label: 'My Work', to: '/my-work', icon: ListTodo },
-  { key: 'jobs', label: 'Jobs', to: '/jobs', icon: Building2 },
+  { key: 'jobs', label: 'Jobs', to: '/verifier-library', icon: Building2 },
   { key: 'approvals', label: 'Approve', to: '/approvals', icon: CheckSquare },
   { key: 'agents', label: 'Agents', to: '/agents', icon: Bot },
 ];

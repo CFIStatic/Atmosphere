@@ -48,29 +48,19 @@ test('create: requires at least one usage intent', () => {
   );
 });
 
-test('join: accepts a code exactly as the dashboard displays it', () => {
+test('join: accepts onboarding answers without a join code', () => {
+  const parsed = joinOrgSchema.parse({ ...answers });
+  assert.equal(parsed.role, 'employee');
+});
+
+test('join: still accepts a leftover joinCode field and ignores it', () => {
   const parsed = joinOrgSchema.parse({ joinCode: '8F3A9C2B', ...answers });
-  assert.equal(parsed.joinCode, '8F3A9C2B');
+  assert.equal(parsed.role, 'employee');
 });
 
-test('join: uppercases and trims a code typed by hand', () => {
-  const parsed = joinOrgSchema.parse({ joinCode: '  8f3a9c2b ', ...answers });
-  assert.equal(parsed.joinCode, '8F3A9C2B');
-});
-
-test('join: rejects codes outside the 6–12 alphanumeric shape', () => {
-  for (const bad of ['ABC12', 'ABCDEF1234567', '8F3A-9C2B', '8F3A 9C2B', '']) {
-    assert.throws(() => joinOrgSchema.parse({ joinCode: bad, ...answers }), bad || '(empty)');
-  }
-});
-
-test('join: rejects a missing code with a clear message', () => {
-  try {
-    joinOrgSchema.parse({ ...answers });
-    assert.fail('expected a validation error');
-  } catch (err) {
-    assert.match(JSON.stringify(err), /Join code is required/);
-  }
+test('join: empty body still defaults joiners to Employee', () => {
+  const parsed = joinOrgSchema.parse({});
+  assert.equal(parsed.role, 'employee');
 });
 
 test('create: defaults the org creator to Global Admin', () => {
@@ -82,12 +72,12 @@ test('create: defaults the org creator to Global Admin', () => {
 });
 
 test('join: defaults joiners to Employee', () => {
-  const parsed = joinOrgSchema.parse({ joinCode: '8F3A9C2B' });
+  const parsed = joinOrgSchema.parse({});
   assert.equal(parsed.role, 'employee');
 });
 
 test('join: ignores a client-requested Global Admin seat', () => {
-  const parsed = joinOrgSchema.parse({ joinCode: '8F3A9C2B', ...answers });
+  const parsed = joinOrgSchema.parse({ ...answers });
   assert.equal(parsed.role, 'employee');
 });
 
@@ -103,7 +93,6 @@ test('both: reject an account type the app does not offer', () => {
 test('both: reject duplicate usage intents', () => {
   assert.throws(() =>
     joinOrgSchema.parse({
-      joinCode: '8F3A9C2B',
       role: 'employee',
       workType: 'mitigation',
       usageIntents: ['crm', 'crm'],

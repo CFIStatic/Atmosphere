@@ -7,7 +7,6 @@ import {
   isFieldCaptureEmail,
   normalizeCrewName,
 } from '../src/field/crewJoin.js';
-import { fieldJoinSchema, fieldOfficePreviewSchema } from '../src/lib/validation.js';
 
 test('crew name: collapse spaces and compare case-insensitively', () => {
   assert.equal(normalizeCrewName('  Nick   Smith '), 'Nick Smith');
@@ -30,26 +29,7 @@ test('field capture email is stable for a name inside one office', () => {
   assert.equal(isFieldCaptureEmail('nick@office.example'), false);
 });
 
-test('field join: name plus office code', () => {
-  const parsed = fieldJoinSchema.parse({
-    fullName: '  Nick   Smith ',
-    joinCode: '  8f3a9c2b ',
-    acceptedTermsVersion: '2026-09-10',
-  });
-  assert.equal(parsed.fullName, 'Nick Smith');
-  assert.equal(parsed.joinCode, '8F3A9C2B');
-  assert.equal(parsed.acceptedTermsVersion, '2026-09-10');
-});
-
-test('field join: reject a first name only', () => {
-  assert.throws(() => fieldJoinSchema.parse({ fullName: 'Nick', joinCode: '8F3A9C2B' }));
-});
-
-test('field join: reject a missing join code', () => {
-  assert.throws(() => fieldJoinSchema.parse({ fullName: 'Nick Smith' }));
-});
-
-test('POST /api/field-app/join rejects a first name only before hitting Auth', async () => {
+test('POST /api/field-app/join is gone', async () => {
   const { createApp } = await import('../src/app.js');
   const app = createApp();
   const server = app.listen(0);
@@ -62,10 +42,7 @@ test('POST /api/field-app/join rejects a first name only before hitting Auth', a
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fullName: 'Nick', joinCode: '8F3A9C2B' }),
     });
-    assert.equal(res.status, 400);
-    const body = (await res.json()) as { error?: string; code?: string };
-    assert.match(body.error ?? '', /first and last name/i);
-    assert.equal(body.code, 'validation_error');
+    assert.equal(res.status, 404);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve())),
@@ -73,7 +50,7 @@ test('POST /api/field-app/join rejects a first name only before hitting Auth', a
   }
 });
 
-test('POST /api/field-app/office/preview is public and rejects a malformed code', async () => {
+test('POST /api/field-app/office/preview is gone', async () => {
   const { createApp } = await import('../src/app.js');
   const app = createApp();
   const server = app.listen(0);
@@ -86,10 +63,7 @@ test('POST /api/field-app/office/preview is public and rejects a malformed code'
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ joinCode: 'NO' }),
     });
-    assert.equal(res.status, 400);
-    const body = (await res.json()) as { code?: string };
-    assert.equal(body.code, 'validation_error');
-    fieldOfficePreviewSchema.parse({ joinCode: '8F3A9C2B' });
+    assert.equal(res.status, 404);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve())),

@@ -42,7 +42,6 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
-const JobsPage = lazy(() => import('./pages/JobsPage').then((m) => ({ default: m.JobsPage })));
 const JobProgressGuestPage = lazy(() =>
   import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
 );
@@ -406,7 +405,7 @@ export default function App() {
             <Route path="/field" element={<PlatformHomePage platform="field" />} />
             <Route path="/my-work" element={<Navigate to="/field" replace />} />
             <Route path="/intake" element={<JobIntakePage />} />
-            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/jobs" element={<Navigate to="/verifier-library" replace />} />
             {/* Same job file as Overview — /jobs/:id bookmarks join /job-progress. */}
             <Route path="/jobs/:id" element={<JobFileFromProfileRedirect />} />
             <Route path="/job-progress" element={<SharedDashboardPage />} />

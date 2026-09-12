@@ -4,37 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JOB_SHARE_PAGE_ROUTE } from '../lib/jobSharePath';
 import { JobSharePage } from './JobSharePage';
 
-const SHARE_VIEW = {
-  you: { company: 'Jack Cyganiak', trade: 'field_capture', role: 'crew' },
-  job: { jobNumber: 3, title: 'Meridian Ave', claimNumber: null, scheduledStart: null },
-  brief: null,
-  currentRevision: 1,
-  acknowledgedRevision: 1,
-  clear: true,
-  because: 'Scope is signed.',
-  scope: [],
-  messages: [],
-};
-
 describe('JobSharePage', () => {
+  const originalLocation = window.location;
+
   beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo) => {
-        const url = String(input);
-        if (url.includes('/proof') || url.includes('/capture-guide')) {
-          return new Response(JSON.stringify({ days: [], guide: null }), { status: 200 });
-        }
-        return new Response(JSON.stringify(SHARE_VIEW), { status: 200 });
-      }),
-    );
+    vi.stubGlobal('location', {
+      ...originalLocation,
+      replace: vi.fn(),
+    });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('does not show the internal trade slug or job number under the title', async () => {
+  it('sends a share token to classic Field Capture', () => {
     render(
       <MemoryRouter initialEntries={['/shared/tok?email=jack%40jettx.ai']}>
         <Routes>
@@ -43,107 +27,16 @@ describe('JobSharePage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Meridian Ave' })).toBeInTheDocument();
-    expect(screen.queryByText(/field_capture/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/job #3/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('You are clear to work')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Accepted revision/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('Keep your jobs in one place')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Powered by Atmosphere/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/This record works for/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Send me a code/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Create your free account/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('Ask before you do it')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Send it' })).not.toBeInTheDocument();
-    expect(screen.getByText("What's happening")).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start film' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open in Field Capture' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('app.atmosphereteam.com'),
-    );
-  });
-
-  it('POSTs a long-enough invite token to /exchange', async () => {
-    render(
-      <MemoryRouter initialEntries={['/shared/long-enough-token']}>
-        <Routes>
-          <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole('heading', { name: 'Meridian Ave' })).toBeInTheDocument();
-    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls.some((url) => url.includes('/api/job-share/exchange'))).toBe(true);
-  });
-
-
-  it('offers film and job file after implicit Accept (not film-only)', async () => {
-    render(
-      <MemoryRouter initialEntries={['/shared/tok']}>
-        <Routes>
-          <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByTestId('invite-actions')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute(
+    expect(screen.getByText('Opening Field Capture…')).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: 'Open in Field Capture' });
+    expect(link).toHaveAttribute(
       'href',
       expect.stringContaining('https://app.atmosphereteam.com/?token=tok'),
     );
-    expect(screen.getByRole('link', { name: 'Film the day' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('account=1'),
+    expect(link).toHaveAttribute('href', expect.stringContaining('email=jack%40jettx.ai'));
+    expect(link).toHaveAttribute('href', expect.stringContaining('account=1'));
+    expect(window.location.replace).toHaveBeenCalledWith(
+      expect.stringContaining('https://app.atmosphereteam.com/?token=tok'),
     );
-    expect(screen.getByRole('link', { name: 'Open job file' })).toHaveAttribute('href', '#job-file');
-    expect(screen.getByTestId('job-file')).toBeInTheDocument();
-    expect(screen.getByTestId('film-today')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Job file' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'What to film' })).toBeInTheDocument();
-    expect(screen.getByTestId('open-field-capture')).toHaveAttribute(
-      'href',
-      expect.stringContaining('token=tok'),
-    );
-    expect(screen.getAllByRole('link', { name: 'Open in Field Capture' })[0]).toHaveAttribute(
-      'href',
-      expect.stringContaining('account=1'),
-    );
-    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
-  });
-
-  it('shows blockers without an Accept button when not clear to work', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo) => {
-        const url = String(input);
-        if (url.includes('/proof') || url.includes('/capture-guide')) {
-          return new Response(JSON.stringify({ days: [], guide: null }), { status: 200 });
-        }
-        return new Response(
-          JSON.stringify({
-            ...SHARE_VIEW,
-            clear: false,
-            because: '1 item waiting on an answer.',
-            currentRevision: 2,
-            acknowledgedRevision: 2,
-          }),
-          { status: 200 },
-        );
-      }),
-    );
-
-    render(
-      <MemoryRouter initialEntries={['/shared/tok']}>
-        <Routes>
-          <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText('Not clear to work yet')).toBeInTheDocument();
-    expect(screen.getByText('1 item waiting on an answer.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Your name')).not.toBeInTheDocument();
   });
 });

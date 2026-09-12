@@ -249,7 +249,8 @@ describe('SignupPage', () => {
   it('does not ask for company type when joining an existing workspace', async () => {
     renderSignup('/signup?step=2&intent=join');
 
-    expect(screen.getByLabelText('Join code')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Join code')).toBeNull();
+    expect(screen.getByText(/Use the invited email/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.queryByLabelText('Company type')).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();

@@ -3,10 +3,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const pinStatus = vi.hoisted(() =>
-  vi.fn(async () => ({ enrolled: false as boolean, lockedUntil: null as string | null })),
-);
-
 const authState = vi.hoisted(() => ({
   user: null as {
     id: string;
@@ -20,7 +16,6 @@ const authState = vi.hoisted(() => ({
   membership: null as { org: { id: string; name: string } | null } | null,
   membershipLoading: false,
   login: vi.fn(),
-  unlockWithPin: vi.fn(),
   logout: vi.fn(),
 }));
 
@@ -34,7 +29,6 @@ const progressShareGrants = vi.hoisted(() => vi.fn(async () => ({ grants: [] as 
 
 vi.mock('../lib/api', () => ({
   api: {
-    pinStatus: () => pinStatus(),
     progressShareGrants: () => progressShareGrants(),
   },
   ApiError: class ApiError extends Error {
@@ -80,10 +74,8 @@ describe('LoginPage', () => {
     authState.membership = null;
     authState.membershipLoading = false;
     authState.login.mockReset();
-    authState.unlockWithPin.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
     queueRedirect.mockReset();
-    pinStatus.mockReset().mockResolvedValue({ enrolled: false, lockedUntil: null });
     progressShareGrants.mockReset().mockResolvedValue({ grants: [] });
     delete document.documentElement.dataset.fieldEmbed;
   });
@@ -200,18 +192,6 @@ describe('LoginPage', () => {
     expect(screen.getByText('Opening your workspace…')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
     expect(screen.queryByLabelText('Email')).toBeNull();
-  });
-
-  it('skips the device PIN inside the Field Capture frame — one login is enough', async () => {
-    pinStatus.mockResolvedValue({ enrolled: true, lockedUntil: null });
-    document.documentElement.dataset.fieldEmbed = '1';
-
-    renderLogin('/login?embed=field&next=%2Fverifier-library%3Fembed%3Dfield');
-
-    expect(screen.getByText('Opening your workspace…')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Enter your PIN' })).toBeNull();
-    await Promise.resolve();
-    expect(pinStatus).not.toHaveBeenCalled();
   });
 
   it('signs the current session out before signing in as a different account', async () => {

@@ -174,7 +174,7 @@
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
-  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-office', 's-terms', 's-platform'];
+  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -185,7 +185,7 @@
     if (app) {
       app.setAttribute(
         'data-switch',
-        id === 's-home' || id === 's-new-job' || id === 's-office' || id === 's-platform' ? 'on' : 'off',
+        id === 's-home' || id === 's-new-job' || id === 's-platform' ? 'on' : 'off',
       );
     }
     var todayTab = document.querySelector('#product-switch a[href="#today"]');
@@ -970,18 +970,6 @@
     el.textContent = message;
   }
 
-  function showOfficeError(message) {
-    var el = $('#office-err');
-    if (!el) return;
-    if (!message) {
-      el.hidden = true;
-      el.textContent = '';
-      return;
-    }
-    el.hidden = false;
-    el.textContent = message;
-  }
-
   function isTermsRequired(err) {
     if (!err) return false;
     if (err.code === 'terms_required') return true;
@@ -1001,9 +989,22 @@
     );
   }
 
-  function showOfficeLink() {
-    show('s-office');
-    showOfficeError('');
+  function joinOfficeByInvite() {
+    if (!state.accessToken || !Core.linkOffice) {
+      return Promise.reject(new Error('Ask your Global Admin to invite this email.'));
+    }
+    return Core.linkOffice({
+      apiBase: API_BASE,
+      accessToken: state.accessToken,
+    }).then(function () {
+      return finishAccountConnect();
+    });
+  }
+
+  function failJoinOffice(err) {
+    writeStoredSession(null, null);
+    showLoginError(err.message || 'Ask your Global Admin to invite this email.');
+    bootBlocked();
   }
 
   function showTermsError(message) {
@@ -1232,8 +1233,7 @@
             }
             if (isNoOrganization(err)) {
               if (TOKEN) return openInviteAfterAccountSignIn();
-              showOfficeLink();
-              return;
+              return joinOfficeByInvite().catch(failJoinOffice);
             }
             writeStoredSession(null, null);
             showLoginError(err.message || 'Could not sign in. Use the same email and password as the office Platform.');
@@ -1291,8 +1291,11 @@
               showTermsGate();
               return;
             }
-            if (isNoOrganization(err) && TOKEN) {
-              return openInviteAfterAccountSignIn();
+            if (isNoOrganization(err)) {
+              if (TOKEN) return openInviteAfterAccountSignIn();
+              return joinOfficeByInvite().catch(function (joinErr) {
+                showSignupError(joinErr.message || 'Ask your Global Admin to invite this email.');
+              });
             }
             showSignupError(err.message || 'Could not create an account. Sign in if you already have one.');
           })
@@ -1301,63 +1304,6 @@
           });
       });
     }
-    var officeForm = $('#office-form');
-    if (officeForm) {
-      officeForm.addEventListener('submit', function (event) {
-        event.preventDefault();
-        var mode = officeForm.getAttribute('data-mode') || 'join';
-        var code = (($('#office-code') && $('#office-code').value) || '').trim().toUpperCase();
-        var name = (($('#office-name') && $('#office-name').value) || '').trim();
-        var officeBtn = $('#office-btn');
-        showOfficeError('');
-        if (mode === 'join') {
-          if (code.length < 6 || code.length > 12) {
-            showOfficeError('Enter a valid 6–12 character office join code.');
-            return;
-          }
-        } else if (name.length < 2) {
-          showOfficeError('Enter an office name.');
-          return;
-        }
-        if (!state.accessToken) {
-          showOfficeError('Sign in first, then link this login to an office.');
-          return;
-        }
-        officeBtn.disabled = true;
-        Core.linkOffice({
-          apiBase: API_BASE,
-          accessToken: state.accessToken,
-          joinCode: mode === 'join' ? code : undefined,
-          orgName: mode === 'create' ? name : undefined,
-        })
-          .then(function () {
-            return finishAccountConnect();
-          })
-          .catch(function (err) {
-            showOfficeError(err.message || 'Could not link this login to an office.');
-          })
-          .then(function () {
-            officeBtn.disabled = false;
-          });
-      });
-    }
-    when('#office-mode-toggle', function (link) {
-      link.addEventListener('click', function (event) {
-        event.preventDefault();
-        var mode = officeForm && officeForm.getAttribute('data-mode') === 'create' ? 'join' : 'create';
-        if (officeForm) officeForm.setAttribute('data-mode', mode);
-        var joinFields = $('#office-join-fields');
-        var createFields = $('#office-create-fields');
-        var btnLbl = $('#office-btn') && $('#office-btn').querySelector('.lbl');
-        if (joinFields) joinFields.hidden = mode !== 'join';
-        if (createFields) createFields.hidden = mode !== 'create';
-        if (btnLbl) {
-          btnLbl.textContent = mode === 'join' ? 'Link to office account' : 'Start office & connect';
-        }
-        link.textContent = mode === 'join' ? 'Start a new office' : 'Join an office with a code';
-        showOfficeError('');
-      });
-    });
     var termsForm = $('#terms-form');
     if (termsForm) {
       var termsBox = $('#terms-ack');
@@ -1388,8 +1334,7 @@
           .catch(function (err) {
             if (isNoOrganization(err)) {
               if (TOKEN) return openInviteAfterAccountSignIn();
-              showOfficeLink();
-              return;
+              return joinOfficeByInvite().catch(failJoinOffice);
             }
             showTermsError(err.message || 'Could not save your acknowledgment. Try again.');
           })
@@ -1406,15 +1351,6 @@
         bootBlocked();
       });
     });
-    when('#office-switch-account', function (link) {
-      link.addEventListener('click', function (event) {
-        event.preventDefault();
-        writeStoredSession(null, null);
-        showOfficeError('');
-        bootBlocked();
-        showLoginError('');
-      });
-    });
     if (state.accessToken) {
       ensureTermsThenConnect(function () {
         return bootAccountSession();
@@ -1425,8 +1361,7 @@
         }
         if (isNoOrganization(err)) {
           if (TOKEN) return openInviteAfterAccountSignIn();
-          showOfficeLink();
-          return;
+          return joinOfficeByInvite().catch(failJoinOffice);
         }
         writeStoredSession(null, null);
         bootBlocked();
@@ -2443,8 +2378,6 @@
         if (blocked && blocked.getAttribute('data-on') === '1') return;
         var terms = document.getElementById('s-terms');
         if (terms && terms.getAttribute('data-on') === '1') return;
-        var office = document.getElementById('s-office');
-        if (office && office.getAttribute('data-on') === '1') return;
         show('s-home');
       });
     }

@@ -1,6 +1,6 @@
 # Railway service named "Field Capture" (GitHub check
 # "Atmosphere - Field Capture"). Serves the crew web app at / and proxies
-# /api to the Atmosphere BFF so name + office-code connect works.
+# /api to the Atmosphere BFF so Field Capture sign-in works.
 #
 # Office Overview lives in the Platform iframe on this host, not in this
 # nginx image. A frontend-only SHA skips these watch paths, so production

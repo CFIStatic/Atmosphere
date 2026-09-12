@@ -22,7 +22,7 @@ export function serializeFieldOrg(org: {
 }
 
 export function alreadyLinkedMessage(orgName: string) {
-  return `This login is already linked to ${orgName}. Enter that office’s code, or disconnect this phone and create a new login.`;
+  return `This login is already linked to ${orgName}.`;
 }
 
 type MembershipRow = {
@@ -40,39 +40,6 @@ function firstRow<T>(data: unknown): T | null {
 async function currentMembership(supabase: ReturnType<typeof createUserClient>) {
   const { data } = await supabase.rpc('my_org_membership');
   return firstRow<MembershipRow>(data);
-}
-
-export async function previewOfficeByJoinCode(
-  accessToken: string,
-  joinCode: string,
-): Promise<{ name: string; joinCode: string }> {
-  const supabase = createUserClient(accessToken);
-  const viaRpc = await supabase.rpc('preview_org_by_join_code', { p_code: joinCode });
-  if (!viaRpc.error) {
-    const row = firstRow<{ name?: string; join_code?: string }>(viaRpc.data);
-    if (row?.name) {
-      return { name: row.name, joinCode: row.join_code ?? joinCode };
-    }
-    throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
-  }
-
-  if (!/could not find|does not exist|schema cache|preview_org_by_join_code/i.test(viaRpc.error.message)) {
-    throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
-  }
-
-  const admin = unscopedAdminOrNull();
-  if (!admin) {
-    throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
-  }
-  const { data } = await admin
-    .from('orgs')
-    .select('name, join_code')
-    .eq('join_code', joinCode)
-    .maybeSingle();
-  if (!data?.name) {
-    throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
-  }
-  return { name: data.name, joinCode: data.join_code ?? joinCode };
 }
 
 async function saveFieldProfile(accessToken: string, user: User, fullName?: string) {
@@ -110,88 +77,75 @@ async function saveFieldUsageIntents(
 }
 
 /**
- * Attach a Field Capture login to an office account (join code) or start a
- * new office. If the phone already created its own workspace, a valid office
- * join code moves the membership so day films land in the real company.
+ * Attach a Field Capture login to an office via a pending email invite, or
+ * start a new office. Clients never send a join code.
  */
 export async function linkFieldOffice(
   accessToken: string,
   user: User,
-  input: { joinCode?: string; orgName?: string; fullName?: string },
+  input: { orgName?: string; fullName?: string },
 ) {
   const supabase = await saveFieldProfile(accessToken, user, input.fullName);
   const current = await currentMembership(supabase);
 
-  if (input.joinCode) {
+  if (current?.org_id && !input.orgName) {
+    return serializeFieldOrg({
+      id: current.org_id,
+      name: current.org_name,
+      join_code: current.org_join_code,
+      contractor_type: current.org_contractor_type,
+    });
+  }
+
+  if (input.orgName) {
+    if (current?.org_id) {
+      throw new HttpError(400, alreadyLinkedMessage(current.org_name || 'an office'), 'already_linked');
+    }
+
+    const { data, error } = await supabase.rpc('create_org', {
+      p_name: input.orgName,
+      p_role: FIELD_APP_CREATE_ONBOARDING.role,
+      p_work_type: FIELD_APP_CREATE_ONBOARDING.workType,
+    });
+    if (error) throw new HttpError(400, error.message, 'create_org_failed');
+
+    const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
+      p_contractor_type: FIELD_APP_CREATE_ONBOARDING.contractorType,
+    });
     if (
-      current?.org_id &&
-      current.org_join_code &&
-      current.org_join_code.toUpperCase() === input.joinCode
+      typeError &&
+      !/could not find|does not exist|schema cache|contractor_type/i.test(typeError.message)
     ) {
-      return serializeFieldOrg({
-        id: current.org_id,
-        name: current.org_name,
-        join_code: current.org_join_code,
-        contractor_type: current.org_contractor_type,
-      });
+      throw new HttpError(400, typeError.message, 'contractor_type_failed');
     }
 
-    if (current?.org_id && current.org_join_code?.toUpperCase() !== input.joinCode) {
-      const admin = unscopedAdminOrNull();
-      if (!admin) {
-        throw new HttpError(400, alreadyLinkedMessage(current.org_name || 'another office'), 'already_linked');
-      }
-      const { error: detachError } = await admin.from('org_members').delete().eq('user_id', user.id);
-      if (detachError) {
-        throw new HttpError(400, alreadyLinkedMessage(current.org_name || 'another office'), 'already_linked');
-      }
-    }
-
-    const invite = await requirePendingOrgInvite({
-      joinCode: input.joinCode,
-      email: user.email,
-    });
-    const { data, error } = await supabase.rpc('join_org', {
-      p_code: input.joinCode,
-      p_role: invite.role,
-      p_work_type: FIELD_APP_ONBOARDING.workType,
-    });
-    if (error) {
-      if (isFcSeatLimitDbError(error)) {
-        throw fcSeatLimitFromDb();
-      }
-      const message = /invalid join code/i.test(error.message)
-        ? 'That join code did not match any organization.'
-        : /already|member|belong/i.test(error.message) && current?.org_name
-          ? alreadyLinkedMessage(current.org_name)
-          : error.message;
-      throw new HttpError(400, message, 'join_org_failed');
-    }
-    await saveFieldUsageIntents(supabase, user.id);
-    return serializeFieldOrg(data);
+    await saveFieldUsageIntents(supabase, user.id, [...FIELD_APP_CREATE_ONBOARDING.usageIntents]);
+    return serializeFieldOrg(orgWithType ?? data);
   }
 
   if (current?.org_id) {
     throw new HttpError(400, alreadyLinkedMessage(current.org_name || 'an office'), 'already_linked');
   }
 
-  const { data, error } = await supabase.rpc('create_org', {
-    p_name: input.orgName,
-    p_role: FIELD_APP_CREATE_ONBOARDING.role,
-    p_work_type: FIELD_APP_CREATE_ONBOARDING.workType,
+  const invite = await requirePendingOrgInvite({
+    email: user.email,
   });
-  if (error) throw new HttpError(400, error.message, 'create_org_failed');
-
-  const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
-    p_contractor_type: FIELD_APP_CREATE_ONBOARDING.contractorType,
+  const { data, error } = await supabase.rpc('join_org', {
+    p_code: invite.joinCode,
+    p_role: invite.role,
+    p_work_type: FIELD_APP_ONBOARDING.workType,
   });
-  if (
-    typeError &&
-    !/could not find|does not exist|schema cache|contractor_type/i.test(typeError.message)
-  ) {
-    throw new HttpError(400, typeError.message, 'contractor_type_failed');
+  if (error) {
+    if (isFcSeatLimitDbError(error)) {
+      throw fcSeatLimitFromDb();
+    }
+    const message = /invalid join code/i.test(error.message)
+      ? 'Could not join that organization.'
+      : /already|member|belong/i.test(error.message) && current?.org_name
+        ? alreadyLinkedMessage(current.org_name)
+        : error.message;
+    throw new HttpError(400, message, 'join_org_failed');
   }
-
-  await saveFieldUsageIntents(supabase, user.id, [...FIELD_APP_CREATE_ONBOARDING.usageIntents]);
-  return serializeFieldOrg(orgWithType ?? data);
+  await saveFieldUsageIntents(supabase, user.id);
+  return serializeFieldOrg(data);
 }

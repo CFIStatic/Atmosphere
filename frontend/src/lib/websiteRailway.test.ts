@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
@@ -148,11 +148,9 @@ describe('Railway corporate-website image', () => {
 
     const preview = read('website/build-preview.py');
     expect(preview).toContain("('hardware', 'hardware.html')");
-
-    const card = read('website/hardware-setup-card.html');
-    expect(card).toContain('doc-field');
-    expect(card).toContain('field-capture-docs-qr.svg');
-    expect(read('website/assets/field-capture-setup-card.pdf').startsWith('%PDF')).toBe(true);
+    expect(existsSync(resolve(repoRoot, 'website/hardware-setup-card.html'))).toBe(false);
+    expect(existsSync(resolve(repoRoot, 'website/assets/field-capture-setup-card.pdf'))).toBe(false);
+    expect(existsSync(resolve(repoRoot, 'website/404.html'))).toBe(false);
 
     const field = read('website/field.html');
     expect(field).toContain('href="hardware.html"');

@@ -7,7 +7,7 @@
 #
 # Same repair as the office console: an unresolved Railway reference becomes
 # "http://:" and would take this replica down. Fall back to the public BFF
-# so name + office-code connect still works.
+# so email/password sign-in still works.
 
 fieldcapture_log() { echo "fieldcapture: $*" >&2; }
 

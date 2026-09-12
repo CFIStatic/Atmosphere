@@ -206,9 +206,8 @@ test('create org accepts a company name alone — the wizard no longer asks the 
   assert.deepEqual(parsed.usageIntents, [...WEBSITE_SIGNUP_ONBOARDING.usageIntents]);
 });
 
-test('join org accepts a join code alone', () => {
-  const parsed = joinOrgSchema.parse({ joinCode: '8f3a9c2b' });
-  assert.equal(parsed.joinCode, '8F3A9C2B');
+test('join org accepts an empty body — the invite email is the credential', () => {
+  const parsed = joinOrgSchema.parse({});
   assert.equal(parsed.role, WEBSITE_SIGNUP_JOIN_ONBOARDING.role);
   assert.deepEqual(parsed.usageIntents, [...WEBSITE_SIGNUP_JOIN_ONBOARDING.usageIntents]);
 });
@@ -254,7 +253,7 @@ test('signup, org, and billing routes reject unauthenticated or invalid requests
       ['GET', '/api/billing/workspace', undefined],
       ['POST', '/api/billing/checkout/onboarding', {}],
       ['POST', '/api/org', { name: 'Meridian Services' }],
-      ['POST', '/api/org/join', { joinCode: '8F3A9C2B' }],
+      ['POST', '/api/org/join', {}],
     ] as const) {
       const res = await fetch(`${base}${path}`, {
         method,

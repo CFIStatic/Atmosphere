@@ -4,7 +4,7 @@ import { requirePendingOrgInvite } from '../src/lib/orgInviteGate.js';
 
 test('join without an email is refused as invite_required', async () => {
   await assert.rejects(
-    () => requirePendingOrgInvite({ joinCode: '8F3A9C2B', email: null }),
+    () => requirePendingOrgInvite({ email: null }),
     (err: unknown) => {
       assert.ok(err && typeof err === 'object' && 'code' in err);
       assert.equal((err as { code: string }).code, 'invite_required');
@@ -15,7 +15,7 @@ test('join without an email is refused as invite_required', async () => {
 
 test('blank email is refused as invite_required', async () => {
   await assert.rejects(
-    () => requirePendingOrgInvite({ joinCode: '8F3A9C2B', email: '   ' }),
+    () => requirePendingOrgInvite({ email: '   ' }),
     (err: unknown) => {
       assert.equal((err as { code: string }).code, 'invite_required');
       return true;

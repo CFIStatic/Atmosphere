@@ -64,7 +64,7 @@ test('CORS allows the live platform.atmosphereteam.com origin', async () => {
 test('CORS allows the live app.atmosphereteam.com Field Capture origin', async () => {
   const { url, close } = await listen();
   try {
-    const res = await fetch(`${url}/api/field-app/join`, {
+    const res = await fetch(`${url}/api/field-app/register`, {
       method: 'OPTIONS',
       headers: {
         Origin: FIELD_CAPTURE_CUSTOM_ORIGIN,
@@ -82,7 +82,7 @@ test('CORS allows the live app.atmosphereteam.com Field Capture origin', async (
 test('CORS allows the Field Capture Railway origin', async () => {
   const { url, close } = await listen();
   try {
-    const res = await fetch(`${url}/api/field-app/join`, {
+    const res = await fetch(`${url}/api/field-app/register`, {
       method: 'OPTIONS',
       headers: {
         Origin: FIELD_CAPTURE_ORIGIN,

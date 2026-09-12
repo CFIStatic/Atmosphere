@@ -105,7 +105,7 @@ AtmosphereFieldCapture/
   Network/MediaUploadClient.swift   # signed PUT / multipart (+ disk stream)
   Queue/DayFilmUploadQueue.swift    # durable save-first filing (web IndexedDB parity)
   Session/FieldDaySession.swift     # today → record → door (upload async)
-  UI/TodayView.swift · SignInView.swift · SignUpView.swift · OfficeLinkView.swift
+  UI/TodayView.swift · SignInView.swift · SignUpView.swift
   UI/RecordingView.swift · DoorView.swift
   Theme/FieldTheme.swift
   Info.plist
@@ -113,11 +113,11 @@ AtmosphereFieldCapture/
 
 ## Crew flow
 
-1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
+1. **First launch only:** Create an Atmosphere account or sign in (same as the website). A pending office invite for that email joins the company automatically.
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
 4. The recording screen is a live rear-camera finder (what you see is what is being recorded). The iOS Simulator has no camera.
-5. Hold **Finish the day** for 5 seconds — film is **saved on phone first**, door opens, filing runs in the background (survives kill). Optional RoomPlan twin after save.
+5. Hold **Finish the day** for 5 seconds — film is **saved on phone first**, door opens, filing runs in the background (survives kill).
 6. Door: **Record another** (same job) or **Back to Home Screen**.
 
 AI dictation and twin review stay in the **office Verifier**.
@@ -130,7 +130,7 @@ day films enqueue server-side vision: sparse frames, action log, and
 Verifier dictation. Set the Xcode Run scheme's `ATMOSPHERE_API_BASE`
 environment variable when intentionally testing a local BFF.
 
-1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
+1. Create account: BFF `POST /api/field-app/register` (email + password; pending invite joins the office), or Supabase `POST /auth/v1/signup`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
 3. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
 4. Day film: mint client `clipId` → durable local queue → `upload-url` / `upload-part-url` (+ `upload-complete` for long films) → `POST …/proof`

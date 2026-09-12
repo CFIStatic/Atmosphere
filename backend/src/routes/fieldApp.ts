@@ -14,8 +14,6 @@ import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
 import {
-  fieldJoinSchema,
-  fieldOfficePreviewSchema,
   fieldOfficeSchema,
   fieldRegisterSchema,
 } from '../lib/validation.js';
@@ -23,7 +21,6 @@ import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwo
 import { clientIp, clientUserAgent } from '../legal/terms.js';
 import { recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
 import { linkFieldOffice } from '../field/officeLink.js';
-import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
 import {
   completeChunkedProofUpload,
@@ -55,10 +52,8 @@ import {
 /**
  * Field Capture (App Store) ↔ platform account bridge.
  *
- * Crew connect is name + office join code. That creates (or reopens) a
- * field-technician membership so the dashboard can assign jobs to that name.
- * Day films land in `job_proofs` on the office record. A dashboard
- * email/password login still works for people who already have one.
+ * Crew join with the same email/password as the office, after a Global Admin
+ * invite. Day films land in `job_proofs` on the office record.
  */
 export const fieldAppRouter = Router();
 
@@ -126,7 +121,6 @@ fieldAppRouter.post(
       try {
         const org = await linkFieldOffice(created.session.access_token, created.user, {
           fullName: input.fullName,
-          joinCode: input.joinCode,
           orgName: input.orgName,
         });
         writeFieldSession(res, created.status, created.user, created.session, { org });
@@ -151,54 +145,12 @@ fieldAppRouter.post(
   },
 );
 
-/**
- * POST /api/field-app/join
- *
- * Crew connect: first and last name plus the office join code from Settings.
- * Public — there is no session yet. The same name + code on another phone
- * reopens this person so assignments stay on Nick Smith.
- */
-fieldAppRouter.post(
-  '/join',
-  authLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const input = fieldJoinSchema.parse(req.body);
-      requireAcceptedTermsVersion(input.acceptedTermsVersion);
-      const joined = await joinCrewByName(input);
-      await recordTermsAcceptance({
-        userId: joined.user.id,
-        accessToken: joined.session.access_token,
-        termsVersion: input.acceptedTermsVersion,
-        ip: clientIp(req),
-        userAgent: clientUserAgent(req),
-      });
-      writeFieldSession(res, joined.created ? 201 : 200, joined.user, joined.session, {
-        org: joined.org,
-      });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/**
- * POST /api/field-app/office/preview
- * Confirm a join code on the connect screen (no session yet).
- */
-fieldAppRouter.post(
-  '/office/preview',
-  authLimiter,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { joinCode } = fieldOfficePreviewSchema.parse(req.body);
-      const org = await previewOfficePublic(joinCode);
-      res.json({ org });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
+fieldAppRouter.all('/join', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found', code: 'not_found' });
+});
+fieldAppRouter.all('/office/preview', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found', code: 'not_found' });
+});
 
 fieldAppRouter.use(requireAuth);
 
@@ -215,9 +167,8 @@ const FIELD_PARTY_COMPANY = 'Field Capture';
 
 /**
  * POST /api/field-app/office
- * Link an already-signed-in Field Capture user to an office (join code or
- * new organization). Used when email confirmation delayed the office step,
- * or when register created the login but the join code was wrong.
+ * Link an already-signed-in Field Capture user to an office (pending email
+ * invite, or a new organization name).
  */
 fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFunction) => {
   try {

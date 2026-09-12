@@ -6,18 +6,19 @@ import { toOrgProductRole, type OrgProductRole } from './productRoles.js';
  * Org seats after the first Global Admin are invite-only.
  *
  * Public signup creates the company (bill payer). Everyone else needs a
- * pending org_invites row for their email before a join code works — knowing
- * the code alone is not enough.
+ * pending org_invites row for their email. The org's join_code stays in the
+ * database for the join_org RPC — callers never send or see it.
  */
 
 export type PendingOrgInvite = {
   orgId: string;
   role: OrgProductRole;
   email: string;
+  /** Internal only — used to call join_org. Never returned to clients. */
+  joinCode: string;
 };
 
 export async function requirePendingOrgInvite(input: {
-  joinCode: string;
   email: string | null | undefined;
 }): Promise<PendingOrgInvite> {
   const email = input.email?.trim().toLowerCase() ?? '';
@@ -31,27 +32,16 @@ export async function requirePendingOrgInvite(input: {
 
   const raw = unscopedAdmin();
 
-  const code = input.joinCode.trim().toUpperCase();
-  const { data: org, error: orgError } = await raw
-    .from('orgs')
-    .select('id')
-    .eq('join_code', code)
-    .maybeSingle();
-  if (orgError) throw new HttpError(500, orgError.message, 'org_lookup_failed');
-  if (!org?.id) {
-    throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
-  }
-
-  const scoped = adminForOrg(org.id as string, raw);
-  const { data: invite, error: inviteError } = await scoped.raw
+  const { data: invite, error: inviteError } = await raw
     .from('org_invites')
-    .select('id, role, email')
-    .eq('org_id', scoped.scope.orgId)
+    .select('id, role, email, org_id')
     .eq('status', 'pending')
     .eq('email', email)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (inviteError) throw new HttpError(500, inviteError.message, 'invite_lookup_failed');
-  if (!invite) {
+  if (!invite?.org_id) {
     throw new HttpError(
       403,
       'This email has not been invited yet. Ask your Global Admin to send an invite.',
@@ -59,9 +49,22 @@ export async function requirePendingOrgInvite(input: {
     );
   }
 
+  const scoped = adminForOrg(invite.org_id as string, raw);
+  const { data: org, error: orgError } = await scoped.raw
+    .from('orgs')
+    .select('id, join_code')
+    .eq('id', scoped.scope.orgId)
+    .maybeSingle();
+  if (orgError) throw new HttpError(500, orgError.message, 'org_lookup_failed');
+  const joinCode = String(org?.join_code ?? '').trim().toUpperCase();
+  if (!org?.id || !joinCode) {
+    throw new HttpError(400, 'Could not join that organization.', 'join_org_failed');
+  }
+
   return {
     orgId: org.id as string,
     role: toOrgProductRole(String(invite.role)),
     email: String(invite.email),
+    joinCode,
   };
 }
