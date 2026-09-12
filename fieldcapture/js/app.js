@@ -661,20 +661,25 @@
     });
   }
 
-  /** Signal back, app back in front, or the safety tick: sync drafts, then file. */
+  /**
+   * Signal back, app back in front, or the safety tick: file now.
+   * Pending-job POSTs run alongside — they only unblock phone-only drafts;
+   * films already on an office job must not wait for that round-trip.
+   */
   function flushFieldWork(reason) {
     var bound = captureSession();
     function file() {
       if (!filmQueue) return undefined;
       return filmQueue.kick(reason || 'flush');
     }
+    var filing = file();
     return syncPendingJobs().then(
       function () {
         if (!sessionStillOpen(bound)) return undefined;
         return file();
       },
       function () {
-        return file();
+        return filing;
       },
     );
   }
@@ -1037,6 +1042,7 @@
         showTermsGate();
         return;
       }
+      beginAccountFiling(me);
       return afterConnect();
     });
   }
@@ -1075,10 +1081,20 @@
         : 'No jobs yet. Tap + to start one.',
     );
     show('s-home');
+    beginAccountFiling(me);
+    warmPlatformFrame();
+  }
+
+  /**
+   * Session is usable — start filing now. Do not wait for Today's job list,
+   * the door, or a later tab. Owner + kick are enough for canFileFilm.
+   */
+  function beginAccountFiling(me) {
+    if (!me) return;
+    state.account = true;
     state.owner = 'user:' + (Core.cacheOwnerId ? Core.cacheOwnerId(me) : '');
     state.sessionLost = false;
     if (filmQueue) filmQueue.kick('session');
-    warmPlatformFrame();
   }
 
   function bootAccountSession() {
@@ -1093,12 +1109,15 @@
       syncPendingJobs();
     }
 
+    if (cachedMe) beginAccountFiling(cachedMe);
+
     return Core.loadFieldMe(API_BASE, state.accessToken).then(
       function (me) {
         if (Core.adoptFieldCache) {
           Core.adoptFieldCache(Core.cacheOwnerId ? Core.cacheOwnerId(me) : '', state.accessToken);
         }
         if (Core.writeCachedMe) Core.writeCachedMe(me);
+        beginAccountFiling(me);
         return Core.loadTodayJobs(API_BASE, state.accessToken).then(
           function (jobs) {
             if (Core.writeCachedJobs) Core.writeCachedJobs(jobs);
@@ -1352,6 +1371,11 @@
       });
     });
     if (state.accessToken) {
+      var bootCacheOk = Core.fieldCacheMatchesSession
+        ? Core.fieldCacheMatchesSession(state.accessToken)
+        : false;
+      var bootCachedMe = bootCacheOk && Core.readCachedMe ? Core.readCachedMe() : null;
+      if (bootCachedMe) beginAccountFiling(bootCachedMe);
       ensureTermsThenConnect(function () {
         return bootAccountSession();
       }).catch(function (err) {
