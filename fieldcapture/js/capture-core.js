@@ -2453,20 +2453,30 @@
       );
     }
 
-    /** Try now. Signal back, app back in front, a fresh session: skip any backoff. */
-    function kick(reason) {
-      var immediate =
+    function skipFailureBackoff(reason) {
+      return (
         reason === 'online' ||
         reason === 'visible' ||
         reason === 'retry' ||
         reason === 'session' ||
-        reason === 'remap';
+        reason === 'remap'
+      );
+    }
+
+    /** Try now. Signal back, app back in front, a fresh session: skip any backoff. */
+    function kick(reason) {
+      var skipBackoff = skipFailureBackoff(reason);
       return load().then(function () {
-        if (immediate) {
-          entries.forEach(function (e) {
-            if (eligible(e)) e.nextAttemptAt = 0;
-          });
-        }
+        entries.forEach(function (e) {
+          if (!eligible(e)) return;
+          if (skipBackoff) {
+            e.nextAttemptAt = 0;
+            return;
+          }
+          // First eligible attempt (never failed): do not honor an offline
+          // parking time. Real failure backoff stays 5s / 10s / 20s / 40s / 1m.
+          if (!(e.attempts > 0)) e.nextAttemptAt = 0;
+        });
         drain(reason || 'kick');
         return films();
       });
@@ -2480,20 +2490,17 @@
         return;
       }
       if (!isOnline()) {
-        // No radio at all. Mark every due film and let the online event (or
-        // the safety interval) bring us back, rather than burn a retry on a
-        // link that is known dead.
-        var t = now();
+        // No radio at all. Mark eligible films and wait for online / visible /
+        // session / the safety tick — do not hide a first attempt behind 60s.
+        // A 0-delay timer here would spin; events and the tick bring us back.
         entries.forEach(function (e) {
-          if (!eligible(e) || (e.nextAttemptAt || 0) > t) return;
+          if (!eligible(e)) return;
           e.status = 'waiting';
           e.lastError = WAITING_FOR_SIGNAL;
           e.lastStatus = 0;
-          e.nextAttemptAt = t + FILING_RETRY_CAP_MS;
           rt(e).step = WAITING_FOR_SIGNAL;
         });
         emit('offline');
-        schedule();
         return;
       }
       run(entry);

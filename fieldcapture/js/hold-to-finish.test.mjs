@@ -170,8 +170,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=no-office-link-1/);
-assert.match(html, /js\/app\.js\?v=no-office-link-1/);
+assert.match(html, /js\/capture-core\.js\?v=pending-upload-asap-1/);
+assert.match(html, /js\/app\.js\?v=pending-upload-asap-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -503,6 +503,15 @@ assert.match(
     /function flushFieldWork[\s\S]*?filmQueue\.kick/,
     'signal back / app in front must kick the filing queue',
   );
+  {
+    const flushFrom = src.indexOf('function flushFieldWork');
+    assert.ok(flushFrom >= 0, 'flushFieldWork must live next to the session helpers');
+    const flushSrc = src.slice(flushFrom);
+    assert.ok(
+      flushSrc.indexOf('file()') < flushSrc.indexOf('syncPendingJobs()'),
+      'eligible films must start uploading before pending-job POSTs finish',
+    );
+  }
   assert.match(
     src,
     /return remapLocalJob\(localJob\.id, serverJob\)\.then\(function \(\) \{[\s\S]*?markPendingJobSynced/,
@@ -588,6 +597,37 @@ assert.match(
 assert.match(appSrc, /addEventListener\('visibilitychange'/, 'Field Capture back in front kicks the queue');
 assert.match(appSrc, /addEventListener\('pageshow'/);
 assert.match(appSrc, /flushFieldWork\('tick'\)/, 'the safety tick keeps filing even if an event is missed');
+assert.match(appSrc, /function beginAccountFiling/, 'filing starts when the session is usable, not when Today finishes loading');
+{
+  const from = appSrc.indexOf('function beginAccountFiling');
+  const to = appSrc.indexOf('function bootAccountSession');
+  assert.ok(from >= 0 && to > from, 'beginAccountFiling must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(src, /filmQueue\.kick\('session'\)/, 'a usable session kicks the queue immediately');
+  assert.doesNotMatch(src, /loadTodayJobs/, 'Today jobs must not gate the first upload');
+}
+{
+  const from = appSrc.indexOf('function bootAccountSession');
+  const to = appSrc.indexOf('function bootAccount()');
+  assert.ok(from >= 0 && to > from, 'bootAccountSession must exist');
+  const src = appSrc.slice(from, to);
+  assert.ok(
+    src.indexOf("beginAccountFiling(me)") < src.indexOf('Core.loadTodayJobs'),
+    'loadFieldMe must kick filing before waiting on Today',
+  );
+  assert.match(src, /if \(cachedMe\) beginAccountFiling\(cachedMe\)/, 'a cached session starts filing before any office round-trip');
+}
+{
+  const from = appSrc.indexOf('function bootAccount()');
+  const to = appSrc.indexOf('/* ---------- recording ---------- */');
+  assert.ok(from >= 0 && to > from, 'bootAccount must exist');
+  const src = appSrc.slice(from, to);
+  assert.match(
+    src,
+    /if \(bootCachedMe\) beginAccountFiling\(bootCachedMe\)/,
+    'app boot with a stored session files pending days before terms/Today resolve',
+  );
+}
 assert.match(
   appSrc,
   /if \(!sessionStillOpen\(bound\)\) \{[\s\S]*?upsertPendingJob/,
@@ -833,12 +873,49 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   assert.equal(uploads.length, 0, 'no radio: do not burn an attempt');
   assert.equal(queue.get(a.id).status, 'waiting');
   assert.equal(queue.get(a.id).lastError, Core.WAITING_FOR_SIGNAL);
+  assert.ok(
+    (queue.get(a.id).nextAttemptAt || 0) <= clock.now(),
+    'offline must not park a first attempt behind a 60s timer',
+  );
   assert.equal((await store.list()).length, 1, 'the film is held on the phone');
   online = true;
-  await queue.kick('online');
+  await queue.kick('tick');
   await flush();
-  assert.equal(uploads.length, 1, 'the online event files it immediately');
+  assert.equal(uploads.length, 1, 'a missed online event: the safety tick files immediately once signal is back');
   uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // Backoff applies only after a failed attempt. A later tick must not skip it.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({ owner: 'user:1', jobId: 'job-a', blob: fakeBlob(10) });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 1, 'first eligible film starts with no delay');
+  uploads[0].d.reject(Object.assign(new Error('network'), { status: 0 }));
+  await flush();
+  assert.equal(queue.get(a.id).nextAttemptAt, clock.now() + 5000, 'first retry after 5s');
+  await queue.kick('tick');
+  await flush();
+  assert.equal(uploads.length, 1, 'the safety tick does not burn a real failure backoff');
+  await queue.kick('session');
+  await flush();
+  assert.equal(uploads.length, 2, 're-auth skips backoff and files immediately');
+  uploads[1].d.resolve(okResult);
   await flush();
 }
 
