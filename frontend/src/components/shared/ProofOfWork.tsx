@@ -8,7 +8,8 @@ import {
   type ProofVideoRecord,
   type WorkEpisodeListItem,
 } from '../../lib/api';
-import { bindMeasuredDuration, formatClipLength } from '../../lib/clipDuration';
+import { formatClipLength } from '../../lib/clipDuration';
+import { JobFilePlayer, type JobFilePlayerCaptions } from './JobFilePlayer';
 import { useVideoSeek } from '../../lib/videoSeek';
 import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
@@ -614,6 +615,7 @@ export function ProofOfWork({
                           seekAt={seekProofId === id ? seekAt : null}
                           seekNonce={seekProofId === id ? seekNonce : 0}
                           autoOpen={seekProofId === id}
+                          captions={captionsForVideo((data.videos ?? []).find((v) => v.id === id))}
                         />
                       ))}
                     </div>
@@ -740,6 +742,21 @@ function statusWord(status: string | null, done: string): string {
   return 'waiting';
 }
 
+
+function captionsForVideo(video: ProofVideoRecord | undefined | null): JobFilePlayerCaptions | null {
+  if (!video) return null;
+  const transcriptText =
+    video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText ?? null;
+  const segments = video.transcriptSegments ?? video.conversation?.transcriptSegments ?? null;
+  const hasText = Boolean(String(transcriptText || '').trim()) || Boolean(segments?.length);
+  if (!hasText) return null;
+  return {
+    transcriptText,
+    segments,
+    durationSeconds: video.durationSeconds,
+  };
+}
+
 function VideoCatalog({
   jobId,
   videos,
@@ -813,6 +830,7 @@ function VideoCatalog({
                   seekAt={seekProofId === video.id ? seekAt : null}
                   seekNonce={seekProofId === video.id ? seekNonce : 0}
                   autoOpen={seekProofId === video.id}
+                  captions={captionsForVideo(video)}
                 />
                 {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
               </div>
@@ -830,45 +848,21 @@ function MeasuredVideo({
   className,
   seekTo,
   seekNonce = 0,
+  captions,
 }: {
   src: string;
   className?: string;
   seekTo?: number | null;
   seekNonce?: number;
+  captions?: JobFilePlayerCaptions | null;
 }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || seekTo == null || !Number.isFinite(seekTo)) return;
-    if (typeof el.scrollIntoView === 'function') {
-      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-    }
-    const apply = () => {
-      try {
-        el.currentTime = seekTo;
-      } catch {
-        /* playhead is decorative until the browser can seek */
-      }
-    };
-    if (el.readyState >= 1) apply();
-    else el.addEventListener('loadedmetadata', apply, { once: true });
-    return () => el.removeEventListener('loadedmetadata', apply);
-  }, [src, seekTo, seekNonce]);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    return bindMeasuredDuration(el);
-  }, [src]);
   return (
-    <video
-      ref={ref}
+    <JobFilePlayer
       src={src}
-      controls
-      playsInline
-      preload="metadata"
-      data-testid="job-file-player"
-      data-seek={seekTo == null ? undefined : String(seekTo)}
       className={className}
+      seekTo={seekTo}
+      seekNonce={seekNonce}
+      captions={captions}
     />
   );
 }
@@ -883,12 +877,14 @@ function PlayClip({
   seekAt,
   seekNonce,
   autoOpen = false,
+  captions,
 }: {
   proofId: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
   seekAt?: number | null;
   seekNonce?: number;
   autoOpen?: boolean;
+  captions?: JobFilePlayerCaptions | null;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -921,6 +917,7 @@ function PlayClip({
           src={url}
           seekTo={seekAt}
           seekNonce={seekNonce}
+          captions={captions}
           className="block max-h-40 w-full rounded-lg bg-black"
         />
       </div>
@@ -953,6 +950,7 @@ function ProofVideo({
   seekAt,
   seekNonce,
   autoOpen = false,
+  captions,
 }: {
   proofId: string;
   label: string;
@@ -960,6 +958,7 @@ function ProofVideo({
   seekAt?: number | null;
   seekNonce?: number;
   autoOpen?: boolean;
+  captions?: JobFilePlayerCaptions | null;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1008,6 +1007,7 @@ function ProofVideo({
           src={url}
           seekTo={seekAt}
           seekNonce={seekNonce}
+          captions={captions}
           className="block max-h-64 w-full bg-black"
         />
       ) : (

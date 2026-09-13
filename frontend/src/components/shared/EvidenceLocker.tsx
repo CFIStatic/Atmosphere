@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type EvidenceItem, type CustodyEntry } from '../../lib/api';
-import { bindMeasuredDuration, formatClipLength } from '../../lib/clipDuration';
+import { formatClipLength } from '../../lib/clipDuration';
+import { JobFilePlayer } from './JobFilePlayer';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
@@ -465,13 +466,13 @@ function EvidenceDetail({
 }
 
 function MeasuredEvidenceVideo({ src }: { src: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    return bindMeasuredDuration(el);
-  }, [src]);
-  return <video ref={ref} src={src} controls playsInline className="w-full rounded-lg bg-black" />;
+  return (
+    <JobFilePlayer
+      src={src}
+      className="w-full rounded-lg bg-black"
+      testId="evidence-locker-player"
+    />
+  );
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

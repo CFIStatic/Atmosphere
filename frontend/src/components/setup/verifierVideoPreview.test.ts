@@ -475,4 +475,24 @@ describe('verifier dashboard video preview screen', () => {
     clock.restore();
     dom.window.close();
   });
+
+  it('ships mute, volume slider, and CC on the preview control bar', () => {
+    expect(verifierHtml).toContain('id="d-mute"');
+    expect(verifierHtml).toContain('id="d-volume"');
+    expect(verifierHtml).toContain('id="d-cc"');
+    expect(verifierHtml).toContain('function readVideoPrefs');
+    expect(verifierHtml).toContain('function buildWebVttFromTranscript');
+    expect(verifierHtml).toContain('function attachVideoTrack');
+    expect(verifierHtml).toContain("atmosphere.videoPlayer");
+    expect(verifierHtml).toContain('Captions unavailable');
+    expect(verifierHtml).toContain('applyVolumePrefs(vid)');
+    expect(verifierHtml).toContain('attachVideoTrack(vid, item)');
+  });
+
+  it('keeps volume prefs after autoplay falls back to muted', () => {
+    expect(verifierHtml).toContain('vid.muted = true');
+    expect(verifierHtml).toContain('writeVideoPrefs({ muted: true, volume: vid.volume })');
+    expect(verifierHtml).toContain('syncVolumeControls(vid)');
+  });
+
 });

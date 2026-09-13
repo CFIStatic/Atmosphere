@@ -44,6 +44,8 @@ const catalog: ProofResponse = {
       transcriptError: null,
       aiSummary: 'Empty hall before the crew started.',
       heardOnMic: 'We have not started the subfloor yet.',
+      transcriptText: '[0:08] We have not started the subfloor yet.',
+      transcriptSegments: [{ tSec: 8, text: 'We have not started the subfloor yet.', speakerLabel: null }],
     },
     {
       id: 'proof-day',
@@ -173,6 +175,25 @@ describe('ProofOfWork video collection', () => {
     expect(document.querySelector('video')?.getAttribute('src')).toBe(
       'https://signed.test/morning.mp4',
     );
+  });
+
+  it('shows volume controls and captions when a Whisper transcript exists', async () => {
+    const user = userEvent.setup();
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <ProofOfWork
+        jobId="job-1"
+        heading="Videos and analysis"
+        initialData={catalog}
+        videoFetcher={videoFetcher}
+      />,
+    );
+
+    await user.click(screen.getAllByRole('button', { name: 'Play' })[0]!);
+    expect(await screen.findByTestId('job-file-mute')).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-volume')).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-cc')).not.toBeDisabled();
+    expect(document.querySelector('track[kind="captions"]')).not.toBeNull();
   });
 
   it('polls for new videos while the job file is open', async () => {
