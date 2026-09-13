@@ -288,7 +288,7 @@ test('formatCollectionRecord includes every video, transcripts included', () => 
     },
   ]);
   assert.match(text, /video/);
-  assert.match(text, /Heard on the mic: We have not started the subfloor yet/);
+  assert.match(text, /Heard on the mic(?: \(verbatim\))?: We have not started the subfloor yet/);
   assert.match(text, /Drywall hung/);
   assert.match(text, /Wet corner/);
 });

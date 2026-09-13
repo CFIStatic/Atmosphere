@@ -65,6 +65,20 @@ describe('ConversationPanel', () => {
             { tSec: 18, speakerLabel: 'Homeowner', text: 'Do not replace cabinets until insurance approves.' },
             { tSec: 96, speakerLabel: 'Crew', text: 'We will remount the mirror today.' },
           ],
+          transcriptText:
+            '[0:18] Homeowner: I do not want you to replace the cabinets unless insurance approves it.\n[1:36] Contractor: We will remount the mirror today.',
+          transcriptSegments: [
+            {
+              tSec: 18,
+              speakerLabel: 'Homeowner',
+              text: 'I do not want you to replace the cabinets unless insurance approves it.',
+            },
+            {
+              tSec: 96,
+              speakerLabel: 'Crew',
+              text: 'We will remount the mirror today.',
+            },
+          ],
         }}
       />,
     );
@@ -73,6 +87,7 @@ describe('ConversationPanel', () => {
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Model brief/);
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Promises/);
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Crew/);
+    expect(screen.getByTestId('verbatim-transcript').textContent).toMatch(/Exact transcript/);
     await user.click(screen.getByText(/Crew will remount the mirror today/i));
     expect(onSeek).toHaveBeenCalledWith(96);
   });

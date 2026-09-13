@@ -114,8 +114,13 @@ export function transcriptSegments(transcript: string): Segment[] {
 
 /** Complete speech lines: every sentence / turn, not a substance skim. */
 function completeSpeechLines(transcript: string, details: ConversationDetails): string[] {
+  // Long speaker turns still split into sentences so kitchen talks get many seek points.
   if (details.turns.length) {
-    return uniqueLines(details.turns.map((t) => t.text));
+    const fromTurns = details.turns.flatMap((turn) => {
+      const sentences = conversationSentences(turn.text);
+      return sentences.length ? sentences : [turn.text];
+    });
+    if (fromTurns.length) return uniqueLines(fromTurns);
   }
   const fromChunks = conversationChunks(transcript).flatMap((chunk) =>
     conversationSentences(chunk.text),

@@ -18,6 +18,7 @@ import {
   publicConversationFields,
 } from '../audio/conversationDetails.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
+import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle } from './proofClipTitle.js';
@@ -355,7 +356,7 @@ export function serializeEvidence(input: {
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:
-      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0
+      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0 || Boolean(typeof proof.transcript_text === 'string' && proof.transcript_text.trim())
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
             /** Spoken-style description for the office player — primary reading. */
@@ -411,7 +412,12 @@ export function serializeEvidence(input: {
 }
 
 function conversationFields(transcript: unknown, stored: unknown) {
-  return publicConversationFields(conversationFromStored(transcript, stored));
+  const text = typeof transcript === 'string' ? transcript : null;
+  return {
+    ...publicConversationFields(conversationFromStored(transcript, stored)),
+    transcriptText: text,
+    transcriptSegments: parseVerbatimTranscript(text),
+  };
 }
 
 /**

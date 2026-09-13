@@ -73,7 +73,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).not.toContain('None on this clip');
     expect(verifierHtml).not.toContain('Nothing on this clip conflicts');
     expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
-    expect(verifierHtml).toContain('id="d-analysis-lead"');
+    expect(verifierHtml).not.toContain('ANALYSIS_DISCLAIMER');
     expect(verifierHtml).toContain('analysis-skel');
     expect(verifierHtml).toContain('saw-k">Events');
   });
@@ -215,7 +215,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
-  it('keeps Analysis as a timeline: events, then a quiet disclaimer — no essay wall', async () => {
+  it('keeps Analysis as a timeline of events — no essay wall', async () => {
     const dom = bootVerifier();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
@@ -224,18 +224,14 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    const lead = document.getElementById('d-analysis-lead');
     const alog = document.getElementById('alog');
     expect(document.getElementById('d-job-summary')).toBeNull();
     expect(document.getElementById('d-saw')).toBeNull();
-    expect(lead).not.toBeNull();
+    expect(document.getElementById('d-analysis-lead')).toBeNull();
     expect(alog).not.toBeNull();
-    expect(alog!.compareDocumentPosition(lead!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(lead!.textContent).toMatch(/never an acceptance/i);
     expect(alog!.textContent).toMatch(/tarp gone/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Against the scope/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Heard on the mic/i);
-    expect(document.querySelector('#d-panel > .footnote:last-child')).toBe(lead);
     expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/Show me the dispute/i);
     expect(document.getElementById('dispute-toggle')?.textContent).toMatch(/1 moment/);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
@@ -299,8 +295,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
       .map((el) => el.textContent || '')
       .join('\n');
-    expect(reply).toMatch(/^Yes/);
     expect(reply).toMatch(/vanity|insurance|cabinets/i);
+    expect(reply).toMatch(/Exact words from the recording|Yes —/i);
+    expect(reply).not.toMatch(/does not show that/i);
     dom.window.close();
   });
 
@@ -313,10 +310,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(row).not.toBeNull();
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
-    const lead = document.getElementById('d-analysis-lead');
     const alog = document.getElementById('alog');
     expect(document.getElementById('d-job-summary')).toBeNull();
-    expect(lead?.textContent).toMatch(/never an acceptance/i);
     expect(document.getElementById('d-saw')).toBeNull();
     const notes = Array.from(document.querySelectorAll('#alog [data-at]'));
     expect(notes.map((el) => el.getAttribute('data-at'))).toEqual(['8', '18']);
@@ -352,7 +347,6 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(document.getElementById('alog-empty')?.textContent).toMatch(/No distinct moments/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/0:00/);
-    expect(document.getElementById('d-analysis-lead')?.textContent).toMatch(/never an acceptance/i);
     expect(document.getElementById('dispute-toggle')).toBeNull();
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/None on this clip/i);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/Show me the dispute/i);

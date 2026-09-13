@@ -790,6 +790,12 @@ export interface DictationEventEntry {
 }
 
 /** One row in the complete Analysis evidence log. */
+export interface TranscriptSegment {
+  tSec: number | null;
+  text: string;
+  speakerLabel?: string | null;
+}
+
 export interface EvidenceLogEntry {
   atSeconds: number;
   text: string;
@@ -875,6 +881,9 @@ export interface ProofConversation {
   conversationKeyMoments?: ConversationKeyMoment[];
   conversationSource?: 'llm' | 'deterministic' | 'empty' | string;
   conversationModel?: string | null;
+  /** Verbatim timestamped transcript lines (same as video.transcriptSegments). */
+  transcriptSegments?: TranscriptSegment[];
+  transcriptText?: string | null;
 }
 
 /** One filed video, as the collection list wants it. */
@@ -896,6 +905,11 @@ export interface ProofVideoRecord {
   transcriptStatus: string | null;
   transcriptError: string | null;
   aiSummary: string | null;
+  /** Full Whisper transcript — exact words. */
+  transcriptText?: string | null;
+  /** Timestamped verbatim segments for seek + search. */
+  transcriptSegments?: TranscriptSegment[];
+  /** Full transcript alias (legacy name). Prefer transcriptText. */
   heardOnMic: string | null;
   /** Structured talk when the mic captured a real conversation. */
   conversation?: ProofConversation | null;

@@ -5458,10 +5458,6 @@
     return html;
   }
 
-  var ANALYSIS_DISCLAIMER =
-    'This is what the model could see in the frames and, when people were talking, what was said — rooms, agreements, concerns — on the same timeline. ' +
-    'Silent clips stay vision-only. It does not infer off-camera work, and it is never an acceptance.';
-
   function clockFromStamp(raw) {
     var parts = String(raw || '').split(':').map(Number);
     if (parts.some(function (n) { return !isFinite(n); })) return null;
@@ -5939,9 +5935,6 @@
       html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list.</p>';
     }
     html += renderConversationBlock(item);
-    if (!pending) {
-      html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
-    }
     return html;
   }
 
@@ -6014,14 +6007,24 @@
     if (state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
     var rows = clipAskCorpus(item);
     if (!rows.length) return 'This clip is still being read. Ask again once the dictation lands.';
-    if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
+    if (/\b(talking|talk|conversation|discuss(?:ed|ing)?|said|saying|mention(?:ed)?|heard on the mic|on the mic|what was said|anything said|what (are|is|was) they talking)\b/i.test(q) ||
+        /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention|talk)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what did they agree/i.test(q)) {
       var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
-      if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
+      var brief = String(a.conversationExecutiveSummary || a.conversationSummary || '').trim();
       var heardLines = String(a.transcript || '').split(/\n+/).map(function (line) {
-        var m = line.trim().match(/^\[(?:\d+:)+\d+\]\s*(.+)$/);
-        return (m ? m[1] : line).trim();
+        var m = line.trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+        if (m) return { at: m[1], text: String(m[2] || '').trim() };
+        var body = line.trim();
+        return body ? { at: null, text: body } : null;
       }).filter(Boolean);
-      if (heardLines.length) return 'Yes — this is what was said on the recording: ' + heardLines.slice(0, 2).join(' ');
+      if (heardLines.length) {
+        var quotes = heardLines.slice(0, 40).map(function (row) {
+          return row.at ? ('“' + row.text + '” (' + row.at + ')') : ('“' + row.text + '”');
+        });
+        var head = brief ? ('Yes — they are talking about this: ' + brief + ' Exact words from the recording: ') : 'Yes — exact words from the recording: ';
+        return head + quotes.join(' ');
+      }
+      if (spoken.length) return (brief ? ('Yes — they are talking about this: ' + brief + ' ') : 'Yes — ') + 'exact words from the recording: ' + spoken.slice(0, 8).join(' ');
       return 'The footage on file does not include usable speech.';
     }
     if (/what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/i.test(q)) {
@@ -6048,6 +6051,18 @@
       return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
     });
     if (!scored.length) {
+      var mic = String(a.transcript || '').trim();
+      if (mic) {
+        var fallbackQuotes = mic.split(/\n+/).map(function (line) {
+          var m = line.trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+          if (m) return '“' + m[2] + '” (' + m[1] + ')';
+          return line.trim() ? ('“' + line.trim() + '”') : null;
+        }).filter(Boolean).slice(0, 40);
+        if (fallbackQuotes.length) {
+          var brief2 = String(a.conversationExecutiveSummary || a.conversationSummary || '').trim();
+          return (brief2 ? ('Yes — they are talking about this: ' + brief2 + ' Exact words from the recording: ') : 'Yes — exact words from the recording: ') + fallbackQuotes.join(' ');
+        }
+      }
       return yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
     }
     if (yesNo) {
@@ -6086,7 +6101,12 @@
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
-        cb(null, body.answer || local);
+        var remote = body.answer || local;
+        if (/does not (show that|include usable speech)/i.test(remote) && local && !/does not (show that|include usable speech)/i.test(local)) {
+          cb(null, local);
+        } else {
+          cb(null, remote);
+        }
       });
     }).catch(function () {
       cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
@@ -6106,6 +6126,7 @@
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
         '<button type="button" data-ask="What did the homeowner say?">What did the homeowner say?</button>' +
+        '<button type="button" data-ask="What are they talking about?">What are they talking about?</button>' +
         '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
     } else {

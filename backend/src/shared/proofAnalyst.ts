@@ -451,12 +451,14 @@ export async function analyseProofDay(input: {
 const QA_SYSTEM = `You answer a project manager's questions about a job's filed videos, using only the analyses provided.
 
 Rules:
-1. Answer only from the record given. It is what the assistant already saw in the frames and, when present, heard on the mic.
-2. If the record does not contain the answer, say "The videos on file do not show that" and stop. Do not reason about what was probably true.
+1. Answer only from the record given. It is what the assistant already saw in the frames and, when present, the VERBATIM Whisper transcript.
+2. If the record does not contain the answer, say "The videos on file do not show that" and stop. Do not reason about what was probably true. EXCEPTION: when a clip has "Heard on the mic" / Whisper text and the question is about talk or what people are talking about, quote that transcript exactly with seek times — never deny on-file speech (including TV/laptop audio).
 3. When asked what is happening in a video, describe the scene from that clip's reading — desk, news, people, screens, work. Do not ask for an after clip.
 4. Quote the work date and which clip when you cite something, so the answer can be checked.
-5. Two or three sentences. This is read on a phone between site visits.
-6. Never estimate cost, hours, or whether work was worth paying for.`;
+5. EXACT SPEECH RECALL: When asked what was said, quote the EXACT words from "Heard on the mic". Never invent, paraphrase, or clean up dialogue. Cite [m:ss] seek times when present.
+6. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
+7. Two or three sentences when the question is visual; for speech questions, quote as many exact lines as needed to answer.
+8. Never estimate cost, hours, or whether work was worth paying for.`;
 
 export interface CollectionClip {
   workDate: string;
@@ -479,7 +481,7 @@ export function formatCollectionRecord(clips: CollectionClip[]): string {
       const lines = [clipLabel(clip)];
       if (clip.summary) lines.push(`  Seen: ${clip.summary}`);
       if (clip.narration && clip.narration !== clip.summary) lines.push(`  Narration: ${clip.narration}`);
-      if (clip.transcript) lines.push(`  Heard on the mic: ${clip.transcript.slice(0, 1200)}`);
+      if (clip.transcript) lines.push(`  Heard on the mic (verbatim): ${clip.transcript}`);
       if (clip.changes?.length) lines.push(`  Changes: ${clip.changes.join('; ')}`);
       if (clip.concerns?.length) lines.push(`  Concerns: ${clip.concerns.join('; ')}`);
       return lines.join('\n');

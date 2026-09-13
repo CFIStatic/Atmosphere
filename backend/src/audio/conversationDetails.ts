@@ -8,6 +8,7 @@
 
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
+import { findVerbatimQuote } from './verbatimTranscript.js';
 
 export type ConversationQuotedFact = {
   text: string;
@@ -269,7 +270,9 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
   let lastLabel: string | null = null;
   for (const chunk of chunks) {
     const pieces = chunk.text
-      .split(/(?=(?:Homeowner|Owner|Home owner|Contractor|Crew|Tech(?:nician)?|Worker|Adjuster|Inspector|Speaker\s*[A-D]|Person\s*[12])\s*[:\-–—])/i)
+      .split(
+        /(?=(?:\bHomeowner\b|\bOwner\b|\bHome owner\b|\bContractor\b|\bCrew\b|\bTech(?:nician)?\b|\bWorker\b|\bAdjuster\b|\bInspector\b|\bSpeaker\s*[A-D]\b|\bPerson\s*[12]\b)\s*[:\-–—])/i,
+      )
       .map((p) => p.trim())
       .filter(Boolean);
     const parts = pieces.length ? pieces : [chunk.text];
@@ -604,6 +607,40 @@ function mergeFactLists(...lists: ConversationQuotedFact[][]): ConversationQuote
   return out;
 }
 
+
+function groundFactQuotes(facts: ConversationQuotedFact[], transcript: string): ConversationQuotedFact[] {
+  return facts.map((fact) => {
+    if (fact.quote && transcript.includes(fact.quote)) return fact;
+    const hit = findVerbatimQuote(transcript, fact.quote || fact.text);
+    if (!hit) return fact;
+    return {
+      ...fact,
+      quote: hit.quote,
+      tSec: fact.tSec != null ? fact.tSec : hit.tSec,
+    };
+  });
+}
+
+function groundConversationQuotes(details: ConversationDetails, transcript: string): ConversationDetails {
+  const raw = String(transcript || '');
+  if (!raw) return details;
+  return {
+    ...details,
+    agreementFacts: groundFactQuotes(details.agreementFacts, raw),
+    concernFacts: groundFactQuotes(details.concernFacts, raw),
+    commitments: groundFactQuotes(details.commitments, raw),
+    refusals: groundFactQuotes(details.refusals, raw),
+    actionItems: groundFactQuotes(details.actionItems, raw),
+    scopeChanges: groundFactQuotes(details.scopeChanges, raw),
+    changeOrders: groundFactQuotes(details.changeOrders, raw),
+    moneyTalk: groundFactQuotes(details.moneyTalk, raw),
+    safety: groundFactQuotes(details.safety, raw),
+    insurance: groundFactQuotes(details.insurance, raw),
+    unresolvedQuestions: groundFactQuotes(details.unresolvedQuestions, raw),
+    contradictions: groundFactQuotes(details.contradictions, raw),
+  };
+}
+
 /** Parse model JSON into ConversationDetails; null when unusable. */
 export function parseConversationModelJson(
   raw: string,
@@ -710,6 +747,7 @@ Rules:
 - commitments MUST set owner when clear ("Crew will…", "Homeowner will…").
 - Prefer Homeowner/Crew/Adjuster labels; else Speaker A/B.
 - Never invent speech. Empty arrays when silent or noise-only.
+- CRITICAL: quote fields must be EXACT verbatim substrings of the transcript. Do not paraphrase quotes. Do not rewrite the transcript. Structure sits ON TOP OF the verbatim log.
 - Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, and unresolved questions explicitly.
 - keyMoments: the 4–10 most important seekable beats for the office player.`;
 
@@ -904,7 +942,7 @@ export async function analyzeConversation(
       }
     }
 
-    return { ...merged, source: 'llm', model: merged.model || model };
+    return groundConversationQuotes({ ...merged, source: 'llm', model: merged.model || model }, raw);
   } catch (err) {
     logger.warn('conversation_llm_failed', {
       detail: (err instanceof Error ? err.message : String(err)).slice(0, 200),

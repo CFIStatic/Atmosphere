@@ -55,7 +55,7 @@ test('formatJobFileRecord includes brief facts, scope, notes, and clips', () => 
   assert.match(text, /Homeowner: Please do not touch the skylights/);
   assert.match(text, /Delgado Roofing/);
   assert.match(text, /Call the carrier about the valley rot/);
-  assert.match(text, /Heard on the mic: Homeowner asked us not to touch the skylights/);
+  assert.match(text, /Heard on the mic(?: \(verbatim\))?: Homeowner asked us not to touch the skylights/);
   assert.match(text, /CLM-88396/);
 });
 

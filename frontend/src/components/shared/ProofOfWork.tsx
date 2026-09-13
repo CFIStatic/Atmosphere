@@ -504,7 +504,15 @@ export function ProofOfWork({
                               return (
                                 <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
                                   <ConversationPanel
-                                    conversation={video.conversation}
+                                    conversation={{
+                                      ...(video.conversation ?? {}),
+                                      transcriptText:
+                                        video.transcriptText ??
+                                        video.heardOnMic ??
+                                        video.conversation?.transcriptText,
+                                      transcriptSegments:
+                                        video.transcriptSegments ?? video.conversation?.transcriptSegments,
+                                    }}
                                     onSeek={(seconds) => applyClipSeek(id, seconds)}
                                   />
                                   <div className="mt-2">
@@ -779,7 +787,12 @@ function VideoCatalog({
                   Mic: {statusWord(video.transcriptStatus, 'heard')}
                 </p>
                 <ConversationPanel
-                  conversation={video.conversation}
+                  conversation={{
+                    ...(video.conversation ?? {}),
+                    transcriptText: video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText,
+                    transcriptSegments:
+                      video.transcriptSegments ?? video.conversation?.transcriptSegments,
+                  }}
                   onSeek={(seconds) => onSeek?.(video.id, seconds)}
                 />
                 {evidenceEntriesFromVideo(video).length > 0 ? (
@@ -792,9 +805,6 @@ function VideoCatalog({
                 ) : video.aiSummary ? (
                   <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
                 ) : null}
-                {video.heardOnMic && !video.conversation && (
-                  <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
-                )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <PlayClip

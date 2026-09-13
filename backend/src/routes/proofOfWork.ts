@@ -71,6 +71,7 @@ import {
   hasConversation,
 } from '../audio/conversationDetails.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
+import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import {
@@ -166,8 +167,14 @@ export async function listAllVisibleProofs(
 function conversationPayloadFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
   const details = conversationFromStored(row?.transcript_text, findings.conversation);
-  if (!hasConversation(details)) return null;
-  return publicConversationFields(details);
+  const transcriptText = typeof row?.transcript_text === 'string' ? row.transcript_text : null;
+  const segments = parseVerbatimTranscript(transcriptText);
+  if (!hasConversation(details) && !segments.length) return null;
+  return {
+    ...publicConversationFields(details),
+    transcriptText,
+    transcriptSegments: segments,
+  };
 }
 
 function evidenceLogFromRow(row: any) {
@@ -2186,7 +2193,13 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       transcriptStatus: row.transcript_status ?? null,
       transcriptError: row.transcript_error ?? null,
       aiSummary: row.ai_summary ?? row.narration_text ?? null,
-      heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
+      /** Full Whisper text — exact recall. Not truncated. */
+      transcriptText: typeof row.transcript_text === 'string' ? row.transcript_text : null,
+      transcriptSegments: parseVerbatimTranscript(
+        typeof row.transcript_text === 'string' ? row.transcript_text : null,
+      ),
+      /** @deprecated Prefer transcriptText — kept as full alias for older clients. */
+      heardOnMic: typeof row.transcript_text === 'string' ? row.transcript_text : null,
       conversation: conversationPayloadFromRow(row),
       evidenceLog: evidenceLogFromRow(row),
       events: catalogEventsFromRow(row),

@@ -1,5 +1,6 @@
 import { eventClock } from '../../lib/downloadJson';
 import type { ConversationQuotedFact, ProofConversation } from '../../lib/api';
+import { VerbatimTranscript } from './VerbatimTranscript';
 
 function hasTalk(conversation: ProofConversation | null | undefined): boolean {
   if (!conversation) return false;
@@ -14,7 +15,9 @@ function hasTalk(conversation: ProofConversation | null | undefined): boolean {
       conversation.conversationActionItems?.length ||
       conversation.conversationRefusals?.length ||
       conversation.conversationRooms?.length ||
-      conversation.conversationDetails?.length,
+      conversation.conversationDetails?.length ||
+      conversation.transcriptSegments?.length ||
+      conversation.transcriptText?.trim(),
   );
 }
 
@@ -52,9 +55,9 @@ function FactList({
                   {item.owner}
                 </span>
               ) : null}
-              {item.quote && item.quote !== item.text ? (
+              {item.quote ? (
                 <span className="mt-0.5 block text-[11px] italic leading-snug text-ink-500">
-                  “{item.quote}”
+                  Exact: “{item.quote}”
                 </span>
               ) : null}
               {item.confidence != null && Number.isFinite(item.confidence) ? (
@@ -202,6 +205,12 @@ export function ConversationPanel({
       <FactList title="Action items" items={actionItems} onSeek={onSeek} showOwner />
       <FactList title="Unresolved questions" items={questions} onSeek={onSeek} />
       <FactList title="Contradictions" items={contradictions} onSeek={onSeek} />
+
+      <VerbatimTranscript
+        segments={c.transcriptSegments}
+        transcriptText={c.transcriptText}
+        onSeek={onSeek}
+      />
 
       {turns.length > 0 && (
         <details className="mt-3" data-testid="conversation-turns-details">
