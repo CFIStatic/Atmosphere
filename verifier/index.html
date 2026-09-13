@@ -1455,6 +1455,26 @@
   }
   .controls button:hover { background: var(--accent); color: #FFFFFF; }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; margin-left: auto; text-align: right; }
+  .controls .vol-wrap {
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+  }
+  .controls .vol-wrap input[type="range"] {
+    width: 84px; height: 4px; accent-color: var(--accent); cursor: pointer;
+  }
+  .controls button.cc-btn {
+    width: auto; min-width: 30px; padding: 0 8px; font-size: 11px; font-weight: 750;
+    letter-spacing: .04em;
+  }
+  .controls button.cc-btn[aria-pressed="true"] {
+    background: var(--accent); color: #FFFFFF;
+  }
+  .controls button.cc-btn:disabled {
+    opacity: 0.45; cursor: default;
+  }
+  .controls .cc-hint {
+    font-size: 11px; color: var(--faint); white-space: nowrap;
+  }
+  .controls button.vol-mute[aria-pressed="true"] { opacity: 0.55; }
 
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
@@ -1855,6 +1875,14 @@
             <button id="d-play" aria-label="Play">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
+            <div class="vol-wrap" data-testid="verifier-volume">
+              <button type="button" id="d-mute" class="vol-mute" aria-label="Mute" aria-pressed="false" title="Mute">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3l4.5-3.7a.7.7 0 011.15.54v11.32a.7.7 0 01-1.15.54L7 14.5H4a1 1 0 01-1-1v-3a1 1 0 011-1z"/><path d="M16.5 9a4 4 0 010 6"/></svg>
+              </button>
+              <input id="d-volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
+            </div>
+            <button type="button" id="d-cc" class="cc-btn" aria-label="Captions unavailable" aria-pressed="false" disabled title="Captions unavailable">CC</button>
+            <span class="cc-hint" id="d-cc-hint" hidden>Captions unavailable</span>
             <span class="time" id="d-time" hidden></span>
           </div>
         </div>
@@ -2814,6 +2842,178 @@
       return;
     }
     setPlayerTime(dur(at) + ' / ' + dur(duration));
+  }
+
+  var VIDEO_PREFS_KEY = 'atmosphere.videoPlayer';
+  function readVideoPrefs() {
+    try {
+      var raw = localStorage.getItem(VIDEO_PREFS_KEY);
+      if (!raw) return { volume: 1, muted: false, captionsOn: true };
+      var parsed = JSON.parse(raw) || {};
+      var vol = Number(parsed.volume);
+      if (!Number.isFinite(vol)) vol = 1;
+      vol = Math.max(0, Math.min(1, vol));
+      return {
+        volume: vol,
+        muted: Boolean(parsed.muted),
+        captionsOn: parsed.captionsOn == null ? true : Boolean(parsed.captionsOn)
+      };
+    } catch (err) {
+      return { volume: 1, muted: false, captionsOn: true };
+    }
+  }
+  function writeVideoPrefs(partial) {
+    var cur = readVideoPrefs();
+    var next = {
+      volume: partial.volume != null ? Math.max(0, Math.min(1, Number(partial.volume) || 0)) : cur.volume,
+      muted: partial.muted != null ? Boolean(partial.muted) : cur.muted,
+      captionsOn: partial.captionsOn != null ? Boolean(partial.captionsOn) : cur.captionsOn
+    };
+    try { localStorage.setItem(VIDEO_PREFS_KEY, JSON.stringify(next)); } catch (err) {}
+    return next;
+  }
+  function formatVttClock(seconds) {
+    var totalMs = Math.max(0, Math.round(seconds * 1000));
+    var h = Math.floor(totalMs / 3600000);
+    var m = Math.floor((totalMs % 3600000) / 60000);
+    var s = Math.floor((totalMs % 60000) / 1000);
+    var ms = totalMs % 1000;
+    function pad(n, w) { return String(n).padStart(w || 2, '0'); }
+    return pad(h) + ':' + pad(m) + ':' + pad(s) + '.' + pad(ms, 3);
+  }
+  function parseTranscriptCues(transcript, duration) {
+    var src = String(transcript || '').trim();
+    if (!src) return [];
+    var re = /\[((?:\d+:)+\d+)\]/g;
+    var stamps = [];
+    var match;
+    while ((match = re.exec(src))) {
+      var parts = match[1].split(':').map(Number);
+      if (parts.some(function (n) { return !Number.isFinite(n); })) continue;
+      var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+        : parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0];
+      if (!(at >= 0)) continue;
+      stamps.push({ at: at, index: match.index, end: match.index + match[0].length });
+    }
+    var chunks = [];
+    if (!stamps.length) {
+      chunks.push({ at: 0, text: src });
+    } else {
+      for (var i = 0; i < stamps.length; i++) {
+        var stamp = stamps[i];
+        var next = stamps[i + 1];
+        var body = src.slice(stamp.end, next ? next.index : src.length).replace(/^[\s:,.\-–—]+/, '').trim();
+        if (!body) continue;
+        chunks.push({ at: stamp.at, text: body });
+      }
+    }
+    var cues = [];
+    for (var c = 0; c < chunks.length; c++) {
+      var chunk = chunks[c];
+      var start = chunk.at;
+      var end = chunks[c + 1] ? chunks[c + 1].at : start + Math.min(12, Math.max(2.2, chunk.text.split(/\s+/).length * 0.42));
+      if (duration > 0) end = Math.min(end, duration);
+      if (end <= start) end = start + 1.5;
+      cues.push({ start: start, end: end, text: chunk.text.replace(/\r?\n/g, ' ') });
+    }
+    return cues;
+  }
+  function buildWebVttFromTranscript(transcript, duration) {
+    var cues = parseTranscriptCues(transcript, duration);
+    if (!cues.length) return null;
+    var lines = ['WEBVTT', ''];
+    for (var i = 0; i < cues.length; i++) {
+      lines.push(String(i + 1));
+      lines.push(formatVttClock(cues[i].start) + ' --> ' + formatVttClock(cues[i].end));
+      lines.push(cues[i].text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+  function transcriptForItem(item) {
+    if (!item) return '';
+    var a = item.analysis || {};
+    return String(a.transcript || '').trim();
+  }
+  function syncVolumeControls(vid) {
+    var prefs = readVideoPrefs();
+    var muteBtn = document.getElementById('d-mute');
+    var slider = document.getElementById('d-volume');
+    var muted = vid ? Boolean(vid.muted) : prefs.muted;
+    var volume = vid ? Number(vid.volume) : prefs.volume;
+    if (!Number.isFinite(volume)) volume = prefs.volume;
+    if (muteBtn) {
+      muteBtn.setAttribute('aria-pressed', muted || volume === 0 ? 'true' : 'false');
+      muteBtn.setAttribute('aria-label', muted || volume === 0 ? 'Unmute' : 'Mute');
+    }
+    if (slider) slider.value = String(muted ? 0 : volume);
+  }
+  function syncCaptionControls(available, on) {
+    var btn = document.getElementById('d-cc');
+    var hint = document.getElementById('d-cc-hint');
+    if (!btn) return;
+    if (!available) {
+      btn.disabled = true;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.setAttribute('aria-label', 'Captions unavailable');
+      btn.title = 'Captions unavailable';
+      if (hint) { hint.hidden = false; hint.textContent = 'Captions unavailable'; }
+      return;
+    }
+    btn.disabled = false;
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('aria-label', on ? 'Turn captions off' : 'Turn captions on');
+    btn.title = on ? 'Captions on' : 'Captions off';
+    if (hint) hint.hidden = true;
+  }
+  function applyCaptionMode(vid, on) {
+    if (!vid || !vid.textTracks) return;
+    for (var i = 0; i < vid.textTracks.length; i++) {
+      var track = vid.textTracks[i];
+      if (track.kind !== 'captions' && track.kind !== 'subtitles') continue;
+      track.mode = on ? 'showing' : 'hidden';
+    }
+  }
+  function attachVideoTrack(vid, item) {
+    var prefs = readVideoPrefs();
+    var vtt = buildWebVttFromTranscript(transcriptForItem(item), item && item.duration);
+    // Drop prior blob tracks
+    Array.prototype.slice.call(vid.querySelectorAll('track[data-atm-cc="1"]')).forEach(function (el) {
+      if (el.src && el.src.indexOf('blob:') === 0) {
+        try { URL.revokeObjectURL(el.src); } catch (err) {}
+      }
+      el.remove();
+    });
+    if (!vtt) {
+      syncCaptionControls(false, false);
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    var track = document.createElement('track');
+    track.kind = 'captions';
+    track.srclang = 'en';
+    track.label = 'Captions';
+    track.src = url;
+    track.setAttribute('data-atm-cc', '1');
+    if (prefs.captionsOn) track.default = true;
+    vid.appendChild(track);
+    syncCaptionControls(true, prefs.captionsOn);
+    var apply = function () { applyCaptionMode(vid, prefs.captionsOn); };
+    track.addEventListener('load', apply);
+    apply();
+  }
+  function applyVolumePrefs(vid) {
+    if (!vid) return;
+    var prefs = readVideoPrefs();
+    vid.volume = prefs.volume;
+    vid.muted = prefs.muted;
+    syncVolumeControls(vid);
+    if (vid.getAttribute('data-atm-vol-bound') === '1') return;
+    vid.setAttribute('data-atm-vol-bound', '1');
+    vid.addEventListener('volumechange', function () {
+      writeVideoPrefs({ volume: vid.volume, muted: vid.muted });
+      syncVolumeControls(vid);
+    });
   }
 
   function setPlayButton(playing) {
@@ -4843,6 +5043,8 @@
     setPlayerTime('full clip · ' + durLabel(item.duration));
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
+    applyVolumePrefs(vid);
+    attachVideoTrack(vid, item);
     bindVideoDuration(vid, item.duration);
     vid.addEventListener('timeupdate', function () {
       syncAnalysisLog(vid.currentTime);
@@ -4988,6 +5190,8 @@
         if (attempt && attempt.catch) {
           attempt.catch(function () {
             vid.muted = true;
+            writeVideoPrefs({ muted: true, volume: vid.volume });
+            syncVolumeControls(vid);
             vid.play().catch(function () {});
           });
         }
@@ -6953,6 +7157,50 @@
     if (state.playing || frameRaf) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
     startFramePlayback();
   });
+
+  var muteBtn = document.getElementById('d-mute');
+  if (muteBtn) muteBtn.addEventListener('click', function () {
+    var vid = previewVideo();
+    var prefs = readVideoPrefs();
+    var nextMuted = !(vid ? vid.muted : prefs.muted);
+    if (vid) {
+      vid.muted = nextMuted;
+      if (!nextMuted && vid.volume === 0) {
+        vid.volume = prefs.volume > 0 ? prefs.volume : 1;
+      }
+      writeVideoPrefs({ muted: vid.muted, volume: vid.volume });
+      syncVolumeControls(vid);
+    } else {
+      writeVideoPrefs({ muted: nextMuted });
+      syncVolumeControls(null);
+    }
+  });
+  var volumeSlider = document.getElementById('d-volume');
+  if (volumeSlider) volumeSlider.addEventListener('input', function () {
+    var next = Math.max(0, Math.min(1, Number(volumeSlider.value) || 0));
+    var vid = previewVideo();
+    if (vid) {
+      vid.volume = next;
+      vid.muted = next === 0;
+      writeVideoPrefs({ volume: vid.volume, muted: vid.muted });
+      syncVolumeControls(vid);
+    } else {
+      writeVideoPrefs({ volume: next, muted: next === 0 });
+      syncVolumeControls(null);
+    }
+  });
+  var ccBtn = document.getElementById('d-cc');
+  if (ccBtn) ccBtn.addEventListener('click', function () {
+    if (ccBtn.disabled) return;
+    var prefs = readVideoPrefs();
+    var next = !prefs.captionsOn;
+    writeVideoPrefs({ captionsOn: next });
+    var vid = previewVideo();
+    applyCaptionMode(vid, next);
+    syncCaptionControls(true, next);
+  });
+  syncVolumeControls(null);
+  syncCaptionControls(false, false);
 
   bindProgressSeek();
 
