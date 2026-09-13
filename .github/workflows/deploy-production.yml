@@ -32,8 +32,10 @@
 # autodeploy instead of building the backend image. Every job here copies its
 # own surface's config over it before `railway up`. See railway.toml.
 #
-# Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
-# as well (not only the "Google API keys" environment) so this job can see them.
+# Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY
+# in `Keys` as well (not only the "Google API keys" environment) so this job
+# can see them. Optional: TRANSCRIPTION_URL / TRANSCRIPTION_API_KEY (backend
+# falls back to OPENAI_API_KEY + OpenAI transcriptions URL when unset).
 #
 # Auto-deploys on push to main, the live Atmosphere API branch, the
 # job-create memory FK fix branch, the office-service-name fix branch, and
@@ -139,6 +141,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || vars.OPENAI_API_KEY }}
+          TRANSCRIPTION_URL: ${{ secrets.TRANSCRIPTION_URL || vars.TRANSCRIPTION_URL }}
+          TRANSCRIPTION_API_KEY: ${{ secrets.TRANSCRIPTION_API_KEY || vars.TRANSCRIPTION_API_KEY }}
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-3.6-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
