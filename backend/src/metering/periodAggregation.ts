@@ -53,3 +53,17 @@ export async function getAdminMeteringAnalytics(
   if (error) throw error;
   return data as Record<string, unknown>;
 }
+
+/** Global token ledger for Internal Growth Metrics (token_usage_events). */
+export async function getAdminTokenUsageAnalytics(
+  client: SupabaseClient,
+  from: string,
+  to: string,
+): Promise<Record<string, unknown>> {
+  const { data, error } = await client.rpc('admin_token_usage_analytics', {
+    p_from: from,
+    p_to: to,
+  });
+  if (error) throw error;
+  return data as Record<string, unknown>;
+}

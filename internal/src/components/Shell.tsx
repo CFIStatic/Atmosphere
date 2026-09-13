@@ -11,6 +11,7 @@ const NAV = [
   { to: '/usage', label: 'Usage' },
   { to: '/experiments', label: 'Experiments', internal: true },
   { to: '/metering', label: 'Metering', internal: true },
+  { to: '/token-usage', label: 'Token usage', internal: true },
   { to: '/legal', label: 'Legal', internal: true },
   { to: '/system', label: 'System' },
 ] as const;

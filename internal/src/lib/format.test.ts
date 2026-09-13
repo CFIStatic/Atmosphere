@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { count, hours, money, moneyCompact, percent, signedPercent } from './format';
+import { count, hours, money, moneyCompact, percent, signedPercent, tokens } from './format';
 
 describe('format', () => {
   it('formats cents as USD', () => {
@@ -19,4 +19,14 @@ describe('format', () => {
     expect(hours(0.04)).toBe('<0.1 h');
     expect(hours(41.2)).toBe('41 h');
   });
+
+  it('formats token counts',
+    () => {
+      expect(tokens(0)).toBe('0');
+      expect(tokens(1234)).toBe('1,234');
+      expect(tokens(12_500)).toBe('13k');
+      expect(tokens(1_200_000)).toBe('1.2M');
+      expect(tokens(null)).toBe('—');
+    },
+  );
 });
