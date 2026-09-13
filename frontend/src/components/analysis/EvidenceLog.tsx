@@ -5,6 +5,7 @@ import type { EvidenceLogEntry } from '../../lib/api';
 const FILTERS: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'said', label: 'Said' },
+  { id: 'person', label: 'People' },
   { id: 'decision', label: 'Decision' },
   { id: 'work', label: 'Work' },
   { id: 'scene', label: 'Scene' },
@@ -16,6 +17,7 @@ function matchesFilter(entry: EvidenceLogEntry, filter: string): boolean {
   if (filter === 'all') return true;
   const t = (entry.type || 'other').toLowerCase();
   if (filter === 'said') return t === 'said' || t === 'speech';
+  if (filter === 'person') return t === 'person';
   return t === filter;
 }
 

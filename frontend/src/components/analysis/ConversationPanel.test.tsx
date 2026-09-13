@@ -79,6 +79,25 @@ describe('ConversationPanel', () => {
               text: 'We will remount the mirror today.',
             },
           ],
+          conversationPeople: [
+            {
+              label: 'Homeowner',
+              role: 'homeowner',
+              firstSeenSec: 18,
+              lastSeenSec: 18,
+              talking: true,
+              evidence: 'Refused cabinet replacement pending insurance.',
+              quote: 'I do not want you to replace the cabinets unless insurance approves it.',
+            },
+            {
+              label: 'Crew',
+              role: 'crew',
+              firstSeenSec: 96,
+              talking: true,
+              evidence: 'Promised to remount the mirror today.',
+              quote: 'We will remount the mirror today',
+            },
+          ],
         }}
       />,
     );
@@ -88,6 +107,8 @@ describe('ConversationPanel', () => {
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Promises/);
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Crew/);
     expect(screen.getByTestId('verbatim-transcript').textContent).toMatch(/Exact transcript/);
+    expect(screen.getByTestId('conversation-people').textContent).toMatch(/Homeowner/);
+    expect(screen.getByTestId('conversation-people').textContent).toMatch(/Crew/);
     await user.click(screen.getByText(/Crew will remount the mirror today/i));
     expect(onSeek).toHaveBeenCalledWith(96);
   });

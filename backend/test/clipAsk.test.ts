@@ -221,6 +221,30 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
   assert.match(topic, /vanity|insurance|cabinets|mirror/i);
   assert.doesNotMatch(topic, /does not show that/i);
   assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
+
+  const who = groundedAnswerFromClip('who is in this video', {
+    ...talk,
+    conversationPeople: [
+      {
+        label: 'Homeowner',
+        role: 'homeowner',
+        firstSeenSec: 18,
+        talking: true,
+        evidence: 'Speaking about the vanity leak.',
+        quote: 'The leak started behind the vanity.',
+      },
+      {
+        label: 'Crew',
+        role: 'crew',
+        firstSeenSec: 96,
+        talking: true,
+        evidence: 'Agreed to remount the mirror.',
+      },
+    ],
+  });
+  assert.match(who, /Homeowner/i);
+  assert.match(who, /Crew/i);
+  assert.doesNotMatch(who, /does not show that/i);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {

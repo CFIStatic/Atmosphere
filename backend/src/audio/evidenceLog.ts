@@ -24,6 +24,7 @@ export const MAX_EVIDENCE_LOG_ENTRIES = 2_000;
 export const EVIDENCE_LOG_FILTERS = [
   'all',
   'said',
+  'person',
   'work',
   'scene',
   'camera',
@@ -38,7 +39,7 @@ export type EvidenceLogFilter = (typeof EVIDENCE_LOG_FILTERS)[number];
 export type EvidenceLogEntry = {
   atSeconds: number;
   text: string;
-  /** said | work | scene | camera | activity | decision | speech | other */
+  /** said | person | work | scene | camera | activity | decision | speech | other */
   type: string;
   speakerLabel?: string | null;
   quote?: string | null;
@@ -135,6 +136,29 @@ function turnEntries(details: ConversationDetails): EvidenceLogEntry[] {
     }));
 }
 
+
+function personEntries(details: ConversationDetails): EvidenceLogEntry[] {
+  return (details.people ?? [])
+    .filter((person) => person.label?.trim())
+    .map((person) => {
+      const when =
+        person.firstSeenSec != null && Number.isFinite(person.firstSeenSec)
+          ? roundTime(person.firstSeenSec)
+          : 0;
+      const talking = person.talking ? 'speaking' : 'present';
+      const role = person.role ? ` (${person.role})` : '';
+      return {
+        atSeconds: when,
+        text: `${person.label}${role} — ${talking}: ${person.evidence}`.slice(0, 500),
+        type: 'person',
+        speakerLabel: person.label,
+        quote: person.quote ?? null,
+        confidence: person.confidence ?? null,
+        kind: 'person',
+      };
+    });
+}
+
 /**
  * Build the complete evidence log from vision narration + mic + conversation facts.
  */
@@ -190,9 +214,10 @@ export function buildEvidenceLog(input: {
 
   const fromTurns = hasConversation(conversation) ? turnEntries(conversation) : [];
   const fromDecisions = hasConversation(conversation) ? decisionEntries(conversation) : [];
+  const fromPeople = conversation.people?.length ? personEntries(conversation) : [];
 
   // Prefer explicit turns when present; speechEvents already merged in resolveDictationEntries.
-  return dedupeEvidenceLog([...fromVision, ...fromTurns, ...fromDecisions]);
+  return dedupeEvidenceLog([...fromVision, ...fromPeople, ...fromTurns, ...fromDecisions]);
 }
 
 export function toStoredEvidenceLog(entries: EvidenceLogEntry[]): StoredEvidenceLog {
@@ -210,5 +235,6 @@ export function filterEvidenceLog(
   const want = filter.toLowerCase();
   if (want === 'decision') return entries.filter((e) => e.type === 'decision');
   if (want === 'said') return entries.filter((e) => e.type === 'said' || e.type === 'speech');
+  if (want === 'person') return entries.filter((e) => e.type === 'person');
   return entries.filter((e) => e.type === want);
 }

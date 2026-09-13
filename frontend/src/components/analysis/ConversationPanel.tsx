@@ -17,7 +17,8 @@ function hasTalk(conversation: ProofConversation | null | undefined): boolean {
       conversation.conversationRooms?.length ||
       conversation.conversationDetails?.length ||
       conversation.transcriptSegments?.length ||
-      conversation.transcriptText?.trim(),
+      conversation.transcriptText?.trim() ||
+      conversation.conversationPeople?.length,
   );
 }
 
@@ -148,6 +149,65 @@ export function ConversationPanel({
       )}
       {rooms.length > 0 && (
         <p className="mt-1 text-[11px] text-ink-500">Rooms & scope mentioned: {rooms.join(', ')}</p>
+      )}
+
+      {(c.conversationPeople?.length ?? 0) > 0 && (
+        <div className="mt-2.5" data-testid="conversation-people">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">People</p>
+          <ul className="mt-1 space-y-1.5">
+            {c.conversationPeople!.map((person) => {
+              const seek =
+                person.firstSeenSec != null && Number.isFinite(person.firstSeenSec)
+                  ? person.firstSeenSec
+                  : null;
+              const body = (
+                <span className="min-w-0">
+                  <span className="text-[12.5px] font-medium leading-snug text-ink-900">{person.label}</span>
+                  {person.role ? (
+                    <span className="ml-1.5 rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
+                      {person.role}
+                    </span>
+                  ) : null}
+                  {person.talking ? (
+                    <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                      speaking
+                    </span>
+                  ) : (
+                    <span className="ml-1.5 text-[10px] uppercase tracking-wide text-ink-400">present</span>
+                  )}
+                  <span className="mt-0.5 block text-[12px] leading-snug text-ink-700">{person.evidence}</span>
+                  {person.quote ? (
+                    <span className="mt-0.5 block text-[11px] italic leading-snug text-ink-500">
+                      Exact: “{person.quote}”
+                    </span>
+                  ) : null}
+                </span>
+              );
+              return (
+                <li key={`${person.label}|${person.firstSeenSec ?? ''}|${person.evidence.slice(0, 24)}`}>
+                  {seek != null ? (
+                    <button
+                      type="button"
+                      data-at={seek}
+                      onClick={() => onSeek?.(seek)}
+                      className="flex w-full items-start gap-2 rounded px-0.5 py-0.5 text-left hover:bg-paper-100/80"
+                    >
+                      <span className="w-10 shrink-0 font-mono text-[11px] tabular-nums text-ink-500">
+                        {eventClock(seek)}
+                      </span>
+                      {body}
+                    </button>
+                  ) : (
+                    <div className="flex items-start gap-2 px-0.5 py-0.5">
+                      <span className="w-10 shrink-0 font-mono text-[11px] text-ink-400">—</span>
+                      {body}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {keyMoments.length > 0 && (

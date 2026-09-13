@@ -61,13 +61,22 @@ export type ClipAskRecord = {
   conversationExecutiveSummary?: string | null;
   conversationTurns?: Array<{ tSec?: number | null; speakerLabel?: string; text?: string }>;
   conversationCommitments?: Array<{ text?: string; owner?: string | null } | string>;
-  conversationActionItems?: Array<{ text?: string; owner?: string | null } | string>;
+  conversationActionItems?: Array<{ text?: string; quote?: string | null; tSec?: number | null; owner?: string | null } | string>;
   conversationMoneyTalk?: Array<{ text?: string } | string>;
   conversationInsurance?: Array<{ text?: string } | string>;
   conversationKeyMoments?: Array<{ tSec?: number | null; label?: string; text?: string }>;
   conversationAgreementFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
   conversationConcernFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
   conversationRefusals?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
+  conversationPeople?: Array<{
+    label?: string;
+    role?: string | null;
+    firstSeenSec?: number | null;
+    lastSeenSec?: number | null;
+    talking?: boolean;
+    evidence?: string;
+    quote?: string | null;
+  }>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -153,6 +162,7 @@ Rules:
 6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
 7. EXACT SPEECH RECALL: When asked what was said, quote the EXACT words from the "Heard on the mic" / transcript section. Never invent, paraphrase, or clean up dialogue. Cite the seek time from [m:ss] stamps when present.
 8. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
+8b. WHO IS IN THE FILM: When asked who is present / talking, answer from the People list and transcript speakers with roles and seek times. Never invent identities.
 9. Two to five sentences. This is read next to the player.
 10. Never estimate cost, hours, or whether work was worth paying for.`;
 
@@ -216,6 +226,7 @@ export function clipRecordFromEvidenceItem(item: {
     conversationConcernFacts: Array.isArray(analysis?.conversationConcernFacts)
       ? analysis.conversationConcernFacts
       : [],
+    conversationPeople: Array.isArray(analysis?.conversationPeople) ? analysis.conversationPeople : [],
   };
 }
 
@@ -364,6 +375,36 @@ function isWhatHappened(question: string): boolean {
   );
 }
 
+
+function isWhoPresent(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /\bwho (is|are|was|were)\b/.test(q) ||
+    /who('?s| is) (in|on|talking|present|there|visible)/.test(q) ||
+    /\b(anyone|anybody|people|person|crew|homeowner) (in|on|present|there|visible|talking)/.test(q) ||
+    /how many people|who('?s| is) speaking|who (spoke|talked)/.test(q)
+  );
+}
+
+function peopleAnswer(record: ClipAskRecord): string | null {
+  const people = (record.conversationPeople ?? []).filter((p) => String(p?.label || '').trim());
+  if (!people.length) return null;
+  const parts = people.slice(0, 12).map((person) => {
+    const label = String(person.label).trim();
+    const role = person.role ? ` (${person.role})` : '';
+    const when =
+      person.firstSeenSec != null && Number.isFinite(person.firstSeenSec)
+        ? formatClipTimeSpoken(person.firstSeenSec) || formatClipTime(person.firstSeenSec)
+        : null;
+    const clock = when ? ` from ${when}` : '';
+    const talking = person.talking ? 'speaking' : 'present';
+    const evidence = String(person.evidence || person.quote || '').trim();
+    const quote = person.quote ? ` Exact: “${person.quote}”` : '';
+    return `${label}${role} — ${talking}${clock}${evidence ? `: ${evidence}` : ''}${quote}`;
+  });
+  return `Yes — people in this film: ${parts.join(' · ')}`;
+}
+
 function isWhatWasSaid(question: string): boolean {
   const q = question.toLowerCase();
   return (
@@ -474,6 +515,11 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   const q = question.trim();
+  if (isWhoPresent(q)) {
+    const who = peopleAnswer(record);
+    if (who) return who;
+    // Fall through to speech / corpus if people catalog empty but mic has speakers.
+  }
   if (isWhatWasSaid(q)) {
     const speech = exactSpeechAnswer(record);
     if (speech) return speech;
@@ -596,6 +642,16 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   } else if (record.conversationSummary) {
     lines.push(`Conversation summary: ${record.conversationSummary}`);
   }
+  for (const person of record.conversationPeople ?? []) {
+    if (!person?.label) continue;
+    const when =
+      person.firstSeenSec != null && Number.isFinite(person.firstSeenSec)
+        ? ` @ ${formatClipTime(person.firstSeenSec)}`
+        : '';
+    lines.push(
+      `Person${when}: ${person.label}${person.role ? ` (${person.role})` : ''}${person.talking ? ' speaking' : ' present'} — ${person.evidence || person.quote || ''}`,
+    );
+  }
   for (const moment of record.conversationKeyMoments ?? []) {
     if (!moment?.text) continue;
     const when = moment.tSec != null && Number.isFinite(moment.tSec) ? ` @ ${formatClipTime(moment.tSec)}` : '';
@@ -648,9 +704,12 @@ export async function answerFromClip(input: {
   // Exact speech recall: do not let a model override transcript-backed answers
   // with "The footage on file does not show that."
   if (
-    isWhatWasSaid(input.question) &&
-    hasUsableSpeech(input.record) &&
-    !/does not (show that|include usable speech)/i.test(grounded)
+    (isWhatWasSaid(input.question) &&
+      hasUsableSpeech(input.record) &&
+      !/does not (show that|include usable speech)/i.test(grounded)) ||
+    (isWhoPresent(input.question) &&
+      (input.record.conversationPeople?.length ?? 0) > 0 &&
+      !/does not (show that|include usable speech)/i.test(grounded))
   ) {
     return { answer: grounded, model: null, usage: null };
   }

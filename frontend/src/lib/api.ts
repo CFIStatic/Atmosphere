@@ -857,6 +857,17 @@ export interface ConversationKeyMoment {
   confidence?: number | null;
 }
 
+export interface ConversationPerson {
+  label: string;
+  role?: string | null;
+  firstSeenSec?: number | null;
+  lastSeenSec?: number | null;
+  talking?: boolean;
+  evidence: string;
+  quote?: string | null;
+  confidence?: number | null;
+}
+
 /** Structured mic conversation for Analysis — null when silent / noise-only. */
 export interface ProofConversation {
   conversationSummary?: string | null;
@@ -879,6 +890,7 @@ export interface ProofConversation {
   conversationUnresolvedQuestions?: ConversationQuotedFact[];
   conversationContradictions?: ConversationQuotedFact[];
   conversationKeyMoments?: ConversationKeyMoment[];
+  conversationPeople?: ConversationPerson[];
   conversationSource?: 'llm' | 'deterministic' | 'empty' | string;
   conversationModel?: string | null;
   /** Verbatim timestamped transcript lines (same as video.transcriptSegments). */

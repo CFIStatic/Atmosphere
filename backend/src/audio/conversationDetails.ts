@@ -9,6 +9,16 @@
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
 import { findVerbatimQuote } from './verbatimTranscript.js';
+import {
+  asPeopleList,
+  groundPeopleQuotes,
+  mergePeopleLists,
+  peopleFromTurnsAndVision,
+  preferPeople,
+  type ConversationPerson,
+} from './peoplePresence.js';
+
+export type { ConversationPerson } from './peoplePresence.js';
 
 export type ConversationQuotedFact = {
   text: string;
@@ -56,6 +66,8 @@ export type ConversationDetails = {
   unresolvedQuestions: ConversationQuotedFact[];
   contradictions: ConversationQuotedFact[];
   keyMoments: ConversationKeyMoment[];
+  /** People present (seen and/or heard) with roles and seek times. */
+  people: ConversationPerson[];
   source: 'llm' | 'deterministic' | 'empty';
   model?: string | null;
 };
@@ -85,9 +97,10 @@ export type StoredConversation = {
   unresolvedQuestions?: ConversationQuotedFact[];
   contradictions?: ConversationQuotedFact[];
   keyMoments?: ConversationKeyMoment[];
+  people?: ConversationPerson[];
 };
 
-export const CONVERSATION_FINDINGS_VERSION = 2;
+export const CONVERSATION_FINDINGS_VERSION = 3;
 
 /** Strong enough for a deep JSON brief; Gemini path already floors high. */
 export const CONVERSATION_LLM_MAX_TOKENS = 8_000;
@@ -171,6 +184,7 @@ function emptyDetails(): ConversationDetails {
     unresolvedQuestions: [],
     contradictions: [],
     keyMoments: [],
+    people: [],
     source: 'empty',
     model: null,
   };
@@ -460,6 +474,7 @@ export function extractConversationDetails(transcript: string | null | undefined
     unresolvedQuestions,
     contradictions: [],
     keyMoments,
+    people: peopleFromTurnsAndVision(turns),
     source: 'deterministic',
     model: null,
   };
@@ -481,6 +496,7 @@ export function hasConversation(details: ConversationDetails): boolean {
     details.safety.length > 0 ||
     details.insurance.length > 0 ||
     details.keyMoments.length > 0 ||
+    details.people.length > 0 ||
     Boolean(details.executiveSummary?.trim()) ||
     Boolean(details.summary?.trim() && details.turns.length > 0)
   );
@@ -638,6 +654,7 @@ function groundConversationQuotes(details: ConversationDetails, transcript: stri
     insurance: groundFactQuotes(details.insurance, raw),
     unresolvedQuestions: groundFactQuotes(details.unresolvedQuestions, raw),
     contradictions: groundFactQuotes(details.contradictions, raw),
+    people: groundPeopleQuotes(details.people, (needle) => findVerbatimQuote(raw, needle)),
   };
 }
 
@@ -708,6 +725,7 @@ export function parseConversationModelJson(
     unresolvedQuestions: preferFacts(unresolvedQuestions, fallback.unresolvedQuestions),
     contradictions: preferFacts(contradictions, fallback.contradictions),
     keyMoments: keyMoments.length ? keyMoments : fallback.keyMoments,
+    people: preferPeople(asPeopleList(data.people), fallback.people),
     source: 'llm',
     model: null,
   };
@@ -736,7 +754,8 @@ Return JSON only (no markdown). Schema:
   "actionItems": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":"...","kind":"action"}],
   "unresolvedQuestions": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
   "contradictions": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
-  "keyMoments": [{"tSec":number|null,"label":"Agreement|Refusal|Promise|Money|Insurance|Scope|Safety|Question","text":"...","quote":"...","confidence":0.0}],
+  "keyMoments": [{"tSec":number|null,"label":"Agreement|Refusal|Promise|Money|Insurance|Scope|Safety|Question|Person","text":"...","quote":"...","confidence":0.0}],
+  "people": [{"label":"Homeowner"|"Crew"|"Adjuster"|string,"role":"homeowner"|"crew"|"adjuster"|"inspector"|"other", "firstSeenSec":number|null,"lastSeenSec":number|null,"talking":true,"evidence":"what they are doing or saying","quote":"verbatim if speaking","confidence":0.0}],
   "roomsMentioned": ["bathroom"],
   "details": ["short fact lines"]
 }
@@ -749,7 +768,10 @@ Rules:
 - Never invent speech. Empty arrays when silent or noise-only.
 - CRITICAL: quote fields must be EXACT verbatim substrings of the transcript. Do not paraphrase quotes. Do not rewrite the transcript. Structure sits ON TOP OF the verbatim log.
 - Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, and unresolved questions explicitly.
-- keyMoments: the 4–10 most important seekable beats for the office player.`;
+- keyMoments: the 4–10 most important seekable beats for the office player.
+- PEOPLE: list everyone clearly present or speaking. Set talking=true when they have transcript lines. firstSeenSec from first stamp / first sighting in vision notes. Do not invent identities beyond role labels supported by transcript or vision.
+- executiveSummary MUST answer what is happening AND who is in the film (roles), then decisions / next steps.
+- actionItems are concrete next steps with owners when known.`;
 
 function planTranscriptChunks(transcript: string): string[] {
   const raw = transcript.trim();
@@ -820,6 +842,7 @@ function mergeParsedChunks(parts: ConversationDetails[], fallback: ConversationD
       .flatMap((p) => p.keyMoments)
       .sort((a, b) => (a.tSec ?? 1e9) - (b.tSec ?? 1e9))
       .slice(0, 16),
+    people: mergePeopleLists(...parts.map((p) => p.people)),
     source: 'llm',
     model: first.model,
   };
@@ -898,6 +921,8 @@ export async function analyzeConversation(
           scopeChanges: merged.scopeChanges.slice(0, 4),
           unresolvedQuestions: merged.unresolvedQuestions.slice(0, 4),
           keyMoments: merged.keyMoments.slice(0, 8),
+          people: merged.people.slice(0, 12),
+          actionItems: merged.actionItems.slice(0, 6),
         },
         null,
         0,
@@ -935,6 +960,7 @@ export async function analyzeConversation(
             unresolvedQuestions: preferFacts(finalParsed.unresolvedQuestions, merged.unresolvedQuestions),
             contradictions: preferFacts(finalParsed.contradictions, merged.contradictions),
             keyMoments: finalParsed.keyMoments.length ? finalParsed.keyMoments : merged.keyMoments,
+            people: preferPeople(finalParsed.people, merged.people),
             source: 'llm',
             model: synth.model || model,
           };
@@ -942,6 +968,12 @@ export async function analyzeConversation(
       }
     }
 
+    if (!merged.people.length) {
+      merged = {
+        ...merged,
+        people: peopleFromTurnsAndVision(merged.turns, opts?.visionContext),
+      };
+    }
     return groundConversationQuotes({ ...merged, source: 'llm', model: merged.model || model }, raw);
   } catch (err) {
     logger.warn('conversation_llm_failed', {
@@ -976,6 +1008,7 @@ export function toStoredConversation(details: ConversationDetails): StoredConver
     unresolvedQuestions: details.unresolvedQuestions,
     contradictions: details.contradictions,
     keyMoments: details.keyMoments,
+    people: details.people,
   };
 }
 
@@ -1042,6 +1075,7 @@ export function conversationFromStored(transcript: unknown, stored: unknown): Co
     unresolvedQuestions: preferFacts(unresolvedQuestions, derived.unresolvedQuestions),
     contradictions: preferFacts(contradictions, derived.contradictions),
     keyMoments: keyMoments.length ? keyMoments : derived.keyMoments,
+    people: preferPeople(asPeopleList(row.people), derived.people.length ? derived.people : peopleFromTurnsAndVision(turns.length ? turns : derived.turns)),
     source,
     model: typeof row.model === 'string' ? row.model : null,
   };
@@ -1070,6 +1104,7 @@ export function publicConversationFields(details: ConversationDetails) {
     conversationUnresolvedQuestions: details.unresolvedQuestions,
     conversationContradictions: details.contradictions,
     conversationKeyMoments: details.keyMoments,
+    conversationPeople: details.people,
     conversationSource: details.source,
     conversationModel: details.model ?? null,
   };
