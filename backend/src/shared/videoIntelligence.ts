@@ -79,6 +79,8 @@ export type VideoDictationResult = {
   actions: VisionAction[];
   /** Event-boundary beats for the Analysis list (not a fixed cadence). */
   events: DictationEvent[];
+  /** Distinct people visible — roles + appearance; never hallucinated legal names. */
+  people: unknown[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -192,22 +194,27 @@ export async function dictatePreparedFrames(
     'Watch the provided stills (sampled across the recording, including long day-long clips) and dictate what is on camera.',
     'Write as spoken field notes an office person can read beside the video player.',
     'Describe only what is visible. Never infer off-camera work or invent rooms.',
-    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
+    'DENSE LOG — every distinct person, object interaction, room/scene change, camera move, and work beat must appear in events with a seek time.',
+    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, fixtures, equipment, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
     'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
     'Name the room or area when you can see it. If you cannot tell, omit it.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
-    'summary is 2–4 sentences that would answer "what is happening in this video". Do not start summary with a timestamp. Do not restate the event list. Do not begin with "The video shows" or "The camera captures".',
+    'PEOPLE: list every distinct visible person in "people". Use labels like "Person 1 (crew-like)" or "Person 2 (homeowner-like)". Include appearance (PPE, clothing, build) when identity is unknown.',
+    'Role may be crew, homeowner, adjuster, inspector, other, or unknown when inferable from clothing/context — NEVER invent a legal name from faces alone. Only put a real name in matchedName when a name tag or readable badge is visible.',
+    'appearMoments: seek times when each person is visible.',
+    'OBJECTS: name tools, materials, fixtures, and equipment in action object/tool/material fields and in event descriptions.',
+    'summary is 2–4 sentences that would answer "what is happening in this video" and why (job phase/room/situation when visible). Do not start summary with a timestamp. Do not restate the event list. Do not begin with "The video shows" or "The camera captures".',
     'events is the Analysis list: one or two present-tense sentences per meaningful change, each tied to a time. No filler ("The video shows", "At N seconds").',
-    'Emit an event when something meaningfully changes — scene change, new object or activity, speech topic shift, camera move to a new subject, work step starts or stops. Quiet stretches may have few or no events.',
+    'Emit an event when something meaningfully changes — scene/room change, new person enters/leaves, object interaction, new activity, speech topic shift, camera move to a new subject, work step starts or stops.',
     'Do NOT emit a mandatory event at t=0. An unchanged opening still belongs in summary, not as a catch-all 0-second event. Only emit t=0 when something actually happens at the open.',
-    'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only.',
+    'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only — but be thorough: prefer more precise beats over a thin highlights reel.',
     't_seconds should match a provided frame timestamp. Never invent off-camera work.',
     'type is optional: scene, activity, speech, camera, work, other.',
     'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count.',
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp.',
-    'Reply with JSON only: {"narration":"...","summary":"...","events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'actions may be an empty array. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary.',
+    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
+    'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary.',
   ].join(' ');
 
   const userText = [
@@ -245,7 +252,7 @@ export async function dictatePreparedFrames(
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 3200,
+    max_tokens: 8192,
     system,
     messages: [
       {
@@ -291,6 +298,7 @@ export async function dictatePreparedFrames(
     frameCount: frames.length,
     actions: parsed.actions,
     events: parsed.events,
+    people: parsed.people,
   };
 }
 
@@ -330,7 +338,7 @@ async function dictateWithGemini(input: {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0,
-        maxOutputTokens: 3200,
+        maxOutputTokens: 8192,
       },
     }),
     });
@@ -373,6 +381,7 @@ async function dictateWithGemini(input: {
     frameCount: input.frames.length,
     actions: parsed.actions,
     events: parsed.events,
+    people: parsed.people,
   };
 }
 
@@ -425,11 +434,22 @@ function eventsFromParsed(
 }
 
 /** Exported for tests — dictation JSON must stay parseable without a live model. */
+function asPeopleArray(value: unknown): unknown[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => item && typeof item === 'object').slice(0, 24);
+}
+
 export function parseDictationPayload(
   text: string,
   frames?: number[],
   model?: string | null,
-): { narration: string; summary: string | null; actions: VisionAction[]; events: DictationEvent[] } {
+): {
+  narration: string;
+  summary: string | null;
+  actions: VisionAction[];
+  events: DictationEvent[];
+  people: unknown[];
+} {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) {
@@ -439,6 +459,7 @@ export function parseDictationPayload(
       summary: null,
       actions: [],
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
+      people: [],
     };
   }
   try {
@@ -448,6 +469,8 @@ export function parseDictationPayload(
       actions?: unknown;
       events?: unknown;
       entries?: unknown;
+      people?: unknown;
+      persons?: unknown;
     };
     const narration = String(data.narration ?? '').trim();
     const summary = String(data.summary ?? '').trim() || null;
@@ -457,6 +480,7 @@ export function parseDictationPayload(
       summary,
       actions,
       events: eventsFromParsed(data, narration, actions, frames, summary),
+      people: asPeopleArray(data.people ?? data.persons),
     };
   } catch {
     const trimmed = text.trim();
@@ -465,6 +489,7 @@ export function parseDictationPayload(
       summary: null,
       actions: [],
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
+      people: [],
     };
   }
 }

@@ -102,6 +102,8 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
     windowsRead: 0,
     actions: dictation.actions,
     events,
+    /** Raw vision people array — enrichProofConversation normalizes into ai_findings.people */
+    visionPeople: Array.isArray(dictation.people) ? dictation.people : [],
   };
 }
 

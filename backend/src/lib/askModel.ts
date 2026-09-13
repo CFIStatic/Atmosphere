@@ -21,7 +21,7 @@ import { logger } from './logger.js';
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
 /** Short office replies. Anthropic counts only visible output. */
-export const ANTHROPIC_ASK_MAX_TOKENS = 500;
+export const ANTHROPIC_ASK_MAX_TOKENS = 4096;
 /**
  * Gemini thinking models spend `maxOutputTokens` on hidden reasoning first.
  * 500 can return an empty candidate and dump Ask back to keyword matching.
@@ -52,14 +52,14 @@ export function isAskModelConfigured(anthropicApiKey?: string | null): boolean {
 }
 
 function anthropicAskModel(): string {
-  return (process.env.ANTHROPIC_MODEL ?? process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5').trim();
+  return (process.env.ANTHROPIC_MODEL ?? process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-4-1').trim();
 }
 
 function geminiAskModel(): string {
   return (
     process.env.VERIFICATION_PRIMARY_MODEL ??
     process.env.GOOGLE_MODEL_FAST ??
-    'gemini-3.6-flash'
+    'gemini-2.5-pro'
   ).trim();
 }
 
@@ -108,7 +108,7 @@ async function completeWithGemini(input: {
     maxOutputTokens: input.maxTokens,
   };
   // Gemini 3 uses thinkingLevel; older Flash ids ignore or reject it, so only send on 3.x.
-  if (/^gemini-3/i.test(model)) {
+  if (/^gemini-(3|2\.5)/i.test(model)) {
     generationConfig.thinkingConfig = { thinkingLevel: GEMINI_ASK_THINKING_LEVEL };
   }
   const response = await fetchFn(url, {

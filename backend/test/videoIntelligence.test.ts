@@ -419,3 +419,25 @@ test('dictatePreparedFrames retries a retired Gemini model with the suggested id
     else process.env.ANTHROPIC_API_KEY = prevAnthropic;
   }
 });
+
+test('parseDictationPayload extracts people without inventing legal names', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'Crew and homeowner in the bathroom.',
+      summary: 'Walkthrough talk at the vanity.',
+      people: [
+        {
+          id: 'person-1',
+          label: 'Person 1 (crew-like)',
+          role: 'crew',
+          appearance: 'hard hat',
+          appearMoments: [{ tSec: 12, note: 'cutting drywall' }],
+        },
+      ],
+      events: [{ t_seconds: 12, description: 'Crew cuts drywall near vanity.', type: 'work' }],
+      actions: [],
+    }),
+  );
+  assert.equal(parsed.people.length, 1);
+  assert.equal((parsed.people[0] as { label?: string }).label, 'Person 1 (crew-like)');
+});

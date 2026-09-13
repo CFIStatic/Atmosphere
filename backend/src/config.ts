@@ -121,7 +121,7 @@ export const config = {
     // mid-tier job. It gets its own knob rather than borrowing the
     // assistant's flagship, so the expensive leg of the pipeline stays the
     // one that actually looks at frames.
-    synthesisModel: process.env.LONG_FORM_SYNTHESIS_MODEL ?? 'claude-sonnet-5',
+    synthesisModel: process.env.LONG_FORM_SYNTHESIS_MODEL ?? 'claude-opus-4-1',
     // Day-length / overnight recordings. The phone may leave the camera
     // running for a whole shift (and sometimes longer); intake accepts up to
     // this many seconds, then the server sparsely extracts stills rather
@@ -187,7 +187,7 @@ export const config = {
     // is usable out of the box and only gets smarter once a key is configured.
     assistant: {
       apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-      model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+      model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-4-1',
       // The live capture loop is a five-way classification of a single still,
       // forty times per walkthrough. That is the cheapest tier's job, and
       // putting the flagship on it would multiply the pipeline's whole cost
@@ -225,7 +225,7 @@ export const config = {
     // be metered. Leave unset and /api/ai/* returns 503 while the rest of the
     // app — including billing — keeps working.
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-    defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
+    defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-4-1',
   },
 
   contact: {

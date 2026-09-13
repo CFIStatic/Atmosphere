@@ -13,6 +13,14 @@
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
+import {
+  extractPeoplePresent,
+  formatPeopleAnswer,
+  hasPeople,
+  type PeoplePresent,
+  type PersonPresent,
+  type SpeakerIndex,
+} from '../audio/peoplePresent.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -68,7 +76,13 @@ export type ClipAskRecord = {
   conversationAgreementFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
   conversationConcernFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
   conversationRefusals?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
+  /** WHO is in frame / talking — structured people log. */
+  peoplePresent?: PersonPresent[];
+  peopleCount?: number | null;
+  peopleSpeakers?: SpeakerIndex[];
+  peopleSource?: string | null;
 };
+
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -153,8 +167,9 @@ Rules:
 6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
 7. EXACT SPEECH RECALL: When asked what was said, quote the EXACT words from the "Heard on the mic" / transcript section. Never invent, paraphrase, or clean up dialogue. Cite the seek time from [m:ss] stamps when present.
 8. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
-9. Two to five sentences. This is read next to the player.
-10. Never estimate cost, hours, or whether work was worth paying for.`;
+9. When asked who is in the video / who is talking / who is present, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
+10. Two to eight sentences when the question needs depth (who/what/why/decided/next). This is read next to the player.
+11. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -216,6 +231,10 @@ export function clipRecordFromEvidenceItem(item: {
     conversationConcernFacts: Array.isArray(analysis?.conversationConcernFacts)
       ? analysis.conversationConcernFacts
       : [],
+    peoplePresent: Array.isArray(analysis?.peoplePresent) ? analysis.peoplePresent : [],
+    peopleCount: analysis?.peopleCount ?? (Array.isArray(analysis?.peoplePresent) ? analysis.peoplePresent.length : null),
+    peopleSpeakers: Array.isArray(analysis?.peopleSpeakers) ? analysis.peopleSpeakers : [],
+    peopleSource: typeof analysis?.peopleSource === 'string' ? analysis.peopleSource : null,
   };
 }
 
@@ -460,6 +479,68 @@ function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string |
   return 'This clip is still being read. Ask again once the dictation lands.';
 }
 
+
+function isWhoQuestion(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /\bwho (is|are|was|were)\b/.test(q) ||
+    /\bwho('?s| is) (in|on|talking|speaking|present|visible|there)\b/.test(q) ||
+    /\bwho('?s| is) talking\b/.test(q) ||
+    /\bpeople (in|on|present|visible)\b/.test(q) ||
+    /\bwho (can|do) (you|we) see\b/.test(q)
+  );
+}
+
+function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
+  if (Array.isArray(record.peoplePresent) && record.peoplePresent.length) {
+    return {
+      count: record.peopleCount ?? record.peoplePresent.length,
+      people: record.peoplePresent,
+      speakers: record.peopleSpeakers ?? [],
+      source: (record.peopleSource as PeoplePresent['source']) || 'deterministic',
+      model: null,
+    };
+  }
+  return extractPeoplePresent({
+    narrationText: record.dictation,
+    summary: record.summary,
+    transcript: record.transcript,
+    conversation: {
+      summary: null,
+      executiveSummary: null,
+      details: [],
+      agreements: [],
+      concerns: [],
+      roomsMentioned: [],
+      turns: (record.conversationTurns ?? []).map((t) => ({
+        tSec: t.tSec ?? null,
+        speakerLabel: String(t.speakerLabel || 'Speaker A'),
+        text: String(t.text || ''),
+      })),
+      commitments: [],
+      actionItems: [],
+      agreementFacts: [],
+      concernFacts: [],
+      refusals: [],
+      scopeChanges: [],
+      changeOrders: [],
+      moneyTalk: [],
+      safety: [],
+      insurance: [],
+      unresolvedQuestions: [],
+      contradictions: [],
+      keyMoments: [],
+      source: 'empty' as const,
+      model: null,
+    },
+    actions: (record.actions ?? []).map((a) => ({
+      atSeconds: a.atSeconds ?? undefined,
+      description: a.description ?? undefined,
+      room: a.room ?? null,
+    })),
+  });
+}
+
 /**
  * Deterministic answer from the clip's reading. Used when no model is
  * configured, and as a fallback if the model call fails.
@@ -474,6 +555,12 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   const q = question.trim();
+  if (isWhoQuestion(q)) {
+    const people = peopleFromRecord(record);
+    const answer = formatPeopleAnswer(people);
+    if (answer) return answer;
+    return 'The footage on file does not identify who is present.';
+  }
   if (isWhatWasSaid(q)) {
     const speech = exactSpeechAnswer(record);
     if (speech) return speech;
@@ -633,6 +720,22 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if ((record.conversationRooms ?? []).length) {
     lines.push(`Rooms mentioned on the mic: ${record.conversationRooms!.join(', ')}`);
   }
+  const people = peopleFromRecord(record);
+  if (hasPeople(people)) {
+    lines.push('People present:');
+    for (const person of people.people) {
+      const when =
+        person.firstSeenSec != null ? ` first ~${formatClipTime(person.firstSeenSec)}` : '';
+      const appearance = person.appearance ? `; appearance: ${person.appearance}` : '';
+      const speaker = person.speakerLabel ? `; speaks as ${person.speakerLabel}` : '';
+      lines.push(
+        `- ${person.label} [${person.role}]${appearance}${speaker}${when}`,
+      );
+    }
+    for (const sp of people.speakers) {
+      lines.push(`Speaker ${sp.speakerLabel}: ${sp.turnCount} turns`);
+    }
+  }
   return lines.join('\n');
 }
 
@@ -651,6 +754,13 @@ export async function answerFromClip(input: {
     isWhatWasSaid(input.question) &&
     hasUsableSpeech(input.record) &&
     !/does not (show that|include usable speech)/i.test(grounded)
+  ) {
+    return { answer: grounded, model: null, usage: null };
+  }
+  if (
+    isWhoQuestion(input.question) &&
+    hasPeople(peopleFromRecord(input.record)) &&
+    !/does not identify who/i.test(grounded)
   ) {
     return { answer: grounded, model: null, usage: null };
   }

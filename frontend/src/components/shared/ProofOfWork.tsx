@@ -17,6 +17,7 @@ import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
 import { ConversationPanel } from '../analysis/ConversationPanel';
+import { PeoplePresentPanel } from '../analysis/PeoplePresent';
 import { EvidenceLog, evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
 
@@ -494,14 +495,21 @@ export function ProofOfWork({
                           (data.videos ?? []).some(
                             (v) =>
                               v.id === id &&
-                              (evidenceEntriesFromVideo(v).length > 0 || Boolean(v.conversation)),
+                              (evidenceEntriesFromVideo(v).length > 0 ||
+                                Boolean(v.conversation) ||
+                                Boolean(v.people?.peoplePresent?.length)),
                           ),
                         ) && (
                           <div className="mt-2 space-y-2">
                             {day.proofIds.map((id) => {
                               const video = (data.videos ?? []).find((v) => v.id === id);
                               if (!video) return null;
-                              if (!evidenceEntriesFromVideo(video).length && !video.conversation) return null;
+                              if (
+                                !evidenceEntriesFromVideo(video).length &&
+                                !video.conversation &&
+                                !(video.people?.peoplePresent?.length)
+                              )
+                                return null;
                               return (
                                 <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
                                   <ConversationPanel
@@ -514,6 +522,10 @@ export function ProofOfWork({
                                       transcriptSegments:
                                         video.transcriptSegments ?? video.conversation?.transcriptSegments,
                                     }}
+                                    onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                  />
+                                  <PeoplePresentPanel
+                                    people={video.people}
                                     onSeek={(seconds) => applyClipSeek(id, seconds)}
                                   />
                                   <div className="mt-2">
@@ -810,6 +822,10 @@ function VideoCatalog({
                     transcriptSegments:
                       video.transcriptSegments ?? video.conversation?.transcriptSegments,
                   }}
+                  onSeek={(seconds) => onSeek?.(video.id, seconds)}
+                />
+                <PeoplePresentPanel
+                  people={video.people}
                   onSeek={(seconds) => onSeek?.(video.id, seconds)}
                 />
                 {evidenceEntriesFromVideo(video).length > 0 ? (
