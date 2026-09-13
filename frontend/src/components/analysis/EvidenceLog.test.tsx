@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { EvidenceLog } from './EvidenceLog';
+import { EvidenceLog, evidenceEntriesFromVideo } from './EvidenceLog';
 
 describe('EvidenceLog', () => {
   it('lists the complete log and filters Said / Decision / Work', async () => {
@@ -39,5 +39,57 @@ describe('EvidenceLog', () => {
 
     await user.click(screen.getByRole('tab', { name: /Work/i }));
     expect(screen.getByTestId('evidence-log-rows').textContent).toMatch(/drywall/i);
+  });
+});
+
+describe('evidenceEntriesFromVideo', () => {
+  it('unions Whisper speech into a vision-only evidence log', () => {
+    const entries = evidenceEntriesFromVideo({
+      evidenceLog: [{ atSeconds: 8, text: 'Hallway in frame.', type: 'scene' }],
+      transcriptSegments: [
+        {
+          tSec: 18,
+          text: 'Do not replace cabinets until insurance approves.',
+          speakerLabel: 'Homeowner',
+        },
+      ],
+    });
+    expect(entries).toHaveLength(2);
+    expect(entries[0].type).toBe('scene');
+    expect(entries[1]).toMatchObject({
+      atSeconds: 18,
+      type: 'said',
+      speakerLabel: 'Homeowner',
+      text: 'Do not replace cabinets until insurance approves.',
+    });
+  });
+
+  it('builds a said log from the transcript when enrich never ran', () => {
+    const entries = evidenceEntriesFromVideo({
+      transcriptText: '[0:08] We have not started the subfloor yet.',
+    });
+    expect(entries).toEqual([
+      expect.objectContaining({
+        atSeconds: 8,
+        type: 'said',
+        text: 'We have not started the subfloor yet.',
+      }),
+    ]);
+  });
+
+  it('does not duplicate a mic line already in the stored log', () => {
+    const entries = evidenceEntriesFromVideo({
+      evidenceLog: [
+        {
+          atSeconds: 18,
+          text: 'Do not replace cabinets until insurance approves.',
+          type: 'said',
+        },
+      ],
+      transcriptSegments: [
+        { tSec: 18, text: 'Do not replace cabinets until insurance approves.', speakerLabel: 'Homeowner' },
+      ],
+    });
+    expect(entries).toHaveLength(1);
   });
 });

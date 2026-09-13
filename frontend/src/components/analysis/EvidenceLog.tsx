@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { eventClock } from '../../lib/downloadJson';
-import type { EvidenceLogEntry } from '../../lib/api';
+import type { EvidenceLogEntry, TranscriptSegment } from '../../lib/api';
+import { parseTimestampedTranscript } from '../../lib/transcriptCaptions';
 
 const FILTERS: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'All' },
@@ -143,25 +144,83 @@ export function EvidenceLog({
   );
 }
 
-/** Prefer the complete evidence log; fall back to dictation entries. */
+function normalizeEvidenceKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isNearDuplicate(a: EvidenceLogEntry, b: EvidenceLogEntry): boolean {
+  if (Math.abs(a.atSeconds - b.atSeconds) > 1.5) return false;
+  const left = normalizeEvidenceKey(a.text);
+  const right = normalizeEvidenceKey(b.text);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length >= 24 && right.includes(left.slice(0, 24))) return true;
+  if (right.length >= 24 && left.includes(right.slice(0, 24))) return true;
+  return false;
+}
+
+function speechEntriesFromVideo(video: {
+  transcriptSegments?: TranscriptSegment[] | null;
+  transcriptText?: string | null;
+  heardOnMic?: string | null;
+  conversation?: {
+    transcriptSegments?: TranscriptSegment[] | null;
+    transcriptText?: string | null;
+  } | null;
+}): EvidenceLogEntry[] {
+  const segments = video.transcriptSegments?.length
+    ? video.transcriptSegments
+    : video.conversation?.transcriptSegments?.length
+      ? video.conversation.transcriptSegments
+      : parseTimestampedTranscript(
+          video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText,
+        );
+  return segments
+    .filter((row) => row.text?.trim())
+    .map((row) => ({
+      atSeconds: row.tSec != null && Number.isFinite(row.tSec) ? row.tSec : 0,
+      text: row.text.trim(),
+      type: 'said',
+      speakerLabel: row.speakerLabel ?? null,
+    }));
+}
+
+/** Complete Analysis log: stored evidence, then dictation, then events, plus every mic line. */
 export function evidenceEntriesFromVideo(video: {
   evidenceLog?: EvidenceLogEntry[] | null;
   dictationEntries?: Array<{ atSeconds: number; text: string; type?: string | null }> | null;
   events?: Array<{ atSeconds: number; text?: string }> | null;
+  transcriptText?: string | null;
+  heardOnMic?: string | null;
+  transcriptSegments?: TranscriptSegment[] | null;
+  conversation?: {
+    transcriptSegments?: TranscriptSegment[] | null;
+    transcriptText?: string | null;
+  } | null;
 }): EvidenceLogEntry[] {
-  if (video.evidenceLog?.length) return video.evidenceLog;
-  if (video.dictationEntries?.length) {
-    return video.dictationEntries.map((e) => ({
-      atSeconds: e.atSeconds,
-      text: e.text,
-      type: (e.type || 'other').toLowerCase(),
-    }));
+  const base: EvidenceLogEntry[] = video.evidenceLog?.length
+    ? video.evidenceLog
+    : video.dictationEntries?.length
+      ? video.dictationEntries.map((e) => ({
+          atSeconds: e.atSeconds,
+          text: e.text,
+          type: (e.type || 'other').toLowerCase(),
+        }))
+      : (video.events ?? [])
+          .filter((e) => e.text)
+          .map((e) => ({
+            atSeconds: e.atSeconds,
+            text: e.text || '',
+            type: 'other',
+          }));
+  const out = [...base];
+  for (const row of speechEntriesFromVideo(video)) {
+    if (out.some((prev) => isNearDuplicate(prev, row))) continue;
+    out.push(row);
   }
-  return (video.events ?? [])
-    .filter((e) => e.text)
-    .map((e) => ({
-      atSeconds: e.atSeconds,
-      text: e.text || '',
-      type: 'other',
-    }));
+  return out.sort((a, b) => a.atSeconds - b.atSeconds || a.text.localeCompare(b.text));
 }

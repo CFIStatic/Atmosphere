@@ -879,6 +879,9 @@ function VideoCatalog({
                   people={video.people}
                   onSeek={(seconds) => onSeek?.(video.id, seconds)}
                 />
+                {video.aiSummary ? (
+                  <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
+                ) : null}
                 {evidenceEntriesFromVideo(video).length > 0 ? (
                   <div className="mt-1.5">
                     <EvidenceLog
@@ -886,8 +889,6 @@ function VideoCatalog({
                       onSeek={(seconds) => onSeek?.(video.id, seconds)}
                     />
                   </div>
-                ) : video.aiSummary ? (
-                  <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
                 ) : null}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
