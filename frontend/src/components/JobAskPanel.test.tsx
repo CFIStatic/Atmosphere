@@ -11,6 +11,8 @@ const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
 const askAboutProofs = vi.fn();
 
+const askAboutProofsStream = vi.fn();
+
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
   api: {
@@ -18,6 +20,7 @@ vi.mock('../lib/api', () => ({
     jobProofs: (...args: unknown[]) => jobProofs(...args),
     proofQuestions: (...args: unknown[]) => proofQuestions(...args),
     askAboutProofs: (...args: unknown[]) => askAboutProofs(...args),
+    askAboutProofsStream: (...args: unknown[]) => askAboutProofsStream(...args),
   },
 }));
 
@@ -89,6 +92,8 @@ describe('JobAskPanel', () => {
     jobProofs.mockReset();
     proofQuestions.mockReset();
     askAboutProofs.mockReset();
+    askAboutProofsStream.mockReset();
+    askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
     sharedJob.mockResolvedValue(record);
     jobProofs.mockResolvedValue(proofs);
     proofQuestions.mockResolvedValue({ questions: [] });
@@ -269,23 +274,47 @@ describe('JobAskPanel', () => {
     expect(seeks).toEqual([]);
   });
 
-  it('holds the typing indicator for 10× a short reply', async () => {
-    vi.useFakeTimers();
-    try {
-      const started = Date.now();
-      const pending = waitOutAskHold(started, ASK_MIN_TYPING_MS);
-      await vi.advanceTimersByTimeAsync(ASK_MIN_TYPING_MS - 1);
-      let settled = false;
-      void pending.then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await pending;
-      expect(settled).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('does not artificially hold Ask after the reply lands', async () => {
+    expect(ASK_MIN_TYPING_MS).toBe(0);
+    const started = Date.now();
+    await waitOutAskHold(started, ASK_MIN_TYPING_MS);
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
+  it('streams tokens into the thread when the stream API is available', async () => {
+    askAboutProofsStream.mockImplementation(
+      async (
+        _jobId: string,
+        _q: string,
+        handlers: { onToken?: (t: string) => void },
+      ) => {
+        handlers.onToken?.('Yes. ');
+        handlers.onToken?.('The tarp came off.');
+        return {
+          answer: 'Yes. The tarp came off.',
+          groundedOn: 1,
+          model: 'gemini-2.5-flash-lite',
+          question: {
+            id: 'q-stream',
+            question: 'Was the tarp removed?',
+            answer: 'Yes. The tarp came off.',
+            grounded_on: ['2026-08-05:after'],
+            created_at: '2026-08-06T12:00:00Z',
+          },
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <VideoSeekProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(askAboutProofsStream).toHaveBeenCalled();
+    expect(askAboutProofs).not.toHaveBeenCalled();
   });
 });

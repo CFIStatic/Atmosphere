@@ -25,8 +25,11 @@ import {
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
-/** 10× a ~400ms instant reply so the typing dots do not flash and vanish. */
-export const ASK_MIN_TYPING_MS = 4_000;
+/**
+ * Artificial typing hold removed for ultra-low-latency Ask.
+ * Kept as 0 so existing imports/tests keep compiling.
+ */
+export const ASK_MIN_TYPING_MS = 0;
 
 export async function waitOutAskHold(startedAt: number, holdMs = ASK_MIN_TYPING_MS): Promise<void> {
   const remaining = holdMs - (Date.now() - startedAt);
@@ -217,13 +220,45 @@ export function JobAskPanel({
     setError(null);
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
+    const streamId = `${pendingId}-a`;
     setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
-    const startedAt = Date.now();
+    let sawFirstToken = false;
     try {
-      const res = askFn ? await askFn(text) : await api.askAboutProofs(jobId, text);
-      await waitOutAskHold(startedAt, import.meta.env.MODE === 'test' ? 0 : ASK_MIN_TYPING_MS);
+      let res: {
+        answer: string;
+        groundedOn: number;
+        model?: string | null;
+        question?: ProofQuestion | null;
+      };
+      if (askFn) {
+        res = await askFn(text);
+      } else {
+        try {
+          res = await api.askAboutProofsStream(jobId, text, {
+            onToken: (delta) => {
+              if (!sawFirstToken) {
+                sawFirstToken = true;
+                setAsking(false);
+              }
+              // Accumulate from the last assistant stream bubble.
+              setTurns((prev) => {
+                const existing = prev.find((turn) => turn.id === streamId);
+                const next = (existing?.content ?? '') + delta;
+                const without = prev.filter((turn) => turn.id !== streamId);
+                return [
+                  ...without,
+                  { id: streamId, role: 'assistant' as const, content: next, at: now },
+                ];
+              });
+            },
+          });
+        } catch {
+          // Stream unavailable — fall back to the classic JSON Ask.
+          res = await api.askAboutProofs(jobId, text);
+        }
+      }
       setTurns((prev) => [
-        ...prev.filter((turn) => turn.id !== pendingId),
+        ...prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId),
         {
           id: res.question?.id ? `${res.question.id}-q` : pendingId,
           role: 'user',
@@ -231,7 +266,7 @@ export function JobAskPanel({
           at: res.question?.created_at ?? now,
         },
         {
-          id: res.question?.id ? `${res.question.id}-a` : `${pendingId}-a`,
+          id: res.question?.id ? `${res.question.id}-a` : streamId,
           role: 'assistant',
           content: res.answer,
           groundedOn: res.groundedOn,
@@ -248,7 +283,7 @@ export function JobAskPanel({
       });
       if (target) seek(target);
     } catch (err) {
-      setTurns((prev) => prev.filter((turn) => turn.id !== pendingId));
+      setTurns((prev) => prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId));
       setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
     } finally {
       setAsking(false);

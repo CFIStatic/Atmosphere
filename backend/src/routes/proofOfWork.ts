@@ -2383,6 +2383,7 @@ export async function runProofAsk(input: {
   question: string;
   userId?: string | null;
   requestId: string;
+  onToken?: (text: string) => void;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -2587,6 +2588,7 @@ export async function runProofAsk(input: {
       file,
       history,
       apiKey,
+      onToken: input.onToken,
     });
 
     recordMeasuredTokenUsage(supabase, {
@@ -2643,6 +2645,39 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+    const wantsStream =
+      String(req.query.stream ?? '') === '1' ||
+      String(req.headers.accept ?? '').includes('application/x-ndjson');
+
+    if (wantsStream) {
+      res.status(200);
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no');
+      const writeEvent = (payload: Record<string, unknown>) => {
+        res.write(`${JSON.stringify(payload)}\n`);
+      };
+      writeEvent({ type: 'status', phase: 'thinking' });
+      const result = await runProofAsk({
+        supabase,
+        orgId,
+        jobId: req.params.jobId,
+        question: input.question,
+        userId,
+        requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+        onToken: (text) => writeEvent({ type: 'token', text }),
+      });
+      writeEvent({
+        type: 'done',
+        answer: result.answer,
+        model: result.model,
+        groundedOn: result.groundedOn,
+        question: result.question,
+      });
+      res.end();
+      return;
+    }
+
     const result = await runProofAsk({
       supabase,
       orgId,

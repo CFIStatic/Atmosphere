@@ -869,6 +869,7 @@ export async function analyzeConversation(
           .filter(Boolean)
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
+        mode: 'analysis',
       });
       if (!completed?.text) continue;
       model = completed.model;
@@ -914,6 +915,7 @@ export async function analyzeConversation(
           .filter(Boolean)
           .join('\n\n'),
         maxTokens: CONVERSATION_LLM_MAX_TOKENS,
+        mode: 'analysis',
       });
       if (synth?.text) {
         const finalParsed = parseConversationModelJson(synth.text, merged);

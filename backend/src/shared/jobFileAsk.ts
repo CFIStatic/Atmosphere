@@ -422,25 +422,53 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
     .slice(0, 700);
 }
 
+/**
+ * Prefer the grounded file hit when it is already a clear brief/field answer
+ * or a simple overview — skip the model for near-instant Ask.
+ */
+export function preferJobFileGroundedFastPath(question: string, grounded: string): boolean {
+  if (/does not have that|Nothing is on this job file/i.test(grounded)) return false;
+  if (looksLikeOverview(question)) return true;
+  // Clear labelled hits from the corpus ("brief · Permit: …", "claim: …").
+  if (
+    /^(brief|claim|policy|job|scope|note|invited|task|crew|log|description|schedule)\b/i.test(grounded) &&
+    grounded.length < 500 &&
+    !/\b(why|explain|compare|summar)/i.test(question)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
   history?: JobFileAskTurn[];
   apiKey?: string | null;
+  onToken?: (text: string) => void;
 }): Promise<{ answer: string; model: string | null; groundedOn: number; usage: MeasuredUsage | null }> {
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
   const apiKey = (input.apiKey ?? '').trim();
 
   if (!jobFileHasContent(input.file)) {
+    input.onToken?.(grounded);
     return { answer: grounded, model: null, groundedOn: 0, usage: null };
   }
+  if (preferJobFileGroundedFastPath(input.question, grounded)) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, groundedOn, usage: null };
+  }
   if (!isAskModelConfigured(apiKey || null)) {
+    input.onToken?.(grounded);
     return { answer: grounded, model: null, groundedOn, usage: null };
   }
 
   const record = formatJobFileRecord(input.file).trim();
-  if (!record) return { answer: grounded, model: null, groundedOn, usage: null };
+  if (!record) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, groundedOn, usage: null };
+  }
 
   const history = (input.history ?? [])
     .filter((turn) => trim(turn.text))
@@ -455,8 +483,12 @@ export async function answerFromJobFile(input: {
       (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
       `\n\nQuestion: ${input.question}`,
     anthropicApiKey: apiKey || null,
+    mode: 'interactive',
+    onToken: input.onToken,
   });
-  return completed
-    ? { answer: completed.text, model: completed.model, groundedOn, usage: completed.usage }
-    : { answer: grounded, model: null, groundedOn, usage: null };
+  if (!completed) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, groundedOn, usage: null };
+  }
+  return { answer: completed.text, model: completed.model, groundedOn, usage: completed.usage };
 }
