@@ -184,33 +184,36 @@ export async function dictatePreparedFrames(
     throw new HttpError(422, 'No frames available for dictation', 'no_frames');
   }
 
-  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 36, 48));
+  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 42, 48));
   const frames = pickEvenlySpaced(prepared.frames, maxModel);
   const hours = (prepared.durationSeconds / 3600).toFixed(2);
   const context = (opts?.contextText ?? '').trim().slice(0, 4000);
 
   const system = [
-    'You are watching a filed video. It may be job-site work, a walkthrough, a conversation, or someone filming a room, a desk, or a screen.',
-    'Watch the provided stills (sampled across the recording, including long day-long clips) and dictate what is on camera.',
-    'Write as spoken field notes an office person can read beside the video player.',
-    'Describe only what is visible. Never infer off-camera work or invent rooms.',
-    'DENSE LOG — every distinct person, object interaction, room/scene change, camera move, and work beat must appear in events with a seek time.',
-    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, fixtures, equipment, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
+    'You are reconstructing a filed video for an office that must know EXACTLY what happened.',
+    'Watch the provided stills (sampled across the recording, including long day-long clips) and produce a dense, timed evidence log of what is on camera.',
+    'ACCURACY OVER BREVITY. Prefer many precise timed beats over a short summary. These films are analyzed to find out what occurred — reconstruct the job/event over time.',
+    'Describe ONLY what is visible or clearly evidenced in the stills. Never invent off-camera work, rooms, people, objects, dialogue, or motives.',
+    'UNCERTAINTY: when you cannot tell, say so explicitly in the event/narration (e.g. "unclear whether…", "possibly…", "cannot confirm…"). Never pad with plausible fiction. Prefer omitting a guess over inventing detail.',
+    'DENSE LOG — every distinct person, object interaction, room/scene change, camera move, tool/material use, and work beat must appear in events with a seek time.',
+    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, fixtures, equipment, damage/conditions, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
     'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
-    'Name the room or area when you can see it. If you cannot tell, omit it.',
+    'Name the room or area when you can see it. If you cannot tell, write "room unclear" rather than inventing one.',
+    'CONTEXT/WHY: when job phase, scope line, or situation is visible or given in Context, state it; otherwise leave it out — do not invent why.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
     'PEOPLE: list every distinct visible person in "people". Use labels like "Person 1 (crew-like)" or "Person 2 (homeowner-like)". Include appearance (PPE, clothing, build) when identity is unknown.',
     'Role may be crew, homeowner, adjuster, inspector, other, or unknown when inferable from clothing/context — NEVER invent a legal name from faces alone. Only put a real name in matchedName when a name tag or readable badge is visible.',
-    'appearMoments: seek times when each person is visible.',
-    'OBJECTS: name tools, materials, fixtures, and equipment in action object/tool/material fields and in event descriptions.',
-    'summary is 2–4 sentences that would answer "what is happening in this video" and why (job phase/room/situation when visible). Do not start summary with a timestamp. Do not restate the event list. Do not begin with "The video shows" or "The camera captures".',
-    'events is the Analysis list: one or two present-tense sentences per meaningful change, each tied to a time. No filler ("The video shows", "At N seconds").',
-    'Emit an event when something meaningfully changes — scene/room change, new person enters/leaves, object interaction, new activity, speech topic shift, camera move to a new subject, work step starts or stops.',
+    'appearMoments: seek times when each person is visible, with a short note of what they are doing.',
+    'OBJECTS: name tools, materials, fixtures, and equipment in action object/tool/material fields and in event descriptions when visible.',
+    'summary is 3–6 sentences that reconstruct what happened and the situation (who/what/where/why when known). Do not start summary with a timestamp. Do not restate the full event list. Do not begin with "The video shows" or "The camera captures". Mark uncertainty in the summary when needed.',
+    'narration is a longer chronological field note covering the whole clip — denser than summary, still only evidenced facts.',
+    'events is the Analysis list: one or two present-tense sentences per meaningful change, each tied to a time. No filler ("The video shows", "At N seconds"). Prefix uncertain beats with "Uncertain:" when confidence is low.',
+    'Emit an event when something meaningfully changes — scene/room change, new person enters/leaves, object interaction, new activity, camera move to a new subject, work step starts or stops, visible condition change.',
     'Do NOT emit a mandatory event at t=0. An unchanged opening still belongs in summary, not as a catch-all 0-second event. Only emit t=0 when something actually happens at the open.',
-    'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only — but be thorough: prefer more precise beats over a thin highlights reel.',
+    'Do NOT emit events on a fixed cadence (not every 5 seconds, not one row per still). Event-boundary timestamps only — but be thorough: prefer dense precise beats over a thin highlights reel.',
     't_seconds should match a provided frame timestamp. Never invent off-camera work.',
     'type is optional: scene, activity, speech, camera, work, other.',
-    'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count.',
+    'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count. Set confidence low (≤0.4) when the still is ambiguous.',
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp.',
     'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
@@ -252,7 +255,7 @@ export async function dictatePreparedFrames(
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 8192,
+    max_tokens: 12_288,
     system,
     messages: [
       {
@@ -338,7 +341,7 @@ async function dictateWithGemini(input: {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 12_288,
       },
     }),
     });
