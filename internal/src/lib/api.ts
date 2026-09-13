@@ -6,6 +6,7 @@ import type {
   AuthUser,
   ExperimentStats,
   MeteringPayload,
+  TokenUsageAnalyticsPayload,
   OverviewPayload,
   RangeParams,
   ReadyPayload,
@@ -129,6 +130,9 @@ export const api = {
   metering: (range: RangeParams) =>
     request<MeteringPayload>(`/api/analytics/metering?${rangeQuery(range)}`),
 
+  tokenUsage: (range: RangeParams) =>
+    request<TokenUsageAnalyticsPayload>(`/api/analytics/token-usage?${rangeQuery(range)}`),
+
   account: (orgId: string, range: RangeParams) =>
     request<AccountDetail>(`/api/analytics/accounts/${orgId}?${rangeQuery(range)}`),
 
@@ -180,4 +184,13 @@ export function defaultRange(): RangeParams {
   const to = new Date();
   const from = new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
   return { from, to, months: 12 };
+}
+
+export type TokenUsageWindow = '30d' | 'all';
+
+export function tokenUsageRange(window: TokenUsageWindow = '30d'): RangeParams {
+  const to = new Date();
+  const days = window === 'all' ? 3650 : 30;
+  const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from, to, months: Math.max(1, Math.round(days / 30)) };
 }

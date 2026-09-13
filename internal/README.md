@@ -18,6 +18,7 @@ crew apps. Integrity agent / computer-use / estimator are not live surfaces.
 | Usage | overview `features` | investor + internal |
 | Experiments | `GET /api/analytics/experiments` | internal |
 | Metering | `GET /api/analytics/metering` | internal |
+| Token usage | `GET /api/analytics/token-usage` | internal |
 | System | `GET /api/ready` + `/api/auth/me` | investor + internal |
 
 This is **not** the customer office console and **not** the marketing site.

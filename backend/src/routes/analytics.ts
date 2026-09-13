@@ -30,7 +30,7 @@ import {
 } from '../lib/analytics.js';
 import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
-import { getAdminMeteringAnalytics } from '../metering/periodAggregation.js';
+import { getAdminMeteringAnalytics, getAdminTokenUsageAnalytics } from '../metering/periodAggregation.js';
 
 export const analyticsRouter = Router();
 
@@ -163,6 +163,22 @@ analyticsRouter.get(
         throw new HttpError(404, 'Organization not found', 'org_not_found');
       }
       res.json(detail);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
+/** Global AI token usage — internal scope only. Source: token_usage_events. */
+analyticsRouter.get(
+  '/token-usage',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { from, to } = parseRange(req);
+      const supabase = createUserClient(req.accessToken!);
+      res.json(await getAdminTokenUsageAnalytics(supabase, from.toISOString(), to.toISOString()));
     } catch (err) {
       next(err);
     }

@@ -61,3 +61,12 @@ export function nanosToMoney(nanos: number | null | undefined): string {
   if (nanos === null || nanos === undefined) return '—';
   return money(Math.round(nanos / 10_000_000));
 }
+
+export function tokens(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 0 : 1)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 10_000) return `${Math.round(value / 1000).toLocaleString('en-US')}k`;
+  return value.toLocaleString('en-US');
+}

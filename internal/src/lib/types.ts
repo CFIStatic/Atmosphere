@@ -251,6 +251,67 @@ export interface AccountDetail {
   features: AccountOrgFeature[];
 }
 
+
+export interface TokenUsageTotals {
+  eventCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  totalTokens: number;
+  priceNanos: number;
+  costNanos: number;
+  distinctOrgs: number;
+  distinctUsers: number;
+  distinctModels: number;
+}
+
+export interface TokenUsageAnalyticsPayload {
+  range?: { from: string; to: string };
+  totals?: TokenUsageTotals;
+  byCustomer?: Array<{
+    orgId: string;
+    orgName: string;
+    eventCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheTokens: number;
+    totalTokens: number;
+    priceNanos: number;
+    distinctUsers: number;
+    distinctModels: number;
+  }>;
+  byUser?: Array<{
+    userId: string;
+    userName: string;
+    email: string | null;
+    orgId: string;
+    orgName: string;
+    eventCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheTokens: number;
+    totalTokens: number;
+    priceNanos: number;
+  }>;
+  byModel?: Array<{
+    model: string;
+    eventCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheTokens: number;
+    totalTokens: number;
+    priceNanos: number;
+    distinctOrgs: number;
+    distinctUsers: number;
+  }>;
+  byFeature?: Array<{
+    feature: string;
+    eventCount: number;
+    totalTokens: number;
+    priceNanos: number;
+  }>;
+}
+
 export interface MeteringPayload {
   totals?: {
     eventCount: number;
