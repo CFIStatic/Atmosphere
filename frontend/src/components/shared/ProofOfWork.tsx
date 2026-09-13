@@ -16,6 +16,7 @@ import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
 import { EventTimeline } from '../analysis/EventTimeline';
+import { ConversationPanel } from '../analysis/ConversationPanel';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
 
 /**
@@ -489,19 +490,31 @@ export function ProofOfWork({
                           </ul>
                         ) : null}
                         {day.proofIds.some((id) =>
-                          (data.videos ?? []).some((v) => v.id === id && (v.dictationEntries?.length ?? 0) > 0),
+                          (data.videos ?? []).some(
+                            (v) =>
+                              v.id === id &&
+                              ((v.dictationEntries?.length ?? 0) > 0 || Boolean(v.conversation)),
+                          ),
                         ) && (
                           <div className="mt-2 space-y-2">
                             {day.proofIds.map((id) => {
                               const video = (data.videos ?? []).find((v) => v.id === id);
-                              if (!video?.dictationEntries?.length) return null;
+                              if (!video?.dictationEntries?.length && !video?.conversation) return null;
                               return (
                                 <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
-                                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
-                                    {video.phase} — events
-                                  </p>
-                                  <EventTimeline
-                                    events={video.dictationEntries}
+                                  {video.dictationEntries?.length ? (
+                                    <>
+                                      <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
+                                        {video.phase} — events
+                                      </p>
+                                      <EventTimeline
+                                        events={video.dictationEntries}
+                                        onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                      />
+                                    </>
+                                  ) : null}
+                                  <ConversationPanel
+                                    conversation={video.conversation}
                                     onSeek={(seconds) => applyClipSeek(id, seconds)}
                                   />
                                 </div>
@@ -783,7 +796,11 @@ function VideoCatalog({
                 ) : video.aiSummary ? (
                   <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
                 ) : null}
-                {video.heardOnMic && (
+                <ConversationPanel
+                  conversation={video.conversation}
+                  onSeek={(seconds) => onSeek?.(video.id, seconds)}
+                />
+                {video.heardOnMic && !video.conversation && (
                   <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
                 )}
               </div>

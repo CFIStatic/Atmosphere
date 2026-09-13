@@ -814,6 +814,35 @@ export interface DisputeMoment {
   scopeTitle: string | null;
 }
 
+
+/** One spoken turn on a filed clip (Office Conversation analysis). */
+export interface ConversationTurn {
+  tSec: number | null;
+  speakerLabel: string;
+  text: string;
+}
+
+export interface ConversationQuotedFact {
+  text: string;
+  tSec?: number | null;
+  quote?: string | null;
+}
+
+/** Structured mic conversation for Analysis — null when silent / noise-only. */
+export interface ProofConversation {
+  conversationSummary?: string | null;
+  conversationDetails?: string[];
+  conversationAgreements?: string[];
+  conversationConcerns?: string[];
+  conversationRooms?: string[];
+  conversationTurns?: ConversationTurn[];
+  conversationCommitments?: ConversationQuotedFact[];
+  conversationActionItems?: ConversationQuotedFact[];
+  conversationAgreementFacts?: ConversationQuotedFact[];
+  conversationConcernFacts?: ConversationQuotedFact[];
+  conversationSource?: 'llm' | 'deterministic' | 'empty' | string;
+}
+
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
   id: string;
@@ -834,6 +863,8 @@ export interface ProofVideoRecord {
   transcriptError: string | null;
   aiSummary: string | null;
   heardOnMic: string | null;
+  /** Structured talk when the mic captured a real conversation. */
+  conversation?: ProofConversation | null;
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];

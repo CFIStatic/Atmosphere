@@ -13,7 +13,10 @@
  * unverified, not clean, and nothing in this file is allowed to blur that.
  */
 
-import { extractConversationDetails } from '../audio/conversationDetails.js';
+import {
+  conversationFromStored,
+  publicConversationFields,
+} from '../audio/conversationDetails.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle } from './proofClipTitle.js';
@@ -395,25 +398,8 @@ export function serializeEvidence(input: {
   };
 }
 
-function conversationFields(
-  transcript: unknown,
-  stored:
-    | { details?: unknown; agreements?: unknown; concerns?: unknown; rooms?: unknown }
-    | null
-    | undefined,
-) {
-  const text = typeof transcript === 'string' ? transcript : '';
-  const derived = extractConversationDetails(text);
-  const asList = (value: unknown, fallback: string[]) =>
-    Array.isArray(value) && value.length
-      ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
-      : fallback;
-  return {
-    conversationDetails: asList(stored?.details, derived.details),
-    conversationAgreements: asList(stored?.agreements, derived.agreements),
-    conversationConcerns: asList(stored?.concerns, derived.concerns),
-    conversationRooms: asList(stored?.rooms, derived.roomsMentioned),
-  };
+function conversationFields(transcript: unknown, stored: unknown) {
+  return publicConversationFields(conversationFromStored(transcript, stored));
 }
 
 /**

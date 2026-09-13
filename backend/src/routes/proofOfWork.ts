@@ -64,6 +64,12 @@ import {
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
+import { enrichProofConversation } from '../audio/proofConversation.js';
+import {
+  conversationFromStored,
+  publicConversationFields,
+  hasConversation,
+} from '../audio/conversationDetails.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import {
@@ -154,6 +160,13 @@ export async function listAllVisibleProofs(
     if (page.length < JOB_PROOF_PAGE) break;
   }
   return rows;
+}
+
+function conversationPayloadFromRow(row: any) {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const details = conversationFromStored(row?.transcript_text, findings.conversation);
+  if (!hasConversation(details)) return null;
+  return publicConversationFields(details);
 }
 
 /** Event-boundary timestamps already stored on the Analysis reading. */
@@ -1294,6 +1307,24 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   return work;
 }
 
+async function maybeEnrichConversationFromMic(admin: any, proofId: string): Promise<void> {
+  try {
+    const { data: mic } = await admin
+      .from('job_proofs')
+      .select('transcript_text, duration_seconds')
+      .eq('id', proofId)
+      .maybeSingle();
+    const talk = typeof (mic as any)?.transcript_text === 'string' ? String((mic as any).transcript_text).trim() : '';
+    if (!talk) return;
+    await enrichProofConversation(admin, proofId, {
+      transcript: talk,
+      durationSeconds: Number((mic as any)?.duration_seconds) || null,
+    });
+  } catch {
+    /* additive */
+  }
+}
+
 async function runNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin
     .from('job_proofs')
@@ -1404,6 +1435,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       actorLabel: 'Atmosphere',
       detail: `described · no scope · ${job.phase} · ${job.workDate}`,
     });
+    await maybeEnrichConversationFromMic(admin, job.proofId);
     return;
   }
 
@@ -1456,6 +1488,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
       actorLabel: 'Atmosphere',
       detail: `described · scope attached, vision fallback · ${job.phase} · ${job.workDate}`,
     });
+    await maybeEnrichConversationFromMic(admin, job.proofId);
     return;
   }
 
@@ -1503,6 +1536,7 @@ async function runNarration(admin: any, job: NarrationJob): Promise<void> {
     actorLabel: 'Atmosphere',
     detail: `narrated · scope cross-ref · ${job.phase} · ${job.workDate}`,
   });
+  await maybeEnrichConversationFromMic(admin, job.proofId);
 }
 
 /**
@@ -1576,6 +1610,7 @@ async function performLongFormAnalysis(
       actorLabel: 'Atmosphere',
       detail: `workday described · no scope · ${(durationSeconds / 3600).toFixed(1)}h · ${dictation.frameCount} frames`,
     });
+    await maybeEnrichConversationFromMic(admin, job.proofId);
     return;
   }
 
@@ -1660,6 +1695,7 @@ async function performLongFormAnalysis(
     actorLabel: 'Atmosphere',
     detail: `workday read · scope cross-ref · ${(durationSeconds / 3600).toFixed(1)}h · ${result.windows.length} windows · ${scopeTitles.length} scope lines`,
   });
+  await maybeEnrichConversationFromMic(admin, job.proofId);
 }
 
 const narrationQueue = new RetryQueue<NarrationJob>({
@@ -2140,6 +2176,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       transcriptError: row.transcript_error ?? null,
       aiSummary: row.ai_summary ?? row.narration_text ?? null,
       heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
+      conversation: conversationPayloadFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),

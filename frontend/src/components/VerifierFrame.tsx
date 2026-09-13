@@ -156,7 +156,7 @@ export function VerifierFrame({
   }, [location.pathname, location.search, logout, membership, navigate, postSession, postToFrame, profile, user]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=stable-previews-1';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=conversation-depth-1';
 
   return (
     <div className={className} style={style}>

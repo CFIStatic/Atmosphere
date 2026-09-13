@@ -2546,6 +2546,23 @@
           'I do not want you to replace the cabinets unless insurance approves it.'
         ],
         conversationRooms: ['bathroom', 'hallway'],
+        conversationSummary: 'Homeowner and crew agreed to remount the mirror and hold cabinet work for insurance.',
+        conversationTurns: [
+          { tSec: 18, speakerLabel: 'Homeowner', text: 'Do not replace cabinets until insurance approves.' },
+          { tSec: 96, speakerLabel: 'Crew', text: 'We will remount the mirror today.' }
+        ],
+        conversationAgreementFacts: [
+          { text: 'Remount the mirror today.', tSec: 96, quote: 'We will remount the mirror today' }
+        ],
+        conversationConcernFacts: [
+          { text: 'Do not cut the hallway above two feet.', tSec: 250 }
+        ],
+        conversationCommitments: [
+          { text: 'Leave cabinets until the adjuster says go ahead.', tSec: 96 }
+        ],
+        conversationActionItems: [
+          { text: 'Wait for adjuster approval on cabinets.', tSec: 18 }
+        ],
         actions: [],
         changes: [],
         scope: [
@@ -5824,6 +5841,68 @@
     return html;
   }
 
+
+  function renderConversationBlock(item) {
+    var a = item.analysis || {};
+    var summary = a.conversationSummary || null;
+    var turns = a.conversationTurns || [];
+    var agreements = a.conversationAgreementFacts && a.conversationAgreementFacts.length
+      ? a.conversationAgreementFacts
+      : (a.conversationAgreements || []).map(function (t) { return { text: t, tSec: null }; });
+    var concerns = a.conversationConcernFacts && a.conversationConcernFacts.length
+      ? a.conversationConcernFacts
+      : (a.conversationConcerns || []).map(function (t) { return { text: t, tSec: null }; });
+    var commitments = a.conversationCommitments || [];
+    var actions = a.conversationActionItems || [];
+    var rooms = a.conversationRooms || [];
+    if (!summary && !turns.length && !agreements.length && !concerns.length && !commitments.length && !actions.length && !rooms.length) {
+      return '';
+    }
+    function factRows(title, items) {
+      if (!items || !items.length) return '';
+      var rows = items.map(function (item) {
+        var text = typeof item === 'string' ? item : (item.text || '');
+        var at = typeof item === 'object' && item && item.tSec != null ? Number(item.tSec) : null;
+        var clock = at != null && isFinite(at) ? fmtClock(at) : '';
+        if (at != null && isFinite(at)) {
+          return '<li data-at="' + at + '" class="conv-fact"><span class="mono">' + esc(clock) + '</span> ' + esc(text) + '</li>';
+        }
+        return '<li class="conv-fact">' + esc(text) + '</li>';
+      }).join('');
+      return '<p class="saw-k">' + esc(title) + '</p><ul class="conv-list">' + rows + '</ul>';
+    }
+    function fmtClock(sec) {
+      var s = Math.max(0, Math.round(Number(sec) || 0));
+      var m = Math.floor(s / 60);
+      var r = s % 60;
+      return m + ':' + String(r).padStart(2, '0');
+    }
+    var html = '<div class="detail-section" data-section="conversation" style="margin-top:12px">';
+    html += '<p class="saw-k">Conversation</p>';
+    if (summary) html += '<p class="footnote" style="margin-top:4px">' + esc(summary) + '</p>';
+    if (rooms.length) html += '<p class="footnote">Rooms: ' + esc(rooms.join(', ')) + '</p>';
+    html += factRows('Agreements', agreements);
+    html += factRows('Commitments', commitments);
+    html += factRows('Concerns', concerns);
+    html += factRows('Action items', actions);
+    if (turns.length) {
+      html += '<p class="saw-k">Turns</p><ul class="alog" id="conv-turns">';
+      turns.forEach(function (turn) {
+        var at = turn.tSec != null ? Number(turn.tSec) : null;
+        var label = esc(turn.speakerLabel || 'Speaker');
+        var body = esc(turn.text || '');
+        if (at != null && isFinite(at)) {
+          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span> <span class="pill">' + label + '</span> ' + body + '</li>';
+        } else {
+          html += '<li><span class="pill">' + label + '</span> ' + body + '</li>';
+        }
+      });
+      html += '</ul>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
@@ -5840,6 +5919,7 @@
     } else if (!pending) {
       html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list.</p>';
     }
+    html += renderConversationBlock(item);
     if (!pending) {
       html += '<p class="footnote analysis-lead" id="d-analysis-lead">' + ANALYSIS_DISCLAIMER + '</p>';
     }
@@ -6135,7 +6215,7 @@
 
     if (tab === 'integrity') {
       el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #dispute-list [data-at]'), function (li) {
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #dispute-list [data-at], [data-section="conversation"] [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
       var toggle = document.getElementById('dispute-toggle');
@@ -6926,7 +7006,14 @@
             conversationDetails: reading.conversationDetails || [],
             conversationAgreements: reading.conversationAgreements || [],
             conversationConcerns: reading.conversationConcerns || [],
-            conversationRooms: reading.conversationRooms || []
+            conversationRooms: reading.conversationRooms || [],
+            conversationSummary: reading.conversationSummary || null,
+            conversationTurns: reading.conversationTurns || [],
+            conversationCommitments: reading.conversationCommitments || [],
+            conversationActionItems: reading.conversationActionItems || [],
+            conversationAgreementFacts: reading.conversationAgreementFacts || [],
+            conversationConcernFacts: reading.conversationConcernFacts || [],
+            conversationSource: reading.conversationSource || null
           }
         : raw.analysisState === 'queued'
           ? { state: 'queued', reason: 'This clip is being read now.' }

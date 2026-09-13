@@ -17,6 +17,7 @@ import { transcriptionEnabled, transcribeAudio } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
+import { enrichProofConversation } from './proofConversation.js';
 
 const PROOF_BUCKET = 'job-proofs';
 
@@ -234,19 +235,35 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
         transcript_lease_until: null,
       })
       .eq('id', proofId);
+    try {
+      await enrichProofConversation(admin, proofId, { transcript: '', durationSeconds: null });
+    } catch {
+      /* additive */
+    }
     return;
   }
 
+  const transcriptText = parts.join('\n').slice(0, MAX_TRANSCRIPT_CHARS);
   await admin
     .from('job_proofs')
     .update({
       transcript_status: 'done',
-      transcript_text: parts.join('\n').slice(0, MAX_TRANSCRIPT_CHARS),
+      transcript_text: transcriptText,
       transcript_error: null,
       transcribed_at: new Date().toISOString(),
       transcript_lease_until: null,
     })
     .eq('id', proofId);
+
+  // Structured conversation for Office Analysis — never fail the Whisper write.
+  try {
+    await enrichProofConversation(admin, proofId, {
+      transcript: transcriptText,
+      durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
+    });
+  } catch {
+    /* conversation enrich is additive */
+  }
 }
 
 async function adminForProof(proofId: string) {

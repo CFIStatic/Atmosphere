@@ -57,6 +57,10 @@ export type ClipAskRecord = {
   conversationAgreements?: string[];
   conversationConcerns?: string[];
   conversationRooms?: string[];
+  conversationSummary?: string | null;
+  conversationTurns?: Array<{ tSec?: number | null; speakerLabel?: string; text?: string }>;
+  conversationCommitments?: Array<{ text?: string } | string>;
+  conversationActionItems?: Array<{ text?: string } | string>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -179,6 +183,15 @@ export function clipRecordFromEvidenceItem(item: {
       : [],
     conversationConcerns: Array.isArray(analysis?.conversationConcerns) ? analysis.conversationConcerns : [],
     conversationRooms: Array.isArray(analysis?.conversationRooms) ? analysis.conversationRooms : [],
+    conversationSummary:
+      typeof analysis?.conversationSummary === 'string' ? analysis.conversationSummary : null,
+    conversationTurns: Array.isArray(analysis?.conversationTurns) ? analysis.conversationTurns : [],
+    conversationCommitments: Array.isArray(analysis?.conversationCommitments)
+      ? analysis.conversationCommitments
+      : [],
+    conversationActionItems: Array.isArray(analysis?.conversationActionItems)
+      ? analysis.conversationActionItems
+      : [],
   };
 }
 
@@ -479,9 +492,23 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
   if (record.transcript) lines.push(`Heard on the mic:\n${record.transcript.slice(0, 6000)}`);
+  if (record.conversationSummary) lines.push(`Conversation summary: ${record.conversationSummary}`);
+  for (const turn of record.conversationTurns ?? []) {
+    const label = turn.speakerLabel || 'Speaker';
+    const when = turn.tSec != null && Number.isFinite(turn.tSec) ? ` @ ${formatClipTime(turn.tSec)}` : '';
+    if (turn.text) lines.push(`${label}${when}: ${turn.text}`);
+  }
   for (const line of record.conversationDetails ?? []) lines.push(`Said: ${line}`);
   for (const line of record.conversationAgreements ?? []) lines.push(`Agreement: ${line}`);
   for (const line of record.conversationConcerns ?? []) lines.push(`Spoken concern: ${line}`);
+  for (const item of record.conversationCommitments ?? []) {
+    const text = typeof item === 'string' ? item : item?.text;
+    if (text) lines.push(`Commitment: ${text}`);
+  }
+  for (const item of record.conversationActionItems ?? []) {
+    const text = typeof item === 'string' ? item : item?.text;
+    if (text) lines.push(`Action item: ${text}`);
+  }
   if ((record.conversationRooms ?? []).length) {
     lines.push(`Rooms mentioned on the mic: ${record.conversationRooms!.join(', ')}`);
   }

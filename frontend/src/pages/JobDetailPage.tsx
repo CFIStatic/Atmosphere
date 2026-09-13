@@ -24,6 +24,7 @@ import {
 import { touchJobFile } from '../lib/jobFileRecents';
 import { ShowDispute } from '../components/analysis/ShowDispute';
 import { EventTimeline } from '../components/analysis/EventTimeline';
+import { ConversationPanel } from '../components/analysis/ConversationPanel';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 
 /**
@@ -193,6 +194,7 @@ export function JobDetailPage() {
                       events={video.dictationEntries ?? []}
                       status={failed ? 'failed' : pending && !video.dictationEntries?.length ? 'pending' : null}
                     />
+                    <ConversationPanel conversation={video.conversation} />
                   </li>
                 );
               })}
