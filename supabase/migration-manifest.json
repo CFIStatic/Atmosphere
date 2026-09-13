@@ -161,7 +161,8 @@
     "20260910190000_drop_unused_non_sold_path_tables.sql",
     "20260911010000_job_progress_grants.sql",
     "20260911120000_job_proofs_scheduled_purge.sql",
-    "20260912160000_job_progress_grants_last_accessed.sql"
+    "20260912160000_job_progress_grants_last_accessed.sql",
+    "20260913190000_admin_token_usage_analytics.sql"
   ],
   "migrations": [
     {
@@ -5280,6 +5281,19 @@
       "expect": [
         "column|public.job_progress_grants.last_accessed_at",
         "index|public.job_progress_grants.job_progress_grants_last_accessed_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260913190000_admin_token_usage_analytics",
+      "file": "20260913190000_admin_token_usage_analytics.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.admin_token_usage_analytics",
+        "index|public.token_usage_events.token_usage_events_created_at"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
