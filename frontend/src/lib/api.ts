@@ -826,11 +826,23 @@ export interface ConversationQuotedFact {
   text: string;
   tSec?: number | null;
   quote?: string | null;
+  confidence?: number | null;
+  owner?: string | null;
+  kind?: string | null;
+}
+
+export interface ConversationKeyMoment {
+  tSec: number | null;
+  label: string;
+  text: string;
+  quote?: string | null;
+  confidence?: number | null;
 }
 
 /** Structured mic conversation for Analysis — null when silent / noise-only. */
 export interface ProofConversation {
   conversationSummary?: string | null;
+  conversationExecutiveSummary?: string | null;
   conversationDetails?: string[];
   conversationAgreements?: string[];
   conversationConcerns?: string[];
@@ -840,7 +852,17 @@ export interface ProofConversation {
   conversationActionItems?: ConversationQuotedFact[];
   conversationAgreementFacts?: ConversationQuotedFact[];
   conversationConcernFacts?: ConversationQuotedFact[];
+  conversationRefusals?: ConversationQuotedFact[];
+  conversationScopeChanges?: ConversationQuotedFact[];
+  conversationChangeOrders?: ConversationQuotedFact[];
+  conversationMoneyTalk?: ConversationQuotedFact[];
+  conversationSafety?: ConversationQuotedFact[];
+  conversationInsurance?: ConversationQuotedFact[];
+  conversationUnresolvedQuestions?: ConversationQuotedFact[];
+  conversationContradictions?: ConversationQuotedFact[];
+  conversationKeyMoments?: ConversationKeyMoment[];
   conversationSource?: 'llm' | 'deterministic' | 'empty' | string;
+  conversationModel?: string | null;
 }
 
 /** One filed video, as the collection list wants it. */

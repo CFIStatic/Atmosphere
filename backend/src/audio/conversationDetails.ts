@@ -1,13 +1,9 @@
 /**
- * Pull the useful facts out of a filed mic transcript.
+ * Intelligent conversation analysis for job films.
  *
- * Some day films are work. Some are the contractor standing in the kitchen
- * talking to the homeowner. Both are evidence. Vision already described the
- * frames; this is the matching pass for what was said — agreements, rooms,
- * insurance, leaks, "please don't" — so Ask can answer without a second listen.
- *
- * Prefer an LLM when Ask/vision providers are configured. Fall back to a
- * deterministic extractor so the office still gets the facts with no key.
+ * LLM-first when Ask/vision providers are configured: full (chunked) transcript
+ * plus optional vision dictation context. Every claim should carry a transcript
+ * quote and seek time. Deterministic regex is fallback only when no model runs.
  */
 
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
@@ -17,6 +13,10 @@ export type ConversationQuotedFact = {
   text: string;
   tSec?: number | null;
   quote?: string | null;
+  confidence?: number | null;
+  /** Who owns a promise / action when known. */
+  owner?: string | null;
+  kind?: string | null;
 };
 
 export type ConversationTurn = {
@@ -25,19 +25,36 @@ export type ConversationTurn = {
   text: string;
 };
 
+export type ConversationKeyMoment = {
+  tSec: number | null;
+  label: string;
+  text: string;
+  quote?: string | null;
+  confidence?: number | null;
+};
+
 export type ConversationDetails = {
   summary: string | null;
+  /** Longer office brief (2–5 sentences) when the model produced one. */
+  executiveSummary: string | null;
   details: string[];
   agreements: string[];
   concerns: string[];
   roomsMentioned: string[];
-  /** Rich structure for Office Analysis — empty when the mic was silent. */
   turns: ConversationTurn[];
   commitments: ConversationQuotedFact[];
   actionItems: ConversationQuotedFact[];
-  /** Quoted agreements / concerns with optional seek times. */
   agreementFacts: ConversationQuotedFact[];
   concernFacts: ConversationQuotedFact[];
+  refusals: ConversationQuotedFact[];
+  scopeChanges: ConversationQuotedFact[];
+  changeOrders: ConversationQuotedFact[];
+  moneyTalk: ConversationQuotedFact[];
+  safety: ConversationQuotedFact[];
+  insurance: ConversationQuotedFact[];
+  unresolvedQuestions: ConversationQuotedFact[];
+  contradictions: ConversationQuotedFact[];
+  keyMoments: ConversationKeyMoment[];
   source: 'llm' | 'deterministic' | 'empty';
   model?: string | null;
 };
@@ -48,6 +65,7 @@ export type StoredConversation = {
   source: 'llm' | 'deterministic' | 'empty';
   model?: string | null;
   summary: string | null;
+  executiveSummary?: string | null;
   details: string[];
   agreements: string[];
   concerns: string[];
@@ -57,9 +75,23 @@ export type StoredConversation = {
   actionItems?: ConversationQuotedFact[];
   agreementFacts?: ConversationQuotedFact[];
   concernFacts?: ConversationQuotedFact[];
+  refusals?: ConversationQuotedFact[];
+  scopeChanges?: ConversationQuotedFact[];
+  changeOrders?: ConversationQuotedFact[];
+  moneyTalk?: ConversationQuotedFact[];
+  safety?: ConversationQuotedFact[];
+  insurance?: ConversationQuotedFact[];
+  unresolvedQuestions?: ConversationQuotedFact[];
+  contradictions?: ConversationQuotedFact[];
+  keyMoments?: ConversationKeyMoment[];
 };
 
-export const CONVERSATION_FINDINGS_VERSION = 1;
+export const CONVERSATION_FINDINGS_VERSION = 2;
+
+/** Strong enough for a deep JSON brief; Gemini path already floors high. */
+export const CONVERSATION_LLM_MAX_TOKENS = 8_000;
+const CHUNK_CHARS = 14_000;
+const SINGLE_PASS_CHARS = 22_000;
 
 const ROOMS = [
   'bathroom',
@@ -83,7 +115,7 @@ const ROOMS = [
 ];
 
 const DETAIL =
-  /\b(said|says|told|asked|agreed|approve|approved|declined|don't|do not|insurance|adjuster|claim|leak|mold|water|replace|mirror|cabinet|drywall|flood|cut|extra|change order|deductible|homeowner|owner)\b/i;
+  /\b(said|says|told|asked|agreed|approve|approved|declined|don't|do not|insurance|adjuster|claim|leak|mold|water|replace|mirror|cabinet|drywall|flood|cut|extra|change order|deductible|homeowner|owner|dollars?|\$|safety|ppe)\b/i;
 
 const AGREEMENT =
   /\b(agreed|agreement|approve|approved|go ahead|yes[,.]|that's fine|ok to|okay to|you can|please (do|go)(?! not))\b/i;
@@ -97,23 +129,52 @@ const COMMITMENT =
 const ACTION =
   /\b(need to|have to|must|should|action item|follow up|call the|email|send|get (the )?adjuster|write up)\b/i;
 
+const REFUSAL =
+  /\b(refused|decline|declined|won't|will not|do not want|don't want|not approving|no way|absolutely not)\b/i;
+
+const SCOPE =
+  /\b(in scope|out of scope|not in scope|scope change|change the scope|add(ed)? to scope|remove(d)? from scope)\b/i;
+
+const CHANGE_ORDER = /\b(change order|change-order|extras?|upsell|additional work)\b/i;
+
+const MONEY = /\b(deductible|dollars?|\$|cost|price|invoice|bill|pay|payment|estimate|quote)\b/i;
+
+const SAFETY = /\b(safety|ppe|hard hat|fall protection|asbestos|lead|hazard|unsafe)\b/i;
+
+const INSURANCE = /\b(insurance|adjuster|claim|carrier|coverage|policy)\b/i;
+
+const QUESTION = /\b(who|what|when|where|why|how|can you|will you|do we|should we)\b.*\?/i;
+
 const SPEAKER_LEAD =
   /^(homeowner|owner|home owner|contractor|crew|tech|technician|worker|adjuster|inspector|speaker\s*[a-d]|person\s*[12])\s*[:\-–—]\s*/i;
 
-const EMPTY: ConversationDetails = {
-  summary: null,
-  details: [],
-  agreements: [],
-  concerns: [],
-  roomsMentioned: [],
-  turns: [],
-  commitments: [],
-  actionItems: [],
-  agreementFacts: [],
-  concernFacts: [],
-  source: 'empty',
-  model: null,
-};
+function emptyDetails(): ConversationDetails {
+  return {
+    summary: null,
+    executiveSummary: null,
+    details: [],
+    agreements: [],
+    concerns: [],
+    roomsMentioned: [],
+    turns: [],
+    commitments: [],
+    actionItems: [],
+    agreementFacts: [],
+    concernFacts: [],
+    refusals: [],
+    scopeChanges: [],
+    changeOrders: [],
+    moneyTalk: [],
+    safety: [],
+    insurance: [],
+    unresolvedQuestions: [],
+    contradictions: [],
+    keyMoments: [],
+    source: 'empty',
+    model: null,
+  };
+}
+
 
 export function conversationSentences(text: string): string[] {
   return text
@@ -152,6 +213,12 @@ function clockToSeconds(raw: string): number | null {
 
 function roundTime(seconds: number): number {
   return Math.round(Math.max(0, seconds) * 100) / 100;
+}
+
+function clampConfidence(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(1, Math.round(n * 100) / 100));
 }
 
 function normalizeSpeaker(raw: string): string {
@@ -219,7 +286,8 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
         text = part.trim();
       } else {
         anon += 1;
-        speakerLabel = anon === 1 ? 'Speaker A' : anon === 2 ? 'Speaker B' : `Speaker ${String.fromCharCode(64 + Math.min(anon, 26))}`;
+        speakerLabel =
+          anon === 1 ? 'Speaker A' : anon === 2 ? 'Speaker B' : `Speaker ${String.fromCharCode(64 + Math.min(anon, 26))}`;
         text = part.trim();
         lastLabel = speakerLabel;
       }
@@ -231,10 +299,14 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
       });
     }
   }
-  return turns.slice(0, 48);
+  return turns.slice(0, 64);
 }
 
-function factFromLine(line: string, chunks: StampChunk[]): ConversationQuotedFact {
+function factFromLine(
+  line: string,
+  chunks: StampChunk[],
+  extras?: Partial<ConversationQuotedFact>,
+): ConversationQuotedFact {
   const needle = line.toLowerCase().slice(0, 48);
   let tSec: number | null = null;
   for (const chunk of chunks) {
@@ -245,17 +317,29 @@ function factFromLine(line: string, chunks: StampChunk[]): ConversationQuotedFac
       break;
     }
   }
-  return { text: line.slice(0, 320), tSec, quote: line.slice(0, 240) };
+  return {
+    text: line.slice(0, 320),
+    tSec,
+    quote: line.slice(0, 240),
+    confidence: extras?.confidence ?? 0.55,
+    owner: extras?.owner ?? null,
+    kind: extras?.kind ?? null,
+  };
 }
 
-function factsFromLines(lines: string[], chunks: StampChunk[], max = 8): ConversationQuotedFact[] {
+function factsFromLines(
+  lines: string[],
+  chunks: StampChunk[],
+  max = 8,
+  extras?: Partial<ConversationQuotedFact>,
+): ConversationQuotedFact[] {
   const out: ConversationQuotedFact[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
     const key = line.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(factFromLine(line, chunks));
+    out.push(factFromLine(line, chunks, extras));
     if (out.length >= max) break;
   }
   return out;
@@ -265,10 +349,18 @@ function textsOf(facts: ConversationQuotedFact[]): string[] {
   return facts.map((f) => f.text);
 }
 
-/** Deterministic pass — always available, no provider required. */
+function inferOwner(line: string): string | null {
+  if (/\b(i|we) will\b|\bwe'll\b|\bi'll\b/i.test(line) && /\b(homeowner|owner)\b/i.test(line)) return 'Homeowner';
+  if (/\b(homeowner|owner) will\b/i.test(line)) return 'Homeowner';
+  if (/\b(we will|we'll|crew will|contractor will|i'll remount|we'?ll remount)\b/i.test(line)) return 'Crew';
+  if (/\bi'll\b|\bi will\b/i.test(line)) return null;
+  return null;
+}
+
+/** Deterministic fallback — only when no model is configured or the model fails. */
 export function extractConversationDetails(transcript: string | null | undefined): ConversationDetails {
   const raw = String(transcript || '').trim();
-  if (!raw) return { ...EMPTY };
+  if (!raw) return emptyDetails();
 
   const chunks = conversationChunks(raw);
   const lines = conversationSentences(raw);
@@ -277,30 +369,76 @@ export function extractConversationDetails(transcript: string | null | undefined
   const concerns = unique(lines.filter((line) => CONCERN.test(line)));
   const commitmentLines = unique(lines.filter((line) => COMMITMENT.test(line)));
   const actionLines = unique(lines.filter((line) => ACTION.test(line)));
+  const refusalLines = unique(lines.filter((line) => REFUSAL.test(line)));
+  const scopeLines = unique(lines.filter((line) => SCOPE.test(line)));
+  const changeOrderLines = unique(lines.filter((line) => CHANGE_ORDER.test(line)));
+  const moneyLines = unique(lines.filter((line) => MONEY.test(line)));
+  const safetyLines = unique(lines.filter((line) => SAFETY.test(line)));
+  const insuranceLines = unique(lines.filter((line) => INSURANCE.test(line)));
+  const questionLines = unique(lines.filter((line) => QUESTION.test(line) || /\?\s*$/.test(line)));
   const roomsMentioned = roomsMentionedIn(raw);
   const turns = turnsFromChunks(chunks);
   const agreementFacts = factsFromLines(agreements, chunks);
   const concernFacts = factsFromLines(concerns, chunks);
-  const commitments = factsFromLines(commitmentLines, chunks);
-  const actionItems = factsFromLines(actionLines, chunks);
+  const commitments = commitmentLines.map((line) =>
+    factFromLine(line, chunks, { owner: inferOwner(line), kind: 'promise' }),
+  );
+  const actionItems = factsFromLines(actionLines, chunks, 8, { kind: 'action' });
+  const refusals = factsFromLines(refusalLines, chunks, 8, { kind: 'refusal' });
+  const scopeChanges = factsFromLines(scopeLines, chunks, 8, { kind: 'scope' });
+  const changeOrders = factsFromLines(changeOrderLines, chunks, 6, { kind: 'change_order' });
+  const moneyTalk = factsFromLines(moneyLines, chunks, 8, { kind: 'money' });
+  const safety = factsFromLines(safetyLines, chunks, 6, { kind: 'safety' });
+  const insurance = factsFromLines(insuranceLines, chunks, 8, { kind: 'insurance' });
+  const unresolvedQuestions = factsFromLines(questionLines, chunks, 8, { kind: 'question' });
 
-  // Filler / noise-only mics must not invent a conversation section.
   const substance =
     details.length > 0 ||
     agreements.length > 0 ||
     concerns.length > 0 ||
     roomsMentioned.length > 0 ||
     commitments.length > 0 ||
-    actionItems.length > 0;
-  if (!substance) return { ...EMPTY };
+    actionItems.length > 0 ||
+    refusals.length > 0 ||
+    scopeChanges.length > 0 ||
+    changeOrders.length > 0 ||
+    moneyTalk.length > 0 ||
+    safety.length > 0 ||
+    insurance.length > 0;
+  if (!substance) return emptyDetails();
 
   const lead = details[0] || lines[0] || raw.slice(0, 240);
   const summary = roomsMentioned.length
     ? `Conversation on site covering ${roomsMentioned.slice(0, 4).join(', ')}. ${lead}`
     : `Conversation on site. ${lead}`;
 
+  const keyMoments: ConversationKeyMoment[] = [
+    ...agreementFacts.slice(0, 2).map((f) => ({
+      tSec: f.tSec ?? null,
+      label: 'Agreement',
+      text: f.text,
+      quote: f.quote ?? null,
+      confidence: f.confidence ?? null,
+    })),
+    ...refusals.slice(0, 2).map((f) => ({
+      tSec: f.tSec ?? null,
+      label: 'Refusal',
+      text: f.text,
+      quote: f.quote ?? null,
+      confidence: f.confidence ?? null,
+    })),
+    ...commitments.slice(0, 2).map((f) => ({
+      tSec: f.tSec ?? null,
+      label: 'Promise',
+      text: f.text,
+      quote: f.quote ?? null,
+      confidence: f.confidence ?? null,
+    })),
+  ].slice(0, 8);
+
   return {
-    summary: summary.slice(0, 500),
+    summary: summary.slice(0, 700),
+    executiveSummary: summary.slice(0, 900),
     details,
     agreements,
     concerns,
@@ -310,12 +448,21 @@ export function extractConversationDetails(transcript: string | null | undefined
     actionItems,
     agreementFacts,
     concernFacts,
+    refusals,
+    scopeChanges,
+    changeOrders,
+    moneyTalk,
+    safety,
+    insurance,
+    unresolvedQuestions,
+    contradictions: [],
+    keyMoments,
     source: 'deterministic',
     model: null,
   };
 }
 
-/** Real talk worth a timeline row — not an empty, skipped, or noise-only mic. */
+/** Real talk worth storing — not empty, skipped, or noise-only. */
 export function hasConversation(details: ConversationDetails): boolean {
   return (
     details.details.length > 0 ||
@@ -323,7 +470,16 @@ export function hasConversation(details: ConversationDetails): boolean {
     details.concerns.length > 0 ||
     details.roomsMentioned.length > 0 ||
     details.commitments.length > 0 ||
-    details.actionItems.length > 0
+    details.actionItems.length > 0 ||
+    details.refusals.length > 0 ||
+    details.scopeChanges.length > 0 ||
+    details.changeOrders.length > 0 ||
+    details.moneyTalk.length > 0 ||
+    details.safety.length > 0 ||
+    details.insurance.length > 0 ||
+    details.keyMoments.length > 0 ||
+    Boolean(details.executiveSummary?.trim()) ||
+    Boolean(details.summary?.trim() && details.turns.length > 0)
   );
 }
 
@@ -332,22 +488,38 @@ function asFactList(value: unknown): ConversationQuotedFact[] {
   const out: ConversationQuotedFact[] = [];
   for (const item of value) {
     if (typeof item === 'string' && item.trim()) {
-      out.push({ text: item.trim().slice(0, 320), tSec: null, quote: item.trim().slice(0, 240) });
+      out.push({
+        text: item.trim().slice(0, 320),
+        tSec: null,
+        quote: item.trim().slice(0, 240),
+        confidence: null,
+        owner: null,
+        kind: null,
+      });
       continue;
     }
     if (!item || typeof item !== 'object') continue;
     const text = String((item as { text?: unknown }).text ?? '').trim();
     if (!text) continue;
-    const tRaw = (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
+    const tRaw =
+      (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
     const tSec = Number(tRaw);
     const quoteRaw = (item as { quote?: unknown }).quote;
+    const ownerRaw = (item as { owner?: unknown }).owner;
+    const kindRaw = (item as { kind?: unknown }).kind;
     out.push({
       text: text.slice(0, 320),
       tSec: Number.isFinite(tSec) && tSec >= 0 ? roundTime(tSec) : null,
-      quote: typeof quoteRaw === 'string' && quoteRaw.trim() ? quoteRaw.trim().slice(0, 240) : text.slice(0, 240),
+      quote:
+        typeof quoteRaw === 'string' && quoteRaw.trim()
+          ? quoteRaw.trim().slice(0, 240)
+          : text.slice(0, 240),
+      confidence: clampConfidence((item as { confidence?: unknown }).confidence),
+      owner: typeof ownerRaw === 'string' && ownerRaw.trim() ? ownerRaw.trim().slice(0, 32) : null,
+      kind: typeof kindRaw === 'string' && kindRaw.trim() ? kindRaw.trim().slice(0, 32) : null,
     });
   }
-  return out.slice(0, 12);
+  return out.slice(0, 16);
 }
 
 function asTurnList(value: unknown): ConversationTurn[] {
@@ -357,8 +529,10 @@ function asTurnList(value: unknown): ConversationTurn[] {
     if (!item || typeof item !== 'object') continue;
     const text = String((item as { text?: unknown }).text ?? '').trim();
     if (!text) continue;
-    const speakerLabel = String((item as { speakerLabel?: unknown }).speakerLabel ?? 'Speaker A').trim() || 'Speaker A';
-    const tRaw = (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
+    const speakerLabel =
+      String((item as { speakerLabel?: unknown }).speakerLabel ?? 'Speaker A').trim() || 'Speaker A';
+    const tRaw =
+      (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
     const tSec = Number(tRaw);
     out.push({
       tSec: Number.isFinite(tSec) && tSec >= 0 ? roundTime(tSec) : null,
@@ -366,7 +540,33 @@ function asTurnList(value: unknown): ConversationTurn[] {
       text: text.slice(0, 500),
     });
   }
-  return out.slice(0, 48);
+  return out.slice(0, 64);
+}
+
+function asKeyMoments(value: unknown): ConversationKeyMoment[] {
+  if (!Array.isArray(value)) return [];
+  const out: ConversationKeyMoment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const text = String((item as { text?: unknown }).text ?? '').trim();
+    if (!text) continue;
+    const label = String((item as { label?: unknown }).label ?? 'Moment').trim() || 'Moment';
+    const tRaw =
+      (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
+    const tSec = Number(tRaw);
+    const quoteRaw = (item as { quote?: unknown }).quote;
+    out.push({
+      tSec: Number.isFinite(tSec) && tSec >= 0 ? roundTime(tSec) : null,
+      label: label.slice(0, 40),
+      text: text.slice(0, 320),
+      quote:
+        typeof quoteRaw === 'string' && quoteRaw.trim()
+          ? quoteRaw.trim().slice(0, 240)
+          : text.slice(0, 240),
+      confidence: clampConfidence((item as { confidence?: unknown }).confidence),
+    });
+  }
+  return out.slice(0, 16);
 }
 
 function asStringList(value: unknown, fallback: string[] = []): string[] {
@@ -383,6 +583,25 @@ function asStringList(value: unknown, fallback: string[] = []): string[] {
     if (fromStrings.length) return unique(fromStrings);
   }
   return fallback;
+}
+
+function preferFacts(primary: ConversationQuotedFact[], fallback: ConversationQuotedFact[]): ConversationQuotedFact[] {
+  return primary.length ? primary : fallback;
+}
+
+function mergeFactLists(...lists: ConversationQuotedFact[][]): ConversationQuotedFact[] {
+  const out: ConversationQuotedFact[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const fact of list) {
+      const key = fact.text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(fact);
+      if (out.length >= 16) return out;
+    }
+  }
+  return out;
 }
 
 /** Parse model JSON into ConversationDetails; null when unusable. */
@@ -406,27 +625,52 @@ export function parseConversationModelJson(
 
   const turns = asTurnList(data.turns);
   const agreementFacts = asFactList(data.agreements);
-  const concernFacts = asFactList(data.concerns);
-  const commitments = asFactList(data.commitments);
+  const concernFacts = asFactList(data.concerns ?? data.objections);
+  const commitments = asFactList(data.commitments ?? data.promises);
   const actionItems = asFactList(data.actionItems);
+  const refusals = asFactList(data.refusals);
+  const scopeChanges = asFactList(data.scopeChanges);
+  const changeOrders = asFactList(data.changeOrders);
+  const moneyTalk = asFactList(data.moneyTalk ?? data.money);
+  const safety = asFactList(data.safety);
+  const insurance = asFactList(data.insurance);
+  const unresolvedQuestions = asFactList(data.unresolvedQuestions);
+  const contradictions = asFactList(data.contradictions);
+  const keyMoments = asKeyMoments(data.keyMoments);
   const roomsMentioned = asStringList(data.roomsMentioned ?? data.rooms, fallback.roomsMentioned);
   const details = asStringList(data.details, fallback.details);
   const summary =
     typeof data.summary === 'string' && data.summary.trim()
-      ? data.summary.trim().slice(0, 500)
+      ? data.summary.trim().slice(0, 700)
       : fallback.summary;
+  const executiveSummary =
+    typeof data.executiveSummary === 'string' && data.executiveSummary.trim()
+      ? data.executiveSummary.trim().slice(0, 1200)
+      : typeof data.brief === 'string' && data.brief.trim()
+        ? data.brief.trim().slice(0, 1200)
+        : summary;
 
   const parsed: ConversationDetails = {
     summary,
+    executiveSummary,
     details: details.length ? details : fallback.details,
     agreements: textsOf(agreementFacts).length ? textsOf(agreementFacts) : fallback.agreements,
     concerns: textsOf(concernFacts).length ? textsOf(concernFacts) : fallback.concerns,
-    roomsMentioned,
+    roomsMentioned: roomsMentioned.length ? roomsMentioned : fallback.roomsMentioned,
     turns: turns.length ? turns : fallback.turns,
-    commitments: commitments.length ? commitments : fallback.commitments,
-    actionItems: actionItems.length ? actionItems : fallback.actionItems,
-    agreementFacts: agreementFacts.length ? agreementFacts : fallback.agreementFacts,
-    concernFacts: concernFacts.length ? concernFacts : fallback.concernFacts,
+    commitments: preferFacts(commitments, fallback.commitments),
+    actionItems: preferFacts(actionItems, fallback.actionItems),
+    agreementFacts: preferFacts(agreementFacts, fallback.agreementFacts),
+    concernFacts: preferFacts(concernFacts, fallback.concernFacts),
+    refusals: preferFacts(refusals, fallback.refusals),
+    scopeChanges: preferFacts(scopeChanges, fallback.scopeChanges),
+    changeOrders: preferFacts(changeOrders, fallback.changeOrders),
+    moneyTalk: preferFacts(moneyTalk, fallback.moneyTalk),
+    safety: preferFacts(safety, fallback.safety),
+    insurance: preferFacts(insurance, fallback.insurance),
+    unresolvedQuestions: preferFacts(unresolvedQuestions, fallback.unresolvedQuestions),
+    contradictions: preferFacts(contradictions, fallback.contradictions),
+    keyMoments: keyMoments.length ? keyMoments : fallback.keyMoments,
     source: 'llm',
     model: null,
   };
@@ -435,59 +679,232 @@ export function parseConversationModelJson(
   return parsed;
 }
 
-const CONVERSATION_SYSTEM = `You extract structured conversation facts from a job-site film transcript.
+const CONVERSATION_SYSTEM = `You are an expert claims / restoration office analyst reading a job-site film transcript (and optional vision notes).
+Your job is a DEEP, quote-grounded conversation brief — not keyword soup.
+
 Return JSON only (no markdown). Schema:
 {
-  "summary": "1-2 sentences",
-  "turns": [{"tSec": number|null, "speakerLabel": "Homeowner"|"Crew"|"Speaker A"|"Speaker B"|string, "text": "..."}],
-  "agreements": [{"text":"...","tSec":number|null,"quote":"..."}],
-  "commitments": [{"text":"...","tSec":number|null,"quote":"..."}],
-  "concerns": [{"text":"...","tSec":number|null,"quote":"..."}],
-  "actionItems": [{"text":"...","tSec":number|null,"quote":"..."}],
+  "executiveSummary": "2-5 sentence intelligent brief for the office: what was decided, refused, promised, money/insurance, open questions",
+  "summary": "1-2 sentence headline",
+  "turns": [{"tSec": number|null, "speakerLabel": "Homeowner"|"Crew"|"Adjuster"|"Speaker A"|"Speaker B"|string, "text": "..."}],
+  "agreements": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":null,"kind":"agreement"}],
+  "refusals": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":null,"kind":"refusal"}],
+  "commitments": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":"Crew"|"Homeowner"|string,"kind":"promise"}],
+  "concerns": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
+  "scopeChanges": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"kind":"scope"}],
+  "changeOrders": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"kind":"change_order"}],
+  "moneyTalk": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"kind":"money"}],
+  "safety": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"kind":"safety"}],
+  "insurance": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"kind":"insurance"}],
+  "actionItems": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":"...","kind":"action"}],
+  "unresolvedQuestions": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
+  "contradictions": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
+  "keyMoments": [{"tSec":number|null,"label":"Agreement|Refusal|Promise|Money|Insurance|Scope|Safety|Question","text":"...","quote":"...","confidence":0.0}],
   "roomsMentioned": ["bathroom"],
   "details": ["short fact lines"]
 }
-Rules: use timestamps from [m:ss] stamps when present; Speaker A/B if roles are unclear; never invent speech; empty arrays when silent or noise-only.`;
+
+Rules:
+- Use [m:ss] / [h:mm:ss] stamps for tSec whenever present. Quote must be a verbatim transcript span.
+- confidence 0–1 reflecting how clearly the transcript supports the claim.
+- commitments MUST set owner when clear ("Crew will…", "Homeowner will…").
+- Prefer Homeowner/Crew/Adjuster labels; else Speaker A/B.
+- Never invent speech. Empty arrays when silent or noise-only.
+- Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, and unresolved questions explicitly.
+- keyMoments: the 4–10 most important seekable beats for the office player.`;
+
+function planTranscriptChunks(transcript: string): string[] {
+  const raw = transcript.trim();
+  if (raw.length <= SINGLE_PASS_CHARS) return [raw];
+  const stamped = conversationChunks(raw);
+  if (stamped.length <= 1) {
+    const parts: string[] = [];
+    for (let i = 0; i < raw.length; i += CHUNK_CHARS) {
+      parts.push(raw.slice(i, i + CHUNK_CHARS));
+    }
+    return parts;
+  }
+  const parts: string[] = [];
+  let buf = '';
+  for (const chunk of stamped) {
+    const piece = chunk.at == null ? chunk.text : `[${formatStamp(chunk.at)}] ${chunk.text}`;
+    if (buf && buf.length + piece.length + 1 > CHUNK_CHARS) {
+      parts.push(buf);
+      buf = piece;
+    } else {
+      buf = buf ? `${buf}\n${piece}` : piece;
+    }
+  }
+  if (buf) parts.push(buf);
+  return parts.length ? parts : [raw.slice(0, SINGLE_PASS_CHARS)];
+}
+
+function formatStamp(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function mergeParsedChunks(parts: ConversationDetails[], fallback: ConversationDetails): ConversationDetails {
+  if (!parts.length) return fallback;
+  if (parts.length === 1) return parts[0]!;
+  const first = parts[0]!;
+  const executive = parts
+    .map((p) => p.executiveSummary || p.summary)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(' ');
+  return {
+    ...first,
+    summary: (first.summary || executive).slice(0, 700),
+    executiveSummary: (executive || first.executiveSummary || first.summary || '').slice(0, 1200),
+    details: unique(parts.flatMap((p) => p.details), 16),
+    agreements: unique(parts.flatMap((p) => p.agreements), 16),
+    concerns: unique(parts.flatMap((p) => p.concerns), 16),
+    roomsMentioned: unique(parts.flatMap((p) => p.roomsMentioned), 12),
+    turns: parts.flatMap((p) => p.turns).slice(0, 64),
+    commitments: mergeFactLists(...parts.map((p) => p.commitments)),
+    actionItems: mergeFactLists(...parts.map((p) => p.actionItems)),
+    agreementFacts: mergeFactLists(...parts.map((p) => p.agreementFacts)),
+    concernFacts: mergeFactLists(...parts.map((p) => p.concernFacts)),
+    refusals: mergeFactLists(...parts.map((p) => p.refusals)),
+    scopeChanges: mergeFactLists(...parts.map((p) => p.scopeChanges)),
+    changeOrders: mergeFactLists(...parts.map((p) => p.changeOrders)),
+    moneyTalk: mergeFactLists(...parts.map((p) => p.moneyTalk)),
+    safety: mergeFactLists(...parts.map((p) => p.safety)),
+    insurance: mergeFactLists(...parts.map((p) => p.insurance)),
+    unresolvedQuestions: mergeFactLists(...parts.map((p) => p.unresolvedQuestions)),
+    contradictions: mergeFactLists(...parts.map((p) => p.contradictions)),
+    keyMoments: parts
+      .flatMap((p) => p.keyMoments)
+      .sort((a, b) => (a.tSec ?? 1e9) - (b.tSec ?? 1e9))
+      .slice(0, 16),
+    source: 'llm',
+    model: first.model,
+  };
+}
+
+export type AnalyzeConversationOpts = {
+  durationSeconds?: number | null;
+  /** Vision dictation / day-film summary already on the proof. */
+  visionContext?: string | null;
+};
 
 /**
- * Prefer LLM when Ask providers are configured; otherwise deterministic.
+ * LLM-first when Ask providers are configured; deterministic only as fallback.
  * Never throws — empty/noise transcripts return an empty structure.
  */
 export async function analyzeConversation(
   transcript: string | null | undefined,
-  opts?: { durationSeconds?: number | null },
+  opts?: AnalyzeConversationOpts,
 ): Promise<ConversationDetails> {
-  const fallback = extractConversationDetails(transcript);
   const raw = String(transcript || '').trim();
-  if (!raw || !hasConversation(fallback)) {
-    return raw ? fallback : { ...EMPTY };
-  }
+  if (!raw) return emptyDetails();
+
+  const fallback = extractConversationDetails(raw);
   if (!isAskModelConfigured()) return fallback;
 
   const duration =
     opts?.durationSeconds != null && Number.isFinite(Number(opts.durationSeconds))
       ? Number(opts.durationSeconds)
       : null;
-  const clipped = raw.length > 24_000 ? `${raw.slice(0, 24_000)}\n…` : raw;
+  const vision = String(opts?.visionContext || '').trim().slice(0, 4000);
+  const chunks = planTranscriptChunks(raw);
+
   try {
-    const completed = await completeAskText({
-      system: CONVERSATION_SYSTEM,
-      user: [
-        duration != null ? `Clip length: ${Math.round(duration)} seconds.` : null,
-        'Transcript:',
-        clipped,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      maxTokens: 2500,
-    });
-    if (!completed?.text) return fallback;
-    const parsed = parseConversationModelJson(completed.text, fallback);
-    if (!parsed) {
-      logger.warn('conversation_llm_parse_failed', { chars: completed.text.length });
+    const parsedParts: ConversationDetails[] = [];
+    let model: string | null = null;
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i]!;
+      const completed = await completeAskText({
+        system: CONVERSATION_SYSTEM,
+        user: [
+          duration != null ? `Clip length: ${Math.round(duration)} seconds.` : null,
+          chunks.length > 1 ? `Transcript chunk ${i + 1} of ${chunks.length}.` : null,
+          vision ? `Vision / dictation context (may be incomplete; transcript is ground truth for speech):\n${vision}` : null,
+          'Transcript:',
+          chunk,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        maxTokens: CONVERSATION_LLM_MAX_TOKENS,
+      });
+      if (!completed?.text) continue;
+      model = completed.model;
+      const parsed = parseConversationModelJson(completed.text, fallback);
+      if (parsed) parsedParts.push({ ...parsed, model: completed.model });
+      else logger.warn('conversation_llm_parse_failed', { chunk: i + 1, chars: completed.text.length });
+    }
+
+    if (!parsedParts.length) {
+      // Model ran but produced nothing usable — still prefer empty over inventing
+      // if regex also found no substance.
       return fallback;
     }
-    return { ...parsed, source: 'llm', model: completed.model };
+
+    let merged = mergeParsedChunks(parsedParts, fallback);
+
+    // Second pass: synthesize a single executive brief when we chunked.
+    if (chunks.length > 1 && isAskModelConfigured()) {
+      const sketch = JSON.stringify(
+        {
+          summary: merged.summary,
+          agreements: merged.agreementFacts.slice(0, 6),
+          refusals: merged.refusals.slice(0, 6),
+          commitments: merged.commitments.slice(0, 6),
+          moneyTalk: merged.moneyTalk.slice(0, 4),
+          insurance: merged.insurance.slice(0, 4),
+          scopeChanges: merged.scopeChanges.slice(0, 4),
+          unresolvedQuestions: merged.unresolvedQuestions.slice(0, 4),
+          keyMoments: merged.keyMoments.slice(0, 8),
+        },
+        null,
+        0,
+      ).slice(0, 12_000);
+      const synth = await completeAskText({
+        system: CONVERSATION_SYSTEM,
+        user: [
+          'Synthesize one final office conversation brief from these chunk extractions.',
+          'Keep quote grounding and tSec values. Fill executiveSummary carefully.',
+          'Extractions JSON:',
+          sketch,
+          vision ? `Vision context:\n${vision}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        maxTokens: CONVERSATION_LLM_MAX_TOKENS,
+      });
+      if (synth?.text) {
+        const finalParsed = parseConversationModelJson(synth.text, merged);
+        if (finalParsed) {
+          merged = {
+            ...finalParsed,
+            // Preserve the richer merged catalogs when synthesis trims too hard.
+            turns: finalParsed.turns.length ? finalParsed.turns : merged.turns,
+            agreementFacts: preferFacts(finalParsed.agreementFacts, merged.agreementFacts),
+            concernFacts: preferFacts(finalParsed.concernFacts, merged.concernFacts),
+            commitments: preferFacts(finalParsed.commitments, merged.commitments),
+            refusals: preferFacts(finalParsed.refusals, merged.refusals),
+            scopeChanges: preferFacts(finalParsed.scopeChanges, merged.scopeChanges),
+            changeOrders: preferFacts(finalParsed.changeOrders, merged.changeOrders),
+            moneyTalk: preferFacts(finalParsed.moneyTalk, merged.moneyTalk),
+            safety: preferFacts(finalParsed.safety, merged.safety),
+            insurance: preferFacts(finalParsed.insurance, merged.insurance),
+            actionItems: preferFacts(finalParsed.actionItems, merged.actionItems),
+            unresolvedQuestions: preferFacts(finalParsed.unresolvedQuestions, merged.unresolvedQuestions),
+            contradictions: preferFacts(finalParsed.contradictions, merged.contradictions),
+            keyMoments: finalParsed.keyMoments.length ? finalParsed.keyMoments : merged.keyMoments,
+            source: 'llm',
+            model: synth.model || model,
+          };
+        }
+      }
+    }
+
+    return { ...merged, source: 'llm', model: merged.model || model };
   } catch (err) {
     logger.warn('conversation_llm_failed', {
       detail: (err instanceof Error ? err.message : String(err)).slice(0, 200),
@@ -502,6 +919,7 @@ export function toStoredConversation(details: ConversationDetails): StoredConver
     source: details.source,
     model: details.model ?? null,
     summary: details.summary,
+    executiveSummary: details.executiveSummary,
     details: details.details,
     agreements: details.agreements,
     concerns: details.concerns,
@@ -511,14 +929,20 @@ export function toStoredConversation(details: ConversationDetails): StoredConver
     actionItems: details.actionItems,
     agreementFacts: details.agreementFacts,
     concernFacts: details.concernFacts,
+    refusals: details.refusals,
+    scopeChanges: details.scopeChanges,
+    changeOrders: details.changeOrders,
+    moneyTalk: details.moneyTalk,
+    safety: details.safety,
+    insurance: details.insurance,
+    unresolvedQuestions: details.unresolvedQuestions,
+    contradictions: details.contradictions,
+    keyMoments: details.keyMoments,
   };
 }
 
 /** Hydrate stored `ai_findings.conversation` (or derive from transcript). */
-export function conversationFromStored(
-  transcript: unknown,
-  stored: unknown,
-): ConversationDetails {
+export function conversationFromStored(transcript: unknown, stored: unknown): ConversationDetails {
   const text = typeof transcript === 'string' ? transcript : '';
   const derived = extractConversationDetails(text);
   if (!stored || typeof stored !== 'object') return derived;
@@ -528,11 +952,24 @@ export function conversationFromStored(
   const concernFacts = asFactList(row.concernFacts ?? row.concerns);
   const commitments = asFactList(row.commitments);
   const actionItems = asFactList(row.actionItems);
+  const refusals = asFactList(row.refusals);
+  const scopeChanges = asFactList(row.scopeChanges);
+  const changeOrders = asFactList(row.changeOrders);
+  const moneyTalk = asFactList(row.moneyTalk);
+  const safety = asFactList(row.safety);
+  const insurance = asFactList(row.insurance);
+  const unresolvedQuestions = asFactList(row.unresolvedQuestions);
+  const contradictions = asFactList(row.contradictions);
+  const keyMoments = asKeyMoments(row.keyMoments);
   const turns = asTurnList(row.turns);
   const details = asStringList(row.details, derived.details);
   const roomsMentioned = asStringList(row.rooms ?? row.roomsMentioned, derived.roomsMentioned);
   const summary =
-    typeof row.summary === 'string' && row.summary.trim() ? row.summary.trim().slice(0, 500) : derived.summary;
+    typeof row.summary === 'string' && row.summary.trim() ? row.summary.trim().slice(0, 700) : derived.summary;
+  const executiveSummary =
+    typeof row.executiveSummary === 'string' && row.executiveSummary.trim()
+      ? row.executiveSummary.trim().slice(0, 1200)
+      : derived.executiveSummary || summary;
   const source =
     row.source === 'llm' || row.source === 'deterministic' || row.source === 'empty'
       ? row.source
@@ -542,15 +979,31 @@ export function conversationFromStored(
 
   const hydrated: ConversationDetails = {
     summary,
+    executiveSummary,
     details,
-    agreements: asStringList(row.agreements, textsOf(agreementFacts).length ? textsOf(agreementFacts) : derived.agreements),
-    concerns: asStringList(row.concerns, textsOf(concernFacts).length ? textsOf(concernFacts) : derived.concerns),
+    agreements: asStringList(
+      row.agreements,
+      textsOf(agreementFacts).length ? textsOf(agreementFacts) : derived.agreements,
+    ),
+    concerns: asStringList(
+      row.concerns,
+      textsOf(concernFacts).length ? textsOf(concernFacts) : derived.concerns,
+    ),
     roomsMentioned,
     turns: turns.length ? turns : derived.turns,
-    commitments: commitments.length ? commitments : derived.commitments,
-    actionItems: actionItems.length ? actionItems : derived.actionItems,
-    agreementFacts: agreementFacts.length ? agreementFacts : derived.agreementFacts,
-    concernFacts: concernFacts.length ? concernFacts : derived.concernFacts,
+    commitments: preferFacts(commitments, derived.commitments),
+    actionItems: preferFacts(actionItems, derived.actionItems),
+    agreementFacts: preferFacts(agreementFacts, derived.agreementFacts),
+    concernFacts: preferFacts(concernFacts, derived.concernFacts),
+    refusals: preferFacts(refusals, derived.refusals),
+    scopeChanges: preferFacts(scopeChanges, derived.scopeChanges),
+    changeOrders: preferFacts(changeOrders, derived.changeOrders),
+    moneyTalk: preferFacts(moneyTalk, derived.moneyTalk),
+    safety: preferFacts(safety, derived.safety),
+    insurance: preferFacts(insurance, derived.insurance),
+    unresolvedQuestions: preferFacts(unresolvedQuestions, derived.unresolvedQuestions),
+    contradictions: preferFacts(contradictions, derived.contradictions),
+    keyMoments: keyMoments.length ? keyMoments : derived.keyMoments,
     source,
     model: typeof row.model === 'string' ? row.model : null,
   };
@@ -560,6 +1013,7 @@ export function conversationFromStored(
 export function publicConversationFields(details: ConversationDetails) {
   return {
     conversationSummary: details.summary,
+    conversationExecutiveSummary: details.executiveSummary,
     conversationDetails: details.details,
     conversationAgreements: details.agreements,
     conversationConcerns: details.concerns,
@@ -569,6 +1023,16 @@ export function publicConversationFields(details: ConversationDetails) {
     conversationActionItems: details.actionItems,
     conversationAgreementFacts: details.agreementFacts,
     conversationConcernFacts: details.concernFacts,
+    conversationRefusals: details.refusals,
+    conversationScopeChanges: details.scopeChanges,
+    conversationChangeOrders: details.changeOrders,
+    conversationMoneyTalk: details.moneyTalk,
+    conversationSafety: details.safety,
+    conversationInsurance: details.insurance,
+    conversationUnresolvedQuestions: details.unresolvedQuestions,
+    conversationContradictions: details.contradictions,
+    conversationKeyMoments: details.keyMoments,
     conversationSource: details.source,
+    conversationModel: details.model ?? null,
   };
 }
