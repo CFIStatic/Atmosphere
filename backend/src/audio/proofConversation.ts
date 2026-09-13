@@ -17,6 +17,13 @@ import {
   toStoredEvidenceLog,
   type StoredEvidenceLog,
 } from './evidenceLog.js';
+import {
+  extractPeoplePresent,
+  hasPeople,
+  parsePeopleModelJson,
+  toStoredPeople,
+  type StoredPeoplePresent,
+} from './peoplePresent.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -85,11 +92,44 @@ export async function enrichProofConversation(
     durationSeconds,
     transcript,
     conversation: hasConversation(details) ? details : null,
+    people: findings.people,
+    visionPeople: findings.visionPeople,
   });
+
+  const visionPeople =
+    Array.isArray(findings.visionPeople)
+      ? findings.visionPeople
+      : Array.isArray(findings.people) && !((findings.people as { people?: unknown }).people)
+        ? findings.people
+        : Array.isArray((findings.people as { people?: unknown } | undefined)?.people)
+          ? (findings.people as { people: unknown[] }).people
+          : [];
+  const fromModel = parsePeopleModelJson(
+    { people: visionPeople },
+    extractPeoplePresent({
+      narrationText: proof?.narration_text ?? null,
+      summary: proof?.ai_summary ?? findings.summary ?? null,
+      transcript,
+      conversation: hasConversation(details) ? details : null,
+      actions,
+    }),
+  );
+  const people =
+    fromModel && hasPeople(fromModel)
+      ? fromModel
+      : extractPeoplePresent({
+          narrationText: proof?.narration_text ?? null,
+          summary: proof?.ai_summary ?? findings.summary ?? null,
+          transcript,
+          conversation: hasConversation(details) ? details : null,
+          visionPeople,
+          actions,
+        });
 
   await mergeFindings(admin, proofId, {
     conversation: hasConversation(details) ? toStoredConversation(details) : null,
     evidenceLog: logEntries.length ? toStoredEvidenceLog(logEntries) : null,
+    people: hasPeople(people) ? toStoredPeople(people) : null,
   });
 
   return hasConversation(details) ? details : null;
@@ -101,6 +141,7 @@ async function mergeFindings(
   patch: {
     conversation: StoredConversation | null;
     evidenceLog: StoredEvidenceLog | null;
+    people: StoredPeoplePresent | null;
   },
 ): Promise<void> {
   const { data: proof } = await admin
@@ -116,6 +157,8 @@ async function mergeFindings(
   else delete prev.conversation;
   if (patch.evidenceLog) prev.evidenceLog = patch.evidenceLog;
   else delete prev.evidenceLog;
+  if (patch.people) prev.people = patch.people;
+  else delete prev.people;
   await admin.from('job_proofs').update({ ai_findings: prev }).eq('id', proofId);
 }
 

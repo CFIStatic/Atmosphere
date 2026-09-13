@@ -70,6 +70,10 @@ import {
   publicConversationFields,
   hasConversation,
 } from '../audio/conversationDetails.js';
+import {
+  publicPeopleFields,
+  resolvePeoplePresent,
+} from '../audio/peoplePresent.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
@@ -192,8 +196,30 @@ function evidenceLogFromRow(row: any) {
     actions,
     durationSeconds: Number(row?.duration_seconds) || null,
     transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+    people: findings.people,
+    visionPeople: findings.visionPeople,
     conversation: conversationFromStored(row?.transcript_text, findings.conversation),
   });
+}
+
+function peoplePayloadFromRow(row: any) {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const actions = Array.isArray(row.actions)
+    ? row.actions
+    : Array.isArray(findings.actions)
+      ? findings.actions
+      : [];
+  const people = resolvePeoplePresent({
+    stored: findings.people,
+    transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+    conversationStored: findings.conversation,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    visionPeople: findings.visionPeople,
+    actions,
+  });
+  if (!people.people.length) return null;
+  return publicPeopleFields(people);
 }
 
 /** Event-boundary timestamps already stored on the Analysis reading. */
@@ -2202,6 +2228,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       heardOnMic: typeof row.transcript_text === 'string' ? row.transcript_text : null,
       conversation: conversationPayloadFromRow(row),
       evidenceLog: evidenceLogFromRow(row),
+      people: peoplePayloadFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),

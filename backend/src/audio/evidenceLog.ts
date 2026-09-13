@@ -13,6 +13,12 @@ import {
   type ConversationQuotedFact,
 } from './conversationDetails.js';
 import {
+  extractPeoplePresent,
+  hasPeople,
+  resolvePeoplePresent,
+  type PeoplePresent,
+} from './peoplePresent.js';
+import {
   type DictationEvent,
   resolveDictationEntries,
 } from '../shared/dictationEvents.js';
@@ -124,6 +130,32 @@ function decisionEntries(details: ConversationDetails): EvidenceLogEntry[] {
   ];
 }
 
+
+function peopleEntries(people: PeoplePresent): EvidenceLogEntry[] {
+  const out: EvidenceLogEntry[] = [];
+  for (const person of people.people) {
+    const moments = person.appearMoments?.length
+      ? person.appearMoments
+      : person.firstSeenSec != null
+        ? [{ tSec: person.firstSeenSec, note: null }]
+        : [];
+    for (const moment of moments) {
+      const note = moment.note?.trim();
+      out.push({
+        atSeconds: roundTime(moment.tSec),
+        text: note
+          ? `${person.label}: ${note}`.slice(0, 500)
+          : `${person.label} visible`.slice(0, 500),
+        type: 'activity',
+        speakerLabel: person.speakerLabel ?? null,
+        kind: 'person',
+        owner: person.role !== 'unknown' ? person.role : null,
+      });
+    }
+  }
+  return out;
+}
+
 function turnEntries(details: ConversationDetails): EvidenceLogEntry[] {
   return details.turns
     .filter((t) => t.text?.trim())
@@ -147,6 +179,9 @@ export function buildEvidenceLog(input: {
   transcript?: string | null;
   conversation?: ConversationDetails | null;
   storedLog?: unknown;
+  /** Stored ai_findings.people or raw vision people. */
+  people?: unknown;
+  visionPeople?: unknown;
 }): EvidenceLogEntry[] {
   if (input.storedLog && typeof input.storedLog === 'object') {
     const row = input.storedLog as StoredEvidenceLog;
@@ -191,8 +226,28 @@ export function buildEvidenceLog(input: {
   const fromTurns = hasConversation(conversation) ? turnEntries(conversation) : [];
   const fromDecisions = hasConversation(conversation) ? decisionEntries(conversation) : [];
 
+  let people = resolvePeoplePresent({
+    stored: input.people,
+    transcript: input.transcript,
+    narrationText: input.narrationText,
+    summary: input.summary,
+    visionPeople: input.visionPeople,
+    actions: input.actions,
+  });
+  if (!hasPeople(people)) {
+    people = extractPeoplePresent({
+      narrationText: input.narrationText,
+      summary: input.summary,
+      transcript: input.transcript,
+      conversation: hasConversation(conversation) ? conversation : null,
+      visionPeople: input.visionPeople,
+      actions: input.actions,
+    });
+  }
+  const fromPeople = hasPeople(people) ? peopleEntries(people) : [];
+
   // Prefer explicit turns when present; speechEvents already merged in resolveDictationEntries.
-  return dedupeEvidenceLog([...fromVision, ...fromTurns, ...fromDecisions]);
+  return dedupeEvidenceLog([...fromVision, ...fromTurns, ...fromDecisions, ...fromPeople]);
 }
 
 export function toStoredEvidenceLog(entries: EvidenceLogEntry[]): StoredEvidenceLog {

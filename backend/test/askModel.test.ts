@@ -64,7 +64,7 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
         key: headers.get('x-goog-api-key'),
         maxOutputTokens: body.generationConfig?.maxOutputTokens ?? null,
       });
-      assert.match(url, /gemini-3\.6-flash:generateContent/);
+      assert.match(url, /gemini-2\.5-pro:generateContent/);
       assert.match(body.system_instruction?.parts?.[0]?.text ?? '', /job file/i);
       assert.match(body.contents?.[0]?.parts?.[0]?.text ?? '', /what happens/i);
       assert.equal(body.generationConfig?.maxOutputTokens, GEMINI_ASK_MAX_TOKENS);
@@ -74,7 +74,7 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'North slope is stripped to decking.' }] } }],
           usageMetadata: { promptTokenCount: 40, candidatesTokenCount: 12 },
-          modelVersion: 'gemini-3.6-flash',
+          modelVersion: 'gemini-2.5-pro',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -87,7 +87,7 @@ test('completeAskText uses Gemini when Anthropic is unset', async () => {
       fetchFn,
     });
     assert.ok(result);
-    assert.equal(result.model, 'gemini-3.6-flash');
+    assert.equal(result.model, 'gemini-2.5-pro');
     assert.match(result.text, /North slope/);
     assert.equal(result.usage?.inputTokens, 40);
     assert.equal(result.usage?.outputTokens, 12);
@@ -114,14 +114,14 @@ test('completeAskText retries a retired Gemini model id', async () => {
       urls.push(url);
       if (url.includes('gemini-2.5-flash')) {
         return new Response(
-          'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.6-flash.',
+          'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-2.5-pro.',
           { status: 404 },
         );
       }
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Retried on the current model.' }] } }],
-          modelVersion: 'gemini-3.6-flash',
+          modelVersion: 'gemini-2.5-pro',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -133,7 +133,7 @@ test('completeAskText retries a retired Gemini model id', async () => {
       fetchFn,
     });
     assert.equal(result?.text, 'Retried on the current model.');
-    assert.equal(result?.model, 'gemini-3.6-flash');
+    assert.equal(result?.model, 'gemini-2.5-pro');
     assert.equal(urls.length, 2);
   } finally {
     restoreEnv('GEMINI_API_KEY', prevGemini);
@@ -161,7 +161,7 @@ test('answerFromJobFile uses Gemini when only a Google key is wired', async () =
               },
             },
           ],
-          modelVersion: 'gemini-3.6-flash',
+          modelVersion: 'gemini-2.5-pro',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )) as typeof fetch;
@@ -174,7 +174,7 @@ test('answerFromJobFile uses Gemini when only a Google key is wired', async () =
       },
       apiKey: null,
     });
-    assert.equal(result.model, 'gemini-3.6-flash');
+    assert.equal(result.model, 'gemini-2.5-pro');
     assert.match(result.answer, /BP-2026-8841/);
   } finally {
     globalThis.fetch = originalFetch;

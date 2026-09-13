@@ -17,6 +17,10 @@ import {
   conversationFromStored,
   publicConversationFields,
 } from '../audio/conversationDetails.js';
+import {
+  publicPeopleFields,
+  resolvePeoplePresent,
+} from '../audio/peoplePresent.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
@@ -396,6 +400,17 @@ export function serializeEvidence(input: {
             model: proof.ai_model ?? proof.narration?.model ?? null,
             transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
             ...conversationFields(proof.transcript_text, findings.conversation),
+            ...publicPeopleFields(
+              resolvePeoplePresent({
+                stored: findings.people,
+                transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+                conversationStored: findings.conversation,
+                narrationText: dictation,
+                summary: proof.ai_summary ?? findings.summary ?? null,
+                visionPeople: findings.visionPeople,
+                actions,
+              }),
+            ),
             evidenceLog: buildEvidenceLog({
               storedLog: findings.evidenceLog,
               storedEntries: proof.narration?.entries,
@@ -404,6 +419,8 @@ export function serializeEvidence(input: {
               actions,
               durationSeconds: Number(proof.duration_seconds) || null,
               transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+              people: findings.people,
+              visionPeople: findings.visionPeople,
               conversation: conversationFromStored(proof.transcript_text, findings.conversation),
             }),
           }

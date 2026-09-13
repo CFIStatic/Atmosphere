@@ -857,6 +857,37 @@ export interface ConversationKeyMoment {
   confidence?: number | null;
 }
 
+
+/** One distinct person visible / speaking in a filed clip. */
+export interface PersonPresent {
+  id: string;
+  label: string;
+  role: 'crew' | 'homeowner' | 'adjuster' | 'inspector' | 'other' | 'unknown' | string;
+  appearance: string | null;
+  matchedOrgUserId?: string | null;
+  matchedName?: string | null;
+  matchConfidence?: number | null;
+  firstSeenSec?: number | null;
+  lastSeenSec?: number | null;
+  appearMoments: Array<{ tSec: number; note?: string | null }>;
+  speakerLabel?: string | null;
+}
+
+export interface PeopleSpeakerIndex {
+  speakerLabel: string;
+  personId: string | null;
+  turnCount: number;
+}
+
+/** Structured WHO log for Analysis — null when nobody identified. */
+export interface ProofPeoplePresent {
+  peoplePresent?: PersonPresent[];
+  peopleCount?: number;
+  peopleSpeakers?: PeopleSpeakerIndex[];
+  peopleSource?: string | null;
+  peopleModel?: string | null;
+}
+
 /** Structured mic conversation for Analysis — null when silent / noise-only. */
 export interface ProofConversation {
   conversationSummary?: string | null;
@@ -915,6 +946,8 @@ export interface ProofVideoRecord {
   conversation?: ProofConversation | null;
   /** Complete seekable evidence log (vision + speech + decisions). */
   evidenceLog?: EvidenceLogEntry[];
+  /** WHO is in frame / talking. */
+  people?: ProofPeoplePresent | null;
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];

@@ -44,12 +44,12 @@ export const verificationConfig = {
     | 'google'
     | 'anthropic'
     | 'openai',
-  primaryModel: process.env.VERIFICATION_PRIMARY_MODEL ?? 'gemini-3.6-flash',
+  primaryModel: process.env.VERIFICATION_PRIMARY_MODEL ?? 'gemini-2.5-pro',
   escalationProvider: (process.env.VERIFICATION_ESCALATION_PROVIDER ?? 'anthropic') as
     | 'google'
     | 'anthropic'
     | 'openai',
-  escalationModel: process.env.VERIFICATION_ESCALATION_MODEL ?? 'claude-sonnet-5',
+  escalationModel: process.env.VERIFICATION_ESCALATION_MODEL ?? 'claude-opus-4-1',
   promptVersion: process.env.VERIFICATION_PROMPT_VERSION ?? 'v1',
 
   /** Confidence / escalation. */

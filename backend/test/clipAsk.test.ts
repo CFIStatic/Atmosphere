@@ -290,3 +290,48 @@ test('Ask describes the scene after a late reading lands on an existing clip', (
   assert.match(answer, /MSNBC|desk|senate/i);
   assert.doesNotMatch(answer, /has not been read yet|still being read/i);
 });
+
+test('Ask answers who is in the video from peoplePresent', () => {
+  const record: ClipAskRecord = {
+    analysisState: 'done',
+    dictation: 'Two people in a bathroom; crew in hard hat talks with the homeowner.',
+    peoplePresent: [
+      {
+        id: 'person-1',
+        label: 'Person 1 (crew-like)',
+        role: 'crew',
+        appearance: 'hard hat, high-vis vest',
+        appearMoments: [{ tSec: 12, note: 'Enters bathroom' }],
+        speakerLabel: 'Crew',
+        firstSeenSec: 12,
+        lastSeenSec: 96,
+      },
+      {
+        id: 'person-2',
+        label: 'Person 2 (homeowner-like)',
+        role: 'homeowner',
+        appearance: 'civilian clothes',
+        appearMoments: [{ tSec: 18, note: 'By the vanity' }],
+        speakerLabel: 'Homeowner',
+        firstSeenSec: 18,
+        lastSeenSec: 250,
+      },
+    ],
+    peopleCount: 2,
+    peopleSpeakers: [
+      { speakerLabel: 'Homeowner', personId: 'person-2', turnCount: 2 },
+      { speakerLabel: 'Crew', personId: 'person-1', turnCount: 1 },
+    ],
+    conversationTurns: [
+      { tSec: 18, speakerLabel: 'Homeowner', text: 'Do not replace the cabinets.' },
+      { tSec: 96, speakerLabel: 'Crew', text: 'We will remount the mirror.' },
+    ],
+  };
+  const who = groundedAnswerFromClip('Who is in this video?', record);
+  assert.match(who, /People in this video/i);
+  assert.match(who, /crew-like|Person 1/i);
+  assert.match(who, /homeowner/i);
+
+  const talking = groundedAnswerFromClip('Who is talking?', record);
+  assert.match(talking, /Speaking:|Homeowner|Crew/i);
+});
