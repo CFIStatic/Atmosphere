@@ -156,7 +156,7 @@ export function VerifierFrame({
   }, [location.pathname, location.search, logout, membership, navigate, postSession, postToFrame, profile, user]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=evidence-log-complete-3';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=verbatim-recall-5';
 
   return (
     <div className={className} style={style}>

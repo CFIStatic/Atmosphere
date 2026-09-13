@@ -190,7 +190,14 @@ export function JobDetailPage() {
                         {video.phase ? ` · ${video.phase}` : ''}
                       </span>
                     </p>
-                    <ConversationPanel conversation={video.conversation} />
+                    <ConversationPanel
+                      conversation={{
+                        ...(video.conversation ?? {}),
+                        transcriptText: video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText,
+                        transcriptSegments:
+                          video.transcriptSegments ?? video.conversation?.transcriptSegments,
+                      }}
+                    />
                     <div className="mt-3">
                       <EvidenceLog
                         entries={evidenceEntriesFromVideo(video)}

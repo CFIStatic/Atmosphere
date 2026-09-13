@@ -62,10 +62,12 @@ export type ClipAskRecord = {
   conversationTurns?: Array<{ tSec?: number | null; speakerLabel?: string; text?: string }>;
   conversationCommitments?: Array<{ text?: string; owner?: string | null } | string>;
   conversationActionItems?: Array<{ text?: string; owner?: string | null } | string>;
-  conversationRefusals?: Array<{ text?: string } | string>;
   conversationMoneyTalk?: Array<{ text?: string } | string>;
   conversationInsurance?: Array<{ text?: string } | string>;
   conversationKeyMoments?: Array<{ tSec?: number | null; label?: string; text?: string }>;
+  conversationAgreementFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
+  conversationConcernFacts?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
+  conversationRefusals?: Array<{ text?: string; quote?: string | null; tSec?: number | null } | string>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -143,15 +145,16 @@ const STOP = new Set([
 const CLIP_QA_SYSTEM = `You answer questions about one filed video, using only the reading of that clip.
 
 Rules:
-1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, what was heard on the mic.
+1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, the VERBATIM Whisper transcript.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
 3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
 4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
 6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-7. Speech on the recording is evidence. Quote what was said when that is what was asked.
-8. Two or three sentences. This is read next to the player.
-9. Never estimate cost, hours, or whether work was worth paying for.`;
+7. EXACT SPEECH RECALL: When asked what was said, quote the EXACT words from the "Heard on the mic" / transcript section. Never invent, paraphrase, or clean up dialogue. Cite the seek time from [m:ss] stamps when present.
+8. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
+9. Two to five sentences. This is read next to the player.
+10. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -206,6 +209,12 @@ export function clipRecordFromEvidenceItem(item: {
     conversationInsurance: Array.isArray(analysis?.conversationInsurance) ? analysis.conversationInsurance : [],
     conversationKeyMoments: Array.isArray(analysis?.conversationKeyMoments)
       ? analysis.conversationKeyMoments
+      : [],
+    conversationAgreementFacts: Array.isArray(analysis?.conversationAgreementFacts)
+      ? analysis.conversationAgreementFacts
+      : [],
+    conversationConcernFacts: Array.isArray(analysis?.conversationConcernFacts)
+      ? analysis.conversationConcernFacts
       : [],
   };
 }
@@ -293,6 +302,31 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   for (const line of record.conversationAgreements ?? []) push(null, line, 'heard');
   for (const line of record.conversationConcerns ?? []) push(null, line, 'heard');
   for (const room of record.conversationRooms ?? []) push(null, `Talked about the ${room}`, 'heard');
+  // Prefer exact quotes from structured facts when present.
+  for (const fact of record.conversationAgreementFacts ?? []) {
+    if (typeof fact === 'string') {
+      push(null, fact, 'heard');
+      continue;
+    }
+    const quote = fact?.quote || fact?.text;
+    if (quote) push(fact?.tSec ?? null, quote, 'heard');
+  }
+  for (const fact of record.conversationConcernFacts ?? []) {
+    if (typeof fact === 'string') {
+      push(null, fact, 'heard');
+      continue;
+    }
+    const quote = fact?.quote || fact?.text;
+    if (quote) push(fact?.tSec ?? null, quote, 'heard');
+  }
+  for (const fact of record.conversationRefusals ?? []) {
+    if (typeof fact === 'string') {
+      push(null, fact, 'heard');
+      continue;
+    }
+    const quote = fact?.quote || fact?.text;
+    if (quote) push(fact?.tSec ?? null, quote, 'heard');
+  }
 
   for (const entry of record.dictationEntries ?? []) {
     push(entry.atSeconds, entry.text || entry.note || entry.summary, 'beat');
@@ -386,21 +420,14 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const q = question.trim();
   if (isWhatWasSaid(q)) {
-    const spoken = [
-      ...(record.conversationDetails ?? []),
-      ...(record.conversationAgreements ?? []),
-      ...(record.conversationConcerns ?? []),
-    ]
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (spoken.length) {
-      return `Yes — this is what was said on the recording: ${spoken.slice(0, 3).join(' ')}`;
-    }
-    const heard = splitTranscript(record.transcript)
-      .map((row) => row.text)
-      .filter(Boolean);
+    const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
     if (heard.length) {
-      return `Yes — this is what was said on the recording: ${heard.slice(0, 2).join(' ')}`;
+      const lines = heard.slice(0, 2000).map((row) => {
+        const when = formatClipTimeSpoken(row.at) || formatClipTime(row.at);
+        const clock = when ? ` (${when})` : '';
+        return `“${row.text}”${clock}`;
+      });
+      return `Yes — exact words from the recording: ${lines.join(' ')}`;
     }
     return 'The footage on file does not include usable speech.';
   }
@@ -506,7 +533,7 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
-  if (record.transcript) lines.push(`Heard on the mic:\n${record.transcript.slice(0, 6000)}`);
+  if (record.transcript) lines.push(`Heard on the mic (verbatim Whisper; quote exactly; never invent dialogue):\n${record.transcript}`);
   if (record.conversationExecutiveSummary) {
     lines.push(`Conversation brief: ${record.conversationExecutiveSummary}`);
   } else if (record.conversationSummary) {

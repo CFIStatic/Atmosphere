@@ -114,7 +114,7 @@ export function buildJobFileDossier(input: {
   });
 
   for (const video of videos) {
-    const heard = video.heardOnMic?.trim();
+    const heard = (video.transcriptText ?? video.heardOnMic)?.trim();
     const summary = video.aiSummary?.trim();
     if (!heard && !summary) continue;
     const when = formatWorkDate(video.workDate);
@@ -248,13 +248,13 @@ export function filePulse(proofs: ProofResponse | null): FilePulse {
   const videos = proofs?.videos ?? [];
   const clips = videos.length || proofs?.counts.videos || 0;
   const read = videos.filter((video) => video.analysisStatus === 'done').length;
-  const heard = videos.filter((video) => Boolean(video.heardOnMic?.trim())).length;
+  const heard = videos.filter((video) => Boolean((video.transcriptText ?? video.heardOnMic)?.trim())).length;
   return { clips, read, heard, lastDate: latestFilmedDate(proofs) };
 }
 
 export function hasMicOnFile(proofs: ProofResponse | null): boolean {
   return Boolean(
-    proofs?.videos?.some((video) => Boolean(video.heardOnMic?.trim())) ||
+    proofs?.videos?.some((video) => Boolean((video.transcriptText ?? video.heardOnMic)?.trim())) ||
       proofs?.videos?.some((video) => video.transcriptStatus === 'done'),
   );
 }
