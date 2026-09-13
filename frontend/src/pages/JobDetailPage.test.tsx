@@ -216,10 +216,10 @@ describe('JobDetailPage', () => {
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
-    expect(screen.getByTestId('event-timeline').textContent).toMatch(/0:12/);
-    expect(screen.getByTestId('event-timeline').textContent).toMatch(/0:28/);
-    expect(screen.getByTestId('event-timeline').textContent).toMatch(/said/i);
-    expect(screen.getByTestId('event-timeline').textContent).toMatch(/skylight/i);
+    expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:12/);
+    expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:28/);
+    expect(screen.getByTestId('evidence-log').textContent).toMatch(/said/i);
+    expect(screen.getByTestId('evidence-log').textContent).toMatch(/skylight/i);
     expect(
       screen.getByText('Delgado Roofing accepted revision 3; the job is on 4'),
     ).toBeInTheDocument();

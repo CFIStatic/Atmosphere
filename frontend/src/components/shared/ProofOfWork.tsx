@@ -15,8 +15,8 @@ import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
-import { EventTimeline } from '../analysis/EventTimeline';
 import { ConversationPanel } from '../analysis/ConversationPanel';
+import { EvidenceLog, evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
 
 /**
@@ -493,30 +493,29 @@ export function ProofOfWork({
                           (data.videos ?? []).some(
                             (v) =>
                               v.id === id &&
-                              ((v.dictationEntries?.length ?? 0) > 0 || Boolean(v.conversation)),
+                              (evidenceEntriesFromVideo(v).length > 0 || Boolean(v.conversation)),
                           ),
                         ) && (
                           <div className="mt-2 space-y-2">
                             {day.proofIds.map((id) => {
                               const video = (data.videos ?? []).find((v) => v.id === id);
-                              if (!video?.dictationEntries?.length && !video?.conversation) return null;
+                              if (!video) return null;
+                              if (!evidenceEntriesFromVideo(video).length && !video.conversation) return null;
                               return (
                                 <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
-                                  {video.dictationEntries?.length ? (
-                                    <>
-                                      <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
-                                        {video.phase} — events
-                                      </p>
-                                      <EventTimeline
-                                        events={video.dictationEntries}
-                                        onSeek={(seconds) => applyClipSeek(id, seconds)}
-                                      />
-                                    </>
-                                  ) : null}
                                   <ConversationPanel
                                     conversation={video.conversation}
                                     onSeek={(seconds) => applyClipSeek(id, seconds)}
                                   />
+                                  <div className="mt-2">
+                                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
+                                      {video.phase} — evidence
+                                    </p>
+                                    <EvidenceLog
+                                      entries={evidenceEntriesFromVideo(video)}
+                                      onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                    />
+                                  </div>
                                 </div>
                               );
                             })}
@@ -758,13 +757,6 @@ function VideoCatalog({
       </p>
       <ul>
         {videos.map((video) => {
-          const timeline =
-            video.dictationEntries?.length
-              ? video.dictationEntries
-              : (video.events ?? []).map((event) => ({
-                  atSeconds: event.atSeconds,
-                  text: event.text ?? '',
-                }));
           return (
           <li key={video.id} className="border-b border-line/70 px-3 py-2 last:border-b-0">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -786,20 +778,20 @@ function VideoCatalog({
                   {' · '}
                   Mic: {statusWord(video.transcriptStatus, 'heard')}
                 </p>
-                {timeline.length > 0 ? (
+                <ConversationPanel
+                  conversation={video.conversation}
+                  onSeek={(seconds) => onSeek?.(video.id, seconds)}
+                />
+                {evidenceEntriesFromVideo(video).length > 0 ? (
                   <div className="mt-1.5">
-                    <EventTimeline
-                      events={timeline}
+                    <EvidenceLog
+                      entries={evidenceEntriesFromVideo(video)}
                       onSeek={(seconds) => onSeek?.(video.id, seconds)}
                     />
                   </div>
                 ) : video.aiSummary ? (
                   <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
                 ) : null}
-                <ConversationPanel
-                  conversation={video.conversation}
-                  onSeek={(seconds) => onSeek?.(video.id, seconds)}
-                />
                 {video.heardOnMic && !video.conversation && (
                   <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
                 )}

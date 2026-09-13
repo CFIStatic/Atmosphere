@@ -1,15 +1,17 @@
 /**
- * Seekable speech moments for the Analysis timeline.
+ * Seekable speech moments for the Analysis evidence log.
  *
  * Whisper already wrote `job_proofs.transcript_text`. Vision already built
- * SCENE / CAMERA / WORK rows. This pass turns a real conversation — agreements,
- * concerns, rooms, scope talk — into SAID rows that interleave by time.
+ * SCENE / CAMERA / WORK rows. This pass emits the FULL conversation as SAID
+ * rows (every turn / stamped sentence), not a 12-row highlights skim.
  *
  * Silent walkthroughs, skipped mics, and noise-only transcripts stay empty.
- * A 10-minute Whisper dump stamped [0:00] is not a speech event.
+ * A 10-minute Whisper dump stamped [0:00] is not a speech event unless we
+ * can place substance inside the chunk with a known duration.
  */
 
 import {
+  conversationChunks,
   conversationSentences,
   extractConversationDetails,
   hasConversation,
@@ -23,10 +25,12 @@ export type SpeechEvent = {
   atSeconds: number;
   text: string;
   type: typeof SAID_EVENT_TYPE;
+  speakerLabel?: string | null;
 };
 
-const MAX_SPEECH_EVENTS = 12;
-const MAX_SPEECH_CHARS = 240;
+/** Safety ceiling only — complete conversation logging is the goal. */
+export const MAX_SPEECH_EVENTS = 2_000;
+const MAX_SPEECH_CHARS = 500;
 /** A stamped line this short is already one moment — do not offset inside it. */
 const STAMPED_LINE_CHARS = 240;
 
@@ -62,7 +66,7 @@ function uniqueLines(values: string[], max = MAX_SPEECH_EVENTS): string[] {
   const seen = new Set<string>();
   for (const value of values) {
     const text = value.replace(/\s+/g, ' ').trim().slice(0, MAX_SPEECH_CHARS);
-    if (!text || text.length > MAX_SPEECH_CHARS) continue;
+    if (!text) continue;
     const key = normalize(text);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -108,7 +112,15 @@ export function transcriptSegments(transcript: string): Segment[] {
   return segments;
 }
 
-function substanceLines(transcript: string, details: ConversationDetails): string[] {
+/** Complete speech lines: every sentence / turn, not a substance skim. */
+function completeSpeechLines(transcript: string, details: ConversationDetails): string[] {
+  if (details.turns.length) {
+    return uniqueLines(details.turns.map((t) => t.text));
+  }
+  const fromChunks = conversationChunks(transcript).flatMap((chunk) =>
+    conversationSentences(chunk.text),
+  );
+  if (fromChunks.length) return uniqueLines(fromChunks);
   const roomLines = conversationSentences(transcript).filter(
     (line) => roomsMentionedIn(line).length > 0,
   );
@@ -116,7 +128,9 @@ function substanceLines(transcript: string, details: ConversationDetails): strin
     ...details.agreements,
     ...details.concerns,
     ...details.details,
+    ...details.refusals.map((f) => f.text),
     ...roomLines,
+    ...conversationSentences(transcript),
   ]);
 }
 
@@ -161,8 +175,6 @@ function timeForHit(
   if (span && hit.hayLen > 0 && hit.segment.text.length > STAMPED_LINE_CHARS) {
     return roundTime(base + (hit.index / hit.hayLen) * span);
   }
-  // A lone [0:00] stamp with no next clock and no duration is a Whisper dump,
-  // not a seekable moment. Unstamped talk already returns null in that case.
   if (span == null && base === 0) return null;
   return roundTime(base);
 }
@@ -177,7 +189,7 @@ function fallbackTime(
 }
 
 /**
- * SAID rows for a clip that has a real conversation. Empty when the mic
+ * Complete SAID rows for a clip with real conversation. Empty when the mic
  * was silent, skipped, or only picked up tool noise.
  */
 export function speechEventsFromTranscript(
@@ -190,13 +202,41 @@ export function speechEventsFromTranscript(
   const details = opts?.conversation ?? extractConversationDetails(raw);
   if (!hasConversation(details)) return [];
 
-  const lines = substanceLines(raw, details);
-  if (!lines.length) return [];
-
   const duration = Number(opts?.durationSeconds);
   const durationSeconds = Number.isFinite(duration) && duration > 0 ? duration : null;
-  const segments = transcriptSegments(raw);
 
+  // Prefer structured turns with real clocks (> 0). A lone [0:00] Whisper dump
+  // falls through so we can seek inside the chunk when duration is known — or
+  // omit entirely when duration is missing.
+  const clockedTurns = details.turns.filter(
+    (t) => t.tSec != null && Number.isFinite(t.tSec) && t.tSec > 0 && t.text.trim(),
+  );
+  if (clockedTurns.length) {
+    const events: SpeechEvent[] = [];
+    const seen = new Set<string>();
+    for (const turn of clockedTurns) {
+      const text = turn.text.replace(/\s+/g, ' ').trim().slice(0, MAX_SPEECH_CHARS);
+      if (!text) continue;
+      const key = `${turn.tSec}|${normalize(text)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      events.push({
+        atSeconds: roundTime(turn.tSec!),
+        text,
+        type: SAID_EVENT_TYPE,
+        speakerLabel: turn.speakerLabel,
+      });
+      if (events.length >= MAX_SPEECH_EVENTS) break;
+    }
+    if (events.length) {
+      return events.sort((a, b) => a.atSeconds - b.atSeconds || a.text.localeCompare(b.text));
+    }
+  }
+
+  const lines = completeSpeechLines(raw, details);
+  if (!lines.length) return [];
+
+  const segments = transcriptSegments(raw);
   const events: SpeechEvent[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < lines.length; i += 1) {
@@ -206,6 +246,8 @@ export function speechEventsFromTranscript(
       ? timeForHit(hit, durationSeconds)
       : fallbackTime(i, lines.length, durationSeconds);
     if (at == null || !Number.isFinite(at) || at < 0) continue;
+    // Never pin a long Whisper dump blob at 0:00 — seek into the chunk or skip.
+    if (at === 0 && text.length > 180) continue;
     const key = `${at}|${normalize(text)}`;
     if (seen.has(key)) continue;
     seen.add(key);

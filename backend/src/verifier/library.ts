@@ -17,6 +17,7 @@ import {
   conversationFromStored,
   publicConversationFields,
 } from '../audio/conversationDetails.js';
+import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle } from './proofClipTitle.js';
@@ -367,6 +368,7 @@ export function serializeEvidence(input: {
               actions,
               durationSeconds: Number(proof.duration_seconds) || undefined,
               transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+              conversation: conversationFromStored(proof.transcript_text, findings.conversation),
             }),
             actions,
             materialChange,
@@ -393,6 +395,16 @@ export function serializeEvidence(input: {
             model: proof.ai_model ?? proof.narration?.model ?? null,
             transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
             ...conversationFields(proof.transcript_text, findings.conversation),
+            evidenceLog: buildEvidenceLog({
+              storedLog: findings.evidenceLog,
+              storedEntries: proof.narration?.entries,
+              narrationText: dictation,
+              summary: proof.ai_summary ?? findings.summary ?? null,
+              actions,
+              durationSeconds: Number(proof.duration_seconds) || null,
+              transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+              conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+            }),
           }
         : null,
   };

@@ -789,6 +789,18 @@ export interface DictationEventEntry {
   type?: string | null;
 }
 
+/** One row in the complete Analysis evidence log. */
+export interface EvidenceLogEntry {
+  atSeconds: number;
+  text: string;
+  type: string;
+  speakerLabel?: string | null;
+  quote?: string | null;
+  confidence?: number | null;
+  owner?: string | null;
+  kind?: string | null;
+}
+
 export interface DeviceIdentity {
   make: string | null;
   model: string | null;
@@ -887,6 +899,8 @@ export interface ProofVideoRecord {
   heardOnMic: string | null;
   /** Structured talk when the mic captured a real conversation. */
   conversation?: ProofConversation | null;
+  /** Complete seekable evidence log (vision + speech + decisions). */
+  evidenceLog?: EvidenceLogEntry[];
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];

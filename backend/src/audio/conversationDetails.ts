@@ -299,7 +299,7 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
       });
     }
   }
-  return turns.slice(0, 64);
+  return turns.slice(0, 2_000);
 }
 
 function factFromLine(
@@ -540,7 +540,7 @@ function asTurnList(value: unknown): ConversationTurn[] {
       text: text.slice(0, 500),
     });
   }
-  return out.slice(0, 64);
+  return out.slice(0, 2_000);
 }
 
 function asKeyMoments(value: unknown): ConversationKeyMoment[] {
@@ -765,7 +765,7 @@ function mergeParsedChunks(parts: ConversationDetails[], fallback: ConversationD
     agreements: unique(parts.flatMap((p) => p.agreements), 16),
     concerns: unique(parts.flatMap((p) => p.concerns), 16),
     roomsMentioned: unique(parts.flatMap((p) => p.roomsMentioned), 12),
-    turns: parts.flatMap((p) => p.turns).slice(0, 64),
+    turns: parts.flatMap((p) => p.turns).slice(0, 2_000),
     commitments: mergeFactLists(...parts.map((p) => p.commitments)),
     actionItems: mergeFactLists(...parts.map((p) => p.actionItems)),
     agreementFacts: mergeFactLists(...parts.map((p) => p.agreementFacts)),

@@ -11,8 +11,10 @@
  */
 
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
+import type { ConversationDetails } from '../audio/conversationDetails.js';
 
-export const MAX_DICTATION_EVENTS = 48;
+/** Safety ceiling for a dense evidence log — not a highlights skim. */
+export const MAX_DICTATION_EVENTS = 2_000;
 
 export const DICTATION_EVENT_TYPES = [
   'scene',
@@ -21,6 +23,7 @@ export const DICTATION_EVENT_TYPES = [
   'said',
   'camera',
   'work',
+  'decision',
   'other',
 ] as const;
 
@@ -304,6 +307,7 @@ export function resolveDictationEntries(input: {
   frames?: number[];
   durationSeconds?: number;
   transcript?: string | null;
+  conversation?: ConversationDetails | null;
 }): DictationEvent[] {
   const stored = parseDictationEvents(input.stored, {
     frames: input.frames,
@@ -321,6 +325,7 @@ export function resolveDictationEntries(input: {
   const speech = sanitizeDictationEvents(
     speechEventsFromTranscript(input.transcript, {
       durationSeconds: input.durationSeconds,
+      conversation: input.conversation ?? null,
     }),
     { summary: input.summary },
   );
