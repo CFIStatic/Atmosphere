@@ -295,8 +295,9 @@ describe('verifier clip Ask tab and live analysis', () => {
     const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
       .map((el) => el.textContent || '')
       .join('\n');
-    expect(reply).toMatch(/^Yes/);
     expect(reply).toMatch(/vanity|insurance|cabinets/i);
+    expect(reply).toMatch(/Exact words from the recording|Yes —/i);
+    expect(reply).not.toMatch(/does not show that/i);
     dom.window.close();
   });
 

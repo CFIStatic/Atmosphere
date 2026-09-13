@@ -6021,10 +6021,10 @@
         var quotes = heardLines.slice(0, 40).map(function (row) {
           return row.at ? ('“' + row.text + '” (' + row.at + ')') : ('“' + row.text + '”');
         });
-        var head = brief ? ('They are talking about this: ' + brief + ' Exact words from the recording: ') : 'Exact words from the recording: ';
+        var head = brief ? ('Yes — they are talking about this: ' + brief + ' Exact words from the recording: ') : 'Yes — exact words from the recording: ';
         return head + quotes.join(' ');
       }
-      if (spoken.length) return (brief ? ('They are talking about this: ' + brief + ' ') : '') + 'Yes — this is what was said on the recording: ' + spoken.slice(0, 8).join(' ');
+      if (spoken.length) return (brief ? ('Yes — they are talking about this: ' + brief + ' ') : 'Yes — ') + 'exact words from the recording: ' + spoken.slice(0, 8).join(' ');
       return 'The footage on file does not include usable speech.';
     }
     if (/what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/i.test(q)) {
@@ -6051,6 +6051,18 @@
       return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
     });
     if (!scored.length) {
+      var mic = String(a.transcript || '').trim();
+      if (mic) {
+        var fallbackQuotes = mic.split(/\n+/).map(function (line) {
+          var m = line.trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+          if (m) return '“' + m[2] + '” (' + m[1] + ')';
+          return line.trim() ? ('“' + line.trim() + '”') : null;
+        }).filter(Boolean).slice(0, 40);
+        if (fallbackQuotes.length) {
+          var brief2 = String(a.conversationExecutiveSummary || a.conversationSummary || '').trim();
+          return (brief2 ? ('Yes — they are talking about this: ' + brief2 + ' Exact words from the recording: ') : 'Yes — exact words from the recording: ') + fallbackQuotes.join(' ');
+        }
+      }
       return yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
     }
     if (yesNo) {
@@ -6089,7 +6101,12 @@
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
-        cb(null, body.answer || local);
+        var remote = body.answer || local;
+        if (/does not (show that|include usable speech)/i.test(remote) && local && !/does not (show that|include usable speech)/i.test(local)) {
+          cb(null, local);
+        } else {
+          cb(null, remote);
+        }
       });
     }).catch(function () {
       cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
@@ -6109,6 +6126,7 @@
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
         '<button type="button" data-ask="What did the homeowner say?">What did the homeowner say?</button>' +
+        '<button type="button" data-ask="What are they talking about?">What are they talking about?</button>' +
         '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
     } else {
