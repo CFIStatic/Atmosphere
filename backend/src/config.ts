@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { resolveStripeSecretKey } from './lib/stripeSecret.js';
+import { resolveTranscriptionConfig } from './lib/transcriptionConfig.js';
 import { usageCustomerMarkup } from './metering/customerMarkup.js';
 
 /**
@@ -208,11 +209,9 @@ export const config = {
     // dictation where available, and this is the fallback for everyone else
     // (notably iOS Safari and Firefox). Any OpenAI-compatible /audio/transcriptions
     // endpoint works — Whisper, Groq, a self-hosted whisper.cpp server.
-    transcription: {
-      url: process.env.TRANSCRIPTION_URL ?? '',
-      apiKey: process.env.TRANSCRIPTION_API_KEY ?? '',
-      model: process.env.TRANSCRIPTION_MODEL ?? 'whisper-1',
-    },
+    // If TRANSCRIPTION_URL / TRANSCRIPTION_API_KEY are unset, reuse OPENAI_API_KEY
+    // against https://api.openai.com/v1/audio/transcriptions so proof captions land.
+    transcription: resolveTranscriptionConfig(),
 
     // Cap on an uploaded audio clip. Opus at the recorder's bitrate runs about
     // 1 MB/minute, so this is roughly a 25-minute dictation.

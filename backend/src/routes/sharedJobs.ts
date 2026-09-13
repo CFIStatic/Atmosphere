@@ -52,6 +52,7 @@ import {
   proofQuestions,
   proofVideoUrl,
   reanalyseProofDay,
+  requeueProofTranscript,
   liveObserve,
   jobEvidence,
   evidenceCustody,
@@ -1612,6 +1613,7 @@ sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);
+sharedJobsRouter.post('/shared/:jobId/proof/:proofId/transcript', requeueProofTranscript);
 sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 
 // Evidence, in the shape a records system uses: a list, a custody log per file,

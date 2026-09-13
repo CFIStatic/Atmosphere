@@ -21,6 +21,7 @@ vi.mock('../../lib/api', () => ({
     episodePhysicalWork: vi.fn(),
     decideProofDay: vi.fn(),
     reanalyseProofDay: vi.fn(),
+    requeueProofTranscript: vi.fn(),
     jobCustodyExport: vi.fn(),
     evidenceCustodyExport: vi.fn(),
   },
@@ -109,6 +110,7 @@ describe('ProofOfWork video collection', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Ask the video collection/i)).toBeInTheDocument();
+    expect(screen.getByTestId('hear-the-mic')).toHaveTextContent(/Hear the mic/i);
   });
 
   it('opens the named clip on a dispute tap and seeks once metadata is ready', async () => {

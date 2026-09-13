@@ -335,3 +335,18 @@ test('Ask answers who is in the video from peoplePresent', () => {
   const talking = groundedAnswerFromClip('Who is talking?', record);
   assert.match(talking, /Speaking:|Homeowner|Crew/i);
 });
+
+test('what are they talking about explains the topic with exact quotes', () => {
+  const talk = {
+    analysisState: 'done' as const,
+    conversationExecutiveSummary: 'The leak behind the vanity and whether cabinets wait on insurance.',
+    transcript:
+      '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
+      '[1:36] Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+  };
+  const topic = groundedAnswerFromClip('what are they talking about', talk);
+  assert.match(topic, /They are talking about this/i);
+  assert.match(topic, /vanity|insurance|cabinets/i);
+  assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
+  assert.doesNotMatch(topic, /does not show that/i);
+});

@@ -169,7 +169,8 @@ Rules:
 8. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
 9. When asked who is in the video / who is talking / who is present, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
 10. Two to eight sentences when the question needs depth (who/what/why/decided/next). This is read next to the player.
-11. Never estimate cost, hours, or whether work was worth paying for.`;
+11. Never estimate cost, hours, or whether work was worth paying for.
+12. CONVERSATION / TOPIC: When asked what people are talking about, what the conversation is, what they discussed, or what they decided — write 3–6 sentences explaining the SUBJECT of the talk (topics, agreements, refusals, next steps). Ground every claim in an exact transcript quote with a seek time. Do not answer with a room-layout / screen / furniture description when a transcript is present. If there is no "Heard on the mic" section, say the mic has not been read yet.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -411,12 +412,24 @@ function hasUsableSpeech(record: ClipAskRecord): boolean {
   return false;
 }
 
-/** Exact quotes with seek times from the Whisper log (and structured turns as fallback). */
-function exactSpeechAnswer(record: ClipAskRecord): string | null {
+function isConversationTopic(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /what (are|is|was|were) they talking about/.test(q) ||
+    /what('?s| is| was) the (topic|conversation|discussion)/.test(q) ||
+    /what did they (talk|discuss) about/.test(q) ||
+    /what (is|was) (this |the )?(talk|conversation|discussion) about/.test(q) ||
+    /\btopic\b|about what/.test(q)
+  );
+}
+
+/** Topic + exact quotes with seek times from the Whisper log (turns as fallback). */
+function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): string | null {
   const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
   const lines: string[] = [];
   if (heard.length) {
-    for (const row of heard.slice(0, 2000)) {
+    const cap = opts?.topic ? 8 : 40;
+    for (const row of heard.slice(0, cap)) {
       const when = formatClipTimeSpoken(row.at) || formatClipTime(row.at);
       const clock = when ? ` (${when})` : '';
       lines.push(`“${row.text}”${clock}`);
@@ -438,6 +451,12 @@ function exactSpeechAnswer(record: ClipAskRecord): string | null {
   if (!lines.length) return null;
   const brief =
     String(record.conversationExecutiveSummary || record.conversationSummary || '').trim() || null;
+  if (opts?.topic) {
+    const head = brief
+      ? `They are talking about this: ${brief}`
+      : 'They are talking about this (exact words from the recording):';
+    return `${head} Exact words from the recording: ${lines.join(' ')}`;
+  }
   const head = brief
     ? `Yes — they are talking about this: ${brief} Exact words from the recording:`
     : 'Yes — exact words from the recording:';
@@ -562,7 +581,7 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     return 'The footage on file does not identify who is present.';
   }
   if (isWhatWasSaid(q)) {
-    const speech = exactSpeechAnswer(record);
+    const speech = exactSpeechAnswer(record, { topic: isConversationTopic(q) });
     if (speech) return speech;
     return 'The footage on file does not include usable speech.';
   }
@@ -748,13 +767,12 @@ export async function answerFromClip(input: {
   history?: ClipAskTurn[];
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  // Exact speech recall: do not let a model override transcript-backed answers
-  // with "The footage on file does not show that."
-  if (
-    isWhatWasSaid(input.question) &&
-    hasUsableSpeech(input.record) &&
-    !/does not (show that|include usable speech)/i.test(grounded)
-  ) {
+  const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
+  // Without a model, the grounded transcript answer is the product.
+  // With a model, conversation questions go through so Ask can *explain*
+  // what people are talking about (quotes + timestamps), not dump the log
+  // or answer from vision-only layout description.
+  if (talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
     return { answer: grounded, model: null, usage: null };
   }
   if (
@@ -775,11 +793,15 @@ export async function answerFromClip(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${turn.text.trim()}`)
     .join('\n');
 
+  const talkHint = talkQuestion
+    ? '\n\nThis question is about the conversation. Explain what people are talking about using the Heard on the mic / transcript section. Quote exact words with seek times. Do not describe only the room, screens, or furniture.'
+    : '';
   const completed = await completeAskText({
     system: CLIP_QA_SYSTEM,
     user:
       `Reading of this clip:\n\n${reading}` +
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
+      talkHint +
       `\n\nQuestion: ${input.question}`,
   });
   if (!completed) return { answer: grounded, model: null, usage: null };

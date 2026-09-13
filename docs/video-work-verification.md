@@ -31,6 +31,8 @@ New uploads already enqueue vision (dictation / long-form windows) and speech (W
 
 Older rows that sat at `idle` (filed before those queues existed, or lost on a restart) are picked up by `proofAnalysisSweep` on boot and every five minutes. Ask is then the same mini-chat as a new clip: grounded in the existing reading and transcript, not a second watch.
 
+**Captions / `transcript_text`:** `queueProofTranscript` only runs when a transcription endpoint is configured. If Railway Atmosphere APIs set `TRANSCRIPTION_MODEL` (e.g. `gpt-4o-transcribe`) but omit `TRANSCRIPTION_URL` / `TRANSCRIPTION_API_KEY`, the backend now falls back to `OPENAI_API_KEY` and `https://api.openai.com/v1/audio/transcriptions`. Existing clips: Proof of work → **Hear the mic** (or **Watch it again**, which also re-queues the mic). Without `OPENAI_API_KEY` or an explicit URL+key, the player correctly shows **Captions unavailable**.
+
 Some day films are the contractor talking to the homeowner. `extractConversationDetails` pulls agreements, concerns, rooms, insurance, and "please don't" from the mic so those facts are Askable even when no demolition is in frame.
 
 ## What this adds

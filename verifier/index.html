@@ -2933,7 +2933,7 @@
   function transcriptForItem(item) {
     if (!item) return '';
     var a = item.analysis || {};
-    return String(a.transcript || '').trim();
+    return String(a.transcript || a.transcriptText || item.transcriptText || item.heardOnMic || '').trim();
   }
   function syncVolumeControls(vid) {
     var prefs = readVideoPrefs();
@@ -2953,11 +2953,12 @@
     var hint = document.getElementById('d-cc-hint');
     if (!btn) return;
     if (!available) {
+      var pending = hint && /pending|queued|running/i.test(String(hint.getAttribute('data-status') || ''));
       btn.disabled = true;
       btn.setAttribute('aria-pressed', 'false');
-      btn.setAttribute('aria-label', 'Captions unavailable');
-      btn.title = 'Captions unavailable';
-      if (hint) { hint.hidden = false; hint.textContent = 'Captions unavailable'; }
+      btn.setAttribute('aria-label', pending ? 'Captions pending' : 'Captions unavailable');
+      btn.title = pending ? 'Captions pending' : 'Captions unavailable';
+      if (hint) { hint.hidden = false; hint.textContent = pending ? 'Captions pending' : 'Captions unavailable'; }
       return;
     }
     btn.disabled = false;
@@ -2985,6 +2986,11 @@
       el.remove();
     });
     if (!vtt) {
+      var hint = document.getElementById('d-cc-hint');
+      if (hint) {
+        var st = item && (item.transcriptStatus || (item.analysis && item.analysis.transcriptStatus));
+        hint.setAttribute('data-status', st || '');
+      }
       syncCaptionControls(false, false);
       return;
     }
@@ -6055,7 +6061,8 @@
     var commitments = a.conversationCommitments || [];
     var actions = a.conversationActionItems || [];
     var rooms = a.conversationRooms || [];
-    if (!summary && !a.conversationExecutiveSummary && !turns.length && !agreements.length && !concerns.length && !commitments.length && !actions.length && !rooms.length && !(a.conversationKeyMoments || []).length && !(a.conversationRefusals || []).length) {
+    var transcript = transcriptForItem(item);
+    if (!summary && !a.conversationExecutiveSummary && !turns.length && !agreements.length && !concerns.length && !commitments.length && !actions.length && !rooms.length && !(a.conversationKeyMoments || []).length && !(a.conversationRefusals || []).length && !transcript) {
       return '';
     }
     function factRows(title, items) {
@@ -6118,7 +6125,32 @@
       });
       html += '</ul>';
     }
+    if (transcript) {
+      html += '<p class="saw-k">Exact transcript</p><pre class="footnote" style="white-space:pre-wrap;margin-top:4px">' + esc(transcript) + '</pre>';
+    }
     html += '</div>';
+    return html;
+  }
+
+  function renderPeopleBlock(item) {
+    var a = item.analysis || {};
+    var people = a.peoplePresent || [];
+    if (!people.length) return '';
+    var html = '<div class="detail-section" data-section="people" style="margin-top:12px">';
+    html += '<p class="saw-k">People present</p><ul class="alog">';
+    people.forEach(function (person) {
+      var label = esc(person.label || 'Person');
+      var role = esc(person.role || '');
+      var appearance = person.appearance ? ' — ' + esc(person.appearance) : '';
+      var moments = person.appearMoments || [];
+      var first = moments[0] && isFinite(moments[0].tSec) ? moments[0].tSec : person.firstSeenSec;
+      if (first != null && isFinite(first)) {
+        html += '<li data-at="' + first + '"><span class="t">' + esc(String(Math.floor(first / 60)) + ':' + String(Math.round(first % 60)).padStart(2, '0')) + '</span> ' + label + (role ? ' <span class="pill">' + role + '</span>' : '') + appearance + '</li>';
+      } else {
+        html += '<li>' + label + (role ? ' <span class="pill">' + role + '</span>' : '') + appearance + '</li>';
+      }
+    });
+    html += '</ul></div>';
     return html;
   }
 
@@ -6139,6 +6171,7 @@
       html += '<p class="footnote analysis-empty" id="alog-empty">No distinct moments to list.</p>';
     }
     html += renderConversationBlock(item);
+    html += renderPeopleBlock(item);
     return html;
   }
 
@@ -6225,7 +6258,10 @@
         var quotes = heardLines.slice(0, 40).map(function (row) {
           return row.at ? ('“' + row.text + '” (' + row.at + ')') : ('“' + row.text + '”');
         });
-        var head = brief ? ('Yes — they are talking about this: ' + brief + ' Exact words from the recording: ') : 'Yes — exact words from the recording: ';
+        var topicQ = /what (are|is|was|were) they talking about|what('?s| is) the (topic|conversation)|what did they (talk|discuss) about/i.test(q);
+        var head = brief
+          ? ((topicQ ? 'They are talking about this: ' : 'Yes — they are talking about this: ') + brief + ' Exact words from the recording: ')
+          : (topicQ ? 'They are talking about this. Exact words from the recording: ' : 'Yes — exact words from the recording: ');
         return head + quotes.join(' ');
       }
       if (spoken.length) return (brief ? ('Yes — they are talking about this: ' + brief + ' ') : 'Yes — ') + 'exact words from the recording: ' + spoken.slice(0, 8).join(' ');

@@ -3857,6 +3857,12 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ partyId }) },
     ),
 
+  requeueProofTranscript: (jobId: string, proofId: string) =>
+    request<{ ok: boolean; status: string; proofId: string }>(
+      `/api/operations/shared/${jobId}/proof/${proofId}/transcript`,
+      { method: 'POST' },
+    ),
+
   proofVideoUrl: (proofId: string) =>
     request<{ url: string; expiresInSeconds: number }>(
       `/api/operations/shared/proof/${proofId}/video`,
