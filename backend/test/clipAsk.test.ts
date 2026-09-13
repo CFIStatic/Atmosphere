@@ -479,3 +479,21 @@ test('clipRecordFromEvidenceItem copies transcriptStatus so Ask can wait on the 
   const answer = groundedAnswerFromClip('what are they talking about', record);
   assert.match(answer, /still hearing the mic/i);
 });
+
+test('what is happening cites both the scene and the conversation', () => {
+  const answer = groundedAnswerFromClip('What is happening in this video?', {
+    analysisState: 'done',
+    transcriptStatus: 'done',
+    workDate: '2026-09-13',
+    dictation: 'Two people stand in a bathroom. The camera never shows the vanity leak.',
+    changes: ['Bathroom walkthrough; no work on the cabinets'],
+    transcript:
+      '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
+    conversationExecutiveSummary: 'Vanity leak; cabinets wait on insurance.',
+  });
+  assert.match(answer, /Bathroom walkthrough|cabinets/i);
+  assert.match(answer, /On the mic|talking about/i);
+  assert.match(answer, /vanity|insurance/i);
+  assert.match(answer, /18 seconds into the recording|\[0:18\]/);
+  assert.doesNotMatch(answer, /does not show that/i);
+});

@@ -623,13 +623,14 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
       .map((a) => String(a.description || '').trim())
       .filter(Boolean);
     const date = record.workDate ? ` on ${record.workDate}` : '';
-    if (changes.length) {
-      return `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`;
-    }
-    if (actions.length) {
-      return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
-    }
-    const speech = exactSpeechAnswer(record);
+    const visual = changes.length
+      ? `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`
+      : actions.length
+        ? `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`
+        : '';
+    const speech = exactSpeechAnswer(record, { topic: true });
+    if (visual && speech) return `${visual} On the mic: ${speech}`;
+    if (visual) return visual;
     if (speech) return speech;
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
