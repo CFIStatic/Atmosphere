@@ -216,6 +216,11 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
 
   const agreed = groundedAnswerFromClip('What did they agree to?', talk);
   assert.match(agreed, /mirror|cabinets|adjuster/i);
+
+  const topic = groundedAnswerFromClip('what are they talking about', talk);
+  assert.match(topic, /vanity|insurance|cabinets|mirror/i);
+  assert.doesNotMatch(topic, /does not show that/i);
+  assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {

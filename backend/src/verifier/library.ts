@@ -356,7 +356,7 @@ export function serializeEvidence(input: {
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:
-      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0
+      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0 || Boolean(typeof proof.transcript_text === 'string' && proof.transcript_text.trim())
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
             /** Spoken-style description for the office player — primary reading. */

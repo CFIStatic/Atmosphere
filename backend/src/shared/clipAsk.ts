@@ -146,7 +146,7 @@ const CLIP_QA_SYSTEM = `You answer questions about one filed video, using only t
 
 Rules:
 1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, the VERBATIM Whisper transcript.
-2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
+2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true. EXCEPTION: when a "Heard on the mic" / Whisper transcript is present and the question is about talk, conversation, what people said, or what they are talking about, you MUST answer from that transcript with exact quotes and seek times — never claim the footage does not show speech that was transcribed (including TV/laptop audio in the room).
 3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
 4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
@@ -365,9 +365,64 @@ function isWhatHappened(question: string): boolean {
 }
 
 function isWhatWasSaid(question: string): boolean {
-  return /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/.test(
-    question.toLowerCase(),
+  const q = question.toLowerCase();
+  return (
+    /\b(talking|talk|conversation|discuss(?:ed|ing)?|said|saying|mention(?:ed)?|heard on the mic|on the mic|what was said|anything said)\b/.test(
+      q,
+    ) ||
+    /what (are|is|was|were|did) (they|people|everyone|somebody|someone|he|she|we|you|the )?(homeowner|owner|contractor|crew|worker|they)?.{0,40}\b(talk|say|ask|tell|agree|mention|discuss)/.test(
+      q,
+    ) ||
+    /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)/.test(q) ||
+    /did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)/.test(q) ||
+    /what did they agree/.test(q) ||
+    /\btopic\b|about what/.test(q)
   );
+}
+
+function hasUsableSpeech(record: ClipAskRecord): boolean {
+  if (String(record.transcript || '').trim()) return true;
+  if ((record.conversationDetails ?? []).some((d) => String(d || '').trim())) return true;
+  if ((record.conversationTurns ?? []).some((t) => String(t?.text || '').trim())) return true;
+  if (String(record.conversationExecutiveSummary || record.conversationSummary || '').trim()) return true;
+  if ((record.conversationAgreements ?? []).length) return true;
+  if ((record.conversationConcerns ?? []).length) return true;
+  if ((record.conversationAgreementFacts ?? []).length) return true;
+  if ((record.conversationKeyMoments ?? []).length) return true;
+  return false;
+}
+
+/** Exact quotes with seek times from the Whisper log (and structured turns as fallback). */
+function exactSpeechAnswer(record: ClipAskRecord): string | null {
+  const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
+  const lines: string[] = [];
+  if (heard.length) {
+    for (const row of heard.slice(0, 2000)) {
+      const when = formatClipTimeSpoken(row.at) || formatClipTime(row.at);
+      const clock = when ? ` (${when})` : '';
+      lines.push(`“${row.text}”${clock}`);
+    }
+  } else {
+    for (const turn of record.conversationTurns ?? []) {
+      const text = String(turn?.text || '').trim();
+      if (!text) continue;
+      const when = formatClipTimeSpoken(turn.tSec) || formatClipTime(turn.tSec);
+      const clock = when ? ` (${when})` : '';
+      const who = turn.speakerLabel ? `${turn.speakerLabel}: ` : '';
+      lines.push(`“${who}${text}”${clock}`);
+    }
+    for (const detail of record.conversationDetails ?? []) {
+      const text = String(detail || '').trim();
+      if (text) lines.push(`“${text}”`);
+    }
+  }
+  if (!lines.length) return null;
+  const brief =
+    String(record.conversationExecutiveSummary || record.conversationSummary || '').trim() || null;
+  const head = brief
+    ? `Yes — they are talking about this: ${brief} Exact words from the recording:`
+    : 'Yes — exact words from the recording:';
+  return `${head} ${lines.join(' ')}`;
 }
 
 function isYesNoQuestion(question: string): boolean {
@@ -420,15 +475,8 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const q = question.trim();
   if (isWhatWasSaid(q)) {
-    const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
-    if (heard.length) {
-      const lines = heard.slice(0, 2000).map((row) => {
-        const when = formatClipTimeSpoken(row.at) || formatClipTime(row.at);
-        const clock = when ? ` (${when})` : '';
-        return `“${row.text}”${clock}`;
-      });
-      return `Yes — exact words from the recording: ${lines.join(' ')}`;
-    }
+    const speech = exactSpeechAnswer(record);
+    if (speech) return speech;
     return 'The footage on file does not include usable speech.';
   }
 
@@ -444,6 +492,8 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     if (actions.length) {
       return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
     }
+    const speech = exactSpeechAnswer(record);
+    if (speech) return speech;
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
     return 'The footage on file does not show that.';
@@ -451,6 +501,8 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const qTokens = tokens(q);
   if (!qTokens.length) {
+    const speech = exactSpeechAnswer(record);
+    if (speech) return speech;
     return (record.dictation || record.summary || 'The footage on file does not show that.').trim();
   }
 
@@ -466,6 +518,11 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
 
   if (!scored.length) {
+    // Never deny on-file speech for talk-ish questions when Whisper heard it.
+    if (hasUsableSpeech(record)) {
+      const speech = exactSpeechAnswer(record);
+      if (speech) return speech;
+    }
     return yesNo
       ? 'No. The footage on file does not show that.'
       : 'The footage on file does not show that.';
@@ -588,6 +645,15 @@ export async function answerFromClip(input: {
   history?: ClipAskTurn[];
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
+  // Exact speech recall: do not let a model override transcript-backed answers
+  // with "The footage on file does not show that."
+  if (
+    isWhatWasSaid(input.question) &&
+    hasUsableSpeech(input.record) &&
+    !/does not (show that|include usable speech)/i.test(grounded)
+  ) {
+    return { answer: grounded, model: null, usage: null };
+  }
   if (!isAskModelConfigured()) return { answer: grounded, model: null, usage: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
@@ -606,7 +672,14 @@ export async function answerFromClip(input: {
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
       `\n\nQuestion: ${input.question}`,
   });
-  return completed
-    ? { answer: completed.text, model: completed.model, usage: completed.usage }
-    : { answer: grounded, model: null, usage: null };
+  if (!completed) return { answer: grounded, model: null, usage: null };
+  // If the model wrongly denies on-file speech, keep the grounded transcript answer.
+  if (
+    hasUsableSpeech(input.record) &&
+    /does not (show that|include usable speech)/i.test(completed.text) &&
+    !/does not (show that|include usable speech)/i.test(grounded)
+  ) {
+    return { answer: grounded, model: null, usage: null };
+  }
+  return { answer: completed.text, model: completed.model, usage: completed.usage };
 }
