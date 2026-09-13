@@ -6331,6 +6331,18 @@
       cb(null, local);
       return;
     }
+    // Grounded speech / strong local hit: answer immediately without waiting on the model.
+    var qLow = String(question || '').toLowerCase();
+    var speechish = /\b(talking|talk|conversation|said|saying|mention|heard on the mic|what was said|what are they talking)\b/.test(qLow);
+    if (
+      speechish &&
+      local &&
+      !/does not (show that|include usable speech)/i.test(local) &&
+      (/Exact words from the recording|“/.test(local) || /Yes — they are talking/.test(local))
+    ) {
+      cb(null, local);
+      return;
+    }
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/ask'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/ask';
@@ -6388,6 +6400,8 @@
     function send(text) {
       var q = String(text || '').trim();
       if (q.length < 3) return;
+      if (item._askBusy) return;
+      item._askBusy = true;
       var thread = ASK_THREADS[item.id] || [];
       thread.push({ role: 'user', text: q });
       ASK_THREADS[item.id] = thread;
@@ -6396,13 +6410,24 @@
       });
       setTab('ask');
       var host = document.getElementById('ask-thread');
+      var formEl = document.getElementById('ask-form');
+      var submitBtn = formEl && formEl.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      if (input) input.disabled = true;
       if (host) {
         var pending = document.createElement('div');
         pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
+        pending.textContent = 'Thinking…';
+        pending.id = 'ask-pending';
         host.appendChild(pending);
       }
       askClip(item, q, history, function (_err, answer) {
+        item._askBusy = false;
+        if (submitBtn) submitBtn.disabled = false;
+        if (input) {
+          input.disabled = false;
+          input.focus();
+        }
         thread.push({ role: 'assistant', text: answer });
         ASK_THREADS[item.id] = thread;
         if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');

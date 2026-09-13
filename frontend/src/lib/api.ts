@@ -3511,6 +3511,87 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ question }) },
     ),
 
+  /**
+   * Stream Ask tokens as NDJSON (`?stream=1`). Falls back is the caller's job —
+   * this helper throws ApiError on non-OK responses.
+   */
+  askAboutProofsStream: async (
+    jobId: string,
+    question: string,
+    handlers: {
+      onToken?: (text: string) => void;
+      onStatus?: (phase: string) => void;
+    } = {},
+  ): Promise<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }> => {
+    const embedToken = fieldEmbedAccessToken();
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/operations/shared/${jobId}/proof/ask?stream=1`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/x-ndjson',
+          ...(embedToken ? { Authorization: `Bearer ${embedToken}` } : {}),
+        },
+        body: JSON.stringify({ question }),
+      });
+    } catch {
+      throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      const body = parseApiJson(text);
+      const { message, code } = apiFailureMessage(res.status, body, text);
+      throw new ApiError(res.status, message, code);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new ApiError(0, 'Ask stream returned no body', 'network_error');
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let answer = '';
+    let groundedOn = 0;
+    let model: string | null = null;
+    let stored: ProofQuestion | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let event: {
+          type?: string;
+          text?: string;
+          phase?: string;
+          answer?: string;
+          groundedOn?: number;
+          model?: string | null;
+          question?: ProofQuestion | null;
+        };
+        try {
+          event = JSON.parse(trimmed) as typeof event;
+        } catch {
+          continue;
+        }
+        if (event.type === 'token' && typeof event.text === 'string') {
+          answer += event.text;
+          handlers.onToken?.(event.text);
+        } else if (event.type === 'status' && event.phase) {
+          handlers.onStatus?.(event.phase);
+        } else if (event.type === 'done') {
+          answer = typeof event.answer === 'string' ? event.answer : answer;
+          groundedOn = typeof event.groundedOn === 'number' ? event.groundedOn : groundedOn;
+          model = event.model ?? model;
+          stored = event.question ?? stored;
+        }
+      }
+    }
+    return { answer, groundedOn, model, question: stored };
+  },
+
   proofQuestions: (jobId: string) =>
     request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
       method: 'GET',

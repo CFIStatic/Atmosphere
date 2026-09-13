@@ -759,33 +759,75 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
 }
 
 /**
- * Answer from the clip reading, with a model when one is configured.
+ * Prefer the grounded reading when it already answers well — skips the model
+ * round-trip for speech recall, who-is-present, what-happened, and strong
+ * yes/no hits with a spoken timestamp.
  */
+function isTopicExplainQuestion(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /\btopic\b|about what|what are they talking|what is (the |this )?conversation|explain (the |this )?(talk|conversation)/.test(
+      q,
+    )
+  );
+}
+
+export function preferClipGroundedFastPath(question: string, grounded: string, record: ClipAskRecord): boolean {
+  if (/still being read|reading of this clip failed|could not be read/i.test(grounded)) return false;
+  // Exact speech recall is instant from the transcript. Topic/explain questions
+  // still use the fast Ask model (with talkHint) so they can summarize.
+  if (
+    isWhatWasSaid(question) &&
+    hasUsableSpeech(record) &&
+    !isTopicExplainQuestion(question) &&
+    !/does not (show that|include usable speech)/i.test(grounded)
+  ) {
+    return true;
+  }
+  if (isWhoQuestion(question) && hasPeople(peopleFromRecord(record)) && !/does not identify who/i.test(grounded)) {
+    return true;
+  }
+  if (isWhatHappened(question) && hasReading(record) && !/does not show that/i.test(grounded)) {
+    return true;
+  }
+  if (
+    isYesNoQuestion(question) &&
+    /^(Yes|No)\./.test(grounded) &&
+    /into the recording/.test(grounded) &&
+    !/does not show that/i.test(grounded)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function answerFromClip(input: {
   question: string;
   record: ClipAskRecord;
   history?: ClipAskTurn[];
+  onToken?: (text: string) => void;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
-  // Without a model, the grounded transcript answer is the product.
-  // With a model, conversation questions go through so Ask can *explain*
-  // what people are talking about (quotes + timestamps), not dump the log
-  // or answer from vision-only layout description.
+  if (preferClipGroundedFastPath(input.question, grounded, input.record)) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, usage: null };
+  }
+  // Topic/explain talk questions: without a model, serve the grounded transcript.
   if (talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
+    input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
-  if (
-    isWhoQuestion(input.question) &&
-    hasPeople(peopleFromRecord(input.record)) &&
-    !/does not identify who/i.test(grounded)
-  ) {
+  if (!isAskModelConfigured()) {
+    input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
-  if (!isAskModelConfigured()) return { answer: grounded, model: null, usage: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
-  if (!reading) return { answer: grounded, model: null, usage: null };
+  if (!reading) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, usage: null };
+  }
 
   const history = (input.history ?? [])
     .filter((turn) => turn.text.trim())
@@ -803,14 +845,20 @@ export async function answerFromClip(input: {
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
       talkHint +
       `\n\nQuestion: ${input.question}`,
+    mode: 'interactive',
+    onToken: input.onToken,
   });
-  if (!completed) return { answer: grounded, model: null, usage: null };
+  if (!completed) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, usage: null };
+  }
   // If the model wrongly denies on-file speech, keep the grounded transcript answer.
   if (
     hasUsableSpeech(input.record) &&
     /does not (show that|include usable speech)/i.test(completed.text) &&
     !/does not (show that|include usable speech)/i.test(grounded)
   ) {
+    input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
   return { answer: completed.text, model: completed.model, usage: completed.usage };

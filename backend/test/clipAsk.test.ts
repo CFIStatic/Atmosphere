@@ -6,6 +6,7 @@ import {
   formatClipTime,
   formatClipTimeSpoken,
   groundedAnswerFromClip,
+  preferClipGroundedFastPath,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
 import { serializeEvidence } from '../src/verifier/library.js';
@@ -349,4 +350,46 @@ test('what are they talking about explains the topic with exact quotes', () => {
   assert.match(topic, /vanity|insurance|cabinets/i);
   assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
   assert.doesNotMatch(topic, /does not show that/i);
+});
+
+test('speech questions take the grounded fast path without a model call', async () => {
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  process.env.GEMINI_API_KEY = 'would-call-if-not-fast-path';
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      throw new Error('model should not be called on speech fast path');
+    }) as typeof fetch;
+
+    const talk: ClipAskRecord = {
+      analysisState: 'done',
+      transcript: '[0:18] Do not replace the cabinets.\n[1:36] We will remount the mirror.',
+      conversationSummary: 'Homeowner forbids cabinet replacement; crew remounts mirror.',
+    };
+    const grounded = groundedAnswerFromClip('What did the homeowner say?', talk);
+    assert.equal(preferClipGroundedFastPath('What did the homeowner say?', grounded, talk), true);
+    const result = await answerFromClip({ question: 'What did the homeowner say?', record: talk });
+    assert.equal(result.model, null);
+    assert.match(result.answer, /cabinets|Exact words/i);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+  }
+});
+
+test('timestamped yes/no hits prefer the grounded fast path', () => {
+  const grounded = groundedAnswerFromClip('Was the tarp removed?', cedarAfter);
+  assert.equal(preferClipGroundedFastPath('Was the tarp removed?', grounded, cedarAfter), true);
 });
