@@ -5855,7 +5855,7 @@
     var commitments = a.conversationCommitments || [];
     var actions = a.conversationActionItems || [];
     var rooms = a.conversationRooms || [];
-    if (!summary && !turns.length && !agreements.length && !concerns.length && !commitments.length && !actions.length && !rooms.length) {
+    if (!summary && !a.conversationExecutiveSummary && !turns.length && !agreements.length && !concerns.length && !commitments.length && !actions.length && !rooms.length && !(a.conversationKeyMoments || []).length && !(a.conversationRefusals || []).length) {
       return '';
     }
     function factRows(title, items) {
@@ -5879,9 +5879,28 @@
     }
     var html = '<div class="detail-section" data-section="conversation" style="margin-top:12px">';
     html += '<p class="saw-k">Conversation</p>';
-    if (summary) html += '<p class="footnote" style="margin-top:4px">' + esc(summary) + '</p>';
+    var brief = a.conversationExecutiveSummary || summary;
+    if (brief) html += '<p class="footnote" style="margin-top:4px">' + esc(brief) + '</p>';
+    var moments = a.conversationKeyMoments || [];
+    if (moments.length) {
+      html += '<p class="saw-k">Key moments</p><ul class="alog">';
+      moments.forEach(function (m) {
+        var at = m.tSec != null ? Number(m.tSec) : null;
+        var label = esc(m.label || 'Moment');
+        var body = esc(m.text || '');
+        if (at != null && isFinite(at)) {
+          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span> <span class="pill">' + label + '</span> ' + body + '</li>';
+        } else {
+          html += '<li><span class="pill">' + label + '</span> ' + body + '</li>';
+        }
+      });
+      html += '</ul>';
+    }
     if (rooms.length) html += '<p class="footnote">Rooms: ' + esc(rooms.join(', ')) + '</p>';
     html += factRows('Agreements', agreements);
+    html += factRows('Refusals', a.conversationRefusals || []);
+    html += factRows('Money', a.conversationMoneyTalk || []);
+    html += factRows('Insurance', a.conversationInsurance || []);
     html += factRows('Commitments', commitments);
     html += factRows('Concerns', concerns);
     html += factRows('Action items', actions);
@@ -7008,6 +7027,11 @@
             conversationConcerns: reading.conversationConcerns || [],
             conversationRooms: reading.conversationRooms || [],
             conversationSummary: reading.conversationSummary || null,
+            conversationExecutiveSummary: reading.conversationExecutiveSummary || null,
+            conversationKeyMoments: reading.conversationKeyMoments || [],
+            conversationRefusals: reading.conversationRefusals || [],
+            conversationMoneyTalk: reading.conversationMoneyTalk || [],
+            conversationInsurance: reading.conversationInsurance || [],
             conversationTurns: reading.conversationTurns || [],
             conversationCommitments: reading.conversationCommitments || [],
             conversationActionItems: reading.conversationActionItems || [],

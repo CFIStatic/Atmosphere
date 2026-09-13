@@ -58,9 +58,14 @@ export type ClipAskRecord = {
   conversationConcerns?: string[];
   conversationRooms?: string[];
   conversationSummary?: string | null;
+  conversationExecutiveSummary?: string | null;
   conversationTurns?: Array<{ tSec?: number | null; speakerLabel?: string; text?: string }>;
-  conversationCommitments?: Array<{ text?: string } | string>;
-  conversationActionItems?: Array<{ text?: string } | string>;
+  conversationCommitments?: Array<{ text?: string; owner?: string | null } | string>;
+  conversationActionItems?: Array<{ text?: string; owner?: string | null } | string>;
+  conversationRefusals?: Array<{ text?: string } | string>;
+  conversationMoneyTalk?: Array<{ text?: string } | string>;
+  conversationInsurance?: Array<{ text?: string } | string>;
+  conversationKeyMoments?: Array<{ tSec?: number | null; label?: string; text?: string }>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -185,12 +190,22 @@ export function clipRecordFromEvidenceItem(item: {
     conversationRooms: Array.isArray(analysis?.conversationRooms) ? analysis.conversationRooms : [],
     conversationSummary:
       typeof analysis?.conversationSummary === 'string' ? analysis.conversationSummary : null,
+    conversationExecutiveSummary:
+      typeof analysis?.conversationExecutiveSummary === 'string'
+        ? analysis.conversationExecutiveSummary
+        : null,
     conversationTurns: Array.isArray(analysis?.conversationTurns) ? analysis.conversationTurns : [],
     conversationCommitments: Array.isArray(analysis?.conversationCommitments)
       ? analysis.conversationCommitments
       : [],
     conversationActionItems: Array.isArray(analysis?.conversationActionItems)
       ? analysis.conversationActionItems
+      : [],
+    conversationRefusals: Array.isArray(analysis?.conversationRefusals) ? analysis.conversationRefusals : [],
+    conversationMoneyTalk: Array.isArray(analysis?.conversationMoneyTalk) ? analysis.conversationMoneyTalk : [],
+    conversationInsurance: Array.isArray(analysis?.conversationInsurance) ? analysis.conversationInsurance : [],
+    conversationKeyMoments: Array.isArray(analysis?.conversationKeyMoments)
+      ? analysis.conversationKeyMoments
       : [],
   };
 }
@@ -492,7 +507,16 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
   if (record.transcript) lines.push(`Heard on the mic:\n${record.transcript.slice(0, 6000)}`);
-  if (record.conversationSummary) lines.push(`Conversation summary: ${record.conversationSummary}`);
+  if (record.conversationExecutiveSummary) {
+    lines.push(`Conversation brief: ${record.conversationExecutiveSummary}`);
+  } else if (record.conversationSummary) {
+    lines.push(`Conversation summary: ${record.conversationSummary}`);
+  }
+  for (const moment of record.conversationKeyMoments ?? []) {
+    if (!moment?.text) continue;
+    const when = moment.tSec != null && Number.isFinite(moment.tSec) ? ` @ ${formatClipTime(moment.tSec)}` : '';
+    lines.push(`Key moment${when} (${moment.label || 'moment'}): ${moment.text}`);
+  }
   for (const turn of record.conversationTurns ?? []) {
     const label = turn.speakerLabel || 'Speaker';
     const when = turn.tSec != null && Number.isFinite(turn.tSec) ? ` @ ${formatClipTime(turn.tSec)}` : '';
@@ -503,7 +527,20 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   for (const line of record.conversationConcerns ?? []) lines.push(`Spoken concern: ${line}`);
   for (const item of record.conversationCommitments ?? []) {
     const text = typeof item === 'string' ? item : item?.text;
-    if (text) lines.push(`Commitment: ${text}`);
+    const owner = typeof item === 'object' && item && 'owner' in item ? item.owner : null;
+    if (text) lines.push(`Commitment${owner ? ` (${owner})` : ''}: ${text}`);
+  }
+  for (const item of record.conversationRefusals ?? []) {
+    const text = typeof item === 'string' ? item : item?.text;
+    if (text) lines.push(`Refusal: ${text}`);
+  }
+  for (const item of record.conversationMoneyTalk ?? []) {
+    const text = typeof item === 'string' ? item : item?.text;
+    if (text) lines.push(`Money: ${text}`);
+  }
+  for (const item of record.conversationInsurance ?? []) {
+    const text = typeof item === 'string' ? item : item?.text;
+    if (text) lines.push(`Insurance: ${text}`);
   }
   for (const item of record.conversationActionItems ?? []) {
     const text = typeof item === 'string' ? item : item?.text;
