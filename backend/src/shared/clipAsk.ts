@@ -170,7 +170,8 @@ Rules:
 9. When asked who is in the video / who is talking / who is present, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
 10. Two to eight sentences when the question needs depth (who/what/why/decided/next). This is read next to the player.
 11. Never estimate cost, hours, or whether work was worth paying for.
-12. CONVERSATION / TOPIC: When asked what people are talking about, what the conversation is, what they discussed, or what they decided — write 3–6 sentences explaining the SUBJECT of the talk (topics, agreements, refusals, next steps). Ground every claim in an exact transcript quote with a seek time. Do not answer with a room-layout / screen / furniture description when a transcript is present. If there is no "Heard on the mic" section, say the mic has not been read yet.`;
+12. CONVERSATION / TOPIC: When asked what people are talking about, what the conversation is, what they discussed, or what they decided — write 3–6 sentences explaining the SUBJECT of the talk (topics, agreements, refusals, next steps). Ground every claim in an exact transcript quote with a seek time. Do not answer with a room-layout / screen / furniture description when a transcript is present. If there is no "Heard on the mic" section, say the mic has not been read yet.
+13. ACCURACY: Never invent detail that is not in the reading. If the reading marks uncertainty ("unclear", "cannot confirm", low confidence), preserve that uncertainty in your answer — do not upgrade it into a firm claim. Prefer "the footage does not show that" over a plausible guess.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 

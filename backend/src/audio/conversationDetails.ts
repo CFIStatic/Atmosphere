@@ -716,12 +716,14 @@ export function parseConversationModelJson(
   return parsed;
 }
 
-const CONVERSATION_SYSTEM = `You are an expert claims / restoration office analyst reading a job-site film transcript (and optional vision notes).
-Your job is a DEEP, quote-grounded conversation brief — not keyword soup.
+const CONVERSATION_SYSTEM = `You are an expert claims / restoration office analyst reconstructing EXACTLY what was said and decided on a job-site film.
+Your job is a DEEP, quote-grounded conversation brief that recovers who spoke, what was discussed, decisions, and next steps — not keyword soup.
+
+ACCURACY: Never invent speech, speakers, decisions, or owners. If the transcript is ambiguous, lower confidence and say so in the text (e.g. "unclear who committed"). Never pad with plausible fiction.
 
 Return JSON only (no markdown). Schema:
 {
-  "executiveSummary": "2-5 sentence intelligent brief for the office: what was decided, refused, promised, money/insurance, open questions",
+  "executiveSummary": "3-7 sentence reconstruction for the office: topics, what was decided, refused, promised, money/insurance, open questions, next steps — grounded in quotes",
   "summary": "1-2 sentence headline",
   "turns": [{"tSec": number|null, "speakerLabel": "Homeowner"|"Crew"|"Adjuster"|"Speaker A"|"Speaker B"|string, "text": "..."}],
   "agreements": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":null,"kind":"agreement"}],
@@ -738,18 +740,19 @@ Return JSON only (no markdown). Schema:
   "contradictions": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0}],
   "keyMoments": [{"tSec":number|null,"label":"Agreement|Refusal|Promise|Money|Insurance|Scope|Safety|Question","text":"...","quote":"...","confidence":0.0}],
   "roomsMentioned": ["bathroom"],
-  "details": ["short fact lines"]
+  "details": ["short fact lines covering every substantive topic raised"]
 }
 
 Rules:
 - Use [m:ss] / [h:mm:ss] stamps for tSec whenever present. Quote must be a verbatim transcript span.
-- confidence 0–1 reflecting how clearly the transcript supports the claim.
-- commitments MUST set owner when clear ("Crew will…", "Homeowner will…").
-- Prefer Homeowner/Crew/Adjuster labels; else Speaker A/B.
+- confidence 0–1 reflecting how clearly the transcript supports the claim. Use ≤0.4 when uncertain.
+- commitments MUST set owner when clear ("Crew will…", "Homeowner will…"); leave owner null when unclear — do not guess.
+- Prefer Homeowner/Crew/Adjuster labels; else Speaker A/B. Never invent a legal name.
 - Never invent speech. Empty arrays when silent or noise-only.
 - CRITICAL: quote fields must be EXACT verbatim substrings of the transcript. Do not paraphrase quotes. Do not rewrite the transcript. Structure sits ON TOP OF the verbatim log.
-- Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, and unresolved questions explicitly.
-- keyMoments: the 4–10 most important seekable beats for the office player.`;
+- Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, next steps, and unresolved questions explicitly and densely.
+- details: cover every distinct topic raised — prefer denser lists over a thin blurb.
+- keyMoments: the 6–14 most important seekable beats for the office player.`;
 
 function planTranscriptChunks(transcript: string): string[] {
   const raw = transcript.trim();
