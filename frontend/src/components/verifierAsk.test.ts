@@ -277,9 +277,12 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(times).toContain(18);
     expect(times).toContain(96);
     expect(times).toContain(250);
+    expect(times).toContain(285);
     expect(times.every((at) => at > 0)).toBe(true);
     expect(document.getElementById('alog')?.textContent).toMatch(/said/i);
     expect(document.getElementById('alog')?.textContent).toMatch(/insurance|cabinets|agreement/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/unless insurance approves it/i);
+    expect(document.getElementById('alog')?.textContent).toMatch(/That is not in the claim/i);
     expect(document.getElementById('alog')?.textContent).not.toMatch(/0:00/);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;

@@ -151,7 +151,7 @@ export function buildJobFileDossier(input: {
     });
   }
 
-  return beats.slice(0, 12);
+  return beats;
 }
 
 const FILE_TOPICS =

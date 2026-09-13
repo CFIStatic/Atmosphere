@@ -2560,7 +2560,8 @@
         transcript:
           '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
           '[1:36] Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.\n' +
-          '[4:10] Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.',
+          '[4:10] Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.\n' +
+          '[4:45] Homeowner: The oak floors stay. Do not sand them. That is not in the claim.',
         conversationDetails: [
           'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
           'Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
@@ -5513,7 +5514,7 @@
     return /^\s*at\s+\d+(\s+seconds?)?\b/i.test(t) || /^\s*\[\d+:\d{2}(?::\d{2})?\]/.test(t);
   }
 
-  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, said: 1, camera: 1, work: 1, other: 1 };
+  var EVENT_TYPES = { scene: 1, activity: 1, speech: 1, said: 1, camera: 1, work: 1, decision: 1, other: 1 };
   var FILLER_LEAD = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?(?:\s+on)?|starts?|begins?|depicts?|features?)\s+(?:that\s+)?/i;
   var TIMESTAMP_LEAD = /^(?:at\s+\d+(?:\.\d+)?(?:\s+seconds?)?|\[(?:\d+:)+\d+\])\s*[:,.\-–—]?\s*/i;
   var GENERIC_DUMP = /^(?:(?:the|this|a)\s+)?(?:video|clip|recording|footage|camera)(?:\s+\S+){0,3}\s+(?:shows?|captures?|opens?|starts?|begins?|depicts?|features?)\b/i;
@@ -5570,23 +5571,31 @@
     return text.split(/(?<=[.!?])\s+/).filter(Boolean).length >= 3;
   }
 
+  function isSpeechEvent(row) {
+    var t = String((row && (row.type || row.kind)) || '').toLowerCase();
+    return t === 'said' || t === 'speech' || t === 'heard';
+  }
+
   function displayEvents(rows, summary) {
     var polished = [];
     (rows || []).forEach(function (row) {
-      var text = polishEventCopy(row.text, 2);
-      if (!text || GENERIC_DUMP.test(text)) return;
+      var speech = isSpeechEvent(row);
+      var text = speech ? String(row.text || '').trim() : polishEventCopy(row.text, 2);
+      if (!text) return;
+      if (!speech && GENERIC_DUMP.test(text)) return;
       polished.push({
         at: Math.max(0, Number(row.at) || 0),
         text: text,
         kind: row.kind || 'note',
-        type: EVENT_TYPES[row.type] ? row.type : (EVENT_TYPES[row.kind] ? row.kind : null)
+        type: EVENT_TYPES[row.type] ? row.type : (EVENT_TYPES[row.kind] ? row.kind : (speech ? 'said' : null))
       });
     });
-    if (polished.length === 1 && isNearZero(polished[0].at) &&
+    if (polished.length === 1 && isNearZero(polished[0].at) && !isSpeechEvent(polished[0]) &&
         (looksLikeWholeClipDump(polished[0].text) || restatesSummary(polished[0].text, summary))) {
       return [];
     }
     return polished.filter(function (row) {
+      if (isSpeechEvent(row)) return true;
       if (!isNearZero(row.at)) return true;
       return !restatesSummary(row.text, summary);
     });
@@ -5676,36 +5685,23 @@
     return null;
   }
 
-  function addSpeechMoments(a, add) {
-    if ((a.dictationEntries || []).some(function (e) { return e.type === 'said' || e.type === 'speech'; })) {
-      return;
+  function addSpeechMoments(item, add) {
+    var a = (item && item.analysis) || {};
+    function pushStamp(at, body) {
+      if (at == null || !isFinite(at) || at < 0 || !body) return;
+      add(at, body, 'heard', 'said');
     }
-    var details = (a.conversationDetails || [])
-      .map(function (line) { return String(line || '').trim(); })
-      .filter(function (line) { return line && line.length <= 240; });
-    var stamps = [];
-    String(a.transcript || '').split(/\n+/).forEach(function (line) {
+    var segs = a.transcriptSegments || item.transcriptSegments || [];
+    segs.forEach(function (seg) {
+      var body = String(seg && seg.text || '').trim();
+      if (!body) return;
+      var at = seg.tSec != null ? Number(seg.tSec) : null;
+      pushStamp(at, body);
+    });
+    String(transcriptForItem(item) || '').split(/\n+/).forEach(function (line) {
       var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
       if (!m) return;
-      var at = clockFromStamp(m[1]);
-      var body = String(m[2] || '').trim();
-      if (at == null || !body || body.length > 240) return;
-      stamps.push({ at: at, text: body });
-    });
-    if (!details.length && !stamps.length) return;
-    details.forEach(function (line) {
-      var at = null;
-      var needle = line.toLowerCase().slice(0, 40);
-      for (var i = 0; i < stamps.length; i++) {
-        var hay = stamps[i].text.toLowerCase();
-        if ((needle && hay.indexOf(needle) !== -1) || hay.indexOf(line.toLowerCase()) !== -1 ||
-            line.toLowerCase().indexOf(hay.slice(0, 40)) !== -1) {
-          at = stamps[i].at;
-          break;
-        }
-      }
-      if (at == null) return;
-      add(at, line, 'heard', 'said');
+      pushStamp(clockFromStamp(m[1]), String(m[2] || '').trim());
     });
   }
 
@@ -5721,6 +5717,9 @@
       seen[key] = true;
       rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note', type: type || null });
     }
+    (a.evidenceLog || []).forEach(function (e) {
+      add(e.atSeconds, e.text, e.kind || 'read', e.type);
+    });
     (a.dictationEntries || []).forEach(function (e) {
       add(e.atSeconds, e.text || e.note || e.summary, 'read', e.type);
     });
@@ -5734,7 +5733,7 @@
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
     });
-    addSpeechMoments(a, add);
+    addSpeechMoments(item, add);
     if (!rows.length) {
       parseTimestampedEvents(String(a.dictation || a.summary || '')).forEach(function (e) {
         add(e.at, e.text, 'read');

@@ -99,8 +99,9 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByText('Every video on this job')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
-    expect(screen.getByText(/We have not started the subfloor yet/)).toBeInTheDocument();
+    expect(screen.getAllByText(/We have not started the subfloor yet/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByTestId('verbatim-transcript')).toBeInTheDocument();
+    expect(screen.getByTestId('evidence-log').textContent).toMatch(/We have not started the subfloor yet/);
     expect(
       screen.getByText((_, el) => el?.textContent === '42 seconds · Picture: read · Mic: heard'),
     ).toBeInTheDocument();
