@@ -23,8 +23,8 @@ import {
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { ShowDispute } from '../components/analysis/ShowDispute';
-import { EventTimeline } from '../components/analysis/EventTimeline';
 import { ConversationPanel } from '../components/analysis/ConversationPanel';
+import { EvidenceLog, evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 
 /**
@@ -162,8 +162,8 @@ export function JobDetailPage() {
               <div>
                 <h2 className="text-base font-semibold text-ink-900">Analysis</h2>
                 <p className="mt-0.5 text-xs text-ink-500">
-                  Vision events plus, when people were talking, what was said. Silent clips stay
-                  vision-only. Tap a time to mark it; open Videos to play.
+                  Complete evidence log — every useful visual and speech beat. Silent clips stay
+                  vision-only. Filter Said / Work / Scene / Decision; tap a time to seek.
                 </p>
               </div>
               <CustodyExportButton jobId={job.id} label="Export custody JSON" />
@@ -190,11 +190,19 @@ export function JobDetailPage() {
                         {video.phase ? ` · ${video.phase}` : ''}
                       </span>
                     </p>
-                    <EventTimeline
-                      events={video.dictationEntries ?? []}
-                      status={failed ? 'failed' : pending && !video.dictationEntries?.length ? 'pending' : null}
-                    />
                     <ConversationPanel conversation={video.conversation} />
+                    <div className="mt-3">
+                      <EvidenceLog
+                        entries={evidenceEntriesFromVideo(video)}
+                        status={
+                          failed
+                            ? 'failed'
+                            : pending && !evidenceEntriesFromVideo(video).length
+                              ? 'pending'
+                              : null
+                        }
+                      />
+                    </div>
                   </li>
                 );
               })}

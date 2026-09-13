@@ -70,6 +70,7 @@ import {
   publicConversationFields,
   hasConversation,
 } from '../audio/conversationDetails.js';
+import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import {
@@ -167,6 +168,25 @@ function conversationPayloadFromRow(row: any) {
   const details = conversationFromStored(row?.transcript_text, findings.conversation);
   if (!hasConversation(details)) return null;
   return publicConversationFields(details);
+}
+
+function evidenceLogFromRow(row: any) {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const actions = Array.isArray(row.actions)
+    ? row.actions
+    : Array.isArray(findings.actions)
+      ? findings.actions
+      : [];
+  return buildEvidenceLog({
+    storedLog: findings.evidenceLog,
+    storedEntries: row?.narration?.entries,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    actions,
+    durationSeconds: Number(row?.duration_seconds) || null,
+    transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+    conversation: conversationFromStored(row?.transcript_text, findings.conversation),
+  });
 }
 
 /** Event-boundary timestamps already stored on the Analysis reading. */
@@ -1309,17 +1329,8 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
 
 async function maybeEnrichConversationFromMic(admin: any, proofId: string): Promise<void> {
   try {
-    const { data: mic } = await admin
-      .from('job_proofs')
-      .select('transcript_text, duration_seconds')
-      .eq('id', proofId)
-      .maybeSingle();
-    const talk = typeof (mic as any)?.transcript_text === 'string' ? String((mic as any).transcript_text).trim() : '';
-    if (!talk) return;
-    await enrichProofConversation(admin, proofId, {
-      transcript: talk,
-      durationSeconds: Number((mic as any)?.duration_seconds) || null,
-    });
+    // Rebuild complete evidence log (vision ± speech). Conversation LLM runs when mic text exists.
+    await enrichProofConversation(admin, proofId);
   } catch {
     /* additive */
   }
@@ -2177,6 +2188,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       aiSummary: row.ai_summary ?? row.narration_text ?? null,
       heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
       conversation: conversationPayloadFromRow(row),
+      evidenceLog: evidenceLogFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),
