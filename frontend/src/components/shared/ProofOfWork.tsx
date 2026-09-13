@@ -491,57 +491,6 @@ export function ProofOfWork({
                             ))}
                           </ul>
                         ) : null}
-                        {day.proofIds.some((id) =>
-                          (data.videos ?? []).some(
-                            (v) =>
-                              v.id === id &&
-                              (evidenceEntriesFromVideo(v).length > 0 ||
-                                Boolean(v.conversation) ||
-                                Boolean(v.people?.peoplePresent?.length)),
-                          ),
-                        ) && (
-                          <div className="mt-2 space-y-2">
-                            {day.proofIds.map((id) => {
-                              const video = (data.videos ?? []).find((v) => v.id === id);
-                              if (!video) return null;
-                              if (
-                                !evidenceEntriesFromVideo(video).length &&
-                                !video.conversation &&
-                                !(video.people?.peoplePresent?.length)
-                              )
-                                return null;
-                              return (
-                                <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
-                                  <ConversationPanel
-                                    conversation={{
-                                      ...(video.conversation ?? {}),
-                                      transcriptText:
-                                        video.transcriptText ??
-                                        video.heardOnMic ??
-                                        video.conversation?.transcriptText,
-                                      transcriptSegments:
-                                        video.transcriptSegments ?? video.conversation?.transcriptSegments,
-                                    }}
-                                    onSeek={(seconds) => applyClipSeek(id, seconds)}
-                                  />
-                                  <PeoplePresentPanel
-                                    people={video.people}
-                                    onSeek={(seconds) => applyClipSeek(id, seconds)}
-                                  />
-                                  <div className="mt-2">
-                                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
-                                      {video.phase} — evidence
-                                    </p>
-                                    <EvidenceLog
-                                      entries={evidenceEntriesFromVideo(video)}
-                                      onSeek={(seconds) => applyClipSeek(id, seconds)}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
                         {day.aiFindings?.opening && day.aiFindings.kind !== 'day_film' && (
                           <p className="mt-1 text-[11px] text-ink-500">
                             Opening shots — before: {OPENING_WORDS[day.aiFindings.opening.before]}
@@ -606,6 +555,62 @@ export function ProofOfWork({
                         ) : null}
                       </div>
                     )}
+
+                    {day.proofIds.some((id) =>
+                      (data.videos ?? []).some(
+                        (v) =>
+                          v.id === id &&
+                          (evidenceEntriesFromVideo(v).length > 0 ||
+                            Boolean(v.conversation) ||
+                            Boolean(v.transcriptText?.trim()) ||
+                            Boolean(v.heardOnMic?.trim()) ||
+                            Boolean(v.people?.peoplePresent?.length)),
+                      ),
+                    ) ? (
+                      <div className="mt-3 space-y-2" data-testid="day-analysis-panels">
+                        {day.proofIds.map((id) => {
+                          const video = (data.videos ?? []).find((v) => v.id === id);
+                          if (!video) return null;
+                          if (
+                            !evidenceEntriesFromVideo(video).length &&
+                            !video.conversation &&
+                            !video.transcriptText?.trim() &&
+                            !video.heardOnMic?.trim() &&
+                            !(video.people?.peoplePresent?.length)
+                          )
+                            return null;
+                          return (
+                            <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
+                              <ConversationPanel
+                                conversation={{
+                                  ...(video.conversation ?? {}),
+                                  transcriptText:
+                                    video.transcriptText ??
+                                    video.heardOnMic ??
+                                    video.conversation?.transcriptText,
+                                  transcriptSegments:
+                                    video.transcriptSegments ?? video.conversation?.transcriptSegments,
+                                }}
+                                onSeek={(seconds) => applyClipSeek(id, seconds)}
+                              />
+                              <PeoplePresentPanel
+                                people={video.people}
+                                onSeek={(seconds) => applyClipSeek(id, seconds)}
+                              />
+                              <div className="mt-2">
+                                <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
+                                  {video.phase} — evidence
+                                </p>
+                                <EvidenceLog
+                                  entries={evidenceEntriesFromVideo(video)}
+                                  onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
 
                     {workRecord ? <PhysicalWorkPanel record={workRecord} /> : null}
 
@@ -761,12 +766,58 @@ function captionsForVideo(video: ProofVideoRecord | undefined | null): JobFilePl
     video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText ?? null;
   const segments = video.transcriptSegments ?? video.conversation?.transcriptSegments ?? null;
   const hasText = Boolean(String(transcriptText || '').trim()) || Boolean(segments?.length);
-  if (!hasText) return null;
+  const pending =
+    video.transcriptStatus === 'queued' || video.transcriptStatus === 'running';
+  if (!hasText) {
+    return { transcriptText: null, segments: null, durationSeconds: video.durationSeconds, status: pending ? 'pending' : 'unavailable' };
+  }
   return {
     transcriptText,
     segments,
     durationSeconds: video.durationSeconds,
   };
+}
+
+
+function HearMicButton({
+  jobId,
+  proofId,
+  status,
+}: {
+  jobId: string;
+  proofId: string;
+  status: string | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function run() {
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.requeueProofTranscript(jobId, proofId);
+      setNote('Queued — captions appear once the mic is read.');
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Could not queue the transcript.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  const pending = status === 'queued' || status === 'running';
+  return (
+    <div className="text-right">
+      <button
+        type="button"
+        onClick={() => void run()}
+        disabled={busy || pending}
+        data-testid="hear-the-mic"
+        className="inline-flex items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
+      >
+        {busy && <SpinnerIcon className="animate-spin" width={11} height={11} />}
+        {pending ? 'Hearing the mic…' : status === 'failed' || status === 'skipped' ? 'Hear the mic again' : 'Hear the mic'}
+      </button>
+      {note ? <p className="mt-1 max-w-[14rem] text-[10.5px] text-ink-500">{note}</p> : null}
+    </div>
+  );
 }
 
 function VideoCatalog({
@@ -849,6 +900,9 @@ function VideoCatalog({
                   captions={captionsForVideo(video)}
                 />
                 {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
+                {jobId && video.transcriptStatus !== 'done' ? (
+                  <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
+                ) : null}
               </div>
             </div>
           </li>

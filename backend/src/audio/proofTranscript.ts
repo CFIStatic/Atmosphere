@@ -13,7 +13,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
-import { transcriptionEnabled, transcribeAudio } from '../lib/transcription.js';
+import { transcriptionEnabled, transcribeAudio, transcriptAlreadyStamped } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
@@ -200,14 +200,16 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
 
   const knownStarts = planAudioChunks(duration);
   const parts: string[] = [];
-  const stamp = (start: number, many: boolean, body: string) =>
-    many ? `[${stampChunk(start)}] ${body}` : body;
+  const stamp = (start: number, many: boolean, body: string) => {
+    if (transcriptAlreadyStamped(body)) return body;
+    return many || start > 0 ? `[${stampChunk(start)}] ${body}` : body;
+  };
 
   if (knownStarts.length) {
     for (const start of knownStarts) {
       const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
       if (wav.length < 1000) continue;
-      const slice = await transcribeAudio(wav, 'audio/wav');
+      const slice = await transcribeAudio(wav, 'audio/wav', { timeOffsetSeconds: start });
       const body = slice.trim();
       if (!body) continue;
       parts.push(stamp(start, knownStarts.length > 1, body));
@@ -219,9 +221,9 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     for (let start = 0; start < MAX_TRANSCRIPT_SECONDS; start += TRANSCRIPT_CHUNK_SECONDS) {
       const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
       if (wav.length < 1000) break;
-      const slice = await transcribeAudio(wav, 'audio/wav');
+      const slice = await transcribeAudio(wav, 'audio/wav', { timeOffsetSeconds: start });
       const body = slice.trim();
-      if (body) parts.push(`[${stampChunk(start)}] ${body}`);
+      if (body) parts.push(stamp(start, true, body));
     }
   }
 

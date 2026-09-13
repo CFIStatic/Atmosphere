@@ -44,3 +44,16 @@ describe('JobFilePlayer', () => {
     expect(stored.muted).toBe(true);
   });
 });
+
+  it('shows captions pending when the mic is still being read', () => {
+    render(
+      <JobFilePlayer
+        src="https://signed.test/clip.mp4"
+        captions={{ status: 'pending', durationSeconds: 40 }}
+      />,
+    );
+    expect(screen.getByTestId('job-file-cc')).toBeDisabled();
+    expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('Captions pending');
+    expect(document.querySelector('track')).toBeNull();
+  });
+

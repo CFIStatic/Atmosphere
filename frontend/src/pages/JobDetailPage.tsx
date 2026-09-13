@@ -24,6 +24,7 @@ import {
 import { touchJobFile } from '../lib/jobFileRecents';
 import { ShowDispute } from '../components/analysis/ShowDispute';
 import { ConversationPanel } from '../components/analysis/ConversationPanel';
+import { PeoplePresentPanel } from '../components/analysis/PeoplePresent';
 import { EvidenceLog, evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 
@@ -198,6 +199,19 @@ export function JobDetailPage() {
                           video.transcriptSegments ?? video.conversation?.transcriptSegments,
                       }}
                     />
+                    <PeoplePresentPanel people={video.people} />
+                    {video.transcriptStatus && video.transcriptStatus !== 'done' ? (
+                      <p className="mt-1.5 text-[11px] text-ink-500">
+                        Mic: {video.transcriptStatus}
+                        {video.transcriptError ? ` — ${video.transcriptError}` : ''}
+                      </p>
+                    ) : null}
+                    {failed ? (
+                      <p className="mt-1.5 text-[11px] text-danger-600">
+                        Analysis failed{video.analysisStatus === 'failed' ? ' on the picture' : ''}.
+                        Re-run from Proof of work — Hear the mic / Watch it again.
+                      </p>
+                    ) : null}
                     <div className="mt-3">
                       <EvidenceLog
                         entries={evidenceEntriesFromVideo(video)}

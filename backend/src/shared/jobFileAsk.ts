@@ -102,7 +102,8 @@ Rules:
 3. Quote which part of the file you used (brief field, scope line, note, clip date, task, log) so the answer can be checked.
 4. Two or three sentences. This is read next to the file.
 5. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
-6. Speech on a recording and written notes are both evidence. Quote them when that is what was asked.`;
+6. Speech on a recording and written notes are both evidence. Quote them when that is what was asked.
+7. When asked what people are talking about / the conversation / what was said, answer from mic transcripts with exact quotes and seek times — not from vision-only room or screen descriptions.`;
 
 const STOP = new Set([
   'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',

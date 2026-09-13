@@ -22,6 +22,8 @@ export type JobFilePlayerCaptions = {
   segments?: TranscriptSegment[] | null;
   transcriptText?: string | null;
   durationSeconds?: number | null;
+  /** When no VTT yet: pending = mic still being read; unavailable = none. */
+  status?: 'pending' | 'unavailable' | null;
 };
 
 export function JobFilePlayer({
@@ -208,10 +210,16 @@ export function JobFilePlayer({
           onClick={toggleCaptions}
           disabled={!captionsAvailable}
           aria-label={
-            captionsAvailable ? (captionsOn ? 'Turn captions off' : 'Turn captions on') : 'Captions unavailable'
+            captionsAvailable
+              ? captionsOn
+                ? 'Turn captions off'
+                : 'Turn captions on'
+              : captions?.status === 'pending'
+                ? 'Captions pending'
+                : 'Captions unavailable'
           }
           aria-pressed={captionsAvailable ? captionsOn : undefined}
-          title={captionsAvailable ? undefined : 'Captions unavailable'}
+          title={captionsAvailable ? undefined : captions?.status === 'pending' ? 'Captions pending' : 'Captions unavailable'}
           className={
             'inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-bold tracking-wide ' +
             (captionsAvailable
@@ -226,7 +234,7 @@ export function JobFilePlayer({
         </button>
         {!captionsAvailable ? (
           <span className="text-[11px] text-ink-500" data-testid="job-file-cc-unavailable">
-            Captions unavailable
+            {captions?.status === 'pending' ? 'Captions pending' : 'Captions unavailable'}
           </span>
         ) : null}
       </div>

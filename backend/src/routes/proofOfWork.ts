@@ -64,6 +64,7 @@ import {
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
+import { transcriptionEnabled } from '../lib/transcription.js';
 import { enrichProofConversation } from '../audio/proofConversation.js';
 import {
   conversationFromStored,
@@ -2794,6 +2795,8 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       try {
         result = await performAnalysis(admin, job, 1);
         lastId = film.id;
+        // Re-read the mic too — captions / conversation Ask need transcript_text.
+        await queueProofTranscript(admin, film.id);
       } catch (error) {
         await admin
           .from('job_proofs')
@@ -2827,6 +2830,52 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       findings: (read as any)?.ai_findings ?? null,
       model: (read as any)?.ai_model ?? null,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+/**
+ * Re-queue Whisper for one filed clip so captions and conversation Ask can land
+ * on videos uploaded before transcription was configured (or after a skip).
+ */
+export async function requeueProofTranscript(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId } = await requireOrgContext(req);
+    const proofId = String(req.params.proofId || '').trim();
+    const jobId = String(req.params.jobId || '').trim();
+    if (!proofId || !jobId) throw new HttpError(400, 'Missing clip.', 'missing_proof');
+
+    const admin = unscopedAdminOrNull();
+    if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+    const { data: proof } = await admin
+      .from('job_proofs')
+      .select('id, job_id, org_id, transcript_status, transcript_text')
+      .eq('id', proofId)
+      .eq('job_id', jobId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!proof) throw new HttpError(404, 'No such video on this job.', 'proof_not_found');
+
+    if (!transcriptionEnabled()) {
+      throw new HttpError(
+        503,
+        'Speech-to-text is not configured. On Railway Atmosphere APIs set OPENAI_API_KEY, or TRANSCRIPTION_URL=https://api.openai.com/v1/audio/transcriptions plus TRANSCRIPTION_API_KEY.',
+        'transcription_unavailable',
+      );
+    }
+
+    await queueProofTranscript(admin, proofId);
+    if (typeof proof.transcript_text === 'string' && proof.transcript_text.trim()) {
+      try {
+        await enrichProofConversation(admin, proofId, { transcript: proof.transcript_text });
+      } catch {
+        /* additive */
+      }
+    }
+    res.json({ ok: true, status: 'queued', proofId });
   } catch (err) {
     next(err);
   }
