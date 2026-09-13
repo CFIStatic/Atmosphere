@@ -347,6 +347,7 @@ export function serializeEvidence(input: {
     // Labels attached here so every consumer prints the same sentence.
     checks: checks.map((c) => ({ verdict: c.verdict, what: labelForCheck(c.key), detail: c.detail })),
     analysisState: analysis,
+    transcriptStatus: typeof proof.transcript_status === 'string' ? proof.transcript_status : null,
     analysisError:
       typeof proof.narration_error === 'string' && proof.narration_error.trim()
         ? proof.narration_error.trim()

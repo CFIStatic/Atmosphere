@@ -7,6 +7,7 @@ import {
   formatClipTimeSpoken,
   groundedAnswerFromClip,
   preferClipGroundedFastPath,
+  isTranscriptPending,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
 import { serializeEvidence } from '../src/verifier/library.js';
@@ -219,9 +220,14 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
   assert.match(agreed, /mirror|cabinets|adjuster/i);
 
   const topic = groundedAnswerFromClip('what are they talking about', talk);
+  assert.match(topic, /talking about/i);
   assert.match(topic, /vanity|insurance|cabinets|mirror/i);
   assert.doesNotMatch(topic, /does not show that/i);
-  assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
+  assert.match(topic, /18 seconds into the recording/);
+  assert.match(topic, /1 minute and 36 seconds into the recording/);
+  assert.match(topic, /\[0:18\]/);
+  assert.match(topic, /\[1:36\]/);
+  assert.match(topic, /Exact words/);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {
@@ -392,4 +398,102 @@ test('speech questions take the grounded fast path without a model call', async 
 test('timestamped yes/no hits prefer the grounded fast path', () => {
   const grounded = groundedAnswerFromClip('Was the tarp removed?', cedarAfter);
   assert.equal(preferClipGroundedFastPath('Was the tarp removed?', grounded, cedarAfter), true);
+});
+
+const talkFixture: ClipAskRecord = {
+  analysisState: 'done',
+  transcriptStatus: 'done',
+  dictation: 'Two people stand in a bathroom. The camera never shows the vanity leak.',
+  summary: 'Bathroom walkthrough; no work on cabinets.',
+  transcript:
+    '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
+    '[1:36] Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+  conversationExecutiveSummary:
+    'The homeowner wants the vanity leak fixed but cabinets left until insurance approves replacement. The contractor will remount the mirror today.',
+};
+
+test('what are they talking about returns topic plus exact quotes with seek times', async () => {
+  const answer = groundedAnswerFromClip('what are they talking about', talkFixture);
+  assert.match(answer, /talking about/i);
+  assert.match(answer, /insurance|vanity|mirror/i);
+  assert.match(answer, /“Homeowner: The leak started behind the vanity/);
+  assert.match(answer, /18 seconds into the recording/);
+  assert.match(answer, /\[0:18\]/);
+  assert.match(answer, /“Contractor: We will remount the mirror today/);
+  assert.match(answer, /1 minute and 36 seconds into the recording/);
+  assert.match(answer, /\[1:36\]/);
+  assert.doesNotMatch(answer, /does not show that|still being read|MSNBC/i);
+
+  const viaAsk = await answerFromClip({ question: 'What are they talking about?', record: talkFixture });
+  assert.equal(viaAsk.model, null, 'talk answers must not wait on Gemini');
+  assert.equal(viaAsk.answer, answer);
+});
+
+test('a talk question while the transcript is pending says the mic is still being heard', () => {
+  const pending: ClipAskRecord = {
+    analysisState: 'done',
+    transcriptStatus: 'queued',
+    dictation: 'A person sits at a desk. On the screen is an MSNBC YouTube clip about an Oklahoma state senate race.',
+    summary: 'Desk, MSNBC, Oklahoma senate race.',
+  };
+  const answer = groundedAnswerFromClip('what are they talking about', pending);
+  assert.match(answer, /still hearing the mic/i);
+  assert.doesNotMatch(answer, /MSNBC|desk|senate|does not show that/i);
+});
+
+test('a talk question with a running transcript does not dodge to vision', async () => {
+  const running: ClipAskRecord = {
+    analysisState: 'done',
+    transcriptStatus: 'running',
+    dictation: 'Crew walks the living room. No one is shown speaking.',
+  };
+  const answer = groundedAnswerFromClip('what was said', running);
+  assert.match(answer, /still hearing the mic/i);
+  assert.doesNotMatch(answer, /living room|does not show that/i);
+
+  const viaAsk = await answerFromClip({ question: 'What was said?', record: running });
+  assert.equal(viaAsk.model, null);
+  assert.match(viaAsk.answer, /still hearing the mic/i);
+});
+
+test('isTranscriptPending covers idle, queued, running, and missing status', () => {
+  assert.equal(isTranscriptPending('queued'), true);
+  assert.equal(isTranscriptPending('running'), true);
+  assert.equal(isTranscriptPending('idle'), true);
+  assert.equal(isTranscriptPending(null), true);
+  assert.equal(isTranscriptPending('done'), false);
+  assert.equal(isTranscriptPending('skipped'), false);
+  assert.equal(isTranscriptPending('failed'), false);
+});
+
+test('clipRecordFromEvidenceItem copies transcriptStatus so Ask can wait on the mic', () => {
+  const record = clipRecordFromEvidenceItem({
+    analysisState: 'done',
+    transcriptStatus: 'queued',
+    analysis: {
+      dictation: 'Desk scene.',
+      transcript: null,
+    },
+  });
+  assert.equal(record.transcriptStatus, 'queued');
+  const answer = groundedAnswerFromClip('what are they talking about', record);
+  assert.match(answer, /still hearing the mic/i);
+});
+
+test('what is happening cites both the scene and the conversation', () => {
+  const answer = groundedAnswerFromClip('What is happening in this video?', {
+    analysisState: 'done',
+    transcriptStatus: 'done',
+    workDate: '2026-09-13',
+    dictation: 'Two people stand in a bathroom. The camera never shows the vanity leak.',
+    changes: ['Bathroom walkthrough; no work on the cabinets'],
+    transcript:
+      '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
+    conversationExecutiveSummary: 'Vanity leak; cabinets wait on insurance.',
+  });
+  assert.match(answer, /Bathroom walkthrough|cabinets/i);
+  assert.match(answer, /On the mic|talking about/i);
+  assert.match(answer, /vanity|insurance/i);
+  assert.match(answer, /18 seconds into the recording|\[0:18\]/);
+  assert.doesNotMatch(answer, /does not show that/i);
 });

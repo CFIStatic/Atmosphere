@@ -61,6 +61,8 @@ export type ClipAskRecord = {
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
   /** What was heard on the mic — contractor / homeowner talk included. */
   transcript?: string | null;
+  /** idle | queued | running | done | skipped | failed */
+  transcriptStatus?: string | null;
   conversationDetails?: string[];
   conversationAgreements?: string[];
   conversationConcerns?: string[];
@@ -181,6 +183,7 @@ export function clipRecordFromEvidenceItem(item: {
   company?: string | null;
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
+  transcriptStatus?: string | null;
   analysis?: ClipAskRecord | null;
 }): ClipAskRecord {
   const analysis = item.analysis ?? null;
@@ -202,6 +205,7 @@ export function clipRecordFromEvidenceItem(item: {
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
     transcript: analysis?.transcript ?? null,
+    transcriptStatus: item.transcriptStatus ?? analysis?.transcriptStatus ?? null,
     conversationDetails: Array.isArray(analysis?.conversationDetails) ? analysis.conversationDetails : [],
     conversationAgreements: Array.isArray(analysis?.conversationAgreements)
       ? analysis.conversationAgreements
@@ -385,6 +389,13 @@ function isWhatHappened(question: string): boolean {
   );
 }
 
+export function isTranscriptPending(status: string | null | undefined): boolean {
+  return !status || status === 'idle' || status === 'queued' || status === 'running';
+}
+
+const HEARING_MIC =
+  "Still hearing the mic on this clip. Ask again in a moment for what was said.";
+
 function isWhatWasSaid(question: string): boolean {
   const q = question.toLowerCase();
   return (
@@ -424,6 +435,18 @@ function isConversationTopic(question: string): boolean {
   );
 }
 
+function conversationTopic(record: ClipAskRecord): string | null {
+  const brief = String(record.conversationExecutiveSummary || record.conversationSummary || '').trim();
+  if (brief) return brief;
+  const first = splitTranscript(record.transcript).find((row) => row.text.trim());
+  if (first?.text) {
+    const spoken = first.text.replace(/^[^:]{1,40}:\s*/, '').trim();
+    if (spoken) return spoken.length > 160 ? `${spoken.slice(0, 157)}…` : spoken;
+  }
+  const detail = (record.conversationDetails ?? []).map((d) => String(d || '').trim()).find(Boolean);
+  return detail || null;
+}
+
 /** Topic + exact quotes with seek times from the Whisper log (turns as fallback). */
 function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): string | null {
   const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
@@ -433,7 +456,9 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
     for (const row of heard.slice(0, cap)) {
       const when = formatClipTimeSpoken(row.at) || formatClipTime(row.at);
       const clock = when ? ` (${when})` : '';
-      lines.push(`“${row.text}”${clock}`);
+      const seek = formatClipTime(row.at);
+      const stamp = seek ? ` [${seek}]` : '';
+      lines.push(`“${row.text}”${clock}${stamp}`);
     }
   } else {
     for (const turn of record.conversationTurns ?? []) {
@@ -441,8 +466,10 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
       if (!text) continue;
       const when = formatClipTimeSpoken(turn.tSec) || formatClipTime(turn.tSec);
       const clock = when ? ` (${when})` : '';
+      const seek = formatClipTime(turn.tSec);
+      const stamp = seek ? ` [${seek}]` : '';
       const who = turn.speakerLabel ? `${turn.speakerLabel}: ` : '';
-      lines.push(`“${who}${text}”${clock}`);
+      lines.push(`“${who}${text}”${clock}${stamp}`);
     }
     for (const detail of record.conversationDetails ?? []) {
       const text = String(detail || '').trim();
@@ -450,16 +477,15 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
     }
   }
   if (!lines.length) return null;
-  const brief =
-    String(record.conversationExecutiveSummary || record.conversationSummary || '').trim() || null;
+  const topic = conversationTopic(record);
   if (opts?.topic) {
-    const head = brief
-      ? `They are talking about this: ${brief}`
+    const head = topic
+      ? `They are talking about this: ${topic}`
       : 'They are talking about this (exact words from the recording):';
     return `${head} Exact words from the recording: ${lines.join(' ')}`;
   }
-  const head = brief
-    ? `Yes — they are talking about this: ${brief} Exact words from the recording:`
+  const head = topic
+    ? `Yes — they are talking about this: ${topic} Exact words from the recording:`
     : 'Yes — exact words from the recording:';
   return `${head} ${lines.join(' ')}`;
 }
@@ -566,6 +592,23 @@ function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
  * configured, and as a fallback if the model call fails.
  */
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
+  const q = question.trim();
+  if (isWhoQuestion(q)) {
+    const people = peopleFromRecord(record);
+    const answer = formatPeopleAnswer(people);
+    if (answer) return answer;
+    return 'The footage on file does not identify who is present.';
+  }
+  // Talk questions always take the speech path — never a vision-only dodge.
+  if (isWhatWasSaid(q)) {
+    const speech = exactSpeechAnswer(record, { topic: isConversationTopic(q) });
+    if (speech) return speech;
+    if (isTranscriptPending(record.transcriptStatus) || unreadAnswer(record.analysisState, q)) {
+      return HEARING_MIC;
+    }
+    return 'The footage on file does not include usable speech.';
+  }
+
   const unread = unreadAnswer(record.analysisState, question);
   if (unread && !hasReading(record)) return unread;
 
@@ -574,32 +617,20 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     return unread ?? 'This clip is still being read. Ask again once the dictation lands.';
   }
 
-  const q = question.trim();
-  if (isWhoQuestion(q)) {
-    const people = peopleFromRecord(record);
-    const answer = formatPeopleAnswer(people);
-    if (answer) return answer;
-    return 'The footage on file does not identify who is present.';
-  }
-  if (isWhatWasSaid(q)) {
-    const speech = exactSpeechAnswer(record, { topic: isConversationTopic(q) });
-    if (speech) return speech;
-    return 'The footage on file does not include usable speech.';
-  }
-
   if (isWhatHappened(q)) {
     const changes = (record.changes ?? []).map((c) => c.trim()).filter(Boolean);
     const actions = (record.actions ?? [])
       .map((a) => String(a.description || '').trim())
       .filter(Boolean);
     const date = record.workDate ? ` on ${record.workDate}` : '';
-    if (changes.length) {
-      return `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`;
-    }
-    if (actions.length) {
-      return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
-    }
-    const speech = exactSpeechAnswer(record);
+    const visual = changes.length
+      ? `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`
+      : actions.length
+        ? `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`
+        : '';
+    const speech = exactSpeechAnswer(record, { topic: true });
+    if (visual && speech) return `${visual} On the mic: ${speech}`;
+    if (visual) return visual;
     if (speech) return speech;
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
@@ -775,6 +806,7 @@ function isTopicExplainQuestion(question: string): boolean {
 
 export function preferClipGroundedFastPath(question: string, grounded: string, record: ClipAskRecord): boolean {
   if (/still being read|reading of this clip failed|could not be read/i.test(grounded)) return false;
+  if (/still hearing the mic/i.test(grounded)) return true;
   // Exact speech recall is instant from the transcript. Topic/explain questions
   // still use the fast Ask model (with talkHint) so they can summarize.
   if (
@@ -809,6 +841,10 @@ export async function answerFromClip(input: {
   onToken?: (text: string) => void;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
+  if (/still hearing the mic/i.test(grounded)) {
+    input.onToken?.(grounded);
+    return { answer: grounded, model: null, usage: null };
+  }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
   if (preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
@@ -836,15 +872,11 @@ export async function answerFromClip(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${turn.text.trim()}`)
     .join('\n');
 
-  const talkHint = talkQuestion
-    ? '\n\nThis question is about the conversation. Explain what people are talking about using the Heard on the mic / transcript section. Quote exact words with seek times. Do not describe only the room, screens, or furniture.'
-    : '';
   const completed = await completeAskText({
     system: CLIP_QA_SYSTEM,
     user:
       `Reading of this clip:\n\n${reading}` +
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
-      talkHint +
       `\n\nQuestion: ${input.question}`,
     mode: 'interactive',
     onToken: input.onToken,
