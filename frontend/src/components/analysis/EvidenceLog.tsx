@@ -36,9 +36,10 @@ function activeIndexForTime(entries: EvidenceLogEntry[], atSeconds: number): num
  * the product.
  *
  * When `activeAtSeconds` is set (playhead sync), the matching row is
- * highlighted. Auto-scroll follow only runs while the user is near the
- * bottom or has not scrolled away — never force scrollIntoView on every
- * tick after they scroll up.
+ * tracked. Orange highlight + auto-scroll run only while Follow playhead
+ * is on (near bottom / resumed). When the user has scrolled away, do not
+ * chase orange — they click a line to seek. Never scrollIntoView (that
+ * scrolls ancestors and can auto-pause the player).
  */
 export function EvidenceLog({
   entries,
@@ -153,7 +154,9 @@ export function EvidenceLog({
           }}
         >
           {visible.map((entry, index) => {
-            const isActive = index === activeIdx;
+            const isPlayhead = index === activeIdx;
+            // Orange chase only while Follow is on; otherwise quiet mark.
+            const isActive = isPlayhead && following;
             return (
               <li
                 key={`${entry.type}|${entry.atSeconds}|${entry.text}`}
@@ -161,6 +164,7 @@ export function EvidenceLog({
                   rowRefs.current[index] = el;
                 }}
                 data-active={isActive ? '1' : undefined}
+                data-playhead={isPlayhead ? '1' : undefined}
                 className={isActive ? 'bg-brand-50/80' : undefined}
               >
                 <button

@@ -43,7 +43,6 @@ describe('JobFilePlayer', () => {
     const stored = JSON.parse(localStorage.getItem(VIDEO_PLAYER_PREFS_KEY) || '{}');
     expect(stored.muted).toBe(true);
   });
-});
 
   it('shows captions pending when the mic is still being read', () => {
     render(
@@ -56,4 +55,4 @@ describe('JobFilePlayer', () => {
     expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('Captions pending');
     expect(document.querySelector('track')).toBeNull();
   });
-
+});

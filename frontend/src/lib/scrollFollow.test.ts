@@ -5,6 +5,7 @@ import {
   pauseScrollFollow,
   resumeScrollFollow,
   scrollFollowAfterUserScroll,
+  scrollRowIntoScroller,
   shouldAutoScrollActiveRow,
 } from './scrollFollow';
 
@@ -43,5 +44,17 @@ describe('scrollFollow', () => {
   it('can pause and resume explicitly', () => {
     expect(pauseScrollFollow().following).toBe(false);
     expect(resumeScrollFollow().following).toBe(true);
+  });
+
+  it('scrolls only the scroller via scrollTop, never scrollIntoView', () => {
+    const scroller = {
+      scrollTop: 100,
+      getBoundingClientRect: () => ({ top: 0, bottom: 200, left: 0, right: 100 }),
+    } as unknown as HTMLElement;
+    const row = {
+      getBoundingClientRect: () => ({ top: 250, bottom: 280, left: 0, right: 100 }),
+    } as unknown as HTMLElement;
+    scrollRowIntoScroller(scroller, row);
+    expect(scroller.scrollTop).toBe(180);
   });
 });

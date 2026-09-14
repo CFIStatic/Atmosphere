@@ -5814,7 +5814,7 @@
     li.setAttribute('data-written', '1');
   }
 
-  var analysisFollow = { enabled: true, programmatic: false };
+  var analysisFollow = { enabled: false, programmatic: false };
 
   function analysisScroller() {
     var side = document.querySelector('#detail .side');
@@ -5854,17 +5854,36 @@
     window.setTimeout(function () { analysisFollow.programmatic = false; }, 120);
   }
 
+  /**
+   * Scroll the active analysis row inside the side panel only.
+   * Never call scrollIntoView — that scrolls ancestor containers (the
+   * detail sheet / page) and can shove the video off-screen, which
+   * browsers often treat as a reason to auto-pause playback.
+   */
+  function scrollRowInSide(side, el) {
+    if (!side || !el) return;
+    var sideRect = side.getBoundingClientRect();
+    var rowRect = el.getBoundingClientRect();
+    var topGap = rowRect.top - sideRect.top;
+    var bottomGap = rowRect.bottom - sideRect.bottom;
+    if (topGap < 0) side.scrollTop += topGap;
+    else if (bottomGap > 0) side.scrollTop += bottomGap;
+  }
+
   function followActiveAnalysisRow(el) {
-    if (!analysisFollow.enabled || !el || !el.scrollIntoView) return;
+    if (!analysisFollow.enabled || !el) return;
     var side = analysisScroller();
+    if (!side) return;
     analysisFollow.programmatic = true;
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    scrollRowInSide(side, el);
     window.setTimeout(function () {
       analysisFollow.programmatic = false;
       if (side && isNearScrollBottom(side, 96)) analysisFollow.enabled = true;
       updateAnalysisFollowChip();
     }, 160);
   }
+
+  var lastAnalysisActiveIdx = -1;
 
   function syncAnalysisLog(seconds) {
     bindAnalysisFollow();
@@ -5877,9 +5896,15 @@
       if (seconds + 0.15 >= Number(li.getAttribute('data-at'))) lastSeen = i;
     });
     var empty = document.getElementById('alog-empty');
+    var followOn = !!analysisFollow.enabled;
     Array.prototype.forEach.call(items, function (li, i) {
       var due = i <= lastSeen;
-      li.classList.toggle('on', i === lastSeen && lastSeen >= 0);
+      var isPlayhead = i === lastSeen && lastSeen >= 0;
+      // Orange chase only while Follow playhead is on. When the user has
+      // scrolled away, leave selection alone — they click a line to seek.
+      li.classList.toggle('on', followOn && isPlayhead);
+      if (isPlayhead) li.setAttribute('data-playhead', '1');
+      else li.removeAttribute('data-playhead');
       li.classList.toggle('seen', i < lastSeen);
       li.classList.toggle('soon', !due);
       if (!due) return;
@@ -5888,7 +5913,10 @@
     });
     if (empty) empty.hidden = true;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    followActiveAnalysisRow(cur);
+    if (followOn && lastSeen !== lastAnalysisActiveIdx) {
+      followActiveAnalysisRow(cur);
+    }
+    lastAnalysisActiveIdx = lastSeen;
   }
 
   function seekTo(seconds) {
@@ -6648,7 +6676,8 @@
     var el = $('#d-panel');
 
     if (tab === 'integrity') {
-      analysisFollow.enabled = true;
+      // Stay calm on tab rebuild — user opts into Follow playhead.
+      lastAnalysisActiveIdx = -1;
       el.innerHTML = renderScopeLog(item);
       Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #exact-transcript [data-at], #dispute-list [data-at], [data-section="conversation"] [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });

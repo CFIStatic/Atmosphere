@@ -32,6 +32,8 @@ export function JobFilePlayer({
   seekTo,
   seekNonce = 0,
   captions,
+  knownDurationSeconds,
+  onTimeUpdate,
   testId = 'job-file-player',
 }: {
   src: string;
@@ -39,6 +41,10 @@ export function JobFilePlayer({
   seekTo?: number | null;
   seekNonce?: number;
   captions?: JobFilePlayerCaptions | null;
+  /** Filed length — skips the WebM dummy-seek duration probe when known. */
+  knownDurationSeconds?: number | null;
+  /** Throttled playhead seconds for analysis highlight (does not seek). */
+  onTimeUpdate?: (seconds: number) => void;
   testId?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -71,9 +77,8 @@ export function JobFilePlayer({
   useEffect(() => {
     const el = ref.current;
     if (!el || seekTo == null || !Number.isFinite(seekTo)) return;
-    if (typeof el.scrollIntoView === 'function') {
-      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-    }
+    // Do not scrollIntoView the video — that can yank the page and fight
+    // the analysis panel / auto-pause the player in some browsers.
     const apply = () => {
       try {
         el.currentTime = seekTo;
@@ -90,8 +95,31 @@ export function JobFilePlayer({
     const el = ref.current;
     if (!el) return;
     applyVideoPlayerPrefs(el);
-    return bindMeasuredDuration(el);
-  }, [src]);
+    const known = knownDurationSeconds ?? captions?.durationSeconds ?? null;
+    return bindMeasuredDuration(el, known);
+  }, [src, knownDurationSeconds, captions?.durationSeconds]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !onTimeUpdate) return;
+    let lastSent = -1;
+    const tick = () => {
+      const t = el.currentTime;
+      if (!Number.isFinite(t)) return;
+      // ~4 Hz — enough for SAID/SCENE highlight without React thrash.
+      if (Math.abs(t - lastSent) < 0.25) return;
+      lastSent = t;
+      onTimeUpdate(t);
+    };
+    el.addEventListener('timeupdate', tick);
+    el.addEventListener('seeked', tick);
+    el.addEventListener('play', tick);
+    return () => {
+      el.removeEventListener('timeupdate', tick);
+      el.removeEventListener('seeked', tick);
+      el.removeEventListener('play', tick);
+    };
+  }, [src, onTimeUpdate]);
 
   useEffect(() => {
     const el = ref.current;
