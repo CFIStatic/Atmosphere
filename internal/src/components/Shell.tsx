@@ -14,6 +14,7 @@ const NAV = [
   { to: '/token-usage', label: 'Token usage', internal: true },
   { to: '/legal', label: 'Legal', internal: true },
   { to: '/safety', label: 'Safety', internal: true },
+  { to: '/motion-clips', label: 'Motion clips', internal: true },
   { to: '/system', label: 'System' },
 ] as const;
 

@@ -12,6 +12,8 @@
 import { normaliseAction, type WorkAction } from '../episodes/actions.js';
 import { rescoreEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
+import { privacyRedactionsFromStored } from '../audio/privacyRedactions.js';
+import { deriveMotionClips, toStoredMotionClips } from './motionClips.js';
 
 export const MAX_PROOF_ACTIONS = 48;
 
@@ -264,6 +266,31 @@ export async function persistProofActions(
     await admin.from('job_proofs').update({ actions }).eq('id', input.proofId);
   } catch {
     return;
+  }
+
+  // Robotics skill-corpus: timed motion segments on the proof (privacy excluded).
+  try {
+    const { data: proofRow } = await admin
+      .from('job_proofs')
+      .select('ai_findings')
+      .eq('id', input.proofId)
+      .maybeSingle();
+    const findings =
+      proofRow?.ai_findings && typeof proofRow.ai_findings === 'object'
+        ? { ...(proofRow.ai_findings as Record<string, unknown>) }
+        : {};
+    const privacy = privacyRedactionsFromStored(findings.privacyRedactions);
+    const derived = deriveMotionClips(actions, {
+      privacyRanges: privacy,
+      model: input.model ?? null,
+    });
+    findings.motionClips = toStoredMotionClips(derived.clips, {
+      excludedForPrivacy: derived.excludedForPrivacy,
+      model: input.model ?? null,
+    });
+    await admin.from('job_proofs').update({ ai_findings: findings }).eq('id', input.proofId);
+  } catch {
+    /* motion clips enrich the proof; never fail the action log */
   }
 
   try {

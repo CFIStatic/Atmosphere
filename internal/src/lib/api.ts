@@ -1,5 +1,6 @@
 import type {
   SafetyIncident,
+  MotionClipsStaffResponse,
   AccessRequest,
   AccessRequestList,
   AccountDetail,
@@ -200,6 +201,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  motionClipsStaff: (query?: { motion?: string; orgId?: string; jobId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.motion) params.set('motion', query.motion);
+    if (query?.orgId) params.set('orgId', query.orgId);
+    if (query?.jobId) params.set('jobId', query.jobId);
+    if (query?.limit) params.set('limit', String(query.limit));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<MotionClipsStaffResponse>(`/api/motion-clips/staff${suffix}`);
+  },
 
   dismissSafetyStaffIncident: (id: string, input?: { reason?: string }) =>
     request<{ incident: SafetyIncident }>(`/api/safety/staff/incidents/${id}/dismiss`, {

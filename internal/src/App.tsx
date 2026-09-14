@@ -15,6 +15,7 @@ import { AccessPage } from './pages/AccessPage';
 import { LegalPage } from './pages/LegalPage';
 import { JobLegalPage } from './pages/JobLegalPage';
 import { SafetyAlertsPage } from './pages/SafetyAlertsPage';
+import { MotionClipsPage } from './pages/MotionClipsPage';
 
 export function App() {
   return (
@@ -41,6 +42,7 @@ export function App() {
             <Route path="token-usage" element={<TokenUsagePage />} />
             <Route path="legal" element={<LegalPage />} />
             <Route path="safety" element={<SafetyAlertsPage />} />
+            <Route path="motion-clips" element={<MotionClipsPage />} />
             <Route path="legal/jobs/:jobId" element={<JobLegalPage />} />
             <Route path="system" element={<SystemPage />} />
           </Route>
