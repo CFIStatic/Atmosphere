@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
+import type { ServiceRoleSlug } from '../../lib/serviceRole';
 
 /**
  * Adding somebody to the team.
