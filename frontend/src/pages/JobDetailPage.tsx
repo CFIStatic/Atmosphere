@@ -161,22 +161,31 @@ export function JobDetailPage() {
         )}
 
         
-      {safetyIncidents.some((i) => i.severity === 'critical' && i.status === 'open') && (
+      {safetyIncidents.some(
+        (i) =>
+          i.status === 'open' &&
+          (i.severity === 'critical' || i.category === 'silent_panic_wellness'),
+      ) && (
         <section
           className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4"
           data-testid="job-safety-alert-banner"
           role="alert"
         >
           <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-            Safety alert on this job
+            Safety / wellness alert on this job
           </p>
           <ul className="mt-2 space-y-2">
             {safetyIncidents
-              .filter((i) => i.status === 'open')
+              .filter(
+                (i) =>
+                  i.status === 'open' &&
+                  (i.severity === 'critical' || i.category === 'silent_panic_wellness'),
+              )
               .map((incident) => (
                 <li key={incident.id} className="text-sm text-ink-800">
                   <span className="font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
                     {incident.severity}
+                    {incident.category === 'silent_panic_wellness' ? ' · wellness' : ''}
                   </span>
                   {' · '}
                   {incident.title}

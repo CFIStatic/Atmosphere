@@ -6,7 +6,7 @@
  *   POST /api/safety/incidents/:id/ack
  *   POST /api/safety/incidents/:id/dismiss
  *   GET  /api/safety/settings
- *   PATCH /api/safety/settings
+ *   PATCH /api/safety/settings  (incl. wellness thresholds)
  *   GET  /api/safety/staff/incidents  (Platform / internal)
  */
 
@@ -159,6 +159,10 @@ const settingsPatch = z.object({
     .union([z.string().url(), z.null()])
     .optional(),
   alertEmails: z.array(z.string().email().max(200)).max(20).optional(),
+  wellnessCheckEnabled: z.boolean().optional(),
+  wellnessNoMotionSeconds: z.number().int().min(60).max(7200).optional(),
+  wellnessCriticalAfterSeconds: z.number().int().min(60).max(14400).optional(),
+  wellnessRequireAlone: z.boolean().optional(),
 });
 
 safetyRouter.patch(
@@ -176,13 +180,18 @@ safetyRouter.patch(
         autoEscalateToAuthorities: body.autoEscalateToAuthorities,
         alertWebhookUrl: body.alertWebhookUrl,
         alertEmails: body.alertEmails,
+        wellnessCheckEnabled: body.wellnessCheckEnabled,
+        wellnessNoMotionSeconds: body.wellnessNoMotionSeconds,
+        wellnessCriticalAfterSeconds: body.wellnessCriticalAfterSeconds,
+        wellnessRequireAlone: body.wellnessRequireAlone,
       });
       res.json({
         settings,
         note:
           'autoEscalateToAuthorities only sets escalateToAuthorities on alert payloads. ' +
           'Atmosphere never calls 911 or police APIs. Prefer human confirm before enabling. ' +
-          'See docs/safety-alerts.md.',
+          'Wellness / silent panic uses configurable no-motion thresholds and never auto-dials 911. ' +
+          'See docs/safety-alerts.md and docs/wellness-check.md.',
       });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid settings'));

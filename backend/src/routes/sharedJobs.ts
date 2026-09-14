@@ -41,6 +41,7 @@ import {
 import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
 import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import { processSafetySample } from '../safety/sample.js';
+import { processWellnessHeartbeat } from '../safety/wellness.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -1729,6 +1730,22 @@ jobShareRouter.post(
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
       res.json(await processSafetySample(admin, party, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+jobShareRouter.post(
+  jobShareActionPattern('/proof/wellness-heartbeat'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      res.json(await processWellnessHeartbeat(admin, party, req.body));
     } catch (err) {
       next(err);
     }

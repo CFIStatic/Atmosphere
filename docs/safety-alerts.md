@@ -72,3 +72,9 @@ POST /api/safety/staff/incidents/:id/dismiss
 
 - **Platform (internal):** Safety nav → open incidents, Ack / Dismiss.
 - **Office job file:** critical open incidents show a banner with Ack / Dismiss.
+
+## Related: silent panic / wellness
+
+Long no-motion + alone-on-site heartbeats open category `silent_panic_wellness`
+with configurable org thresholds. Same ack/dismiss and alert channels; never
+auto-911. See `docs/wellness-check.md`.

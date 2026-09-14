@@ -13,6 +13,7 @@ export const SAFETY_CATEGORIES = [
   'verbal_threat',
   'medical_distress',
   'other_emergency',
+  'silent_panic_wellness',
 ] as const;
 export type SafetyCategory = (typeof SAFETY_CATEGORIES)[number];
 
@@ -34,6 +35,7 @@ export const SAFETY_SOURCES = [
   'upload_chunk',
   'post_upload',
   'transcript',
+  'wellness_heartbeat',
 ] as const;
 export type SafetySource = (typeof SAFETY_SOURCES)[number];
 
@@ -93,6 +95,14 @@ export type OrgSafetySettings = {
   autoEscalateToAuthorities: boolean;
   alertWebhookUrl: string | null;
   alertEmails: string[];
+  /** Silent panic / wellness check (no auto-911). */
+  wellnessCheckEnabled: boolean;
+  /** Seconds of no significant motion before a watch nudge. */
+  wellnessNoMotionSeconds: number;
+  /** Seconds of no motion before critical (still office-only). */
+  wellnessCriticalAfterSeconds: number;
+  /** When true, require alone_on_site before alerting. */
+  wellnessRequireAlone: boolean;
 };
 
 /** Minimum confidence to open an incident (high precision bias). */
@@ -101,3 +111,9 @@ export const SAFETY_MIN_CONFIDENCE_CRITICAL = 0.85;
 
 /** Do not re-alert the same job+category within this window. */
 export const SAFETY_ALERT_RATE_LIMIT_MS = 10 * 60 * 1000;
+
+/** Default wellness thresholds (seconds). Org settings may override. */
+export const WELLNESS_DEFAULT_NO_MOTION_SECONDS = 300;
+export const WELLNESS_DEFAULT_CRITICAL_AFTER_SECONDS = 600;
+/** Motion score at or above this resets the no-motion clock. */
+export const WELLNESS_MOTION_SCORE_THRESHOLD = 0.04;
