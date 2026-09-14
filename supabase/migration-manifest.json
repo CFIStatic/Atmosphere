@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 147,
+    "migrationCount": 149,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -162,7 +162,8 @@
     "20260911010000_job_progress_grants.sql",
     "20260911120000_job_proofs_scheduled_purge.sql",
     "20260912160000_job_progress_grants_last_accessed.sql",
-    "20260913190000_admin_token_usage_analytics.sql"
+    "20260913190000_admin_token_usage_analytics.sql",
+    "20260914190000_safety_incidents.sql"
   ],
   "migrations": [
     {
@@ -5294,6 +5295,35 @@
       "expect": [
         "function|public.admin_token_usage_analytics",
         "index|public.token_usage_events.token_usage_events_created_at"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260914190000_safety_incidents",
+      "file": "20260914190000_safety_incidents.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "type|public.safety_incident_category",
+        "type|public.safety_incident_severity",
+        "type|public.safety_incident_status",
+        "type|public.safety_recommended_action",
+        "type|public.safety_incident_source",
+        "column|public.orgs.safety_auto_escalate_to_authorities",
+        "column|public.orgs.safety_alert_webhook_url",
+        "column|public.orgs.safety_alert_emails",
+        "table|public.safety_incidents",
+        "index|public.safety_incidents.safety_incidents_pkey",
+        "index|public.safety_incidents.safety_incidents_org_open_idx",
+        "index|public.safety_incidents.safety_incidents_job_idx",
+        "index|public.safety_incidents.safety_incidents_proof_idx",
+        "index|public.safety_incidents.safety_incidents_org_created_idx",
+        "index|public.safety_incidents.safety_incidents_rate_idx",
+        "policy|public.safety_incidents.safety_incidents_select_member",
+        "policy|public.safety_incidents.safety_incidents_update_member",
+        "rls|public.safety_incidents"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
