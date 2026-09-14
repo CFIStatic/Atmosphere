@@ -196,7 +196,7 @@ progressShareRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const claimed = await claimProgressShareForUser({
-        token: req.params.token,
+        token: tokenFromProgressRequest(req),
         userId: req.user!.id,
         userEmail: req.user!.email,
       });
@@ -241,6 +241,8 @@ progressShareRouter.get('/:token', sendProgressGuest);
  * POST /api/progress-share/:token/ask
  * Homeowner (or counsel / bank / adjuster) asks the same job file the office Ask
  * reads — token is the credential, no Atmosphere account.
+ * After cookie exchange the client posts to /session/ask; resolveShareToken then
+ * reads the httpOnly progress-share cookie.
  */
 progressShareRouter.post(
   '/:token/ask',
