@@ -2323,6 +2323,58 @@ const routes: Array<[string, RegExp, Handler]> = [
     };
   }],
 
+
+  ['GET', /^\/api\/operations\/live-map$/, () => ({
+    body: {
+      generatedAt: new Date().toISOString(),
+      gaps: [
+        'Demo data — crew live GPS is not on the sold path',
+        'on_site uses party last_seen within 15 minutes',
+      ],
+      summary: { jobs: 2, withCoords: 2, active: 1, openSafety: 1, criticalSafety: 1 },
+      jobs: [
+        {
+          jobId: 'job-1',
+          jobNumber: 1041,
+          title: 'Meridian Ave water',
+          status: 'in_progress',
+          address: '1842 Meridian Ave, Austin, TX',
+          activity: 'on_site',
+          coords: { lat: 30.2912, lon: -97.7461, source: 'proof' },
+          lastPingAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+          lastPingLabel: 'Proof from Priya Shah',
+          people: [{ name: 'Priya Shah', kind: 'party', lastSeenAt: new Date(Date.now() - 4 * 60_000).toISOString() }],
+          openSafetyFlags: [
+            {
+              id: 'inc-demo-1',
+              severity: 'critical',
+              category: 'fall_person_down',
+              title: 'Person down on site',
+              status: 'open',
+              createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+              source: 'live_sample',
+            },
+          ],
+          filmedToday: true,
+        },
+        {
+          jobId: 'job-2',
+          jobNumber: 1042,
+          title: 'Lamar loft remodel',
+          status: 'scheduled',
+          address: '2200 Lamar Blvd, Austin, TX',
+          activity: 'idle',
+          coords: { lat: 30.2849, lon: -97.7465, source: 'property' },
+          lastPingAt: null,
+          lastPingLabel: null,
+          people: [{ name: 'Hector Delgado', kind: 'party', lastSeenAt: null }],
+          openSafetyFlags: [],
+          filmedToday: false,
+        },
+      ],
+    },
+  })],
+
   /* ------------------------------------------- live crew positions */
   ['GET', /^\/api\/locations\/sharing$/, () => ({
     body: { sharing: SHARING.on, shareWindow: 'shift', decidedAt: SHARING.at },

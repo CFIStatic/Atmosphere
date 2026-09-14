@@ -3,6 +3,7 @@ import {
   DecisionIcon,
   GaugeIcon,
   MicIcon,
+  NavigationIcon,
   SettingsIcon,
 } from '../components/icons';
 
@@ -53,6 +54,7 @@ const WORK: NavGroup = {
   items: [
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
+    { to: '/live-map', label: 'Live map', Icon: NavigationIcon },
   ],
 };
 

@@ -81,6 +81,7 @@ export function supportedCatalogLocales(): AppLocale[] {
 export interface VerifierChromeStrings {
   startJob: string;
   dashboard: string;
+  liveMap: string;
   settings: string;
   support: string;
   signOut: string;
@@ -107,6 +108,7 @@ export function verifierChromeStrings(
   return {
     startJob: translate(locale, 'nav.startJob'),
     dashboard: translate(locale, 'nav.dashboard'),
+    liveMap: translate(locale, 'nav.liveMap'),
     settings: translate(locale, 'nav.settings'),
     support: translate(locale, 'nav.support'),
     signOut: translate(locale, 'common.signOut'),

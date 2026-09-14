@@ -19,6 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/intake': 'Start a job',
   '/job-progress': 'Job file',
   '/jobs': 'Dashboard',
+  '/live-map': 'Live map',
   '/settings': 'Settings',
   '/field': 'Overview',
   '/my-jobs': 'My jobs',
@@ -33,6 +34,7 @@ function pageNameFor(pathname: string): string | undefined {
   if (pathname === '/settings') return t('document.settings');
   if (pathname === '/intake') return t('document.startJob');
   if (pathname === '/verifier-library') return t('document.dashboard');
+  if (pathname === '/live-map') return t('document.liveMap');
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
 
   const match = Object.keys(PAGE_TITLES)

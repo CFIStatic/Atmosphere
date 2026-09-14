@@ -1137,6 +1137,51 @@ export interface ProofPulseJob {
   filmedToday: number;
 }
 
+export type LiveMapActivity =
+  | 'uploading'
+  | 'on_site'
+  | 'recent_upload'
+  | 'in_progress'
+  | 'idle';
+
+export interface LiveMapJobRow {
+  jobId: string;
+  jobNumber: number | null;
+  title: string;
+  status: string | null;
+  address: string | null;
+  activity: LiveMapActivity;
+  coords: { lat: number; lon: number; source: 'proof' | 'property' | 'safety' } | null;
+  lastPingAt: string | null;
+  lastPingLabel: string | null;
+  people: Array<{ name: string; kind: 'crew' | 'party'; lastSeenAt: string | null }>;
+  openSafetyFlags: Array<{
+    id: string;
+    severity: 'watch' | 'critical';
+    category: string;
+    title: string;
+    status: string;
+    createdAt: string;
+    source: string;
+    lat?: number | null;
+    lon?: number | null;
+  }>;
+  filmedToday: boolean;
+}
+
+export interface LiveMapResponse {
+  generatedAt: string;
+  gaps: string[];
+  summary: {
+    jobs: number;
+    withCoords: number;
+    active: number;
+    openSafety: number;
+    criticalSafety: number;
+  };
+  jobs: LiveMapJobRow[];
+}
+
 export interface ProofPulse {
   clips: number;
   read: number;
@@ -3629,6 +3674,9 @@ export const api = {
 
   // ---- Proof of work ----
   proofPulse: () => request<ProofPulse>('/api/operations/proofs/pulse', { method: 'GET' }),
+
+  /** Office live map: open jobs, last geo ping, activity, open safety flags. */
+  liveJobMap: () => request<LiveMapResponse>('/api/operations/live-map', { method: 'GET' }),
 
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
