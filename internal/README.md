@@ -30,25 +30,23 @@ SQL both re-check).
 Do this once in the same Railway project that already runs `Atmosphere`
 (the BFF) and `Atmosphere-web` (the office app).
 
-### 1. Apply the account-file and authenticator migrations
+### 1. Apply the account-file and access-request migrations
 
 On the production Supabase project, apply **one** copy of each (the two
 directories are identical):
 
 - `backend/supabase/migrations/20260821160000_internal_account_detail.sql`
   or `supabase/migrations/20260821160000_internal_account_detail.sql`
-- `backend/supabase/migrations/20260821210000_internal_staff_totp.sql`
-  or `supabase/migrations/20260821210000_internal_staff_totp.sql`
 - `backend/supabase/migrations/20260822170000_internal_access_requests.sql`
   or `supabase/migrations/20260822170000_internal_access_requests.sql`
-- `backend/supabase/migrations/20260822181000_internal_staff_totp_names.sql`
-  or `supabase/migrations/20260822181000_internal_staff_totp_names.sql`
+- (optional / legacy) `20260821210000_internal_staff_totp.sql` and
+  `20260822181000_internal_staff_totp_names.sql` — no longer required for login
 
 Without the account-file migration, overview/accounts still load from the
 existing analytics RPCs; opening one org (`/accounts/:id`) returns an error.
-Without the TOTP table, Microsoft Authenticator sign-in cannot store the
-enrolled secret. Without the access-request table, unknown employees cannot
-be queued for admin approval.
+Legacy TOTP migrations may still be present in the database; Internal login
+no longer uses Authenticator secrets. Without the access-request table,
+unknown employees cannot be queued for admin approval.
 
 ### 2. Create the service
 
@@ -111,33 +109,36 @@ Health: `GET https://<internal-host>/healthz` → `ok`. nginx also answers
 `/health` and `/api/health` with `ok` so a leftover backend probe cannot
 take the replica down.
 
-### 6. Sign in with Microsoft Authenticator
+### 6. Sign in (invite-only, Platform password)
 
-Open the generated domain. The first visit asks for **first name**, **last name**,
-and **email** — not the office-app password. After Authenticator is set up once,
-later visits use **email + the 6-digit Authenticator code as the password**.
+Open the generated domain. Sign in with the **same email + password** as
+Atmosphere Platform (Supabase Auth). Microsoft Authenticator codes are **not**
+used.
 
-- Allowlisted emails (`ANALYTICS_INTERNAL_EMAILS`, default `jack@jettx.ai`)
-  sign in immediately. Anyone else is queued on **Access** for an internal
-  admin to approve (or deny). Approved employees then enroll Authenticator.
-- First visit for an approved email shows a QR code. In Microsoft Authenticator:
-  **+ → Other account (Google, Facebook, etc.) → scan the QR**. Enter the
-  6-digit code. That enrollment is stored on the BFF (encrypted with
-  `DEVICE_PEPPER`). Finish this step in one sitting (about 10 minutes).
-- Later visits: email + the same 6-digit Authenticator code (that code is the
-  password). No office-app password.
-- The first successful enrollment for an allowlisted email owns that pairing.
-  If you close the page before entering the first code, delete the Atmosphere
-  Internal account in Authenticator and scan again.
+- **Invite-only.** Allowlisted emails (`ANALYTICS_INTERNAL_EMAILS`, default
+  `jack@jettx.ai` / `Jack@jettx.ai`) can sign in immediately. Email matching is
+  case-insensitive.
+- Anyone else taps **Need access? Request an invite**, enters name + work email,
+  and is queued on **Access** for an internal admin to approve (or deny).
+  After approval they sign in with their Platform password.
+- Staff must already have a Platform account (or create one on
+  platform.atmosphereteam.com). Internal does not store a parallel password.
 
-The BFF upserts `analytics_staff` when `SUPABASE_SERVICE_ROLE_KEY` is set,
-and stores the name you typed as the staff display name.
+#### How to invite staff
 
-Manual grant for someone else:
+1. **Env allowlist (ops):** add the email to `ANALYTICS_INTERNAL_EMAILS` on the
+   Atmosphere APIs service (comma-separated). Default includes `jack@jettx.ai`.
+2. **Access page (admin UI):** an internal admin opens **Access**, approves the
+   pending request. The employee then signs in with Platform email + password.
+3. **CLI grant (existing Auth user):**
+   ```bash
+   cd backend && npm run analytics:grant -- someone@company.com internal
+   ```
+   Prefer (1) or (2) for Internal Growth Metrics login; the allowlist / Access
+   approval is what the invite gate checks before Platform password verification.
 
-```bash
-cd backend && npm run analytics:grant -- someone@company.com internal
-```
+The BFF upserts `analytics_staff` on successful internal sign-in when
+`SUPABASE_SERVICE_ROLE_KEY` is set.
 
 You will see **live** orgs, MRR, usage, jobs, and `/api/ready` from
 production — empty tiles mean there is no production data yet, not demo data.
@@ -170,8 +171,8 @@ the BFF.
 | --- | --- |
 | `API_UPSTREAM` on Internal Growth Metrics | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 | Not | `http://127.0.0.1:4000` or `https://atmosphere-production.up.railway.app` |
-| Atmosphere BFF | deployed with `POST /api/auth/internal-challenge` |
-| Supabase | `20260821210000_internal_staff_totp.sql` applied |
+| Atmosphere BFF | deployed with `POST /api/auth/internal-login` (Platform password) |
+| Supabase | staff allowlist / access-request tables; Platform Auth users |
 
 The public https BFF URL hairpins across Railway edges and 502s. Loopback
 is inside the nginx container, where nothing is listening.
@@ -189,11 +190,9 @@ Sign in with a real staff account. Same cookies as the office app.
 
 | Knob | Meaning |
 | --- | --- |
-| `ANALYTICS_INTERNAL_EMAILS` | Auto-grant internal scope (default `jack@jettx.ai`) |
+| `ANALYTICS_INTERNAL_EMAILS` | Invite allowlist / auto-grant internal scope (default `jack@jettx.ai`) |
 | **Access** page | Internal admin queue — approve one employee or approve all |
-| `DEVICE_PEPPER` | Encrypts Microsoft Authenticator secrets (existing BFF secret) |
-| `npm run analytics:grant --prefix backend -- someone@company.com internal` | Manual grant |
+| Platform password | Same Supabase email + password as platform.atmosphereteam.com |
+| `npm run analytics:grant --prefix backend -- someone@company.com internal` | Manual analytics_staff grant |
 | Migration `20260821160000_internal_account_detail.sql` | One-org members/jobs/usage RPC |
-| Migration `20260821210000_internal_staff_totp.sql` | Authenticator enrollment table |
 | Migration `20260822170000_internal_access_requests.sql` | Employee access-request queue |
-| Migration `20260822181000_internal_staff_totp_names.sql` | Remember name after first Authenticator setup |

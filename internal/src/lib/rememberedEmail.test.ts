@@ -6,7 +6,7 @@ describe('remembered staff email', () => {
     localStorage.clear();
   });
 
-  it('stores the email used at first Authenticator setup', () => {
+  it('stores the staff email used at sign-in', () => {
     expect(readRememberedStaffEmail()).toBe('');
     rememberStaffEmail('Jack@JettX.ai');
     expect(readRememberedStaffEmail()).toBe('jack@jettx.ai');

@@ -28,14 +28,9 @@ import {
   signInPasswordAccount,
 } from '../auth/passwordAccount.js';
 import { sendPasswordReset } from '../auth/sendPasswordReset.js';
-import { hasStaffName, resolveStaffNames, STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
+import { hasStaffName, STAFF_LOGIN_DENIED, STAFF_NOT_INVITED } from '../lib/internalStaffGate.js';
 import { resolvedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { recordAccessRequest } from '../auth/internalAccessRequests.js';
-import { openInternalStaffSession } from '../auth/internalStaffSession.js';
-import { signStaffChallenge, readStaffChallenge } from '../lib/internalStaffChallenge.js';
-import { otpauthUrl, randomTotpSecret, verifyTotp } from '../lib/totp.js';
-import { loadEnrolledTotp, saveEnrolledTotp } from '../auth/internalStaffTotpStore.js';
-import { toDataURL as totpQrDataUrl } from 'qrcode';
 import { CURRENT_TERMS_VERSION, TERMS_PUBLIC_URL, clientIp, clientUserAgent } from '../legal/terms.js';
 import { loadTermsStatus, recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
 
@@ -160,9 +155,9 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 
 /**
  * POST /api/auth/internal-challenge
- * Internal staff site step 1: name + approved email. Allowlisted or
- * admin-approved staff get a Microsoft Authenticator enrollment QR or a
- * prompt for the 6-digit code. Everyone else is queued for admin approval.
+ * Invite request for Internal Growth Metrics. Allowlisted / already-approved
+ * emails are told to sign in with their Platform password. Everyone else is
+ * queued for an internal admin on the Access page.
  */
 authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -174,60 +169,25 @@ authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Re
         'internal_login_unavailable',
       );
     }
-    const named = hasStaffName(body.firstName) && hasStaffName(body.lastName);
-    if ((await resolvedAnalyticsScope(body.email)) === null) {
-      if (!named) {
-        res.json({ status: 'setup' });
-        return;
-      }
-      const recorded = await recordAccessRequest({
-        email: body.email,
-        firstName: body.firstName,
-        lastName: body.lastName,
-      });
-      if (recorded === 'pending') {
-        res.json({ status: 'pending' });
-        return;
-      }
-      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-    }
-
-    const enrolled = await loadEnrolledTotp(body.email);
-    if (enrolled) {
-      const names = resolveStaffNames(body, enrolled, body.email);
-      const challenge = signStaffChallenge({
-        email: body.email,
-        firstName: names.firstName,
-        lastName: names.lastName,
-        enrolled: true,
-      });
-      res.json({ status: 'code', challenge });
+    if ((await resolvedAnalyticsScope(body.email)) !== null) {
+      res.json({ status: 'ready' });
       return;
     }
-
+    const named = hasStaffName(body.firstName) && hasStaffName(body.lastName);
     if (!named) {
       res.json({ status: 'setup' });
       return;
     }
-
-    const secret = randomTotpSecret();
-    const otpauth = otpauthUrl(body.email, secret);
-    const qrDataUrl = await totpQrDataUrl(otpauth, { margin: 1, width: 220, errorCorrectionLevel: 'M' });
-    const challenge = signStaffChallenge({
+    const recorded = await recordAccessRequest({
       email: body.email,
       firstName: body.firstName,
       lastName: body.lastName,
-      enrolled: false,
-      secret,
     });
-    res.json({
-      status: 'enroll',
-      challenge,
-      otpauthUrl: otpauth,
-      qrDataUrl,
-      secret,
-      issuer: 'Atmosphere Internal',
-    });
+    if (recorded === 'pending') {
+      res.json({ status: 'pending' });
+      return;
+    }
+    throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
   } catch (err) {
     next(err);
   }
@@ -235,86 +195,37 @@ authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Re
 
 /**
  * POST /api/auth/internal-login
- * Internal staff site step 2: 6-digit code from Microsoft Authenticator.
+ * Invite-only staff sign-in with the same Platform email + password
+ * (Supabase Auth). Does not use Microsoft Authenticator TOTP.
  */
 authRouter.post('/internal-login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = internalStaffVerifySchema.parse(req.body);
-    let email: string;
-    let firstName: string;
-    let lastName: string;
-    let secret: string;
-    let minCounter = -1n;
-
-    if (body.challenge) {
-      const challenge = readStaffChallenge(body.challenge);
-      if (!challenge || (await resolvedAnalyticsScope(challenge.email)) === null) {
-        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-      }
-      email = challenge.email;
-      firstName = challenge.firstName;
-      lastName = challenge.lastName;
-      if (challenge.enrolled) {
-        const stored = await loadEnrolledTotp(challenge.email);
-        if (!stored) throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-        secret = stored.secret;
-        minCounter = stored.lastCounter;
-        const names = resolveStaffNames(challenge, stored, challenge.email);
-        firstName = names.firstName;
-        lastName = names.lastName;
-      } else if (challenge.secret) {
-        secret = challenge.secret;
-      } else {
-        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-      }
-    } else if (body.email) {
-      if ((await resolvedAnalyticsScope(body.email)) === null) {
-        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-      }
-      const stored = await loadEnrolledTotp(body.email);
-      if (!stored) throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-      email = body.email;
-      secret = stored.secret;
-      minCounter = stored.lastCounter;
-      const names = resolveStaffNames({}, stored, body.email);
-      firstName = names.firstName;
-      lastName = names.lastName;
-    } else {
-      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    if ((await resolvedAnalyticsScope(body.email)) === null) {
+      throw unauthorized(STAFF_NOT_INVITED, 'internal_not_invited');
     }
 
-    const verified = verifyTotp(secret, body.code, { minCounter });
-    if (!verified.ok) {
-      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    const result = await signInPasswordAccount(body.email, body.password);
+    if (result.kind === 'error') {
+      if (result.error.code === 'invalid_credentials') {
+        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      }
+      throw result.error;
     }
 
-    try {
-      await saveEnrolledTotp(email, secret, verified.counter, { firstName, lastName });
-    } catch {
-      throw new HttpError(
-        503,
-        'Staff authenticator is not configured on this server.',
-        'internal_totp_unavailable',
-      );
-    }
-
-    const fullName = `${firstName} ${lastName}`.replace(/\s+/g, ' ').trim();
-    const { user, session } = await openInternalStaffSession({
-      email,
-      firstName,
-      lastName,
-      fullName,
-    });
-
-    setSessionCookies(res, session);
-    await ensureAllowlistedAnalyticsAccess(user, fullName);
-    await recordEvent(createUserClient(session.access_token), {
+    setSessionCookies(res, result.session);
+    const fromMeta =
+      typeof result.user.user_metadata?.full_name === 'string'
+        ? result.user.user_metadata.full_name.trim()
+        : '';
+    await ensureAllowlistedAnalyticsAccess(result.user, fromMeta || result.user.email);
+    await recordEvent(createUserClient(result.session.access_token), {
       type: 'auth.signed_in',
-      summary: 'signed in to the internal site with Microsoft Authenticator',
-      entityId: user.id,
+      summary: 'signed in to the internal site with Platform password',
+      entityId: result.user.id,
     });
 
-    res.json({ user: publicUser(user), session: sessionTokens(session) });
+    res.json({ user: publicUser(result.user), session: sessionTokens(result.session) });
   } catch (err) {
     next(err);
   }
