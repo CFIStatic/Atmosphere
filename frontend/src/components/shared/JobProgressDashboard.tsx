@@ -4,7 +4,6 @@ import { ProofOfWork } from './ProofOfWork';
 import { SpinnerIcon } from '../icons';
 import {
   buildJobProgressStory,
-  buildUpToSpeedSummary,
   type StoryItem,
   type StoryTone,
 } from './jobProgressStory';
@@ -16,19 +15,12 @@ import { LiveProgressStory } from './LiveProgressStory';
 import { siteLine } from '../../lib/jobFileAsk';
 
 /**
- * Homeowner-clear job progress: one status + progress card, a live plain-English
+ * Homeowner-clear job progress: progress meter, a live plain-English
  * What happened story (Glance/Scan across clips), then a single Now / Done / Left
  * brief (with a compact Needs attention strip when needed).
  * Shared by office /job-progress and guest /progress/:token.
  * Does not own Ask/chat chrome.
  */
-
-const SUMMARY_STYLE: Record<StoryTone, string> = {
-  success: 'border-success-200 bg-success-50 text-success-700',
-  caution: 'border-caution-200 bg-caution-50 text-caution-700',
-  danger: 'border-danger-200 bg-danger-50 text-danger-700',
-  neutral: 'border-line bg-paper-50/60 text-ink-700',
-};
 
 const BADGE_STYLE: Record<StoryTone, string> = {
   success: 'bg-success-50 text-success-600',
@@ -191,7 +183,6 @@ export function JobProgressDashboard({
         ? Math.round((doneCount / trackedCount) * 100)
         : 0;
 
-  const summary = useMemo(() => buildUpToSpeedSummary(story), [story]);
   const liveStory = useMemo(() => {
     if (liveStoryOverride) return liveStoryOverride;
     return buildHomeownerLiveProgressStory(proof?.videos ?? []);
@@ -240,15 +231,8 @@ export function JobProgressDashboard({
           </div>
         ) : (
           <>
-            <div
-              className={`${showIdentity ? 'mt-5' : ''} rounded-xl border px-4 py-3.5 ${SUMMARY_STYLE[summary.tone]}`}
-              data-testid="job-progress-up-to-speed"
-            >
-              <p className="text-sm sm:text-base font-medium leading-relaxed">{summary.text}</p>
-            </div>
-
             {trackedCount > 0 && (
-              <div className="mt-4" data-testid="job-progress-meter">
+              <div className={`${showIdentity ? 'mt-5' : ''}`} data-testid="job-progress-meter">
                 <div className="mb-2 flex items-center justify-between text-sm">
                   <span className="font-medium text-ink-800">
                     {doneCount} of {trackedCount} done

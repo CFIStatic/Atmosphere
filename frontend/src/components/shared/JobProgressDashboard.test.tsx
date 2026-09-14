@@ -103,7 +103,7 @@ describe('JobProgressDashboard even simpler', () => {
     jobProofs.mockReset();
   });
 
-  it('shows one status sentence + progress, then Needs attention / Now / Done / Left — no dashboard chrome', async () => {
+  it('shows progress meter, then Needs attention / Now / Done / Left — no status prose banner', async () => {
     render(
       <JobProgressDashboard
         jobId="job-1"
@@ -113,11 +113,12 @@ describe('JobProgressDashboard even simpler', () => {
       />,
     );
 
-    const status = await screen.findByTestId('job-progress-up-to-speed');
-    expect(status).toHaveTextContent(/Needs your attention: Sub has not accepted the scope/);
-    expect(status).not.toHaveTextContent(/Up to speed/i);
+    expect(screen.queryByTestId('job-progress-up-to-speed')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Worth a look/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Needs your attention:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Crews finished/i)).not.toBeInTheDocument();
 
-    expect(screen.getByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
+    expect(await screen.findByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
     // Demoted 3-stat jump line is gone
     expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/happening/);
     expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/still to do/i);
@@ -149,9 +150,9 @@ describe('JobProgressDashboard even simpler', () => {
       />,
     );
 
-    expect(await screen.findByTestId('job-progress-up-to-speed')).toHaveTextContent(
-      /Crews finished 1 of 2 work items/,
-    );
+    expect(await screen.findByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
+    expect(screen.queryByTestId('job-progress-up-to-speed')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Crews finished/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-progress-needs-attention')).not.toBeInTheDocument();
   });
