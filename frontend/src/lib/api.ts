@@ -69,6 +69,12 @@ export interface Profile {
   email: string | null;
   fullName: string | null;
   avatarUrl: string | null;
+  /** Curated person service role slug (not org seat role). */
+  serviceRole?: string | null;
+  serviceRoleCustom?: string | null;
+  /** Stable Analysis shape alias of serviceRole. */
+  role?: string | null;
+  displayLabel?: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -708,6 +714,14 @@ export interface JobAccessPerson {
   name: string | null;
   email: string | null;
   accessType: string;
+  /** Curated service role slug for Analysis. */
+  role: string;
+  /** Human service title. */
+  displayLabel: string;
+  /** Alias of displayLabel for speaker-identity. */
+  serviceTitle?: string;
+  /** "Alex — Electrician" or "Homeowner". */
+  displayName?: string;
   grantedByName: string | null;
   grantedByEmail: string | null;
   grantedAt: string | null;
@@ -1618,6 +1632,9 @@ export interface OrgInvite {
   role: MemberRole;
   note?: string | null;
   status: 'pending' | 'joined' | 'revoked';
+  /** Advisory person service title for Analysis labeling. */
+  serviceRole?: string | null;
+  serviceRoleCustom?: string | null;
   createdAt: string;
   joinedAt?: string | null;
   revokedAt?: string | null;
@@ -2955,10 +2972,18 @@ export const api = {
   // ---- Profile ----
   getProfile: () => request<{ profile: Profile }>('/api/profile', { method: 'GET' }),
 
-  updateProfile: (fullName: string | null) =>
+  updateProfile: (
+    fullName: string | null,
+    serviceRole?: string | null,
+    serviceRoleCustom?: string | null,
+  ) =>
     request<{ profile: Profile }>('/api/profile', {
       method: 'PATCH',
-      body: JSON.stringify({ fullName }),
+      body: JSON.stringify({
+        fullName,
+        ...(serviceRole !== undefined ? { serviceRole } : {}),
+        ...(serviceRoleCustom !== undefined ? { serviceRoleCustom } : {}),
+      }),
     }),
 
   uploadAvatar: (input: { filename: string; mediaType: string; contentBase64: string }) =>
@@ -3406,7 +3431,13 @@ export const api = {
   // ---- Invitations ----
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
-  createOrgInvite: (input: { email: string; role?: MemberRole; note?: string }) =>
+  createOrgInvite: (input: {
+    email: string;
+    role?: MemberRole;
+    note?: string;
+    serviceRole?: string;
+    serviceRoleCustom?: string | null;
+  }) =>
     request<{ invite: OrgInvite; emailed: boolean }>('/api/org/invites', {
       method: 'POST',
       body: JSON.stringify(input),

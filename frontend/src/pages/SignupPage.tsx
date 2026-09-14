@@ -25,6 +25,8 @@ import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons
 import { isFieldEmbedMarked, withFieldEmbed } from '../lib/fieldEmbed';
 import { CURRENT_TERMS_VERSION } from '../lib/terms';
 import { TermsAckCheckbox } from '../components/TermsAckCheckbox';
+import { ServiceRolePicker } from '../components/shared/ServiceRolePicker';
+import type { ServiceRoleSlug } from '../lib/serviceRole';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -59,6 +61,8 @@ export function SignupPage() {
   const orgIntent = parseSignupIntent(searchParams.get('intent'));
 
   const [fullName, setFullName] = useState('');
+  const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
+  const [serviceRoleCustom, setServiceRoleCustom] = useState('');
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -238,9 +242,19 @@ export function SignupPage() {
           setPassword('');
           return;
         }
-        if (fullName.trim()) {
-          await api.updateProfile(fullName.trim());
+        if (fullName.trim() || (serviceRole && !isHomeowner)) {
+          await api.updateProfile(
+            fullName.trim() || null,
+            isHomeowner ? 'homeowner' : serviceRole || null,
+            !isHomeowner && serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
+          );
           await refreshMembership();
+        } else if (isHomeowner) {
+          try {
+            await api.updateProfile(null, 'homeowner', null);
+          } catch {
+            /* claim path also forces Homeowner */
+          }
         }
         if (res.membership?.org) {
           await continueAfterWorkspace();
@@ -362,6 +376,24 @@ export function SignupPage() {
                     className={inputClass}
                   />
                 </Field>
+                )}
+
+                {!isHomeowner && (
+                  <ServiceRolePicker
+                    value={serviceRole}
+                    custom={serviceRoleCustom}
+                    onChange={(role, custom) => {
+                      setServiceRole(role);
+                      setServiceRoleCustom(custom);
+                    }}
+                    hint="Analysis labels you with this title (e.g. Alex — Electrician)."
+                  />
+                )}
+                {isHomeowner && (
+                  <p className="text-xs text-ink-500">
+                    You will be labeled as <span className="font-semibold text-ink-800">Homeowner</span> on
+                    this job — not a name scraped from the web.
+                  </p>
                 )}
 
                 <Field label={isInviteeAccount ? 'Email' : 'Work email'} htmlFor="signup-email">

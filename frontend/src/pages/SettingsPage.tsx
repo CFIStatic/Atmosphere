@@ -16,6 +16,8 @@ import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
 import { PersonAvatar } from '../components/PersonAvatar';
+import { ServiceRolePicker } from '../components/shared/ServiceRolePicker';
+import type { ServiceRoleSlug } from '../lib/serviceRole';
 import { LanguagePicker } from '../components/LanguagePicker';
 import { usePlatformSupportUrl } from '../lib/contactSupport';
 import { useT } from '../lib/i18n';
@@ -268,6 +270,10 @@ function ProfileSection() {
   const { user, profile, setProfile } = useAuth();
   const resolvedName = profile?.fullName || nameFromMetadata(user?.metadata);
   const [name, setName] = useState(resolvedName ?? '');
+  const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>(
+    (profile?.serviceRole as ServiceRoleSlug | null | undefined) ?? '',
+  );
+  const [serviceRoleCustom, setServiceRoleCustom] = useState(profile?.serviceRoleCustom ?? '');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -282,22 +288,38 @@ function ProfileSection() {
   }, [profile?.fullName, user?.metadata]);
 
   useEffect(() => {
+    if (profile?.serviceRole) setServiceRole(profile.serviceRole as ServiceRoleSlug);
+    if (profile?.serviceRoleCustom != null) setServiceRoleCustom(profile.serviceRoleCustom);
+  }, [profile?.serviceRole, profile?.serviceRoleCustom]);
+
+  useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
 
   const storedName = profile?.fullName ?? '';
-  const dirty = name.trim() !== storedName;
+  const storedRole = profile?.serviceRole ?? '';
+  const storedCustom = profile?.serviceRoleCustom ?? '';
+  const dirty =
+    name.trim() !== storedName ||
+    (serviceRole || '') !== (storedRole || '') ||
+    (serviceRole === 'other' ? serviceRoleCustom.trim() : '') !== (storedCustom || '');
   const avatarUrl = previewUrl || profile?.avatarUrl || null;
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      const { profile: updated } = await api.updateProfile(name.trim() || null);
+      const { profile: updated } = await api.updateProfile(
+        name.trim() || null,
+        serviceRole || null,
+        serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
+      );
       setProfile(updated);
       setName(updated.fullName ?? '');
+      setServiceRole((updated.serviceRole as ServiceRoleSlug | null | undefined) ?? '');
+      setServiceRoleCustom(updated.serviceRoleCustom ?? '');
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -425,7 +447,7 @@ function ProfileSection() {
           </div>
         </div>
 
-        <div className="mt-6 max-w-md">
+        <div className="mt-6 max-w-md space-y-4">
           <Field label={t('settings.profile.displayName')} hint={t('settings.profile.displayNameHint')}>
             <input
               value={name}
@@ -435,6 +457,23 @@ function ProfileSection() {
               className={`mt-2 ${INPUT_CLASS}`}
             />
           </Field>
+          {profile?.serviceRole === 'homeowner' ? (
+            <p className="text-sm text-ink-600">
+              Service title: <span className="font-semibold text-ink-900">Homeowner</span>
+              <span className="mt-1 block text-xs text-ink-500">
+                Set automatically from a job progress invite — Analysis always labels you as Homeowner.
+              </span>
+            </p>
+          ) : (
+            <ServiceRolePicker
+              value={serviceRole}
+              custom={serviceRoleCustom}
+              onChange={(role, custom) => {
+                setServiceRole(role);
+                setServiceRoleCustom(custom);
+              }}
+            />
+          )}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">

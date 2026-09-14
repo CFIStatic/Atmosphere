@@ -19,7 +19,14 @@ function when(iso: string | null): string {
 }
 
 function personLabel(person: JobAccessPerson): string {
-  return person.name?.trim() || person.email || 'Someone';
+  if (person.displayName?.trim()) return person.displayName.trim();
+  if (person.kind === 'homeowner' || person.role === 'homeowner') return 'Homeowner';
+  const name = person.name?.trim() || person.email || 'Someone';
+  const title = person.displayLabel?.trim() || person.accessType?.trim();
+  if (title && name && !name.toLowerCase().includes(title.toLowerCase())) {
+    return `${name} — ${title}`;
+  }
+  return name;
 }
 
 function grantedLine(person: JobAccessPerson): string {

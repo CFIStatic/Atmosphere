@@ -5301,6 +5301,24 @@
       "dropsCount": 0
     },
     {
+      "version": "20260914180000_user_service_role_titles",
+      "file": "20260914180000_user_service_role_titles.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.profiles.service_role",
+        "column|public.profiles.service_role_custom",
+        "column|public.job_parties.service_role",
+        "column|public.job_parties.service_role_custom",
+        "column|public.job_progress_grants.service_role",
+        "column|public.org_invites.service_role",
+        "column|public.org_invites.service_role_custom"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
       "version": "20260914190000_safety_incidents",
       "file": "20260914190000_safety_incidents.sql",
       "structurallyVerifiable": true,

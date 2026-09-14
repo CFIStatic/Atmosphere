@@ -8,7 +8,17 @@
  *
  * lastAccessedAt prefers grant stamps for claimed accounts, then share opens,
  * then party last_seen_at. grantedBy comes from created_by → profiles.
+ *
+ * Service role titles (`role` / `displayLabel` / `serviceTitle`) feed Analysis
+ * people-matching — see docs/user-service-role-titles.md.
  */
+
+import {
+  HOMEOWNER_SERVICE_ROLE,
+  deriveServiceRole,
+  formatPersonRoleLabel,
+  type ServiceRoleLabel,
+} from './serviceRole.js';
 
 export type JobAccessKind = 'homeowner' | 'field_capture';
 
@@ -18,6 +28,14 @@ export type JobAccessPerson = {
   name: string | null;
   email: string | null;
   accessType: string;
+  /** Curated service role slug — stable for speaker-identity. */
+  role: string;
+  /** Human service title (alias of serviceTitle). */
+  displayLabel: string;
+  /** Alias of displayLabel for speaker-identity OrgMemberHint.serviceTitle. */
+  serviceTitle: string;
+  /** "Alex — Electrician" or "Homeowner". */
+  displayName: string;
   grantedByName: string | null;
   grantedByEmail: string | null;
   grantedAt: string | null;
@@ -45,6 +63,8 @@ export type RosterPartyRow = {
   contact_name: string | null;
   email: string | null;
   role: string | null;
+  service_role?: string | null;
+  service_role_custom?: string | null;
   created_by: string | null;
   created_at: string;
   invited_at: string | null;
@@ -59,12 +79,15 @@ export type RosterGrantRow = {
   recipient_email: string;
   created_at: string;
   last_accessed_at: string | null;
+  service_role?: string | null;
 };
 
 export type RosterProfile = {
   id: string;
   full_name: string | null;
   email: string | null;
+  service_role?: string | null;
+  service_role_custom?: string | null;
 };
 
 function normEmail(email: string | null | undefined): string {
@@ -86,30 +109,42 @@ function shareState(row: Pick<RosterShareRow, 'revoked_at' | 'expires_at'>): 'li
 function profileLabel(
   profiles: Map<string, RosterProfile>,
   userId: string | null | undefined,
-): { name: string | null; email: string | null } {
-  if (!userId) return { name: null, email: null };
+): { name: string | null; email: string | null; profile: RosterProfile | null } {
+  if (!userId) return { name: null, email: null, profile: null };
   const p = profiles.get(userId);
-  if (!p) return { name: null, email: null };
+  if (!p) return { name: null, email: null, profile: null };
   const name = p.full_name?.trim() || null;
   const email = p.email?.trim() || null;
-  return { name: name || email, email };
+  return { name: name || email, email, profile: p };
 }
 
-function partyAccessType(party: RosterPartyRow): string {
-  const trade = party.trade?.trim();
-  if (trade) return trade;
-  switch (party.role) {
-    case 'general_contractor':
-      return 'General contractor';
-    case 'owner':
-      return 'Owner';
-    case 'adjuster':
-      return 'Adjuster';
-    case 'subcontractor':
-      return 'Subcontractor';
-    default:
-      return 'Field Capture';
-  }
+function withServiceFields(
+  base: Omit<JobAccessPerson, 'role' | 'displayLabel' | 'serviceTitle' | 'displayName' | 'accessType'>,
+  label: ServiceRoleLabel,
+  nameForFormat: string | null,
+): JobAccessPerson {
+  const displayName =
+    formatPersonRoleLabel(nameForFormat, label) || label.displayLabel || nameForFormat || 'Someone';
+  return {
+    ...base,
+    accessType: label.displayLabel,
+    role: label.role,
+    displayLabel: label.displayLabel,
+    serviceTitle: label.displayLabel,
+    displayName,
+  };
+}
+
+function partyServiceLabel(party: RosterPartyRow): ServiceRoleLabel {
+  return (
+    deriveServiceRole({
+      serviceRole: party.service_role,
+      serviceRoleCustom: party.service_role_custom,
+      trade: party.trade,
+      partyRole: party.role,
+      kind: 'job_party',
+    }) || { role: 'crew', displayLabel: 'Crew' }
+  );
 }
 
 /**
@@ -157,19 +192,25 @@ export function presentJobAccessRoster(input: {
 
     const granter = profileLabel(profiles, share.created_by);
     const lastAccessedAt = laterIso(grant?.last_accessed_at, share.last_opened_at);
+    const name = share.label?.trim() || email;
 
-    people.push({
-      id: `share:${share.id}`,
-      kind: 'homeowner',
-      name: share.label?.trim() || email,
-      email,
-      accessType: 'Homeowner',
-      grantedByName: granter.name,
-      grantedByEmail: granter.email,
-      grantedAt: share.created_at,
-      lastAccessedAt,
-      state: grant ? 'claimed' : state,
-    });
+    people.push(
+      withServiceFields(
+        {
+          id: `share:${share.id}`,
+          kind: 'homeowner',
+          name,
+          email,
+          grantedByName: granter.name,
+          grantedByEmail: granter.email,
+          grantedAt: share.created_at,
+          lastAccessedAt,
+          state: grant ? 'claimed' : state,
+        },
+        HOMEOWNER_SERVICE_ROLE,
+        name,
+      ),
+    );
   }
 
   // Grants whose share was deleted / never linked still count as access.
@@ -180,18 +221,25 @@ export function presentJobAccessRoster(input: {
     if (email) seenEmails.add(email);
 
     const user = profileLabel(profiles, grant.user_id);
-    people.push({
-      id: `grant:${grant.id}`,
-      kind: 'homeowner',
-      name: user.name || email,
-      email: email || user.email,
-      accessType: 'Homeowner',
-      grantedByName: null,
-      grantedByEmail: null,
-      grantedAt: grant.created_at,
-      lastAccessedAt: grant.last_accessed_at,
-      state: 'claimed',
-    });
+    const name = user.name || email;
+
+    people.push(
+      withServiceFields(
+        {
+          id: `grant:${grant.id}`,
+          kind: 'homeowner',
+          name,
+          email: email || user.email,
+          grantedByName: null,
+          grantedByEmail: null,
+          grantedAt: grant.created_at,
+          lastAccessedAt: grant.last_accessed_at,
+          state: 'claimed',
+        },
+        HOMEOWNER_SERVICE_ROLE,
+        name,
+      ),
+    );
   }
 
   for (const party of input.parties) {
@@ -203,19 +251,25 @@ export function presentJobAccessRoster(input: {
       party.company?.trim() ||
       email ||
       'Crew';
+    const label = partyServiceLabel(party);
 
-    people.push({
-      id: `party:${party.id}`,
-      kind: 'field_capture',
-      name,
-      email,
-      accessType: partyAccessType(party),
-      grantedByName: granter.name,
-      grantedByEmail: granter.email,
-      grantedAt: party.invited_at ?? party.created_at,
-      lastAccessedAt: party.last_seen_at,
-      state: 'live',
-    });
+    people.push(
+      withServiceFields(
+        {
+          id: `party:${party.id}`,
+          kind: 'field_capture',
+          name,
+          email,
+          grantedByName: granter.name,
+          grantedByEmail: granter.email,
+          grantedAt: party.invited_at ?? party.created_at,
+          lastAccessedAt: party.last_seen_at,
+          state: 'live',
+        },
+        label,
+        party.contact_name?.trim() || null,
+      ),
+    );
   }
 
   people.sort((a, b) => {
