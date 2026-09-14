@@ -170,8 +170,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=pending-upload-resume-1/);
-assert.match(html, /js\/app\.js\?v=pending-upload-resume-1/);
+assert.match(html, /js\/capture-core\.js\?v=offline-capture-guarantees-1/);
+assert.match(html, /js\/app\.js\?v=offline-capture-guarantees-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -299,14 +299,17 @@ assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the
 assert.match(appSrc, /notifyOfficeLibraryChanged/, 'a new Field Capture job must refresh the office list');
 assert.match(appSrc, /atmosphere: 'library-changed'/);
 assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
-assert.match(coreSrc, /filingHomeVisible/, 'home only shows filing when the crew must act');
+assert.match(coreSrc, /filingHomeVisible/, 'home shows filing while anything is still local or uploading');
 assert.match(coreSrc, /isStuckStatus: isStuckStatus/, 'door can detect stuck multipart answers');
 assert.match(appSrc, /showHomeAction\(\{ retry: true \}\)/, 'stuck upload turns Retry on at the door');
 assert.match(appSrc, /filmQueue\.retryNow/, 'Retry upload kicks the filing queue');
 assert.match(appSrc, /filingHomeVisible\(summary\)/, 'the home strip gates on filingHomeVisible');
 assert.match(html, /id="door-sub"/);
 assert.match(html, /id="doneline-title"/, 'the door done-line changes from Done to Uploaded as the film files');
-assert.match(html, /id="filing"/, 'Today keeps a warn-only strip for filing that needs the crew');
+assert.match(html, /id="filing"/, 'Today keeps a strip for every phone-local pending film');
+assert.match(html, /id="filing-resume"/, 'Resume filing is an explicit control on the Today strip');
+assert.match(appSrc, /function resumeFilingNow/, 'Resume claims share films then kicks the queue');
+assert.match(appSrc, /includeUnclaimedShare/, 'unclaimed share films stay visible after account sign-in');
 assert.match(html, /id="filing-title"/);
 assert.match(html, /id="filing-detail"/);
 assert.match(html, /id="filing-rows"/);
@@ -477,8 +480,8 @@ assert.match(
   const src = appSrc.slice(from, to);
   assert.match(src, /filmQueue\.pending\(\)/, 'sign-out must count every pending film on this phone');
   assert.match(src, /window\.confirm/, 'sign-out with films still filing asks first');
-  assert.match(src, /still filing with the office/);
-  assert.match(src, /stay saved on this phone/);
+  assert.match(src, /still on this phone until filed/);
+  assert.match(src, /finish the next time you sign in here/);
 }
 {
   const from = appSrc.indexOf('function captureSession');
@@ -1113,26 +1116,34 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   assert.equal(busy.count, 2, "only this crew's films");
   assert.equal(busy.tone, 'busy');
   assert.equal(busy.title, 'Filing 2 days with the office');
-  assert.equal(busy.detail, 'Uploading… · 43%');
+  assert.match(busy.detail, /^Uploading… · 43%/);
   assert.equal(busy.progress, 0.43);
   assert.deepEqual(busy.rows.map((r) => r.state), ['Filing · 43%', 'Retrying…']);
   assert.equal(busy.rows[0].name, 'Meridian Ave');
   assert.equal(busy.rows[0].length, '12 minutes');
+  assert.match(busy.detail, /Safe on this phone until filed/);
+  assert.equal(busy.resume, false, 'busy uploading does not need Resume — it is already filing');
   const offline = Core.summarizeDayFilms([films[1]], { owner: 'user:1', online: false, signedIn: true });
   assert.equal(offline.tone, 'wait');
   assert.equal(offline.title, '1 day saved on this phone');
   assert.match(offline.detail, /Waiting for signal/);
+  assert.match(offline.detail, /Safe on this phone until filed/);
+  assert.equal(offline.resume, true, 'offline waiting offers Resume');
   assert.deepEqual(offline.rows.map((r) => r.state), ['Waiting for signal']);
   const signedOut = Core.summarizeDayFilms(films, { signedIn: false });
   assert.equal(signedOut.count, 3);
   assert.equal(signedOut.title, 'Sign in to finish filing 3 days');
   assert.equal(signedOut.signInLine, '3 days are saved on this phone. Sign in to finish filing them.');
+  assert.match(signedOut.detail, /Safe on this phone until filed/);
+  assert.equal(signedOut.resume, true);
   const stuck = Core.summarizeDayFilms(
     [{ id: 'f4', owner: 'user:1', status: 'waiting', lastError: 'That day film is too large to assemble here.', lastStatus: 413, jobId: 'job-a' }],
     { owner: 'user:1', online: true, signedIn: true },
   );
   assert.equal(stuck.tone, 'warn');
-  assert.equal(stuck.detail, 'That day film is too large to assemble here.', 'a server answer that will not change by itself is said out loud');
+  assert.match(stuck.detail, /That day film is too large to assemble here/, 'a server answer that will not change by itself is said out loud');
+  assert.match(stuck.detail, /Safe on this phone until filed/);
+  assert.equal(stuck.resume, true);
   assert.deepEqual(stuck.rows.map((r) => r.state), ['Needs the office']);
   const volatile = Core.summarizeDayFilms(
     [{ id: 'f5', owner: 'user:1', status: 'queued', volatile: true, jobId: 'job-a' }],
@@ -1145,12 +1156,38 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
     { owner: 'user:1', online: true, signedIn: true },
   );
   assert.deepEqual(localJob.rows.map((r) => r.state), ['Creating the job']);
-  assert.equal(Core.filingHomeVisible(busy), false, 'busy Uploading… is not a home banner');
-  assert.equal(Core.filingHomeVisible(offline), false, 'waiting for signal is not a home banner');
+  assert.equal(Core.filingHomeVisible(busy), true, 'busy Uploading… stays on home — never silent');
+  assert.equal(Core.filingHomeVisible(offline), true, 'waiting for signal stays on home — never silent');
   assert.equal(Core.filingHomeVisible(signedOut), true, 'sign-in needed stays on home');
   assert.equal(Core.filingHomeVisible(stuck), true, 'stuck filing stays on home');
   assert.equal(Core.filingHomeVisible(volatile), true, 'volatile keep-open stays on home');
-  assert.equal(volatile.tone, 'warn', 'volatile elevates to warn so home can show it');
+  assert.equal(volatile.tone, 'warn', 'volatile elevates to warn');
+  const unclaimed = Core.summarizeDayFilms(
+    [
+      {
+        id: 'f-share',
+        owner: 'share:job-a',
+        mode: 'share',
+        status: 'queued',
+        jobId: 'job-a',
+        jobName: 'Invite job',
+        durationSeconds: 60,
+      },
+    ],
+    { owner: 'user:1', online: true, signedIn: true, includeUnclaimedShare: true },
+  );
+  assert.equal(unclaimed.count, 1, 'unclaimed share films stay visible after account sign-in');
+  assert.equal(unclaimed.unclaimedShare, 1);
+  assert.equal(unclaimed.tone, 'warn');
+  assert.equal(unclaimed.resume, true);
+  assert.deepEqual(unclaimed.rows.map((r) => r.state), ['Needs resume']);
+  assert.match(unclaimed.detail, /Safe on this phone until filed/);
+  const queuedOnly = Core.summarizeDayFilms(
+    [{ id: 'f7', owner: 'user:1', status: 'queued', jobId: 'job-a', jobName: 'Cedar' }],
+    { owner: 'user:1', online: true, signedIn: true },
+  );
+  assert.deepEqual(queuedOnly.rows.map((r) => r.state), ['On this phone']);
+  assert.equal(queuedOnly.resume, true);
 }
 
 {

@@ -436,9 +436,9 @@
   .erow .pendingpin { font-size: 11px; color: var(--muted); }
 
   /* ---------- days saved on this phone, filing in the background ----------
-     Finishing a day never waits on the upload. The film is saved here, the
-     crew goes back to work, and this strip is the only place the transfer
-     shows: one line, honest about signal, gone when the office has it. */
+     Offline-first: films are safe on device until filed. Finishing a day
+     never waits on the upload. This strip always shows local vs uploading
+     vs waiting, with Resume when the crew can nudge filing. */
   .filing {
     margin-top: 14px;
     border: 1px solid var(--line); border-radius: 13px;
@@ -468,6 +468,20 @@
   }
   .filing-rows li b { color: var(--ink); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .filing-rows li span { flex: none; color: var(--faint); }
+  .filing-resume {
+    display: block; width: calc(100% - 26px); margin: 0 13px 11px;
+    padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line);
+    background: var(--panel); color: var(--ink);
+    font-size: 13px; font-weight: 650; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .filing-resume:active { transform: translateY(1px); }
+  .filing[data-tone="warn"] .filing-resume {
+    border-color: rgba(220, 80, 60, 0.45); color: #c43b2a;
+  }
+  .filing[data-tone="wait"] .filing-resume {
+    border-color: rgba(200, 140, 40, 0.5);
+  }
 
   /* ---------- the day, while it runs ---------- */
   .sitestrip {
@@ -835,7 +849,7 @@
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
       <h1 class="h1">Start it and go to work</h1>
-      <!-- Filing strip: warn-only on home (fail / sign-in / volatile). Quiet Uploading… lives on the office Overview. -->
+      <!-- Filing strip: always visible while anything is still local / uploading / waiting. Resume when the crew can nudge. -->
       <div class="filing" id="filing" hidden data-tone="idle" role="status" aria-live="polite">
         <button type="button" class="filing-head" id="filing-toggle" aria-expanded="false" aria-controls="filing-rows">
           <span class="filing-dot" aria-hidden="true"></span>
@@ -847,6 +861,7 @@
         </button>
         <div class="filing-meter" aria-hidden="true"><div class="filing-meter-fill" id="filing-bar"></div></div>
         <ul class="filing-rows" id="filing-rows" hidden></ul>
+        <button type="button" class="filing-resume" id="filing-resume" hidden>Resume filing</button>
       </div>
       <div class="job-search-row">
         <label class="job-search" for="job-search">
@@ -1072,7 +1087,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=pending-upload-resume-1"></script>
-<script src="js/app.js?v=pending-upload-resume-1"></script>
+<script src="js/capture-core.js?v=offline-capture-guarantees-1"></script>
+<script src="js/app.js?v=offline-capture-guarantees-1"></script>
 </body>
 </html>

@@ -1089,7 +1089,8 @@
   /**
    * Share-invite films were saved as owner share:<jobId>. After account
    * sign-in they never match state.owner (user:<id>), so claim them onto
-   * this session when the job is still on Today.
+   * this session when the job is still on Today. Resume also re-runs this
+   * so a job that lands on Today later is never left silently stuck.
    */
   function claimShareFilmsForAccount() {
     if (!filmQueue) return Promise.resolve(0);
@@ -1785,7 +1786,7 @@
       '</b><span>Filing with the office in the background.</span></div>';
     setDoneline(
       'Done.',
-      'Saved on this phone and filing with the office on its own. You can start the next one now.',
+      'Safe on this phone until filed. Filing with the office on its own — You can start the next one now.',
     );
     $('#doneline').classList.add('on');
     showHomeAction();
@@ -1836,7 +1837,7 @@
       setDoorSub('Saved. You can start the next one.');
       setDoneline(
         'Done.',
-        'Saved on this phone and filing with the office on its own. You can start the next one now.',
+        'Safe on this phone until filed. Filing with the office on its own — You can start the next one now.',
       );
       $('#doneline').classList.add('on');
       showHomeAction({ retry: false });
@@ -2011,9 +2012,8 @@
   function renderFilingStrip(summary) {
     var root = $('#filing');
     if (!root) return;
-    /* Quiet phone-local Uploading… progress is no longer a home banner —
-       background filing still runs; only warn tones (fail / sign-in /
-       volatile) stay conspicuous here. Office Overview shows pending. */
+    /* Offline-first: any phone-local pending film stays visible — local,
+       uploading, or waiting — until filed. Never silent stuck. */
     if (!Core.filingHomeVisible || !Core.filingHomeVisible(summary)) {
       root.hidden = true;
       return;
@@ -2023,9 +2023,11 @@
     var title = $('#filing-title');
     var detail = $('#filing-detail');
     var bar = $('#filing-bar');
+    var resume = $('#filing-resume');
     if (title) title.textContent = summary.title;
     if (detail) detail.textContent = summary.detail;
     if (bar) bar.style.width = Math.round((summary.progress || 0) * 100) + '%';
+    if (resume) resume.hidden = !summary.resume;
     var rows = $('#filing-rows');
     if (rows) {
       rows.innerHTML = (summary.rows || [])
@@ -2047,10 +2049,13 @@
   function paintFiling(films, reason) {
     if (!Core.summarizeDayFilms) return;
     var online = navigator.onLine !== false;
+    var signedIn = sessionUsable();
     var mine = Core.summarizeDayFilms(films, {
       owner: state.owner,
       online: online,
-      signedIn: sessionUsable(),
+      signedIn: signedIn,
+      /* Surface share→account films that have not been claimed yet. */
+      includeUnclaimedShare: Boolean(signedIn && state.owner && state.owner.indexOf('user:') === 0),
     });
     renderFilingStrip(mine);
     if (state.doorFilmId && onScreen('s-door')) {
@@ -2068,9 +2073,19 @@
     }
   }
 
+  function resumeFilingNow() {
+    /* Claim share-owner films onto this account first, then skip backoff. */
+    var claimed = claimShareFilmsForAccount();
+    return Promise.resolve(claimed).then(function () {
+      if (filmQueue) return filmQueue.retryNow();
+      return null;
+    });
+  }
+
   function bindFilingStrip() {
     var toggle = $('#filing-toggle');
     var rows = $('#filing-rows');
+    var resume = $('#filing-resume');
     if (!toggle || !rows || toggle.getAttribute('data-bound') === '1') return;
     toggle.setAttribute('data-bound', '1');
     toggle.addEventListener('click', function () {
@@ -2078,8 +2093,16 @@
       toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
       rows.hidden = open;
       /* Opening the list is also a nudge: try now rather than at the next backoff. */
-      if (!open && filmQueue) filmQueue.retryNow();
+      if (!open) resumeFilingNow();
     });
+    if (resume && resume.getAttribute('data-bound') !== '1') {
+      resume.setAttribute('data-bound', '1');
+      resume.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        resumeFilingNow();
+      });
+    }
   }
 
   /* ---------- hold to finish ----------
@@ -2393,7 +2416,7 @@
         var n = waiting.length;
         var ok = window.confirm(
           (n === 1 ? '1 day is' : n + ' days are') +
-            ' still filing with the office. They stay saved on this phone and finish the next time you sign in here. Sign out anyway?',
+            ' still on this phone until filed. They finish the next time you sign in here. Sign out anyway?',
         );
         if (!ok) return;
       }
