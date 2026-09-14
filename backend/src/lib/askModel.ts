@@ -33,14 +33,14 @@ export const ANTHROPIC_ASK_MAX_TOKENS = 1024;
  */
 export const GEMINI_ASK_MAX_TOKENS = 2048;
 /**
- * Analysis / extraction calls (conversation brief, etc.) may raise this via
- * `maxTokens`. Kept as a separate constant for callers and tests.
+ * Analysis / extraction calls (conversation brief, evidence fusion, etc.) may
+ * raise this via `maxTokens`. Kept as a separate constant for callers and tests.
  */
-export const GEMINI_ASK_ANALYSIS_MAX_TOKENS = 8192;
+export const GEMINI_ASK_ANALYSIS_MAX_TOKENS = 12_288;
 /** Interactive Ask: no deep thinking — first token ASAP. */
 export const GEMINI_ASK_THINKING_LEVEL = 'minimal';
-/** Offline analysis may think a little; still not the old interactive `high`. */
-export const GEMINI_ASK_ANALYSIS_THINKING_LEVEL = 'low';
+/** Offline Analysis: strong thinking for dense reconstruction (never invent). */
+export const GEMINI_ASK_ANALYSIS_THINKING_LEVEL = 'high';
 
 export type AskCompletionMode = 'interactive' | 'analysis';
 
@@ -78,9 +78,7 @@ export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string 
     return (
       process.env.ASK_ANALYSIS_MODEL ??
       process.env.VERIFICATION_PRIMARY_MODEL ??
-      process.env.GOOGLE_MODEL_FAST ??
-      process.env.ASK_MODEL ??
-      'gemini-2.5-flash'
+      'gemini-2.5-pro'
     ).trim();
   }
   return (
@@ -140,13 +138,16 @@ function buildGeminiGenerationConfig(input: {
       generationConfig.thinkingConfig = { thinkingLevel: level };
     }
   } else if (/^gemini-2\.5/i.test(input.model) && !/lite/i.test(input.model)) {
-    // 2.5 Flash: thinkingBudget 0 disables hidden reasoning for interactive Ask.
+    // 2.5 Flash/Pro: thinkingBudget 0 disables hidden reasoning for interactive Ask.
     if (input.mode === 'interactive' || level === 'none' || level === 'off' || level === 'minimal') {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
     } else if (level === 'low') {
       generationConfig.thinkingConfig = { thinkingBudget: 1024 };
-    } else {
+    } else if (level === 'medium') {
       generationConfig.thinkingConfig = { thinkingBudget: 4096 };
+    } else {
+      // high / xhigh — denser Analysis reconstruction headroom
+      generationConfig.thinkingConfig = { thinkingBudget: 8192 };
     }
   }
   return generationConfig;

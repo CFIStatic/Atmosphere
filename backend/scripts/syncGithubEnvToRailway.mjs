@@ -42,6 +42,8 @@ const KEYS = [
   'ANTHROPIC_MODEL',
   'VERIFICATION_PRIMARY_MODEL',
   'VERIFICATION_ESCALATION_MODEL',
+  'ASK_ANALYSIS_MODEL',
+  'ASK_ANALYSIS_THINKING_LEVEL',
 ];
 
 const REQUIRED = [
@@ -99,6 +101,29 @@ function resolveRailwayService(name) {
 
 const service = resolveRailwayService(process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere APIs');
 console.log(`Railway: targeting service ${service}`);
+
+// Analysis must stay on Pro/Opus even if Deploy WV still carries legacy flash/sonnet pins.
+const SMART_ANALYSIS_DEFAULTS = {
+  VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
+  ASK_ANALYSIS_MODEL: 'gemini-2.5-pro',
+  ASK_ANALYSIS_THINKING_LEVEL: 'high',
+  ANTHROPIC_MODEL: 'claude-opus-4-1-20250805',
+  VERIFICATION_ESCALATION_MODEL: 'claude-opus-4-1-20250805',
+};
+const WEAK_ANALYSIS_PINS = new Set([
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'claude-sonnet-5',
+  'claude-sonnet-4-6',
+  'claude-sonnet-4-20250514',
+]);
+for (const [name, smart] of Object.entries(SMART_ANALYSIS_DEFAULTS)) {
+  const current = (process.env[name] ?? '').trim();
+  if (!current || WEAK_ANALYSIS_PINS.has(current)) {
+    process.env[name] = smart;
+  }
+}
 
 for (const name of KEYS) {
   const value = process.env[name]?.trim();

@@ -17,6 +17,7 @@ import {
   toStoredEvidenceLog,
   type StoredEvidenceLog,
 } from './evidenceLog.js';
+import { fuseVisionTranscriptEvidence } from './evidenceFusion.js';
 import {
   extractPeoplePresent,
   hasPeople,
@@ -84,7 +85,7 @@ export async function enrichProofConversation(
       : [];
   const narration = proof?.narration && typeof proof.narration === 'object' ? proof.narration : {};
 
-  const logEntries = buildEvidenceLog({
+  let logEntries = buildEvidenceLog({
     storedEntries: narration.entries,
     narrationText: proof?.narration_text ?? null,
     summary: proof?.ai_summary ?? findings.summary ?? null,
@@ -94,6 +95,16 @@ export async function enrichProofConversation(
     conversation: hasConversation(details) ? details : null,
     people: findings.people,
     visionPeople: findings.visionPeople,
+  });
+  // Dense multi-pass: fuse vision + transcript into additional timed beats
+  // (context/why, speech grounded in visible work) without inventing.
+  logEntries = await fuseVisionTranscriptEvidence({
+    entries: logEntries,
+    narrationText: proof?.narration_text ?? null,
+    summary: proof?.ai_summary ?? findings.summary ?? null,
+    transcript,
+    conversation: hasConversation(details) ? details : null,
+    durationSeconds,
   });
 
   const visionPeople =

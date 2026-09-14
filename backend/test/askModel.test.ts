@@ -259,3 +259,58 @@ test('answerFromJobFile uses Gemini when only a Google key is wired', async () =
     restoreEnv('GOOGLE_API_KEY', prevGoogle);
   }
 });
+
+test('analysis mode defaults to gemini-2.5-pro with high thinking headroom', async () => {
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  const prevAsk = process.env.ASK_MODEL;
+  const prevAnalysis = process.env.ASK_ANALYSIS_MODEL;
+  const prevThink = process.env.ASK_ANALYSIS_THINKING_LEVEL;
+  const prevPrimary = process.env.VERIFICATION_PRIMARY_MODEL;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.ASK_MODEL;
+  delete process.env.ASK_ANALYSIS_MODEL;
+  delete process.env.ASK_ANALYSIS_THINKING_LEVEL;
+  delete process.env.VERIFICATION_PRIMARY_MODEL;
+  process.env.GEMINI_API_KEY = 'live-gemini';
+  try {
+    assert.equal(geminiAskModel('analysis'), 'gemini-2.5-pro');
+    assert.equal(geminiAskModel('interactive'), 'gemini-2.5-flash-lite');
+
+    const bodies: any[] = [];
+    const fetchFn: typeof fetch = async (input, init) => {
+      assert.match(String(input), /gemini-2\.5-pro:generateContent/);
+      bodies.push(JSON.parse(String(init?.body ?? '{}')));
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: 'Dense reconstruction.' }] } }],
+          usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 20 },
+          modelVersion: 'gemini-2.5-pro',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    };
+
+    const result = await completeAskText({
+      system: 'Reconstruct the job film.',
+      user: 'Produce dense timed evidence.',
+      anthropicApiKey: null,
+      fetchFn,
+      mode: 'analysis',
+    });
+    assert.ok(result);
+    assert.equal(result.model, 'gemini-2.5-pro');
+    assert.equal(bodies[0]?.generationConfig?.thinkingConfig?.thinkingBudget, 8192);
+    assert.ok((bodies[0]?.generationConfig?.maxOutputTokens ?? 0) >= 8192);
+  } finally {
+    restoreEnv('ANTHROPIC_API_KEY', prevAnthropic);
+    restoreEnv('GEMINI_API_KEY', prevGemini);
+    restoreEnv('GOOGLE_API_KEY', prevGoogle);
+    restoreEnv('ASK_MODEL', prevAsk);
+    restoreEnv('ASK_ANALYSIS_MODEL', prevAnalysis);
+    restoreEnv('ASK_ANALYSIS_THINKING_LEVEL', prevThink);
+    restoreEnv('VERIFICATION_PRIMARY_MODEL', prevPrimary);
+  }
+});
