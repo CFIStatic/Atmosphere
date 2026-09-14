@@ -1509,6 +1509,37 @@
             /* never block capture */
           }
         }
+        // Silent panic / wellness: motion + alone heartbeats (office nudge only).
+        if (Core.createLiveWellnessMonitor && !DEMO && (LIVE || (state.account && state.accessToken))) {
+          try {
+            if (rec.wellnessMonitor && rec.wellnessMonitor.stop) rec.wellnessMonitor.stop();
+            rec.wellnessMonitor = Core.createLiveWellnessMonitor({
+              videoEl: videoEl,
+              apiBase: state.apiBase || Core.resolveApiBase(),
+              jobId: LIVE ? null : state.activeJobId,
+              token: LIVE ? state.shareToken : null,
+              accessToken: function () {
+                return state.accessToken;
+              },
+              clipId: rec.clipId,
+              atSeconds: function () {
+                return state.seconds || 0;
+              },
+              site: function () {
+                return state.site;
+              },
+              // Default alone-on-site: single active capture device. Office can
+              // disable requireAlone via PATCH /api/safety/settings.
+              aloneOnSite: function () {
+                return true;
+              },
+              workDate: Core.localDateISO(Date.now()),
+              phase: 'after',
+            });
+          } catch (e) {
+            /* never block capture */
+          }
+        }
       })
       .catch(function (err) {
         if (stream) {
@@ -1534,6 +1565,14 @@
       rec.safetySampler.stop();
     } catch (e) {}
     rec.safetySampler = null;
+  }
+
+  function stopWellnessMonitor(rec) {
+    if (!rec || !rec.wellnessMonitor) return;
+    try {
+      rec.wellnessMonitor.stop();
+    } catch (e) {}
+    rec.wellnessMonitor = null;
   }
 
   function canStreamNow() {
@@ -1638,6 +1677,7 @@
     var recorder = state.recorder;
     var rec = state.recording || null;
     stopSafetySampler(rec);
+    stopWellnessMonitor(rec);
     var boundJobId = (rec && rec.jobId) || state.activeJobId;
     var boundJob = jobById(boundJobId);
     var boundOwner = state.filmOwner || state.owner;

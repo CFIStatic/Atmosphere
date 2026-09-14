@@ -47,6 +47,7 @@ import {
   type JobSimilaritySeed,
 } from '../shared/similarPastJobs.js';
 import { processSafetySample } from '../safety/sample.js';
+import { processWellnessHeartbeat } from '../safety/wellness.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -1864,6 +1865,22 @@ jobShareRouter.post(
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
       res.json(await processSafetySample(admin, party, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+jobShareRouter.post(
+  jobShareActionPattern('/proof/wellness-heartbeat'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      res.json(await processWellnessHeartbeat(admin, party, req.body));
     } catch (err) {
       next(err);
     }

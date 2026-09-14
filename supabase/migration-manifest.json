@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 149,
+    "migrationCount": 151,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -163,7 +163,9 @@
     "20260911120000_job_proofs_scheduled_purge.sql",
     "20260912160000_job_progress_grants_last_accessed.sql",
     "20260913190000_admin_token_usage_analytics.sql",
-    "20260914190000_safety_incidents.sql"
+    "20260914180000_user_service_role_titles.sql",
+    "20260914190000_safety_incidents.sql",
+    "20260914200000_wellness_check.sql"
   ],
   "migrations": [
     {
@@ -5342,6 +5344,28 @@
         "policy|public.safety_incidents.safety_incidents_select_member",
         "policy|public.safety_incidents.safety_incidents_update_member",
         "rls|public.safety_incidents"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260914200000_wellness_check",
+      "file": "20260914200000_wellness_check.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.orgs.wellness_check_enabled",
+        "column|public.orgs.wellness_no_motion_seconds",
+        "column|public.orgs.wellness_critical_after_seconds",
+        "column|public.orgs.wellness_require_alone",
+        "table|public.wellness_session_state",
+        "index|public.wellness_session_state.wellness_session_state_pkey",
+        "index|public.wellness_session_state.wellness_session_state_job_clip_uidx",
+        "index|public.wellness_session_state.wellness_session_state_job_noclip_uidx",
+        "index|public.wellness_session_state.wellness_session_state_org_job_idx",
+        "policy|public.wellness_session_state.wellness_session_state_select_member",
+        "rls|public.wellness_session_state"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

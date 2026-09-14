@@ -51,8 +51,9 @@ export function SafetyAlertsPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Safety alerts</h1>
       <p className="mt-1 text-sm text-ink-500">
         Near-real-time Field Capture emergency flags (fall, violence, threats, medical
-        distress). Atmosphere never auto-dials 911 — authorities escalation is an org
-        policy flag only. See docs/safety-alerts.md.
+        distress) plus silent panic / wellness (long no-motion while alone).
+        Atmosphere never auto-dials 911 — authorities escalation is an org policy
+        flag only. See docs/safety-alerts.md and docs/wellness-check.md.
       </p>
       {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
 

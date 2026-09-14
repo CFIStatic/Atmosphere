@@ -2816,6 +2816,148 @@
   }
 
 
+
+  /* ---------- silent panic / wellness heartbeats ----------
+     Between safety frame posts, sample motion (frame-diff) + alone-on-site
+     and POST wellness-heartbeat so the office gets a nudge on long stillness. */
+  var WELLNESS_MOTION_SCORE_THRESHOLD = 0.04;
+
+  function motionScoreFromFrames(prevData, nextData) {
+    if (!prevData || !nextData || prevData.length !== nextData.length) return 0;
+    var step = 16; // RGBA stride sample — cheap on phone
+    var acc = 0;
+    var n = 0;
+    for (var i = 0; i < prevData.length; i += step) {
+      acc += Math.abs(prevData[i] - nextData[i]);
+      n += 1;
+    }
+    if (!n) return 0;
+    return Math.min(1, acc / (n * 255));
+  }
+
+  function grabFramePixels(video, maxEdge) {
+    maxEdge = maxEdge || 160;
+    if (!video || !video.videoWidth) return null;
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    var scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    try {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return context.getImageData(0, 0, canvas.width, canvas.height).data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function postWellnessHeartbeat(opts) {
+    opts = opts || {};
+    var apiBase = origin(opts.apiBase);
+    var url = opts.jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(opts.jobId) + '/proof/wellness-heartbeat'
+      : jobShareUrl(apiBase, opts.token, '/proof/wellness-heartbeat');
+    var body = {
+      clipId: opts.clipId || undefined,
+      clipTimestampSeconds: opts.clipTimestampSeconds,
+      motionScore: typeof opts.motionScore === 'number' ? opts.motionScore : 0,
+      aloneOnSite: opts.aloneOnSite !== false,
+      personCountEstimate: opts.personCountEstimate,
+      recordingActive: opts.recordingActive !== false,
+      lat: opts.lat,
+      lon: opts.lon,
+      locationLabel: opts.locationLabel,
+      phase: opts.phase || 'after',
+      workDate: opts.workDate,
+    };
+    return apiJson(url, {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: body,
+    });
+  }
+
+  /**
+   * Live wellness monitor: frame-diff motion + alone-on-site heartbeats.
+   * Returns { stop() }. Failures are swallowed — capture must not break.
+   */
+  function createLiveWellnessMonitor(cfg) {
+    cfg = cfg || {};
+    var videoEl = cfg.videoEl;
+    var intervalMs = Math.max(10000, Number(cfg.intervalMs) || 20000);
+    var stopped = false;
+    var timer = null;
+    var inFlight = false;
+    var prevPixels = null;
+
+    function tick() {
+      if (stopped || inFlight || !videoEl) return;
+      if (!videoEl.videoWidth) return;
+      var pixels = null;
+      try {
+        pixels = grabFramePixels(videoEl, 160);
+      } catch (e) {
+        return;
+      }
+      var score = 0;
+      if (pixels && prevPixels) {
+        score = motionScoreFromFrames(prevPixels, pixels);
+      } else if (pixels && !prevPixels) {
+        // First sample: treat as motion so we do not alert immediately on start.
+        score = 1;
+      }
+      if (pixels) prevPixels = pixels;
+
+      inFlight = true;
+      var at = typeof cfg.atSeconds === 'function' ? cfg.atSeconds() : 0;
+      var site = typeof cfg.site === 'function' ? cfg.site() : null;
+      var alone =
+        typeof cfg.aloneOnSite === 'function'
+          ? cfg.aloneOnSite() !== false
+          : cfg.aloneOnSite !== false;
+      Promise.resolve(
+        postWellnessHeartbeat({
+          apiBase: cfg.apiBase,
+          jobId: cfg.jobId,
+          token: cfg.token,
+          accessToken: typeof cfg.accessToken === 'function' ? cfg.accessToken() : cfg.accessToken,
+          clipId: cfg.clipId,
+          clipTimestampSeconds: at,
+          motionScore: score,
+          aloneOnSite: alone,
+          personCountEstimate: typeof cfg.personCountEstimate === 'function'
+            ? cfg.personCountEstimate()
+            : cfg.personCountEstimate,
+          recordingActive: true,
+          lat: site && site.lat != null ? site.lat : undefined,
+          lon: site && site.lon != null ? site.lon : undefined,
+          locationLabel: site && site.label ? site.label : undefined,
+          phase: cfg.phase || 'after',
+          workDate: cfg.workDate,
+        }),
+      )
+        .catch(function () {
+          /* never fail the recording */
+        })
+        .then(function () {
+          inFlight = false;
+        });
+    }
+
+    timer = setInterval(tick, intervalMs);
+    setTimeout(tick, Math.min(6000, intervalMs));
+
+    return {
+      stop: function () {
+        stopped = true;
+        if (timer) clearInterval(timer);
+        timer = null;
+        prevPixels = null;
+      },
+    };
+  }
+
   /* ---------- near-real-time safety samples ----------
      While the camera rolls (and chunks stream), grab a sparse JPEG from the
      live preview every ~25s and POST it for emergency classification.
@@ -2959,6 +3101,9 @@
     createDayFilmStreamer: createDayFilmStreamer,
     postSafetySample: postSafetySample,
     createLiveSafetySampler: createLiveSafetySampler,
+    postWellnessHeartbeat: postWellnessHeartbeat,
+    createLiveWellnessMonitor: createLiveWellnessMonitor,
+    WELLNESS_MOTION_SCORE_THRESHOLD: WELLNESS_MOTION_SCORE_THRESHOLD,
     streamStateOf: streamStateOf,
     STREAM_PART_BYTES: STREAM_PART_BYTES,
     STREAM_MAX_BYTES: STREAM_MAX_BYTES,
