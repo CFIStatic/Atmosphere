@@ -1179,6 +1179,74 @@ export interface JobCustodyExport {
   clips: ClipCustodyExport[];
 }
 
+export interface ClaimReadyPacket {
+  schema: 'atmosphere.claim_ready_packet.v1';
+  exportedAt: string;
+  disclaimer: string;
+  job: {
+    id: string;
+    number: number | null;
+    name: string | null;
+    claimNumber: string | null;
+    policyNumber: string | null;
+    lossType: string | null;
+    siteAddress: string | null;
+  };
+  datesOnSite: string[];
+  parties: Array<{
+    id: string;
+    company: string | null;
+    contactName: string | null;
+    trade: string | null;
+  }>;
+  damageObservations: Array<{
+    text: string;
+    kind: 'damage' | 'observation' | 'material_change' | 'scope';
+    sourceProofId: string | null;
+    workDate: string | null;
+    atSeconds: number | null;
+    confidence: number | null;
+  }>;
+  cause: {
+    text: string;
+    sourceProofId: string | null;
+    workDate: string | null;
+    atSeconds: number | null;
+    quote: string | null;
+  } | null;
+  photosFrames: Array<{
+    proofId: string;
+    workDate: string | null;
+    phase: string | null;
+    atSeconds: number;
+    storagePath: string | null;
+  }>;
+  statements: Array<{
+    speakerLabel: string | null;
+    text: string;
+    quote: string | null;
+    atSeconds: number | null;
+    proofId: string;
+    workDate: string | null;
+    privacyRedacted: boolean;
+  }>;
+  clips: Array<{
+    proofId: string;
+    workDate: string | null;
+    phase: string | null;
+    capturedAt: string | null;
+    partyId: string | null;
+    company: string | null;
+    summary: string | null;
+    materialChange: string | null;
+    frameCount: number;
+    statementCount: number;
+    privacyRangeCount: number;
+  }>;
+  gaps: string[];
+  privacy: { redactionsApplied: boolean; rangeCount: number };
+}
+
 export interface ProofQuestion {
   id: string;
   question: string;
@@ -3887,6 +3955,9 @@ export const api = {
 
   jobCustodyExport: (jobId: string) =>
     request<JobCustodyExport>(`/api/operations/shared/${jobId}/custody-export`, { method: 'GET' }),
+
+  jobClaimReadyPacket: (jobId: string) =>
+    request<ClaimReadyPacket>(`/api/operations/shared/${jobId}/claim-ready`, { method: 'GET' }),
 
   setEvidenceHold: (jobId: string, proofId: string, input: { hold: boolean; reason?: string }) =>
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
