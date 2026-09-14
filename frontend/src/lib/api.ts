@@ -2822,6 +2822,45 @@ export function apiFailureMessage(
   return { message: `${fallbackPrefix} (${status})`, code };
 }
 
+
+async function requestBlob(
+  path: string,
+  options: RequestInit = {},
+  retried = false,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const embedToken = fieldEmbedAccessToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        ...(embedToken ? { Authorization: `Bearer ${embedToken}` } : {}),
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
+  }
+
+  if (!res.ok && res.status === 401 && !retried && path !== '/api/auth/refresh') {
+    const refreshed = await refreshFieldEmbedSession();
+    if (refreshed) return requestBlob(path, options, true);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    const body = parseApiJson(text);
+    const { message, code } = apiFailureMessage(res.status, body, text);
+    throw new ApiError(res.status, message, code);
+  }
+
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = /filename="([^"]+)"/i.exec(disposition);
+  const filename = match?.[1] ?? null;
+  return { blob: await res.blob(), filename };
+}
+
 async function request<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const embedToken = fieldEmbedAccessToken();
   let res: Response;
@@ -3722,6 +3761,18 @@ export const api = {
       `/api/operations/shared/${jobId}/evidence/${proofId}/custody-export`,
       { method: 'GET' },
     ),
+
+  jobProofPackPdf: async (jobId: string, workDate?: string) => {
+    const qs = workDate ? `?date=${encodeURIComponent(workDate)}` : '';
+    const { blob, filename } = await requestBlob(
+      `/api/operations/shared/${encodeURIComponent(jobId)}/proof-pack.pdf${qs}`,
+      { method: 'GET' },
+    );
+    return {
+      blob,
+      filename: filename ?? `atmosphere-proof-pack-${jobId}.pdf`,
+    };
+  },
 
   jobCustodyExport: (jobId: string) =>
     request<JobCustodyExport>(`/api/operations/shared/${jobId}/custody-export`, { method: 'GET' }),

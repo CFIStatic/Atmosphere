@@ -27,6 +27,7 @@ import { ShowDispute } from '../components/analysis/ShowDispute';
 import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
+import { DownloadProofPackButton } from '../components/analysis/DownloadProofPackButton';
 
 /**
  * The job file.
@@ -221,7 +222,10 @@ export function JobDetailPage() {
                   who / decisions / next steps, Full evidence when you need the timed log.
                 </p>
               </div>
-              <CustodyExportButton jobId={job.id} label="Export custody JSON" />
+              <div className="flex flex-wrap items-center gap-2">
+                <DownloadProofPackButton jobId={job.id} />
+                <CustodyExportButton jobId={job.id} label="Export custody JSON" />
+              </div>
             </div>
             {(proofs.disputes?.length ?? 0) > 0 && (
               <div className="mt-3">

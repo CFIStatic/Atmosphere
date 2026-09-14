@@ -5,6 +5,7 @@ import { JobFilePlayer } from './JobFilePlayer';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
+import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
 
 /**
  * The evidence locker.
@@ -155,6 +156,7 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
+          <DownloadProofPackButton jobId={jobId} />
           <CustodyExportButton jobId={jobId} label="Export custody JSON" />
           <span className="text-ink-600">
             <span className="font-semibold text-ink-900">{counts.items}</span> files

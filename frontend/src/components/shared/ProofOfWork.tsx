@@ -19,6 +19,7 @@ import { ShowDispute } from '../analysis/ShowDispute';
 import { ClipAnalysisLayers } from '../analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
+import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
 
 /**
  * Proof of work.
@@ -310,6 +311,7 @@ export function ProofOfWork({
               }
             }}
           />
+          {jobId && <DownloadProofPackButton jobId={jobId} />}
           {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
         </div>
       )}

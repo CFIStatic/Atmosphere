@@ -60,6 +60,7 @@ import {
   evidenceCustody,
   evidenceCustodyExport,
   jobCustodyExport,
+  jobProofPackPdf,
   jobDisputes,
   setEvidenceHold,
   deleteEvidence,
@@ -1643,6 +1644,7 @@ sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/disputes', jobDisputes);
 sharedJobsRouter.get('/shared/:jobId/custody-export', jobCustodyExport);
+sharedJobsRouter.get('/shared/:jobId/proof-pack.pdf', jobProofPackPdf);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
