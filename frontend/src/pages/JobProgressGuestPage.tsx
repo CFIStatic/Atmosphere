@@ -238,6 +238,7 @@ export function JobProgressGuestPage() {
             readOnly
             initialProof={view.proof}
             metrics={view.progress}
+            liveStory={view.liveStory ?? null}
             videoFetcher={(proofId) => api.progressShareVideo(token, proofId)}
             alwaysShowRecordings
           />

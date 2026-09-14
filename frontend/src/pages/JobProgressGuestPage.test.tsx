@@ -162,9 +162,12 @@ describe('JobProgressGuestPage', () => {
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByText('Carrier declined them on revision 4.')).toBeInTheDocument();
     expect(await screen.findByText('All recordings')).toBeInTheDocument();
+    expect(await screen.findByTestId('homeowner-live-progress-story')).toHaveTextContent(
+      /north slope is stripped to decking/i,
+    );
     expect(
-      await screen.findByText('The north slope is stripped to decking.'),
-    ).toBeInTheDocument();
+      screen.getAllByText('The north slope is stripped to decking.').length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Save this job' })).toHaveAttribute(
       'href',
       expect.stringContaining('intent=homeowner'),
