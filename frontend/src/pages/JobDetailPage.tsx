@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -49,6 +49,9 @@ export function JobDetailPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [playbookBusy, setPlaybookBusy] = useState(false);
+  const [playbookMsg, setPlaybookMsg] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setError(null);
@@ -81,6 +84,31 @@ export function JobDetailPage() {
 
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
   const pulse = useMemo(() => filePulse(proofs), [proofs]);
+  const hasCompletedAnalysis = useMemo(() => {
+    const videos = proofs?.videos ?? [];
+    return videos.some(
+      (v) =>
+        v.analysisStatus === 'done' ||
+        Boolean(v.aiSummary?.trim()) ||
+        (Array.isArray(v.events) && v.events.length > 0),
+    );
+  }, [proofs]);
+
+  async function saveAsPlaybook() {
+    if (!job?.id || playbookBusy) return;
+    setPlaybookBusy(true);
+    setPlaybookMsg(null);
+    try {
+      const res = await api.createPlaybookFromJob(job.id);
+      setPlaybookMsg('Saved to playbook library.');
+      navigate(`/playbooks?id=${encodeURIComponent(res.playbook.id)}`);
+    } catch (err) {
+      setPlaybookMsg(err instanceof ApiError ? err.message : 'Could not save playbook.');
+    } finally {
+      setPlaybookBusy(false);
+    }
+  }
+
   const beats = useMemo(
     () =>
       buildJobFileDossier({
@@ -234,10 +262,26 @@ export function JobDetailPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {hasCompletedAnalysis && (
+                  <button
+                    type="button"
+                    data-testid="save-as-playbook"
+                    disabled={playbookBusy}
+                    onClick={() => void saveAsPlaybook()}
+                    className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-800 hover:bg-paper-100 disabled:opacity-50"
+                  >
+                    {playbookBusy ? 'Saving…' : 'Save as playbook'}
+                  </button>
+                )}
                 <DownloadProofPackButton jobId={job.id} />
                 <CustodyExportButton jobId={job.id} label="Export custody JSON" />
               </div>
             </div>
+            {playbookMsg && (
+              <p className="mt-2 text-xs text-ink-600" data-testid="playbook-save-msg">
+                {playbookMsg}
+              </p>
+            )}
             {(proofs.disputes?.length ?? 0) > 0 && (
               <div className="mt-3">
                 <ShowDispute disputes={proofs.disputes ?? []} />

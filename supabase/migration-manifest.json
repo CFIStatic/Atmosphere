@@ -166,7 +166,8 @@
     "20260914180000_user_service_role_titles.sql",
     "20260914190000_safety_incidents.sql",
     "20260914200000_wellness_check.sql",
-    "20260914210000_daily_job_reports.sql"
+    "20260914210000_daily_job_reports.sql",
+    "20260914220000_trade_playbooks.sql"
   ],
   "migrations": [
     {
@@ -5391,6 +5392,35 @@
         "index|public.daily_job_reports.daily_job_reports_status_idx",
         "policy|public.daily_job_reports.daily_job_reports_select_member",
         "rls|public.daily_job_reports"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260914220000_trade_playbooks",
+      "file": "20260914220000_trade_playbooks.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.trade_playbooks",
+        "table|public.trade_playbook_steps",
+        "table|public.trade_playbook_sources",
+        "index|public.trade_playbooks.trade_playbooks_pkey",
+        "index|public.trade_playbooks.trade_playbooks_org_updated_idx",
+        "index|public.trade_playbooks.trade_playbooks_org_trade_status_idx",
+        "index|public.trade_playbooks.trade_playbooks_source_job_idx",
+        "index|public.trade_playbook_steps.trade_playbook_steps_pkey",
+        "index|public.trade_playbook_steps.trade_playbook_steps_playbook_idx",
+        "index|public.trade_playbook_sources.trade_playbook_sources_pkey",
+        "index|public.trade_playbook_sources.trade_playbook_sources_playbook_idx",
+        "index|public.trade_playbook_sources.trade_playbook_sources_job_idx",
+        "policy|public.trade_playbooks.trade_playbooks_select_member",
+        "policy|public.trade_playbook_steps.trade_playbook_steps_select_member",
+        "policy|public.trade_playbook_sources.trade_playbook_sources_select_member",
+        "rls|public.trade_playbooks",
+        "rls|public.trade_playbook_steps",
+        "rls|public.trade_playbook_sources"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

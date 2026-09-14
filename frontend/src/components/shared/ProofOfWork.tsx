@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   api,
+  ApiError,
   type PhysicalWorkRecord,
   type ProofResponse,
   type ProofDay,
@@ -134,6 +136,9 @@ export function ProofOfWork({
   const [seekNonce, setSeekNonce] = useState(0);
   /** Playhead seconds per proof — drives Follow-gated highlight. */
   const [playheadByProof, setPlayheadByProof] = useState<Record<string, number>>({});
+  const [playbookBusy, setPlaybookBusy] = useState(false);
+  const [playbookMsg, setPlaybookMsg] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   function applyClipSeek(proofId: string, seconds: number | null | undefined) {
     setSeekProofId(proofId);
@@ -271,6 +276,32 @@ export function ProofOfWork({
     }
   }
 
+
+  const hasCompletedAnalysis = useMemo(() => {
+    const videos = data?.videos ?? [];
+    return videos.some(
+      (v) =>
+        v.analysisStatus === 'done' ||
+        Boolean(v.aiSummary?.trim()) ||
+        (Array.isArray(v.events) && v.events.length > 0),
+    );
+  }, [data]);
+
+  async function saveAsPlaybook() {
+    if (!jobId || playbookBusy) return;
+    setPlaybookBusy(true);
+    setPlaybookMsg(null);
+    try {
+      const res = await api.createPlaybookFromJob(jobId);
+      setPlaybookMsg('Saved to playbook library.');
+      navigate(`/playbooks?id=${encodeURIComponent(res.playbook.id)}`);
+    } catch (err) {
+      setPlaybookMsg(err instanceof ApiError ? err.message : 'Could not save playbook.');
+    } finally {
+      setPlaybookBusy(false);
+    }
+  }
+
   return (
     <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -325,8 +356,26 @@ export function ProofOfWork({
               }}
             />
           )}
-          {jobId && <DownloadProofPackButton jobId={jobId} />}
-          {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
+          <div className="flex flex-wrap items-center gap-2">
+            {jobId && hasCompletedAnalysis && (
+              <button
+                type="button"
+                data-testid="save-as-playbook"
+                disabled={playbookBusy || readOnly}
+                onClick={() => void saveAsPlaybook()}
+                className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-800 hover:bg-paper-100 disabled:opacity-50"
+              >
+                {playbookBusy ? 'Saving…' : 'Save as playbook'}
+              </button>
+            )}
+            {jobId && <DownloadProofPackButton jobId={jobId} />}
+            {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
+          </div>
+          {playbookMsg && (
+            <p className="text-xs text-ink-600" data-testid="playbook-save-msg">
+              {playbookMsg}
+            </p>
+          )}
         </div>
       )}
 

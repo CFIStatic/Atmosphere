@@ -3152,6 +3152,53 @@ export interface AuthResponse {
 export type SafetySeverity = 'watch' | 'critical';
 export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
 
+
+/* ------------------------------------------------------------------ */
+/* Trade playbooks                                                     */
+/* ------------------------------------------------------------------ */
+
+export type PlaybookStatus = 'draft' | 'published' | 'archived';
+export type PlaybookSourceKind = 'job_analysis' | 'manual' | 'seeded';
+
+export interface PlaybookStep {
+  id: string;
+  playbookId: string;
+  position: number;
+  title: string;
+  instruction: string | null;
+  skillKey: string | null;
+  evidenceHint: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface PlaybookSource {
+  id: string;
+  playbookId: string;
+  jobId: string | null;
+  proofId: string | null;
+  episodeId: string | null;
+  analysisSnapshot: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface TradePlaybook {
+  id: string;
+  orgId: string;
+  title: string;
+  trade: string | null;
+  summary: string | null;
+  status: PlaybookStatus;
+  sourceKind: PlaybookSourceKind;
+  sourceJobId: string | null;
+  skillTags: string[];
+  stepCount: number;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  steps?: PlaybookStep[];
+  sources?: PlaybookSource[];
+}
+
 export interface SafetyIncident {
   id: string;
   orgId: string;
@@ -3912,6 +3959,76 @@ export const api = {
       body: JSON.stringify(reason ? { reason } : {}),
     }),
 
+
+
+  listPlaybooks: (query: { trade?: string; status?: PlaybookStatus | 'all'; q?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (query.trade) params.set('trade', query.trade);
+    if (query.status) params.set('status', query.status);
+    if (query.q) params.set('q', query.q);
+    if (query.limit) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    return request<{ playbooks: TradePlaybook[] }>(`/api/playbooks${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  getPlaybook: (id: string) =>
+    request<{ playbook: TradePlaybook }>(`/api/playbooks/${encodeURIComponent(id)}`, { method: 'GET' }),
+
+  createPlaybook: (input: {
+    title: string;
+    trade?: string | null;
+    summary?: string | null;
+    steps: Array<{
+      title: string;
+      instruction?: string | null;
+      skillKey?: string | null;
+      evidenceHint?: string | null;
+    }>;
+  }) =>
+    request<{ playbook: TradePlaybook }>('/api/playbooks', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  createPlaybookFromJob: (jobId: string) =>
+    request<{ playbook: TradePlaybook }>('/api/playbooks/from-job', {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    }),
+
+  updatePlaybook: (
+    id: string,
+    patch: {
+      title?: string;
+      trade?: string | null;
+      summary?: string | null;
+      status?: PlaybookStatus;
+      steps?: Array<{
+        title: string;
+        instruction?: string | null;
+        skillKey?: string | null;
+        evidenceHint?: string | null;
+      }>;
+    },
+  ) =>
+    request<{ playbook: TradePlaybook }>(`/api/playbooks/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  publishPlaybook: (id: string) =>
+    request<{ playbook: TradePlaybook }>(`/api/playbooks/${encodeURIComponent(id)}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  archivePlaybook: (id: string) =>
+    request<{ playbook: TradePlaybook }>(`/api/playbooks/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 
   jobEpisodes: (jobId: string) =>
     request<{ episodes: WorkEpisodeListItem[] }>(`/api/episodes?jobId=${encodeURIComponent(jobId)}`, {

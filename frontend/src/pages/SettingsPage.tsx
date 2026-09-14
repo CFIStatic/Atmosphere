@@ -5,7 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canManageBilling, isGlobalAdmin } from '../domain/productRoles';
 import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '../lib/api';
@@ -150,6 +150,21 @@ export function SettingsPage() {
               <InvitePanel />
               <DailyReportSection />
               <LinkedAccountsCard />
+              <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
+                <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>
+                <p className="mt-1 text-sm text-ink-600">
+                  Org library of reusable trade checklists and skill cards, generated from
+                  completed job analysis.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to="/playbooks"
+                    className="inline-flex items-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 hover:bg-brand-700"
+                  >
+                    Open playbook library
+                  </Link>
+                </div>
+              </section>
             </>
           )}
           {active === 'billing' && showBilling && <BillingSection />}
