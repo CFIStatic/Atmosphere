@@ -6,6 +6,10 @@ import { jobFilePath } from '../../lib/jobFileAsk';
 /**
  * "Show me how we did this last time" — past jobs ranked by trade, rooms,
  * work type, and analysis similarity. Links open the other job file.
+ *
+ * Office / org staff only. Mount only when the viewer is an org member
+ * (SharedDashboard uses `!grantViewer`). Homeowners, guests, grant-only
+ * accounts, and Field Capture invitees must not see this panel.
  */
 function scoreLabel(score: number): string {
   const pct = Math.round(Math.max(0, Math.min(1, score)) * 100);

@@ -575,7 +575,11 @@ sharedJobsRouter.post(
  * GET /api/operations/shared/:jobId/similar-jobs
  * "Show me how we did this last time" — past jobs in this org ranked by
  * work type, trades, rooms, and analysis text/embedding similarity.
- * Org members only (same gate as the access roster).
+ *
+ * Org members only (same gate as the access roster). Deliberately uses
+ * requireOrgContext with no job-progress-grant fallback — homeowners,
+ * grant-only accounts, guests, and invitees must not learn about other
+ * jobs in the org via this endpoint.
  */
 sharedJobsRouter.get(
   '/shared/:jobId/similar-jobs',
