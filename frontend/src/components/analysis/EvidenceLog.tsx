@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { eventClock } from '../../lib/downloadJson';
 import type { EvidenceLogEntry, TranscriptSegment } from '../../lib/api';
 import { parseTimestampedTranscript } from '../../lib/transcriptCaptions';
+import { useScrollFollow } from '../../hooks/useScrollFollow';
 
 const FILTERS: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'All' },
@@ -20,27 +21,57 @@ function matchesFilter(entry: EvidenceLogEntry, filter: string): boolean {
   return t === filter;
 }
 
+function activeIndexForTime(entries: EvidenceLogEntry[], atSeconds: number): number {
+  let last = -1;
+  for (let i = 0; i < entries.length; i += 1) {
+    if (atSeconds + 0.15 >= entries[i]!.atSeconds) last = i;
+    else break;
+  }
+  return last;
+}
+
 /**
  * Complete Analysis evidence log — every useful visual and speech beat,
  * filterable and seekable. The summary brief can sit above; this log is
  * the product.
+ *
+ * When `activeAtSeconds` is set (playhead sync), the matching row is
+ * highlighted. Auto-scroll follow only runs while the user is near the
+ * bottom or has not scrolled away — never force scrollIntoView on every
+ * tick after they scroll up.
  */
 export function EvidenceLog({
   entries,
   onSeek,
   empty = 'No evidence moments to list yet.',
   status,
+  activeAtSeconds,
 }: {
   entries: EvidenceLogEntry[];
   onSeek?: (seconds: number) => void;
   empty?: string;
   status?: 'pending' | 'failed' | null;
+  /** Optional playhead seconds for active-row highlight + sticky follow. */
+  activeAtSeconds?: number | null;
 }) {
   const [filter, setFilter] = useState('all');
   const visible = useMemo(
     () => entries.filter((entry) => matchesFilter(entry, filter)),
     [entries, filter],
   );
+  const followEnabled = activeAtSeconds != null && Number.isFinite(activeAtSeconds);
+  const { scrollerRef, following, followActive, resume, setScroller } = useScrollFollow({
+    enabled: followEnabled,
+  });
+  const rowRefs = useRef<Array<HTMLElement | null>>([]);
+  const activeIdx = followEnabled
+    ? activeIndexForTime(visible, activeAtSeconds as number)
+    : -1;
+
+  useEffect(() => {
+    if (!followEnabled || activeIdx < 0) return;
+    followActive(rowRefs.current[activeIdx]);
+  }, [activeIdx, followEnabled, followActive]);
 
   if (status === 'pending') {
     return (
@@ -67,7 +98,7 @@ export function EvidenceLog({
 
   return (
     <div data-testid="evidence-log">
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
         <p className="mr-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">
           Evidence log
         </p>
@@ -75,8 +106,18 @@ export function EvidenceLog({
           {visible.length}
           {filter !== 'all' ? ` / ${entries.length}` : ''} rows
         </p>
+        {followEnabled && !following ? (
+          <button
+            type="button"
+            onClick={resume}
+            className="ml-auto rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold text-paper-50"
+            data-testid="evidence-log-follow"
+          >
+            Follow playhead
+          </button>
+        ) : null}
       </div>
-      <div className="mb-2 flex flex-wrap gap-1" role="tablist" aria-label="Evidence filters">
+      <div className="mb-2.5 flex flex-wrap gap-1" role="tablist" aria-label="Evidence filters">
         {FILTERS.map((item) => {
           const count = entries.filter((e) => matchesFilter(e, item.id)).length;
           if (item.id !== 'all' && count === 0) return null;
@@ -103,41 +144,71 @@ export function EvidenceLog({
       {!visible.length ? (
         <p className="text-[12px] text-ink-500">Nothing in this filter.</p>
       ) : (
-        <ol className="divide-y divide-line/70" data-testid="evidence-log-rows">
-          {visible.map((entry) => (
-            <li key={`${entry.type}|${entry.atSeconds}|${entry.text}`}>
-              <button
-                type="button"
-                data-at={entry.atSeconds}
-                data-type={entry.type}
-                onClick={() => onSeek?.(entry.atSeconds)}
-                className="flex w-full items-start gap-3 px-0.5 py-2 text-left hover:bg-paper-100/80"
+        <ol
+          className="max-h-96 divide-y divide-line/60 overflow-y-auto"
+          data-testid="evidence-log-rows"
+          ref={(el) => {
+            setScroller(el);
+            scrollerRef.current = el;
+          }}
+        >
+          {visible.map((entry, index) => {
+            const isActive = index === activeIdx;
+            return (
+              <li
+                key={`${entry.type}|${entry.atSeconds}|${entry.text}`}
+                ref={(el) => {
+                  rowRefs.current[index] = el;
+                }}
+                data-active={isActive ? '1' : undefined}
+                className={isActive ? 'bg-brand-50/80' : undefined}
               >
-                <span className="w-11 shrink-0 font-mono text-[12px] tabular-nums text-ink-500">
-                  {eventClock(entry.atSeconds)}
-                </span>
-                <span className="min-w-0">
-                  <span className="mb-0.5 mr-1.5 inline-block rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
-                    {entry.type}
+                <button
+                  type="button"
+                  data-at={entry.atSeconds}
+                  data-type={entry.type}
+                  onClick={() => onSeek?.(entry.atSeconds)}
+                  className="flex w-full items-start gap-3 px-1 py-2.5 text-left hover:bg-paper-100/80"
+                >
+                  <span
+                    className={
+                      'w-11 shrink-0 font-mono text-[12px] tabular-nums ' +
+                      (isActive ? 'font-bold text-brand-700' : 'text-ink-500')
+                    }
+                  >
+                    {eventClock(entry.atSeconds)}
                   </span>
-                  {entry.speakerLabel ? (
-                    <span className="mb-0.5 mr-1.5 inline-block rounded-full bg-ink-900/90 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-paper-50">
-                      {entry.speakerLabel}
+                  <span className="min-w-0 space-y-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-block rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
+                        {entry.type}
+                      </span>
+                      {entry.speakerLabel ? (
+                        <span
+                          className="inline-block rounded-full bg-ink-900/90 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-paper-50"
+                          data-testid="evidence-speaker"
+                        >
+                          {entry.speakerLabel}
+                        </span>
+                      ) : null}
+                      {entry.owner ? (
+                        <span className="inline-block rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
+                          {entry.owner}
+                        </span>
+                      ) : null}
                     </span>
-                  ) : null}
-                  {entry.owner ? (
-                    <span className="mb-0.5 mr-1.5 inline-block rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
-                      {entry.owner}
-                    </span>
-                  ) : null}
-                  <span className="text-[13px] leading-snug text-ink-800">{entry.text}</span>
-                  {entry.quote && entry.quote !== entry.text ? (
-                    <span className="mt-0.5 block text-[11px] italic text-ink-500">“{entry.quote}”</span>
-                  ) : null}
-                </span>
-              </button>
-            </li>
-          ))}
+                    {'\n'}
+                    <span className="block text-[13px] leading-relaxed text-ink-800">{entry.text}</span>
+                    {entry.quote && entry.quote !== entry.text ? (
+                      <span className="block text-[11px] italic leading-relaxed text-ink-500">
+                        “{entry.quote}”
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

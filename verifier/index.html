@@ -1528,6 +1528,61 @@
     padding: 2px 6px; border-radius: 999px; line-height: 1.2;
   }
   .alog li.on .alog-chip { background: var(--panel); }
+  .alog-speaker {
+    display: block;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 3px;
+  }
+  .alog-quote {
+    display: block;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .alog-follow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: var(--ink);
+    color: var(--panel);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .alog-follow[hidden] { display: none !important; }
+  .conv-list { list-style: none; margin: 0; padding: 0; }
+  .conv-list .conv-fact {
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .conv-list .conv-fact:last-child { border-bottom: 0; }
+  .conv-list .mono {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--faint);
+    margin-right: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .exact-transcript {
+    list-style: none; margin: 6px 0 0; padding: 0;
+    max-height: 280px; overflow-y: auto;
+    border: 1px solid var(--line-soft); border-radius: 8px;
+  }
+  .exact-transcript li {
+    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
+    padding: 10px 10px; border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; line-height: 1.55;
+  }
+  .exact-transcript li:last-child { border-bottom: 0; }
   .alog li.writing [data-full]::after {
     content: ''; display: inline-block; width: 6px; height: 12px; margin-left: 3px;
     background: var(--accent); vertical-align: text-bottom;
@@ -5759,7 +5814,60 @@
     li.setAttribute('data-written', '1');
   }
 
+  var analysisFollow = { enabled: true, programmatic: false };
+
+  function analysisScroller() {
+    var side = document.querySelector('#detail .side');
+    return side || null;
+  }
+
+  function isNearScrollBottom(el, thresholdPx) {
+    if (!el) return true;
+    if (el.scrollHeight <= el.clientHeight + 1) return true;
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) <= (thresholdPx || 96);
+  }
+
+  function updateAnalysisFollowChip() {
+    var chip = document.getElementById('alog-follow');
+    if (!chip) return;
+    chip.hidden = !!analysisFollow.enabled;
+  }
+
+  function bindAnalysisFollow() {
+    var side = analysisScroller();
+    if (!side || side.getAttribute('data-follow-bound') === '1') return;
+    side.setAttribute('data-follow-bound', '1');
+    side.addEventListener('scroll', function () {
+      if (analysisFollow.programmatic) return;
+      analysisFollow.enabled = isNearScrollBottom(side, 96);
+      updateAnalysisFollowChip();
+    }, { passive: true });
+  }
+
+  function resumeAnalysisFollow() {
+    analysisFollow.enabled = true;
+    updateAnalysisFollowChip();
+    var side = analysisScroller();
+    if (!side) return;
+    analysisFollow.programmatic = true;
+    side.scrollTop = side.scrollHeight;
+    window.setTimeout(function () { analysisFollow.programmatic = false; }, 120);
+  }
+
+  function followActiveAnalysisRow(el) {
+    if (!analysisFollow.enabled || !el || !el.scrollIntoView) return;
+    var side = analysisScroller();
+    analysisFollow.programmatic = true;
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    window.setTimeout(function () {
+      analysisFollow.programmatic = false;
+      if (side && isNearScrollBottom(side, 96)) analysisFollow.enabled = true;
+      updateAnalysisFollowChip();
+    }, 160);
+  }
+
   function syncAnalysisLog(seconds) {
+    bindAnalysisFollow();
     var list = document.getElementById('alog');
     if (!list) return;
     var items = list.querySelectorAll('[data-at]');
@@ -5780,7 +5888,7 @@
     });
     if (empty) empty.hidden = true;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    followActiveAnalysisRow(cur);
   }
 
   function seekTo(seconds) {
@@ -6094,10 +6202,12 @@
         var at = m.tSec != null ? Number(m.tSec) : null;
         var label = esc(m.label || 'Moment');
         var body = esc(m.text || '');
+        var quote = m.quote ? '<span class="alog-quote" style="font-style:italic;color:var(--faint);font-size:12px">“' + esc(m.quote) + '”</span>' : '';
+        var inner = '<span class="alog-body"><span class="alog-chip">' + label + '</span><span class="alog-quote">' + body + '</span>' + quote + '</span>';
         if (at != null && isFinite(at)) {
-          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span> <span class="pill">' + label + '</span> ' + body + '</li>';
+          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span>' + inner + '</li>';
         } else {
-          html += '<li><span class="pill">' + label + '</span> ' + body + '</li>';
+          html += '<li><span class="t">—</span>' + inner + '</li>';
         }
       });
       html += '</ul>';
@@ -6116,16 +6226,35 @@
         var at = turn.tSec != null ? Number(turn.tSec) : null;
         var label = esc(turn.speakerLabel || 'Speaker');
         var body = esc(turn.text || '');
+        var inner = '<span class="alog-body"><span class="alog-speaker">' + label + '</span><span class="alog-quote">' + body + '</span></span>';
         if (at != null && isFinite(at)) {
-          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span> <span class="pill">' + label + '</span> ' + body + '</li>';
+          html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span>' + inner + '</li>';
         } else {
-          html += '<li><span class="pill">' + label + '</span> ' + body + '</li>';
+          html += '<li><span class="t">—</span>' + inner + '</li>';
         }
       });
       html += '</ul>';
     }
     if (transcript) {
-      html += '<p class="saw-k">Exact transcript</p><pre class="footnote" style="white-space:pre-wrap;margin-top:4px">' + esc(transcript) + '</pre>';
+      html += '<p class="saw-k">Exact transcript</p>';
+      var segs = (a.transcriptSegments || item.transcriptSegments || []);
+      if (segs.length) {
+        html += '<ul class="exact-transcript" id="exact-transcript">';
+        segs.forEach(function (row) {
+          var at = row.tSec != null ? Number(row.tSec) : null;
+          var label = row.speakerLabel ? '<span class="alog-speaker">' + esc(row.speakerLabel) + '</span>' : '';
+          var body = esc(row.text || '');
+          var inner = '<span class="alog-body">' + label + '<span class="alog-quote">' + body + '</span></span>';
+          if (at != null && isFinite(at)) {
+            html += '<li data-at="' + at + '"><span class="t">' + esc(fmtClock(at)) + '</span>' + inner + '</li>';
+          } else {
+            html += '<li><span class="t">—</span>' + inner + '</li>';
+          }
+        });
+        html += '</ul>';
+      } else {
+        html += '<pre class="footnote" style="white-space:pre-wrap;margin-top:6px;line-height:1.55">' + esc(transcript) + '</pre>';
+      }
     }
     html += '</div>';
     return html;
@@ -6163,7 +6292,8 @@
       return html;
     }
     if (rows.length) {
-      html += '<p class="saw-k">Events</p>';
+      html += '<div class="alog-head"><h4>Events</h4>' +
+        '<button type="button" class="alog-follow" id="alog-follow" hidden>Follow playhead</button></div>';
       html += '<p class="footnote alog-wait" id="alog-empty" hidden>Times seek the playhead.</p>';
       html += '<ul class="alog" id="alog">' + rows.map(renderEventRow).join('') + '</ul>';
     } else if (!pending) {
@@ -6518,10 +6648,19 @@
     var el = $('#d-panel');
 
     if (tab === 'integrity') {
+      analysisFollow.enabled = true;
       el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #dispute-list [data-at], [data-section="conversation"] [data-at]'), function (li) {
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], #exact-transcript [data-at], #dispute-list [data-at], [data-section="conversation"] [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
+      var followBtn = document.getElementById('alog-follow');
+      if (followBtn) {
+        followBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          resumeAnalysisFollow();
+          syncAnalysisLog(currentPlayhead());
+        });
+      }
       var toggle = document.getElementById('dispute-toggle');
       var panel = document.getElementById('dispute-panel');
       if (toggle && panel) {
@@ -6534,6 +6673,8 @@
       }
       var goto = el.querySelector('[data-goto]');
       if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+      bindAnalysisFollow();
+      updateAnalysisFollowChip();
       syncAnalysisLog(currentPlayhead());
       return;
     }

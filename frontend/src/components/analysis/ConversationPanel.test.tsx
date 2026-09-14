@@ -91,4 +91,23 @@ describe('ConversationPanel', () => {
     await user.click(screen.getByText(/Crew will remount the mirror today/i));
     expect(onSeek).toHaveBeenCalledWith(96);
   });
+
+  it('separates turn speaker labels from quote bodies', async () => {
+    const user = userEvent.setup();
+    render(
+      <ConversationPanel
+        conversation={{
+          conversationTurns: [
+            { tSec: 12, speakerLabel: 'Friedberg', text: 'I think we hold cabinets.' },
+          ],
+          conversationSummary: 'They discussed cabinets.',
+        }}
+      />,
+    );
+    const details = screen.getByTestId('conversation-turns-details');
+    await user.click(details.querySelector('summary')!);
+    expect(screen.getByTestId('turn-speaker').textContent).toBe('Friedberg');
+    const text = screen.getByTestId('conversation-turns').textContent || '';
+    expect(text).not.toMatch(/FriedbergI think/);
+  });
 });
