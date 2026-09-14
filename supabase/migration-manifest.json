@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 151,
+    "migrationCount": 154,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -167,7 +167,8 @@
     "20260914190000_safety_incidents.sql",
     "20260914200000_wellness_check.sql",
     "20260914210000_daily_job_reports.sql",
-    "20260914220000_trade_playbooks.sql"
+    "20260914220000_trade_playbooks.sql",
+    "20260915010000_ask_threads.sql"
   ],
   "migrations": [
     {
@@ -5421,6 +5422,29 @@
         "rls|public.trade_playbooks",
         "rls|public.trade_playbook_steps",
         "rls|public.trade_playbook_sources"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260915010000_ask_threads",
+      "file": "20260915010000_ask_threads.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.ask_threads",
+        "index|public.ask_threads.ask_threads_pkey",
+        "index|public.ask_threads.ask_threads_user_job_idx",
+        "index|public.ask_threads.ask_threads_share_job_idx",
+        "index|public.ask_threads.ask_threads_job_idx",
+        "index|public.job_proof_questions.job_proof_questions_thread_idx",
+        "column|public.job_proof_questions.thread_id",
+        "policy|public.ask_threads.ask_threads_select",
+        "policy|public.ask_threads.ask_threads_insert",
+        "policy|public.ask_threads.ask_threads_update",
+        "policy|public.job_proof_questions.job_proof_questions_update",
+        "rls|public.ask_threads"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

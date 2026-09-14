@@ -203,7 +203,7 @@ export function JobAskPanel({
           setOwnRecord(nextRecord);
           setOwnProofs(nextProofs);
         }
-        let nextThreads = threadRes.threads;
+        let nextThreads = threadRes?.threads ?? [];
         if (!nextThreads.length) {
           try {
             const created = createThread
