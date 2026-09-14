@@ -18,6 +18,7 @@ import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import { enrichProofConversation } from './proofConversation.js';
+import { runSafetyScanForProof } from '../safety/sample.js';
 
 const PROOF_BUCKET = 'job-proofs';
 
@@ -180,7 +181,7 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
 
   const { data: proof, error } = await admin
     .from('job_proofs')
-    .select('id, storage_path, duration_seconds')
+    .select('id, org_id, job_id, party_id, clip_id, storage_path, duration_seconds, lat, lon')
     .eq('id', proofId)
     .maybeSingle();
   if (error || !proof?.storage_path) throw new Error('The video file is not on record.');
@@ -265,6 +266,24 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     });
   } catch {
     /* conversation enrich is additive */
+  }
+
+  // Verbal threat / medical distress cues from the finished transcript.
+  if (proof.org_id && proof.job_id && proof.party_id) {
+    void runSafetyScanForProof(admin, {
+      orgId: proof.org_id,
+      jobId: proof.job_id,
+      partyId: proof.party_id,
+      proofId,
+      clipId: proof.clip_id ?? null,
+      transcriptSnippet: transcriptText.slice(0, 2000),
+      lat: proof.lat == null ? null : Number(proof.lat),
+      lon: proof.lon == null ? null : Number(proof.lon),
+      source: 'transcript',
+      allowModel: false,
+    }).catch((err) => {
+      console.warn('[safety] transcript scan failed:', err instanceof Error ? err.message : err);
+    });
   }
 }
 

@@ -1,4 +1,5 @@
 import type {
+  SafetyIncident,
   AccessRequest,
   AccessRequestList,
   AccountDetail,
@@ -176,7 +177,37 @@ export const api = {
     return request<{ events: UserActivityEvent[]; count: number }>(`/api/legal/activity${suffix}`);
   },
 
-  exportUrl: (range: RangeParams, dataset = 'all') =>
+  safetyStaffIncidents: (query?: {
+    status?: 'open' | 'acknowledged' | 'dismissed' | 'all';
+    severity?: 'watch' | 'critical';
+    orgId?: string;
+    jobId?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.status) params.set('status', query.status);
+    if (query?.severity) params.set('severity', query.severity);
+    if (query?.orgId) params.set('orgId', query.orgId);
+    if (query?.jobId) params.set('jobId', query.jobId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<{
+      incidents: SafetyIncident[];
+      counts: { open: number; criticalOpen: number };
+    }>(`/api/safety/staff/incidents${suffix}`);
+  },
+
+  ackSafetyStaffIncident: (id: string) =>
+    request<{ incident: SafetyIncident }>(`/api/safety/staff/incidents/${id}/ack`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  dismissSafetyStaffIncident: (id: string, input?: { reason?: string }) =>
+    request<{ incident: SafetyIncident }>(`/api/safety/staff/incidents/${id}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+    }),
+
+    exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
 };
 

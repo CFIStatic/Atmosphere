@@ -31,6 +31,7 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
+import { safetyRouter } from './routes/safety.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
@@ -137,13 +138,21 @@ export function createApp(): Express {
   // reached — the global cap would already have rejected the upload with 413.
   // Every raised limit therefore has to be declared in this one place.
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
+  // Near-real-time safety samples carry 1–3 small JPEGs while recording.
+  const safetySamplePath =
+    /\/proof\/safety-sample\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
+  const safetySampleJson = express.json({ limit: '1.5mb' });
 
   app.use((req, res, next) => {
-    const parse = avatarPath.test(req.path) ? avatarJson : standardJson;
+    const parse = avatarPath.test(req.path)
+      ? avatarJson
+      : safetySamplePath.test(req.path)
+        ? safetySampleJson
+        : standardJson;
     parse(req, res, next);
   });
 
@@ -156,6 +165,7 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/legal', legalRouter);
+  app.use('/api/safety', safetyRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   // /api/audit unmounted — agent_runs ledger dropped (non-sold-path).

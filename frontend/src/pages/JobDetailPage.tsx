@@ -7,6 +7,7 @@ import {
   type Job,
   type JobParty,
   type ProofResponse,
+  type SafetyIncident,
   type SharedJobRecord,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
@@ -41,6 +42,7 @@ export function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [proofs, setProofs] = useState<ProofResponse | null>(null);
+  const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -48,14 +50,16 @@ export function JobDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [detail, nextRecord, nextProofs] = await Promise.all([
+      const [detail, nextRecord, nextProofs, nextSafety] = await Promise.all([
         api.getJob(id),
         api.sharedJob(id).catch(() => null),
         api.jobProofs(id).catch(() => null),
+        api.jobSafetyIncidents(id, 'open').catch(() => ({ incidents: [], counts: { open: 0, criticalOpen: 0 } })),
       ]);
       setJob(detail.job);
       setRecord(nextRecord);
       setProofs(nextProofs);
+      setSafetyIncidents(nextSafety.incidents ?? []);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load that job.');
     } finally {
@@ -155,6 +159,57 @@ export function JobDetailPage() {
             <ErrorNote message={error} />
           </div>
         )}
+
+        
+      {safetyIncidents.some((i) => i.severity === 'critical' && i.status === 'open') && (
+        <section
+          className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4"
+          data-testid="job-safety-alert-banner"
+          role="alert"
+        >
+          <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+            Safety alert on this job
+          </p>
+          <ul className="mt-2 space-y-2">
+            {safetyIncidents
+              .filter((i) => i.status === 'open')
+              .map((incident) => (
+                <li key={incident.id} className="text-sm text-ink-800">
+                  <span className="font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
+                    {incident.severity}
+                  </span>
+                  {' · '}
+                  {incident.title}
+                  {incident.clipTimestampSeconds != null
+                    ? ` · ${incident.clipTimestampSeconds}s`
+                    : ''}
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md bg-ink-900 px-2 py-1 text-xs text-white"
+                      onClick={() => {
+                        void api.ackSafetyIncident(incident.id).then(() => load());
+                      }}
+                    >
+                      Acknowledge
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-line px-2 py-1 text-xs"
+                      onClick={() => {
+                        void api
+                          .dismissSafetyIncident(incident.id, 'Reviewed in Platform')
+                          .then(() => load());
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
 
         {proofs && ((proofs.videos?.length ?? 0) > 0 || (proofs.disputes?.length ?? 0) > 0) && (
           <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-analysis">

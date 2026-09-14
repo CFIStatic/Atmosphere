@@ -14,6 +14,7 @@ import { SystemPage } from './pages/SystemPage';
 import { AccessPage } from './pages/AccessPage';
 import { LegalPage } from './pages/LegalPage';
 import { JobLegalPage } from './pages/JobLegalPage';
+import { SafetyAlertsPage } from './pages/SafetyAlertsPage';
 
 export function App() {
   return (
@@ -39,6 +40,7 @@ export function App() {
             <Route path="metering" element={<MeteringPage />} />
             <Route path="token-usage" element={<TokenUsagePage />} />
             <Route path="legal" element={<LegalPage />} />
+            <Route path="safety" element={<SafetyAlertsPage />} />
             <Route path="legal/jobs/:jobId" element={<JobLegalPage />} />
             <Route path="system" element={<SystemPage />} />
           </Route>

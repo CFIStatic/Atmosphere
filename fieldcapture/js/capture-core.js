@@ -2815,6 +2815,100 @@
     return Boolean(summary && summary.count && summary.tone === 'warn');
   }
 
+
+  /* ---------- near-real-time safety samples ----------
+     While the camera rolls (and chunks stream), grab a sparse JPEG from the
+     live preview every ~25s and POST it for emergency classification.
+     This is near-real-time — not WebRTC sub-second live (TODO). */
+  function postSafetySample(opts) {
+    opts = opts || {};
+    var apiBase = origin(opts.apiBase);
+    var url = opts.jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(opts.jobId) + '/proof/safety-sample'
+      : jobShareUrl(apiBase, opts.token, '/proof/safety-sample');
+    var body = {
+      clipId: opts.clipId || undefined,
+      clipTimestampSeconds: opts.clipTimestampSeconds,
+      source: opts.source || 'live_sample',
+      frames: opts.frames || [],
+      lat: opts.lat,
+      lon: opts.lon,
+      locationLabel: opts.locationLabel,
+      transcriptSnippet: opts.transcriptSnippet,
+      phase: opts.phase || 'after',
+      workDate: opts.workDate,
+    };
+    return apiJson(url, {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: body,
+    });
+  }
+
+  /**
+   * Sample the live <video> preview on an interval and POST safety-sample.
+   * Returns { stop() }. Failures are swallowed — capture must not break.
+   */
+  function createLiveSafetySampler(cfg) {
+    cfg = cfg || {};
+    var videoEl = cfg.videoEl;
+    var intervalMs = Math.max(15000, Number(cfg.intervalMs) || 25000);
+    var maxEdge = Number(cfg.maxEdge) || 480;
+    var stopped = false;
+    var timer = null;
+    var inFlight = false;
+
+    function tick() {
+      if (stopped || inFlight || !videoEl) return;
+      if (!videoEl.videoWidth) return;
+      var base64 = null;
+      try {
+        base64 = grabPaintedFrame(videoEl, maxEdge);
+      } catch (e) {
+        return;
+      }
+      if (!base64 || base64.length < 80) return;
+      inFlight = true;
+      var at = typeof cfg.atSeconds === 'function' ? cfg.atSeconds() : 0;
+      var site = typeof cfg.site === 'function' ? cfg.site() : null;
+      Promise.resolve(
+        postSafetySample({
+          apiBase: cfg.apiBase,
+          jobId: cfg.jobId,
+          token: cfg.token,
+          accessToken: typeof cfg.accessToken === 'function' ? cfg.accessToken() : cfg.accessToken,
+          clipId: cfg.clipId,
+          clipTimestampSeconds: at,
+          frames: [{ atSeconds: at, base64: base64 }],
+          lat: site && site.lat != null ? site.lat : undefined,
+          lon: site && site.lon != null ? site.lon : undefined,
+          locationLabel: site && site.label ? site.label : undefined,
+          phase: cfg.phase || 'after',
+          workDate: cfg.workDate,
+          source: 'live_sample',
+        }),
+      )
+        .catch(function () {
+          /* never fail the recording */
+        })
+        .then(function () {
+          inFlight = false;
+        });
+    }
+
+    timer = setInterval(tick, intervalMs);
+    // First sample after a short settle so the preview has pixels.
+    setTimeout(tick, Math.min(8000, intervalMs));
+
+    return {
+      stop: function () {
+        stopped = true;
+        if (timer) clearInterval(timer);
+        timer = null;
+      },
+    };
+  }
+
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     DAY_FILM_MAX_WIDTH: DAY_FILM_MAX_WIDTH,
@@ -2863,6 +2957,8 @@
     CLIP_ID: CLIP_ID,
     mintPartUploadUrl: mintPartUploadUrl,
     createDayFilmStreamer: createDayFilmStreamer,
+    postSafetySample: postSafetySample,
+    createLiveSafetySampler: createLiveSafetySampler,
     streamStateOf: streamStateOf,
     STREAM_PART_BYTES: STREAM_PART_BYTES,
     STREAM_MAX_BYTES: STREAM_MAX_BYTES,
