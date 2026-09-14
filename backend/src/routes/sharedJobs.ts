@@ -39,6 +39,7 @@ import {
   touchJobProgressGrantAccess,
 } from '../shared/jobProgressGrants.js';
 import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
+import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import { processSafetySample } from '../safety/sample.js';
 import {
   completeChunkedProofUpload,
@@ -130,7 +131,7 @@ function attachShareToken(req: Request, _res: Response, next: NextFunction) {
 }
 
 const PARTY_SELECT =
-  'id, company, trade, contact_name, email, phone, role, invited_at, last_seen_at, revoked_at, created_at';
+  'id, company, trade, contact_name, email, phone, role, invited_at, last_seen_at, revoked_at, created_at, service_role, service_role_custom';
 const SCOPE_SELECT =
   'id, party_id, state, title, detail, amount, reason, revision, decided_at, created_at';
 
@@ -444,14 +445,14 @@ sharedJobsRouter.get(
         supabase
           .from('job_parties')
           .select(
-            'id, company, trade, contact_name, email, role, created_by, created_at, invited_at, last_seen_at, revoked_at',
+            'id, company, trade, contact_name, email, role, service_role, service_role_custom, created_by, created_at, invited_at, last_seen_at, revoked_at',
           )
           .eq('org_id', orgId)
           .eq('job_id', jobId)
           .order('created_at', { ascending: true }),
         admin
           .from('job_progress_grants')
-          .select('id, user_id, share_id, recipient_email, created_at, last_accessed_at')
+          .select('id, user_id, share_id, recipient_email, created_at, last_accessed_at, service_role')
           .eq('org_id', orgId)
           .eq('job_id', jobId),
       ]);
@@ -498,7 +499,7 @@ sharedJobsRouter.get(
       if (granterIds.length) {
         const { data: profileRows, error: profileError } = await admin
           .from('profiles')
-          .select('id, full_name, email')
+          .select('id, full_name, email, service_role, service_role_custom')
           .in('id', granterIds);
         if (profileError) throw new HttpError(500, profileError.message, 'profiles_failed');
         profiles = (profileRows ?? []) as any[];
@@ -925,6 +926,14 @@ const partySchema = z.object({
   email: z.string().email().max(200).nullable().optional(),
   phone: z.string().trim().max(60).nullable().optional(),
   role: z.enum(['general_contractor', 'subcontractor', 'owner', 'adjuster']).optional(),
+  serviceRole: z.enum(SERVICE_ROLE_SLUGS).nullable().optional(),
+  serviceRoleCustom: z
+    .string()
+    .trim()
+    .max(60)
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 });
 
 sharedJobsRouter.post(
@@ -934,6 +943,28 @@ sharedJobsRouter.post(
       const { orgId, userId, supabase } = await requireOrgContext(req);
       const input = partySchema.parse(req.body ?? {});
 
+      const partyRole = input.role ?? 'subcontractor';
+      // Homeowner/owner/adjuster parties force matching service titles.
+      const forcedHomeowner = partyRole === 'owner';
+      const forcedAdjuster = partyRole === 'adjuster';
+      let serviceNorm = normalizeServiceRoleInput({
+        serviceRole: forcedHomeowner
+          ? 'homeowner'
+          : forcedAdjuster
+            ? 'adjuster'
+            : input.serviceRole ?? null,
+        serviceRoleCustom: forcedHomeowner || forcedAdjuster ? null : input.serviceRoleCustom ?? null,
+        forceHomeowner: forcedHomeowner,
+      });
+      if (!serviceNorm.service_role && input.trade) {
+        const derived = deriveServiceRole({ trade: input.trade, partyRole, kind: 'job_party' });
+        if (derived) {
+          serviceNorm = {
+            service_role: derived.role,
+            service_role_custom: derived.role === 'other' ? derived.displayLabel : null,
+          };
+        }
+      }
       const { data, error } = await supabase
         .from('job_parties')
         .insert({
@@ -944,7 +975,9 @@ sharedJobsRouter.post(
           contact_name: input.contactName ?? null,
           email: input.email ?? null,
           phone: input.phone ?? null,
-          role: input.role ?? 'subcontractor',
+          role: partyRole,
+          service_role: serviceNorm.service_role,
+          service_role_custom: serviceNorm.service_role_custom,
           created_by: userId,
         })
         .select(`${PARTY_SELECT}, access_token`)

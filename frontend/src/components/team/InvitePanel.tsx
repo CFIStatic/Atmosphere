@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
+import type { ServiceRoleSlug } from '../../lib/serviceRole';
 
 /**
  * Adding somebody to the team.
@@ -36,6 +37,8 @@ export function InvitePanel() {
   const [invites, setInvites] = useState<OrgInvite[] | null>(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('employee');
+  const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
+  const [serviceRoleCustom, setServiceRoleCustom] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,13 +86,20 @@ export function InvitePanel() {
     setError(null);
     setOutcome(null);
     try {
-      const res = await api.createOrgInvite({ email, role });
+      const res = await api.createOrgInvite({
+        email,
+        role,
+        serviceRole: serviceRole || undefined,
+        serviceRoleCustom: serviceRole === 'other' ? serviceRoleCustom.trim() || null : null,
+      });
       setOutcome(
         res.emailed
           ? `Invited — Atmosphere emailed ${email}.`
           : `Invited. Atmosphere could not email them, so let them know to check with you.`,
       );
       setEmail('');
+      setServiceRole('');
+      setServiceRoleCustom('');
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.checkoutUrl) {
@@ -139,6 +149,34 @@ export function InvitePanel() {
             </option>
           ))}
         </select>
+        <select
+          value={serviceRole}
+          onChange={(e) => setServiceRole((e.target.value || '') as ServiceRoleSlug | '')}
+          className="rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          title="Service title for Analysis labels"
+        >
+          <option value="">Title (optional)</option>
+          <option value="adjuster">Adjuster</option>
+          <option value="estimator">Estimator</option>
+          <option value="project_manager">Project Manager</option>
+          <option value="electrician">Electrician</option>
+          <option value="plumber">Plumber</option>
+          <option value="roofer">Roofer</option>
+          <option value="technician">Technician</option>
+          <option value="crew">Crew</option>
+          <option value="inspector">Inspector</option>
+          <option value="other">Other</option>
+        </select>
+        {serviceRole === 'other' ? (
+          <input
+            type="text"
+            maxLength={60}
+            value={serviceRoleCustom}
+            onChange={(e) => setServiceRoleCustom(e.target.value)}
+            placeholder="Custom title"
+            className="min-w-[8rem] rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          />
+        ) : null}
         <button
           type="submit"
           disabled={busy || !email.trim()}
@@ -169,7 +207,7 @@ export function InvitePanel() {
               <span className="min-w-0">
                 <span className="block truncate text-xs font-medium text-ink-800">{inv.email}</span>
                 <span className="block text-[11px] text-ink-500">
-                  {ROLE_LABELS[inv.role as MemberRole] ?? inv.role} · asked {ago(inv.createdAt)}
+                  {ROLE_LABELS[inv.role as MemberRole] ?? inv.role}{inv.serviceRole ? ` · ${inv.serviceRole === 'other' && inv.serviceRoleCustom ? inv.serviceRoleCustom : inv.serviceRole}` : ''} · asked {ago(inv.createdAt)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">

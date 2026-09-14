@@ -114,16 +114,50 @@ export const changePasswordSchema = z
     path: ['newPassword'],
   });
 
-/** Body of a profile update. Only the display name is user-editable. */
-export const updateProfileSchema = z.object({
-  fullName: z
-    .string()
-    .trim()
-    .max(80, 'Name must be at most 80 characters')
-    // An empty string clears the name and falls the UI back to the email.
-    .transform((value) => (value === '' ? null : value))
-    .nullable(),
+/** Curated person service role titles (not org seat roles). */
+export const SERVICE_ROLE_SLUGS = [
+  'homeowner',
+  'adjuster',
+  'estimator',
+  'project_manager',
+  'electrician',
+  'plumber',
+  'roofer',
+  'technician',
+  'crew',
+  'inspector',
+  'other',
+] as const;
+
+const serviceRoleSlugSchema = z.enum(SERVICE_ROLE_SLUGS, {
+  errorMap: () => ({ message: 'Select a valid service role title' }),
 });
+
+const serviceRoleCustomSchema = z
+  .string()
+  .trim()
+  .max(60, 'Custom title must be at most 60 characters')
+  .transform((value) => (value === '' ? null : value))
+  .nullable()
+  .optional();
+
+/** Body of a profile update — display name + optional service role title. */
+export const updateProfileSchema = z
+  .object({
+    fullName: z
+      .string()
+      .trim()
+      .max(80, 'Name must be at most 80 characters')
+      // An empty string clears the name and falls the UI back to the email.
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .optional(),
+    serviceRole: serviceRoleSlugSchema.nullable().optional(),
+    serviceRoleCustom: serviceRoleCustomSchema,
+  })
+  .refine((v) => v.fullName !== undefined || v.serviceRole !== undefined, {
+    message: 'Provide a name or service role title',
+  });
 
 const AVATAR_MEDIA_TYPES = [
   'image/jpeg',

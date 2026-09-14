@@ -8,6 +8,7 @@ import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrig
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { decideMemberRemoval } from '../org/members.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
+import { normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import {
   createOrgSchema,
   joinOrgSchema,
@@ -353,6 +354,33 @@ orgRouter.post('/join', async (req: Request, res: Response, next: NextFunction) 
 
     await saveUsageIntents(supabase, req.user!.id, usageIntents);
 
+    // Prefill person service title from the invite when the profile has none yet.
+    if (invite.serviceRole) {
+      const norm = normalizeServiceRoleInput({
+        serviceRole: invite.serviceRole,
+        serviceRoleCustom: invite.serviceRoleCustom,
+      });
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('service_role')
+        .eq('id', req.user!.id)
+        .maybeSingle();
+      if (!(existing as any)?.service_role) {
+        await supabase
+          .from('profiles')
+          .upsert(
+            {
+              id: req.user!.id,
+              email: req.user!.email,
+              service_role: norm.service_role,
+              service_role_custom: norm.service_role_custom,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' },
+          );
+      }
+    }
+
     res.status(200).json({ org: serializeOrg(data) });
   } catch (err) {
     next(err);
@@ -521,7 +549,7 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
     const [{ data: inviteRows }, { data: memberRows }] = await Promise.all([
       supabase
         .from('org_invites')
-        .select('id, email, role, note, status, created_at, joined_at, revoked_at, invited_by')
+        .select('id, email, role, note, status, created_at, joined_at, revoked_at, invited_by, service_role, service_role_custom')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(200),
@@ -551,6 +579,8 @@ orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction
         role: invite.role,
         note: invite.note,
         status: invite.status,
+        serviceRole: invite.service_role ?? null,
+        serviceRoleCustom: invite.service_role_custom ?? null,
         createdAt: invite.created_at,
         joinedAt: invite.joined_at,
         revokedAt: invite.revoked_at,
@@ -565,6 +595,14 @@ const createInviteSchema = z.object({
   email: z.string().email().max(200),
   role: z.enum(MEMBER_ROLES).optional(),
   note: z.string().trim().max(500).optional(),
+  serviceRole: z.enum(SERVICE_ROLE_SLUGS).optional(),
+  serviceRoleCustom: z
+    .string()
+    .trim()
+    .max(60)
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -598,6 +636,10 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
       });
     }
 
+    const serviceNorm = normalizeServiceRoleInput({
+      serviceRole: input.serviceRole ?? null,
+      serviceRoleCustom: input.serviceRoleCustom ?? null,
+    });
     const { data: invite, error } = await supabase
       .from('org_invites')
       .insert({
@@ -606,8 +648,10 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         role: seat,
         note: input.note ?? null,
         invited_by: req.user!.id,
+        service_role: serviceNorm.service_role,
+        service_role_custom: serviceNorm.service_role_custom,
       })
-      .select('id, email, role, status, created_at')
+      .select('id, email, role, status, created_at, service_role, service_role_custom')
       .single();
     if (error) {
       if (error.code === '23505') {
@@ -665,6 +709,8 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         email: (invite as any).email,
         role: (invite as any).role,
         status: (invite as any).status,
+        serviceRole: (invite as any).service_role ?? null,
+        serviceRoleCustom: (invite as any).service_role_custom ?? null,
         createdAt: (invite as any).created_at,
       },
       emailed,

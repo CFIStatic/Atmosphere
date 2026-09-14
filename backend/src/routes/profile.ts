@@ -3,6 +3,7 @@ import { createUserClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { updateProfileSchema, uploadAvatarSchema } from '../lib/validation.js';
+import { displayLabelForServiceRole, normalizeServiceRoleInput } from '../shared/serviceRole.js';
 import { HttpError } from '../lib/errors.js';
 import {
   AVATAR_BUCKET,
@@ -23,57 +24,121 @@ profileRouter.use(requireAuth);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const PROFILE_SELECT = 'id, email, full_name, avatar_url, created_at, updated_at';
+const PROFILE_SELECT =
+  'id, email, full_name, avatar_url, service_role, service_role_custom, created_at, updated_at';
 const PROFILE_SELECT_LEGACY = 'id, email, full_name, created_at, updated_at';
+const PROFILE_SELECT_NO_SERVICE =
+  'id, email, full_name, avatar_url, created_at, updated_at';
 
 function isMissingAvatarColumn(message: string | undefined): boolean {
   return /avatar_url|column .* does not exist/i.test(message ?? '');
 }
 
+function isMissingServiceRoleColumn(message: string | undefined): boolean {
+  return /service_role|column .* does not exist/i.test(message ?? '');
+}
+
 function serializeProfile(row: any, fallbackEmail: string | null) {
   const avatarUrl = isDisplayableAvatarUrl(row?.avatar_url) ? row.avatar_url : null;
+  const serviceRole = row?.service_role ?? null;
+  const serviceRoleCustom = row?.service_role_custom ?? null;
+  const displayLabel = serviceRole
+    ? displayLabelForServiceRole(serviceRole, serviceRoleCustom)
+    : null;
   return {
     id: row?.id ?? null,
     email: row?.email ?? fallbackEmail,
     fullName: row?.full_name ?? null,
     avatarUrl,
+    serviceRole,
+    serviceRoleCustom,
+    /** Stable Analysis shape: { role, displayLabel }. */
+    role: serviceRole,
+    displayLabel: displayLabel || null,
     createdAt: row?.created_at ?? null,
     updatedAt: row?.updated_at ?? null,
   };
 }
 
 async function readOwnProfile(supabase: ReturnType<typeof createUserClient>, userId: string) {
-  const withAvatar = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).maybeSingle();
-  if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message)) {
+  const withService = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).maybeSingle();
+  if (withService.error && isMissingServiceRoleColumn(withService.error.message)) {
+    const withAvatar = await supabase
+      .from('profiles')
+      .select(PROFILE_SELECT_NO_SERVICE)
+      .eq('id', userId)
+      .maybeSingle();
+    if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message)) {
+      return supabase.from('profiles').select(PROFILE_SELECT_LEGACY).eq('id', userId).maybeSingle();
+    }
+    return withAvatar;
+  }
+  if (withService.error && isMissingAvatarColumn(withService.error.message)) {
     return supabase.from('profiles').select(PROFILE_SELECT_LEGACY).eq('id', userId).maybeSingle();
   }
-  return withAvatar;
+  return withService;
 }
 
 async function upsertOwnProfile(
   supabase: ReturnType<typeof createUserClient>,
   values: Record<string, unknown>,
 ) {
-  const withAvatar = await supabase
+  const withService = await supabase
     .from('profiles')
     .upsert(values, { onConflict: 'id' })
     .select(PROFILE_SELECT)
     .maybeSingle();
-  if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message) && 'avatar_url' in values) {
+  if (
+    withService.error &&
+    isMissingServiceRoleColumn(withService.error.message) &&
+    ('service_role' in values || 'service_role_custom' in values)
+  ) {
+    throw new HttpError(
+      503,
+      'Service role titles are not available on this deployment yet.',
+      'service_role_unavailable',
+    );
+  }
+  if (withService.error && isMissingServiceRoleColumn(withService.error.message)) {
+    const stripped = { ...values };
+    delete stripped.service_role;
+    delete stripped.service_role_custom;
+    const withAvatar = await supabase
+      .from('profiles')
+      .upsert(stripped, { onConflict: 'id' })
+      .select(PROFILE_SELECT_NO_SERVICE)
+      .maybeSingle();
+    if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message) && 'avatar_url' in stripped) {
+      throw new HttpError(
+        503,
+        'Profile photos are not available on this deployment yet.',
+        'avatar_unavailable',
+      );
+    }
+    if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message)) {
+      return supabase
+        .from('profiles')
+        .upsert(stripped, { onConflict: 'id' })
+        .select(PROFILE_SELECT_LEGACY)
+        .maybeSingle();
+    }
+    return withAvatar;
+  }
+  if (withService.error && isMissingAvatarColumn(withService.error.message) && 'avatar_url' in values) {
     throw new HttpError(
       503,
       'Profile photos are not available on this deployment yet.',
       'avatar_unavailable',
     );
   }
-  if (withAvatar.error && isMissingAvatarColumn(withAvatar.error.message)) {
+  if (withService.error && isMissingAvatarColumn(withService.error.message)) {
     return supabase
       .from('profiles')
       .upsert(values, { onConflict: 'id' })
       .select(PROFILE_SELECT_LEGACY)
       .maybeSingle();
   }
-  return withAvatar;
+  return withService;
 }
 
 async function removeStoredAvatar(userId: string, currentUrl: string | null) {
@@ -117,19 +182,39 @@ profileRouter.get('/', async (req: Request, res: Response, next: NextFunction) =
  */
 profileRouter.patch('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { fullName } = updateProfileSchema.parse(req.body);
+    const body = updateProfileSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
     const current = await readOwnProfile(supabase, req.user!.id);
-    const currentRow = current.data as { avatar_url?: string | null } | null;
+    const currentRow = current.data as {
+      avatar_url?: string | null;
+      full_name?: string | null;
+      service_role?: string | null;
+      service_role_custom?: string | null;
+    } | null;
     const values: Record<string, unknown> = {
       id: req.user!.id,
       email: req.user!.email,
-      full_name: fullName,
       updated_at: new Date().toISOString(),
     };
+    if (body.fullName !== undefined) {
+      values.full_name = body.fullName;
+    } else if (currentRow) {
+      values.full_name = currentRow.full_name ?? null;
+    }
     // Re-send the stored photo so a name-only upsert cannot blank it.
     if (currentRow && 'avatar_url' in currentRow) {
       values.avatar_url = currentRow.avatar_url ?? null;
+    }
+    if (body.serviceRole !== undefined) {
+      const normalized = normalizeServiceRoleInput({
+        serviceRole: body.serviceRole,
+        serviceRoleCustom: body.serviceRoleCustom ?? null,
+      });
+      values.service_role = normalized.service_role;
+      values.service_role_custom = normalized.service_role_custom;
+    } else if (currentRow && 'service_role' in (currentRow as object)) {
+      values.service_role = currentRow.service_role ?? null;
+      values.service_role_custom = currentRow.service_role_custom ?? null;
     }
 
     const { data, error } = await upsertOwnProfile(supabase, values);

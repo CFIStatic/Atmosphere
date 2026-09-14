@@ -31,6 +31,7 @@ import {
   identifySpeakers,
   webIdentifyPublicSpeakers,
 } from './speakerIdentity.js';
+import { deriveServiceRole, serviceTitleFromLabel } from '../shared/serviceRole.js';
 import {
   applyPrivacyToEvidenceEntries,
   derivePrivacyRedactions,
@@ -232,7 +233,7 @@ async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgM
 
     const { data: rows } = await admin
       .from('org_members')
-      .select('user_id, role, work_type, profiles(full_name, email)')
+      .select('user_id, role, work_type, profiles(full_name, email, service_role, service_role_custom)')
       .eq('org_id', orgId)
       .limit(200);
     for (const row of rows ?? []) {
@@ -242,12 +243,18 @@ async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgM
       const key = `user:${row.user_id}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      const label = deriveServiceRole({
+        serviceRole: profile?.service_role,
+        serviceRoleCustom: profile?.service_role_custom,
+        memberRole: row.role ?? null,
+        kind: 'org_member',
+      });
       out.push({
         userId: String(row.user_id),
         fullName,
         email: profile?.email ?? null,
         memberRole: row.role ?? null,
-        serviceTitle: null, // parallel branches may fill richer titles later
+        serviceTitle: serviceTitleFromLabel(label),
         kind: 'org_member',
       });
     }
@@ -255,7 +262,7 @@ async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgM
     if (jobId) {
       const { data: parties } = await admin
         .from('job_parties')
-        .select('id, contact_name, email, trade, role, company')
+        .select('id, contact_name, email, trade, role, company, service_role, service_role_custom')
         .eq('job_id', jobId)
         .is('revoked_at', null)
         .limit(100);
@@ -265,13 +272,20 @@ async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgM
         const key = `party:${String(party.id)}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        const label = deriveServiceRole({
+          serviceRole: party.service_role,
+          serviceRoleCustom: party.service_role_custom,
+          trade: party.trade,
+          partyRole: party.role,
+          kind: 'job_party',
+        });
         out.push({
           userId: `party:${String(party.id)}`,
           fullName,
           email: party.email ?? null,
           trade: party.trade ?? null,
           memberRole: party.role ?? null,
-          serviceTitle: null,
+          serviceTitle: serviceTitleFromLabel(label),
           kind: 'job_party',
         });
       }

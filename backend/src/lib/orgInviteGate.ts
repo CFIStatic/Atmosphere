@@ -14,6 +14,9 @@ export type PendingOrgInvite = {
   orgId: string;
   role: OrgProductRole;
   email: string;
+  /** Advisory person service title from the invite. */
+  serviceRole: string | null;
+  serviceRoleCustom: string | null;
   /** Internal only — used to call join_org. Never returned to clients. */
   joinCode: string;
 };
@@ -34,7 +37,7 @@ export async function requirePendingOrgInvite(input: {
 
   const { data: invite, error: inviteError } = await raw
     .from('org_invites')
-    .select('id, role, email, org_id')
+    .select('id, role, email, org_id, service_role, service_role_custom')
     .eq('status', 'pending')
     .eq('email', email)
     .order('created_at', { ascending: false })
@@ -65,6 +68,8 @@ export async function requirePendingOrgInvite(input: {
     orgId: org.id as string,
     role: toOrgProductRole(String(invite.role)),
     email: String(invite.email),
+    serviceRole: (invite as { service_role?: string | null }).service_role ?? null,
+    serviceRoleCustom: (invite as { service_role_custom?: string | null }).service_role_custom ?? null,
     joinCode,
   };
 }

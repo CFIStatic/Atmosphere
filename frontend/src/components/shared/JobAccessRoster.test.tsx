@@ -19,6 +19,10 @@ const people: JobAccessPerson[] = [
     name: 'von@example.com',
     email: 'von@example.com',
     accessType: 'Homeowner',
+    role: 'homeowner',
+    displayLabel: 'Homeowner',
+    serviceTitle: 'Homeowner',
+    displayName: 'Homeowner',
     grantedByName: 'Alex Office',
     grantedByEmail: 'alex@contractor.com',
     grantedAt: '2026-09-01T00:00:00.000Z',
@@ -30,7 +34,11 @@ const people: JobAccessPerson[] = [
     kind: 'field_capture',
     name: 'Sam Rivera',
     email: 'sam@rivera.test',
-    accessType: 'drywall',
+    accessType: 'Crew',
+    role: 'crew',
+    displayLabel: 'Crew',
+    serviceTitle: 'Crew',
+    displayName: 'Sam Rivera — Crew',
     grantedByName: 'Alex Office',
     grantedByEmail: 'alex@contractor.com',
     grantedAt: '2026-09-03T00:00:00.000Z',
@@ -49,9 +57,9 @@ describe('JobAccessRoster', () => {
     render(<JobAccessRoster jobId="job-1" />);
 
     expect(await screen.findByRole('heading', { name: 'Who has access' })).toBeInTheDocument();
-    expect(screen.getByText('von@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Homeowner')).toBeInTheDocument();
     expect(screen.getAllByText(/Granted by Alex Office/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Sam Rivera')).toBeInTheDocument();
+    expect(screen.getByText('Sam Rivera — Crew')).toBeInTheDocument();
     expect(screen.getByText(/Last access never/i)).toBeInTheDocument();
 
     await waitFor(() => {

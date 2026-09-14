@@ -32,6 +32,9 @@ test('presentJobAccessRoster — homeowner share with grantor and last open', ()
   assert.equal(people[0]?.kind, 'homeowner');
   assert.equal(people[0]?.email, 'von@example.com');
   assert.equal(people[0]?.accessType, 'Homeowner');
+  assert.equal(people[0]?.role, 'homeowner');
+  assert.equal(people[0]?.displayLabel, 'Homeowner');
+  assert.equal(people[0]?.displayName, 'Homeowner');
   assert.equal(people[0]?.grantedByName, 'Alex Office');
   assert.equal(people[0]?.grantedByEmail, 'alex@contractor.com');
   assert.equal(people[0]?.lastAccessedAt, '2026-09-10T15:00:00.000Z');
@@ -121,7 +124,10 @@ test('presentJobAccessRoster — field capture party with grantor and last seen'
   assert.equal(people.length, 1);
   assert.equal(people[0]?.kind, 'field_capture');
   assert.equal(people[0]?.name, 'Sam Rivera');
-  assert.equal(people[0]?.accessType, 'drywall');
+  assert.equal(people[0]?.accessType, 'Crew');
+  assert.equal(people[0]?.role, 'crew');
+  assert.equal(people[0]?.displayLabel, 'Crew');
+  assert.equal(people[0]?.serviceTitle, 'Crew');
   assert.equal(people[0]?.grantedByName, 'Alex Office');
   assert.equal(people[0]?.lastAccessedAt, '2026-09-11T09:00:00.000Z');
 });
@@ -186,4 +192,35 @@ test('presentJobAccessRoster — ignores evidence shares', () => {
     profiles,
   });
   assert.equal(people.length, 0);
+});
+
+
+test('presentJobAccessRoster — service_role override beats trade', () => {
+  const people = presentJobAccessRoster({
+    shares: [],
+    parties: [
+      {
+        id: 'party-e',
+        company: 'Spark Co',
+        trade: 'drywall',
+        contact_name: 'Alex Rivera',
+        email: 'alex@spark.test',
+        role: 'subcontractor',
+        service_role: 'electrician',
+        service_role_custom: null,
+        created_by: 'u-office',
+        created_at: '2026-09-03T00:00:00.000Z',
+        invited_at: '2026-09-03T01:00:00.000Z',
+        last_seen_at: null,
+        revoked_at: null,
+      },
+    ],
+    grants: [],
+    profiles,
+  });
+  assert.equal(people.length, 1);
+  assert.equal(people[0]?.role, 'electrician');
+  assert.equal(people[0]?.displayLabel, 'Electrician');
+  assert.equal(people[0]?.displayName, 'Alex Rivera — Electrician');
+  assert.equal(people[0]?.accessType, 'Electrician');
 });

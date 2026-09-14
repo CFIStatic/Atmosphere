@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError, badRequest } from '../lib/errors.js';
+import { deriveServiceRole } from '../shared/serviceRole.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
@@ -771,16 +772,21 @@ async function createJobFileStepwise(
   const parties: CreatedParty[] = [];
   for (const person of invitees) {
     const company = (person.company?.trim() || person.fullName).slice(0, 160);
+    const trade = person.trade || (person.external ? 'subcontractor' : 'field_capture');
+    const derived = deriveServiceRole({ trade, partyRole: 'subcontractor', kind: 'job_party' });
     const { data: party, error: partyError } = await writer
       .from('job_parties')
       .insert({
         org_id: orgId,
         job_id: jobId,
         company,
-        trade: person.trade || (person.external ? 'subcontractor' : 'field_capture'),
+        trade,
         contact_name: person.fullName,
         email: person.email,
         role: 'subcontractor',
+        service_role: derived?.role ?? null,
+        service_role_custom:
+          derived?.role === 'other' ? derived.displayLabel : null,
         invited_at: new Date().toISOString(),
         created_by: userId,
       })

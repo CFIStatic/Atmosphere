@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
 import { requireOrgContext, type OrgContext } from '../lib/orgContext.js';
 import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
+import { normalizeServiceRoleInput } from './serviceRole.js';
 
 export type JobProgressGrant = {
   orgId: string;
@@ -170,12 +171,14 @@ export async function claimProgressShareForUser(input: {
     );
   }
 
+  const homeowner = normalizeServiceRoleInput({ forceHomeowner: true });
   const row = {
     org_id: (share as any).org_id,
     job_id: (share as any).job_id,
     user_id: input.userId,
     share_id: (share as any).id,
     recipient_email: recipient,
+    service_role: homeowner.service_role,
   };
 
   const { error: upsertError } = await admin.from('job_progress_grants').upsert(row, {
@@ -189,8 +192,29 @@ export async function claimProgressShareForUser(input: {
         'grants_unavailable',
       );
     }
-    throw new HttpError(400, upsertError.message, 'claim_failed');
+    // Retry without service_role if column not applied yet.
+    if (/service_role|schema cache|column .* does not exist/i.test(upsertError.message ?? '')) {
+      const { service_role: _sr, ...legacy } = row as any;
+      const retry = await admin.from('job_progress_grants').upsert(legacy, {
+        onConflict: 'job_id,user_id',
+      });
+      if (retry.error) throw new HttpError(400, retry.error.message, 'claim_failed');
+    } else {
+      throw new HttpError(400, upsertError.message, 'claim_failed');
+    }
   }
+
+  // Progress-share claim always labels the person as Homeowner for Analysis.
+  await admin.from('profiles').upsert(
+    {
+      id: input.userId,
+      email: email,
+      service_role: 'homeowner',
+      service_role_custom: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' },
+  );
 
   const jobId = (share as any).job_id as string;
   return {
