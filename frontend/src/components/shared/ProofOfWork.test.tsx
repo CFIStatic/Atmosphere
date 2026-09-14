@@ -90,7 +90,8 @@ describe('ProofOfWork video collection', () => {
     jobEpisodes.mockResolvedValue({ episodes: [] });
   });
 
-  it('lists every uploaded video with picture and mic status', () => {
+  it('lists every uploaded video with picture and mic status', async () => {
+    const user = userEvent.setup();
     render(<ProofOfWork jobId="job-1" heading="Videos and analysis" initialData={catalog} />);
 
     expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
@@ -99,9 +100,14 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByText('Every video on this job')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
-    expect(screen.getAllByText(/We have not started the subfloor yet/).length).toBeGreaterThanOrEqual(2);
+    // Dense proof (exact transcript + evidence log) stays behind Full evidence.
+    expect(screen.queryByTestId('verbatim-transcript')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
+    expect(screen.getByTestId('full-evidence')).toBeInTheDocument();
+    await user.click(screen.getByTestId('full-evidence-summary'));
     expect(screen.getByTestId('verbatim-transcript')).toBeInTheDocument();
     expect(screen.getByTestId('evidence-log').textContent).toMatch(/We have not started the subfloor yet/);
+    expect(screen.getAllByText(/We have not started the subfloor yet/).length).toBeGreaterThanOrEqual(2);
     expect(
       screen.getByText((_, el) => el?.textContent === '42 seconds · Picture: read · Mic: heard'),
     ).toBeInTheDocument();

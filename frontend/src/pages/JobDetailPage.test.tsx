@@ -216,6 +216,10 @@ describe('JobDetailPage', () => {
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
+    expect(screen.getByTestId('full-evidence')).toBeInTheDocument();
+    expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('full-evidence-summary'));
     expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:12/);
     expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:28/);
     expect(screen.getByTestId('evidence-log').textContent).toMatch(/said/i);

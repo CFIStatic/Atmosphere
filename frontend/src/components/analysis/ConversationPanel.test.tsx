@@ -9,7 +9,7 @@ describe('ConversationPanel', () => {
     expect(container.querySelector('[data-testid="conversation-panel"]')).toBeNull();
   });
 
-  it('shows an executive brief, key moments, and seekable grounded claims', async () => {
+  it('shows Glance + Scan by default without dumping exact transcript', async () => {
     const user = userEvent.setup();
     const onSeek = vi.fn();
     render(
@@ -83,13 +83,25 @@ describe('ConversationPanel', () => {
       />,
     );
     expect(screen.getByTestId('conversation-brief').textContent).toMatch(/refused cabinet/i);
+    expect(screen.getByTestId('analysis-glance').textContent).toMatch(/Glance/i);
+    expect(screen.getByTestId('analysis-scan').textContent).toMatch(/Scan/i);
     expect(screen.getByTestId('conversation-key-moments').textContent).toMatch(/Refusal/);
-    expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Model brief/);
-    expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Promises/);
-    expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Crew/);
-    expect(screen.getByTestId('verbatim-transcript').textContent).toMatch(/Exact transcript/);
-    await user.click(screen.getByText(/Crew will remount the mirror today/i));
+    expect(screen.getByTestId('analysis-scan-decisions').textContent).toMatch(/cabinet|mirror/i);
+    expect(screen.getByTestId('analysis-scan-next').textContent).toMatch(/Crew/);
+    expect(screen.queryByTestId('verbatim-transcript')).toBeNull();
+    expect(screen.queryByTestId('conversation-turns')).toBeNull();
+
+    const momentBtn = screen
+      .getByTestId('conversation-key-moments')
+      .querySelector('button[data-at="96"]') as HTMLButtonElement;
+    expect(momentBtn).toBeTruthy();
+    await user.click(momentBtn);
     expect(onSeek).toHaveBeenCalledWith(96);
+
+    await user.click(screen.getByTestId('conversation-more-details').querySelector('summary')!);
+    expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Insurance & adjuster/i);
+    await user.click(screen.getByTestId('conversation-turns-details').querySelector('summary')!);
+    expect(screen.getByTestId('conversation-turns').textContent).toMatch(/Homeowner/);
   });
 
   it('separates turn speaker labels from quote bodies', async () => {
@@ -104,6 +116,7 @@ describe('ConversationPanel', () => {
         }}
       />,
     );
+    await user.click(screen.getByTestId('conversation-more-details').querySelector('summary')!);
     const details = screen.getByTestId('conversation-turns-details');
     await user.click(details.querySelector('summary')!);
     expect(screen.getByTestId('turn-speaker').textContent).toBe('Friedberg');

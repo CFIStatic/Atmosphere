@@ -23,9 +23,8 @@ import {
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { ShowDispute } from '../components/analysis/ShowDispute';
-import { ConversationPanel } from '../components/analysis/ConversationPanel';
-import { PeoplePresentPanel } from '../components/analysis/PeoplePresent';
-import { EvidenceLog, evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
+import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
+import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 
 /**
@@ -163,8 +162,8 @@ export function JobDetailPage() {
               <div>
                 <h2 className="text-base font-semibold text-ink-900">Analysis</h2>
                 <p className="mt-0.5 text-xs text-ink-500">
-                  Complete evidence log — every useful visual and speech beat. Silent clips stay
-                  vision-only. Filter Said / Work / Scene / Decision; tap a time to seek.
+                  Know what happened, prove it, decide what&apos;s next — Glance first, Scan for
+                  who / decisions / next steps, Full evidence when you need the timed log.
                 </p>
               </div>
               <CustodyExportButton jobId={job.id} label="Export custody JSON" />
@@ -191,15 +190,6 @@ export function JobDetailPage() {
                         {video.phase ? ` · ${video.phase}` : ''}
                       </span>
                     </p>
-                    <ConversationPanel
-                      conversation={{
-                        ...(video.conversation ?? {}),
-                        transcriptText: video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText,
-                        transcriptSegments:
-                          video.transcriptSegments ?? video.conversation?.transcriptSegments,
-                      }}
-                    />
-                    <PeoplePresentPanel people={video.people} />
                     {video.transcriptStatus && video.transcriptStatus !== 'done' ? (
                       <p className="mt-1.5 text-[11px] text-ink-500">
                         Mic: {video.transcriptStatus}
@@ -212,18 +202,26 @@ export function JobDetailPage() {
                         Re-run from Proof of work — Hear the mic / Watch it again.
                       </p>
                     ) : null}
-                    <div className="mt-3">
-                      <EvidenceLog
-                        entries={evidenceEntriesFromVideo(video)}
-                        status={
-                          failed
-                            ? 'failed'
-                            : pending && !evidenceEntriesFromVideo(video).length
-                              ? 'pending'
-                              : null
-                        }
-                      />
-                    </div>
+                    <ClipAnalysisLayers
+                      conversation={{
+                        ...(video.conversation ?? {}),
+                        transcriptText:
+                          video.transcriptText ??
+                          video.heardOnMic ??
+                          video.conversation?.transcriptText,
+                        transcriptSegments:
+                          video.transcriptSegments ?? video.conversation?.transcriptSegments,
+                      }}
+                      people={video.people}
+                      evidenceEntries={evidenceEntriesFromVideo(video)}
+                      evidenceStatus={
+                        failed
+                          ? 'failed'
+                          : pending && !evidenceEntriesFromVideo(video).length
+                            ? 'pending'
+                            : null
+                      }
+                    />
                   </li>
                 );
               })}
