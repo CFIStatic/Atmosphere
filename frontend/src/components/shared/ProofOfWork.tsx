@@ -16,9 +16,8 @@ import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
-import { ConversationPanel } from '../analysis/ConversationPanel';
-import { PeoplePresentPanel } from '../analysis/PeoplePresent';
-import { EvidenceLog, evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
+import { ClipAnalysisLayers } from '../analysis/ClipAnalysisLayers';
+import { evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
 
 /**
@@ -581,7 +580,8 @@ export function ProofOfWork({
                             return null;
                           return (
                             <div key={id} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
-                              <ConversationPanel
+                              <ClipAnalysisLayers
+                                phaseLabel={video.phase ? `${video.phase} — analysis` : null}
                                 conversation={{
                                   ...(video.conversation ?? {}),
                                   transcriptText:
@@ -591,21 +591,10 @@ export function ProofOfWork({
                                   transcriptSegments:
                                     video.transcriptSegments ?? video.conversation?.transcriptSegments,
                                 }}
-                                onSeek={(seconds) => applyClipSeek(id, seconds)}
-                              />
-                              <PeoplePresentPanel
                                 people={video.people}
+                                evidenceEntries={evidenceEntriesFromVideo(video)}
                                 onSeek={(seconds) => applyClipSeek(id, seconds)}
                               />
-                              <div className="mt-2">
-                                <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
-                                  {video.phase} — evidence
-                                </p>
-                                <EvidenceLog
-                                  entries={evidenceEntriesFromVideo(video)}
-                                  onSeek={(seconds) => applyClipSeek(id, seconds)}
-                                />
-                              </div>
                             </div>
                           );
                         })}
@@ -866,30 +855,20 @@ function VideoCatalog({
                   {' · '}
                   Mic: {statusWord(video.transcriptStatus, 'heard')}
                 </p>
-                <ConversationPanel
+                {video.aiSummary ? (
+                  <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
+                ) : null}
+                <ClipAnalysisLayers
                   conversation={{
                     ...(video.conversation ?? {}),
                     transcriptText: video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText,
                     transcriptSegments:
                       video.transcriptSegments ?? video.conversation?.transcriptSegments,
                   }}
-                  onSeek={(seconds) => onSeek?.(video.id, seconds)}
-                />
-                <PeoplePresentPanel
                   people={video.people}
+                  evidenceEntries={evidenceEntriesFromVideo(video)}
                   onSeek={(seconds) => onSeek?.(video.id, seconds)}
                 />
-                {video.aiSummary ? (
-                  <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
-                ) : null}
-                {evidenceEntriesFromVideo(video).length > 0 ? (
-                  <div className="mt-1.5">
-                    <EvidenceLog
-                      entries={evidenceEntriesFromVideo(video)}
-                      onSeek={(seconds) => onSeek?.(video.id, seconds)}
-                    />
-                  </div>
-                ) : null}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <PlayClip

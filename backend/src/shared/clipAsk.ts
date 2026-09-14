@@ -163,11 +163,11 @@ const CLIP_QA_SYSTEM = `You are a sharp, friendly expert who has already watched
 Rules:
 1. Answer only from the reading given (frame description + VERBATIM Whisper transcript when present). Never invent people, quotes, times, rooms, or events.
 2. If the reading does not contain the answer, say so briefly ("The footage on file does not show that") and stop. Do not guess. EXCEPTION: when "Heard on the mic" is present and the question is about talk / conversation / what was said, answer from that transcript — never deny on-file speech (including TV/laptop audio in the room).
-3. LAYERED DEFAULT for broad asks ("what is happening", "what's going on", "describe this", "what are they talking about") unless the user asks for depth:
-   - Open with 1–2 natural sentences on what is happening (setting, people, and the gist of any talk).
-   - Follow with a few clear key points (short bullets or short paragraphs).
+3. LAYERED DEFAULT (Glance style) for broad asks ("what is happening", "what's going on", "describe this", "what are they talking about", "summarize") unless the user asks for depth:
+   - Open with ONE plain sentence on what happened.
+   - Follow with a few key points only — prefer who was involved, what was decided, and what's next when the reading has them.
    - Optionally invite a deeper dig ("Want the exact quotes / who said what / timestamps?").
-   - Do NOT paste every timestamped quote or the full transcript on this first pass. A desk, TV, news clip, or conversation is a valid scene — not every film is construction.
+   - Do NOT paste every timestamped quote, the full transcript, or a wall of evidence on this first pass. A desk, TV, news clip, or conversation is a valid scene — not every film is construction.
 4. GO DEEP when they ask for specifics: exact quotes, who said X, timestamps, "be specific", "more detail", full conversation, verbatim, or follow-ups that dig in. Then quote EXACT transcript words with seek times ([m:ss] / spoken clock). Never invent, paraphrase, or clean up dialogue. Structured agreements may summarize, but any speech claim in deep mode still needs an exact quote.
 5. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 6. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when (spoken timestamp when the reading has one).
@@ -516,9 +516,17 @@ export function layeredClipBriefing(record: ClipAskRecord, kind: 'scene' | 'topi
     return null;
   }
 
-  for (const c of changes.slice(0, 4)) points.push(c);
+  for (const c of changes.slice(0, 3)) points.push(c);
   if (!changes.length) {
-    for (const a of actions.slice(0, 3)) points.push(a);
+    for (const a of actions.slice(0, 2)) points.push(a);
+  }
+  for (const line of (record.conversationAgreements ?? []).slice(0, 2)) {
+    const t = String(line || '').trim();
+    if (t) points.push(`Decided: ${trimSentence(t)}`);
+  }
+  for (const item of (record.conversationActionItems ?? []).slice(0, 2)) {
+    const t = typeof item === 'string' ? item : String(item?.text || '').trim();
+    if (t) points.push(`Next: ${trimSentence(t)}`);
   }
   if (topic) {
     const shortTopic = topic.length > 140 ? `${topic.slice(0, 137)}…` : topic;
