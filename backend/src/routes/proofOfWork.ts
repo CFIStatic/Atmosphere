@@ -75,6 +75,11 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import {
+  applyPrivacyToEvidenceEntries,
+  privacyRedactionsFromStored,
+  publicPrivacyFields,
+} from '../audio/privacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
@@ -189,18 +194,27 @@ function evidenceLogFromRow(row: any) {
     : Array.isArray(findings.actions)
       ? findings.actions
       : [];
-  return buildEvidenceLog({
-    storedLog: findings.evidenceLog,
-    storedEntries: row?.narration?.entries,
-    narrationText: row?.narration_text ?? null,
-    summary: row?.ai_summary ?? findings.summary ?? null,
-    actions,
-    durationSeconds: Number(row?.duration_seconds) || null,
-    transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
-    people: findings.people,
-    visionPeople: findings.visionPeople,
-    conversation: conversationFromStored(row?.transcript_text, findings.conversation),
-  });
+  const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
+  return applyPrivacyToEvidenceEntries(
+    buildEvidenceLog({
+      storedLog: findings.evidenceLog,
+      storedEntries: row?.narration?.entries,
+      narrationText: row?.narration_text ?? null,
+      summary: row?.ai_summary ?? findings.summary ?? null,
+      actions,
+      durationSeconds: Number(row?.duration_seconds) || null,
+      transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+      people: findings.people,
+      visionPeople: findings.visionPeople,
+      conversation: conversationFromStored(row?.transcript_text, findings.conversation),
+    }),
+    ranges,
+  );
+}
+
+function privacyRedactionsPayloadFromRow(row: any) {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  return publicPrivacyFields(privacyRedactionsFromStored(findings.privacyRedactions));
 }
 
 function peoplePayloadFromRow(row: any) {
@@ -2230,6 +2244,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       conversation: conversationPayloadFromRow(row),
       evidenceLog: evidenceLogFromRow(row),
       people: peoplePayloadFromRow(row),
+      privacyRedactions: privacyRedactionsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),

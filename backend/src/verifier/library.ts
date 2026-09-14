@@ -21,6 +21,12 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import {
+  applyPrivacyToEvidenceEntries,
+  privacyRedactionsFromStored,
+  publicPrivacyFields,
+  redactTranscriptForAsk,
+} from '../audio/privacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
@@ -399,7 +405,14 @@ export function serializeEvidence(input: {
             windowsTotal: findings.windowsTotal ?? null,
             windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? proof.narration?.model ?? null,
-            transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+            transcript: (() => {
+              const raw = typeof proof.transcript_text === 'string' ? proof.transcript_text : null;
+              const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
+              return redactTranscriptForAsk(raw, ranges);
+            })(),
+            privacyRedactions: publicPrivacyFields(
+              privacyRedactionsFromStored(findings.privacyRedactions),
+            ),
             ...conversationFields(proof.transcript_text, findings.conversation),
             ...publicPeopleFields(
               resolvePeoplePresent({
@@ -412,18 +425,21 @@ export function serializeEvidence(input: {
                 actions,
               }),
             ),
-            evidenceLog: buildEvidenceLog({
-              storedLog: findings.evidenceLog,
-              storedEntries: proof.narration?.entries,
-              narrationText: dictation,
-              summary: proof.ai_summary ?? findings.summary ?? null,
-              actions,
-              durationSeconds: Number(proof.duration_seconds) || null,
-              transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-              people: findings.people,
-              visionPeople: findings.visionPeople,
-              conversation: conversationFromStored(proof.transcript_text, findings.conversation),
-            }),
+            evidenceLog: applyPrivacyToEvidenceEntries(
+              buildEvidenceLog({
+                storedLog: findings.evidenceLog,
+                storedEntries: proof.narration?.entries,
+                narrationText: dictation,
+                summary: proof.ai_summary ?? findings.summary ?? null,
+                actions,
+                durationSeconds: Number(proof.duration_seconds) || null,
+                transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+                people: findings.people,
+                visionPeople: findings.visionPeople,
+                conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+              }),
+              privacyRedactionsFromStored(findings.privacyRedactions),
+            ),
           }
         : null,
   };

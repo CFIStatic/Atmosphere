@@ -11,6 +11,10 @@
 
 import { narrationEntriesFromEvents, sanitizeDictationEvents } from './dictationEvents.js';
 import { dictatePreparedFrames, type PreparedVideoFrames, type VideoDictationResult } from './videoIntelligence.js';
+import {
+  derivePrivacyRedactions,
+  toStoredPrivacyRedactions,
+} from '../audio/privacyRedactions.js';
 
 export function scopeContextNote(scopeTitles: string[]): string {
   const lines = scopeTitles.map((t) => t.trim()).filter(Boolean);
@@ -104,6 +108,37 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
     events,
     /** Raw vision people array — enrichProofConversation normalizes into ai_findings.people */
     visionPeople: Array.isArray(dictation.people) ? dictation.people : [],
+    privacyRedactions: (() => {
+      const peopleNotes: Array<{ tSec?: number | null; note?: string | null }> = [];
+      for (const person of Array.isArray(dictation.people) ? dictation.people : []) {
+        if (!person || typeof person !== 'object') continue;
+        const moments = (person as { appearMoments?: unknown }).appearMoments;
+        if (!Array.isArray(moments)) continue;
+        for (const m of moments) {
+          if (m && typeof m === 'object') {
+            peopleNotes.push({
+              tSec: Number((m as { tSec?: unknown }).tSec),
+              note: String((m as { note?: unknown }).note ?? ''),
+            });
+          } else if (typeof m === 'number') {
+            peopleNotes.push({ tSec: m, note: null });
+          }
+        }
+      }
+      const ranges = derivePrivacyRedactions({
+        events: (dictation.events ?? []).map((e) => ({
+          atSeconds: e.atSeconds,
+          text: e.text,
+          type: e.type,
+        })),
+        peopleNotes,
+        narrationText: dictation.narrationText,
+        summary: dictation.narrationSummary,
+        visionRanges: dictation.privacyRedactions ?? [],
+        model: dictation.model,
+      });
+      return toStoredPrivacyRedactions(ranges, dictation.model);
+    })(),
   };
 }
 

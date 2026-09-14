@@ -1,6 +1,10 @@
 import { anthropicClient, isModelProviderConfigured, type MeasuredUsage } from '../lib/anthropic.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { config } from '../config.js';
+import {
+  privacyRedactionsFromStored,
+  redactTranscriptForAsk,
+} from '../audio/privacyRedactions.js';
 
 /**
  * Reading the proof videos, and answering questions about them.
@@ -502,6 +506,7 @@ export function collectionClipsFromRows(
       changes?: unknown;
       workPerformed?: unknown;
       concerns?: unknown;
+      privacyRedactions?: unknown;
     } | null;
   }>,
 ): CollectionClip[] {
@@ -510,16 +515,25 @@ export function collectionClipsFromRows(
       ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       : [];
 
-  return rows.map((row) => ({
-    workDate: String(row.work_date ?? row.workDate ?? ''),
-    phase: row.phase ?? null,
-    company: row.company ?? null,
-    summary: row.ai_summary ?? row.narration_text ?? null,
-    narration: row.narration_text ?? null,
-    transcript: row.transcript_text ?? null,
-    changes: asStrings(row.ai_findings?.changes ?? row.ai_findings?.workPerformed),
-    concerns: asStrings(row.ai_findings?.concerns),
-  }));
+  return rows.map((row) => {
+    const findings = row.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+    const ranges = privacyRedactionsFromStored(
+      (findings as { privacyRedactions?: unknown }).privacyRedactions,
+    );
+    return {
+      workDate: String(row.work_date ?? row.workDate ?? ''),
+      phase: row.phase ?? null,
+      company: row.company ?? null,
+      summary: row.ai_summary ?? row.narration_text ?? null,
+      narration: row.narration_text ?? null,
+      transcript: redactTranscriptForAsk(row.transcript_text ?? null, ranges),
+      changes: asStrings(
+        (findings as { changes?: unknown; workPerformed?: unknown }).changes ??
+          (findings as { workPerformed?: unknown }).workPerformed,
+      ),
+      concerns: asStrings((findings as { concerns?: unknown }).concerns),
+    };
+  });
 }
 
 const STOP = new Set([

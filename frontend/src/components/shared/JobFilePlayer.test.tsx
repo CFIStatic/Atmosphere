@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VIDEO_PLAYER_PREFS_KEY } from '../../lib/videoPlayerPrefs';
-import { JobFilePlayer } from './JobFilePlayer';
+import { JobFilePlayer, activePrivacyRange } from './JobFilePlayer';
 
 describe('JobFilePlayer', () => {
   beforeEach(() => {
@@ -56,3 +56,31 @@ describe('JobFilePlayer', () => {
     expect(document.querySelector('track')).toBeNull();
   });
 });
+
+  it('activePrivacyRange matches inclusive private windows', () => {
+    const ranges = [{ startSec: 10, endSec: 20, reason: 'bathroom', confidence: 0.8, source: 'vision' as const }];
+    expect(activePrivacyRange(9.9, ranges)).toBeNull();
+    expect(activePrivacyRange(10, ranges)?.reason).toBe('bathroom');
+    expect(activePrivacyRange(19.9, ranges)?.reason).toBe('bathroom');
+  });
+
+  it('shows a privacy badge and hint when redaction ranges are provided', async () => {
+    render(
+      <JobFilePlayer
+        src="https://signed.test/clip.mp4"
+        privacyRedactions={[
+          { startSec: 5, endSec: 15, reason: 'bathroom', confidence: 0.9, source: 'vision' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('job-file-privacy-hint')).toHaveTextContent('Privacy-protected');
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 8, set: () => undefined });
+    video.dispatchEvent(new Event('timeupdate'));
+    await waitFor(() => {
+      expect(screen.getByTestId('job-file-privacy-badge')).toHaveTextContent('Privacy protected');
+    });
+    expect(video.getAttribute('data-privacy-active')).toBe('1');
+    expect(video.className).toMatch(/job-file-player-privacy-blur/);
+    expect(video.muted).toBe(true);
+  });
