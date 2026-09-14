@@ -14,11 +14,14 @@ describe('verifier analysis scroll follow', () => {
     expect(verifierHtml).toContain('followActiveAnalysisRow');
     expect(verifierHtml).toContain('isNearScrollBottom');
     expect(verifierHtml).toContain('resumeAnalysisFollow');
+    expect(verifierHtml).toContain('scrollRowInSide');
     expect(verifierHtml).toMatch(/if\s*\(\s*!analysisFollow\.enabled/);
-    // Must not unconditionally scrollIntoView on every sync anymore.
+    // Contained side-panel scroll only — never scrollIntoView (auto-pause).
     expect(verifierHtml).not.toMatch(
-      /var cur = lastSeen >= 0 \? items\[lastSeen\] : null;\s*if \(cur && cur\.scrollIntoView\) cur\.scrollIntoView/,
+      /followActiveAnalysisRow[\s\S]{0,200}scrollIntoView/,
     );
+    expect(verifierHtml).toContain("var analysisFollow = { enabled: false");
+    expect(verifierHtml).toContain('followOn && isPlayhead');
   });
 
   it('keeps speaker labels on a separate line from turn / transcript bodies', () => {

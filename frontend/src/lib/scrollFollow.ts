@@ -4,6 +4,10 @@
  * Follow while the user is near the bottom (or hasn't scrolled away).
  * Once they scroll up, pause follow until they return near the bottom
  * or explicitly resume.
+ *
+ * Never use Element.scrollIntoView for playhead follow — that scrolls
+ * ancestor containers (detail sheet / page) and can shove the video
+ * off-screen, which some browsers treat as a reason to auto-pause.
  */
 
 export const SCROLL_FOLLOW_NEAR_PX = 96;
@@ -52,4 +56,20 @@ export function resumeScrollFollow(): ScrollFollowState {
 
 export function pauseScrollFollow(): ScrollFollowState {
   return { following: false };
+}
+
+/**
+ * Scroll `row` into visibility inside `scroller` only — adjust scrollTop.
+ * Does not call scrollIntoView (ancestor-safe; avoids player auto-pause).
+ */
+export function scrollRowIntoScroller(scroller: HTMLElement, row: HTMLElement): void {
+  const sideRect = scroller.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const topGap = rowRect.top - sideRect.top;
+  const bottomGap = rowRect.bottom - sideRect.bottom;
+  if (topGap < 0) {
+    scroller.scrollTop += topGap;
+  } else if (bottomGap > 0) {
+    scroller.scrollTop += bottomGap;
+  }
 }

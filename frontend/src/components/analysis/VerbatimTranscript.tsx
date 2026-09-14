@@ -108,7 +108,8 @@ export function VerbatimTranscript({
         >
           {visible.map((row, index) => {
             const seekable = row.tSec != null && Number.isFinite(row.tSec) && row.tSec >= 0;
-            const isActive = index === activeIdx;
+            const isPlayhead = index === activeIdx;
+            const isActive = isPlayhead && following;
             const body = (
               <>
                 <span
@@ -142,6 +143,7 @@ export function VerbatimTranscript({
                   rowRefs.current[index] = el;
                 }}
                 data-active={isActive ? '1' : undefined}
+                data-playhead={isPlayhead ? '1' : undefined}
                 className={isActive ? 'bg-brand-50/80' : undefined}
               >
                 {seekable ? (

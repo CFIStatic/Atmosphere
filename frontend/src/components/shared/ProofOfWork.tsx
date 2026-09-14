@@ -130,11 +130,24 @@ export function ProofOfWork({
   const [seekProofId, setSeekProofId] = useState<string | null>(null);
   const [seekAt, setSeekAt] = useState<number | null>(null);
   const [seekNonce, setSeekNonce] = useState(0);
+  /** Playhead seconds per proof — drives Follow-gated highlight. */
+  const [playheadByProof, setPlayheadByProof] = useState<Record<string, number>>({});
 
   function applyClipSeek(proofId: string, seconds: number | null | undefined) {
     setSeekProofId(proofId);
-    if (seconds != null) setSeekAt(seconds);
+    if (seconds != null) {
+      setSeekAt(seconds);
+      setPlayheadByProof((prev) => ({ ...prev, [proofId]: seconds }));
+    }
     setSeekNonce((n) => n + 1);
+  }
+
+  function onClipTimeUpdate(proofId: string, seconds: number) {
+    setPlayheadByProof((prev) => {
+      const prevAt = prev[proofId];
+      if (prevAt != null && Math.abs(prevAt - seconds) < 0.2) return prev;
+      return { ...prev, [proofId]: seconds };
+    });
   }
 
   async function load(opts?: { silent?: boolean }) {
@@ -342,6 +355,8 @@ export function ProofOfWork({
           seekAt={seekAt}
           seekNonce={seekNonce}
           onSeek={applyClipSeek}
+          playheadByProof={playheadByProof}
+          onTimeUpdate={onClipTimeUpdate}
         />
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
@@ -594,6 +609,7 @@ export function ProofOfWork({
                                 people={video.people}
                                 evidenceEntries={evidenceEntriesFromVideo(video)}
                                 onSeek={(seconds) => applyClipSeek(id, seconds)}
+                                activeAtSeconds={playheadByProof[id] ?? null}
                               />
                             </div>
                           );
@@ -622,6 +638,7 @@ export function ProofOfWork({
                           seekNonce={seekProofId === id ? seekNonce : 0}
                           autoOpen={seekProofId === id}
                           captions={captionsForVideo((data.videos ?? []).find((v) => v.id === id))}
+                          onTimeUpdate={(seconds) => onClipTimeUpdate(id, seconds)}
                         />
                       ))}
                     </div>
@@ -817,6 +834,8 @@ function VideoCatalog({
   seekAt,
   seekNonce,
   onSeek,
+  playheadByProof,
+  onTimeUpdate,
 }: {
   jobId?: string;
   videos: ProofVideoRecord[];
@@ -825,6 +844,8 @@ function VideoCatalog({
   seekAt?: number | null;
   seekNonce?: number;
   onSeek?: (proofId: string, seconds: number) => void;
+  playheadByProof?: Record<string, number>;
+  onTimeUpdate?: (proofId: string, seconds: number) => void;
 }) {
   if (!videos.length) return null;
   return (
@@ -868,6 +889,7 @@ function VideoCatalog({
                   people={video.people}
                   evidenceEntries={evidenceEntriesFromVideo(video)}
                   onSeek={(seconds) => onSeek?.(video.id, seconds)}
+                  activeAtSeconds={playheadByProof?.[video.id] ?? null}
                 />
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -878,6 +900,7 @@ function VideoCatalog({
                   seekNonce={seekProofId === video.id ? seekNonce : 0}
                   autoOpen={seekProofId === video.id}
                   captions={captionsForVideo(video)}
+                  onTimeUpdate={(seconds) => onTimeUpdate?.(video.id, seconds)}
                 />
                 {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
                 {jobId && video.transcriptStatus !== 'done' ? (
@@ -899,12 +922,14 @@ function MeasuredVideo({
   seekTo,
   seekNonce = 0,
   captions,
+  onTimeUpdate,
 }: {
   src: string;
   className?: string;
   seekTo?: number | null;
   seekNonce?: number;
   captions?: JobFilePlayerCaptions | null;
+  onTimeUpdate?: (seconds: number) => void;
 }) {
   return (
     <JobFilePlayer
@@ -913,6 +938,8 @@ function MeasuredVideo({
       seekTo={seekTo}
       seekNonce={seekNonce}
       captions={captions}
+      knownDurationSeconds={captions?.durationSeconds}
+      onTimeUpdate={onTimeUpdate}
     />
   );
 }
@@ -928,6 +955,7 @@ function PlayClip({
   seekNonce,
   autoOpen = false,
   captions,
+  onTimeUpdate,
 }: {
   proofId: string;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
@@ -935,6 +963,7 @@ function PlayClip({
   seekNonce?: number;
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
+  onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -968,6 +997,7 @@ function PlayClip({
           seekTo={seekAt}
           seekNonce={seekNonce}
           captions={captions}
+          onTimeUpdate={onTimeUpdate}
           className="block max-h-40 w-full rounded-lg bg-black"
         />
       </div>
@@ -1001,6 +1031,7 @@ function ProofVideo({
   seekNonce,
   autoOpen = false,
   captions,
+  onTimeUpdate,
 }: {
   proofId: string;
   label: string;
@@ -1009,6 +1040,7 @@ function ProofVideo({
   seekNonce?: number;
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
+  onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1058,6 +1090,7 @@ function ProofVideo({
           seekTo={seekAt}
           seekNonce={seekNonce}
           captions={captions}
+          onTimeUpdate={onTimeUpdate}
           className="block max-h-64 w-full bg-black"
         />
       ) : (

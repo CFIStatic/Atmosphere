@@ -62,7 +62,8 @@ describe('EvidenceLog', () => {
     expect(row).not.toMatch(/FriedbergI think/);
   });
 
-  it('highlights the active playhead row without requiring a seek click', () => {
+  it('marks the playhead row quietly until Follow playhead is on', async () => {
+    const user = userEvent.setup();
     render(
       <EvidenceLog
         activeAtSeconds={50}
@@ -73,9 +74,12 @@ describe('EvidenceLog', () => {
         ]}
       />,
     );
-    const rows = screen.getByTestId('evidence-log-rows').querySelectorAll('li');
-    expect(rows[1]).toHaveAttribute('data-active', '1');
-    expect(rows[0]).not.toHaveAttribute('data-active');
+    const rows = () => screen.getByTestId('evidence-log-rows').querySelectorAll('li');
+    expect(rows()[1]).toHaveAttribute('data-playhead', '1');
+    expect(rows()[1]).not.toHaveAttribute('data-active');
+    expect(rows()[0]).not.toHaveAttribute('data-playhead');
+    await user.click(screen.getByTestId('evidence-log-follow'));
+    expect(rows()[1]).toHaveAttribute('data-active', '1');
   });
 });
 
