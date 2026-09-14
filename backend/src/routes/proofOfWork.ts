@@ -109,6 +109,11 @@ import {
   buildJobCustodyExport,
   parseDeviceMetadata,
 } from '../shared/custodyExport.js';
+import { buildJobProofPack } from '../shared/jobProofPack.js';
+import {
+  proofPackFilename,
+  renderJobProofPackPdf,
+} from '../shared/jobProofPackPdf.js';
 import {
   PROOF_ASSEMBLE_MAX_BYTES,
   assertProofAssembleBudget,
@@ -3431,6 +3436,126 @@ export async function restoreEvidence(req: Request, res: Response, next: NextFun
     });
 
     res.json({ ok: true, restored: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/operations/shared/:jobId/proof-pack.pdf?date=YYYY-MM-DD
+ * Downloadable PDF proof pack for insurer / GC / homeowner.
+ * Optional `date` (or `workDate`) limits the pack to one work day.
+ * Privacy-redacted ranges omit private frames and quotes.
+ */
+export async function jobProofPackPdf(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const dateRaw = String(req.query.date ?? req.query.workDate ?? '').trim();
+    const workDateFilter = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
+
+    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+
+    const { data: jobRow } = await supabase
+      .from('crm_jobs')
+      .select('id, title, job_number, claim_number, work_type, property_id')
+      .eq('id', req.params.jobId)
+      .maybeSingle();
+
+    let address: string | null = null;
+    const propertyId = (jobRow as any)?.property_id as string | null | undefined;
+    if (propertyId) {
+      const { data: property } = await supabase
+        .from('crm_properties')
+        .select('address_line1, city, region, postal_code')
+        .eq('id', propertyId)
+        .maybeSingle();
+      if (property) {
+        address = [property.address_line1, property.city, property.region, property.postal_code]
+          .filter(Boolean)
+          .join(', ');
+      }
+    }
+
+    const videos = (payload.videos ?? []) as any[];
+    const proofIds = videos
+      .filter((v) => (workDateFilter ? v.workDate === workDateFilter : true))
+      .map((v) => v.id as string);
+
+    const framesByProof = new Map<
+      string,
+      Array<{ proofId: string; atSeconds: number; storagePath: string | null }>
+    >();
+    const admin = unscopedAdminOrNull();
+    if (admin && proofIds.length) {
+      const { data: frameRows } = await admin
+        .from('job_proof_frames')
+        .select('proof_id, at_seconds, storage_path')
+        .in('proof_id', proofIds)
+        .order('at_seconds');
+      for (const row of (frameRows ?? []) as any[]) {
+        const proofId = String(row.proof_id);
+        const list = framesByProof.get(proofId) ?? [];
+        list.push({
+          proofId,
+          atSeconds: Number(row.at_seconds) || 0,
+          storagePath: row.storage_path ? String(row.storage_path) : null,
+        });
+        framesByProof.set(proofId, list);
+      }
+    }
+
+    const pack = buildJobProofPack({
+      workDateFilter,
+      job: {
+        id: req.params.jobId,
+        number: (jobRow as any)?.job_number ?? payload.job?.number ?? null,
+        name: (jobRow as any)?.title ?? payload.job?.name ?? null,
+        claimNumber: (jobRow as any)?.claim_number ?? null,
+        address,
+        workType: (jobRow as any)?.work_type ?? null,
+      },
+      days: (payload.days ?? []) as any[],
+      videos: videos as any[],
+      disputes: (payload.disputes ?? []) as any[],
+      framesByProof,
+    });
+
+    // Download selected public frame JPEGs (best-effort).
+    if (admin) {
+      for (const clip of pack.clips) {
+        for (const frame of clip.frames) {
+          if (!frame.storagePath) continue;
+          try {
+            const { data, error } = await admin.storage.from(PROOF_BUCKET).download(frame.storagePath);
+            if (error || !data) continue;
+            const ab = await data.arrayBuffer();
+            frame.jpeg = Buffer.from(ab);
+          } catch {
+            // Skip broken stills — text report still ships.
+          }
+        }
+      }
+    }
+
+    const pdf = await renderJobProofPackPdf(pack);
+    const filename = proofPackFilename(pack);
+
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      proofId: null,
+      action: 'exported',
+      detail: workDateFilter
+        ? `proof-pack.pdf · work date ${workDateFilter}`
+        : 'proof-pack.pdf · full job',
+      ...actor,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
   } catch (err) {
     next(err);
   }
