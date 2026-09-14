@@ -37,6 +37,7 @@ import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
+import { runSafetyScanForProof } from '../safety/sample.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelForCheck, labelsForProof } from '../verifier/library.js';
 import { persistProofClipTitleIfEmpty } from '../verifier/proofClipTitle.js';
@@ -740,6 +741,27 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // Step 2 — the file is on disk, so the model reads it now. Nobody has to
   // open Scope of Work. That tab only displays what this already wrote.
   const analysis = await analyseUploadedProof(admin, party, proof as any, input.workDate);
+
+  // Near-real-time safety: classify client frames (if any) right after file.
+  // Does not block the crew — incidents fan out async. True WebRTC live is TODO.
+  if (input.frames?.length) {
+    void runSafetyScanForProof(admin, {
+      orgId: party.org_id,
+      jobId: party.job_id,
+      partyId: party.id,
+      proofId: (proof as any).id,
+      clipId: recordedClipId,
+      frames: input.frames.slice(0, 3).map((f: { atSeconds: number; base64: string }) => ({
+        atSeconds: f.atSeconds,
+        base64: f.base64,
+      })),
+      lat: input.lat ?? null,
+      lon: input.lon ?? null,
+      source: 'post_upload',
+    }).catch((err) => {
+      console.warn('[safety] post-upload scan failed:', err instanceof Error ? err.message : err);
+    });
+  }
 
   // The clip's own length and stills, settled off the critical path. Neither
   // needs a model, and a crew standing in a doorway must not wait on FFmpeg

@@ -28,6 +28,7 @@ import {
   createUploadUrl,
   recordProof,
 } from './proofOfWork.js';
+import { processSafetySampleForParty } from '../safety/sample.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
@@ -724,6 +725,9 @@ fieldAppRouter.post('/jobs/:jobId/proof/upload-part-url', proofRoute(createPartU
 
 /** POST /api/field-app/jobs/:jobId/proof/upload-complete — stitch resumed or streamed parts. */
 fieldAppRouter.post('/jobs/:jobId/proof/upload-complete', proofRoute(completeChunkedProofUpload));
+
+/** POST /api/field-app/jobs/:jobId/proof/safety-sample — near-real-time safety classify while recording. */
+fieldAppRouter.post('/jobs/:jobId/proof/safety-sample', proofRoute(processSafetySampleForParty));
 
 /** POST /api/field-app/jobs/:jobId/proof — file the uploaded day film into the org record. */
 fieldAppRouter.post('/jobs/:jobId/proof', proofRoute(recordProof, 201));

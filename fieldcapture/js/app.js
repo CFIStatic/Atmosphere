@@ -1483,6 +1483,32 @@
           $('#site-text').textContent = site.label;
           $('#sitestrip').className = 'sitestrip' + (site.lat == null ? ' unsure' : '');
         });
+        // Near-real-time safety: sparse live frames while recording (not WebRTC).
+        if (Core.createLiveSafetySampler && !DEMO && (LIVE || (state.account && state.accessToken))) {
+          try {
+            if (rec.safetySampler && rec.safetySampler.stop) rec.safetySampler.stop();
+            rec.safetySampler = Core.createLiveSafetySampler({
+              videoEl: videoEl,
+              apiBase: state.apiBase || Core.resolveApiBase(),
+              jobId: LIVE ? null : state.activeJobId,
+              token: LIVE ? state.shareToken : null,
+              accessToken: function () {
+                return state.accessToken;
+              },
+              clipId: rec.clipId,
+              atSeconds: function () {
+                return state.seconds || 0;
+              },
+              site: function () {
+                return state.site;
+              },
+              workDate: Core.localDateISO(Date.now()),
+              phase: 'after',
+            });
+          } catch (e) {
+            /* never block capture */
+          }
+        }
       })
       .catch(function (err) {
         if (stream) {
@@ -1501,6 +1527,15 @@
    * (not a phone-only draft) or a job-share link, and signal right now. A
    * recording that cannot stream simply uploads whole at the end.
    */
+
+  function stopSafetySampler(rec) {
+    if (!rec || !rec.safetySampler) return;
+    try {
+      rec.safetySampler.stop();
+    } catch (e) {}
+    rec.safetySampler = null;
+  }
+
   function canStreamNow() {
     if (DEMO || !Core.createDayFilmStreamer || !Core.mintPartUploadUrl) return false;
     if (navigator.onLine === false) return false;
@@ -1602,6 +1637,7 @@
     if (!state.recorder || stopping) return;
     var recorder = state.recorder;
     var rec = state.recording || null;
+    stopSafetySampler(rec);
     var boundJobId = (rec && rec.jobId) || state.activeJobId;
     var boundJob = jobById(boundJobId);
     var boundOwner = state.filmOwner || state.owner;

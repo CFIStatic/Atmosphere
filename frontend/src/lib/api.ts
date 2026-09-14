@@ -2855,6 +2855,27 @@ export interface AuthResponse {
   terms?: TermsStatus;
 }
 
+
+export type SafetySeverity = 'watch' | 'critical';
+export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
+
+export interface SafetyIncident {
+  id: string;
+  orgId: string;
+  jobId: string | null;
+  category: string;
+  severity: SafetySeverity;
+  confidence: number;
+  title: string;
+  description: string;
+  clipTimestampSeconds: number | null;
+  locationLabel: string | null;
+  recommendedAction: string;
+  status: SafetyStatus;
+  source: string;
+  createdAt: string;
+}
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -3512,6 +3533,28 @@ export const api = {
 
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
+
+  jobSafetyIncidents: (jobId: string, status: 'open' | 'all' = 'open') =>
+    request<{
+      incidents: SafetyIncident[];
+      counts: { open: number; criticalOpen: number };
+    }>(
+      `/api/safety/incidents?jobId=${encodeURIComponent(jobId)}&status=${encodeURIComponent(status)}`,
+      { method: 'GET' },
+    ),
+
+  ackSafetyIncident: (id: string) =>
+    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/ack`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  dismissSafetyIncident: (id: string, reason?: string) =>
+    request<{ incident: SafetyIncident }>(`/api/safety/incidents/${id}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+
 
   jobEpisodes: (jobId: string) =>
     request<{ episodes: WorkEpisodeListItem[] }>(`/api/episodes?jobId=${encodeURIComponent(jobId)}`, {

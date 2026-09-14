@@ -39,6 +39,7 @@ import {
   touchJobProgressGrantAccess,
 } from '../shared/jobProgressGrants.js';
 import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
+import { processSafetySample } from '../safety/sample.js';
 import {
   completeChunkedProofUpload,
   createPartUploadUrl,
@@ -1678,6 +1679,23 @@ jobShareRouter.post(
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
       res.json(await completeChunkedProofUpload(party, admin, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Near-real-time safety sample while filming / uploading chunks. */
+jobShareRouter.post(
+  jobShareActionPattern('/proof/safety-sample'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      res.json(await processSafetySample(admin, party, req.body));
     } catch (err) {
       next(err);
     }

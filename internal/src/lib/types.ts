@@ -396,3 +396,35 @@ export interface LegalProductionPackage {
   }>;
   activity: UserActivityEvent[];
 }
+
+
+export type SafetySeverity = 'watch' | 'critical';
+export type SafetyStatus = 'open' | 'acknowledged' | 'dismissed';
+
+export interface SafetyIncident {
+  id: string;
+  orgId: string;
+  jobId: string | null;
+  partyId: string | null;
+  proofId: string | null;
+  clipId: string | null;
+  category: string;
+  severity: SafetySeverity;
+  confidence: number;
+  title: string;
+  description: string;
+  clipTimestampSeconds: number | null;
+  lat: number | null;
+  lon: number | null;
+  locationLabel: string | null;
+  recommendedAction: string;
+  status: SafetyStatus;
+  source: string;
+  model: string | null;
+  alertSentAt: string | null;
+  alertChannels: string[];
+  acknowledgedAt: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
