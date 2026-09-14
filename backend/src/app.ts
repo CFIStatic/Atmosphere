@@ -32,6 +32,7 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { legalRouter } from './routes/legal.js';
+import { playbooksRouter } from './routes/playbooks.js';
 import { safetyRouter } from './routes/safety.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
@@ -171,6 +172,7 @@ export function createApp(): Express {
   app.use('/api/safety', safetyRouter);
   app.use('/api/motion-clips', motionClipsRouter);
   app.use('/api/daily-report', dailyReportRouter);
+  app.use('/api/playbooks', playbooksRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   // /api/audit unmounted — agent_runs ledger dropped (non-sold-path).

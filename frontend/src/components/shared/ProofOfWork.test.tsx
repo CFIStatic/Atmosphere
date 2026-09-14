@@ -24,6 +24,8 @@ vi.mock('../../lib/api', () => ({
     requeueProofTranscript: vi.fn(),
     jobCustodyExport: vi.fn(),
     evidenceCustodyExport: vi.fn(),
+    createPlaybookFromJob: vi.fn(),
+    downloadProofPack: vi.fn(),
   },
 }));
 

@@ -45,6 +45,9 @@ const SettingsPage = lazy(() =>
 const LiveJobMapPage = lazy(() =>
   import('./pages/LiveJobMapPage').then((m) => ({ default: m.LiveJobMapPage })),
 );
+const PlaybooksLibraryPage = lazy(() =>
+  import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
+);
 const JobProgressGuestPage = lazy(() =>
   import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
 );
@@ -415,6 +418,7 @@ export default function App() {
             <Route path="/shared" element={<SharedJobsRedirect />} />
             <Route path="/live-map" element={<LiveJobMapPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/playbooks" element={<PlaybooksLibraryPage />} />
           </Route>
 
           <Route path="/billing" element={<BillingSettingsRedirect />} />
