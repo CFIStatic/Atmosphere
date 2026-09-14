@@ -33,6 +33,10 @@ import {
   sanitizeDictationEvents,
   type DictationEvent,
 } from './dictationEvents.js';
+import {
+  parsePrivacyRedactions,
+  type PrivacyRedactionRange,
+} from '../audio/privacyRedactions.js';
 
 export type VideoSourceKind =
   | 'proof_of_work'
@@ -81,6 +85,8 @@ export type VideoDictationResult = {
   events: DictationEvent[];
   /** Distinct people visible — roles + appearance; never hallucinated legal names. */
   people: unknown[];
+  /** Private intervals to blur+mute (bathroom, undressing, intimate spaces). */
+  privacyRedactions: PrivacyRedactionRange[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -217,8 +223,9 @@ export async function dictatePreparedFrames(
     'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count. Set confidence low (≤0.4) when the still is ambiguous.',
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp.',
-    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary.',
+    'PRIVACY: when stills show a bathroom/toilet/shower, locker/changing room, explicit undressing, or clearly intimate/private space not meant for work evidence, add privacyRedactions ranges {startSec,endSec,reason,confidence}. Prefer over-redacting private spaces over leaking them. Mark confidence; never invent a private room that is not evidenced. Empty array when nothing private is visible.',
+    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}],"privacyRedactions":[{"startSec":60,"endSec":95,"reason":"bathroom","confidence":0.85}]}',
+    'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary. privacyRedactions may be empty.',
   ].join(' ');
 
   const userText = [
@@ -303,6 +310,7 @@ export async function dictatePreparedFrames(
     actions: parsed.actions,
     events: parsed.events,
     people: parsed.people,
+    privacyRedactions: parsed.privacyRedactions,
   };
 }
 
@@ -393,6 +401,7 @@ async function dictateWithGemini(input: {
     actions: parsed.actions,
     events: parsed.events,
     people: parsed.people,
+    privacyRedactions: parsed.privacyRedactions,
   };
 }
 
@@ -460,6 +469,7 @@ export function parseDictationPayload(
   actions: VisionAction[];
   events: DictationEvent[];
   people: unknown[];
+  privacyRedactions: PrivacyRedactionRange[];
 } {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -471,6 +481,7 @@ export function parseDictationPayload(
       actions: [],
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
       people: [],
+      privacyRedactions: [],
     };
   }
   try {
@@ -482,6 +493,8 @@ export function parseDictationPayload(
       entries?: unknown;
       people?: unknown;
       persons?: unknown;
+      privacyRedactions?: unknown;
+      privacy_redactions?: unknown;
     };
     const narration = String(data.narration ?? '').trim();
     const summary = String(data.summary ?? '').trim() || null;
@@ -492,6 +505,9 @@ export function parseDictationPayload(
       actions,
       events: eventsFromParsed(data, narration, actions, frames, summary),
       people: asPeopleArray(data.people ?? data.persons),
+      privacyRedactions: parsePrivacyRedactions(
+        data.privacyRedactions ?? data.privacy_redactions,
+      ),
     };
   } catch {
     const trimmed = text.trim();
@@ -501,6 +517,7 @@ export function parseDictationPayload(
       actions: [],
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
       people: [],
+      privacyRedactions: [],
     };
   }
 }

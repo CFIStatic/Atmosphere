@@ -682,3 +682,17 @@ html[data-field-embed] #root {
   background: #f4f1eb;
 }
 
+
+
+/* Phase-1 privacy redaction: heavy blur while playhead is in a private range.
+   Pointer events stay on the video so seeking still works; audio is force-muted
+   in JobFilePlayer. Server-side re-encode is phase 2 (docs/privacy-redaction.md). */
+.job-file-player-privacy-blur {
+  filter: blur(28px) brightness(0.55) saturate(0.4);
+}
+.job-file-player-stage {
+  isolation: isolate;
+}
+.job-file-player-privacy-veil {
+  background: rgba(15, 18, 22, 0.18);
+}

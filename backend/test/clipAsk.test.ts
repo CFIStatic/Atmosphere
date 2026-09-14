@@ -10,6 +10,7 @@ import {
   preferClipGroundedFastPath,
   isTranscriptPending,
   wantsAskDepth,
+  speechSafeClipRecord,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
 import { serializeEvidence } from '../src/verifier/library.js';
@@ -534,4 +535,27 @@ test('layeredClipBriefing keeps first-turn answers scannable', () => {
   assert.ok(briefing);
   assert.match(briefing!, /Bathroom|cabinets|vanity|insurance/i);
   assert.doesNotMatch(briefing!, /\[0:18\]|Exact words/);
+});
+
+test('Ask skips verbatim audio from privacy-redacted ranges', () => {
+  const record: ClipAskRecord = {
+    workDate: '2026-09-14',
+    phase: 'after',
+    analysisState: 'done',
+    summary: 'Crew walked the hall and briefly entered a bathroom.',
+    transcript:
+      '[0:10] Crew: Starting in the hall.\n' +
+      '[1:20] Crew: Bathroom — give me a minute.\n' +
+      '[2:05] Crew: Back on the trim.',
+    privacyRedactions: {
+      ranges: [
+        { startSec: 70, endSec: 100, reason: 'bathroom', confidence: 0.8, source: 'vision' },
+      ],
+    },
+  };
+  const safe = speechSafeClipRecord(record);
+  assert.match(String(safe.transcript), /\[privacy redacted\]/);
+  assert.doesNotMatch(String(safe.transcript), /give me a minute/i);
+  const answer = groundedAnswerFromClip('What did they say in the bathroom?', record);
+  assert.doesNotMatch(answer, /give me a minute/i);
 });

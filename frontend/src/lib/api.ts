@@ -929,6 +929,20 @@ export interface ProofConversation {
   transcriptText?: string | null;
 }
 
+/** Privacy-protected interval on a filed video (blur + mute). */
+export interface PrivacyRedactionRange {
+  startSec: number;
+  endSec: number;
+  reason: string;
+  confidence: number;
+  source: 'vision' | 'heuristic' | 'merged' | 'manual' | string;
+}
+
+export interface ProofPrivacyRedactions {
+  version: number;
+  ranges: PrivacyRedactionRange[];
+}
+
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
   id: string;
@@ -960,6 +974,8 @@ export interface ProofVideoRecord {
   evidenceLog?: EvidenceLogEntry[];
   /** WHO is in frame / talking. */
   people?: ProofPeoplePresent | null;
+  /** Private intervals — player blurs + mutes; Ask skips speech. */
+  privacyRedactions?: ProofPrivacyRedactions | null;
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];

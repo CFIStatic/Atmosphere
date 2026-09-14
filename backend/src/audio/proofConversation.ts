@@ -31,6 +31,13 @@ import {
   identifySpeakers,
   webIdentifyPublicSpeakers,
 } from './speakerIdentity.js';
+import {
+  applyPrivacyToEvidenceEntries,
+  derivePrivacyRedactions,
+  privacyRedactionsFromStored,
+  toStoredPrivacyRedactions,
+  type StoredPrivacyRedactions,
+} from './privacyRedactions.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -174,10 +181,31 @@ export async function enrichProofConversation(
         : undefined,
   });
 
+  const peopleNotes: Array<{ tSec?: number | null; note?: string | null }> = [];
+  for (const person of people.people) {
+    for (const m of person.appearMoments ?? []) {
+      peopleNotes.push({ tSec: m.tSec, note: m.note ?? null });
+    }
+  }
+  const existingPrivacy = privacyRedactionsFromStored(findings.privacyRedactions);
+  const privacyRanges = derivePrivacyRedactions({
+    durationSeconds,
+    events: logEntries.map((e) => ({ atSeconds: e.atSeconds, text: e.text, type: e.type })),
+    peopleNotes,
+    narrationText,
+    summary,
+    visionRanges: existingPrivacy,
+  });
+  const privacyStored = toStoredPrivacyRedactions(privacyRanges);
+  if (privacyRanges.length) {
+    logEntries = applyPrivacyToEvidenceEntries(logEntries, privacyRanges);
+  }
+
   await mergeFindings(admin, proofId, {
     conversation: hasConversation(details) ? toStoredConversation(details) : null,
     evidenceLog: logEntries.length ? toStoredEvidenceLog(logEntries) : null,
     people: hasPeople(people) ? toStoredPeople(people) : null,
+    privacyRedactions: privacyStored,
   });
 
   return hasConversation(details) ? details : null;
@@ -288,6 +316,7 @@ async function mergeFindings(
     conversation: StoredConversation | null;
     evidenceLog: StoredEvidenceLog | null;
     people: StoredPeoplePresent | null;
+    privacyRedactions: StoredPrivacyRedactions | null;
   },
 ): Promise<void> {
   const { data: proof } = await admin
@@ -305,6 +334,8 @@ async function mergeFindings(
   else delete prev.evidenceLog;
   if (patch.people) prev.people = patch.people;
   else delete prev.people;
+  if (patch.privacyRedactions) prev.privacyRedactions = patch.privacyRedactions;
+  else delete prev.privacyRedactions;
   await admin.from('job_proofs').update({ ai_findings: prev }).eq('id', proofId);
 }
 

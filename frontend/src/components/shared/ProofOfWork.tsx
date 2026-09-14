@@ -638,6 +638,9 @@ export function ProofOfWork({
                           seekNonce={seekProofId === id ? seekNonce : 0}
                           autoOpen={seekProofId === id}
                           captions={captionsForVideo((data.videos ?? []).find((v) => v.id === id))}
+                          privacyRedactions={
+                            (data.videos ?? []).find((v) => v.id === id)?.privacyRedactions?.ranges ?? null
+                          }
                           onTimeUpdate={(seconds) => onClipTimeUpdate(id, seconds)}
                         />
                       ))}
@@ -900,8 +903,24 @@ function VideoCatalog({
                   seekNonce={seekProofId === video.id ? seekNonce : 0}
                   autoOpen={seekProofId === video.id}
                   captions={captionsForVideo(video)}
+                  privacyRedactions={video.privacyRedactions?.ranges ?? null}
                   onTimeUpdate={(seconds) => onTimeUpdate?.(video.id, seconds)}
                 />
+                {video.privacyRedactions?.ranges?.length ? (
+                  <p
+                    className="max-w-[14rem] text-right text-[10px] text-ink-400"
+                    data-testid="privacy-redaction-review"
+                    title={video.privacyRedactions.ranges
+                      .map(
+                        (r) =>
+                          `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+                      )
+                      .join('\n')}
+                  >
+                    Privacy-protected · {video.privacyRedactions.ranges.length} segment
+                    {video.privacyRedactions.ranges.length === 1 ? '' : 's'}
+                  </p>
+                ) : null}
                 {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
                 {jobId && video.transcriptStatus !== 'done' ? (
                   <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
@@ -922,6 +941,7 @@ function MeasuredVideo({
   seekTo,
   seekNonce = 0,
   captions,
+  privacyRedactions,
   onTimeUpdate,
 }: {
   src: string;
@@ -929,6 +949,7 @@ function MeasuredVideo({
   seekTo?: number | null;
   seekNonce?: number;
   captions?: JobFilePlayerCaptions | null;
+  privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   return (
@@ -939,6 +960,7 @@ function MeasuredVideo({
       seekNonce={seekNonce}
       captions={captions}
       knownDurationSeconds={captions?.durationSeconds}
+      privacyRedactions={privacyRedactions}
       onTimeUpdate={onTimeUpdate}
     />
   );
@@ -955,6 +977,7 @@ function PlayClip({
   seekNonce,
   autoOpen = false,
   captions,
+  privacyRedactions,
   onTimeUpdate,
 }: {
   proofId: string;
@@ -963,6 +986,7 @@ function PlayClip({
   seekNonce?: number;
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
+  privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -997,6 +1021,7 @@ function PlayClip({
           seekTo={seekAt}
           seekNonce={seekNonce}
           captions={captions}
+          privacyRedactions={privacyRedactions}
           onTimeUpdate={onTimeUpdate}
           className="block max-h-40 w-full rounded-lg bg-black"
         />
@@ -1031,6 +1056,7 @@ function ProofVideo({
   seekNonce,
   autoOpen = false,
   captions,
+  privacyRedactions,
   onTimeUpdate,
 }: {
   proofId: string;
@@ -1040,6 +1066,7 @@ function ProofVideo({
   seekNonce?: number;
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
+  privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -1090,6 +1117,7 @@ function ProofVideo({
           seekTo={seekAt}
           seekNonce={seekNonce}
           captions={captions}
+          privacyRedactions={privacyRedactions}
           onTimeUpdate={onTimeUpdate}
           className="block max-h-64 w-full bg-black"
         />
