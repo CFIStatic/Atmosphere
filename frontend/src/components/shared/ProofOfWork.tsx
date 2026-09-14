@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -138,7 +137,6 @@ export function ProofOfWork({
   const [playheadByProof, setPlayheadByProof] = useState<Record<string, number>>({});
   const [playbookBusy, setPlaybookBusy] = useState(false);
   const [playbookMsg, setPlaybookMsg] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   function applyClipSeek(proofId: string, seconds: number | null | undefined) {
     setSeekProofId(proofId);
@@ -294,7 +292,8 @@ export function ProofOfWork({
     try {
       const res = await api.createPlaybookFromJob(jobId);
       setPlaybookMsg('Saved to playbook library.');
-      navigate(`/playbooks?id=${encodeURIComponent(res.playbook.id)}`);
+      // Full navigation keeps ProofOfWork usable outside a Router (unit tests).
+      window.location.assign(`/playbooks?id=${encodeURIComponent(res.playbook.id)}`);
     } catch (err) {
       setPlaybookMsg(err instanceof ApiError ? err.message : 'Could not save playbook.');
     } finally {
