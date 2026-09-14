@@ -21,6 +21,7 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import { overlaySpeakerLabels } from '../audio/speakerIdentity.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
@@ -400,9 +401,8 @@ export function serializeEvidence(input: {
             windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? proof.narration?.model ?? null,
             transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-            ...conversationFields(proof.transcript_text, findings.conversation),
-            ...publicPeopleFields(
-              resolvePeoplePresent({
+            ...(() => {
+              const peopleResolved = resolvePeoplePresent({
                 stored: findings.people,
                 transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
                 conversationStored: findings.conversation,
@@ -410,31 +410,42 @@ export function serializeEvidence(input: {
                 summary: proof.ai_summary ?? findings.summary ?? null,
                 visionPeople: findings.visionPeople,
                 actions,
-              }),
-            ),
-            evidenceLog: buildEvidenceLog({
-              storedLog: findings.evidenceLog,
-              storedEntries: proof.narration?.entries,
-              narrationText: dictation,
-              summary: proof.ai_summary ?? findings.summary ?? null,
-              actions,
-              durationSeconds: Number(proof.duration_seconds) || null,
-              transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-              people: findings.people,
-              visionPeople: findings.visionPeople,
-              conversation: conversationFromStored(proof.transcript_text, findings.conversation),
-            }),
+              });
+              const evidence = buildEvidenceLog({
+                storedLog: findings.evidenceLog,
+                storedEntries: proof.narration?.entries,
+                narrationText: dictation,
+                summary: proof.ai_summary ?? findings.summary ?? null,
+                actions,
+                durationSeconds: Number(proof.duration_seconds) || null,
+                transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+                people: findings.people,
+                visionPeople: findings.visionPeople,
+                conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+              });
+              return {
+                ...conversationFields(proof.transcript_text, findings.conversation, peopleResolved),
+                ...publicPeopleFields(peopleResolved),
+                evidenceLog: overlaySpeakerLabels(evidence, peopleResolved),
+              };
+            })(),
           }
         : null,
   };
 }
 
-function conversationFields(transcript: unknown, stored: unknown) {
+function conversationFields(
+  transcript: unknown,
+  stored: unknown,
+  people?: ReturnType<typeof resolvePeoplePresent> | null,
+) {
   const text = typeof transcript === 'string' ? transcript : null;
+  const fields = publicConversationFields(conversationFromStored(transcript, stored));
   return {
-    ...publicConversationFields(conversationFromStored(transcript, stored)),
+    ...fields,
+    conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people ?? null),
     transcriptText: text,
-    transcriptSegments: parseVerbatimTranscript(text),
+    transcriptSegments: overlaySpeakerLabels(parseVerbatimTranscript(text), people ?? null),
   };
 }
 

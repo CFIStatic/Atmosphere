@@ -50,4 +50,40 @@ describe('PeoplePresentPanel', () => {
     const { container } = render(<PeoplePresentPanel people={null} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('shows displayName and identity method instead of generic Speaker label', () => {
+    render(
+      <PeoplePresentPanel
+        people={{
+          peoplePresent: [
+            {
+              id: 'person-1',
+              label: 'Lex Fridman',
+              role: 'other',
+              appearance: 'desk interview',
+              appearMoments: [{ tSec: 12, note: 'speaking' }],
+              speakerLabel: 'Speaker A',
+              displayName: 'Lex Fridman',
+              identityMethod: 'web',
+              identityConfidence: 0.94,
+            },
+          ],
+          peopleCount: 1,
+          peopleSpeakers: [
+            {
+              speakerLabel: 'Speaker A',
+              personId: 'person-1',
+              turnCount: 4,
+              displayName: 'Lex Fridman',
+              identityMethod: 'web',
+              identityConfidence: 0.94,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId('person-present-row').textContent).toMatch(/Lex Fridman/);
+    expect(screen.getByTestId('person-identity-method').textContent).toMatch(/web/i);
+    expect(screen.getByTestId('people-speakers').textContent).toMatch(/Lex Fridman/);
+  });
 });

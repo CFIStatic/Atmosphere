@@ -871,12 +871,21 @@ export interface PersonPresent {
   lastSeenSec?: number | null;
   appearMoments: Array<{ tSec: number; note?: string | null }>;
   speakerLabel?: string | null;
+  /** Confident real name — never a face guess. Prefer over speakerLabel in UI. */
+  displayName?: string | null;
+  identityConfidence?: number | null;
+  identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
+  identitySource?: string | null;
 }
 
 export interface PeopleSpeakerIndex {
   speakerLabel: string;
   personId: string | null;
   turnCount: number;
+  displayName?: string | null;
+  identityConfidence?: number | null;
+  identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
+  identitySource?: string | null;
 }
 
 /** Structured WHO log for Analysis — null when nobody identified. */

@@ -23,8 +23,14 @@ import {
   hasPeople,
   parsePeopleModelJson,
   toStoredPeople,
+  type OrgMemberHint,
   type StoredPeoplePresent,
 } from './peoplePresent.js';
+import {
+  classifySceneKind,
+  identifySpeakers,
+  webIdentifyPublicSpeakers,
+} from './speakerIdentity.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -125,7 +131,7 @@ export async function enrichProofConversation(
       actions,
     }),
   );
-  const people =
+  const basePeople =
     fromModel && hasPeople(fromModel)
       ? fromModel
       : extractPeoplePresent({
@@ -137,6 +143,37 @@ export async function enrichProofConversation(
           actions,
         });
 
+  const narrationText = proof?.narration_text ?? null;
+  const summary = proof?.ai_summary ?? findings.summary ?? null;
+  const orgMembers = await loadOrgMembersForProof(admin, proofId);
+  const visibleFromVision = (Array.isArray(visionPeople) ? visionPeople : [])
+    .map((p: unknown) => {
+      if (!p || typeof p !== 'object') return '';
+      const row = p as { matchedName?: unknown; appearance?: unknown; label?: unknown };
+      return [row.matchedName, row.appearance, row.label].filter(Boolean).join(' ');
+    })
+    .filter(Boolean) as string[];
+
+  const sceneKind = classifySceneKind({ narrationText, summary });
+  const people = await identifySpeakers({
+    people: basePeople,
+    narrationText,
+    summary,
+    orgMembers,
+    visibleTextHints: visibleFromVision,
+    allowWebIdentify: sceneKind === 'public_media' ? true : sceneKind === 'private_job' ? false : null,
+    webIdentify:
+      sceneKind === 'public_media'
+        ? async ({ hints, people: ppl }) =>
+            webIdentifyPublicSpeakers({
+              hints,
+              speakerLabels: ppl.speakers.map((s) => s.speakerLabel),
+              narrationText,
+              summary,
+            })
+        : undefined,
+  });
+
   await mergeFindings(admin, proofId, {
     conversation: hasConversation(details) ? toStoredConversation(details) : null,
     evidenceLog: logEntries.length ? toStoredEvidenceLog(logEntries) : null,
@@ -144,6 +181,42 @@ export async function enrichProofConversation(
   });
 
   return hasConversation(details) ? details : null;
+}
+
+
+async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgMemberHint[]> {
+  try {
+    const { data: proof } = await admin
+      .from('job_proofs')
+      .select('org_id')
+      .eq('id', proofId)
+      .maybeSingle();
+    const orgId = proof?.org_id;
+    if (!orgId) return [];
+    const { data: rows } = await admin
+      .from('org_members')
+      .select('user_id, profiles(full_name, email)')
+      .eq('org_id', orgId)
+      .limit(200);
+    const out: OrgMemberHint[] = [];
+    for (const row of rows ?? []) {
+      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+      const fullName = String(profile?.full_name || '').trim();
+      if (!fullName || !row.user_id) continue;
+      out.push({
+        userId: String(row.user_id),
+        fullName,
+        email: profile?.email ?? null,
+      });
+    }
+    return out;
+  } catch (err) {
+    console.warn(
+      '[speaker-identity] org roster load failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }
 
 async function mergeFindings(

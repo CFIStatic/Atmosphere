@@ -75,6 +75,7 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import { overlaySpeakerLabels } from '../audio/speakerIdentity.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
@@ -175,10 +176,20 @@ function conversationPayloadFromRow(row: any) {
   const transcriptText = typeof row?.transcript_text === 'string' ? row.transcript_text : null;
   const segments = parseVerbatimTranscript(transcriptText);
   if (!hasConversation(details) && !segments.length) return null;
+  const people = resolvePeoplePresent({
+    stored: findings.people,
+    transcript: transcriptText,
+    conversationStored: findings.conversation,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    visionPeople: findings.visionPeople,
+  });
+  const fields = publicConversationFields(details);
   return {
-    ...publicConversationFields(details),
+    ...fields,
+    conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people),
     transcriptText,
-    transcriptSegments: segments,
+    transcriptSegments: overlaySpeakerLabels(segments, people),
   };
 }
 
@@ -189,7 +200,16 @@ function evidenceLogFromRow(row: any) {
     : Array.isArray(findings.actions)
       ? findings.actions
       : [];
-  return buildEvidenceLog({
+  const people = resolvePeoplePresent({
+    stored: findings.people,
+    transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+    conversationStored: findings.conversation,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    visionPeople: findings.visionPeople,
+    actions,
+  });
+  const entries = buildEvidenceLog({
     storedLog: findings.evidenceLog,
     storedEntries: row?.narration?.entries,
     narrationText: row?.narration_text ?? null,
@@ -201,6 +221,7 @@ function evidenceLogFromRow(row: any) {
     visionPeople: findings.visionPeople,
     conversation: conversationFromStored(row?.transcript_text, findings.conversation),
   });
+  return overlaySpeakerLabels(entries, people);
 }
 
 function peoplePayloadFromRow(row: any) {
