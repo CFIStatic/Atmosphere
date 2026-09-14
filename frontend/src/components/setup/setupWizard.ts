@@ -45,7 +45,7 @@ const HOMEOWNER_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Save this job',
-    detail: 'Email and password — then you are in.',
+    detail: 'Email and password — free, no payment.',
   },
 ] as const;
 
@@ -68,7 +68,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'homeowner') {
     return {
       heading: 'Save this job',
-      lede: 'Pick an email and password so you can open this job file again anytime.',
+      lede: 'Use the invited email and a password. Atmosphere is free for homeowners — no plan, no card, no trial.',
       steps: HOMEOWNER_WIZARD_STEPS,
     };
   }
@@ -102,7 +102,10 @@ export function initialSetupStep(options: {
   membership: boolean;
   stepParam: string | null;
   checkout?: string | null;
+  /** Homeowner / capture invitees never see Stripe or plan selection. */
+  inviteeAccount?: boolean;
 }): SetupWizardStep {
+  if (options.inviteeAccount) return 1;
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
   // Stripe always returns to billing. Do this before the membership check —
   // on a full-page return the session is still loading and membership is empty.

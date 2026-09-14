@@ -50,15 +50,18 @@ export function SignupPage() {
   const checkoutParam =
     checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
+  const orgIntent = parseSignupIntent(searchParams.get('intent'));
+  const isInviteeIntent = orgIntent === 'homeowner' || orgIntent === 'capture';
+
   const [step, setStep] = useState<SetupWizardStep>(() =>
     initialSetupStep({
       user: Boolean(user),
       membership: Boolean(membership),
       stepParam: searchParams.get('step'),
       checkout: checkoutParam,
+      inviteeAccount: isInviteeIntent,
     }),
   );
-  const orgIntent = parseSignupIntent(searchParams.get('intent'));
 
   const [fullName, setFullName] = useState('');
   const [serviceRole, setServiceRole] = useState<ServiceRoleSlug | ''>('');
@@ -83,17 +86,18 @@ export function SignupPage() {
 
   const goToStep = useCallback(
     (next: SetupWizardStep) => {
-      setStep(next);
+      const safe = isInviteeIntent ? 1 : next;
+      setStep(safe);
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev);
-          params.set('step', String(next));
+          params.set('step', String(safe));
           return params;
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, isInviteeIntent],
   );
 
   useEffect(() => {
@@ -101,6 +105,11 @@ export function SignupPage() {
   }, [orgIntent]);
 
   useEffect(() => {
+    // Invitees never enter Stripe / plan selection — keep them on step 1.
+    if (isInviteeIntent) {
+      if (step !== 1) setStep(1);
+      return;
+    }
     if (loading || !user || !membership) return;
 
     let cancelled = false;
@@ -127,7 +136,7 @@ export function SignupPage() {
     return () => {
       cancelled = true;
     };
-  }, [loading, user, membership, searchParams, checkoutParam]);
+  }, [loading, user, membership, searchParams, checkoutParam, isInviteeIntent, step]);
 
   if (loading) {
     return (
@@ -256,11 +265,8 @@ export function SignupPage() {
             /* claim path also forces Homeowner */
           }
         }
-        if (res.membership?.org) {
-          await continueAfterWorkspace();
-          return;
-        }
-        // Homeowner quick account: email + password only — claim progress share next.
+        // Homeowner / capture invitees never create an org or enter billing —
+        // even if signup somehow returned a membership.
         if (orgIntent === 'homeowner') {
           queueRedirect(homeownerAfterSignup(redirectTo));
           return;
@@ -269,6 +275,10 @@ export function SignupPage() {
           window.location.assign(
             captureAfterSignup(searchParams.get('token'), email.trim() || searchParams.get('email')),
           );
+          return;
+        }
+        if (res.membership?.org) {
+          await continueAfterWorkspace();
           return;
         }
       }
@@ -325,7 +335,7 @@ export function SignupPage() {
             isCapture
               ? 'Email and password. Then Field Capture opens this job.'
               : isHomeowner
-                ? 'Email and password. That is it.'
+                ? 'Invited email + password. Free — no plan or payment.'
                 : mode === 'join'
                   ? 'Use the invite from your Global Admin — create the account with the invited email.'
                   : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
@@ -391,8 +401,9 @@ export function SignupPage() {
                 )}
                 {isHomeowner && (
                   <p className="text-xs text-ink-500">
-                    You will be labeled as <span className="font-semibold text-ink-800">Homeowner</span> on
-                    this job — not a name scraped from the web.
+                    Free for homeowners — no plan or payment. You will be labeled as{' '}
+                    <span className="font-semibold text-ink-800">Homeowner</span> on this job.
+                    Use the same email as the invite.
                   </p>
                 )}
 
@@ -480,7 +491,7 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {step === 2 && membership && (
+      {step === 2 && !isInviteeAccount && membership && (
         <SetupBillingStep
           redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
@@ -489,7 +500,7 @@ export function SignupPage() {
         />
       )}
 
-      {step === 2 && !membership && (
+      {step === 2 && !isInviteeAccount && !membership && (
         <SetupStepCard
           step={2}
           intent={orgIntent}
@@ -515,7 +526,8 @@ export function SignupPage() {
             />
           </div>
           <p className="mt-3 text-sm text-ink-600">
-            Extra Field Capture seats are $125/mo each. AI/token usage is billed the day it is used.
+            Extra Field Capture seats are $125/mo each. Seats count Field Capture accounts only —
+            office-only Global Admins do not use a seat. AI/token usage is billed the day it is used.
           </p>
           <div className="mt-7 flex justify-end">
             <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>

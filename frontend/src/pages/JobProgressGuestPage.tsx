@@ -154,7 +154,8 @@ export function JobProgressGuestPage() {
       <div className="shrink-0 border-b border-line bg-paper-0 px-6 py-3">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-ink-700">
-            Want to come back later? Save this job with an email and password.
+            Want to come back later? Save this job with the invited email and a password —{' '}
+            <span className="font-medium text-ink-800">free, no payment</span>.
           </p>
           <div className="flex flex-wrap gap-2">
             {user ? (

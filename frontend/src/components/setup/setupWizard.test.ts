@@ -5,13 +5,14 @@ describe('setupWizardCopy', () => {
   it('uses a one-step homeowner save-job flow without contractor copy', () => {
     const copy = setupWizardCopy('homeowner');
     expect(copy.heading).toMatch(/Save this job/i);
-    expect(copy.lede).toMatch(/email and password/i);
+    expect(copy.lede).toMatch(/invited email/i);
+    expect(copy.lede).toMatch(/free for homeowners/i);
     expect(copy.lede).not.toMatch(/film the first day/i);
     expect(copy.lede).not.toMatch(/Field Capture/i);
-    expect(copy.lede).not.toMatch(/no payment/i);
     expect(copy.steps).toHaveLength(1);
     expect(copy.steps[0]?.title).toMatch(/Save this job/i);
     expect(copy.steps[0]?.detail).toMatch(/email and password/i);
+    expect(copy.steps[0]?.detail).toMatch(/free|no payment/i);
     expect(copy.steps[0]?.detail).not.toMatch(/Field Capture/i);
   });
 
@@ -83,5 +84,25 @@ describe('initialSetupStep', () => {
         checkout: 'cancelled',
       }),
     ).toBe(2);
+  });
+
+  it('keeps homeowner and capture invitees on step 1 even with billing URL params', () => {
+    expect(
+      initialSetupStep({
+        user: true,
+        membership: true,
+        stepParam: '2',
+        checkout: 'success',
+        inviteeAccount: true,
+      }),
+    ).toBe(1);
+    expect(
+      initialSetupStep({
+        user: false,
+        membership: false,
+        stepParam: '2',
+        inviteeAccount: true,
+      }),
+    ).toBe(1);
   });
 });

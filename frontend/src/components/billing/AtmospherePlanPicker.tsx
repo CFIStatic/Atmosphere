@@ -61,7 +61,8 @@ export function AtmospherePlanPicker({
         })}
       </fieldset>
       <p className="mt-3 text-xs text-ink-500">
-        Prices increase 10% annually on your plan anniversary (30-day notice). Includes seats and usage.
+        Field Capture seats only — office-only Global Admins do not use a seat. Extra seats $125/mo.
+        Prices increase 10% annually on your plan anniversary (30-day notice).
       </p>
     </div>
   );
