@@ -40,6 +40,12 @@ import {
 } from '../shared/jobProgressGrants.js';
 import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
 import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
+import { roomsMentionedIn } from '../audio/conversationDetails.js';
+import {
+  rankSimilarPastJobs,
+  roomsFromAnalysis,
+  type JobSimilaritySeed,
+} from '../shared/similarPastJobs.js';
 import { processSafetySample } from '../safety/sample.js';
 import {
   completeChunkedProofUpload,
@@ -513,6 +519,133 @@ sharedJobsRouter.get(
       });
 
       res.json({ people });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
+/**
+ * GET /api/operations/shared/:jobId/similar-jobs
+ * "Show me how we did this last time" — past jobs in this org ranked by
+ * work type, trades, rooms, and analysis text/embedding similarity.
+ * Org members only (same gate as the access roster).
+ */
+sharedJobsRouter.get(
+  '/shared/:jobId/similar-jobs',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const { orgId, supabase } = await requireOrgContext(req);
+
+      const { data: sourceJob, error: sourceError } = await supabase
+        .from('crm_jobs')
+        .select('id, job_number, title, status, work_type, description, deleted_at')
+        .eq('org_id', orgId)
+        .eq('id', jobId)
+        .maybeSingle();
+      if (sourceError) throw new HttpError(500, sourceError.message, 'job_lookup_failed');
+      if (!sourceJob || (sourceJob as any).deleted_at) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
+      if (await jobFileIsTombstoned(writerForJob({ orgId, jobId }, supabase).raw, orgId, jobId)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
+
+      const { data: candidateJobs, error: candidatesError } = await supabase
+        .from('crm_jobs')
+        .select('id, job_number, title, status, work_type, description, created_at, deleted_at')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .neq('id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(120);
+      if (candidatesError) {
+        throw new HttpError(500, candidatesError.message, 'similar_jobs_lookup_failed');
+      }
+
+      const jobs = [sourceJob, ...((candidateJobs ?? []) as any[])];
+      const jobIds = jobs.map((j) => j.id as string);
+
+      const [partiesRes, proofsRes] = await Promise.all([
+        supabase
+          .from('job_parties')
+          .select('job_id, trade, revoked_at')
+          .eq('org_id', orgId)
+          .in('job_id', jobIds),
+        supabase
+          .from('job_proofs')
+          .select('job_id, ai_summary, ai_findings, transcript_text, narration_text, deleted_at')
+          .eq('org_id', orgId)
+          .in('job_id', jobIds)
+          .is('deleted_at', null)
+          .limit(800),
+      ]);
+      if (partiesRes.error) throw new HttpError(500, partiesRes.error.message, 'parties_failed');
+      if (proofsRes.error) throw new HttpError(500, proofsRes.error.message, 'proofs_failed');
+
+      const tradesByJob = new Map<string, string[]>();
+      for (const row of (partiesRes.data ?? []) as any[]) {
+        if (row.revoked_at) continue;
+        const list = tradesByJob.get(row.job_id) ?? [];
+        if (row.trade) list.push(String(row.trade));
+        tradesByJob.set(row.job_id, list);
+      }
+
+      const analysisByJob = new Map<string, { text: string[]; rooms: string[] }>();
+      for (const row of (proofsRes.data ?? []) as any[]) {
+        const bucket = analysisByJob.get(row.job_id) ?? { text: [], rooms: [] };
+        const chunks = [row.ai_summary, row.narration_text, row.transcript_text]
+          .filter((v) => typeof v === 'string' && v.trim())
+          .map((v: string) => v.trim());
+        bucket.text.push(...chunks);
+        const joined = chunks.join('\n');
+        bucket.rooms.push(
+          ...roomsFromAnalysis(joined, row.ai_findings, roomsMentionedIn),
+        );
+        analysisByJob.set(row.job_id, bucket);
+      }
+
+      const toSeed = (job: any): JobSimilaritySeed => {
+        const analysis = analysisByJob.get(job.id) ?? { text: [], rooms: [] };
+        return {
+          jobId: job.id,
+          title: job.title ?? null,
+          jobNumber: job.job_number ?? null,
+          workType: job.work_type ?? null,
+          status: job.status ?? null,
+          description: job.description ?? null,
+          trades: tradesByJob.get(job.id) ?? [],
+          rooms: analysis.rooms,
+          analysisText: analysis.text.join('\n').slice(0, 12_000),
+        };
+      };
+
+      const source = toSeed(sourceJob);
+      // Also mine rooms from the job title/description when proofs are thin.
+      source.rooms = [
+        ...new Set([
+          ...(source.rooms ?? []),
+          ...roomsFromAnalysis(
+            [source.title, source.description].filter(Boolean).join('\n'),
+            null,
+            roomsMentionedIn,
+          ),
+        ]),
+      ];
+
+      const matches = rankSimilarPastJobs(
+        source,
+        ((candidateJobs ?? []) as any[]).map(toSeed),
+        { limit: 8, minScore: 0.12 },
+      );
+
+      res.json({
+        jobId,
+        matches,
+        compared: (candidateJobs ?? []).length,
+      });
     } catch (err) {
       next(err);
     }

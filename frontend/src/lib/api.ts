@@ -734,6 +734,29 @@ export interface JobAccessRoster {
 }
 
 
+export interface SimilarJobMatch {
+  jobId: string;
+  title: string;
+  jobNumber: string | number | null;
+  workType: string | null;
+  status: string | null;
+  score: number;
+  reasons: string[];
+  trades: string[];
+  rooms: string[];
+  sharedTrades: string[];
+  sharedRooms: string[];
+  textSimilarity: number;
+}
+
+export interface SimilarPastJobsResponse {
+  jobId: string;
+  matches: SimilarJobMatch[];
+  compared: number;
+}
+
+
+
 /* ---- Proof of work ------------------------------------------------------- */
 
 export type ProofCheckVerdict = 'pass' | 'fail' | 'unknown';
@@ -3351,6 +3374,12 @@ export const api = {
 
   jobAccessRoster: (jobId: string) =>
     request<JobAccessRoster>(`/api/operations/shared/${jobId}/access-roster`, { method: 'GET' }),
+
+  similarPastJobs: (jobId: string) =>
+    request<SimilarPastJobsResponse>(`/api/operations/shared/${jobId}/similar-jobs`, {
+      method: 'GET',
+    }),
+
 
   renameJobFile: (jobId: string, title: string) =>
     request<{
