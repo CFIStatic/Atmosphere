@@ -112,11 +112,12 @@ Finishing a day never waits on the upload.
 - **Phone-only jobs.** A day filmed on a job named offline carries a copy of
   the draft. Once the office creates the job the film follows the office id;
   if the draft list was cleared, the film recreates the job itself.
-- **Today strip.** `#filing` stays quiet during normal background Uploading…
-  (the office Overview owns pending-with-the-office). It only appears when
-  the crew must act — sign-in needed, a stuck server answer, or a volatile
-  copy that requires keeping Field Capture open. Jobs still show *Filmed
-  today* the moment the recorder stops.
+- **Today strip (offline-first).** `#filing` stays visible while any day is
+  still local, uploading, or waiting — with clear state rows and a **Resume
+  filing** control. Copy says films are safe on this phone until filed.
+  Share-invite days that need `claimSession` after sign-in never go silent.
+  Office Overview still covers office-side pending (being read / unread).
+  Jobs still show *Filmed today* the moment the recorder stops.
 
 Older phones without a clip id still use the one-object-per-day path, where
 a re-upload replaces the day's film; the office accepts both.

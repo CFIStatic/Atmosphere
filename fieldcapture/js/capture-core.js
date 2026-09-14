@@ -2727,14 +2727,21 @@
 
   function dayFilmRow(film, opts) {
     var pct = Math.round((film.progress || 0) * 100);
+    var unclaimed =
+      opts &&
+      opts.owner != null &&
+      film.owner &&
+      film.owner !== opts.owner &&
+      film.mode === 'share';
     var state;
-    if (film.status === 'uploading') state = 'Filing · ' + pct + '%';
+    if (unclaimed) state = 'Needs resume';
+    else if (film.status === 'uploading') state = 'Filing · ' + pct + '%';
     else if (opts && opts.signedIn === false) state = 'Needs sign-in';
     else if (opts && opts.online === false) state = 'Waiting for signal';
     else if (isLocalJobId(film.jobId)) state = 'Creating the job';
     else if (isStuckStatus(film.lastStatus)) state = 'Needs the office';
     else if (film.status === 'waiting') state = 'Retrying…';
-    else state = 'Saved';
+    else state = 'On this phone';
     return {
       id: film.id,
       name: film.jobName || 'Job',
@@ -2745,27 +2752,52 @@
 
   /**
    * The Today strip in one line: what is on this phone, what it is doing,
-   * and — only when true — that the crew needs to keep the app open.
+   * and whether the crew can resume. Offline-first guarantee: local vs
+   * uploading vs waiting is always said out loud until the office has it.
    */
   function summarizeDayFilms(films, opts) {
     opts = opts || {};
     var list = (Array.isArray(films) ? films : []).filter(isPendingFilm);
     if (opts.owner != null) {
       list = list.filter(function (f) {
-        return f.owner === opts.owner;
+        if (f.owner === opts.owner) return true;
+        /* Share-invite days filmed before account sign-in: never hide them
+           while signed in — claimSession may still be waiting on Today. */
+        if (opts.includeUnclaimedShare && f.mode === 'share') return true;
+        return false;
       });
     }
     var n = list.length;
-    var out = { count: n, title: '', detail: '', progress: null, tone: 'idle', rows: [], signInLine: '' };
+    var out = {
+      count: n,
+      title: '',
+      detail: '',
+      progress: null,
+      tone: 'idle',
+      rows: [],
+      signInLine: '',
+      resume: false,
+      unclaimedShare: 0,
+    };
     if (!n) return out;
     var uploading = null;
     var volatile = false;
     var stuck = null;
+    var unclaimed = 0;
     list.forEach(function (f) {
       if (f.status === 'uploading' && !uploading) uploading = f;
       if (f.volatile) volatile = true;
       if (!stuck && isStuckStatus(f.lastStatus) && f.lastError) stuck = f;
+      if (
+        opts.owner != null &&
+        f.mode === 'share' &&
+        f.owner &&
+        f.owner !== opts.owner
+      ) {
+        unclaimed += 1;
+      }
     });
+    out.unclaimedShare = unclaimed;
     var days = dayCount(n);
     out.rows = list.map(function (f) {
       return dayFilmRow(f, opts);
@@ -2777,42 +2809,60 @@
     if (opts.signedIn === false) {
       out.tone = 'warn';
       out.title = 'Sign in to finish filing ' + days;
-      out.detail = 'Saved on this phone.';
+      out.detail = 'Safe on this phone until filed.';
+      out.resume = true;
+    } else if (unclaimed) {
+      out.tone = 'warn';
+      out.title =
+        unclaimed === 1
+          ? '1 day needs resume after sign-in'
+          : unclaimed + ' days need resume after sign-in';
+      out.detail =
+        'Safe on this phone until filed. Tap Resume — or open that job on Today.';
+      out.resume = true;
     } else if (uploading) {
       var pct = Math.round((uploading.progress || 0) * 100);
       out.tone = 'busy';
       out.progress = uploading.progress || 0;
       out.title = 'Filing ' + days + ' with the office';
-      out.detail = (uploading.step || 'Uploading…') + ' · ' + pct + '%';
+      out.detail =
+        (uploading.step || 'Uploading…') +
+        ' · ' +
+        pct +
+        '% · Safe on this phone until filed.';
     } else if (opts.online === false) {
       out.tone = 'wait';
       out.title = days + ' saved on this phone';
-      out.detail = 'Waiting for signal. It files on its own when you are back online.';
+      out.detail =
+        'Safe on this phone until filed. Waiting for signal — tap Resume when you are back online.';
+      out.resume = true;
     } else if (stuck) {
       out.tone = 'warn';
       out.title = days + ' saved on this phone';
-      out.detail = stuck.lastError;
+      out.detail = stuck.lastError + ' Safe on this phone until filed.';
+      out.resume = true;
     } else {
       out.tone = 'wait';
       out.title = days + ' saved on this phone';
-      out.detail = 'Filing with the office in the background.';
+      out.detail =
+        'Safe on this phone until filed. Filing with the office — tap Resume to try now.';
+      out.resume = true;
     }
     if (volatile) {
       out.detail += ' Keep Field Capture open — this phone could not keep a copy.';
-      /* Volatile copies need the crew to keep the app open — treat as warn
-         so the home strip still surfaces even when Uploading… is hidden. */
       out.tone = 'warn';
+      out.resume = true;
     }
     return out;
   }
 
   /**
-   * Home only shows the filing strip when the crew must act (sign-in, stuck
-   * server answer, volatile copy). Quiet Uploading… / waiting-for-signal
-   * progress stays off the home screen — the office Overview owns that.
+   * Home always shows the filing strip while anything is still local /
+   * uploading / waiting. Office Overview covers office-side pending only;
+   * phone-local progress must never go silent on Field Capture.
    */
   function filingHomeVisible(summary) {
-    return Boolean(summary && summary.count && summary.tone === 'warn');
+    return Boolean(summary && summary.count > 0);
   }
 
 
