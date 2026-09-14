@@ -158,22 +158,23 @@ const STOP = new Set([
   'inside',
 ]);
 
-const CLIP_QA_SYSTEM = `You answer questions about one filed video, using only the reading of that clip.
+const CLIP_QA_SYSTEM = `You are a sharp, friendly expert who has already watched this video and read the mic transcript. Answer like a top-tier chat assistant (Claude / ChatGPT / Grok): natural, clear, easy to scan — never a forensic dump or a thin keyword match.
 
 Rules:
-1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, the VERBATIM Whisper transcript.
-2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true. EXCEPTION: when a "Heard on the mic" / Whisper transcript is present and the question is about talk, conversation, what people said, or what they are talking about, you MUST answer from that transcript with exact quotes and seek times — never claim the footage does not show speech that was transcribed (including TV/laptop audio in the room).
-3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
-4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
-5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
-6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-7. EXACT SPEECH RECALL: When asked what was said, quote the EXACT words from the "Heard on the mic" / transcript section. Never invent, paraphrase, or clean up dialogue. Cite the seek time from [m:ss] stamps when present.
-8. Structured agreements/concerns may summarize, but any claim about speech must still include an exact transcript quote.
-9. When asked who is in the video / who is talking / who is present, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
-10. Two to eight sentences when the question needs depth (who/what/why/decided/next). This is read next to the player.
-11. Never estimate cost, hours, or whether work was worth paying for.
-12. CONVERSATION / TOPIC: When asked what people are talking about, what the conversation is, what they discussed, or what they decided — write 3–6 sentences explaining the SUBJECT of the talk (topics, agreements, refusals, next steps). Ground every claim in an exact transcript quote with a seek time. Do not answer with a room-layout / screen / furniture description when a transcript is present. If there is no "Heard on the mic" section, say the mic has not been read yet.
-13. ACCURACY: Never invent detail that is not in the reading. If the reading marks uncertainty ("unclear", "cannot confirm", low confidence), preserve that uncertainty in your answer — do not upgrade it into a firm claim. Prefer "the footage does not show that" over a plausible guess.`;
+1. Answer only from the reading given (frame description + VERBATIM Whisper transcript when present). Never invent people, quotes, times, rooms, or events.
+2. If the reading does not contain the answer, say so briefly ("The footage on file does not show that") and stop. Do not guess. EXCEPTION: when "Heard on the mic" is present and the question is about talk / conversation / what was said, answer from that transcript — never deny on-file speech (including TV/laptop audio in the room).
+3. LAYERED DEFAULT for broad asks ("what is happening", "what's going on", "describe this", "what are they talking about") unless the user asks for depth:
+   - Open with 1–2 natural sentences on what is happening (setting, people, and the gist of any talk).
+   - Follow with a few clear key points (short bullets or short paragraphs).
+   - Optionally invite a deeper dig ("Want the exact quotes / who said what / timestamps?").
+   - Do NOT paste every timestamped quote or the full transcript on this first pass. A desk, TV, news clip, or conversation is a valid scene — not every film is construction.
+4. GO DEEP when they ask for specifics: exact quotes, who said X, timestamps, "be specific", "more detail", full conversation, verbatim, or follow-ups that dig in. Then quote EXACT transcript words with seek times ([m:ss] / spoken clock). Never invent, paraphrase, or clean up dialogue. Structured agreements may summarize, but any speech claim in deep mode still needs an exact quote.
+5. Each video is standalone. Do not mention before/after pairing or ask for another clip.
+6. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when (spoken timestamp when the reading has one).
+7. When asked who is present / talking, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
+8. Never estimate cost, hours, or whether work was worth paying for.
+9. Preserve uncertainty marked in the reading ("unclear", "cannot confirm"). Prefer "the footage does not show that" over a plausible guess.
+10. Tone: warm expert colleague, lightly structured, no stiff disclaimers, no wall-of-evidence unless depth was requested.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -447,6 +448,100 @@ function conversationTopic(record: ClipAskRecord): string | null {
   return detail || null;
 }
 
+/** User asked to dig in — quotes, who said what, timestamps, more detail. */
+export function wantsAskDepth(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /\b(exact quotes?|verbatim|word[- ]for[- ]word|full (transcript|conversation|quotes?)|who said|timestamps?|seek times?|be (more )?specific|more details?|go deeper|dig (in|deeper)|every quote|quote (that|them|it|him|her)|what did (\w+ ){0,4}say)\b/.test(
+      q,
+    ) || /\b(tell me (exactly|precisely)|read (it|that|them) back)\b/.test(q)
+  );
+}
+
+function trimSentence(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+}
+
+function bulletBlock(points: string[]): string {
+  const clean = points.map((p) => trimSentence(p)).filter(Boolean);
+  if (!clean.length) return '';
+  return clean.map((p) => `- ${p}`).join('\n');
+}
+
+/**
+ * Conversational first-turn briefing: short opener + a few key points +
+ * optional invite to go deeper. No quote dump.
+ */
+export function layeredClipBriefing(record: ClipAskRecord, kind: 'scene' | 'topic' = 'scene'): string | null {
+  const date = record.workDate ? ` on ${record.workDate}` : '';
+  const changes = (record.changes ?? []).map((c) => String(c || '').trim()).filter(Boolean);
+  const actions = (record.actions ?? [])
+    .map((a) => String(a.description || '').trim())
+    .filter(Boolean);
+  const summary = String(record.dictation || record.summary || '').trim();
+  const topic = conversationTopic(record);
+  const points: string[] = [];
+
+  if (kind === 'topic') {
+    if (!topic && !hasUsableSpeech(record)) return null;
+    const opener = topic
+      ? `They're talking about this: ${trimSentence(topic)}.`
+      : 'There is conversation on the mic in this clip.';
+    for (const line of (record.conversationAgreements ?? []).slice(0, 2)) {
+      const t = String(line || '').trim();
+      if (t) points.push(t);
+    }
+    for (const line of (record.conversationConcerns ?? []).slice(0, 2)) {
+      const t = String(line || '').trim();
+      if (t) points.push(t);
+    }
+    if (!points.length && topic) points.push(trimSentence(topic));
+    const body = bulletBlock(points.slice(0, 4));
+    const invite = '\n\nWant the exact quotes, who said what, or timestamps?';
+    return body ? `${opener}\n\n${body}${invite}` : `${opener}${invite}`;
+  }
+
+  // scene / what-is-happening
+  let opener = '';
+  if (changes.length) {
+    opener = `Yes — the footage${date} shows ${trimSentence(changes[0]!)}.`;
+  } else if (summary) {
+    const first = summary.split(/(?<=\.)\s+/)[0] || summary;
+    opener = trimSentence(first) + '.';
+  } else if (topic) {
+    opener = `This clip${date} is mainly a conversation.`;
+  } else if (actions.length) {
+    opener = `Yes — the footage${date} shows activity on camera.`;
+  } else {
+    return null;
+  }
+
+  for (const c of changes.slice(0, 4)) points.push(c);
+  if (!changes.length) {
+    for (const a of actions.slice(0, 3)) points.push(a);
+  }
+  if (topic) {
+    const shortTopic = topic.length > 140 ? `${topic.slice(0, 137)}…` : topic;
+    points.push(`On the mic: ${trimSentence(shortTopic)}`);
+  }
+  // Deduplicate near-identical points
+  const seen = new Set<string>();
+  const unique = points.filter((p) => {
+    const key = p.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const body = bulletBlock(unique.slice(0, 5));
+  const invite = hasUsableSpeech(record)
+    ? '\n\nWant the exact quotes, who said what, or timestamps?'
+    : unique.length
+      ? '\n\nWant timestamps for those moments?'
+      : '';
+  return body ? `${opener}\n\n${body}${invite}` : `${opener}${invite}`;
+}
+
 /** Topic + exact quotes with seek times from the Whisper log (turns as fallback). */
 function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): string | null {
   const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
@@ -599,9 +694,24 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     if (answer) return answer;
     return 'The footage on file does not identify who is present.';
   }
-  // Talk questions always take the speech path — never a vision-only dodge.
+  // Depth / exact-recall asks get verbatim quotes. Broad topic asks stay layered.
+  // (Leave what-happened+depth to the scene briefing path below.)
+  if (
+    wantsAskDepth(q) &&
+    hasUsableSpeech(record) &&
+    !isWhatHappened(q) &&
+    (isWhatWasSaid(q) ||
+      /\b(quote|verbatim|transcript|timestamp|seek time|who said|full conversation)\b/i.test(q))
+  ) {
+    const speech = exactSpeechAnswer(record, { topic: false });
+    if (speech) return speech;
+  }
   if (isWhatWasSaid(q)) {
-    const speech = exactSpeechAnswer(record, { topic: isConversationTopic(q) });
+    if (isConversationTopic(q) && !wantsAskDepth(q)) {
+      const layered = layeredClipBriefing(record, 'topic');
+      if (layered) return layered;
+    }
+    const speech = exactSpeechAnswer(record, { topic: false });
     if (speech) return speech;
     if (isTranscriptPending(record.transcriptStatus) || unreadAnswer(record.analysisState, q)) {
       return HEARING_MIC;
@@ -618,22 +728,15 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   if (isWhatHappened(q)) {
-    const changes = (record.changes ?? []).map((c) => c.trim()).filter(Boolean);
-    const actions = (record.actions ?? [])
-      .map((a) => String(a.description || '').trim())
-      .filter(Boolean);
-    const date = record.workDate ? ` on ${record.workDate}` : '';
-    const visual = changes.length
-      ? `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`
-      : actions.length
-        ? `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`
-        : '';
-    const speech = exactSpeechAnswer(record, { topic: true });
-    if (visual && speech) return `${visual} On the mic: ${speech}`;
-    if (visual) return visual;
-    if (speech) return speech;
-    const summary = (record.dictation || record.summary || '').trim();
-    if (summary) return `The reading of this clip${date}: ${summary}`;
+    if (wantsAskDepth(q) && hasUsableSpeech(record)) {
+      const deep = exactSpeechAnswer(record, { topic: false });
+      if (deep) {
+        const layered = layeredClipBriefing(record, 'scene');
+        return layered ? `${layered}\n\n${deep}` : deep;
+      }
+    }
+    const layered = layeredClipBriefing(record, 'scene');
+    if (layered) return layered;
     return 'The footage on file does not show that.';
   }
 
@@ -792,8 +895,9 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
 
 /**
  * Prefer the grounded reading when it already answers well — skips the model
- * round-trip for speech recall, who-is-present, what-happened, and strong
- * yes/no hits with a spoken timestamp.
+ * round-trip for exact speech recall, who-is-present, depth digs, and strong
+ * yes/no hits with a spoken timestamp. Broad what-happened / topic asks go to
+ * the model for conversational prose when a key is configured.
  */
 function isTopicExplainQuestion(question: string): boolean {
   const q = question.toLowerCase();
@@ -820,7 +924,9 @@ export function preferClipGroundedFastPath(question: string, grounded: string, r
   if (isWhoQuestion(question) && hasPeople(peopleFromRecord(record)) && !/does not identify who/i.test(grounded)) {
     return true;
   }
-  if (isWhatHappened(question) && hasReading(record) && !/does not show that/i.test(grounded)) {
+  // Broad what-happened / topic asks go to the model for conversational prose.
+  // Depth digs still use the grounded transcript path for instant exact quotes.
+  if (wantsAskDepth(question) && hasUsableSpeech(record) && !/does not (show that|include usable speech)/i.test(grounded)) {
     return true;
   }
   if (

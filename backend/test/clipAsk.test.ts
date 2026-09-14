@@ -6,8 +6,10 @@ import {
   formatClipTime,
   formatClipTimeSpoken,
   groundedAnswerFromClip,
+  layeredClipBriefing,
   preferClipGroundedFastPath,
   isTranscriptPending,
+  wantsAskDepth,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
 import { serializeEvidence } from '../src/verifier/library.js';
@@ -223,11 +225,9 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
   assert.match(topic, /talking about/i);
   assert.match(topic, /vanity|insurance|cabinets|mirror/i);
   assert.doesNotMatch(topic, /does not show that/i);
-  assert.match(topic, /18 seconds into the recording/);
-  assert.match(topic, /1 minute and 36 seconds into the recording/);
-  assert.match(topic, /\[0:18\]/);
-  assert.match(topic, /\[1:36\]/);
-  assert.match(topic, /Exact words/);
+  // Layered first turn: no quote dump — invite depth instead.
+  assert.doesNotMatch(topic, /18 seconds into the recording|\[0:18\]|Exact words/);
+  assert.match(topic, /Want the exact quotes|who said what|timestamps/i);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {
@@ -343,7 +343,7 @@ test('Ask answers who is in the video from peoplePresent', () => {
   assert.match(talking, /Speaking:|Homeowner|Crew/i);
 });
 
-test('what are they talking about explains the topic with exact quotes', () => {
+test('what are they talking about returns a layered topic briefing', () => {
   const talk = {
     analysisState: 'done' as const,
     conversationExecutiveSummary: 'The leak behind the vanity and whether cabinets wait on insurance.',
@@ -352,9 +352,10 @@ test('what are they talking about explains the topic with exact quotes', () => {
       '[1:36] Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
   };
   const topic = groundedAnswerFromClip('what are they talking about', talk);
-  assert.match(topic, /They are talking about this/i);
+  assert.match(topic, /They are talking about this|talking about/i);
   assert.match(topic, /vanity|insurance|cabinets/i);
-  assert.match(topic, /0:18|18 seconds|1:36|1 minute/i);
+  assert.doesNotMatch(topic, /0:18|18 seconds into the recording|Exact words/i);
+  assert.match(topic, /Want the exact quotes|timestamps/i);
   assert.doesNotMatch(topic, /does not show that/i);
 });
 
@@ -412,21 +413,33 @@ const talkFixture: ClipAskRecord = {
     'The homeowner wants the vanity leak fixed but cabinets left until insurance approves replacement. The contractor will remount the mirror today.',
 };
 
-test('what are they talking about returns topic plus exact quotes with seek times', async () => {
+test('what are they talking about returns a layered briefing without dumping quotes', async () => {
   const answer = groundedAnswerFromClip('what are they talking about', talkFixture);
   assert.match(answer, /talking about/i);
   assert.match(answer, /insurance|vanity|mirror/i);
-  assert.match(answer, /“Homeowner: The leak started behind the vanity/);
-  assert.match(answer, /18 seconds into the recording/);
-  assert.match(answer, /\[0:18\]/);
-  assert.match(answer, /“Contractor: We will remount the mirror today/);
-  assert.match(answer, /1 minute and 36 seconds into the recording/);
-  assert.match(answer, /\[1:36\]/);
+  assert.doesNotMatch(answer, /“Homeowner: The leak started behind the vanity/);
+  assert.doesNotMatch(answer, /18 seconds into the recording|\[0:18\]|Exact words/);
+  assert.match(answer, /Want the exact quotes|who said what|timestamps/i);
   assert.doesNotMatch(answer, /does not show that|still being read|MSNBC/i);
 
-  const viaAsk = await answerFromClip({ question: 'What are they talking about?', record: talkFixture });
-  assert.equal(viaAsk.model, null, 'talk answers must not wait on Gemini');
-  assert.equal(viaAsk.answer, answer);
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const viaAsk = await answerFromClip({ question: 'What are they talking about?', record: talkFixture });
+    assert.equal(viaAsk.model, null, 'without a model key, layered grounded briefing is served');
+    assert.equal(viaAsk.answer, answer);
+  } finally {
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+  }
 });
 
 test('a talk question while the transcript is pending says the mic is still being heard', () => {
@@ -480,8 +493,8 @@ test('clipRecordFromEvidenceItem copies transcriptStatus so Ask can wait on the 
   assert.match(answer, /still hearing the mic/i);
 });
 
-test('what is happening cites both the scene and the conversation', () => {
-  const answer = groundedAnswerFromClip('What is happening in this video?', {
+test('what is happening returns a layered scene briefing, not a quote dump', () => {
+  const record: ClipAskRecord = {
     analysisState: 'done',
     transcriptStatus: 'done',
     workDate: '2026-09-13',
@@ -490,10 +503,35 @@ test('what is happening cites both the scene and the conversation', () => {
     transcript:
       '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
     conversationExecutiveSummary: 'Vanity leak; cabinets wait on insurance.',
-  });
+  };
+  const answer = groundedAnswerFromClip('What is happening in this video?', record);
   assert.match(answer, /Bathroom walkthrough|cabinets/i);
-  assert.match(answer, /On the mic|talking about/i);
-  assert.match(answer, /vanity|insurance/i);
-  assert.match(answer, /18 seconds into the recording|\[0:18\]/);
+  assert.match(answer, /On the mic|vanity|insurance/i);
+  assert.doesNotMatch(answer, /18 seconds into the recording|\[0:18\]|Exact words|“Homeowner:/);
+  assert.match(answer, /Want the exact quotes|who said what|timestamps/i);
   assert.doesNotMatch(answer, /does not show that/i);
+  assert.equal(preferClipGroundedFastPath('What is happening in this video?', answer, record), false);
+});
+
+test('exact quotes / what did they say digs into grounded verbatim speech', () => {
+  const answer = groundedAnswerFromClip('Give me the exact quotes', talkFixture);
+  assert.match(answer, /“Homeowner: The leak started behind the vanity/);
+  assert.match(answer, /18 seconds into the recording/);
+  assert.match(answer, /\[0:18\]/);
+  assert.match(answer, /“Contractor: We will remount the mirror today/);
+  assert.match(answer, /\[1:36\]/);
+  assert.equal(wantsAskDepth('Give me the exact quotes'), true);
+  assert.equal(wantsAskDepth('What is happening in this video?'), false);
+  assert.equal(preferClipGroundedFastPath('Give me the exact quotes', answer, talkFixture), true);
+
+  const about = groundedAnswerFromClip('What did they say about insurance?', talkFixture);
+  assert.match(about, /insurance/i);
+  assert.match(about, /Exact words|“/);
+});
+
+test('layeredClipBriefing keeps first-turn answers scannable', () => {
+  const briefing = layeredClipBriefing(talkFixture, 'scene');
+  assert.ok(briefing);
+  assert.match(briefing!, /Bathroom|cabinets|vanity|insurance/i);
+  assert.doesNotMatch(briefing!, /\[0:18\]|Exact words/);
 });

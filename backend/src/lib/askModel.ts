@@ -6,13 +6,15 @@
  * chat fell back to keyword matching and answered "The videos on file do
  * not show that" for ordinary questions.
  *
- * Interactive Ask defaults to a low-latency Gemini Flash-Lite path with
- * thinking off / minimal and a modest output budget. Conversation analysis
- * and other offline extractors opt into `mode: 'analysis'` for more headroom.
+ * Interactive Ask prefers Anthropic (Opus / strong Sonnet via ANTHROPIC_MODEL)
+ * when ANTHROPIC_API_KEY is present — streaming for snappy, high-quality prose.
+ * Gemini Flash-Lite remains the fallback when Anthropic is unset, with thinking
+ * off / minimal and a modest output budget. Conversation analysis and other
+ * offline extractors opt into `mode: 'analysis'` for more headroom.
  *
  * Order: organisation / server Anthropic key, then Gemini. Failures are
  * logged and the next provider is tried. Callers keep their grounded
- * keyword answer when nothing is configured or every provider fails.
+ * answer when nothing is configured or every provider fails.
  */
 import {
   anthropicClientForKey,
@@ -25,7 +27,7 @@ import { logger } from './logger.js';
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
 /** Interactive Ask — short office replies. Anthropic counts only visible output. */
-export const ANTHROPIC_ASK_MAX_TOKENS = 1024;
+export const ANTHROPIC_ASK_MAX_TOKENS = 2048;
 /**
  * Interactive Gemini Ask output budget. Thinking models used to burn a 20k
  * ceiling on hidden reasoning first; interactive Ask keeps this modest so the
@@ -350,9 +352,9 @@ async function completeWithGemini(input: {
  * Complete an Ask turn. Returns null when no provider is configured or
  * every configured provider failed — callers then serve the grounded answer.
  *
- * Pass `onToken` to stream visible deltas as they arrive (Gemini SSE /
- * Anthropic message stream). Interactive Ask uses Flash-Lite + thinking off
- * by default; pass `mode: 'analysis'` for heavier offline extractors.
+ * Pass `onToken` to stream visible deltas as they arrive (Anthropic stream /
+ * Gemini SSE). Interactive Ask prefers Anthropic when keyed; otherwise
+ * Flash-Lite + thinking off. Pass `mode: 'analysis'` for heavier offline extractors.
  */
 export async function completeAskText(input: {
   system: string;
