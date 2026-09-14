@@ -17,6 +17,7 @@ export const EN = {
   'nav.system': 'System',
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
+  'nav.liveMap': 'Live map',
   'nav.settings': 'Settings',
   'nav.support': 'Support',
   'nav.fieldCapture': 'Field capture',
@@ -126,6 +127,7 @@ export const EN = {
   'document.settings': 'Settings',
   'document.startJob': 'Start a job',
   'document.dashboard': 'Dashboard',
+  'document.liveMap': 'Live map',
 } as const;
 
 export type MessageKey = keyof typeof EN;

@@ -42,6 +42,9 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
+const LiveJobMapPage = lazy(() =>
+  import('./pages/LiveJobMapPage').then((m) => ({ default: m.LiveJobMapPage })),
+);
 const JobProgressGuestPage = lazy(() =>
   import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
 );
@@ -410,6 +413,7 @@ export default function App() {
             <Route path="/jobs/:id" element={<JobFileFromProfileRedirect />} />
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
+            <Route path="/live-map" element={<LiveJobMapPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
