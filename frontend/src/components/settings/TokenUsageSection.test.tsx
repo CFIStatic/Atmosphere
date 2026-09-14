@@ -64,6 +64,7 @@ const report: TokenUsageReport = {
       },
     },
   ],
+  byJob: [],
   byEmployee: [
     {
       userId: 'u-1',
@@ -195,5 +196,49 @@ describe('TokenUsageSection', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Last 30 days' }));
     expect(getTokenUsage).toHaveBeenCalledWith('30d');
+  });
+});
+
+describe('Usage by job', () => {
+  beforeEach(() => {
+    getTokenUsage.mockReset();
+  });
+
+  it('shows analysis minutes from real film duration', async () => {
+    const withJobs: TokenUsageReport = {
+      ...report,
+      byJob: [
+        {
+          jobId: 'job-1',
+          title: 'Oak Street water loss',
+          jobNumber: 1042,
+          analysisMinutes: 12.5,
+          analysisSeconds: 750,
+          events: 4,
+          inputTokens: 10_000,
+          outputTokens: 2_000,
+          cacheTokens: 0,
+          totalTokens: 12_000,
+          priceNanos: 1_500_000_000,
+          byFeature: {
+            video_analysis: totals({ totalTokens: 10_000 }),
+            chat: emptyTokenTotals(),
+            ask: totals({ totalTokens: 2_000 }),
+            other: emptyTokenTotals(),
+          },
+        },
+      ],
+    };
+    getTokenUsage.mockResolvedValue(withJobs);
+    render(<TokenUsageSection />);
+    expect(await screen.findByText(/Usage by job/i)).toBeInTheDocument();
+    expect(screen.getByText(/This job used 12.5 analysis minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/#1042 · Oak Street water loss/)).toBeInTheDocument();
+  });
+
+  it('shows an honest empty state when no jobs are attributed', async () => {
+    getTokenUsage.mockResolvedValue({ ...report, byJob: [] });
+    render(<TokenUsageSection />);
+    expect(await screen.findByText(/No job-attributed AI usage/i)).toBeInTheDocument();
   });
 });

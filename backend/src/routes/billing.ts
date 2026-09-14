@@ -448,8 +448,11 @@ const TOKEN_USAGE_RANGES = new Set<TokenUsageRange>(['period', '30d', '90d']);
 /**
  * GET /api/billing/token-usage
  *
- * Org-wide token meter plus a per-employee breakdown. Global Admins only —
- * employees do not see Settings → Billing.
+ * Org-wide token meter plus per-employee and per-job (job costing) breakdowns.
+ * Global Admins only — employees do not see Settings → Billing.
+ *
+ * `byJob` includes analysis minutes from analysed film durations (not a
+ * tokens→minutes guess) plus token spend for events attributed to each job.
  *
  * `range=period` (default) is the current Stripe / org billing period.
  * `30d` and `90d` are rolling windows for the usage graph.

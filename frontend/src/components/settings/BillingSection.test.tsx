@@ -124,6 +124,7 @@ const tokenUsage = {
   },
   byFeature: [],
   byDay: [],
+  byJob: [],
   byEmployee: [],
   recent: [],
 };

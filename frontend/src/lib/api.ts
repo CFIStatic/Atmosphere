@@ -5837,6 +5837,16 @@ export interface TokenEmployeeBreakdown extends TokenTotals {
   byFeature: Record<TokenFeature, TokenTotals>;
 }
 
+export interface TokenJobBreakdown extends TokenTotals {
+  jobId: string;
+  title: string;
+  jobNumber: number | null;
+  /** Minutes of analysed film (duration_seconds/60); null when unknown. */
+  analysisMinutes: number | null;
+  analysisSeconds: number | null;
+  byFeature: Record<TokenFeature, TokenTotals>;
+}
+
 export interface TokenUsageRecent {
   id: string;
   createdAt: string;
@@ -5860,6 +5870,7 @@ export interface TokenUsageReport {
   byFeature: TokenFeatureBreakdown[];
   byDay: TokenUsageDay[];
   byEmployee: TokenEmployeeBreakdown[];
+  byJob: TokenJobBreakdown[];
   recent: TokenUsageRecent[];
 }
 

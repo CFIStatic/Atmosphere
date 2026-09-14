@@ -5,12 +5,13 @@ import {
   TOKEN_FEATURES,
   type TokenEmployeeBreakdown,
   type TokenFeature,
+  type TokenJobBreakdown,
   type TokenUsageRange,
   type TokenUsageReport,
 } from '../../lib/api';
 import { formatTokens, formatUsd, formatUsdCompact } from '../../lib/money';
 import { TokenUsageChart } from './TokenUsageChart';
-import { TOKEN_FEATURE_TRACK, sharePct } from './tokenUsageModel';
+import { TOKEN_FEATURE_TRACK, formatAnalysisMinutes, sharePct } from './tokenUsageModel';
 
 const RANGES: { id: TokenUsageRange; label: string }[] = [
   { id: 'period', label: 'This period' },
@@ -206,6 +207,39 @@ export function TokenUsageSection() {
       </section>
 
       <section className="rounded-xl glass-card p-5">
+        <h3 className="text-base font-semibold text-ink-900">Usage by job</h3>
+        <p className="mt-0.5 text-xs text-ink-500">
+          Job costing view for this window: analysis minutes are the length of film that finished AI
+          analysis (proof duration), not a tokens-to-minutes estimate. Token spend matches the bill.
+        </p>
+        {(report.byJob ?? []).length === 0 ? (
+          <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
+            No job-attributed AI usage in this window yet.
+          </p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-left text-xs">
+              <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
+                <tr className="border-b border-line">
+                  <th className="py-2 pr-3 font-semibold">Job</th>
+                  <th className="px-3 py-2 text-right font-semibold">Analysis min</th>
+                  <th className="px-3 py-2 text-right font-semibold">Video</th>
+                  <th className="px-3 py-2 text-right font-semibold">Ask</th>
+                  <th className="px-3 py-2 text-right font-semibold">Tokens</th>
+                  <th className="py-2 pl-3 text-right font-semibold">Spend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(report.byJob ?? []).map((row) => (
+                  <JobUsageRow key={row.jobId} row={row} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">Recent calls</h3>
         <p className="mt-0.5 text-xs text-ink-500">Newest metered model calls in this window.</p>
         {report.recent.length === 0 ? (
@@ -278,6 +312,34 @@ function Meter({
         <div className={`h-full rounded-full ${track}`} style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }} />
       </div>
     </li>
+  );
+}
+
+function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
+  const minutes = formatAnalysisMinutes(row.analysisMinutes);
+  const feature = (key: TokenFeature) => formatTokens(row.byFeature?.[key]?.totalTokens ?? 0);
+  const label =
+    row.jobNumber != null ? `#${row.jobNumber} · ${row.title}` : row.title;
+  return (
+    <tr className="border-b border-line/60 last:border-b-0">
+      <td className="py-2.5 pr-3">
+        <div className="font-medium text-ink-900">{label}</div>
+        <div className="text-[11px] text-ink-500">
+          {row.analysisMinutes != null
+            ? `This job used ${minutes} analysis minute${row.analysisMinutes === 1 ? '' : 's'}`
+            : 'Analysis minutes unknown (no timed analysed film)'}
+        </div>
+      </td>
+      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">{minutes}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('video_analysis')}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums text-ink-700">{feature('ask')}</td>
+      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-ink-900">
+        {formatTokens(row.totalTokens)}
+      </td>
+      <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
+        {formatUsd(row.priceNanos, { precise: true })}
+      </td>
+    </tr>
   );
 }
 
