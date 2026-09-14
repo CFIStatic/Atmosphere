@@ -46,7 +46,6 @@ const JUMP_TARGETS = (() => {
 const NAV_LABEL_KEYS: Record<string, MessageKey> = {
   'Start a job': 'nav.startJob',
   Dashboard: 'nav.dashboard',
-  'Live map': 'nav.liveMap',
   Settings: 'nav.settings',
   'Field capture': 'nav.fieldCapture',
   Work: 'nav.work',

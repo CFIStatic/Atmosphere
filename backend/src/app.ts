@@ -26,7 +26,6 @@ import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
-import { liveJobMapRouter } from './routes/liveJobMap.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
@@ -187,7 +186,6 @@ export function createApp(): Express {
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
-  app.use('/api/operations', liveJobMapRouter);
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);
   // Video work-verification pipeline (extends proof-of-work; async stages).

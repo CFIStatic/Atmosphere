@@ -1793,10 +1793,6 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label" data-i18n-chrome="dashboard">Dashboard</span>
       </button>
-      <button type="button" class="navitem nav-icon" id="nav-live-map" data-tour="nav-live-map">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="2.2"/></svg>
-        <span class="label" data-i18n-chrome="liveMap">Live map</span>
-      </button>
     </div>
 
     <div class="rail-section" id="evidence-nav">
@@ -6995,11 +6991,6 @@
       if (dashOnRecord) dashOnRecord.setAttribute('aria-current', 'true');
       return;
     }
-    if (activeRoute === '/live-map') {
-      var liveMap = document.getElementById('nav-live-map');
-      if (liveMap) liveMap.setAttribute('aria-current', 'true');
-      return;
-    }
     if (activeRoute === '/settings') {
       var settings = document.getElementById('nav-settings');
       if (settings) settings.setAttribute('aria-current', 'true');
@@ -7331,10 +7322,6 @@
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
       navStartJob.addEventListener('click', function () { goShell('/intake'); });
-    }
-    var navLiveMap = document.getElementById('nav-live-map');
-    if (navLiveMap) {
-      navLiveMap.addEventListener('click', function () { goShell('/live-map'); });
     }
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {

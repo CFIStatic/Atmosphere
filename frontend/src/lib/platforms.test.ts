@@ -7,13 +7,12 @@ describe('operations rail destinations', () => {
     expect(DASHBOARD_HOME).toBe('/verifier-library');
   });
 
-  it('puts Start a job, Dashboard, and Live map on the office rail', () => {
+  it('puts Start a job and Dashboard on the office rail', () => {
     const work = PLATFORMS.operations.groups.find((group) => group.label === 'Work');
     expect(work).toBeDefined();
     expect(work!.items.map((item) => [item.to, item.label])).toEqual([
       ['/intake', 'Start a job'],
       ['/verifier-library', 'Dashboard'],
-      ['/live-map', 'Live map'],
     ]);
     expect(work!.items.map((item) => item.label)).not.toContain('Overview');
     expect(work!.items.map((item) => item.label)).not.toContain('Job Files');

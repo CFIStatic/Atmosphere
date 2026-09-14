@@ -9,14 +9,13 @@ const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html
 const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 
 describe('verifier office rail', () => {
-  it('lists Start a job, Dashboard, and Live map', () => {
+  it('lists Start a job and Dashboard', () => {
     const nav = verifierHtml.match(
       /<div class="rail-section" id="platform-nav" hidden>[\s\S]*?<\/div>/,
     );
     expect(nav).not.toBeNull();
     const labels = [...nav![0].matchAll(/<span class="label"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
-    expect(labels).toEqual(['Start a job', 'Dashboard', 'Live map']);
-    expect(nav![0]).toContain('id="nav-live-map"');
+    expect(labels).toEqual(['Start a job', 'Dashboard']);
     expect(nav![0]).not.toContain('data-route="/field"');
     expect(nav![0]).not.toContain('data-route="/my-work"');
     expect(nav![0]).toContain('data-screen="dashboard"');
@@ -30,7 +29,6 @@ describe('verifier office rail', () => {
     expect(verifierHtml).not.toContain("goShell('/my-work')");
     expect(verifierHtml).not.toContain("goShell('/jobs')");
     expect(verifierHtml).toContain("goShell('/intake')");
-    expect(verifierHtml).toContain("goShell('/live-map')");
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
 
