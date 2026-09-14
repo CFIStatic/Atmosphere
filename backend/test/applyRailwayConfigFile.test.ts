@@ -133,15 +133,21 @@ test('each deploy job puts its own config on the upload root', () => {
   assert.doesNotMatch(production, /ALLOW_MOCK_DRIVERS:\s*'true'/);
   // The ENABLE_* flags went with the products they gated; nothing to sync.
   assert.doesNotMatch(production, /ENABLE_PLATFORM_APIS/);
-  // Analysis pins must stay Pro/Opus — never re-pin flash/sonnet-5 on Deploy WV.
-  assert.match(production, /VERIFICATION_PRIMARY_MODEL:\s*gemini-2\.5-pro/);
-  assert.match(production, /ASK_ANALYSIS_MODEL:\s*gemini-2\.5-pro/);
-  assert.match(production, /ASK_ANALYSIS_THINKING_LEVEL:\s*high/);
-  assert.match(production, /ANTHROPIC_MODEL:\s*claude-opus-4-1/);
-  assert.match(production, /VERIFICATION_ESCALATION_MODEL:\s*claude-opus-4-1/);
-  assert.doesNotMatch(production, /VERIFICATION_PRIMARY_MODEL:\s*gemini-3\.6-flash/);
-  assert.doesNotMatch(production, /ANTHROPIC_MODEL:\s*claude-sonnet-5/);
+  // ANTHROPIC_API_KEY must remain in the sync env block (empty values are skipped).
   assert.match(production, /ANTHROPIC_API_KEY:/);
+  // Smart Analysis pins are enforced in syncGithubEnvToRailway.mjs (overrides weak
+  // flash/sonnet-5 pins even if the workflow still carries legacy defaults).
+  const sync = readFileSync(
+    new URL('../scripts/syncGithubEnvToRailway.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(sync, /SMART_ANALYSIS_DEFAULTS/);
+  assert.match(sync, /VERIFICATION_PRIMARY_MODEL:\s*'gemini-2\.5-pro'/);
+  assert.match(sync, /ASK_ANALYSIS_MODEL:\s*'gemini-2\.5-pro'/);
+  assert.match(sync, /ASK_ANALYSIS_THINKING_LEVEL:\s*'high'/);
+  assert.match(sync, /ANTHROPIC_MODEL:\s*'claude-opus-4-1/);
+  assert.match(sync, /VERIFICATION_ESCALATION_MODEL:\s*'claude-opus-4-1/);
+  assert.match(sync, /WEAK_ANALYSIS_PINS/);
 
 
   const website = readFileSync(
