@@ -75,6 +75,7 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import { overlaySpeakerLabels } from '../audio/speakerIdentity.js';
 import {
   applyPrivacyToEvidenceEntries,
   privacyRedactionsFromStored,
@@ -180,10 +181,20 @@ function conversationPayloadFromRow(row: any) {
   const transcriptText = typeof row?.transcript_text === 'string' ? row.transcript_text : null;
   const segments = parseVerbatimTranscript(transcriptText);
   if (!hasConversation(details) && !segments.length) return null;
+  const people = resolvePeoplePresent({
+    stored: findings.people,
+    transcript: transcriptText,
+    conversationStored: findings.conversation,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    visionPeople: findings.visionPeople,
+  });
+  const fields = publicConversationFields(details);
   return {
-    ...publicConversationFields(details),
+    ...fields,
+    conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people),
     transcriptText,
-    transcriptSegments: segments,
+    transcriptSegments: overlaySpeakerLabels(segments, people),
   };
 }
 
@@ -194,8 +205,17 @@ function evidenceLogFromRow(row: any) {
     : Array.isArray(findings.actions)
       ? findings.actions
       : [];
+  const people = resolvePeoplePresent({
+    stored: findings.people,
+    transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
+    conversationStored: findings.conversation,
+    narrationText: row?.narration_text ?? null,
+    summary: row?.ai_summary ?? findings.summary ?? null,
+    visionPeople: findings.visionPeople,
+    actions,
+  });
   const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
-  return applyPrivacyToEvidenceEntries(
+  const entries = applyPrivacyToEvidenceEntries(
     buildEvidenceLog({
       storedLog: findings.evidenceLog,
       storedEntries: row?.narration?.entries,
@@ -210,6 +230,7 @@ function evidenceLogFromRow(row: any) {
     }),
     ranges,
   );
+  return overlaySpeakerLabels(entries, people);
 }
 
 function privacyRedactionsPayloadFromRow(row: any) {

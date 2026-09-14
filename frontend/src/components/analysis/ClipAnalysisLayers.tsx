@@ -59,7 +59,7 @@ export function ClipAnalysisLayers({
           {phaseLabel}
         </p>
       ) : null}
-      {talk ? <ConversationPanel conversation={conversation} onSeek={onSeek} /> : null}
+      {talk ? <ConversationPanel conversation={conversation} people={people} onSeek={onSeek} /> : null}
       {present ? (
         <div data-testid="analysis-scan-people">
           <PeoplePresentPanel people={people} onSeek={onSeek} />
@@ -72,6 +72,7 @@ export function ClipAnalysisLayers({
         activeAtSeconds={activeAtSeconds}
         transcriptSegments={segments}
         transcriptText={transcriptText}
+        people={people}
         defaultOpen={defaultEvidenceOpen}
       />
     </div>

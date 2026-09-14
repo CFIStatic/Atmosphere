@@ -23,8 +23,14 @@ import {
   hasPeople,
   parsePeopleModelJson,
   toStoredPeople,
+  type OrgMemberHint,
   type StoredPeoplePresent,
 } from './peoplePresent.js';
+import {
+  classifySceneKind,
+  identifySpeakers,
+  webIdentifyPublicSpeakers,
+} from './speakerIdentity.js';
 import {
   applyPrivacyToEvidenceEntries,
   derivePrivacyRedactions,
@@ -132,7 +138,7 @@ export async function enrichProofConversation(
       actions,
     }),
   );
-  const people =
+  const basePeople =
     fromModel && hasPeople(fromModel)
       ? fromModel
       : extractPeoplePresent({
@@ -143,6 +149,37 @@ export async function enrichProofConversation(
           visionPeople,
           actions,
         });
+
+  const narrationText = proof?.narration_text ?? null;
+  const summary = proof?.ai_summary ?? findings.summary ?? null;
+  const orgMembers = await loadOrgMembersForProof(admin, proofId);
+  const visibleFromVision = (Array.isArray(visionPeople) ? visionPeople : [])
+    .map((p: unknown) => {
+      if (!p || typeof p !== 'object') return '';
+      const row = p as { matchedName?: unknown; appearance?: unknown; label?: unknown };
+      return [row.matchedName, row.appearance, row.label].filter(Boolean).join(' ');
+    })
+    .filter(Boolean) as string[];
+
+  const sceneKind = classifySceneKind({ narrationText, summary });
+  const people = await identifySpeakers({
+    people: basePeople,
+    narrationText,
+    summary,
+    orgMembers,
+    visibleTextHints: visibleFromVision,
+    allowWebIdentify: sceneKind === 'public_media' ? true : sceneKind === 'private_job' ? false : null,
+    webIdentify:
+      sceneKind === 'public_media'
+        ? async ({ hints, people: ppl }) =>
+            webIdentifyPublicSpeakers({
+              hints,
+              speakerLabels: ppl.speakers.map((s) => s.speakerLabel),
+              narrationText,
+              summary,
+            })
+        : undefined,
+  });
 
   const peopleNotes: Array<{ tSec?: number | null; note?: string | null }> = [];
   for (const person of people.people) {
@@ -155,8 +192,8 @@ export async function enrichProofConversation(
     durationSeconds,
     events: logEntries.map((e) => ({ atSeconds: e.atSeconds, text: e.text, type: e.type })),
     peopleNotes,
-    narrationText: proof?.narration_text ?? null,
-    summary: proof?.ai_summary ?? findings.summary ?? null,
+    narrationText,
+    summary,
     visionRanges: existingPrivacy,
   });
   const privacyStored = toStoredPrivacyRedactions(privacyRanges);
@@ -172,6 +209,104 @@ export async function enrichProofConversation(
   });
 
   return hasConversation(details) ? details : null;
+}
+
+
+/**
+ * Org members + job_parties + homeowner progress invites for this proof's job.
+ * Supplies names + service titles for speaker labeling (never invents).
+ */
+async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgMemberHint[]> {
+  try {
+    const { data: proof } = await admin
+      .from('job_proofs')
+      .select('org_id, job_id')
+      .eq('id', proofId)
+      .maybeSingle();
+    const orgId = proof?.org_id;
+    const jobId = proof?.job_id;
+    if (!orgId) return [];
+
+    const out: OrgMemberHint[] = [];
+    const seen = new Set<string>();
+
+    const { data: rows } = await admin
+      .from('org_members')
+      .select('user_id, role, work_type, profiles(full_name, email)')
+      .eq('org_id', orgId)
+      .limit(200);
+    for (const row of rows ?? []) {
+      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+      const fullName = String(profile?.full_name || '').trim();
+      if (!fullName || !row.user_id) continue;
+      const key = `user:${row.user_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        userId: String(row.user_id),
+        fullName,
+        email: profile?.email ?? null,
+        memberRole: row.role ?? null,
+        serviceTitle: null, // parallel branches may fill richer titles later
+        kind: 'org_member',
+      });
+    }
+
+    if (jobId) {
+      const { data: parties } = await admin
+        .from('job_parties')
+        .select('id, contact_name, email, trade, role, company')
+        .eq('job_id', jobId)
+        .is('revoked_at', null)
+        .limit(100);
+      for (const party of parties ?? []) {
+        const fullName = String(party.contact_name || '').trim();
+        if (!fullName) continue;
+        const key = `party:${String(party.id)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          userId: `party:${String(party.id)}`,
+          fullName,
+          email: party.email ?? null,
+          trade: party.trade ?? null,
+          memberRole: party.role ?? null,
+          serviceTitle: null,
+          kind: 'job_party',
+        });
+      }
+
+      // Homeowner progress shares — role label only, never for web name search.
+      const { data: shares } = await admin
+        .from('verifier_shares')
+        .select('id, label, recipient_email')
+        .eq('job_id', jobId)
+        .eq('share_kind', 'progress')
+        .is('revoked_at', null)
+        .limit(50);
+      for (const share of shares ?? []) {
+        const label = String(share.label || share.recipient_email || 'Homeowner').trim();
+        const key = `home:${String(share.id)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          userId: key,
+          fullName: label,
+          email: share.recipient_email ?? null,
+          serviceTitle: 'Homeowner',
+          kind: 'homeowner',
+        });
+      }
+    }
+
+    return out;
+  } catch (err) {
+    console.warn(
+      '[speaker-identity] org roster load failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }
 
 async function mergeFindings(

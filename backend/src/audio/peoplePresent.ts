@@ -46,12 +46,33 @@ export type PersonPresent = {
   appearMoments: PersonAppearMoment[];
   /** Tied to conversation turns when speech exists. */
   speakerLabel?: string | null;
+  /**
+   * Confident real-world name for UI / Ask. Never set from face guess alone.
+   * Prefer this over speakerLabel when present.
+   */
+  displayName?: string | null;
+  identityConfidence?: number | null;
+  identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
+  /** Citation for web / OCR (chyron text, show name, roster note). */
+  identitySource?: string | null;
+  /**
+   * Service / trade title when known from signup, org membership, or job
+   * assignment (Plumber, Adjuster, Project Manager). Used with displayName
+   * as "Jordan — Plumber". Homeowners stay the role label "Homeowner".
+   */
+  serviceTitle?: string | null;
 };
 
 export type SpeakerIndex = {
   speakerLabel: string;
   personId: string | null;
   turnCount: number;
+  /** Confident display name when identified (roster|ocr|web). */
+  displayName?: string | null;
+  identityConfidence?: number | null;
+  identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
+  identitySource?: string | null;
+  serviceTitle?: string | null;
 };
 
 export type PeoplePresent = {
@@ -72,10 +93,26 @@ export type StoredPeoplePresent = {
   speakers: SpeakerIndex[];
 };
 
+/**
+ * Roster row for speaker labeling. `serviceTitle` / `trade` / `memberRole`
+ * are optional hooks — parallel branches may populate richer titles; we
+ * format what we have and never invent.
+ */
 export type OrgMemberHint = {
   userId: string;
   fullName: string;
   email?: string | null;
+  /** org_members.role (project_manager, field_technician, …) when known. */
+  memberRole?: string | null;
+  /** Free-text trade from job_parties (plumber, electrical, roofing, …). */
+  trade?: string | null;
+  /**
+   * Explicit service title when a parallel path supplies one
+   * (e.g. "Plumber", "Estimator"). Preferred over derived trade/role.
+   */
+  serviceTitle?: string | null;
+  /** Where this row came from — drives homeowner vs crew labeling. */
+  kind?: 'org_member' | 'job_party' | 'homeowner' | null;
 };
 
 function emptyPeople(): PeoplePresent {
@@ -116,10 +153,12 @@ function roleFromSpeaker(label: string): PersonRole {
 
 function defaultLabel(index: number, role: PersonRole, appearance: string | null): string {
   const n = index + 1;
-  if (role === 'homeowner') return appearance ? `Person ${n} (homeowner-like)` : `Person ${n} (homeowner)`;
+  // Prefer stable role words over Speaker/Person N when role is known —
+  // homeowners are always "Homeowner" (never a guessed legal name).
+  if (role === 'homeowner') return 'Homeowner';
+  if (role === 'adjuster') return 'Adjuster';
+  if (role === 'inspector') return 'Inspector';
   if (role === 'crew') return appearance ? `Person ${n} (crew-like)` : `Person ${n} (crew)`;
-  if (role === 'adjuster') return `Person ${n} (adjuster)`;
-  if (role === 'inspector') return `Person ${n} (inspector)`;
   if (appearance) return `Person ${n} (${appearance.slice(0, 40)})`;
   return `Person ${n}`;
 }
@@ -144,7 +183,11 @@ export function sanitizePersonLabel(raw: string, role: PersonRole, appearance: s
   if (/^person\s*\d+/i.test(s) || /crew-like|homeowner-like|speaker\s*[a-d]/i.test(s)) {
     return s.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 64);
   }
-  if (/^(homeowner|crew|adjuster|inspector|speaker\s*[a-d])$/i.test(s)) {
+  if (
+    /^(homeowner|crew|adjuster|inspector|estimator|technician|plumber|electrician|roofer|project\s*manager|speaker\s*[a-d])$/i.test(
+      s,
+    )
+  ) {
     return s.replace(/\b\w/g, (c) => c.toUpperCase());
   }
   // Soft descriptors are fine.
@@ -201,25 +244,70 @@ function asPersonList(value: unknown): PersonPresent[] {
       typeof matchedOrgUserIdRaw === 'string' && matchedOrgUserIdRaw.trim()
         ? matchedOrgUserIdRaw.trim().slice(0, 64)
         : null;
-    // Legal names only survive when org-matched.
-    const label =
-      matchedName && matchedOrgUserId
-        ? matchedName
-        : sanitizePersonLabel(labelRaw, role, appearance, out.length);
     const speakerRaw = (item as { speakerLabel?: unknown }).speakerLabel;
     const first = Number((item as { firstSeenSec?: unknown }).firstSeenSec);
     const last = Number((item as { lastSeenSec?: unknown }).lastSeenSec);
     const moments = asAppearMoments((item as { appearMoments?: unknown }).appearMoments);
+    const displayNameRaw = (item as { displayName?: unknown }).displayName;
+    const identityMethodRaw = (item as { identityMethod?: unknown }).identityMethod;
+    const identitySourceRaw = (item as { identitySource?: unknown }).identitySource;
+    const identityMethod =
+      identityMethodRaw === 'roster' ||
+      identityMethodRaw === 'ocr' ||
+      identityMethodRaw === 'web' ||
+      identityMethodRaw === 'voice' ||
+      identityMethodRaw === 'unknown'
+        ? identityMethodRaw
+        : matchedOrgUserId
+          ? 'roster'
+          : null;
+    // displayName only survives with a method + confidence, or roster match.
+    const displayNameCandidate =
+      typeof displayNameRaw === 'string' && displayNameRaw.trim()
+        ? displayNameRaw.trim().slice(0, 80)
+        : matchedOrgUserId && matchedName
+          ? matchedName
+          : null;
+    const identityConfidence = clampConfidence(
+      (item as { identityConfidence?: unknown }).identityConfidence ??
+        (item as { matchConfidence?: unknown }).matchConfidence,
+    );
+    const allowDisplay =
+      Boolean(displayNameCandidate) &&
+      (identityMethod === 'roster' ||
+        identityMethod === 'ocr' ||
+        identityMethod === 'web' ||
+        identityMethod === 'voice') &&
+      (identityConfidence == null || identityConfidence >= 0.7);
+    // Legal names in label only when org-matched OR when a gated identity method set displayName.
+    const finalLabel =
+      matchedName && matchedOrgUserId
+        ? matchedName
+        : allowDisplay && displayNameCandidate
+          ? displayNameCandidate
+          : sanitizePersonLabel(labelRaw, role, appearance, out.length);
     out.push({
       id,
-      label,
+      label: finalLabel,
       role,
       appearance,
       matchedOrgUserId,
-      matchedName: matchedOrgUserId ? matchedName : null,
+      // Keep vision name-tag text for the OCR identity pass; label/displayName
+      // stay generic until roster|ocr|web promotion.
+      matchedName: matchedOrgUserId
+        ? matchedName
+        : allowDisplay
+          ? displayNameCandidate
+          : matchedName && looksLikeLegalName(matchedName)
+            ? matchedName
+            : null,
       matchConfidence: matchedOrgUserId
         ? clampConfidence((item as { matchConfidence?: unknown }).matchConfidence)
-        : null,
+        : allowDisplay
+          ? identityConfidence
+          : matchedName && looksLikeLegalName(matchedName)
+            ? clampConfidence((item as { matchConfidence?: unknown }).matchConfidence)
+            : null,
       firstSeenSec: Number.isFinite(first) && first >= 0 ? roundTime(first) : moments[0]?.tSec ?? null,
       lastSeenSec:
         Number.isFinite(last) && last >= 0
@@ -230,6 +318,17 @@ function asPersonList(value: unknown): PersonPresent[] {
       appearMoments: moments,
       speakerLabel:
         typeof speakerRaw === 'string' && speakerRaw.trim() ? speakerRaw.trim().slice(0, 24) : null,
+      displayName: allowDisplay ? displayNameCandidate : null,
+      identityConfidence: allowDisplay ? identityConfidence : null,
+      identityMethod: allowDisplay ? identityMethod : null,
+      identitySource:
+        allowDisplay && typeof identitySourceRaw === 'string' && identitySourceRaw.trim()
+          ? identitySourceRaw.trim().slice(0, 200)
+          : null,
+      serviceTitle: (() => {
+        const raw = (item as { serviceTitle?: unknown }).serviceTitle;
+        return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 60) : null;
+      })(),
     });
     if (out.length >= 24) break;
   }
@@ -252,11 +351,20 @@ function speakersFromPeople(people: PersonPresent[], turns: ConversationTurn[]):
     counts.set(person.speakerLabel, prev);
   }
   return [...counts.entries()]
-    .map(([speakerLabel, v]) => ({
-      speakerLabel,
-      personId: v.personId,
-      turnCount: v.turnCount,
-    }))
+    .map(([speakerLabel, v]) => {
+      const person = people.find((p) => p.id === v.personId) ||
+        people.find((p) => p.speakerLabel?.toLowerCase() === speakerLabel.toLowerCase());
+      return {
+        speakerLabel,
+        personId: v.personId,
+        turnCount: v.turnCount,
+        displayName: person?.displayName ?? null,
+        identityConfidence: person?.identityConfidence ?? null,
+        identityMethod: person?.identityMethod ?? null,
+        identitySource: person?.identitySource ?? null,
+        serviceTitle: person?.serviceTitle ?? null,
+      };
+    })
     .sort((a, b) => b.turnCount - a.turnCount)
     .slice(0, 16);
 }
@@ -394,20 +502,44 @@ export function matchPeopleToOrgMembers(
     .filter((t) => t.length >= 3);
   if (!hay.length) return people;
 
+  const usedMembers = new Set<string>();
   const next = people.people.map((person) => {
     if (person.matchedOrgUserId && person.matchedName) return person;
+    // Homeowners are a role label only — never attach a crew legal name from roster text.
+    if (person.role === 'homeowner') {
+      return {
+        ...person,
+        serviceTitle: person.serviceTitle ?? 'Homeowner',
+      };
+    }
     for (const member of members) {
+      if (member.kind === 'homeowner') continue; // do not name-match private homeowners
       const name = member.fullName.trim();
       if (name.length < 3) continue;
+      if (usedMembers.has(member.userId)) continue;
       const lower = name.toLowerCase();
-      const hit = hay.some((h) => h.includes(lower) || lower.split(/\s+/).every((part) => part.length > 2 && h.includes(part)));
+      const hit = hay.some(
+        (h) => h.includes(lower) || lower.split(/\s+/).every((part) => part.length > 2 && h.includes(part)),
+      );
       if (!hit) continue;
+      usedMembers.add(member.userId);
+      const title =
+        (member.serviceTitle && member.serviceTitle.trim()) ||
+        (member.trade && member.trade.trim()) ||
+        null;
       return {
         ...person,
         matchedOrgUserId: member.userId,
         matchedName: name.slice(0, 80),
         matchConfidence: 0.85,
         label: name.slice(0, 80),
+        serviceTitle: title ? title.slice(0, 60) : person.serviceTitle ?? null,
+        role:
+          person.role === 'unknown' && member.kind === 'job_party'
+            ? normalizeRole(member.memberRole || 'crew')
+            : person.role === 'unknown'
+              ? 'crew'
+              : person.role,
       };
     }
     return person;
@@ -455,11 +587,32 @@ export function parsePeopleModelJson(raw: unknown, fallback: PeoplePresent): Peo
         .filter((s) => s && typeof s === 'object')
         .map((s) => {
           const o = s as Record<string, unknown>;
-          return {
+          const method = o.identityMethod;
+          const identityMethod: SpeakerIndex['identityMethod'] =
+            method === 'roster' || method === 'ocr' || method === 'web' || method === 'voice' || method === 'unknown'
+              ? method
+              : null;
+          const displayName =
+            typeof o.displayName === 'string' && o.displayName.trim() ? o.displayName.trim().slice(0, 80) : null;
+          const identityConfidence = clampConfidence(o.identityConfidence);
+          const serviceTitleRaw = o.serviceTitle;
+          const row: SpeakerIndex = {
             speakerLabel: String(o.speakerLabel ?? 'Speaker').trim().slice(0, 24) || 'Speaker',
             personId: typeof o.personId === 'string' ? o.personId : null,
             turnCount: Number.isFinite(Number(o.turnCount)) ? Math.max(0, Math.floor(Number(o.turnCount))) : 0,
+            displayName,
+            identityConfidence,
+            identityMethod,
+            identitySource:
+              typeof o.identitySource === 'string' && o.identitySource.trim()
+                ? o.identitySource.trim().slice(0, 200)
+                : null,
+            serviceTitle:
+              typeof serviceTitleRaw === 'string' && serviceTitleRaw.trim()
+                ? serviceTitleRaw.trim().slice(0, 60)
+                : null,
           };
+          return row;
         })
         .slice(0, 16)
     : speakersFromPeople(list, fallback.speakers.length ? [] : []);
@@ -523,18 +676,28 @@ export function publicPeopleFields(people: PeoplePresent) {
 export function formatPeopleAnswer(people: PeoplePresent): string | null {
   if (!hasPeople(people)) return null;
   const parts = people.people.map((p) => {
+    const name = (p.displayName && p.displayName.trim()) || p.label;
     const when =
       p.firstSeenSec != null && Number.isFinite(p.firstSeenSec)
         ? ` (first seen ~${formatClock(p.firstSeenSec)})`
         : '';
     const appearance = p.appearance ? ` — ${p.appearance}` : '';
     const role =
-      p.role !== 'unknown' && !p.label.toLowerCase().includes(p.role) ? ` [${p.role}]` : '';
-    return `${p.label}${role}${appearance}${when}`;
+      p.role !== 'unknown' && !name.toLowerCase().includes(p.role) ? ` [${p.role}]` : '';
+    const how =
+      p.identityMethod && p.identityMethod !== 'unknown'
+        ? ` via ${p.identityMethod}${p.identityConfidence != null ? ` ${Math.round(p.identityConfidence * 100)}%` : ''}`
+        : '';
+    return `${name}${role}${appearance}${when}${how}`;
   });
   const talkers = people.speakers.filter((s) => s.turnCount > 0);
   const talkLine = talkers.length
-    ? ` Speaking: ${talkers.map((s) => `${s.speakerLabel} (${s.turnCount} turn${s.turnCount === 1 ? '' : 's'})`).join(', ')}.`
+    ? ` Speaking: ${talkers
+        .map((s) => {
+          const name = (s.displayName && s.displayName.trim()) || s.speakerLabel;
+          return `${name} (${s.turnCount} turn${s.turnCount === 1 ? '' : 's'})`;
+        })
+        .join(', ')}.`
     : '';
   return `People in this video (${people.count}): ${parts.join('; ')}.${talkLine}`;
 }

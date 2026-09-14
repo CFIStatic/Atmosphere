@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { eventClock } from '../../lib/downloadJson';
-import type { ConversationQuotedFact, ProofConversation } from '../../lib/api';
+import type { ConversationQuotedFact, ProofConversation, ProofPeoplePresent } from '../../lib/api';
+import { speakerDisplayName } from '../../lib/speakerDisplay';
 
 function hasTalk(conversation: ProofConversation | null | undefined): boolean {
   if (!conversation) return false;
@@ -137,9 +138,11 @@ function glancePoints(c: ProofConversation): string[] {
  */
 export function ConversationPanel({
   conversation,
+  people,
   onSeek,
 }: {
   conversation?: ProofConversation | null;
+  people?: ProofPeoplePresent | null;
   onSeek?: (seconds: number) => void;
   /** @deprecated Playhead sync belongs on Full evidence / transcript. */
   activeAtSeconds?: number | null;
@@ -163,7 +166,10 @@ export function ConversationPanel({
   const safety = c.conversationSafety ?? [];
   const questions = c.conversationUnresolvedQuestions ?? [];
   const contradictions = c.conversationContradictions ?? [];
-  const turns = c.conversationTurns ?? [];
+  const turns = (c.conversationTurns ?? []).map((turn) => ({
+    ...turn,
+    speakerLabel: speakerDisplayName(turn.speakerLabel, people) || turn.speakerLabel,
+  }));
   const rooms = c.conversationRooms ?? [];
   const points = glancePoints(c);
 

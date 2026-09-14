@@ -26,12 +26,37 @@ function PersonRow({
   return (
     <li className="rounded-md bg-paper-100/70 px-2 py-1.5" data-testid="person-present-row">
       <div className="flex flex-wrap items-baseline gap-1.5">
-        <span className="text-[12.5px] font-medium text-ink-900">{person.label}</span>
+        <span className="text-[12.5px] font-medium text-ink-900">
+          {(person.displayName && person.displayName.trim()) || person.label}
+        </span>
         <span className="rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
           {roleWord(person.role)}
         </span>
-        {person.speakerLabel ? (
+        {person.serviceTitle &&
+        !(person.displayName || person.label || '').toLowerCase().includes(person.serviceTitle.toLowerCase()) ? (
+          <span
+            className="rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-600"
+            data-testid="person-service-title"
+          >
+            {person.serviceTitle}
+          </span>
+        ) : null}
+        {person.identityMethod && person.identityMethod !== 'unknown' ? (
+          <span
+            className="rounded-full bg-ink-900/90 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-paper-50"
+            data-testid="person-identity-method"
+          >
+            {person.identityMethod}
+            {person.identityConfidence != null
+              ? ` ${Math.round(person.identityConfidence * 100)}%`
+              : ''}
+          </span>
+        ) : null}
+        {person.speakerLabel &&
+        !(person.displayName && person.displayName.trim()) ? (
           <span className="text-[10.5px] text-ink-500">Speaks as {person.speakerLabel}</span>
+        ) : person.speakerLabel && person.displayName ? (
+          <span className="text-[10.5px] text-ink-500">Was {person.speakerLabel}</span>
         ) : null}
       </div>
       {person.appearance ? (
@@ -111,7 +136,7 @@ export function PeoplePresentPanel({
           Speaking:{' '}
           {speakers
             .filter((s) => s.turnCount > 0)
-            .map((s) => `${s.speakerLabel} (${s.turnCount})`)
+            .map((s) => `${(s.displayName && s.displayName.trim()) || s.speakerLabel} (${s.turnCount})`)
             .join(', ')}
         </p>
       ) : null}

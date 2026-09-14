@@ -21,6 +21,7 @@ import {
   publicPeopleFields,
   resolvePeoplePresent,
 } from '../audio/peoplePresent.js';
+import { overlaySpeakerLabels } from '../audio/speakerIdentity.js';
 import {
   applyPrivacyToEvidenceEntries,
   privacyRedactionsFromStored,
@@ -413,9 +414,8 @@ export function serializeEvidence(input: {
             privacyRedactions: publicPrivacyFields(
               privacyRedactionsFromStored(findings.privacyRedactions),
             ),
-            ...conversationFields(proof.transcript_text, findings.conversation),
-            ...publicPeopleFields(
-              resolvePeoplePresent({
+            ...(() => {
+              const peopleResolved = resolvePeoplePresent({
                 stored: findings.people,
                 transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
                 conversationStored: findings.conversation,
@@ -423,34 +423,45 @@ export function serializeEvidence(input: {
                 summary: proof.ai_summary ?? findings.summary ?? null,
                 visionPeople: findings.visionPeople,
                 actions,
-              }),
-            ),
-            evidenceLog: applyPrivacyToEvidenceEntries(
-              buildEvidenceLog({
-                storedLog: findings.evidenceLog,
-                storedEntries: proof.narration?.entries,
-                narrationText: dictation,
-                summary: proof.ai_summary ?? findings.summary ?? null,
-                actions,
-                durationSeconds: Number(proof.duration_seconds) || null,
-                transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-                people: findings.people,
-                visionPeople: findings.visionPeople,
-                conversation: conversationFromStored(proof.transcript_text, findings.conversation),
-              }),
-              privacyRedactionsFromStored(findings.privacyRedactions),
-            ),
+              });
+              const evidence = applyPrivacyToEvidenceEntries(
+                buildEvidenceLog({
+                  storedLog: findings.evidenceLog,
+                  storedEntries: proof.narration?.entries,
+                  narrationText: dictation,
+                  summary: proof.ai_summary ?? findings.summary ?? null,
+                  actions,
+                  durationSeconds: Number(proof.duration_seconds) || null,
+                  transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+                  people: findings.people,
+                  visionPeople: findings.visionPeople,
+                  conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+                }),
+                privacyRedactionsFromStored(findings.privacyRedactions),
+              );
+              return {
+                ...conversationFields(proof.transcript_text, findings.conversation, peopleResolved),
+                ...publicPeopleFields(peopleResolved),
+                evidenceLog: overlaySpeakerLabels(evidence, peopleResolved),
+              };
+            })(),
           }
         : null,
   };
 }
 
-function conversationFields(transcript: unknown, stored: unknown) {
+function conversationFields(
+  transcript: unknown,
+  stored: unknown,
+  people?: ReturnType<typeof resolvePeoplePresent> | null,
+) {
   const text = typeof transcript === 'string' ? transcript : null;
+  const fields = publicConversationFields(conversationFromStored(transcript, stored));
   return {
-    ...publicConversationFields(conversationFromStored(transcript, stored)),
+    ...fields,
+    conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people ?? null),
     transcriptText: text,
-    transcriptSegments: parseVerbatimTranscript(text),
+    transcriptSegments: overlaySpeakerLabels(parseVerbatimTranscript(text), people ?? null),
   };
 }
 

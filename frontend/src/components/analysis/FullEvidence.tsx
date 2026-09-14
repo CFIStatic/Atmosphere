@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import type { EvidenceLogEntry, TranscriptSegment } from '../../lib/api';
+import { useMemo, useState } from 'react';
+import type { EvidenceLogEntry, ProofPeoplePresent, TranscriptSegment } from '../../lib/api';
+import { overlaySpeakerDisplayName } from '../../lib/speakerDisplay';
 import { EvidenceLog } from './EvidenceLog';
 import { VerbatimTranscript } from './VerbatimTranscript';
 
@@ -15,6 +16,7 @@ export function FullEvidence({
   activeAtSeconds,
   transcriptSegments,
   transcriptText,
+  people,
   defaultOpen = false,
   emptyHint = 'No timed evidence yet. Run Read this video / Hear the mic from Proof of work.',
 }: {
@@ -24,14 +26,23 @@ export function FullEvidence({
   activeAtSeconds?: number | null;
   transcriptSegments?: TranscriptSegment[] | null;
   transcriptText?: string | null;
+  people?: ProofPeoplePresent | null;
   defaultOpen?: boolean;
   emptyHint?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const hasTranscript = Boolean(
-    transcriptSegments?.length || String(transcriptText || '').trim(),
+  const namedEntries = useMemo(
+    () => overlaySpeakerDisplayName(entries, people),
+    [entries, people],
   );
-  const hasLog = entries.length > 0 || status === 'pending' || status === 'failed';
+  const namedSegments = useMemo(
+    () => (transcriptSegments ? overlaySpeakerDisplayName(transcriptSegments, people) : transcriptSegments),
+    [transcriptSegments, people],
+  );
+  const hasTranscript = Boolean(
+    namedSegments?.length || String(transcriptText || '').trim(),
+  );
+  const hasLog = namedEntries.length > 0 || status === 'pending' || status === 'failed';
 
   if (!hasLog && !hasTranscript) {
     return (
@@ -41,8 +52,8 @@ export function FullEvidence({
     );
   }
 
-  const countLabel = entries.length
-    ? `${entries.length} moment${entries.length === 1 ? '' : 's'}`
+  const countLabel = namedEntries.length
+    ? `${namedEntries.length} moment${namedEntries.length === 1 ? '' : 's'}`
     : hasTranscript
       ? 'exact transcript'
       : status === 'pending'
@@ -73,7 +84,7 @@ export function FullEvidence({
         <div className="mt-3 space-y-3" data-testid="full-evidence-body">
           {hasLog ? (
             <EvidenceLog
-              entries={entries}
+              entries={namedEntries}
               status={status}
               onSeek={onSeek}
               activeAtSeconds={activeAtSeconds}
@@ -82,7 +93,7 @@ export function FullEvidence({
           ) : null}
           {hasTranscript ? (
             <VerbatimTranscript
-              segments={transcriptSegments}
+              segments={namedSegments}
               transcriptText={transcriptText}
               onSeek={onSeek}
               activeAtSeconds={activeAtSeconds}

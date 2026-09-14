@@ -21,6 +21,7 @@ import {
   type PersonPresent,
   type SpeakerIndex,
 } from '../audio/peoplePresent.js';
+import { resolveSpeakerDisplayName } from '../audio/speakerIdentity.js';
 import {
   PRIVACY_REDACTED_LABEL,
   privacyRedactionsFromStored,
@@ -604,7 +605,11 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
       const clock = when ? ` (${when})` : '';
       const seek = formatClipTime(turn.tSec);
       const stamp = seek ? ` [${seek}]` : '';
-      const who = turn.speakerLabel ? `${turn.speakerLabel}: ` : '';
+      const people = peopleFromRecord(record);
+      const whoLabel = turn.speakerLabel
+        ? resolveSpeakerDisplayName(turn.speakerLabel, people) || turn.speakerLabel
+        : '';
+      const who = whoLabel ? `${whoLabel}: ` : '';
       lines.push(`“${who}${text}”${clock}${stamp}`);
     }
     for (const detail of record.conversationDetails ?? []) {
@@ -885,8 +890,12 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
     const when = moment.tSec != null && Number.isFinite(moment.tSec) ? ` @ ${formatClipTime(moment.tSec)}` : '';
     lines.push(`Key moment${when} (${moment.label || 'moment'}): ${moment.text}`);
   }
+  const people = peopleFromRecord(record);
   for (const turn of record.conversationTurns ?? []) {
-    const label = turn.speakerLabel || 'Speaker';
+    const label =
+      resolveSpeakerDisplayName(turn.speakerLabel, people) ||
+      turn.speakerLabel ||
+      'Speaker';
     const when = turn.tSec != null && Number.isFinite(turn.tSec) ? ` @ ${formatClipTime(turn.tSec)}` : '';
     if (turn.text) lines.push(`${label}${when}: ${turn.text}`);
   }
@@ -917,20 +926,28 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if ((record.conversationRooms ?? []).length) {
     lines.push(`Rooms mentioned on the mic: ${record.conversationRooms!.join(', ')}`);
   }
-  const people = peopleFromRecord(record);
   if (hasPeople(people)) {
     lines.push('People present:');
     for (const person of people.people) {
       const when =
         person.firstSeenSec != null ? ` first ~${formatClipTime(person.firstSeenSec)}` : '';
       const appearance = person.appearance ? `; appearance: ${person.appearance}` : '';
-      const speaker = person.speakerLabel ? `; speaks as ${person.speakerLabel}` : '';
-      lines.push(
-        `- ${person.label} [${person.role}]${appearance}${speaker}${when}`,
-      );
+      const name = (person.displayName && person.displayName.trim()) || person.label;
+      const speaker =
+        person.speakerLabel && name !== person.speakerLabel
+          ? `; was ${person.speakerLabel}`
+          : person.speakerLabel
+            ? `; speaks as ${person.speakerLabel}`
+            : '';
+      const via =
+        person.identityMethod && person.identityMethod !== 'unknown'
+          ? `; identity via ${person.identityMethod}`
+          : '';
+      lines.push(`- ${name} [${person.role}]${appearance}${speaker}${via}${when}`);
     }
     for (const sp of people.speakers) {
-      lines.push(`Speaker ${sp.speakerLabel}: ${sp.turnCount} turns`);
+      const name = (sp.displayName && sp.displayName.trim()) || sp.speakerLabel;
+      lines.push(`${name}: ${sp.turnCount} turns`);
     }
   }
   return lines.join('\n');
