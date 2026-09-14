@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyOcrIdentities,
+  applyRoleTitleLabels,
   applyWebIdentities,
   classifySceneKind,
+  deriveServiceTitle,
   extractVisibleNameHints,
+  formatNamedRoleLabel,
   identifySpeakers,
   overlaySpeakerLabels,
   parseWebIdentityJson,
@@ -215,4 +218,87 @@ test('overlaySpeakerLabels swaps Speaker A for displayName in turns/transcript',
   );
   assert.equal(turns[0]?.speakerLabel, 'Lex Fridman');
   assert.equal(resolveSpeakerDisplayName('Speaker A', identified), 'Lex Fridman');
+});
+
+test('homeowners stay Homeowner — never web-named; crew get Name — Title', async () => {
+  assert.equal(deriveServiceTitle({ kind: 'homeowner' }), 'Homeowner');
+  assert.equal(deriveServiceTitle({ trade: 'plumbing' }), 'Plumber');
+  assert.equal(deriveServiceTitle({ memberRole: 'project_manager' }), 'Project Manager');
+  assert.equal(deriveServiceTitle({ serviceTitle: 'Estimator' }), 'Estimator');
+  assert.equal(formatNamedRoleLabel('Jordan Lee', 'Plumber'), 'Jordan Lee — Plumber');
+
+  const base = extractPeoplePresent({
+    visionPeople: [
+      {
+        id: 'person-1',
+        label: 'Person 1 (homeowner-like)',
+        role: 'homeowner',
+        appearance: 'civilian clothes',
+        speakerLabel: 'Homeowner',
+        appearMoments: [{ tSec: 2 }],
+      },
+      {
+        id: 'person-2',
+        label: 'Person 2 (crew-like)',
+        role: 'crew',
+        appearance: 'name tag',
+        matchedName: 'Jordan Lee',
+        matchConfidence: 0.9,
+        speakerLabel: 'Speaker B',
+        appearMoments: [{ tSec: 4, note: 'name tag: Jordan Lee' }],
+      },
+    ],
+  });
+
+  const identified = await identifySpeakers({
+    people: base,
+    narrationText: 'Bathroom remodel; homeowner watches crew.',
+    allowWebIdentify: true,
+    orgMembers: [
+      {
+        userId: 'party:1',
+        fullName: 'Jordan Lee',
+        trade: 'plumbing',
+        kind: 'job_party',
+      },
+    ],
+    visibleTextHints: ['Name tag: Jordan Lee'],
+    webIdentify: async () => [
+      {
+        speakerLabel: 'Homeowner',
+        displayName: 'Private Person',
+        confidence: 0.99,
+        source: 'should-not-apply',
+      },
+    ],
+  });
+
+  const homeowner = identified.people.find((p) => p.role === 'homeowner');
+  assert.equal(homeowner?.displayName, 'Homeowner');
+  assert.ok(homeowner?.identityMethod !== 'web');
+
+  const crew = identified.people.find((p) => p.id === 'person-2');
+  assert.ok(crew);
+  assert.equal(crew?.role, 'crew');
+  assert.match(String(crew?.displayName), /Jordan Lee/);
+  assert.match(String(crew?.displayName), /Plumber/);
+  assert.equal(crew?.serviceTitle, 'Plumber');
+});
+
+test('applyRoleTitleLabels prefers role words over Speaker A when title known', () => {
+  const base = extractPeoplePresent({
+    visionPeople: [
+      {
+        id: 'person-1',
+        label: 'Person 1',
+        role: 'adjuster',
+        appearance: null,
+        speakerLabel: 'Speaker A',
+        appearMoments: [{ tSec: 1 }],
+      },
+    ],
+  });
+  const labeled = applyRoleTitleLabels(base, []);
+  assert.equal(labeled.people[0]?.displayName, 'Adjuster');
+  assert.equal(resolveSpeakerDisplayName('Speaker A', labeled), 'Adjuster');
 });

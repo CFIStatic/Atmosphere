@@ -10,6 +10,10 @@
  *
  * Guardrails:
  *   - Never invent names. Uncertainty → keep role / Speaker N.
+ *   - Homeowners: always the role label "Homeowner" — never web-search private
+ *     homeowners for legal names.
+ *   - Job footage: prefer job roster + service titles (Plumber, Adjuster, …)
+ *     + OCR/nameplates over open-web face search.
  *   - Private Field Capture / job footage: web face-search is OFF by default.
  *   - Voice celebrity DB is not faked; voice method reserved for future
  *     in-clip / labeled-prior embedding match.
@@ -62,6 +66,96 @@ function looksLikeLegalName(raw: string): boolean {
     return false; // single token alone is too weak without context
   }
   return false;
+}
+
+/**
+ * Human service title from org membership / job_parties trade / explicit title.
+ * Hook for parallel branches that land richer titles on OrgMemberHint.serviceTitle.
+ */
+export function deriveServiceTitle(hint: {
+  serviceTitle?: string | null;
+  trade?: string | null;
+  memberRole?: string | null;
+  kind?: string | null;
+}): string | null {
+  const explicit = String(hint.serviceTitle || '').trim();
+  if (explicit) return titleCaseTrade(explicit).slice(0, 60);
+
+  if (hint.kind === 'homeowner') return 'Homeowner';
+
+  const trade = String(hint.trade || '').trim().toLowerCase();
+  if (trade) {
+    const mapped = tradeTitleMap(trade);
+    if (mapped) return mapped;
+    return titleCaseTrade(trade).slice(0, 60);
+  }
+
+  const role = String(hint.memberRole || '').trim().toLowerCase();
+  switch (role) {
+    case 'project_manager':
+      return 'Project Manager';
+    case 'field_technician':
+      return 'Technician';
+    case 'office_manager':
+      return 'Office Manager';
+    case 'sales':
+      return 'Estimator';
+    case 'accountant':
+      return 'Accountant';
+    case 'employee':
+      return 'Crew';
+    case 'adjuster':
+      return 'Adjuster';
+    case 'owner':
+    case 'homeowner':
+      return 'Homeowner';
+    case 'general_contractor':
+      return 'General Contractor';
+    case 'subcontractor':
+      return 'Crew';
+    default:
+      return null;
+  }
+}
+
+function tradeTitleMap(trade: string): string | null {
+  const t = trade.replace(/[_-]+/g, ' ').trim();
+  if (/plumb/.test(t)) return 'Plumber';
+  if (/electr/.test(t)) return 'Electrician';
+  if (/roof/.test(t)) return 'Roofer';
+  if (/hvac|heating|cooling/.test(t)) return 'HVAC';
+  if (/drywall|sheetrock/.test(t)) return 'Drywall';
+  if (/paint/.test(t)) return 'Painter';
+  if (/fram/.test(t)) return 'Framer';
+  if (/estimat/.test(t)) return 'Estimator';
+  if (/project\s*manag|\bpm\b/.test(t)) return 'Project Manager';
+  if (/adjust/.test(t)) return 'Adjuster';
+  if (/inspect/.test(t)) return 'Inspector';
+  if (/tech/.test(t)) return 'Technician';
+  if (/crew|labor|worker|mitigation|restoration|field\s*capture/.test(t)) return 'Crew';
+  return null;
+}
+
+function titleCaseTrade(raw: string): string {
+  return raw
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/** "Jordan — Plumber" when both known; else title alone; else name alone. */
+export function formatNamedRoleLabel(name: string | null | undefined, title: string | null | undefined): string | null {
+  const n = String(name || '').trim();
+  const t = String(title || '').trim();
+  if (n && t && !n.toLowerCase().includes(t.toLowerCase())) {
+    return `${n.slice(0, 48)} — ${t.slice(0, 40)}`.slice(0, 80);
+  }
+  if (n) return n.slice(0, 80);
+  if (t) return t.slice(0, 80);
+  return null;
 }
 
 /**
@@ -245,13 +339,23 @@ export function overlaySpeakerLabels<T extends { speakerLabel?: string | null }>
 
 function applyIdentityToPerson(
   person: PersonPresent,
-  identity: Omit<SpeakerIdentity, 'personId'> & { personId?: string | null },
+  identity: Omit<SpeakerIdentity, 'personId'> & {
+    personId?: string | null;
+    serviceTitle?: string | null;
+    role?: PersonPresent['role'];
+  },
 ): PersonPresent {
+  const title = identity.serviceTitle ?? person.serviceTitle ?? null;
   return {
     ...person,
+    role: identity.role ?? person.role,
     label: identity.displayName,
     displayName: identity.displayName,
-    matchedName: identity.method === 'roster' ? identity.displayName : person.matchedName ?? identity.displayName,
+    serviceTitle: title,
+    matchedName:
+      identity.method === 'roster' && looksLikeLegalName(identity.displayName)
+        ? identity.displayName
+        : person.matchedName ?? (looksLikeLegalName(identity.displayName) ? identity.displayName : person.matchedName),
     matchConfidence: identity.confidence,
     identityConfidence: identity.confidence,
     identityMethod: identity.method,
@@ -286,6 +390,7 @@ function rebuildSpeakers(people: PersonPresent[], speakers: SpeakerIndex[]): Spe
       identityConfidence: id.confidence,
       identityMethod: id.method,
       identitySource: id.source,
+      serviceTitle: person?.serviceTitle ?? sp.serviceTitle ?? null,
     };
   });
 }
@@ -381,6 +486,7 @@ export function applyWebIdentities(
   if (!candidates.length) return people;
 
   const next = people.people.map((person) => {
+    if (person.role === 'homeowner') return person; // never web-name private homeowners
     if (identityFromPerson(person)?.method === 'roster') return person;
     const hit = candidates.find((c) => {
       if (c.personId && c.personId === person.id) return true;
@@ -460,6 +566,104 @@ export type IdentifySpeakersInput = {
   >;
 };
 
+
+/**
+ * Prefer job roster + role titles over Speaker A/B when we know the role but
+ * not a legal name. Homeowners → "Homeowner" (never a web/legal-name guess).
+ * Crew with name+title → "Jordan — Plumber".
+ */
+export function applyRoleTitleLabels(
+  people: PeoplePresent,
+  roster: OrgMemberHint[] = [],
+): PeoplePresent {
+  if (!people.people.length && !people.speakers.length) return people;
+
+  const titlesByUser = new Map<string, string>();
+  const titlesByName = new Map<string, string>();
+  for (const row of roster) {
+    const title = deriveServiceTitle(row);
+    if (!title) continue;
+    if (row.userId) titlesByUser.set(row.userId, title);
+    if (row.fullName?.trim()) titlesByName.set(row.fullName.trim().toLowerCase(), title);
+    if (row.kind === 'homeowner') {
+      // no-op map; homeowner path uses role
+    }
+  }
+
+  const next = people.people.map((person) => {
+    // Hard rule: homeowners are the role label — never promote a web/legal name.
+    if (person.role === 'homeowner') {
+      return applyIdentityToPerson(person, {
+        displayName: 'Homeowner',
+        confidence: Math.max(person.identityConfidence ?? 0.9, 0.9),
+        method: 'roster',
+        source: 'job homeowner role',
+        serviceTitle: 'Homeowner',
+        role: 'homeowner',
+      });
+    }
+
+    const fromUser =
+      person.matchedOrgUserId && titlesByUser.get(person.matchedOrgUserId)
+        ? titlesByUser.get(person.matchedOrgUserId)!
+        : null;
+    const fromName =
+      person.matchedName && titlesByName.get(person.matchedName.toLowerCase())
+        ? titlesByName.get(person.matchedName.toLowerCase())!
+        : person.displayName && titlesByName.get(person.displayName.toLowerCase())
+          ? titlesByName.get(person.displayName.toLowerCase())!
+          : null;
+    const title =
+      person.serviceTitle?.trim() ||
+      fromUser ||
+      fromName ||
+      (person.role === 'adjuster'
+        ? 'Adjuster'
+        : person.role === 'inspector'
+          ? 'Inspector'
+          : null);
+
+    const legal =
+      (person.displayName && looksLikeLegalName(person.displayName) ? person.displayName : null) ||
+      (person.matchedName && looksLikeLegalName(person.matchedName) ? person.matchedName : null);
+
+    if (legal && title) {
+      const label = formatNamedRoleLabel(legal, title);
+      if (!label) return person.serviceTitle ? person : { ...person, serviceTitle: title };
+      return applyIdentityToPerson(person, {
+        displayName: label,
+        confidence: person.identityConfidence ?? person.matchConfidence ?? 0.85,
+        method: (person.identityMethod as IdentityMethod) || 'roster',
+        source: person.identitySource ?? 'roster name + service title',
+        serviceTitle: title,
+      });
+    }
+
+    if (!legal && title && !(person.displayName && person.identityConfidence && person.identityConfidence >= 0.7)) {
+      // Role/title alone beats Speaker A when we know the service role.
+      return applyIdentityToPerson(person, {
+        displayName: title,
+        confidence: 0.8,
+        method: 'roster',
+        source: 'job / org service title',
+        serviceTitle: title,
+      });
+    }
+
+    if (title && !person.serviceTitle) {
+      return { ...person, serviceTitle: title };
+    }
+    return person;
+  });
+
+  return {
+    ...people,
+    people: next,
+    speakers: rebuildSpeakers(next, people.speakers),
+    count: next.length,
+  };
+}
+
 /**
  * Full identity pass: roster → OCR → optional gated web.
  * Never invents. Private jobs skip web.
@@ -484,14 +688,28 @@ export async function identifySpeakers(input: IdentifySpeakersInput): Promise<Pe
   if (input.orgMembers?.length) {
     people = matchPeopleToOrgMembers(people, input.orgMembers, uniqueHints);
     const rosterPeople = people.people.map((p) => {
+      if (p.role === 'homeowner') {
+        return applyIdentityToPerson(p, {
+          displayName: 'Homeowner',
+          confidence: 0.95,
+          method: 'roster',
+          source: 'job homeowner role',
+          serviceTitle: 'Homeowner',
+          role: 'homeowner',
+        });
+      }
       if (!p.matchedOrgUserId || !p.matchedName) return p;
       const confidence = clampConfidence(p.matchConfidence) ?? 0.85;
       if (confidence < ROSTER_MIN_CONFIDENCE) return p;
+      const member = input.orgMembers!.find((m) => m.userId === p.matchedOrgUserId);
+      const title = deriveServiceTitle(member ?? { serviceTitle: p.serviceTitle });
+      const label = formatNamedRoleLabel(p.matchedName, title) || p.matchedName;
       return applyIdentityToPerson(p, {
-        displayName: p.matchedName,
+        displayName: label,
         confidence,
         method: 'roster',
-        source: 'org roster match on visible name text',
+        source: 'org / job roster match on visible name text',
+        serviceTitle: title,
       });
     });
     people = {
@@ -503,11 +721,25 @@ export async function identifySpeakers(input: IdentifySpeakersInput): Promise<Pe
   }
 
   people = applyOcrIdentities(people, uniqueHints);
+  people = applyRoleTitleLabels(people, input.orgMembers ?? []);
 
   if (sceneKind === 'public_media' && input.webIdentify) {
     try {
       const candidates = await input.webIdentify({ sceneKind, hints: uniqueHints, people });
-      people = applyWebIdentities(people, candidates ?? [], sceneKind);
+      // Never web-identify private homeowners even in mixed scenes.
+      const safe = (candidates ?? []).filter((c) => {
+        const person = people.people.find(
+          (p) =>
+            (c.personId && p.id === c.personId) ||
+            (c.speakerLabel &&
+              p.speakerLabel &&
+              c.speakerLabel.toLowerCase() === p.speakerLabel.toLowerCase()),
+        );
+        return !person || person.role !== 'homeowner';
+      });
+      people = applyWebIdentities(people, safe, sceneKind);
+      // Re-assert homeowner role labels after web pass.
+      people = applyRoleTitleLabels(people, input.orgMembers ?? []);
     } catch (err) {
       console.warn(
         '[speaker-identity] web identify skipped:',

@@ -32,6 +32,15 @@ function PersonRow({
         <span className="rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
           {roleWord(person.role)}
         </span>
+        {person.serviceTitle &&
+        !(person.displayName || person.label || '').toLowerCase().includes(person.serviceTitle.toLowerCase()) ? (
+          <span
+            className="rounded-full bg-paper-200 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-ink-600"
+            data-testid="person-service-title"
+          >
+            {person.serviceTitle}
+          </span>
+        ) : null}
         {person.identityMethod && person.identityMethod !== 'unknown' ? (
           <span
             className="rounded-full bg-ink-900/90 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-paper-50"

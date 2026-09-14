@@ -55,6 +55,12 @@ export type PersonPresent = {
   identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
   /** Citation for web / OCR (chyron text, show name, roster note). */
   identitySource?: string | null;
+  /**
+   * Service / trade title when known from signup, org membership, or job
+   * assignment (Plumber, Adjuster, Project Manager). Used with displayName
+   * as "Jordan — Plumber". Homeowners stay the role label "Homeowner".
+   */
+  serviceTitle?: string | null;
 };
 
 export type SpeakerIndex = {
@@ -66,6 +72,7 @@ export type SpeakerIndex = {
   identityConfidence?: number | null;
   identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
   identitySource?: string | null;
+  serviceTitle?: string | null;
 };
 
 export type PeoplePresent = {
@@ -86,10 +93,26 @@ export type StoredPeoplePresent = {
   speakers: SpeakerIndex[];
 };
 
+/**
+ * Roster row for speaker labeling. `serviceTitle` / `trade` / `memberRole`
+ * are optional hooks — parallel branches may populate richer titles; we
+ * format what we have and never invent.
+ */
 export type OrgMemberHint = {
   userId: string;
   fullName: string;
   email?: string | null;
+  /** org_members.role (project_manager, field_technician, …) when known. */
+  memberRole?: string | null;
+  /** Free-text trade from job_parties (plumber, electrical, roofing, …). */
+  trade?: string | null;
+  /**
+   * Explicit service title when a parallel path supplies one
+   * (e.g. "Plumber", "Estimator"). Preferred over derived trade/role.
+   */
+  serviceTitle?: string | null;
+  /** Where this row came from — drives homeowner vs crew labeling. */
+  kind?: 'org_member' | 'job_party' | 'homeowner' | null;
 };
 
 function emptyPeople(): PeoplePresent {
@@ -130,10 +153,12 @@ function roleFromSpeaker(label: string): PersonRole {
 
 function defaultLabel(index: number, role: PersonRole, appearance: string | null): string {
   const n = index + 1;
-  if (role === 'homeowner') return appearance ? `Person ${n} (homeowner-like)` : `Person ${n} (homeowner)`;
+  // Prefer stable role words over Speaker/Person N when role is known —
+  // homeowners are always "Homeowner" (never a guessed legal name).
+  if (role === 'homeowner') return 'Homeowner';
+  if (role === 'adjuster') return 'Adjuster';
+  if (role === 'inspector') return 'Inspector';
   if (role === 'crew') return appearance ? `Person ${n} (crew-like)` : `Person ${n} (crew)`;
-  if (role === 'adjuster') return `Person ${n} (adjuster)`;
-  if (role === 'inspector') return `Person ${n} (inspector)`;
   if (appearance) return `Person ${n} (${appearance.slice(0, 40)})`;
   return `Person ${n}`;
 }
@@ -158,7 +183,11 @@ export function sanitizePersonLabel(raw: string, role: PersonRole, appearance: s
   if (/^person\s*\d+/i.test(s) || /crew-like|homeowner-like|speaker\s*[a-d]/i.test(s)) {
     return s.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 64);
   }
-  if (/^(homeowner|crew|adjuster|inspector|speaker\s*[a-d])$/i.test(s)) {
+  if (
+    /^(homeowner|crew|adjuster|inspector|estimator|technician|plumber|electrician|roofer|project\s*manager|speaker\s*[a-d])$/i.test(
+      s,
+    )
+  ) {
     return s.replace(/\b\w/g, (c) => c.toUpperCase());
   }
   // Soft descriptors are fine.
@@ -296,6 +325,10 @@ function asPersonList(value: unknown): PersonPresent[] {
         allowDisplay && typeof identitySourceRaw === 'string' && identitySourceRaw.trim()
           ? identitySourceRaw.trim().slice(0, 200)
           : null,
+      serviceTitle: (() => {
+        const raw = (item as { serviceTitle?: unknown }).serviceTitle;
+        return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 60) : null;
+      })(),
     });
     if (out.length >= 24) break;
   }
@@ -329,6 +362,7 @@ function speakersFromPeople(people: PersonPresent[], turns: ConversationTurn[]):
         identityConfidence: person?.identityConfidence ?? null,
         identityMethod: person?.identityMethod ?? null,
         identitySource: person?.identitySource ?? null,
+        serviceTitle: person?.serviceTitle ?? null,
       };
     })
     .sort((a, b) => b.turnCount - a.turnCount)
@@ -468,20 +502,44 @@ export function matchPeopleToOrgMembers(
     .filter((t) => t.length >= 3);
   if (!hay.length) return people;
 
+  const usedMembers = new Set<string>();
   const next = people.people.map((person) => {
     if (person.matchedOrgUserId && person.matchedName) return person;
+    // Homeowners are a role label only — never attach a crew legal name from roster text.
+    if (person.role === 'homeowner') {
+      return {
+        ...person,
+        serviceTitle: person.serviceTitle ?? 'Homeowner',
+      };
+    }
     for (const member of members) {
+      if (member.kind === 'homeowner') continue; // do not name-match private homeowners
       const name = member.fullName.trim();
       if (name.length < 3) continue;
+      if (usedMembers.has(member.userId)) continue;
       const lower = name.toLowerCase();
-      const hit = hay.some((h) => h.includes(lower) || lower.split(/\s+/).every((part) => part.length > 2 && h.includes(part)));
+      const hit = hay.some(
+        (h) => h.includes(lower) || lower.split(/\s+/).every((part) => part.length > 2 && h.includes(part)),
+      );
       if (!hit) continue;
+      usedMembers.add(member.userId);
+      const title =
+        (member.serviceTitle && member.serviceTitle.trim()) ||
+        (member.trade && member.trade.trim()) ||
+        null;
       return {
         ...person,
         matchedOrgUserId: member.userId,
         matchedName: name.slice(0, 80),
         matchConfidence: 0.85,
         label: name.slice(0, 80),
+        serviceTitle: title ? title.slice(0, 60) : person.serviceTitle ?? null,
+        role:
+          person.role === 'unknown' && member.kind === 'job_party'
+            ? normalizeRole(member.memberRole || 'crew')
+            : person.role === 'unknown'
+              ? 'crew'
+              : person.role,
       };
     }
     return person;
@@ -530,14 +588,15 @@ export function parsePeopleModelJson(raw: unknown, fallback: PeoplePresent): Peo
         .map((s) => {
           const o = s as Record<string, unknown>;
           const method = o.identityMethod;
-          const identityMethod =
+          const identityMethod: SpeakerIndex['identityMethod'] =
             method === 'roster' || method === 'ocr' || method === 'web' || method === 'voice' || method === 'unknown'
               ? method
               : null;
           const displayName =
             typeof o.displayName === 'string' && o.displayName.trim() ? o.displayName.trim().slice(0, 80) : null;
           const identityConfidence = clampConfidence(o.identityConfidence);
-          return {
+          const serviceTitleRaw = o.serviceTitle;
+          const row: SpeakerIndex = {
             speakerLabel: String(o.speakerLabel ?? 'Speaker').trim().slice(0, 24) || 'Speaker',
             personId: typeof o.personId === 'string' ? o.personId : null,
             turnCount: Number.isFinite(Number(o.turnCount)) ? Math.max(0, Math.floor(Number(o.turnCount))) : 0,
@@ -548,7 +607,12 @@ export function parsePeopleModelJson(raw: unknown, fallback: PeoplePresent): Peo
               typeof o.identitySource === 'string' && o.identitySource.trim()
                 ? o.identitySource.trim().slice(0, 200)
                 : null,
+            serviceTitle:
+              typeof serviceTitleRaw === 'string' && serviceTitleRaw.trim()
+                ? serviceTitleRaw.trim().slice(0, 60)
+                : null,
           };
+          return row;
         })
         .slice(0, 16)
     : speakersFromPeople(list, fallback.speakers.length ? [] : []);

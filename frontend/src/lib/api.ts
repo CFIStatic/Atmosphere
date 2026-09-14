@@ -876,6 +876,8 @@ export interface PersonPresent {
   identityConfidence?: number | null;
   identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
   identitySource?: string | null;
+  /** Trade / service title when known (Plumber, Adjuster). Homeowner stays role. */
+  serviceTitle?: string | null;
 }
 
 export interface PeopleSpeakerIndex {
@@ -886,6 +888,7 @@ export interface PeopleSpeakerIndex {
   identityConfidence?: number | null;
   identityMethod?: 'roster' | 'ocr' | 'web' | 'voice' | 'unknown' | null;
   identitySource?: string | null;
+  serviceTitle?: string | null;
 }
 
 /** Structured WHO log for Analysis — null when nobody identified. */
