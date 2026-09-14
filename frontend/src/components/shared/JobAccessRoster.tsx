@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, type JobAccessPerson } from '../../lib/api';
+import { TrashIcon } from '../icons';
 
 /**
  * Everyone with a path into this job file — homeowners (progress shares) and
  * Field Capture crew. Last open + who granted, for the office on /job-progress.
+ * Org members only (parent hides this for homeowner viewers). Trash revokes.
  */
 
 function when(iso: string | null): string {
@@ -35,9 +37,28 @@ function grantedLine(person: JobAccessPerson): string {
   return 'Granted by office';
 }
 
+function revokeConfirmLabel(person: JobAccessPerson): string {
+  const who =
+    person.email?.trim() ||
+    person.displayName?.trim() ||
+    person.name?.trim() ||
+    (person.kind === 'homeowner' ? 'this homeowner' : 'this person');
+  if (person.kind === 'field_capture') {
+    return `Revoke Field Capture access for ${who}? They lose access immediately.`;
+  }
+  return `Revoke job progress access for ${who}? They lose access immediately.`;
+}
+
 export function JobAccessRoster({ jobId }: { jobId: string }) {
   const [people, setPeople] = useState<JobAccessPerson[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    const res = await api.jobAccessRoster(jobId);
+    setPeople(res.people);
+  }, [jobId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +79,20 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
       cancelled = true;
     };
   }, [jobId]);
+
+  async function revoke(person: JobAccessPerson) {
+    if (!window.confirm(revokeConfirmLabel(person))) return;
+    setRevokingId(person.id);
+    setError(null);
+    try {
+      await api.revokeJobAccess(jobId, person.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke access.');
+    } finally {
+      setRevokingId(null);
+    }
+  }
 
   return (
     <section className="rounded-xl glass-card p-5" data-testid="job-access-roster">
@@ -99,23 +134,34 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
                   {grantedLine(person)}
                 </p>
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="text-[11px] text-ink-500">
-                  Last access {when(person.lastAccessedAt).toLowerCase()}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-                    person.state === 'claimed' || person.state === 'live'
-                      ? 'bg-success-50 text-success-600'
-                      : 'bg-paper-200/60 text-ink-500'
-                  }`}
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[11px] text-ink-500">
+                    Last access {when(person.lastAccessedAt).toLowerCase()}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                      person.state === 'claimed' || person.state === 'live'
+                        ? 'bg-success-50 text-success-600'
+                        : 'bg-paper-200/60 text-ink-500'
+                    }`}
+                  >
+                    {person.kind === 'homeowner'
+                      ? person.state === 'claimed'
+                        ? 'account'
+                        : 'invite'
+                      : 'Field Capture'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void revoke(person)}
+                  disabled={revokingId === person.id}
+                  aria-label={`Revoke access for ${personLabel(person)}`}
+                  className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
                 >
-                  {person.kind === 'homeowner'
-                    ? person.state === 'claimed'
-                      ? 'account'
-                      : 'invite'
-                    : 'Field Capture'}
-                </span>
+                  <TrashIcon width={14} height={14} />
+                </button>
               </div>
             </li>
           ))}

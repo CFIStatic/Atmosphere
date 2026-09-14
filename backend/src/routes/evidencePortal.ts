@@ -1214,7 +1214,7 @@ evidencePortalRouter.post(
       const { supabase, orgId, userId } = await requireOrgContext(req);
       const { data: share } = await supabase
         .from('verifier_shares')
-        .select('id, job_id, label, revoked_at')
+        .select('id, job_id, label, revoked_at, share_kind, recipient_email')
         .eq('org_id', orgId)
         .eq('id', req.params.id)
         .maybeSingle();
@@ -1228,6 +1228,33 @@ evidencePortalRouter.post(
         .update({ revoked_at: new Date().toISOString() })
         .eq('id', req.params.id);
       if (error) throw new HttpError(400, error.message, 'revoke_failed');
+
+      // Progress shares also mint job_progress_grants on claim — drop those so
+      // the homeowner loses /job-progress access, not just the invite link.
+      if ((share as any).share_kind === 'progress') {
+        const admin = unscopedAdminOrNull();
+        if (admin) {
+          const jobId = (share as any).job_id as string;
+          const shareId = (share as any).id as string;
+          await admin
+            .from('job_progress_grants')
+            .delete()
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .eq('share_id', shareId);
+          const email = String((share as any).recipient_email ?? '')
+            .trim()
+            .toLowerCase();
+          if (email) {
+            await admin
+              .from('job_progress_grants')
+              .delete()
+              .eq('org_id', orgId)
+              .eq('job_id', jobId)
+              .eq('recipient_email', email);
+          }
+        }
+      }
 
       await recordAccess(supabase, {
         orgId,

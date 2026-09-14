@@ -3653,6 +3653,13 @@ export const api = {
   jobAccessRoster: (jobId: string) =>
     request<JobAccessRoster>(`/api/operations/shared/${jobId}/access-roster`, { method: 'GET' }),
 
+  /** Org only — revoke one Who-has-access row (share: / grant: / party: id). */
+  revokeJobAccess: (jobId: string, personId: string) =>
+    request<{ ok: boolean; kind: 'share' | 'grant' | 'party' }>(
+      `/api/operations/shared/${jobId}/access-roster/revoke`,
+      { method: 'POST', body: JSON.stringify({ personId }) },
+    ),
+
   similarPastJobs: (jobId: string) =>
     request<SimilarPastJobsResponse>(`/api/operations/shared/${jobId}/similar-jobs`, {
       method: 'GET',

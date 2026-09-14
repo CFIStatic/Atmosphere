@@ -39,6 +39,7 @@ import {
   touchJobProgressGrantAccess,
 } from '../shared/jobProgressGrants.js';
 import { presentJobAccessRoster } from '../shared/jobAccessRoster.js';
+import { revokeJobAccessPerson } from '../shared/revokeJobAccess.js';
 import { deriveServiceRole, normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import { roomsMentionedIn } from '../audio/conversationDetails.js';
 import {
@@ -523,6 +524,46 @@ sharedJobsRouter.get(
       });
 
       res.json({ people });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/operations/shared/:jobId/access-roster/revoke
+ * Org only: revoke a Who-has-access row (progress share/grant or Field Capture party).
+ * Body: { personId: "share:…" | "grant:…" | "party:…" } from the roster list.
+ */
+sharedJobsRouter.post(
+  '/shared/:jobId/access-roster/revoke',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const personId = z.string().trim().min(1).max(80).parse((req.body ?? {}).personId);
+      const { orgId, supabase } = await requireOrgContext(req);
+
+      const { data: job, error: jobError } = await supabase
+        .from('crm_jobs')
+        .select('id, deleted_at')
+        .eq('org_id', orgId)
+        .eq('id', jobId)
+        .maybeSingle();
+      if (jobError) throw new HttpError(500, jobError.message, 'job_lookup_failed');
+      if (!job || (job as any).deleted_at) throw new HttpError(404, 'No such job.', 'job_not_found');
+      if (await jobFileIsTombstoned(writerForJob({ orgId, jobId }, supabase).raw, orgId, jobId)) {
+        throw new HttpError(404, 'No such job.', 'job_not_found');
+      }
+
+      const admin = unscopedAdminOrNull() ?? requireAdmin();
+      const result = await revokeJobAccessPerson({
+        supabase,
+        admin,
+        orgId,
+        jobId,
+        personId,
+      });
+      res.json(result);
     } catch (err) {
       next(err);
     }
