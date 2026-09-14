@@ -82,6 +82,10 @@ import {
   privacyRedactionsFromStored,
   publicPrivacyFields,
 } from '../audio/privacyRedactions.js';
+import {
+  motionClipsFromProofRow,
+  publicMotionClipsFields,
+} from '../shared/motionClips.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
@@ -237,6 +241,11 @@ function evidenceLogFromRow(row: any) {
     ranges,
   );
   return overlaySpeakerLabels(entries, people);
+}
+
+
+function motionClipsPayloadFromRow(row: any) {
+  return publicMotionClipsFields(motionClipsFromProofRow(row));
 }
 
 function privacyRedactionsPayloadFromRow(row: any) {
@@ -2293,6 +2302,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       evidenceLog: evidenceLogFromRow(row),
       people: peoplePayloadFromRow(row),
       privacyRedactions: privacyRedactionsPayloadFromRow(row),
+      motionClips: motionClipsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),

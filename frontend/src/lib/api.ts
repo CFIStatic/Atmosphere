@@ -975,6 +975,68 @@ export interface PrivacyRedactionRange {
   source: 'vision' | 'heuristic' | 'merged' | 'manual' | string;
 }
 
+
+export interface MotionClip {
+  startSec: number;
+  endSec: number;
+  action: string;
+  motion: string;
+  description: string;
+  toolLabel: string | null;
+  objectLabel: string | null;
+  materialLabel: string | null;
+  room: string | null;
+  confidence: number;
+  source: 'ai_vision' | 'verified_action';
+  durationInferred: boolean;
+  model?: string | null;
+}
+
+export interface ProofMotionClips {
+  version: number;
+  schema: string;
+  clips: MotionClip[];
+  excludedForPrivacy: number;
+  count: number;
+}
+
+export interface MotionTypeBucket {
+  motion: string;
+  action: string | null;
+  count: number;
+  clips: Array<
+    MotionClip & {
+      proofId: string;
+      jobId: string;
+      orgId: string;
+      workDate: string | null;
+      phase: string | null;
+      jobTitle?: string | null;
+      company?: string | null;
+    }
+  >;
+}
+
+export interface MotionClipsBrowseResponse {
+  jobId?: string;
+  jobTitle?: string | null;
+  orgId?: string | null;
+  motion: string | null;
+  totalClips: number;
+  types: Array<{ motion: string; action: string | null; count: number }>;
+  buckets: MotionTypeBucket[];
+  clips?: Array<
+    MotionClip & {
+      proofId: string;
+      jobId: string;
+      orgId: string;
+      workDate: string | null;
+      phase: string | null;
+    }
+  >;
+  disclaimer: string;
+}
+
 export interface ProofPrivacyRedactions {
   version: number;
   ranges: PrivacyRedactionRange[];
@@ -1013,6 +1075,7 @@ export interface ProofVideoRecord {
   people?: ProofPeoplePresent | null;
   /** Private intervals — player blurs + mutes; Ask skips speech. */
   privacyRedactions?: ProofPrivacyRedactions | null;
+  motionClips?: ProofMotionClips | null;
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];
@@ -3418,6 +3481,25 @@ export const api = {
     request<SimilarPastJobsResponse>(`/api/operations/shared/${jobId}/similar-jobs`, {
       method: 'GET',
     }),
+
+  motionClipTypes: () =>
+    request<{ types: Array<{ motion: string; action: string }>; note: string }>('/api/motion-clips/types'),
+
+  motionClipsBrowse: (query?: { motion?: string; jobId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.motion) params.set('motion', query.motion);
+    if (query?.jobId) params.set('jobId', query.jobId);
+    if (query?.limit) params.set('limit', String(query.limit));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<MotionClipsBrowseResponse>(`/api/motion-clips${suffix}`);
+  },
+
+  motionClipsForJob: (jobId: string, query?: { motion?: string }) => {
+    const params = new URLSearchParams();
+    if (query?.motion) params.set('motion', query.motion);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<MotionClipsBrowseResponse>(`/api/motion-clips/job/${jobId}${suffix}`);
+  },
 
 
   renameJobFile: (jobId: string, title: string) =>

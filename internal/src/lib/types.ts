@@ -428,3 +428,43 @@ export interface SafetyIncident {
   createdAt: string;
   updatedAt: string;
 }
+
+
+export interface MotionClipStaffItem {
+  startSec: number;
+  endSec: number;
+  action: string;
+  motion: string;
+  description: string;
+  toolLabel: string | null;
+  objectLabel: string | null;
+  materialLabel: string | null;
+  room: string | null;
+  confidence: number;
+  source: string;
+  durationInferred: boolean;
+  proofId: string;
+  jobId: string;
+  orgId: string;
+  workDate: string | null;
+  phase: string | null;
+  jobTitle?: string | null;
+  company?: string | null;
+}
+
+export interface MotionTypeBucket {
+  motion: string;
+  action: string | null;
+  count: number;
+  clips: MotionClipStaffItem[];
+}
+
+export interface MotionClipsStaffResponse {
+  motion: string | null;
+  orgId: string | null;
+  totalClips: number;
+  types: Array<{ motion: string; action: string | null; count: number }>;
+  buckets: MotionTypeBucket[];
+  knownTypes?: Array<{ motion: string; action: string }>;
+  disclaimer: string;
+}
