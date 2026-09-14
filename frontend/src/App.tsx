@@ -151,6 +151,8 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<'loading' | 'ready' | 'blocked' | 'error'>('loading');
   const fieldEmbed =
     typeof document !== 'undefined' && document.documentElement.dataset.fieldEmbed === '1';
+  // Only skip when there is no org membership on a grant-only surface. Org
+  // members on /job-progress still must finish Stripe when billing is required.
   const jobProgressViewer =
     !membership &&
     (location.pathname === '/job-progress' ||

@@ -351,6 +351,16 @@ describe('SignupPage', () => {
     });
   });
 
+  it('never shows plan or billing UI on a homeowner invitee signup', () => {
+    renderSignup('/signup?intent=homeowner&step=2&checkout=success');
+    expect(screen.getByRole('heading', { level: 2, name: 'Save this job' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Starter/i })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Work Verification/i })).toBeNull();
+    expect(screen.queryByText(/Continue to Stripe/i)).toBeNull();
+    expect(screen.getAllByText(/free for homeowners/i).length).toBeGreaterThan(0);
+  });
+
   it('sends a homeowner save-job account to the hub when there is no job link', async () => {
     const user = userEvent.setup();
     authState.signup.mockResolvedValue({
