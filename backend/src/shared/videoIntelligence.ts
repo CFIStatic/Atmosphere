@@ -90,7 +90,8 @@ export function isLongFormVideo(durationSeconds: number): boolean {
 /** Gemini hanging used to leave narration_status=running forever. */
 export function geminiDictationTimeoutMs(): number {
   const n = Number(process.env.GEMINI_DICTATION_TIMEOUT_MS);
-  return Number.isFinite(n) && n > 0 ? n : 60_000;
+  // Pro + dense JSON needs more headroom than Flash; override via env when needed.
+  return Number.isFinite(n) && n > 0 ? n : 120_000;
 }
 
 export function assertProcessableDuration(durationSeconds: number): void {
@@ -341,7 +342,14 @@ async function dictateWithGemini(input: {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0,
-        maxOutputTokens: 12_288,
+        maxOutputTokens: 16_384,
+        // Dense reconstruction on 2.5 Pro / non-lite Flash — thinking helps
+        // accuracy without inventing. Lite / unknown ids omit this.
+        ...(/^gemini-2\.5/i.test(model) && !/lite/i.test(model)
+          ? { thinkingConfig: { thinkingBudget: 8192 } }
+          : /^gemini-3/i.test(model)
+            ? { thinkingConfig: { thinkingLevel: 'high' } }
+            : {}),
       },
     }),
     });

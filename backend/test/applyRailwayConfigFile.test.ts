@@ -113,6 +113,10 @@ test('Keys sync no longer ships ALLOW_MOCK_DRIVERS=true', () => {
   assert.match(sync, /variable', 'delete', 'ALLOW_MOCK_DRIVERS'/);
   const keysBlock = sync.slice(sync.indexOf('const KEYS'), sync.indexOf('const REQUIRED'));
   assert.doesNotMatch(keysBlock, /ALLOW_MOCK_DRIVERS/);
+  assert.match(keysBlock, /ANTHROPIC_API_KEY/);
+  assert.match(keysBlock, /ASK_ANALYSIS_MODEL/);
+  assert.match(keysBlock, /ASK_ANALYSIS_THINKING_LEVEL/);
+  assert.match(keysBlock, /VERIFICATION_PRIMARY_MODEL/);
 });
 
 test('each deploy job puts its own config on the upload root', () => {
@@ -129,6 +133,16 @@ test('each deploy job puts its own config on the upload root', () => {
   assert.doesNotMatch(production, /ALLOW_MOCK_DRIVERS:\s*'true'/);
   // The ENABLE_* flags went with the products they gated; nothing to sync.
   assert.doesNotMatch(production, /ENABLE_PLATFORM_APIS/);
+  // Analysis pins must stay Pro/Opus — never re-pin flash/sonnet-5 on Deploy WV.
+  assert.match(production, /VERIFICATION_PRIMARY_MODEL:\s*gemini-2\.5-pro/);
+  assert.match(production, /ASK_ANALYSIS_MODEL:\s*gemini-2\.5-pro/);
+  assert.match(production, /ASK_ANALYSIS_THINKING_LEVEL:\s*high/);
+  assert.match(production, /ANTHROPIC_MODEL:\s*claude-opus-4-1/);
+  assert.match(production, /VERIFICATION_ESCALATION_MODEL:\s*claude-opus-4-1/);
+  assert.doesNotMatch(production, /VERIFICATION_PRIMARY_MODEL:\s*gemini-3\.6-flash/);
+  assert.doesNotMatch(production, /ANTHROPIC_MODEL:\s*claude-sonnet-5/);
+  assert.match(production, /ANTHROPIC_API_KEY:/);
+
 
   const website = readFileSync(
     new URL('../../.github/workflows/deploy-website.yml', import.meta.url),

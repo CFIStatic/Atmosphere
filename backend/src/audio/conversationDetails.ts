@@ -90,7 +90,7 @@ export type StoredConversation = {
 export const CONVERSATION_FINDINGS_VERSION = 2;
 
 /** Strong enough for a deep JSON brief; Gemini path already floors high. */
-export const CONVERSATION_LLM_MAX_TOKENS = 8_000;
+export const CONVERSATION_LLM_MAX_TOKENS = 12_288;
 const CHUNK_CHARS = 14_000;
 const SINGLE_PASS_CHARS = 22_000;
 
@@ -889,8 +889,9 @@ export async function analyzeConversation(
 
     let merged = mergeParsedChunks(parsedParts, fallback);
 
-    // Second pass: synthesize a single executive brief when we chunked.
-    if (chunks.length > 1 && isAskModelConfigured()) {
+    // Second pass: synthesize a single executive brief when we chunked,
+    // or densify with vision context on a single long pass.
+    if ((chunks.length > 1 || Boolean(vision)) && isAskModelConfigured()) {
       const sketch = JSON.stringify(
         {
           summary: merged.summary,
@@ -909,8 +910,10 @@ export async function analyzeConversation(
       const synth = await completeAskText({
         system: CONVERSATION_SYSTEM,
         user: [
-          'Synthesize one final office conversation brief from these chunk extractions.',
-          'Keep quote grounding and tSec values. Fill executiveSummary carefully.',
+          chunks.length > 1
+            ? 'Synthesize one final office conversation brief from these chunk extractions.'
+            : 'Densify this office conversation brief using vision context. Keep quote grounding.',
+          'Keep quote grounding and tSec values. Fill executiveSummary carefully. Never invent speech.',
           'Extractions JSON:',
           sketch,
           vision ? `Vision context:\n${vision}` : null,
