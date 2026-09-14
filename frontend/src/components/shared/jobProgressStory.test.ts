@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildJobProgressStory,
-  buildUpToSpeedSummary,
   dayIsOnSite,
 } from './jobProgressStory';
 import type { JobScopeItem, ProofDay } from '../../lib/api';
@@ -211,86 +210,5 @@ describe('buildJobProgressStory', () => {
     expect(story.happened.some((i) => i.badge === 'Verified')).toBe(true);
     expect(story.happened.some((i) => i.badge === 'Done')).toBe(true);
     expect(JSON.stringify(story)).not.toMatch(/payable|scopeVerdict|contradicted/i);
-  });
-});
-
-describe('buildUpToSpeedSummary', () => {
-  it('leads with attention in a danger tone', () => {
-    const story = buildJobProgressStory({
-      scope: [
-        scope({ id: '1', title: 'Extract standing water', state: 'included' }),
-        scope({ id: '2', title: 'Set drying equipment', state: 'included' }),
-      ],
-      days: [],
-      risks: [
-        {
-          key: 'unacked',
-          level: 'blocker',
-          title: 'jack@jettx.ai has not accepted the scope',
-          action: 'Do not let them start.',
-        },
-      ],
-    });
-    const summary = buildUpToSpeedSummary(story);
-    expect(summary.tone).toBe('danger');
-    expect(summary.text).toMatch(/Needs your attention: jack@jettx\.ai has not accepted the scope/);
-    expect(summary.text).toMatch(/Crews finished 0 of 2 work items/);
-    expect(summary.text).toMatch(/Next up: Extract standing water/);
-  });
-
-  it('explains finished count, empty site, and next up for a quiet mid-job', () => {
-    const story = buildJobProgressStory({
-      scope: [
-        scope({ id: '1', title: 'Tear off and replace roof', state: 'included' }),
-        scope({ id: '2', title: 'Rewire bedroom circuits', state: 'included' }),
-        scope({ id: '3', title: 'Paint exterior trim', state: 'included' }),
-        scope({ id: '4', title: 'Final walkthrough', state: 'included' }),
-      ],
-      days: [
-        day({
-          partyId: 'p2',
-          company: 'Delgado Roofing',
-          workDate: '2026-08-05',
-          hasBefore: true,
-          hasAfter: true,
-          accepted: true,
-          payable: true,
-          aiFindings: {
-            scopeVerdicts: [
-              {
-                title: 'Tear off and replace roof',
-                verdict: 'appears_complete',
-                because: 'Slope stripped; new underlayment in frame.',
-              },
-            ],
-          },
-        }),
-      ],
-      risks: [],
-    });
-    const summary = buildUpToSpeedSummary(story);
-    expect(summary.text).toMatch(/Crews finished 1 of 4 work items/);
-    expect(summary.text).toMatch(/Nothing is on site today/);
-    expect(summary.text).toMatch(/Next up: Rewire bedroom circuits/);
-    expect(summary.tone).toBe('success');
-  });
-
-  it('mentions crews on site when a before-only day is open', () => {
-    const story = buildJobProgressStory({
-      scope: [scope({ id: '1', title: 'Tear off north slope', state: 'included' })],
-      days: [
-        day({
-          partyId: 'p1',
-          workDate: '2026-08-12',
-          hasBefore: true,
-          hasAfter: false,
-          summary: 'Morning clip in.',
-        }),
-      ],
-      risks: [],
-    });
-    const summary = buildUpToSpeedSummary(story);
-    expect(summary.text).toMatch(/on site now/i);
-    expect(summary.tone).toBe('caution');
   });
 });

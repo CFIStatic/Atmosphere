@@ -25,12 +25,6 @@ export type JobProgressStory = {
   exclusionCount: number;
 };
 
-export type UpToSpeedSummary = {
-  /** One or two plain sentences for a homeowner. */
-  text: string;
-  tone: StoryTone;
-};
-
 type ScopeLike = Pick<JobScopeItem, 'id' | 'state' | 'title' | 'detail' | 'reason'>;
 type RiskLike = Pick<JobRisk, 'title' | 'action' | 'level'> & { key?: string };
 type DayLike = Pick<
@@ -139,94 +133,6 @@ function bucketForScope(state: ScopeState, verdict: string | undefined): 'happen
   if (verdict === 'appears_complete') return 'happened';
   if (verdict === 'in_progress') return 'happening';
   return 'next';
-}
-
-function plural(n: number, one: string, many: string): string {
-  return n === 1 ? one : many;
-}
-
-/**
- * One or two plain sentences so a homeowner is brought up to speed.
- * Leads with attention when something needs a decision.
- */
-export function buildUpToSpeedSummary(story: JobProgressStory): UpToSpeedSummary {
-  const sentences: string[] = [];
-  let tone: StoryTone = 'neutral';
-
-  const dangerAttention = story.attention.filter((i) => i.tone === 'danger');
-  if (dangerAttention.length > 0) {
-    const first = dangerAttention[0].title;
-    sentences.push(
-      dangerAttention.length === 1
-        ? `Needs your attention: ${first}.`
-        : `Needs your attention: ${first} (+${dangerAttention.length - 1} more).`,
-    );
-    tone = 'danger';
-  } else if (story.attention.length > 0) {
-    const first = story.attention[0].title;
-    sentences.push(
-      story.attention.length === 1
-        ? `Worth a look: ${first}.`
-        : `Worth a look: ${first} (+${story.attention.length - 1} more).`,
-    );
-    tone = 'caution';
-  }
-
-  const progressBits: string[] = [];
-  if (story.trackedCount > 0) {
-    progressBits.push(
-      `Crews finished ${story.doneCount} of ${story.trackedCount} work ${plural(story.trackedCount, 'item', 'items')}`,
-    );
-    if (tone === 'neutral' && story.doneCount > 0) tone = 'success';
-  } else if (story.happened.length === 0 && story.happening.length === 0) {
-    progressBits.push('Nothing has been filmed yet');
-  } else if (story.happened.length > 0) {
-    progressBits.push(
-      `${story.happened.length} field ${plural(story.happened.length, 'update is', 'updates are')} on record`,
-    );
-    if (tone === 'neutral') tone = 'success';
-  }
-
-  const onSiteNow = story.happening.filter((i) => i.kind === 'day');
-  const inProgressScope = story.happening.filter((i) => i.kind === 'scope');
-  if (onSiteNow.length > 0) {
-    progressBits.push(
-      onSiteNow.length === 1
-        ? `${onSiteNow[0].title} is on site now`
-        : `${onSiteNow.length} crews are on site right now`,
-    );
-    if (tone === 'neutral' || tone === 'success') tone = 'caution';
-  } else if (inProgressScope.length > 0) {
-    progressBits.push(
-      inProgressScope.length === 1
-        ? `In progress: ${inProgressScope[0].title}`
-        : `${inProgressScope.length} work items are in progress`,
-    );
-    if (tone === 'neutral' || tone === 'success') tone = 'caution';
-  } else if (story.trackedCount > 0 || story.happened.length > 0) {
-    progressBits.push('Nothing is on site today');
-    if (story.next.length > 0) {
-      const nextTitle = story.next[0].title;
-      const more = story.next.length > 1 ? ` (+${story.next.length - 1} more)` : '';
-      progressBits.push(`Next up: ${nextTitle}${more}`);
-    }
-  } else if (story.next.length > 0) {
-    const nextTitle = story.next[0].title;
-    const more = story.next.length > 1 ? ` (+${story.next.length - 1} more)` : '';
-    progressBits.push(`Next up: ${nextTitle}${more}`);
-  }
-
-  if (progressBits.length > 0) {
-    // Fold progress + now/next into one sentence so the banner stays to ~2 lines.
-    const joined =
-      progressBits.length === 1
-        ? `${progressBits[0]}.`
-        : `${progressBits[0]}. ${progressBits.slice(1).join('. ')}.`.replace(/\.\./g, '.');
-    sentences.push(joined);
-  }
-
-  const text = sentences.slice(0, 2).join(' ').trim();
-  return { text: text || 'Checking the latest job updates.', tone };
 }
 
 /**
