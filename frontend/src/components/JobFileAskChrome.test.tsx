@@ -69,6 +69,16 @@ describe('JobFileAskChrome initial pane', () => {
 });
 
 describe('JobFileAskChrome source', () => {
+  it('pins Ask on the left of the job file on desktop', () => {
+    const desktop = chromeSrc.slice(chromeSrc.indexOf(') : ('));
+    const askIdx = desktop.indexOf('data-testid="job-file-ask"');
+    const fileIdx = desktop.indexOf('{children}');
+    expect(askIdx).toBeGreaterThan(-1);
+    expect(fileIdx).toBeGreaterThan(askIdx);
+    expect(chromeSrc).toContain('lg:border-r');
+    expect(chromeSrc).toContain('Desktop pins Ask on the left');
+  });
+
   it('does not put a bare flex utility on the Ask TabPanel', () => {
     expect(chromeSrc).toContain(
       'min-h-0 flex-1 flex-col outline-none data-[state=active]:flex data-[state=inactive]:hidden',

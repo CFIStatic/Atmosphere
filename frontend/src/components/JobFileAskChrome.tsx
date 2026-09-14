@@ -4,7 +4,7 @@ import { usePhoneShell } from '../lib/usePhoneShell';
 import { VideoSeekProvider } from '../lib/videoSeek';
 import { TabPanel, Tabs } from '../design/Tabs';
 import { JobAskPanel, type JobAskFn } from './JobAskPanel';
-import type { ProofQuestion } from '../lib/api';
+import type { AskThread, ProofQuestion } from '../lib/api';
 
 type JobFilePane = 'file' | 'ask';
 
@@ -39,7 +39,7 @@ function isOverviewBack(node: ReactNode): boolean {
 
 /**
  * One job file chrome for the office job file, intake, and the Field Capture
- * frame. Desktop pins Ask on the right. A phone (or the 480px app iframe)
+ * frame. Desktop pins Ask on the left; the job file sits on the right. A phone (or the 480px app iframe)
  * uses File / Ask tabs so chat is first-class on both surfaces.
  *
  * Never paints an Overview back/breadcrumb. Callers that still pass one are
@@ -54,6 +54,8 @@ export function JobFileAskChrome({
   initialPane = 'file',
   ask,
   loadQuestions,
+  loadThreads,
+  createThread,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -63,7 +65,9 @@ export function JobFileAskChrome({
   /** Open Ask first — used by the emailed Ask link (?ask=1). */
   initialPane?: JobFilePane;
   ask?: JobAskFn;
-  loadQuestions?: () => Promise<{ questions: ProofQuestion[] }>;
+  loadQuestions?: (threadId?: string | null) => Promise<{ questions: ProofQuestion[] }>;
+  loadThreads?: () => Promise<{ threads: AskThread[] }>;
+  createThread?: (title?: string) => Promise<{ thread: AskThread }>;
 }) {
   const phone = usePhoneShell();
   const [pane, setPane] = useState<JobFilePane>(initialPane);
@@ -116,24 +120,24 @@ export function JobFileAskChrome({
               aria-label="Ask this job"
               data-testid="job-file-ask"
             >
-              <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} />
+              <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} />
             </TabPanel>
           </Tabs>
         </div>
       ) : (
         <>
+          <aside
+            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-r lg:border-t-0"
+            aria-label="Ask this job"
+            data-testid="job-file-ask"
+          >
+            <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} />
+          </aside>
+
           <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
             {shownBack ? <div data-testid="job-file-back">{shownBack}</div> : null}
             {children}
           </div>
-
-          <aside
-            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
-            aria-label="Ask this job"
-            data-testid="job-file-ask"
-          >
-            <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} />
-          </aside>
         </>
       )}
       {extra}

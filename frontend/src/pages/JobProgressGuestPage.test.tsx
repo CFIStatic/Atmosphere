@@ -6,6 +6,9 @@ import type { ProgressShareGuestView } from '../lib/api';
 const progressShareGuest = vi.fn();
 const progressShareVideo = vi.fn();
 const progressShareAsk = vi.fn();
+const progressShareAskThreads = vi.fn();
+const progressShareCreateAskThread = vi.fn();
+const progressShareAskQuestions = vi.fn();
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: null, loading: false }),
@@ -20,6 +23,9 @@ vi.mock('../lib/api', async (importOriginal) => {
       progressShareGuest: (...args: unknown[]) => progressShareGuest(...args),
       progressShareVideo: (...args: unknown[]) => progressShareVideo(...args),
       progressShareAsk: (...args: unknown[]) => progressShareAsk(...args),
+      progressShareAskThreads: (...args: unknown[]) => progressShareAskThreads(...args),
+      progressShareCreateAskThread: (...args: unknown[]) => progressShareCreateAskThread(...args),
+      progressShareAskQuestions: (...args: unknown[]) => progressShareAskQuestions(...args),
     },
   };
 });
@@ -140,6 +146,14 @@ describe('JobProgressGuestPage', () => {
     progressShareGuest.mockReset();
     progressShareVideo.mockReset();
     progressShareAsk.mockReset();
+    progressShareAskThreads.mockReset();
+    progressShareCreateAskThread.mockReset();
+    progressShareAskQuestions.mockReset();
+    progressShareAskThreads.mockResolvedValue({ threads: [], project: { kind: 'job', jobId: 'job-1038' } });
+    progressShareCreateAskThread.mockResolvedValue({
+      thread: { id: 'thr-g', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null },
+    });
+    progressShareAskQuestions.mockResolvedValue({ questions: [] });
     progressShareGuest.mockResolvedValue(view);
     vi.stubGlobal(
       'fetch',

@@ -97,6 +97,8 @@ export interface VerifierChromeStrings {
   classified: string;
   awaitingAnalysis: string;
   needsReview: string;
+  chatHistory: string;
+  newChat: string;
 }
 
 export function verifierChromeStrings(
@@ -123,5 +125,7 @@ export function verifierChromeStrings(
     classified: translate(locale, 'nav.classified'),
     awaitingAnalysis: translate(locale, 'nav.awaitingAnalysis'),
     needsReview: translate(locale, 'nav.needsReview'),
+    chatHistory: translate(locale, 'nav.chatHistory'),
+    newChat: translate(locale, 'nav.newChat'),
   };
 }

@@ -196,8 +196,10 @@ export function JobProgressGuestPage() {
         jobId={view.job.id}
         initialPane={openAsk ? 'ask' : 'file'}
         file={{ record: guestRecord, proofs: view.proof }}
-        ask={(question) => api.progressShareAsk(token, question)}
-        loadQuestions={() => Promise.resolve({ questions: [] })}
+        ask={(question, opts) => api.progressShareAsk(token, question, opts)}
+        loadQuestions={(threadId) => api.progressShareAskQuestions(token, { threadId })}
+        loadThreads={() => api.progressShareAskThreads(token)}
+        createThread={(title) => api.progressShareCreateAskThread(token, title)}
       >
         <div className="mx-auto max-w-3xl space-y-4">
           {view.brief && Object.keys(view.brief.facts).length > 0 && (

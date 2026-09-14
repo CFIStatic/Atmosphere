@@ -60,6 +60,8 @@ import {
   decideProofDay,
   askAboutProofs,
   proofQuestions,
+  listJobAskThreads,
+  createJobAskThread,
   proofVideoUrl,
   reanalyseProofDay,
   requeueProofTranscript,
@@ -1829,6 +1831,8 @@ sharedJobsRouter.get('/shared/:jobId/custody-export', jobCustodyExport);
 sharedJobsRouter.get('/shared/:jobId/proof-pack.pdf', jobProofPackPdf);
 sharedJobsRouter.get('/shared/:jobId/claim-ready', jobClaimReadyPacket);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
+sharedJobsRouter.get('/shared/:jobId/ask/threads', listJobAskThreads);
+sharedJobsRouter.post('/shared/:jobId/ask/threads', createJobAskThread);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEven
 import {
   api,
   ApiError,
+  type AskThread,
   type ProofQuestion,
   type ProofResponse,
   type SharedJobRecord,
 } from '../lib/api';
+import { onAskHistoryAction, publishAskHistory } from '../lib/askHistoryBridge';
 import {
   buildJobFileDossier,
   fileKnowsCopy,
@@ -95,11 +97,15 @@ function TypingDots() {
   );
 }
 
-export type JobAskFn = (question: string) => Promise<{
+export type JobAskFn = (
+  question: string,
+  opts?: { threadId?: string | null },
+) => Promise<{
   answer: string;
   groundedOn: number;
   model?: string | null;
   question?: ProofQuestion | null;
+  threadId?: string | null;
 }>;
 
 /**
@@ -115,17 +121,23 @@ export function JobAskPanel({
   fill = false,
   ask: askFn,
   loadQuestions,
+  loadThreads,
+  createThread,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
   /** Fill a docked column instead of sitting as a card with a capped thread. */
   fill?: boolean;
   ask?: JobAskFn;
-  loadQuestions?: () => Promise<{ questions: ProofQuestion[] }>;
+  loadQuestions?: (threadId?: string | null) => Promise<{ questions: ProofQuestion[] }>;
+  loadThreads?: () => Promise<{ threads: AskThread[] }>;
+  createThread?: (title?: string) => Promise<{ thread: AskThread }>;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
   const [turns, setTurns] = useState<JobFileTurn[]>([]);
+  const [threads, setThreads] = useState<AskThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
@@ -133,37 +145,140 @@ export function JobAskPanel({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+  const activeThreadIdRef = useRef<string | null>(null);
   const { seek } = useVideoSeek();
   const record = file ? file.record : ownRecord;
   const proofs = file ? file.proofs : ownProofs;
   const preloaded = file !== undefined;
 
   useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    publishAskHistory({ jobId, threads, activeThreadId });
+  }, [jobId, threads, activeThreadId]);
+
+  async function loadThreadMessages(threadId: string | null) {
+    if (!threadId) {
+      if (loadQuestions) {
+        const next = await loadQuestions(null).catch(() => ({ questions: [] as ProofQuestion[] }));
+        return turnsFromQuestions(next.questions);
+      }
+      return [] as JobFileTurn[];
+    }
+    try {
+      if (loadQuestions) {
+        const next = await loadQuestions(threadId).catch(() => ({ questions: [] as ProofQuestion[] }));
+        return turnsFromQuestions(next.questions);
+      }
+      const next = await api.proofQuestions(jobId, { threadId });
+      return turnsFromQuestions(next.questions);
+    } catch {
+      return [] as JobFileTurn[];
+    }
+  }
+
+  useEffect(() => {
     const n = ++seq.current;
     setLoading(true);
     setError(null);
+    setActiveThreadId(null);
+    setThreads([]);
+    setTurns([]);
     Promise.all([
       preloaded ? Promise.resolve(record) : api.sharedJob(jobId).catch(() => null),
       preloaded ? Promise.resolve(proofs) : api.jobProofs(jobId).catch(() => null),
-      (loadQuestions ?? (() => api.proofQuestions(jobId)))().catch(() => ({
-        questions: [] as ProofQuestion[],
-      })),
+      (loadThreads
+        ? loadThreads().catch(() => ({ threads: [] as AskThread[] }))
+        : askFn
+          ? Promise.resolve({ threads: [] as AskThread[] })
+          : (api.askThreads?.(jobId) ?? Promise.resolve({ threads: [] as AskThread[] })).catch(
+              () => ({ threads: [] as AskThread[] }),
+            )),
     ])
-      .then(([nextRecord, nextProofs, nextQuestions]) => {
+      .then(async ([nextRecord, nextProofs, threadRes]) => {
         if (n !== seq.current) return;
         if (!preloaded) {
           setOwnRecord(nextRecord);
           setOwnProofs(nextProofs);
         }
-        setTurns(turnsFromQuestions(nextQuestions.questions));
+        let nextThreads = threadRes?.threads ?? [];
+        if (!nextThreads.length) {
+          try {
+            const created = createThread
+              ? await createThread()
+              : askFn
+                ? null
+                : await api.createAskThread(jobId);
+            if (created) nextThreads = [created.thread];
+          } catch {
+            nextThreads = [];
+          }
+        }
+        setThreads(nextThreads);
+        const firstId = nextThreads[0]?.id ?? null;
+        setActiveThreadId(firstId);
+        if (firstId) {
+          const msgs = await loadThreadMessages(firstId);
+          if (n !== seq.current) return;
+          setTurns(msgs);
+        } else if (loadQuestions) {
+          const legacy = await loadQuestions(null).catch(() => ({ questions: [] as ProofQuestion[] }));
+          if (n !== seq.current) return;
+          setTurns(turnsFromQuestions(legacy.questions));
+        }
       })
       .finally(() => {
         if (n === seq.current) setLoading(false);
       });
-    // Reload when the job changes — not when the parent passes a new file object
-    // for the same clips, or a typed answer disappears.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- record/proofs are the preloaded snapshot
   }, [jobId, preloaded]);
+
+  useEffect(() => {
+    return onAskHistoryAction((action) => {
+      if (action.jobId !== jobId) return;
+      if (action.type === 'new-chat') {
+        void (async () => {
+          try {
+            const created = createThread
+              ? await createThread()
+              : askFn
+                ? null
+                : await api.createAskThread(jobId);
+            if (created) {
+              setThreads((prev) => [created.thread, ...prev.filter((t) => t.id !== created.thread.id)]);
+              setActiveThreadId(created.thread.id);
+              setTurns([]);
+              setError(null);
+              inputRef.current?.focus();
+            } else {
+              setActiveThreadId(null);
+              setTurns([]);
+            }
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : 'Could not start a new chat.');
+          }
+        })();
+        return;
+      }
+      if (action.type === 'select-thread') {
+        void (async () => {
+          setActiveThreadId(action.threadId);
+          setLoading(true);
+          setError(null);
+          try {
+            const msgs = await loadThreadMessages(action.threadId);
+            setTurns(msgs);
+          } finally {
+            setLoading(false);
+            inputRef.current?.focus();
+          }
+        })();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, askFn]);
 
   const analysisEvents = useMemo(() => analysisEventsFromProofs(proofs), [proofs]);
 
@@ -229,33 +344,49 @@ export function JobAskPanel({
         groundedOn: number;
         model?: string | null;
         question?: ProofQuestion | null;
+        threadId?: string | null;
       };
+      const threadOpts = { threadId: activeThreadIdRef.current };
       if (askFn) {
-        res = await askFn(text);
+        res = await askFn(text, threadOpts);
       } else {
         try {
-          res = await api.askAboutProofsStream(jobId, text, {
-            onToken: (delta) => {
-              if (!sawFirstToken) {
-                sawFirstToken = true;
-                setAsking(false);
-              }
-              // Accumulate from the last assistant stream bubble.
-              setTurns((prev) => {
-                const existing = prev.find((turn) => turn.id === streamId);
-                const next = (existing?.content ?? '') + delta;
-                const without = prev.filter((turn) => turn.id !== streamId);
-                return [
-                  ...without,
-                  { id: streamId, role: 'assistant' as const, content: next, at: now },
-                ];
-              });
+          res = await api.askAboutProofsStream(
+            jobId,
+            text,
+            {
+              onToken: (delta) => {
+                if (!sawFirstToken) {
+                  sawFirstToken = true;
+                  setAsking(false);
+                }
+                // Accumulate from the last assistant stream bubble.
+                setTurns((prev) => {
+                  const existing = prev.find((turn) => turn.id === streamId);
+                  const next = (existing?.content ?? '') + delta;
+                  const without = prev.filter((turn) => turn.id !== streamId);
+                  return [
+                    ...without,
+                    { id: streamId, role: 'assistant' as const, content: next, at: now },
+                  ];
+                });
+              },
             },
-          });
+            threadOpts,
+          );
         } catch {
           // Stream unavailable — fall back to the classic JSON Ask.
-          res = await api.askAboutProofs(jobId, text);
+          res = await api.askAboutProofs(jobId, text, threadOpts);
         }
+      }
+      if (res.threadId && res.threadId !== activeThreadIdRef.current) {
+        setActiveThreadId(res.threadId);
+      }
+      // Refresh thread titles after first message auto-title.
+      if (loadThreads) {
+        void loadThreads().then((r) => setThreads(r.threads)).catch(() => {});
+      } else if (!askFn) {
+        void api.askThreads(jobId).then((r) => setThreads(r.threads)).catch(() => {});
       }
       setTurns((prev) => [
         ...prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId),

@@ -199,6 +199,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(ask).toHaveAttribute('aria-label', 'Ask this job');
     expect(ask.className).toMatch(/lg:h-full/);
     expect(ask.className).toMatch(/lg:w-\[min\(32rem,42%\)\]/);
+    expect(ask.className).toMatch(/lg:border-r/);
     expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
