@@ -3665,25 +3665,6 @@ export const api = {
       method: 'GET',
     }),
 
-  motionClipTypes: () =>
-    request<{ types: Array<{ motion: string; action: string }>; note: string }>('/api/motion-clips/types'),
-
-  motionClipsBrowse: (query?: { motion?: string; jobId?: string; limit?: number }) => {
-    const params = new URLSearchParams();
-    if (query?.motion) params.set('motion', query.motion);
-    if (query?.jobId) params.set('jobId', query.jobId);
-    if (query?.limit) params.set('limit', String(query.limit));
-    const suffix = params.toString() ? `?${params.toString()}` : '';
-    return request<MotionClipsBrowseResponse>(`/api/motion-clips${suffix}`);
-  },
-
-  motionClipsForJob: (jobId: string, query?: { motion?: string }) => {
-    const params = new URLSearchParams();
-    if (query?.motion) params.set('motion', query.motion);
-    const suffix = params.toString() ? `?${params.toString()}` : '';
-    return request<MotionClipsBrowseResponse>(`/api/motion-clips/job/${jobId}${suffix}`);
-  },
-
 
   renameJobFile: (jobId: string, title: string) =>
     request<{

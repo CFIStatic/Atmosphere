@@ -1,10 +1,14 @@
 /**
- * Motion clips browse API — Platform (org) + Internal staff.
+ * Motion clips browse API — Internal / Jettx staff only.
  *
- *   GET /api/motion-clips                 org corpus, filter by motion
+ *   GET /api/motion-clips                 staff corpus (org-scoped when caller has org)
  *   GET /api/motion-clips/types           known narrow motion labels
- *   GET /api/motion-clips/staff           internal staff cross-org browse
- *   GET /api/motion-clips/job/:jobId      job-scoped clips for Platform UI
+ *   GET /api/motion-clips/staff           cross-org staff browse
+ *   GET /api/motion-clips/job/:jobId      job-scoped clips for Internal tooling
+ *
+ * Not on the customer job file. Homeowners, guests, invitees, and ordinary
+ * org Platform users must not browse the robotics skill corpus here —
+ * generation still runs on proofs; Internal `/motion-clips` is the UI.
  */
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
@@ -23,6 +27,9 @@ import {
 } from '../shared/motionClips.js';
 
 export const motionClipsRouter = Router();
+
+motionClipsRouter.use(requireAuth);
+motionClipsRouter.use(requireAnalytics('internal'));
 
 function adminOrThrow() {
   const admin = unscopedAdminOrNull();
@@ -68,7 +75,6 @@ function clipsFromProofRows(
 
 motionClipsRouter.get(
   '/types',
-  requireAuth,
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.json({
@@ -83,7 +89,6 @@ motionClipsRouter.get(
 
 motionClipsRouter.get(
   '/',
-  requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = await requireOrgContext(req);
@@ -138,7 +143,6 @@ motionClipsRouter.get(
 
 motionClipsRouter.get(
   '/job/:jobId',
-  requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = await requireOrgContext(req);
@@ -198,8 +202,6 @@ motionClipsRouter.get(
 
 motionClipsRouter.get(
   '/staff',
-  requireAuth,
-  requireAnalytics('internal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const q = browseQuery.extend({
