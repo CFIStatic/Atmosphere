@@ -441,3 +441,22 @@ test('parseDictationPayload extracts people without inventing legal names', () =
   assert.equal(parsed.people.length, 1);
   assert.equal((parsed.people[0] as { label?: string }).label, 'Person 1 (crew-like)');
 });
+
+test('parseDictationPayload extracts privacyRedactions from the model JSON', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'Crew films the hall then enters a bathroom briefly.',
+      summary: 'Hallway walk then bathroom.',
+      people: [],
+      events: [{ t_seconds: 60, description: 'Enters bathroom', type: 'scene' }],
+      actions: [],
+      privacyRedactions: [
+        { startSec: 58, endSec: 90, reason: 'bathroom', confidence: 0.88, source: 'vision' },
+      ],
+    }),
+  );
+  assert.equal(parsed.privacyRedactions.length, 1);
+  assert.equal(parsed.privacyRedactions[0]!.startSec, 58);
+  assert.equal(parsed.privacyRedactions[0]!.reason, 'bathroom');
+  assert.ok(parsed.privacyRedactions[0]!.confidence >= 0.8);
+});

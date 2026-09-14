@@ -21,6 +21,13 @@ import {
   type PersonPresent,
   type SpeakerIndex,
 } from '../audio/peoplePresent.js';
+import {
+  PRIVACY_REDACTED_LABEL,
+  privacyRedactionsFromStored,
+  redactTranscriptForAsk,
+  secondsInPrivacyRange,
+  type PrivacyRedactionRange,
+} from '../audio/privacyRedactions.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -83,6 +90,8 @@ export type ClipAskRecord = {
   peopleCount?: number | null;
   peopleSpeakers?: SpeakerIndex[];
   peopleSource?: string | null;
+  /** Private intervals — Ask must not quote speech inside these ranges. */
+  privacyRedactions?: PrivacyRedactionRange[] | { ranges?: PrivacyRedactionRange[] } | null;
 };
 
 
@@ -207,6 +216,7 @@ export function clipRecordFromEvidenceItem(item: {
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
     transcript: analysis?.transcript ?? null,
     transcriptStatus: item.transcriptStatus ?? analysis?.transcriptStatus ?? null,
+    privacyRedactions: analysis?.privacyRedactions ?? null,
     conversationDetails: Array.isArray(analysis?.conversationDetails) ? analysis.conversationDetails : [],
     conversationAgreements: Array.isArray(analysis?.conversationAgreements)
       ? analysis.conversationAgreements
@@ -284,6 +294,28 @@ function parseClock(stamp: string): number | null {
   if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
   if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
   return null;
+}
+
+
+function privacyRangesOf(record: ClipAskRecord): PrivacyRedactionRange[] {
+  return privacyRedactionsFromStored(record.privacyRedactions);
+}
+
+/** Transcript + conversation turns with private intervals scrubbed for Ask. */
+export function speechSafeClipRecord(record: ClipAskRecord): ClipAskRecord {
+  const ranges = privacyRangesOf(record);
+  if (!ranges.length) return record;
+  const transcript = redactTranscriptForAsk(record.transcript, ranges);
+  const turns = Array.isArray(record.conversationTurns)
+    ? record.conversationTurns.map((t) => {
+        const tSec = t.tSec == null ? null : Number(t.tSec);
+        if (tSec == null || !Number.isFinite(tSec) || !secondsInPrivacyRange(tSec, ranges)) {
+          return t;
+        }
+        return { ...t, text: PRIVACY_REDACTED_LABEL };
+      })
+    : record.conversationTurns;
+  return { ...record, transcript, conversationTurns: turns };
 }
 
 function splitTranscript(transcript: string | null | undefined): Array<{ at: number | null; text: string }> {
@@ -552,6 +584,7 @@ export function layeredClipBriefing(record: ClipAskRecord, kind: 'scene' | 'topi
 
 /** Topic + exact quotes with seek times from the Whisper log (turns as fallback). */
 function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): string | null {
+  record = speechSafeClipRecord(record);
   const heard = splitTranscript(record.transcript).filter((row) => row.text.trim());
   const lines: string[] = [];
   if (heard.length) {
@@ -695,6 +728,7 @@ function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
  * configured, and as a fallback if the model call fails.
  */
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
+  record = speechSafeClipRecord(record);
   const q = question.trim();
   if (isWhoQuestion(q)) {
     const people = peopleFromRecord(record);
@@ -799,6 +833,7 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 }
 
 export function formatClipRecordForModel(record: ClipAskRecord): string {
+  record = speechSafeClipRecord(record);
   const lines: string[] = [];
   if (record.workDate) lines.push(`Work date: ${record.workDate}`);
   if (record.phase) lines.push(`Phase: ${record.phase}`);
