@@ -1512,6 +1512,26 @@ export interface EvidenceShare {
   state: 'live' | 'expired' | 'revoked';
 }
 
+export interface HomeownerLiveProgressStoryMoment {
+  id: string;
+  workDate: string;
+  whenLabel: string;
+  phase: string | null;
+  company: string;
+  glance: string | null;
+  scan: string[];
+  people: string[];
+  privacyProtected: boolean;
+}
+
+/** Plain-English timeline of what happened — Glance/Scan across clips. */
+export interface HomeownerLiveProgressStory {
+  overview: string;
+  moments: HomeownerLiveProgressStoryMoment[];
+  clipCount: number;
+  withGlanceCount: number;
+}
+
 export interface ProgressShareGuestView {
   share: {
     label: string;
@@ -1538,6 +1558,8 @@ export interface ProgressShareGuestView {
     verifiedDays: number;
     inProgress: number;
   };
+  /** Privacy-safe Glance/Scan timeline for /progress. */
+  liveStory?: HomeownerLiveProgressStory | null;
   proof: ProofResponse;
 }
 

@@ -20,6 +20,7 @@ import {
   enrichJobProgressGrants,
   listJobProgressGrants,
 } from '../shared/jobProgressGrants.js';
+import { composeHomeownerLiveStory } from '../shared/homeownerLiveStory.js';
 
 /**
  * Guest access to a read-only job file.
@@ -177,6 +178,7 @@ async function sendProgressGuest(req: Request, res: Response, next: NextFunction
       brief: jobFile.brief,
       scope: jobFile.scope,
       progress: progressFromRecord(scope, proof),
+      liveStory: composeHomeownerLiveStory((proof as any).videos ?? []),
       proof,
     });
   } catch (err) {

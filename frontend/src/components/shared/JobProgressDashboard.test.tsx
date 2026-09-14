@@ -155,4 +155,76 @@ describe('JobProgressDashboard even simpler', () => {
     expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-progress-needs-attention')).not.toBeInTheDocument();
   });
+
+  it('shows a plain-English live story from clip Glance/Scan and hides private moments', async () => {
+    const withVideos = {
+      ...proof,
+      videos: [
+        {
+          id: 'vid-1',
+          partyId: 'pty-2',
+          company: 'Delgado Roofing',
+          workDate: '2026-08-05',
+          phase: 'after',
+          durationSeconds: 90,
+          analysisStatus: 'done',
+          narrationStatus: null,
+          transcriptStatus: null,
+          transcriptError: null,
+          aiSummary: null,
+          heardOnMic: null,
+          conversation: {
+            conversationExecutiveSummary: 'Crew finished the north slope tear-off.',
+            conversationKeyMoments: [{ tSec: 10, label: 'Decision', text: 'Agreed to tarp overnight' }],
+          },
+          people: {
+            peoplePresent: [
+              { id: '1', label: 'Alex', role: 'crew', appearance: null, appearMoments: [] },
+            ],
+          },
+          privacyRedactions: null,
+        },
+        {
+          id: 'vid-private',
+          partyId: 'pty-2',
+          company: 'Delgado Roofing',
+          workDate: '2026-08-06',
+          phase: 'after',
+          durationSeconds: 40,
+          analysisStatus: 'done',
+          narrationStatus: null,
+          transcriptStatus: null,
+          transcriptError: null,
+          aiSummary: 'Worker walked into the bathroom while recording',
+          heardOnMic: null,
+          conversation: {
+            conversationSummary: 'Discussion in the bathroom',
+          },
+          people: null,
+          privacyRedactions: {
+            version: 1,
+            ranges: [
+              { startSec: 5, endSec: 30, reason: 'bathroom', confidence: 0.9, source: 'vision' },
+            ],
+          },
+        },
+      ],
+    };
+
+    render(
+      <JobProgressDashboard
+        jobId="job-1"
+        record={{ ...record, risks: [] }}
+        initialProof={withVideos}
+        showProofOfWork={false}
+      />,
+    );
+
+    const live = await screen.findByTestId('homeowner-live-progress-story');
+    expect(live).toHaveTextContent(/What happened/);
+    expect(live).toHaveTextContent(/north slope/i);
+    expect(live.textContent).not.toMatch(/bathroom/i);
+    expect(screen.getByTestId('live-story-timeline')).toBeInTheDocument();
+  });
+
 });

@@ -8,11 +8,17 @@ import {
   type StoryItem,
   type StoryTone,
 } from './jobProgressStory';
+import {
+  buildHomeownerLiveProgressStory,
+  type HomeownerLiveProgressStory,
+} from './jobLiveProgressStory';
+import { LiveProgressStory } from './LiveProgressStory';
 import { siteLine } from '../../lib/jobFileAsk';
 
 /**
- * Homeowner-clear job progress: one status + progress card, then a single
- * Now / Done / Left brief (with a compact Needs attention strip when needed).
+ * Homeowner-clear job progress: one status + progress card, a live plain-English
+ * What happened story (Glance/Scan across clips), then a single Now / Done / Left
+ * brief (with a compact Needs attention strip when needed).
  * Shared by office /job-progress and guest /progress/:token.
  * Does not own Ask/chat chrome.
  */
@@ -90,6 +96,7 @@ export function JobProgressDashboard({
   showIdentity = true,
   alwaysShowRecordings = false,
   metrics: metricsOverride,
+  liveStory: liveStoryOverride,
 }: {
   jobId: string;
   record: Pick<SharedJobRecord, 'job' | 'scope' | 'risks' | 'brief'>;
@@ -111,6 +118,8 @@ export function JobProgressDashboard({
     verifiedDays: number;
     inProgress: number;
   };
+  /** Server-composed live story (progress share). Falls back to proof.videos. */
+  liveStory?: HomeownerLiveProgressStory | null;
 }) {
   const [proof, setProof] = useState<ProofResponse | null>(initialProof ?? null);
   const [loading, setLoading] = useState(!initialProof);
@@ -183,6 +192,10 @@ export function JobProgressDashboard({
         : 0;
 
   const summary = useMemo(() => buildUpToSpeedSummary(story), [story]);
+  const liveStory = useMemo(() => {
+    if (liveStoryOverride) return liveStoryOverride;
+    return buildHomeownerLiveProgressStory(proof?.videos ?? []);
+  }, [liveStoryOverride, proof]);
   const siteAddress = siteLine(record);
 
   const nextItems =
@@ -253,6 +266,8 @@ export function JobProgressDashboard({
           </>
         )}
       </section>
+
+      {!loading && <LiveProgressStory story={liveStory} />}
 
       {!loading && (
         <div className="rounded-xl glass-card px-5 py-4 sm:px-6 divide-y divide-line">
