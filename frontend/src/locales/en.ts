@@ -34,6 +34,8 @@ export const EN = {
   'nav.classified': 'Classified',
   'nav.awaitingAnalysis': 'Awaiting analysis',
   'nav.needsReview': 'Needs review',
+  'nav.chatHistory': 'Chat history',
+  'nav.newChat': 'New chat',
 
   'settings.title': 'Settings',
   'settings.sectionsAria': 'Settings sections',

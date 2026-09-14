@@ -33,6 +33,8 @@ export const ES: MessageCatalog = {
   'nav.themeModeHint': 'Modo {current}. Clic para {next}.',
   'nav.videos': 'Vídeos',
   'nav.allVideos': 'Todos los vídeos',
+  'nav.chatHistory': 'Historial de chats',
+  'nav.newChat': 'Nuevo chat',
   'nav.classified': 'Clasificados',
   'nav.awaitingAnalysis': 'Pendiente de análisis',
   'nav.needsReview': 'Requiere revisión',

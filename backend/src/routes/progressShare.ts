@@ -14,6 +14,11 @@ import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
+import {
+  createAskThread,
+  ensureAskThreads,
+  presentAskThread,
+} from '../shared/askThreads.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   claimProgressShareForUser,
@@ -244,19 +249,90 @@ progressShareRouter.get('/:token', sendProgressGuest);
  * After cookie exchange the client posts to /session/ask; resolveShareToken then
  * reads the httpOnly progress-share cookie.
  */
+progressShareRouter.get(
+  '/:token/ask/threads',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
+      const threads = await ensureAskThreads(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        owner: { kind: 'share', shareId: share.id },
+      });
+      res.json({
+        threads: threads.map(presentAskThread),
+        project: { kind: 'job', jobId: share.job_id },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+progressShareRouter.post(
+  '/:token/ask/threads',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
+      const input = z
+        .object({ title: z.string().trim().min(1).max(200).optional() })
+        .parse(req.body ?? {});
+      const thread = await createAskThread(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        owner: { kind: 'share', shareId: share.id },
+        title: input.title ?? 'New chat',
+      });
+      res.status(201).json({ thread: presentAskThread(thread) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+progressShareRouter.get(
+  '/:token/ask/questions',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
+      const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
+      let q = admin
+        .from('job_proof_questions')
+        .select('id, question, answer, model, grounded_on, created_at, thread_id')
+        .eq('org_id', share.org_id)
+        .eq('job_id', share.job_id);
+      if (threadId) q = q.eq('thread_id', threadId);
+      const { data } = await q.order('created_at', { ascending: false }).limit(30);
+      res.json({ questions: data ?? [] });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 progressShareRouter.post(
   '/:token/ask',
   askLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
-      const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+      const input = z
+        .object({
+          question: z.string().trim().min(3).max(1000),
+          threadId: z.string().uuid().optional().nullable(),
+        })
+        .parse(req.body ?? {});
       const result = await runProofAsk({
         supabase: admin,
         orgId: share.org_id,
         jobId: share.job_id,
         question: input.question,
         userId: null,
+        shareId: share.id,
+        threadId: input.threadId ?? null,
         requestId: `ask:progress:${share.id}:${randomUUID()}`,
       });
 

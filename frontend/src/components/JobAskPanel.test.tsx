@@ -12,6 +12,8 @@ const proofQuestions = vi.fn();
 const askAboutProofs = vi.fn();
 
 const askAboutProofsStream = vi.fn();
+const askThreads = vi.fn();
+const createAskThread = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
@@ -21,6 +23,8 @@ vi.mock('../lib/api', () => ({
     proofQuestions: (...args: unknown[]) => proofQuestions(...args),
     askAboutProofs: (...args: unknown[]) => askAboutProofs(...args),
     askAboutProofsStream: (...args: unknown[]) => askAboutProofsStream(...args),
+    askThreads: (...args: unknown[]) => askThreads(...args),
+    createAskThread: (...args: unknown[]) => createAskThread(...args),
   },
 }));
 
@@ -93,7 +97,16 @@ describe('JobAskPanel', () => {
     proofQuestions.mockReset();
     askAboutProofs.mockReset();
     askAboutProofsStream.mockReset();
+    askThreads.mockReset();
+    createAskThread.mockReset();
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
+    askThreads.mockResolvedValue({
+      threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
+      project: { kind: 'job', jobId: 'job-1038' },
+    });
+    createAskThread.mockResolvedValue({
+      thread: { id: 'thr-new', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null },
+    });
     sharedJob.mockResolvedValue(record);
     jobProofs.mockResolvedValue(proofs);
     proofQuestions.mockResolvedValue({ questions: [] });
@@ -134,6 +147,7 @@ describe('JobAskPanel', () => {
       expect(askAboutProofs).toHaveBeenCalledWith(
         'job-1038',
         'What did the homeowner say about the skylights?',
+        { threadId: 'thr-1' },
       );
     });
     expect(
@@ -171,7 +185,9 @@ describe('JobAskPanel', () => {
     );
 
     await waitFor(() => {
-      expect(ask).toHaveBeenCalledWith('What did the homeowner say about the skylights?');
+      expect(ask).toHaveBeenCalledWith('What did the homeowner say about the skylights?', {
+        threadId: null,
+      });
     });
     expect(askAboutProofs).not.toHaveBeenCalled();
     expect(await screen.findByText('From the guest file.')).toBeInTheDocument();

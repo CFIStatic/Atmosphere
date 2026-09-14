@@ -109,6 +109,14 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("createdAt: j.createdAt || ''");
   });
 
+  it('keeps Chat history under Videos on the job file rail', () => {
+    expect(verifierHtml).toContain('id="ask-history-nav"');
+    expect(verifierHtml).toContain('data-i18n-chrome="chatHistory"');
+    expect(verifierHtml).toContain('data-i18n-chrome="newChat"');
+    expect(verifierHtml).toContain("d.atmosphere === 'ask-history'");
+    expect(verifierHtml).toContain("atmosphere: 'ask-history-action'");
+  });
+
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
     expect(verifierHtml).toMatch(/<h3[^>]*>Videos<\/h3>/);

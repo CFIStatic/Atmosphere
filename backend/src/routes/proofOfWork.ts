@@ -10,6 +10,14 @@ import {
   scheduledPurgeAt,
 } from '../lib/videoDeletePolicy.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
+import {
+  createAskThread,
+  ensureAskThreads,
+  getAskThreadForOwner,
+  presentAskThread,
+  touchAskThreadAfterMessage,
+  type AskThreadOwner,
+} from '../shared/askThreads.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
@@ -2491,21 +2499,54 @@ function extractedDocumentText(extracted: unknown): string | null {
  * Used by the office (session) and by a homeowner progress-share token so
  * both doors read the same file.
  */
+
+function askWriteClient(userScoped: any) {
+  // Thread ensure/migrate may UPDATE legacy job_proof_questions; prefer service role.
+  return unscopedAdminOrNull() ?? userScoped;
+}
+
 export async function runProofAsk(input: {
   supabase: any;
   orgId: string;
   jobId: string;
   question: string;
   userId?: string | null;
+  shareId?: string | null;
+  threadId?: string | null;
   requestId: string;
   onToken?: (text: string) => void;
 }): Promise<{
   answer: string;
   model: string | null;
   groundedOn: number;
-  question: { id: string; question: string; answer: string; grounded_on: unknown; created_at: string } | null;
+  question: { id: string; question: string; answer: string; grounded_on: unknown; created_at: string; thread_id?: string | null } | null;
+  threadId: string | null;
 }> {
     const { supabase, orgId, jobId, userId } = input;
+    const writeDb = askWriteClient(supabase);
+    let threadId: string | null = input.threadId ?? null;
+    const owner: AskThreadOwner | null = userId
+      ? { kind: 'user', userId }
+      : input.shareId
+        ? { kind: 'share', shareId: input.shareId }
+        : null;
+    if (owner) {
+      try {
+        if (threadId) {
+          await getAskThreadForOwner(writeDb, { orgId, jobId, threadId, owner });
+        } else {
+          const threads = await ensureAskThreads(writeDb, { orgId, jobId, owner });
+          threadId = threads[0]?.id ?? null;
+          if (!threadId) {
+            const created = await createAskThread(writeDb, { orgId, jobId, owner });
+            threadId = created.id;
+          }
+        }
+      } catch {
+        // Threads table may be mid-migrate — Ask still answers without history scoping.
+        threadId = threadId ?? null;
+      }
+    }
 
     const [
       proofsRes,
@@ -2588,13 +2629,22 @@ export async function runProofAsk(input: {
         .eq('job_id', jobId)
         .order('created_at', { ascending: false })
         .limit(5),
-      supabase
-        .from('job_proof_questions')
-        .select('question, answer')
-        .eq('org_id', orgId)
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: false })
-        .limit(8),
+      (threadId
+        ? supabase
+            .from('job_proof_questions')
+            .select('question, answer')
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .eq('thread_id', threadId)
+            .order('created_at', { ascending: false })
+            .limit(8)
+        : supabase
+            .from('job_proof_questions')
+            .select('question, answer')
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .order('created_at', { ascending: false })
+            .limit(8)),
     ]);
 
     const partyRows = (partyRes.data ?? []) as any[];
@@ -2735,15 +2785,33 @@ export async function runProofAsk(input: {
         model: result.model,
         grounded_on: groundedOn,
         asked_by: userId ?? null,
+        ...(threadId ? { thread_id: threadId } : {}),
       })
-      .select('id, question, answer, model, grounded_on, created_at')
+      .select('id, question, answer, model, grounded_on, created_at, thread_id')
       .single();
+
+    if (threadId && owner) {
+      try {
+        const { count } = await writeDb
+          .from('job_proof_questions')
+          .select('id', { count: 'exact', head: true })
+          .eq('thread_id', threadId);
+        await touchAskThreadAfterMessage(writeDb, {
+          threadId,
+          question: input.question,
+          isFirstMessage: (count ?? 0) <= 1,
+        });
+      } catch {
+        // Non-fatal — answer already stored.
+      }
+    }
 
     return {
       answer: result.answer,
       model: result.model,
       question: stored ?? null,
       groundedOn: result.groundedOn || groundedOn.length,
+      threadId,
     };
 }
 
@@ -2760,7 +2828,12 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
   try {
     // Org members and claimed progress-share homeowners (grant viewers).
     const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
-    const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+    const input = z
+      .object({
+        question: z.string().trim().min(3).max(1000),
+        threadId: z.string().uuid().optional().nullable(),
+      })
+      .parse(req.body ?? {});
     const wantsStream =
       String(req.query.stream ?? '') === '1' ||
       String(req.headers.accept ?? '').includes('application/x-ndjson');
@@ -2780,6 +2853,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         jobId: req.params.jobId,
         question: input.question,
         userId,
+        threadId: input.threadId ?? null,
         requestId: `ask:${req.params.jobId}:${randomUUID()}`,
         onToken: (text) => writeEvent({ type: 'token', text }),
       });
@@ -2789,6 +2863,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         model: result.model,
         groundedOn: result.groundedOn,
         question: result.question,
+        threadId: result.threadId,
       });
       res.end();
       return;
@@ -2800,6 +2875,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       jobId: req.params.jobId,
       question: input.question,
       userId,
+      threadId: input.threadId ?? null,
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
     });
     res.status(201).json(result);
@@ -2812,14 +2888,52 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
-    const { data } = await supabase
+    const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
+    let q = supabase
       .from('job_proof_questions')
-      .select('id, question, answer, model, grounded_on, created_at')
+      .select('id, question, answer, model, grounded_on, created_at, thread_id')
       .eq('org_id', orgId)
-      .eq('job_id', req.params.jobId)
-      .order('created_at', { ascending: false })
-      .limit(30);
+      .eq('job_id', req.params.jobId);
+    if (threadId) q = q.eq('thread_id', threadId);
+    const { data } = await q.order('created_at', { ascending: false }).limit(30);
     res.json({ questions: data ?? [] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/operations/shared/:jobId/ask/threads — list (and migrate) chats for this job. */
+export async function listJobAskThreads(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const writeDb = askWriteClient(supabase);
+    const owner: AskThreadOwner = { kind: 'user', userId };
+    const threads = await ensureAskThreads(writeDb, {
+      orgId,
+      jobId: req.params.jobId,
+      owner,
+    });
+    res.json({ threads: threads.map(presentAskThread), project: { kind: 'job', jobId: req.params.jobId } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/operations/shared/:jobId/ask/threads — start a New chat. */
+export async function createJobAskThread(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const writeDb = askWriteClient(supabase);
+    const input = z
+      .object({ title: z.string().trim().min(1).max(200).optional() })
+      .parse(req.body ?? {});
+    const thread = await createAskThread(writeDb, {
+      orgId,
+      jobId: req.params.jobId,
+      owner: { kind: 'user', userId },
+      title: input.title ?? 'New chat',
+    });
+    res.status(201).json({ thread: presentAskThread(thread) });
   } catch (err) {
     next(err);
   }

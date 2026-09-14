@@ -1293,6 +1293,15 @@ export interface ProofQuestion {
   model?: string | null;
   grounded_on: string[];
   created_at: string;
+  thread_id?: string | null;
+}
+
+export interface AskThread {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string | null;
 }
 
 /** Org-wide video analysis pipeline, for the office Overview. */
@@ -4014,11 +4023,17 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  askAboutProofs: (jobId: string, question: string) =>
-    request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion }>(
-      `/api/operations/shared/${jobId}/proof/ask`,
-      { method: 'POST', body: JSON.stringify({ question }) },
-    ),
+  askAboutProofs: (jobId: string, question: string, opts?: { threadId?: string | null }) =>
+    request<{
+      answer: string;
+      groundedOn: number;
+      model: string | null;
+      question: ProofQuestion;
+      threadId?: string | null;
+    }>(`/api/operations/shared/${jobId}/proof/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question, threadId: opts?.threadId ?? undefined }),
+    }),
 
   /**
    * Stream Ask tokens as NDJSON (`?stream=1`). Falls back is the caller's job —
@@ -4031,7 +4046,14 @@ export const api = {
       onToken?: (text: string) => void;
       onStatus?: (phase: string) => void;
     } = {},
-  ): Promise<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }> => {
+    opts?: { threadId?: string | null },
+  ): Promise<{
+    answer: string;
+    groundedOn: number;
+    model: string | null;
+    question: ProofQuestion | null;
+    threadId?: string | null;
+  }> => {
     const embedToken = fieldEmbedAccessToken();
     let res: Response;
     try {
@@ -4043,7 +4065,7 @@ export const api = {
           Accept: 'application/x-ndjson',
           ...(embedToken ? { Authorization: `Bearer ${embedToken}` } : {}),
         },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, threadId: opts?.threadId ?? undefined }),
       });
     } catch {
       throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
@@ -4062,6 +4084,7 @@ export const api = {
     let groundedOn = 0;
     let model: string | null = null;
     let stored: ProofQuestion | null = null;
+    let threadId: string | null = opts?.threadId ?? null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -4079,6 +4102,7 @@ export const api = {
           groundedOn?: number;
           model?: string | null;
           question?: ProofQuestion | null;
+          threadId?: string | null;
         };
         try {
           event = JSON.parse(trimmed) as typeof event;
@@ -4095,15 +4119,33 @@ export const api = {
           groundedOn = typeof event.groundedOn === 'number' ? event.groundedOn : groundedOn;
           model = event.model ?? model;
           stored = event.question ?? stored;
+          if (event.threadId) threadId = event.threadId;
         }
       }
     }
-    return { answer, groundedOn, model, question: stored };
+    return { answer, groundedOn, model, question: stored, threadId };
   },
 
-  proofQuestions: (jobId: string) =>
-    request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
-      method: 'GET',
+  proofQuestions: (jobId: string, opts?: { threadId?: string | null }) => {
+    const q = opts?.threadId
+      ? `?threadId=${encodeURIComponent(opts.threadId)}`
+      : '';
+    return request<{ questions: ProofQuestion[] }>(
+      `/api/operations/shared/${jobId}/proof/questions${q}`,
+      { method: 'GET' },
+    );
+  },
+
+  askThreads: (jobId: string) =>
+    request<{ threads: AskThread[]; project: { kind: string; jobId: string } }>(
+      `/api/operations/shared/${jobId}/ask/threads`,
+      { method: 'GET' },
+    ),
+
+  createAskThread: (jobId: string, title?: string) =>
+    request<{ thread: AskThread }>(`/api/operations/shared/${jobId}/ask/threads`, {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
     }),
 
   jobEvidence: (jobId: string) =>
@@ -4247,11 +4289,37 @@ export const api = {
       { method: 'GET' },
     ),
 
-  progressShareAsk: (token: string, question: string) =>
-    request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }>(
-      progressShareApiPath(token, '/ask'),
-      { method: 'POST', body: JSON.stringify({ question }) },
+  progressShareAsk: (token: string, question: string, opts?: { threadId?: string | null }) =>
+    request<{
+      answer: string;
+      groundedOn: number;
+      model: string | null;
+      question: ProofQuestion | null;
+      threadId?: string | null;
+    }>(progressShareApiPath(token, '/ask'), {
+      method: 'POST',
+      body: JSON.stringify({ question, threadId: opts?.threadId ?? undefined }),
+    }),
+
+  progressShareAskThreads: (token: string) =>
+    request<{ threads: AskThread[]; project: { kind: string; jobId: string } }>(
+      progressShareApiPath(token, '/ask/threads'),
+      { method: 'GET' },
     ),
+
+  progressShareCreateAskThread: (token: string, title?: string) =>
+    request<{ thread: AskThread }>(progressShareApiPath(token, '/ask/threads'), {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+
+  progressShareAskQuestions: (token: string, opts?: { threadId?: string | null }) => {
+    const q = opts?.threadId ? `?threadId=${encodeURIComponent(opts.threadId)}` : '';
+    return request<{ questions: ProofQuestion[] }>(
+      progressShareApiPath(token, `/ask/questions${q}`),
+      { method: 'GET' },
+    );
+  },
 
   claimProgressShare: (token: string) =>
     request<{ ok: boolean; orgId: string; jobId: string; path: string }>(

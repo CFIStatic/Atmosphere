@@ -18,6 +18,11 @@ import { notifyLibraryChanged } from '../lib/libraryChanged';
 import { openPlatformSupport } from '../lib/contactSupport';
 import { nameFromMetadata } from '../lib/display';
 import { verifierSessionUser } from '../lib/verifierSession';
+import {
+  onAskHistory,
+  publishAskHistoryAction,
+  type AskHistoryAction,
+} from '../lib/askHistoryBridge';
 
 /**
  * The Verifier portal iframe — one persistent instance per operations shell.
@@ -98,6 +103,17 @@ export function VerifierFrame({
   }, [frameReady, postSession, profile?.avatarUrl]);
 
   useEffect(() => {
+    return onAskHistory((payload) => {
+      postToFrame({
+        atmosphere: 'ask-history',
+        jobId: payload.jobId,
+        threads: payload.threads,
+        activeThreadId: payload.activeThreadId,
+      });
+    });
+  }, [postToFrame]);
+
+  useEffect(() => {
     if (frameReady) postToFrame({ atmosphere: 'theme', preference: theme });
   }, [frameReady, postToFrame, theme]);
 
@@ -117,6 +133,7 @@ export function VerifierFrame({
         atmosphere?: string;
         to?: string;
         preference?: unknown;
+        action?: AskHistoryAction;
       } | null;
       if (!data?.atmosphere) return;
 
@@ -149,6 +166,9 @@ export function VerifierFrame({
       if (data.atmosphere === 'library-changed' || data.atmosphere === 'reload-library') {
         notifyLibraryChanged();
         postToFrame({ atmosphere: 'reload-library' });
+      }
+      if (data.atmosphere === 'ask-history-action' && data.action) {
+        publishAskHistoryAction(data.action as AskHistoryAction);
       }
     }
     window.addEventListener('message', onMessage);
