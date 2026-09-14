@@ -124,6 +124,7 @@ import {
   proofPackFilename,
   renderJobProofPackPdf,
 } from '../shared/jobProofPackPdf.js';
+import { buildClaimReadyPacket } from '../shared/claimReadyPacket.js';
 import {
   PROOF_ASSEMBLE_MAX_BYTES,
   assertProofAssembleBudget,
@@ -3350,6 +3351,120 @@ export async function jobCustodyExport(req: Request, res: Response, next: NextFu
 }
 
 /**
+ * GET /api/operations/shared/:jobId/claim-ready
+ * Carrier-ish claim packet from evidenced job fields only — never invented.
+ * Separate from any proof-pack PDF export.
+ */
+export async function jobClaimReadyPacket(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const jobId = req.params.jobId;
+
+    const [
+      { data: proofs, error: proofsError },
+      { data: jobRow, error: jobError },
+      { data: partyRows, error: partyError },
+      { data: scopeRows },
+    ] = await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select(PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: true })
+        .limit(200),
+      supabase
+        .from('crm_jobs')
+        .select('id, title, job_number, claim_number, policy_number, loss_type, property_id')
+        .eq('org_id', orgId)
+        .eq('id', jobId)
+        .maybeSingle(),
+      supabase
+        .from('job_parties')
+        .select('id, company, contact_name, trade, revoked_at')
+        .eq('job_id', jobId),
+      supabase
+        .from('job_scope_items')
+        .select('title, state, reason')
+        .eq('job_id', jobId)
+        .limit(200),
+    ]);
+
+    if (proofsError) throw new HttpError(500, proofsError.message, 'claim_ready_failed');
+    if (jobError) throw new HttpError(500, jobError.message, 'claim_ready_failed');
+    if (partyError) throw new HttpError(500, partyError.message, 'claim_ready_failed');
+    if (!jobRow) throw new HttpError(404, 'Job file not found.', 'job_missing');
+
+    const rows = (proofs ?? []) as any[];
+    const partyMap = new Map(
+      ((partyRows ?? []) as any[]).map((p) => [
+        p.id as string,
+        { company: (p.company as string | null) ?? null, person: (p.contact_name as string | null) ?? null },
+      ]),
+    );
+    for (const row of rows) {
+      const party = partyMap.get(row.party_id);
+      if (party?.company) row.company = party.company;
+    }
+
+    let siteAddress: string | null = null;
+    const propertyId = (jobRow as any).property_id as string | null;
+    if (propertyId) {
+      const { data: property } = await supabase
+        .from('crm_properties')
+        .select('address_line1, address_line2, city, region, postal_code')
+        .eq('id', propertyId)
+        .maybeSingle();
+      if (property) {
+        const parts = [
+          (property as any).address_line1,
+          (property as any).address_line2,
+          [ (property as any).city, (property as any).region ].filter(Boolean).join(', '),
+          (property as any).postal_code,
+        ]
+          .map((p) => (typeof p === 'string' ? p.trim() : ''))
+          .filter(Boolean);
+        siteAddress = parts.length ? parts.join(', ') : null;
+      }
+    }
+
+    const proofIds = rows.map((r) => r.id as string);
+    let frames: any[] = [];
+    if (proofIds.length) {
+      const { data: frameRows } = await supabase
+        .from('job_proof_frames')
+        .select('proof_id, at_seconds, storage_path')
+        .in('proof_id', proofIds)
+        .order('at_seconds')
+        .limit(2000);
+      frames = (frameRows ?? []) as any[];
+    }
+
+    const packet = buildClaimReadyPacket({
+      job: {
+        id: jobId,
+        number: (jobRow as any).job_number ?? null,
+        name: (jobRow as any).title ?? null,
+        claimNumber: (jobRow as any).claim_number ?? null,
+        policyNumber: (jobRow as any).policy_number ?? null,
+        lossType: (jobRow as any).loss_type ?? null,
+        siteAddress,
+      },
+      parties: (partyRows ?? []) as any[],
+      proofs: rows,
+      frames,
+      scopeItems: (scopeRows ?? []) as any[],
+    });
+
+    res.json(packet);
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+/**
  * POST /api/operations/shared/:jobId/evidence/:proofId/hold
  * Put a file beyond the reach of retention, or let it go again.
  *
@@ -3357,6 +3472,7 @@ export async function jobCustodyExport(req: Request, res: Response, next: NextFu
  * needed" is a question somebody eventually asks.
  */
 export async function setEvidenceHold(req: Request, res: Response, next: NextFunction) {
+
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = z

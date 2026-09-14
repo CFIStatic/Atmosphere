@@ -29,6 +29,7 @@ import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 import { DownloadProofPackButton } from '../components/analysis/DownloadProofPackButton';
+import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 
 /**
  * The job file.
@@ -331,6 +332,10 @@ export function JobDetailPage() {
             </ul>
           </section>
         )}
+
+        <div className="mt-6">
+          <ClaimReadyPacketPanel jobId={job.id} />
+        </div>
 
         <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-knows">
           <h2 className="text-base font-semibold text-ink-900">On this file</h2>
