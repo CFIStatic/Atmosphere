@@ -25,8 +25,8 @@ Response includes `gaps` (honest missing pieces) and `privacy.redactionsApplied`
 ## Platform
 
 Job file (Platform dashboard + job detail) shows a **Claim-ready packet**
-section with refresh + JSON export. Exportable alongside custody / reports —
-not a rendered PDF.
+section with refresh + Download. Downloadable alongside reports — not a
+rendered PDF. Custody JSON is not exposed as a job-file UI action.
 
 ## Rules
 

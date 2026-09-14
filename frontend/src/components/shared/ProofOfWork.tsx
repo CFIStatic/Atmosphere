@@ -20,7 +20,6 @@ import { ShowDispute } from '../analysis/ShowDispute';
 import { PunchListPanel } from '../analysis/PunchListPanel';
 import { ClipAnalysisLayers } from '../analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
-import { CustodyExportButton } from '../analysis/CustodyExportButton';
 import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
 
 /**
@@ -368,7 +367,6 @@ export function ProofOfWork({
               </button>
             )}
             {jobId && <DownloadProofPackButton jobId={jobId} />}
-            {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
           </div>
           {playbookMsg && (
             <p className="text-xs text-ink-600" data-testid="playbook-save-msg">
@@ -985,7 +983,6 @@ function VideoCatalog({
                     {video.privacyRedactions.ranges.length === 1 ? '' : 's'}
                   </p>
                 ) : null}
-                {jobId && <CustodyExportButton jobId={jobId} proofId={video.id} label="Custody JSON" />}
                 {jobId && video.transcriptStatus !== 'done' ? (
                   <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
                 ) : null}

@@ -4,7 +4,7 @@ import { downloadJson, eventClock } from '../../lib/downloadJson';
 
 /**
  * Platform section: carrier-ish claim packet from evidenced job fields.
- * JSON API export alongside reports — not a proof-pack PDF.
+ * Downloadable alongside reports — not a proof-pack PDF.
  */
 
 function GapList({ gaps }: { gaps: string[] }) {
@@ -47,7 +47,7 @@ export function ClaimReadyPacketPanel({ jobId }: { jobId: string }) {
     void load();
   }, [load]);
 
-  function exportJson() {
+  function downloadPacket() {
     if (!packet) return;
     const slug = packet.job.claimNumber || packet.job.number || packet.job.id;
     downloadJson(`claim-ready-${slug}.json`, packet);
@@ -75,12 +75,12 @@ export function ClaimReadyPacketPanel({ jobId }: { jobId: string }) {
           </button>
           <button
             type="button"
-            onClick={exportJson}
+            onClick={downloadPacket}
             disabled={!packet || busy}
             className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
-            data-testid="claim-ready-export"
+            data-testid="claim-ready-download"
           >
-            Export JSON
+            Download
           </button>
         </div>
       </div>

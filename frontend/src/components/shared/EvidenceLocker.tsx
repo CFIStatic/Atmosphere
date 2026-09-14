@@ -4,7 +4,6 @@ import { formatClipLength } from '../../lib/clipDuration';
 import { JobFilePlayer } from './JobFilePlayer';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
-import { CustodyExportButton } from '../analysis/CustodyExportButton';
 import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
 
 /**
@@ -157,7 +156,6 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
           <DownloadProofPackButton jobId={jobId} />
-          <CustodyExportButton jobId={jobId} label="Export custody JSON" />
           <span className="text-ink-600">
             <span className="font-semibold text-ink-900">{counts.items}</span> files
           </span>
@@ -422,12 +420,9 @@ function EvidenceDetail({
 
       {/* The chain itself. Views included — that is the whole point. */}
       <div className="mt-4 border-t border-line pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">
-            Chain of custody
-          </p>
-          <CustodyExportButton jobId={jobId} proofId={item.id} label="Export this clip" />
-        </div>
+        <p className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">
+          Chain of custody
+        </p>
         {custody === null ? (
           <p className="mt-2 text-xs text-ink-500">Loading…</p>
         ) : custody.length === 0 ? (
