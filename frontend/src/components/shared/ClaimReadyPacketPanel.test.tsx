@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ClaimReadyPacketPanel } from './ClaimReadyPacketPanel';
 
 const jobClaimReadyPacket = vi.fn();
@@ -63,17 +64,35 @@ describe('ClaimReadyPacketPanel', () => {
     });
   });
 
-  it('renders carrier-ish packet fields from the API', async () => {
+  it('renders a compact card without inline packet dump', async () => {
     render(<ClaimReadyPacketPanel jobId="job-1" />);
     expect(screen.getByTestId('claim-ready-packet')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Claim-ready packet' })).toBeInTheDocument();
+    expect(screen.getByText(/Carrier fields from filed evidence only/i)).toBeInTheDocument();
+    expect(screen.getByTestId('claim-ready-view')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText(/Claim CLM-1/)).toBeInTheDocument();
+      expect(screen.getByTestId('claim-ready-download')).toBeEnabled();
     });
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    expect(screen.queryByText(/Delgado Roofing/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Damaged decking exposed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Claim CLM-1/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('claim-ready-detail')).not.toBeInTheDocument();
+  });
+
+  it('opens the full packet in a modal when View is clicked', async () => {
+    const user = userEvent.setup();
+    render(<ClaimReadyPacketPanel jobId="job-1" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('claim-ready-download')).toBeEnabled();
+    });
+    await user.click(screen.getByTestId('claim-ready-view'));
+    expect(screen.getByTestId('claim-ready-modal')).toBeInTheDocument();
+    expect(screen.getByTestId('claim-ready-detail')).toBeInTheDocument();
+    expect(screen.getByText(/Claim CLM-1/)).toBeInTheDocument();
     expect(screen.getByText('2026-08-04')).toBeInTheDocument();
     expect(screen.getByText(/Delgado Roofing/)).toBeInTheDocument();
     expect(screen.getByText(/Damaged decking exposed/)).toBeInTheDocument();
     expect(screen.getByText(/Loss caused by the hail storm/)).toBeInTheDocument();
-    expect(screen.getByTestId('claim-ready-download')).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
   });
 });
