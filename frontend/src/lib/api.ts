@@ -853,6 +853,32 @@ export interface DeviceIdentity {
   label: string | null;
 }
 
+export type PunchListSource =
+  | 'action'
+  | 'commitment'
+  | 'unresolved'
+  | 'scope_in_progress'
+  | 'concern';
+
+/** Open item derived from video analysis — never invented. */
+export interface PunchListItem {
+  id: string;
+  fingerprint: string;
+  text: string;
+  detail: string | null;
+  quote: string | null;
+  ownerLabel: string | null;
+  source: PunchListSource;
+  seekSeconds: number | null;
+  proofId: string | null;
+  workDate: string | null;
+  company: string | null;
+  partyId: string | null;
+  phase: string | null;
+  scopeTitle: string | null;
+  assignedTaskId: string | null;
+}
+
 export interface DisputeMoment {
   id: string;
   kind: 'scope' | 'clip' | 'integrity';
@@ -1065,12 +1091,15 @@ export interface ProofResponse {
   days: ProofDay[];
   videos?: ProofVideoRecord[];
   disputes?: DisputeMoment[];
+  /** Open items from film analysis for the job file + proof-pack consumers. */
+  punchList?: PunchListItem[];
   counts: {
     days: number;
     videos?: number;
     payable: number;
     contradicted: number;
     disputes?: number;
+    punchList?: number;
     awaitingAfter: number;
     analysing?: number;
   };
@@ -4263,7 +4292,35 @@ export const api = {
     request<{ events: MemoryEvent[] }>(`/api/jobs/${id}/memory`, { method: 'GET' }),
 
   // ---- Tasks ----
-  createTask: (jobId: string, input: CreateTaskInput) =>
+  assignPunchListTask: (jobId: string, item: PunchListItem) => {
+    const clock =
+      item.seekSeconds != null && Number.isFinite(item.seekSeconds)
+        ? ` @ ${Math.floor(item.seekSeconds / 60)}:${String(Math.floor(item.seekSeconds % 60)).padStart(2, '0')}`
+        : '';
+    const where = [item.workDate, item.company, item.phase].filter(Boolean).join(' · ');
+    const details = [
+      item.detail,
+      item.quote ? `Exact: “${item.quote}”` : null,
+      where ? `From film: ${where}${clock}` : clock ? `From film${clock}` : null,
+      item.ownerLabel ? `Suggested owner (from talk): ${item.ownerLabel}` : null,
+      `atmosphere.punch:${item.fingerprint};seek=${item.seekSeconds ?? ''};proof=${item.proofId ?? ''}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    return request<{ task: JobTask }>(`/api/jobs/${jobId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: item.text.slice(0, 200),
+        details,
+        priority: item.source === 'concern' || item.source === 'scope_in_progress' ? 'high' : 'normal',
+      }),
+    });
+  },
+  jobPunchList: (jobId: string) =>
+    request<{ schema: string; jobId: string; punchList: PunchListItem[]; count: number }>(
+      `/api/operations/shared/${jobId}/punch-list`,
+    ),
+    createTask: (jobId: string, input: CreateTaskInput) =>
     request<{ task: JobTask }>(`/api/jobs/${jobId}/tasks`, {
       method: 'POST',
       body: JSON.stringify(input),

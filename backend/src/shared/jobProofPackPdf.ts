@@ -295,6 +295,32 @@ export async function renderJobProofPackPdf(pack: JobProofPack): Promise<Buffer>
       }
     }
 
+    if (pack.punchList.length) {
+      sectionTitle(doc, 'Punch list / open items');
+      for (const item of pack.punchList) {
+        ensureSpace(doc, 36);
+        const clock =
+          item.seekSeconds != null ? `[${formatProofPackClock(item.seekSeconds)}] ` : '';
+        const meta = [item.workDate, item.company, item.ownerLabel, item.source]
+          .filter(Boolean)
+          .join(' · ');
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(9)
+          .fillColor(ATMOSPHERE_INK)
+          .text(`${clock}${item.text}`);
+        if (meta) {
+          doc.font('Helvetica').fontSize(8).fillColor('#78716C').text(meta);
+        }
+        if (item.detail) {
+          doc.font('Helvetica').fontSize(8).fillColor('#44403C').text(item.detail, {
+            width: CONTENT_WIDTH,
+          });
+        }
+        doc.moveDown(0.25);
+      }
+    }
+
     if (pack.disputes.length) {
       sectionTitle(doc, 'Disputes / integrity');
       for (const d of pack.disputes) {

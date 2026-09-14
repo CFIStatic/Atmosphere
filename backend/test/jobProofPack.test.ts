@@ -161,3 +161,27 @@ test('renderJobProofPackPdf returns a PDF buffer', async () => {
     'atmosphere-proof-pack-job-9-2026-09-01.pdf',
   );
 });
+
+test('punch list items appear in pack and PDF when provided', async () => {
+  const pack = buildJobProofPack({
+    job: { id: 'job-1', name: 'Test', number: 1 },
+    days: [],
+    videos: [],
+    punchList: [
+      {
+        text: 'Remount chest cam',
+        detail: 'From film',
+        source: 'action',
+        seekSeconds: 94,
+        workDate: '2026-08-05',
+        company: 'Delgado',
+        ownerLabel: 'Crew',
+        proofId: 'p1',
+      },
+    ],
+  });
+  assert.equal(pack.punchList.length, 1);
+  assert.equal(pack.punchList[0]!.text, 'Remount chest cam');
+  const pdf = await renderJobProofPackPdf(pack);
+  assert.ok(pdf.subarray(0, 5).toString() === '%PDF-');
+});

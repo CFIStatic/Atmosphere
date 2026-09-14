@@ -68,6 +68,7 @@ import {
   jobCustodyExport,
   jobProofPackPdf,
   jobDisputes,
+  jobPunchList,
   setEvidenceHold,
   deleteEvidence,
   restoreEvidence,
@@ -1776,6 +1777,7 @@ sharedJobsRouter.get('/proofs/pulse', proofsPulse);
 sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/disputes', jobDisputes);
+sharedJobsRouter.get('/shared/:jobId/punch-list', jobPunchList);
 sharedJobsRouter.get('/shared/:jobId/custody-export', jobCustodyExport);
 sharedJobsRouter.get('/shared/:jobId/proof-pack.pdf', jobProofPackPdf);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);

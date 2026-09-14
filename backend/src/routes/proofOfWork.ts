@@ -105,6 +105,12 @@ import {
   type DisputeScopeLine,
 } from '../shared/disputeSurfacing.js';
 import {
+  JOB_PUNCH_LIST_SCHEMA,
+  buildJobPunchList,
+  type PunchListClipInput,
+  type PunchListItem,
+} from '../shared/jobPunchList.js';
+import {
   buildClipCustodyExport,
   buildJobCustodyExport,
   parseDeviceMetadata,
@@ -2161,7 +2167,7 @@ function disputeClipFromRow(
 
 /** Assemble proof-of-work days for one job — shared by org routes and progress shares. */
 export async function buildJobProofPayload(supabase: any, orgId: string, jobId: string) {
-  const [proofRows, { data: partyRows }, { data: scopeRows }, { data: jobRow }, site] =
+  const [proofRows, { data: partyRows }, { data: scopeRows }, { data: jobRow }, site, { data: taskRows }] =
     await Promise.all([
       listAllVisibleProofs(supabase, { orgId, jobId }),
       supabase.from('job_parties').select('id, company, trade, contact_name').eq('job_id', jobId),
@@ -2172,6 +2178,11 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
         .limit(200),
       supabase.from('crm_jobs').select('id, title, job_number').eq('id', jobId).maybeSingle(),
       siteLocation(supabase, orgId, jobId),
+      supabase
+        .from('job_tasks')
+        .select('id, title, details, status')
+        .eq('job_id', jobId)
+        .limit(500),
     ]);
 
   const rows = proofRows;
@@ -2299,17 +2310,56 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
     };
   });
 
+  const findingsByProof = new Map<string, Record<string, any>>();
+  for (const row of rows) {
+    findingsByProof.set(row.id, findingsOf(row));
+  }
+
+  const punchClips: PunchListClipInput[] = videos.map((video) => {
+    const f = findingsByProof.get(video.id) ?? {};
+    return {
+      id: video.id,
+      partyId: video.partyId,
+      company: video.company,
+      workDate: String(video.workDate),
+      phase: video.phase,
+      conversation: video.conversation ?? null,
+      aiFindings: {
+        scopeVerdicts: Array.isArray(f.scopeVerdicts) ? f.scopeVerdicts : [],
+        concerns: Array.isArray(f.concerns) ? f.concerns : [],
+      },
+      events: (video.events ?? [])
+        .filter((e: { atSeconds?: number; text?: string }) => Number.isFinite(Number(e.atSeconds)))
+        .map((e: { atSeconds: number; text?: string }) => ({
+          atSeconds: Number(e.atSeconds),
+          text: String(e.text || ''),
+        })),
+    };
+  });
+
+  const punchList: PunchListItem[] = buildJobPunchList({
+    clips: punchClips,
+    assignedTasks: ((taskRows ?? []) as any[]).map((t) => ({
+      id: t.id,
+      title: t.title,
+      details: t.details,
+      status: t.status,
+    })),
+  });
+
   return {
     job: jobMeta,
     days,
     videos,
     disputes,
+    punchList,
     counts: {
       days: days.length,
       videos: videos.length,
       payable: days.filter((d) => d.payable && !d.accepted).length,
       contradicted: days.filter((d) => d.contradicted).length,
       disputes: disputes.length,
+      punchList: punchList.length,
       analysing: days.filter(
         (d) => d.analysisStatus === 'queued' || d.analysisStatus === 'running',
       ).length,
@@ -3199,6 +3249,22 @@ export async function jobDisputes(req: Request, res: Response, next: NextFunctio
   }
 }
 
+/** GET /api/operations/shared/:jobId/punch-list */
+export async function jobPunchList(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const payload = await buildJobProofPayload(supabase, orgId, req.params.jobId);
+    res.json({
+      schema: JOB_PUNCH_LIST_SCHEMA,
+      jobId: req.params.jobId,
+      punchList: payload.punchList ?? [],
+      count: (payload.punchList ?? []).length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /**
  * GET /api/operations/shared/:jobId/evidence/:proofId/custody-export
  * Structured custody metadata for one clip — JSON, not chrome.
@@ -3517,6 +3583,7 @@ export async function jobProofPackPdf(req: Request, res: Response, next: NextFun
       days: (payload.days ?? []) as any[],
       videos: videos as any[],
       disputes: (payload.disputes ?? []) as any[],
+      punchList: (payload.punchList ?? []) as any[],
       framesByProof,
     });
 

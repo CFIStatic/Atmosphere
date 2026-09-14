@@ -24,6 +24,7 @@ import {
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { ShowDispute } from '../components/analysis/ShowDispute';
+import { PunchListPanel } from '../components/analysis/PunchListPanel';
 import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
@@ -212,7 +213,7 @@ export function JobDetailPage() {
         </section>
       )}
 
-        {proofs && ((proofs.videos?.length ?? 0) > 0 || (proofs.disputes?.length ?? 0) > 0) && (
+        {proofs && ((proofs.videos?.length ?? 0) > 0 || (proofs.disputes?.length ?? 0) > 0 || (proofs.punchList?.length ?? 0) > 0) && (
           <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-analysis">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -230,6 +231,26 @@ export function JobDetailPage() {
             {(proofs.disputes?.length ?? 0) > 0 && (
               <div className="mt-3">
                 <ShowDispute disputes={proofs.disputes ?? []} />
+              </div>
+            )}
+            {(proofs.punchList?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <PunchListPanel
+                  jobId={job.id}
+                  items={proofs.punchList ?? []}
+                  onSeek={(item) => {
+                    if (item.proofId == null || item.seekSeconds == null) return;
+                    const el = document.querySelector(
+                      `[data-proof-id="${item.proofId}"]`,
+                    ) as HTMLElement | null;
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    window.dispatchEvent(
+                      new CustomEvent('atmosphere:seek-proof', {
+                        detail: { proofId: item.proofId, seconds: item.seekSeconds },
+                      }),
+                    );
+                  }}
+                />
               </div>
             )}
             <ol className="mt-4 space-y-4">
