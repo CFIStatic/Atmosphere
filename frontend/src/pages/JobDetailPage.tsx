@@ -27,7 +27,6 @@ import { ShowDispute } from '../components/analysis/ShowDispute';
 import { PunchListPanel } from '../components/analysis/PunchListPanel';
 import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
-import { CustodyExportButton } from '../components/analysis/CustodyExportButton';
 import { DownloadProofPackButton } from '../components/analysis/DownloadProofPackButton';
 import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 
@@ -274,7 +273,6 @@ export function JobDetailPage() {
                   </button>
                 )}
                 <DownloadProofPackButton jobId={job.id} />
-                <CustodyExportButton jobId={job.id} label="Export custody JSON" />
               </div>
             </div>
             {playbookMsg && (

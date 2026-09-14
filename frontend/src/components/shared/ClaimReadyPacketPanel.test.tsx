@@ -73,6 +73,7 @@ describe('ClaimReadyPacketPanel', () => {
     expect(screen.getByText(/Delgado Roofing/)).toBeInTheDocument();
     expect(screen.getByText(/Damaged decking exposed/)).toBeInTheDocument();
     expect(screen.getByText(/Loss caused by the hail storm/)).toBeInTheDocument();
-    expect(screen.getByTestId('claim-ready-export')).toBeEnabled();
+    expect(screen.getByTestId('claim-ready-download')).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
   });
 });

@@ -9,8 +9,6 @@ vi.mock('../../lib/api', () => ({
   api: {
     jobEvidence: (...args: unknown[]) => jobEvidence(...args),
     evidenceCustody: (...args: unknown[]) => evidenceCustody(...args),
-    evidenceCustodyExport: vi.fn(),
-    jobCustodyExport: vi.fn(),
   },
 }));
 
@@ -67,5 +65,7 @@ describe('EvidenceLocker', () => {
     expect(screen.queryByText('Place on legal hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Lift the hold')).not.toBeInTheDocument();
     expect(screen.queryByText('on hold — indefinite')).not.toBeInTheDocument();
+    expect(screen.queryByText('Export custody JSON')).not.toBeInTheDocument();
+    expect(screen.queryByText('Export this clip')).not.toBeInTheDocument();
   });
 });
