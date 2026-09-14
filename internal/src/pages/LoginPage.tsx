@@ -4,30 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { landingPath } from '../lib/access';
 import { forgetStaffEmail, readRememberedStaffEmail, rememberStaffEmail } from '../lib/rememberedEmail';
-import type { StaffChallengeResponse } from '../lib/types';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-type Step =
-  | { kind: 'returning' }
-  | { kind: 'identity' }
-  | { kind: 'pending' }
-  | { kind: 'enroll'; challenge: string; qrDataUrl: string; secret: string }
-  | { kind: 'code'; challenge: string };
-
-function stepFromChallenge(next: StaffChallengeResponse): Step {
-  if (next.status === 'pending') return { kind: 'pending' };
-  if (next.status === 'setup') return { kind: 'identity' };
-  if (next.status === 'enroll') {
-    return {
-      kind: 'enroll',
-      challenge: next.challenge,
-      qrDataUrl: next.qrDataUrl,
-      secret: next.secret,
-    };
-  }
-  return { kind: 'code', challenge: next.challenge };
-}
+type Step = { kind: 'login' } | { kind: 'request' } | { kind: 'pending' };
 
 export function LoginPage() {
   const { user, access, loading, startSignIn, login } = useAuth();
@@ -36,10 +16,8 @@ export function LoginPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState(remembered);
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState<Step>(() =>
-    remembered ? { kind: 'returning' } : { kind: 'identity' },
-  );
+  const [password, setPassword] = useState('');
+  const [step, setStep] = useState<Step>({ kind: 'login' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,48 +34,12 @@ export function LoginPage() {
     return <Navigate to={next && next.startsWith('/') ? next : landingPath(access.scope)} replace />;
   }
 
-  async function onIdentity(event: FormEvent) {
+  async function onLogin(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const next = await startSignIn({ firstName, lastName, email });
-      setCode('');
-      setStep(stepFromChallenge(next));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not sign in.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function onReturning(event: FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      const next = await startSignIn({ email });
-      if (next.status === 'code') {
-        await login({ email, code: code.replace(/\s+/g, '') });
-        rememberStaffEmail(email);
-        return;
-      }
-      setCode('');
-      setStep(stepFromChallenge(next));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not sign in.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function onVerify(event: FormEvent) {
-    event.preventDefault();
-    if (step.kind === 'identity' || step.kind === 'pending' || step.kind === 'returning') return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await login({ challenge: step.challenge, code: code.replace(/\s+/g, '') });
+      await login({ email, password });
       rememberStaffEmail(email);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.');
@@ -106,16 +48,39 @@ export function LoginPage() {
     }
   }
 
-  function backToIdentity() {
-    setStep({ kind: 'identity' });
-    setCode('');
+  async function onRequestInvite(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const next = await startSignIn({ firstName, lastName, email });
+      if (next.status === 'ready') {
+        setStep({ kind: 'login' });
+        setError(null);
+        setPassword('');
+        return;
+      }
+      if (next.status === 'pending') {
+        setStep({ kind: 'pending' });
+        return;
+      }
+      setError('Enter your first name, last name, and work email to request access.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not request access.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function goLogin() {
+    setStep({ kind: 'login' });
     setError(null);
   }
 
-  function backToReturning() {
-    setStep({ kind: 'returning' });
-    setCode('');
+  function goRequest() {
+    setStep({ kind: 'request' });
     setError(null);
+    setPassword('');
   }
 
   function useDifferentEmail() {
@@ -123,7 +88,8 @@ export function LoginPage() {
     setEmail('');
     setFirstName('');
     setLastName('');
-    backToIdentity();
+    setPassword('');
+    goLogin();
   }
 
   return (
@@ -138,74 +104,24 @@ export function LoginPage() {
         {step.kind === 'pending' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              Your request is waiting on an Atmosphere admin. After they approve {email || 'you'},
-              come back here and finish Microsoft Authenticator sign-in.
+              Your request for {email || 'access'} is waiting on an Atmosphere admin. After they
+              invite you, sign in here with the same email and password you use on Platform.
             </p>
             <button
               type="button"
-              onClick={backToIdentity}
+              onClick={goLogin}
               className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500"
             >
-              Request another email
+              Back to sign in
             </button>
           </>
-        ) : step.kind === 'returning' ? (
+        ) : step.kind === 'request' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              After the first Microsoft Authenticator setup, the 6-digit code is your password.
+              Atmosphere Internal is invite-only. Enter your name and work email to request access.
+              After an admin approves you, sign in with your Platform account password.
             </p>
-            <form className="mt-6 space-y-4" onSubmit={(event) => void onReturning(event)}>
-              <label className="block text-sm">
-                <span className="text-ink-600">Email</span>
-                <input
-                  type="email"
-                  autoComplete="username"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-ink-600">Password</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="\d{6}"
-                  maxLength={6}
-                  required
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 tracking-[0.3em] text-ink-900 outline-none focus:border-brand-500"
-                />
-              </label>
-              <p className="text-xs text-ink-500">6-digit code from Microsoft Authenticator</p>
-              {error && <p className="text-sm text-danger-600">{error}</p>}
-              <button
-                type="submit"
-                disabled={submitting || code.length !== 6}
-                className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
-              >
-                {submitting ? 'Signing in…' : 'Sign in'}
-              </button>
-              <button
-                type="button"
-                onClick={useDifferentEmail}
-                className="w-full text-sm text-ink-500 hover:text-ink-800"
-              >
-                First time? Set up Authenticator
-              </button>
-            </form>
-          </>
-        ) : step.kind === 'identity' ? (
-          <>
-            <p className="mt-2 text-sm text-ink-500">
-              First visit: enter your name and work email, then add Atmosphere Internal in
-              Microsoft Authenticator. After that, the 6-digit code is your password. If you are
-              not on the staff list yet, Continue queues you for admin approval.
-            </p>
-            <form className="mt-6 space-y-4" onSubmit={(event) => void onIdentity(event)}>
+            <form className="mt-6 space-y-4" onSubmit={(event) => void onRequestInvite(event)}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="text-ink-600">First name</span>
@@ -247,72 +163,71 @@ export function LoginPage() {
                 disabled={submitting}
                 className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
               >
-                {submitting ? 'Checking…' : 'Continue'}
+                {submitting ? 'Submitting…' : 'Request invite'}
               </button>
               <button
                 type="button"
-                onClick={backToReturning}
+                onClick={goLogin}
                 className="w-full text-sm text-ink-500 hover:text-ink-800"
               >
-                I already set up Authenticator
+                Already invited? Sign in
               </button>
             </form>
           </>
         ) : (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              {step.kind === 'enroll'
-                ? 'Add Atmosphere Internal in Microsoft Authenticator, then enter the 6-digit code. That code is your password from now on.'
-                : `Enter the 6-digit Microsoft Authenticator code for ${email}. That code is your password.`}
+              Invite-only. Use the same email and password as your Atmosphere Platform account.
             </p>
-            {step.kind === 'enroll' && (
-              <div className="mt-4 rounded-xl border border-line bg-paper-50 p-4">
-                <ol className="list-decimal space-y-1 pl-4 text-sm text-ink-600">
-                  <li>Open Microsoft Authenticator</li>
-                  <li>Tap +, then Other account (Google, Facebook, etc.)</li>
-                  <li>Scan this QR code</li>
-                </ol>
-                <img
-                  src={step.qrDataUrl}
-                  alt="QR code for Microsoft Authenticator"
-                  className="mx-auto mt-4 h-[220px] w-[220px] rounded-lg bg-white p-2"
+            <form className="mt-6 space-y-4" onSubmit={(event) => void onLogin(event)}>
+              <label className="block text-sm">
+                <span className="text-ink-600">Email</span>
+                <input
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                 />
-                <p className="mt-3 break-all text-center font-mono text-[11px] text-ink-500">
-                  Setup key: {step.secret}
-                </p>
-              </div>
-            )}
-            <form className="mt-6 space-y-4" onSubmit={(event) => void onVerify(event)}>
+              </label>
               <label className="block text-sm">
                 <span className="text-ink-600">Password</span>
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="\d{6}"
-                  maxLength={6}
+                  type="password"
+                  autoComplete="current-password"
                   required
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 tracking-[0.3em] text-ink-900 outline-none focus:border-brand-500"
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
                 />
               </label>
-              <p className="text-xs text-ink-500">6-digit code from Microsoft Authenticator</p>
+              <p className="text-xs text-ink-500">Same password as Platform (platform.atmosphereteam.com)</p>
               {error && <p className="text-sm text-danger-600">{error}</p>}
               <button
                 type="submit"
-                disabled={submitting || code.length !== 6}
+                disabled={submitting || password.length < 8}
                 className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
               >
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
               <button
                 type="button"
-                onClick={useDifferentEmail}
+                onClick={goRequest}
                 className="w-full text-sm text-ink-500 hover:text-ink-800"
               >
-                Use a different email
+                Need access? Request an invite
               </button>
+              {remembered ? (
+                <button
+                  type="button"
+                  onClick={useDifferentEmail}
+                  className="w-full text-sm text-ink-500 hover:text-ink-800"
+                >
+                  Use a different email
+                </button>
+              ) : null}
             </form>
           </>
         )}

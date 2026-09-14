@@ -2,10 +2,10 @@
  * Auto-provision analytics_staff for allowlisted Atmosphere emails or
  * employees an internal admin has approved from the staff site.
  *
- * Preview / day-to-day: Jack (and any ANALYTICS_INTERNAL_EMAILS) sign in and
- * immediately see /analytics — no SQL grant step. The database allow-list is
- * still the source of truth for reporting RPCs; we just write the row via the
- * service role when a matching user hits the access probe.
+ * Internal Growth Metrics is invite-only: ANALYTICS_INTERNAL_EMAILS (default
+ * jack@jettx.ai) and Access-page approvals gate Platform email/password login.
+ * The database allow-list is still the source of truth for reporting RPCs; we
+ * upsert the row via the service role when a matching user hits the access probe.
  */
 
 import type { User } from '@supabase/supabase-js';

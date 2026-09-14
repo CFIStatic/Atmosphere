@@ -68,8 +68,8 @@ export function AccessPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Access</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Employees who asked to join Internal Growth Metrics. Approve them here — they can
-            finish Microsoft Authenticator sign-in after you grant access.
+            Employees who asked to join Internal Growth Metrics. Approve them here — they then
+            sign in with the same email and password as their Atmosphere Platform account.
           </p>
         </div>
         {pending.length > 0 && (

@@ -4,13 +4,14 @@ import { otpauthUrl, randomTotpSecret, totpAt, verifyTotp } from './totp.js';
 import { readStaffChallenge, signStaffChallenge } from './internalStaffChallenge.js';
 import { fallbackStaffNames, resolveStaffNames, staffFullName } from './internalStaffGate.js';
 import { decryptTotpSecret, encryptTotpSecret } from '../auth/internalStaffTotpStore.js';
+import { allowlistedAnalyticsScope } from './analyticsAccess.js';
 
 describe('staff name', () => {
   it('joins first and last name', () => {
     assert.equal(staffFullName('  Jack ', ' Cyganiak '), 'Jack Cyganiak');
   });
 
-  it('reuses the name saved at first Authenticator setup', () => {
+  it('reuses a saved display name when present', () => {
     assert.deepEqual(
       resolveStaffNames({}, { firstName: 'Jack', lastName: 'Cyganiak' }, 'jack@jettx.ai'),
       { firstName: 'Jack', lastName: 'Cyganiak' },
@@ -19,7 +20,16 @@ describe('staff name', () => {
   });
 });
 
-describe('TOTP (Microsoft Authenticator)', () => {
+describe('staff allowlist (invite gate)', () => {
+  it('treats jack@jettx.ai case-insensitively as internal staff', () => {
+    assert.equal(allowlistedAnalyticsScope('jack@jettx.ai'), 'internal');
+    assert.equal(allowlistedAnalyticsScope('Jack@jettx.ai'), 'internal');
+    assert.equal(allowlistedAnalyticsScope('JACK@JETTX.AI'), 'internal');
+    assert.equal(allowlistedAnalyticsScope('stranger@example.com'), null);
+  });
+});
+
+describe('TOTP helpers (legacy enrollment storage)', () => {
   it('verifies a code from the same secret and time window', () => {
     const secret = randomTotpSecret();
     const now = 1_700_000_000;
@@ -73,29 +83,28 @@ describe('staff challenge token', () => {
 });
 
 describe('internal staff login schema', () => {
-  it('starts with name + email and verifies a 6-digit authenticator code', async () => {
+  it('accepts Platform email + password and invite-request identity', async () => {
     const { internalStaffStartSchema, internalStaffVerifySchema } = await import('./validation.js');
     const start = internalStaffStartSchema.parse({
       firstName: 'Jack',
       lastName: 'Cyganiak',
-      email: 'jack@jettx.ai',
+      email: 'Jack@jettx.ai',
     });
     assert.equal(start.email, 'jack@jettx.ai');
     const returning = internalStaffStartSchema.parse({ email: 'jack@jettx.ai' });
     assert.equal(returning.firstName, '');
     assert.equal(returning.lastName, '');
     const verify = internalStaffVerifySchema.parse({
-      challenge: 'a'.repeat(32) + '.' + 'b'.repeat(32),
-      code: '123456',
+      email: 'Jack@jettx.ai',
+      password: 'platform-password',
     });
-    assert.equal(verify.code, '123456');
-    const password = internalStaffVerifySchema.parse({
-      email: 'jack@jettx.ai',
-      code: '123456',
-    });
-    assert.equal(password.email, 'jack@jettx.ai');
+    assert.equal(verify.email, 'jack@jettx.ai');
+    assert.equal(verify.password, 'platform-password');
     assert.throws(() =>
-      internalStaffVerifySchema.parse({ challenge: 'abc.def', code: '12' }),
+      internalStaffVerifySchema.parse({ email: 'jack@jettx.ai', password: 'short' }),
+    );
+    assert.throws(() =>
+      internalStaffVerifySchema.parse({ email: 'jack@jettx.ai', code: '123456' }),
     );
   });
 });

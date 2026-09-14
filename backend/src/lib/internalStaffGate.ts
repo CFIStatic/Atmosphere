@@ -1,9 +1,13 @@
 /**
- * Internal staff site identity (name + allowlisted email). After the first
- * Authenticator enrollment, the 6-digit code is the password.
+ * Internal staff site identity helpers. Access is invite-only (env allowlist
+ * or Access-page approval). Sign-in uses the same Platform email + password
+ * (Supabase Auth) — not a parallel password store or Authenticator TOTP.
  */
 
 export const STAFF_LOGIN_DENIED = 'That sign-in is not valid.';
+
+export const STAFF_NOT_INVITED =
+  'This email is not invited to Atmosphere Internal. Ask an admin to invite you, or request access.';
 
 export function staffFullName(firstName: string, lastName: string): string {
   return `${firstName.trim()} ${lastName.trim()}`.replace(/\s+/g, ' ').trim();

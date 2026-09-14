@@ -33,22 +33,13 @@ export interface StaffIdentity {
 }
 
 export type StaffChallengeResponse =
-  | { status: 'code'; challenge: string }
+  | { status: 'ready' }
   | { status: 'pending' }
-  | { status: 'setup' }
-  | {
-      status: 'enroll';
-      challenge: string;
-      otpauthUrl: string;
-      qrDataUrl: string;
-      secret: string;
-      issuer: string;
-    };
+  | { status: 'setup' };
 
 export interface StaffVerify {
-  challenge?: string;
-  email?: string;
-  code: string;
+  email: string;
+  password: string;
 }
 
 export interface AuthUser {

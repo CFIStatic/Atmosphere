@@ -57,27 +57,21 @@ const optionalStaffName = z
   .default('')
   .refine((value) => value === '' || nameField.safeParse(value).success, 'Enter a real name');
 
-const authenticatorCodeField = z
-  .string({ required_error: 'Authenticator code is required' })
-  .trim()
-  .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator');
-
+/** Invite request: name + work email (not on the staff allowlist yet). */
 export const internalStaffStartSchema = z.object({
   firstName: optionalStaffName,
   lastName: optionalStaffName,
   email: emailField,
 });
 
-export const internalStaffVerifySchema = z
-  .object({
-    challenge: z.string().trim().min(16).max(4000).optional(),
-    email: emailField.optional(),
-    code: authenticatorCodeField,
-  })
-  .refine((value) => Boolean(value.challenge || value.email), {
-    message: 'Enter your work email and the 6-digit Authenticator code.',
-    path: ['email'],
-  });
+/**
+ * Internal Growth Metrics login: same email + password as Platform
+ * (Supabase Auth). Invite/allowlist is enforced in the route, not here.
+ */
+export const internalStaffVerifySchema = z.object({
+  email: emailField,
+  password: passwordField,
+});
 
 /** Body of the "email me a reset link" request. */
 export const forgotPasswordSchema = z.object({ email: emailField });
