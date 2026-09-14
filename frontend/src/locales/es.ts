@@ -18,7 +18,6 @@ export const ES: MessageCatalog = {
   'nav.work': 'Trabajo',
   'nav.system': 'Sistema',
   'nav.startJob': 'Empezar un trabajo',
-  'nav.liveMap': 'Mapa en vivo',
   'nav.dashboard': 'Panel',
   'nav.settings': 'Ajustes',
   'nav.support': 'Soporte',
@@ -131,6 +130,5 @@ export const ES: MessageCatalog = {
 
   'document.settings': 'Ajustes',
   'document.startJob': 'Empezar un trabajo',
-  'document.liveMap': 'Mapa en vivo',
   'document.dashboard': 'Panel',
 };

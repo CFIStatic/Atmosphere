@@ -191,10 +191,6 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     const library = await json(url, '/api/evidence-portal/library');
     assert.equal(library.status, 401);
     assert.equal(library.body.code, 'unauthorized');
-    const liveMap = await json(url, '/api/operations/live-map');
-    assert.equal(liveMap.status, 401);
-    assert.equal(liveMap.body.code, 'unauthorized');
-
 
     const roster = await json(
       url,
