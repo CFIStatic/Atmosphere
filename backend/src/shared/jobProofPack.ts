@@ -88,6 +88,17 @@ export type JobProofPack = {
     workDate: string | null;
     seekSeconds: number | null;
   }>;
+  /** Open items from film analysis — never invented. Empty when none on file. */
+  punchList: Array<{
+    text: string;
+    detail: string | null;
+    source: string;
+    seekSeconds: number | null;
+    workDate: string | null;
+    company: string | null;
+    ownerLabel: string | null;
+    proofId: string | null;
+  }>;
   privacyNotice: string;
 };
 
@@ -383,6 +394,16 @@ export function buildJobProofPack(input: {
     workDate?: string | null;
     seekSeconds?: number | null;
   }>;
+  punchList?: Array<{
+    text?: string;
+    detail?: string | null;
+    source?: string;
+    seekSeconds?: number | null;
+    workDate?: string | null;
+    company?: string | null;
+    ownerLabel?: string | null;
+    proofId?: string | null;
+  }>;
   framesByProof?: Map<string, ProofPackFrameInput[]>;
 }): JobProofPack {
   const workDateFilter = clean(input.workDateFilter, 32);
@@ -504,6 +525,24 @@ export function buildJobProofPack(input: {
     }))
     .slice(0, 30);
 
+  const punchList = (input.punchList ?? [])
+    .filter((p) => (workDateFilter ? !p.workDate || p.workDate === workDateFilter : true))
+    .map((p) => ({
+      text: clean(p.text, 280) ?? '',
+      detail: clean(p.detail, 600),
+      source: clean(p.source, 40) ?? 'action',
+      seekSeconds:
+        p.seekSeconds == null || !Number.isFinite(Number(p.seekSeconds))
+          ? null
+          : Number(p.seekSeconds),
+      workDate: p.workDate ?? null,
+      company: clean(p.company, 120),
+      ownerLabel: clean(p.ownerLabel, 80),
+      proofId: p.proofId ?? null,
+    }))
+    .filter((p) => p.text)
+    .slice(0, 80);
+
   const redactedRangeCount = clips.reduce((n, c) => n + c.privacyRangesRedacted, 0);
 
   return {
@@ -527,6 +566,7 @@ export function buildJobProofPack(input: {
     days: packDays,
     clips,
     disputes,
+    punchList,
     privacyNotice:
       redactedRangeCount > 0
         ? `Private moments were redacted (${redactedRangeCount} interval${redactedRangeCount === 1 ? '' : 's'}). Private frames and quotes are omitted from this report.`

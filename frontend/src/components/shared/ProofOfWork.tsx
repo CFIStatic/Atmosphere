@@ -16,6 +16,7 @@ import { SpinnerIcon } from '../icons';
 import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
+import { PunchListPanel } from '../analysis/PunchListPanel';
 import { ClipAnalysisLayers } from '../analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../analysis/EvidenceLog';
 import { CustodyExportButton } from '../analysis/CustodyExportButton';
@@ -311,6 +312,19 @@ export function ProofOfWork({
               }
             }}
           />
+          {(data.punchList?.length ?? 0) > 0 && (
+            <PunchListPanel
+              jobId={jobId}
+              items={data.punchList ?? []}
+              onSeek={(item) => {
+                if (item.proofId) {
+                  const day = data.days.find((d) => d.proofIds.includes(item.proofId!));
+                  if (day) setOpenDay(`${day.partyId}|${day.workDate}`);
+                  applyClipSeek(item.proofId, item.seekSeconds);
+                }
+              }}
+            />
+          )}
           {jobId && <DownloadProofPackButton jobId={jobId} />}
           {jobId && <CustodyExportButton jobId={jobId} label="Export custody for every clip" />}
         </div>
