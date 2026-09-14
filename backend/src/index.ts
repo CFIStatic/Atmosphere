@@ -7,6 +7,7 @@ import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/
 import { assertProductionReady } from './lib/productionGuards.js';
 import { initSentry } from './lib/sentry.js';
 import { startVerificationLeaseSweep, stopVerificationLeaseSweep } from './verification/reclaim.js';
+import { startDailyJobReportSweep, stopDailyJobReportSweep } from './dailyReport/index.js';
 import { askProviderLabel } from './lib/askModel.js';
 import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
@@ -47,6 +48,7 @@ const server = app.listen(config.port, host, () => {
     startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
+    startDailyJobReportSweep();
   }
 });
 
@@ -59,6 +61,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopProofAnalysisSweep();
     stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
+    stopDailyJobReportSweep();
     server.close(() => process.exit(0));
   });
 }
