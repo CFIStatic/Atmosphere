@@ -1,9 +1,10 @@
 /**
- * Robotics-ready motion clips — skill-corpus foundation.
+ * Robotics-ready motion clips — skill-corpus foundation (Internal only).
  *
  * Label narrow trade motions (screw, cut, measure, …) from verified proof
  * actions / vision evidence. Persist timed segments on the proof under
  * `ai_findings.motionClips`. Privacy ranges are excluded entirely.
+ * Browse UI and APIs are Jettx/Internal staff — not the customer job file.
  *
  * Never invent a motion without evidence: no description → drop; unknown
  * verb stays out of the corpus (not forced into a neighbour).

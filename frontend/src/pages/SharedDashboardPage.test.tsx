@@ -357,4 +357,35 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('similar-past-jobs')).toBeInTheDocument();
     expect(screen.getByTestId('job-access-roster')).toBeInTheDocument();
   });
+
+  it('never mounts Motion clips on the job file (org or grant)', async () => {
+    authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
+    sharedJob.mockResolvedValue({ ...record, access: 'org' });
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Videos and analysis')).toBeInTheDocument();
+    expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
+    expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/skill corpus foundation for robotics/i),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    authMembership.current = null;
+    sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('your-job-files')).toBeInTheDocument();
+    expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
+    expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
+  });
 });
+

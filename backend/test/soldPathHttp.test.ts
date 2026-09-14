@@ -206,6 +206,17 @@ test('sold path: login → intake → share → proof mounts stay registered', a
     assert.equal(similar.status, 401);
     assert.equal(similar.body.code, 'unauthorized');
 
+    const motionJob = await json(
+      url,
+      '/api/motion-clips/job/00000000-0000-4000-8000-000000000001',
+    );
+    assert.equal(motionJob.status, 401);
+    assert.equal(motionJob.body.code, 'unauthorized');
+
+    const motionStaff = await json(url, '/api/motion-clips/staff');
+    assert.equal(motionStaff.status, 401);
+    assert.equal(motionStaff.body.code, 'unauthorized');
+
     const field = await json(url, '/api/field-app/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

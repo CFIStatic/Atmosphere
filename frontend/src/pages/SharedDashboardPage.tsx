@@ -19,7 +19,6 @@ import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
-import { MotionClipsBrowser } from '../components/shared/MotionClipsBrowser';
 import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
@@ -443,7 +442,6 @@ export function SharedDashboardPage() {
             <div className="mt-4 space-y-4">
               <ProofOfWork jobId={record.job.id} heading="Videos and analysis" showCollectionAsk={false} />
               <ClaimReadyPacketPanel jobId={record.job.id} />
-              <MotionClipsBrowser jobId={record.job.id} />
               <EvidenceLocker jobId={record.job.id} />
             </div>
             )}
