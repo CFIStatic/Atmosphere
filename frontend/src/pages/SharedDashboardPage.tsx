@@ -430,7 +430,9 @@ export function SharedDashboardPage() {
               }
             />
 
-            {!viewerOnly && (
+            {/* Similar jobs + Who-has-access are office/org only — never for
+                homeowners, grant-only, guest progress, or invitee viewers. */}
+            {!grantViewer && (
               <div className="mt-4 space-y-4">
                 <JobAccessRoster jobId={record.job.id} />
                 <SimilarPastJobs jobId={record.job.id} />
