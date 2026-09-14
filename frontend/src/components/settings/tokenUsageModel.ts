@@ -46,3 +46,10 @@ export function compactDayLabel(isoDay: string): string {
 export function activeFeatures(days: TokenUsageDay[]): TokenFeature[] {
   return TOKEN_FEATURES.filter((feature) => days.some((day) => featureTokens(day, feature) > 0));
 }
+
+/** Display analysis minutes from the API (already rounded) or format seconds. */
+export function formatAnalysisMinutes(minutes: number | null | undefined): string {
+  if (minutes == null || !Number.isFinite(minutes) || minutes < 0) return '—';
+  if (minutes === 0) return '0';
+  return Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
+}

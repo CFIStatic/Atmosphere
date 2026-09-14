@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { compactDayLabel, peakDayTokens, sharePct } from './tokenUsageModel';
-import { emptyTokenTotals } from './tokenUsageModel';
+import {
+  compactDayLabel,
+  emptyTokenTotals,
+  formatAnalysisMinutes,
+  peakDayTokens,
+  sharePct,
+} from './tokenUsageModel';
 
 describe('tokenUsageModel', () => {
   it('clamps share percentages', () => {
@@ -21,5 +26,14 @@ describe('tokenUsageModel', () => {
       ask: emptyTokenTotals(),
       other: emptyTokenTotals(),
     } }])).toBe(1);
+  });
+});
+
+describe('formatAnalysisMinutes', () => {
+  it('formats known minutes and unknown as em dash', () => {
+    expect(formatAnalysisMinutes(12.5)).toBe('12.5');
+    expect(formatAnalysisMinutes(12)).toBe('12');
+    expect(formatAnalysisMinutes(null)).toBe('—');
+    expect(formatAnalysisMinutes(undefined)).toBe('—');
   });
 });

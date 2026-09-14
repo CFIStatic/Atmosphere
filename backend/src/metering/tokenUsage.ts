@@ -101,6 +101,21 @@ export interface TokenUsageRecent {
   priceNanos: number;
 }
 
+/**
+ * Per-job rollup for Settings → Billing job costing.
+ * `analysisMinutes` is Σ duration_seconds of analysed film / 60 — never a tokens→minutes guess.
+ */
+export interface TokenJobBreakdown extends TokenTotals {
+  jobId: string;
+  title: string;
+  jobNumber: number | null;
+  /** Minutes of film with analysis_status=done in the report window (analysed_at). */
+  analysisMinutes: number | null;
+  /** Raw seconds behind analysisMinutes; null when no timed analysed film. */
+  analysisSeconds: number | null;
+  byFeature: Record<TokenFeature, TokenTotals>;
+}
+
 export interface TokenUsageReport {
   periodStart: string;
   periodEnd: string;
@@ -109,6 +124,7 @@ export interface TokenUsageReport {
   byFeature: TokenFeatureBreakdown[];
   byDay: TokenUsageDay[];
   byEmployee: TokenEmployeeBreakdown[];
+  byJob: TokenJobBreakdown[];
   recent: TokenUsageRecent[];
 }
 
@@ -122,6 +138,53 @@ const EMPTY_TOTALS = (): TokenTotals => ({
   totalTokens: 0,
   priceNanos: 0,
 });
+
+/** Convert film seconds to display minutes (1 decimal). Null when unknown. */
+export function secondsToAnalysisMinutes(seconds: number | null | undefined): number | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.round((seconds / 60) * 10) / 10;
+}
+
+export function aggregateJobTokenUsage(
+  rows: TokenUsageEventRow[],
+  jobs: Array<{ jobId: string; title: string; jobNumber: number | null }>,
+  analysisSecondsByJob: Map<string, number>,
+): TokenJobBreakdown[] {
+  const jobMeta = new Map(jobs.map((j) => [j.jobId, j]));
+  const map = new Map<string, TokenJobBreakdown>();
+
+  function ensure(jobId: string): TokenJobBreakdown {
+    const existing = map.get(jobId);
+    if (existing) return existing;
+    const meta = jobMeta.get(jobId);
+    const seconds = analysisSecondsByJob.get(jobId);
+    const row: TokenJobBreakdown = {
+      jobId,
+      title: meta?.title?.trim() || 'Job',
+      jobNumber: meta?.jobNumber ?? null,
+      analysisSeconds: seconds != null && seconds > 0 ? seconds : null,
+      analysisMinutes: secondsToAnalysisMinutes(seconds),
+      byFeature: emptyByFeature(),
+      ...EMPTY_TOTALS(),
+    };
+    map.set(jobId, row);
+    return row;
+  }
+
+  for (const row of rows) {
+    if (!row.jobId) continue;
+    const job = ensure(row.jobId);
+    const increment = asEventTotals(row);
+    addTo(job, increment);
+    addTo(job.byFeature[row.feature], increment);
+  }
+
+  return [...map.values()].sort((a, b) => {
+    if (b.priceNanos !== a.priceNanos) return b.priceNanos - a.priceNanos;
+    if (b.totalTokens !== a.totalTokens) return b.totalTokens - a.totalTokens;
+    return a.title.localeCompare(b.title);
+  });
+}
 
 function emptyByFeature(): Record<TokenFeature, TokenTotals> {
   return {
@@ -194,6 +257,10 @@ export function aggregateTokenUsage(
     email: string | null;
     role: string;
   }>,
+  jobContext?: {
+    jobs: Array<{ jobId: string; title: string; jobNumber: number | null }>;
+    analysisSecondsByJob: Map<string, number>;
+  },
 ): Omit<TokenUsageReport, 'range'> {
   const totals = EMPTY_TOTALS();
   const featureMap = emptyByFeature();
@@ -285,6 +352,12 @@ export function aggregateTokenUsage(
       };
     });
 
+  const byJob = aggregateJobTokenUsage(
+    rows,
+    jobContext?.jobs ?? [],
+    jobContext?.analysisSecondsByJob ?? new Map(),
+  );
+
   return {
     periodStart: window.start,
     periodEnd: window.end,
@@ -292,6 +365,7 @@ export function aggregateTokenUsage(
     byFeature,
     byDay,
     byEmployee,
+    byJob,
     recent,
   };
 }
@@ -561,10 +635,86 @@ export async function loadTokenUsageReport(
   if (error) throw error;
 
   const rows = ((data ?? []) as Array<Record<string, unknown>>).map(parseEventRow);
+  const jobIds = [...new Set(rows.map((r) => r.jobId).filter((id): id is string => Boolean(id)))];
+  const [jobs, analysisSecondsByJob] = await Promise.all([
+    loadJobMeta(client, orgId, jobIds),
+    loadAnalysedFilmSeconds(client, orgId, jobIds, window),
+  ]);
+
   return {
     range,
-    ...aggregateTokenUsage(rows, window, members),
+    ...aggregateTokenUsage(rows, window, members, { jobs, analysisSecondsByJob }),
   };
+}
+
+
+async function loadJobMeta(
+  client: SupabaseClient,
+  orgId: string,
+  jobIds: string[],
+): Promise<Array<{ jobId: string; title: string; jobNumber: number | null }>> {
+  if (jobIds.length === 0) return [];
+  const { data, error } = await client
+    .from('crm_jobs')
+    .select('id, title, job_number')
+    .eq('org_id', orgId)
+    .in('id', jobIds);
+  if (error) throw error;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    jobId: String(row.id),
+    title: typeof row.title === 'string' && row.title.trim() ? row.title.trim() : 'Job',
+    jobNumber:
+      row.job_number == null || row.job_number === ''
+        ? null
+        : Number.isFinite(Number(row.job_number))
+          ? Number(row.job_number)
+          : null,
+  }));
+}
+
+/**
+ * Sum duration_seconds for film that finished AI analysis in the report window.
+ * Uses analysed_at when set; never invents minutes from tokens.
+ */
+async function loadAnalysedFilmSeconds(
+  client: SupabaseClient,
+  orgId: string,
+  jobIds: string[],
+  window: { start: string; end: string },
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (jobIds.length === 0) return map;
+
+  const { data, error } = await client
+    .from('job_proofs')
+    .select('job_id, duration_seconds, analysed_at, analysis_status, deleted_at')
+    .eq('org_id', orgId)
+    .eq('analysis_status', 'done')
+    .in('job_id', jobIds)
+    .is('deleted_at', null);
+
+  if (error) throw error;
+
+  const startMs = Date.parse(window.start);
+  const endMs = Date.parse(window.end);
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const jobId = typeof row.job_id === 'string' ? row.job_id : null;
+    if (!jobId) continue;
+
+    const analysedAt = typeof row.analysed_at === 'string' ? row.analysed_at : null;
+    if (analysedAt) {
+      const t = Date.parse(analysedAt);
+      if (!Number.isFinite(t) || t < startMs || t >= endMs) continue;
+    }
+    // If analysed_at is missing on a done proof, include it only when we cannot
+    // window — still require a real positive duration (never invent).
+
+    const seconds = Number(row.duration_seconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) continue;
+    map.set(jobId, (map.get(jobId) ?? 0) + seconds);
+  }
+  return map;
 }
 
 /** Convert a USD estimate (video analysis) into nanodollars for the ledger. */

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { classifyTokenFeature } from '../src/metering/tokenFeatures.js';
 import { billableNanosFromCost } from '../src/metering/customerMarkup.js';
 import {
+  aggregateJobTokenUsage,
   aggregateTokenUsage,
   eachUtcDay,
   estimatedUsdToNanos,
@@ -10,6 +11,7 @@ import {
   recordMeasuredTokenUsageAsync,
   recordTokenUsage,
   resolveTokenUsageWindow,
+  secondsToAnalysisMinutes,
   type TokenUsageEventRow,
 } from '../src/metering/tokenUsage.js';
 
@@ -333,4 +335,106 @@ test('aggregateTokenUsage Spend KPI is the billable price_nanos, not COGS', () =
   assert.equal(report.totals.priceNanos, billable);
   assert.equal(report.byEmployee[0]?.priceNanos, billable);
   assert.notEqual(report.totals.priceNanos, cost);
+});
+
+test('secondsToAnalysisMinutes converts film seconds honestly', () => {
+  assert.equal(secondsToAnalysisMinutes(750), 12.5);
+  assert.equal(secondsToAnalysisMinutes(60), 1);
+  assert.equal(secondsToAnalysisMinutes(0), null);
+  assert.equal(secondsToAnalysisMinutes(null), null);
+});
+
+test('aggregateJobTokenUsage rolls tokens and analysis minutes per job', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'j1-a',
+      feature: 'video_analysis',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      jobId: 'job-a',
+      totalTokens: 1000,
+      inputTokens: 800,
+      outputTokens: 200,
+      priceNanos: 5_000_000,
+    }),
+    event({
+      id: 'j1-b',
+      feature: 'ask',
+      createdAt: '2026-09-01T11:00:00.000Z',
+      jobId: 'job-a',
+      totalTokens: 200,
+      inputTokens: 150,
+      outputTokens: 50,
+      priceNanos: 1_000_000,
+    }),
+    event({
+      id: 'j2',
+      feature: 'video_analysis',
+      createdAt: '2026-09-01T12:00:00.000Z',
+      jobId: 'job-b',
+      totalTokens: 500,
+      inputTokens: 400,
+      outputTokens: 100,
+      priceNanos: 2_000_000,
+    }),
+    event({
+      id: 'none',
+      feature: 'chat',
+      createdAt: '2026-09-01T13:00:00.000Z',
+      jobId: null,
+      totalTokens: 50,
+      priceNanos: 100_000,
+    }),
+  ];
+
+  const byJob = aggregateJobTokenUsage(
+    rows,
+    [
+      { jobId: 'job-a', title: 'Oak Street', jobNumber: 1042 },
+      { jobId: 'job-b', title: 'Pine Ave', jobNumber: null },
+    ],
+    new Map([
+      ['job-a', 750],
+      // job-b has no timed film → minutes null
+    ]),
+  );
+
+  assert.equal(byJob.length, 2);
+  assert.equal(byJob[0]?.jobId, 'job-a'); // higher spend first
+  assert.equal(byJob[0]?.title, 'Oak Street');
+  assert.equal(byJob[0]?.jobNumber, 1042);
+  assert.equal(byJob[0]?.analysisMinutes, 12.5);
+  assert.equal(byJob[0]?.analysisSeconds, 750);
+  assert.equal(byJob[0]?.totalTokens, 1200);
+  assert.equal(byJob[0]?.priceNanos, 6_000_000);
+  assert.equal(byJob[0]?.byFeature.video_analysis.totalTokens, 1000);
+  assert.equal(byJob[0]?.byFeature.ask.totalTokens, 200);
+
+  assert.equal(byJob[1]?.jobId, 'job-b');
+  assert.equal(byJob[1]?.analysisMinutes, null);
+  assert.equal(byJob[1]?.totalTokens, 500);
+});
+
+test('aggregateTokenUsage includes byJob when job context is provided', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'with-job',
+      feature: 'video_analysis',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      jobId: 'job-z',
+      totalTokens: 300,
+      priceNanos: 900_000,
+    }),
+  ];
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-09-01T00:00:00.000Z', end: '2026-09-02T00:00:00.000Z' },
+    [],
+    {
+      jobs: [{ jobId: 'job-z', title: 'Zeta', jobNumber: 7 }],
+      analysisSecondsByJob: new Map([['job-z', 120]]),
+    },
+  );
+  assert.equal(report.byJob.length, 1);
+  assert.equal(report.byJob[0]?.analysisMinutes, 2);
+  assert.equal(report.byJob[0]?.title, 'Zeta');
 });

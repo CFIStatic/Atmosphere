@@ -65,7 +65,7 @@ and a same-day Invoice (`kind=same_day_usage`). Same-day charges are
 coalesced: later usage that day invoices only the leftover. `invoice.finalized`
 and `invoice.paid` record the receipt. Period-close invoices leftover usage
 days as a safety net. Do not apply this multiplier to seat or Stripe
-subscription prices. Settings → Billing lists the same invoices from Stripe
+subscription prices. Settings → Billing also shows **Usage by job** (analysis minutes from analysed proof durations + token spend from `token_usage_events`); see `docs/usage-job-costing.md`. Settings → Billing lists the same invoices from Stripe
 (`GET /api/billing/invoices`) with a hosted invoice / PDF link. Usage
 InvoiceItems are created as **quantity × `unit_amount_decimal`** (analysis
 units at $0.01 for leftover token/AI cents; extra jobs as qty × job price),

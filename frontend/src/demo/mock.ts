@@ -504,6 +504,7 @@ const TOKEN_USAGE = (): TokenUsageReport => {
       { feature: 'other', ...zeroTokens() },
     ],
     byDay: days,
+    byJob: [],
     byEmployee: (() => {
       const video = feature('video_analysis');
       const chat = feature('chat');
