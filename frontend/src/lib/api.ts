@@ -7,6 +7,7 @@
  */
 
 import { fieldEmbedAccessToken, refreshFieldEmbedSession } from './fieldEmbed';
+import { progressShareApiPath } from './progressSharePath';
 import type { TermsStatus } from './terms';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -4280,14 +4281,9 @@ export const api = {
     }),
 
   progressShareGuest: (token: string) =>
-    request<ProgressShareGuestView>(
-      token.trim()
-        ? `/api/progress-share/${encodeURIComponent(token)}`
-        : '/api/progress-share/session',
-      {
-        method: 'GET',
-      },
-    ),
+    request<ProgressShareGuestView>(progressShareApiPath(token), {
+      method: 'GET',
+    }),
 
   exchangeProgressShare: (token: string) =>
     request<{ ok: boolean }>('/api/progress-share/exchange', {
@@ -4306,19 +4302,19 @@ export const api = {
 
   progressShareVideo: (token: string, proofId: string) =>
     request<{ url: string; expiresInSeconds: number }>(
-      `/api/progress-share/${encodeURIComponent(token)}/proof/${encodeURIComponent(proofId)}/video`,
+      progressShareApiPath(token, `/proof/${encodeURIComponent(proofId)}/video`),
       { method: 'GET' },
     ),
 
   progressShareAsk: (token: string, question: string) =>
     request<{ answer: string; groundedOn: number; model: string | null; question: ProofQuestion | null }>(
-      `/api/progress-share/${encodeURIComponent(token)}/ask`,
+      progressShareApiPath(token, '/ask'),
       { method: 'POST', body: JSON.stringify({ question }) },
     ),
 
   claimProgressShare: (token: string) =>
     request<{ ok: boolean; orgId: string; jobId: string; path: string }>(
-      `/api/progress-share/${encodeURIComponent(token)}/claim`,
+      progressShareApiPath(token, '/claim'),
       { method: 'POST', body: JSON.stringify({}) },
     ),
 

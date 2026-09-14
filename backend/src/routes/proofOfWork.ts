@@ -2767,7 +2767,8 @@ export async function runProofAsk(input: {
  */
 export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
+    // Org members and claimed progress-share homeowners (grant viewers).
+    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
     const wantsStream =
       String(req.query.stream ?? '') === '1' ||
@@ -2819,7 +2820,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 /** GET /api/operations/shared/:jobId/proof/questions */
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const { data } = await supabase
       .from('job_proof_questions')
       .select('id, question, answer, model, grounded_on, created_at')
