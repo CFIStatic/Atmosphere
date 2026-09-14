@@ -75,7 +75,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('atmosphere.clip_custody.v1');
     expect(verifierHtml).not.toContain('ANALYSIS_DISCLAIMER');
     expect(verifierHtml).toContain('analysis-skel');
-    expect(verifierHtml).toContain('saw-k">Events');
+    expect(verifierHtml).toContain('alog-head');
+    expect(verifierHtml).toContain('>Events</h4>');
   });
 
   it('answers clip questions from the reading of that clip', () => {
@@ -325,7 +326,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(alog?.textContent).toMatch(/scene|activity/i);
     expect(alog?.textContent).not.toMatch(/said/i);
     expect(
-      Array.from(document.querySelectorAll('#d-panel .saw-k')).some((el) => el.textContent === 'Events'),
+      Array.from(document.querySelectorAll('#d-panel .alog-head h4')).some((el) => el.textContent === 'Events'),
     ).toBe(true);
     expect(document.getElementById('d-panel')?.textContent).not.toMatch(/At 0 seconds, the camera captures/i);
 

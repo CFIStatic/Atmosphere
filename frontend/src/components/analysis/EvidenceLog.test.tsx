@@ -40,6 +40,43 @@ describe('EvidenceLog', () => {
     await user.click(screen.getByRole('tab', { name: /Work/i }));
     expect(screen.getByTestId('evidence-log-rows').textContent).toMatch(/drywall/i);
   });
+
+  it('keeps the speaker label separate from the quote body', () => {
+    render(
+      <EvidenceLog
+        entries={[
+          {
+            atSeconds: 18,
+            text: 'I think we should wait on cabinets.',
+            type: 'said',
+            speakerLabel: 'Friedberg',
+          },
+        ]}
+      />,
+    );
+    const speaker = screen.getByTestId('evidence-speaker');
+    expect(speaker.textContent).toBe('Friedberg');
+    const row = screen.getByTestId('evidence-log-rows').textContent || '';
+    expect(row).toMatch(/Friedberg/);
+    expect(row).toMatch(/I think we should wait/);
+    expect(row).not.toMatch(/FriedbergI think/);
+  });
+
+  it('highlights the active playhead row without requiring a seek click', () => {
+    render(
+      <EvidenceLog
+        activeAtSeconds={50}
+        entries={[
+          { atSeconds: 8, text: 'Hallway in frame.', type: 'scene' },
+          { atSeconds: 48, text: 'Pulling wet drywall.', type: 'work' },
+          { atSeconds: 96, text: 'Done for today.', type: 'activity' },
+        ]}
+      />,
+    );
+    const rows = screen.getByTestId('evidence-log-rows').querySelectorAll('li');
+    expect(rows[1]).toHaveAttribute('data-active', '1');
+    expect(rows[0]).not.toHaveAttribute('data-active');
+  });
 });
 
 describe('evidenceEntriesFromVideo', () => {

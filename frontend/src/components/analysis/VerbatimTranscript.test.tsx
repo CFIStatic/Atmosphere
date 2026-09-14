@@ -31,4 +31,18 @@ describe('VerbatimTranscript', () => {
     await user.click(screen.getByText(/We will remount the mirror today/i));
     expect(onSeek).toHaveBeenCalledWith(96);
   });
+
+  it('puts the speaker on its own line so the name never glues to the quote', () => {
+    render(
+      <VerbatimTranscript
+        segments={[
+          { tSec: 12, speakerLabel: 'Friedberg', text: 'I think we hold cabinets.' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('transcript-speaker').textContent).toBe('Friedberg');
+    const text = screen.getByTestId('verbatim-lines').textContent || '';
+    expect(text).not.toMatch(/FriedbergI think/);
+    expect(text).toMatch(/I think we hold cabinets/);
+  });
 });
