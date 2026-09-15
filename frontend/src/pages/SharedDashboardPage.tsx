@@ -10,7 +10,6 @@ import {
   type IntakeCaptureInvite,
 } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
-import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
@@ -453,7 +452,6 @@ export function SharedDashboardPage() {
                 </span>
               </summary>
               <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
-                <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
                 <PartyList
                   record={record}
                   onChanged={() => {
@@ -474,7 +472,6 @@ export function SharedDashboardPage() {
                   onDecide={decide}
                   onChanged={() => void openJob(record.job.id)}
                 />
-                <Thread record={record} onPosted={() => void openJob(record.job.id)} />
               </div>
             </details>
             )}
@@ -503,118 +500,6 @@ export function SharedDashboardPage() {
     >
       {fileBody}
     </JobFileAskChrome>
-  );
-}
-
-/**
- * The facts, and the act of changing them.
- *
- * Publishing is not an edit — it is a new revision that lapses everybody's
- * acceptance. The button says so before it is pressed, because the cost of
- * that action lands on other people.
- */
-function SharedFacts({
-  record,
-  onPublished,
-}: {
-  record: SharedJobRecord;
-  onPublished: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [note, setNote] = useState('');
-  const [facts, setFacts] = useState(() =>
-    Object.entries(record.brief?.facts ?? {})
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n'),
-  );
-  const [busy, setBusy] = useState(false);
-
-  const affected = record.parties.filter((p) => !p.revoked_at).length;
-
-  async function publish(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const parsed: Record<string, string> = {};
-      for (const line of facts.split('\n')) {
-        const at = line.indexOf(':');
-        if (at < 1) continue;
-        parsed[line.slice(0, at).trim()] = line.slice(at + 1).trim();
-      }
-      await api.publishJobBrief(record.job.id, { facts: parsed, note: note || null });
-      setEditing(false);
-      setNote('');
-      onPublished();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="rounded-xl glass-card p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">
-          Job facts
-          {record.currentRevision !== null && (
-            <span className="ml-2 text-xs font-normal text-ink-500">
-              revision {record.currentRevision}
-            </span>
-          )}
-        </h2>
-        <button
-          onClick={() => setEditing((v) => !v)}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
-        >
-          {editing ? 'Cancel' : 'Publish a change'}
-        </button>
-      </div>
-
-      {!editing ? (
-        record.brief ? (
-          <dl className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {Object.entries(record.brief.facts ?? {}).map(([key, value]) => (
-              <div key={key} className="flex justify-between gap-3 text-xs">
-                <dt className="text-ink-500">{key}</dt>
-                <dd className="text-right font-medium text-ink-800">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : (
-          <p className="mt-3 text-sm text-ink-600">
-            Nothing published yet. Until there is a revision, nobody can accept anything.
-          </p>
-        )
-      ) : (
-        <form onSubmit={publish} className="mt-3 space-y-2">
-          <textarea
-            rows={7}
-            value={facts}
-            onChange={(e) => setFacts(e.target.value)}
-            placeholder={'Site address: 1408 Meridian Ave\nGate code: 4412\nPermit: BP-2026-8841'}
-            className="w-full rounded-lg glass-field px-3 py-2 text-xs leading-relaxed text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="What changed, in one line"
-            className="w-full rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          {/* Said before the button, not after. */}
-          <p className="text-[11px] text-caution-600">
-            Publishing lapses acceptance for {affected} compan{affected === 1 ? 'y' : 'ies'}. They
-            will show as working from old facts until they accept the new revision.
-          </p>
-          <button
-            type="submit"
-            disabled={busy}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
-          >
-            {busy && <SpinnerIcon className="animate-spin" width={12} height={12} />}
-            Publish revision {(record.currentRevision ?? 0) + 1}
-          </button>
-        </form>
-      )}
-    </section>
   );
 }
 
@@ -883,67 +768,6 @@ function ScopeList({
             </li>
           ))}
         </ul>
-      )}
-    </section>
-  );
-}
-
-/** The thread. Append-only, which is why it settles arguments. */
-function Thread({ record, onPosted }: { record: SharedJobRecord; onPosted: () => void }) {
-  const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function post(event: FormEvent) {
-    event.preventDefault();
-    if (!body.trim()) return;
-    setBusy(true);
-    try {
-      await api.postJobMessage(record.job.id, { body });
-      setBody('');
-      onPosted();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="rounded-xl glass-card p-5">
-      <h2 className="text-base font-semibold text-ink-900">On the record</h2>
-      <p className="mt-1 text-xs text-ink-500">
-        Nothing here can be edited or deleted. Corrections are new messages — which is how a paper
-        file works, and how every argument about one gets settled.
-      </p>
-
-      <form onSubmit={post} className="mt-3 flex gap-2">
-        <input
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Say it here instead of on the phone"
-          className="min-w-0 flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-        />
-        <button
-          type="submit"
-          disabled={busy || !body.trim()}
-          className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
-        >
-          Post
-        </button>
-      </form>
-
-      {record.messages.length === 0 ? (
-        <p className="mt-3 text-xs text-ink-500">Nothing yet.</p>
-      ) : (
-        <ol className="mt-3 max-h-[24rem] space-y-2.5 overflow-y-auto pr-1">
-          {record.messages.map((message) => (
-            <li key={message.id} className="rounded-lg border border-line px-3 py-2">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-ink-800">{message.author_label}</span>
-                <span className="text-[11px] text-ink-400">{ago(message.created_at)}</span>
-              </div>
-              <p className="mt-0.5 text-xs text-ink-700">{message.body}</p>
-            </li>
-          ))}
-        </ol>
       )}
     </section>
   );

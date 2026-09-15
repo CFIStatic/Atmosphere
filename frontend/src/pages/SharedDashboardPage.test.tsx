@@ -351,6 +351,27 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
   });
 
+  it('keeps Scope in Job setup and omits Job facts and On the record', async () => {
+    const user = userEvent.setup();
+    authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
+    sharedJob.mockResolvedValue({ ...record, access: 'org' });
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Videos and analysis')).toBeInTheDocument();
+    await user.click(screen.getByText(/Job setup/));
+    expect(await screen.findByRole('heading', { name: 'Scope' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a line' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Job facts' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Publish a change')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'On the record' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing here can be edited or deleted/)).not.toBeInTheDocument();
+  });
+
   it('never mounts Motion clips on the job file (org or grant)', async () => {
     authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
     sharedJob.mockResolvedValue({ ...record, access: 'org' });

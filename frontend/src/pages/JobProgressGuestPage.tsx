@@ -202,23 +202,6 @@ export function JobProgressGuestPage() {
         createThread={(title) => api.progressShareCreateAskThread(token, title)}
       >
         <div className="mx-auto max-w-3xl space-y-4">
-          {view.brief && Object.keys(view.brief.facts).length > 0 && (
-            <section className="rounded-xl glass-card p-5" data-testid="homeowner-job-facts">
-              <h2 className="text-base font-semibold text-ink-900">On this file</h2>
-              {view.brief.note && (
-                <p className="mt-1 text-sm text-ink-600">{view.brief.note}</p>
-              )}
-              <dl className="mt-3 space-y-2">
-                {Object.entries(view.brief.facts).map(([key, value]) => (
-                  <div key={key} className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    <dt className="w-36 shrink-0 text-xs font-medium text-ink-500">{key}</dt>
-                    <dd className="min-w-0 flex-1 text-sm text-ink-800">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          )}
-
           {exclusions.length > 0 && (
             <section className="rounded-xl border border-danger-200 bg-danger-50/50 px-5 py-4" data-testid="homeowner-do-nots">
               <h2 className="text-sm font-semibold text-ink-900">Do not</h2>
