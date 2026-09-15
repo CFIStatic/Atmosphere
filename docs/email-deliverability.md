@@ -49,9 +49,11 @@ npm run check:email-auth --prefix backend
    SPF / MX for `hello@` / `support@` forwards to `jack@jettx.ai`. Resend
    authenticates only on `send.invites.atmosphereteam.com`.
 
-Inbox placement still needs DMARC on apex + `invites.atmosphereteam.com`:
+Inbox placement still needs DMARC on apex + `invites.atmosphereteam.com`.
+**Omit `rua`** so aggregate reports do not flood `hello@` / the main inbox.
+`rua` is optional; if you add it later, use a dedicated mailbox — never `hello@atmosphereteam.com`.
 
 | Type | Name | Value |
 | --- | --- | --- |
-| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:hello@atmosphereteam.com; fo=1; adkim=r; aspf=r` |
-| TXT | `_dmarc.invites` | same |
+| TXT | `_dmarc` | `v=DMARC1; p=none; fo=1; adkim=r; aspf=r` (or a stricter policy such as `p=reject` — still without `rua` to hello@) |
+| TXT | `_dmarc.invites` | `v=DMARC1; p=none; fo=1; adkim=r; aspf=r` |

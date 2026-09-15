@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   alignedReplyTo,
   deliverabilityHeaders,
+  dmarcRuaPointsAtMainInbox,
   evaluateEmailAuthDns,
   formatFromHeader,
   organizationalDomain,
@@ -131,6 +132,19 @@ describe('transport order', () => {
 });
 
 describe('DNS auth scoring', () => {
+  it('recommends DMARC without rua so reports do not flood hello@', () => {
+    const txt = recommendedDmarcTxt();
+    assert.equal(txt, 'v=DMARC1; p=none; fo=1; adkim=r; aspf=r');
+    assert.doesNotMatch(txt, /rua=/i);
+    assert.equal(dmarcRuaPointsAtMainInbox(txt), false);
+    assert.equal(
+      dmarcRuaPointsAtMainInbox(
+        'v=DMARC1; p=none; rua=mailto:hello@atmosphereteam.com; fo=1; adkim=r; aspf=r',
+      ),
+      true,
+    );
+  });
+
   it('flags missing DMARC on atmosphereteam.com', () => {
     const findings = evaluateEmailAuthDns({
       apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
@@ -146,16 +160,51 @@ describe('DNS auth scoring', () => {
     assert.equal(byName['invites-dkim']?.ok, true);
     assert.equal(byName['resend-return-path-spf']?.ok, true);
     assert.match(byName['apex-dmarc']?.fix ?? '', /v=DMARC1/);
+    assert.doesNotMatch(byName['apex-dmarc']?.fix ?? '', /rua=/i);
+    assert.doesNotMatch(byName['invites-dmarc']?.fix ?? '', /rua=/i);
   });
 
-  it('passes a fully authenticated zone', () => {
+  it('passes a fully authenticated zone without rua', () => {
     const findings = evaluateEmailAuthDns({
       apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
-      apexDmarc: [recommendedDmarcTxt('hello@atmosphereteam.com')],
-      invitesDmarc: [recommendedDmarcTxt('hello@atmosphereteam.com')],
+      apexDmarc: [recommendedDmarcTxt()],
+      invitesDmarc: [recommendedDmarcTxt()],
       invitesDkim: ['v=DKIM1; k=rsa; p=MIIBIjAN'],
       sendInvitesSpf: ['v=spf1 include:amazonses.com ~all'],
     });
     assert.ok(findings.every((f) => f.ok));
+  });
+
+  it('accepts live-style DMARC (no rua) including apex p=reject', () => {
+    const findings = evaluateEmailAuthDns({
+      apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
+      apexDmarc: ['v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s'],
+      invitesDmarc: ['v=DMARC1; p=none; fo=1; adkim=r; aspf=r'],
+      invitesDkim: ['v=DKIM1; k=rsa; p=MIIBIjAN'],
+      sendInvitesSpf: ['v=spf1 include:amazonses.com ~all'],
+    });
+    const byName = Object.fromEntries(findings.map((f) => [f.name, f]));
+    assert.equal(byName['apex-dmarc']?.ok, true);
+    assert.equal(byName['invites-dmarc']?.ok, true);
+    assert.equal(byName['apex-dmarc-rua'], undefined);
+    assert.equal(byName['invites-dmarc-rua'], undefined);
+  });
+
+  it('warns when rua points at hello@', () => {
+    const withRua =
+      'v=DMARC1; p=none; rua=mailto:hello@atmosphereteam.com; fo=1; adkim=r; aspf=r';
+    const findings = evaluateEmailAuthDns({
+      apexTxt: ['v=spf1 include:_spf.mx.cloudflare.net ~all'],
+      apexDmarc: [withRua],
+      invitesDmarc: [withRua],
+      invitesDkim: ['v=DKIM1; k=rsa; p=MIIBIjAN'],
+      sendInvitesSpf: ['v=spf1 include:amazonses.com ~all'],
+    });
+    const byName = Object.fromEntries(findings.map((f) => [f.name, f]));
+    assert.equal(byName['apex-dmarc']?.ok, true);
+    assert.equal(byName['invites-dmarc']?.ok, true);
+    assert.equal(byName['apex-dmarc-rua']?.ok, false);
+    assert.equal(byName['invites-dmarc-rua']?.ok, false);
+    assert.match(byName['apex-dmarc-rua']?.detail ?? '', /hello@/);
   });
 });
