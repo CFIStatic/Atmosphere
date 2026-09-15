@@ -432,9 +432,6 @@ function ActionRow({ action, compact }: { action: OverviewAction; compact: boole
         />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-2">
-            {action.jobNumber != null && (
-              <span className="shrink-0 font-mono text-xs text-ink-500">#{action.jobNumber}</span>
-            )}
             <span
               className={
                 compact
@@ -495,7 +492,6 @@ function QuietRow({
           <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
           <p className="mt-0.5 truncate text-[13px] text-ink-500">Moving — nothing waiting on you</p>
         </div>
-        {jobNumber != null && <span className="shrink-0 font-mono text-[11px] text-ink-400">#{jobNumber}</span>}
       </Link>
     </li>
   );
@@ -610,7 +606,7 @@ function OnJobsCard({ crew, loaded }: { crew: CrewBoardRow[]; loaded: boolean })
               <p className="text-sm font-semibold text-ink-900">{row.name}</p>
               <p className="mt-0.5 truncate text-xs text-ink-500">
                 {row.jobs
-                  .map((job) => (job.jobNumber != null ? `#${job.jobNumber} ${job.title}` : job.title))
+                  .map((job) => job.title)
                   .join(' · ')}
               </p>
             </li>

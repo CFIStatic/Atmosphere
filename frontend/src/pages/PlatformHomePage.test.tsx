@@ -216,6 +216,9 @@ describe('PlatformHomePage', () => {
     await waitFor(() => {
       expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
     });
+    expect(screen.queryByText('#1041')).not.toBeInTheDocument();
+    expect(screen.queryByText('#1044')).not.toBeInTheDocument();
+    expect(screen.queryByText('#1038')).not.toBeInTheDocument();
 
     expect(screen.getByText('2 clips failed')).toBeInTheDocument();
     expect(screen.getByText('The assistant could not read the film. A person has to look.')).toBeInTheDocument();

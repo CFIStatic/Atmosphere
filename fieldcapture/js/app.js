@@ -357,7 +357,7 @@
     return {
       id: j.id,
       title: j.title || j.name || '',
-      name: (j.number ? j.number + ' · ' : '') + (j.name || 'Job'),
+      name: j.name || j.title || 'Job',
       addr: j.address || j.addr || '',
       at: j.at || 'Today',
       placed: j.placed !== false,
@@ -907,7 +907,6 @@
   function paintLiveJob(payload) {
     state.job = payload;
     var title = (payload.job && payload.job.title) || 'Job';
-    var num = (payload.job && payload.job.jobNumber) || '';
     var company = (payload.you && payload.you.company) || 'Crew';
     paintFieldAccount({
       name: company,
@@ -917,7 +916,7 @@
     var sharePath = TOKEN ? '/shared/' + TOKEN : '/guest';
     renderExpect([
       {
-        name: (num ? num + ' · ' : '') + title,
+        name: title,
         addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
         at: 'Today',
         placed: true,
