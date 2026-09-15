@@ -171,8 +171,7 @@ describe('JobProgressGuestPage', () => {
     expect(await screen.findByText('Job file')).toBeInTheDocument();
     expect(screen.getByText('Ortiz Restoration')).toBeInTheDocument();
     expect(screen.getByText('board@cedarridgehoa.org')).toBeInTheDocument();
-    expect(screen.getByText('Skylights removed from scope.')).toBeInTheDocument();
-    expect(screen.getAllByText('2214 Cedar Ridge Dr, Round Rock TX').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('homeowner-job-facts')).not.toBeInTheDocument();
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByText('Carrier declined them on revision 4.')).toBeInTheDocument();
     expect(await screen.findByText('All recordings')).toBeInTheDocument();
