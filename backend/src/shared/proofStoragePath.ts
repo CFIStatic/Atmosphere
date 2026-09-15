@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpError } from '../lib/errors.js';
+import { assertAllowedProofExtension } from '../lib/proofMediaType.js';
 
 const EXTENSION = /^[a-z0-9]{2,5}$/;
 /** Phone- or server-minted id for one recording: lowercase base36, 6–32 characters. */
@@ -54,7 +55,7 @@ export function proofObjectPath(
   party: ProofPartyRef,
   input: { workDate: string; phase: string; extension: string; clipId?: string | null },
 ): string {
-  const extension = input.extension.toLowerCase();
+  const extension = assertAllowedProofExtension(input.extension);
   if (!EXTENSION.test(extension)) {
     throw new HttpError(400, 'Invalid file extension.', 'invalid_extension');
   }

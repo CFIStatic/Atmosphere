@@ -33,10 +33,12 @@ Documented string: see `LIVE_VIEW_LATENCY_NOTE` in `backend/src/live/officeLiveV
 3. Click **Watch now** (or wait for auto-load) to play the latest contiguous segments.
 4. When recording ends and the film is filed, the Live card disappears; use the normal proof player (with privacy redaction once analysis finishes).
 
-## Privacy
+## Privacy / unredacted disclosure
 
-- **Live may be raw** until the film is filed and analysis writes child-blur /
-  private-moment ranges. The Live card states this explicitly.
+- **Live may show unredacted (raw) footage** until the day film is filed and
+  analysis writes child-blur / private-moment ranges. Office operators should
+  treat Live as a near-realtime operational feed, not a privacy-safe playback
+  surface. The Live card states this in-product (`LIVE_PRIVACY_NOTE`).
 - After file + analysis, use the filed `JobFilePlayer` which applies stored
   ranges. See `docs/privacy-redaction.md` and `docs/child-privacy-redaction.md`.
 

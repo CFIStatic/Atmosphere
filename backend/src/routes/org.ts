@@ -7,6 +7,7 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { decideMemberRemoval } from '../org/members.js';
+import { revokeAllAuthSessionsForUser } from '../auth/revokeUserSessions.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import { normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
 import {
@@ -437,7 +438,9 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
  *
  * The person's auth login stays — they just lose this workspace until
  * someone invites that address again. Pending invites for the same email
- * are withdrawn so they cannot walk back in without a new invite.
+ * are withdrawn so they cannot walk back in without a new invite. Their
+ * Supabase Auth sessions / refresh tokens are revoked (global sign-out)
+ * so a terminated employee cannot keep an open session.
  */
 orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -503,6 +506,15 @@ orgRouter.delete('/members/:userId', async (req: Request, res: Response, next: N
         .eq('org_id', orgId)
         .eq('email', email)
         .eq('status', 'pending');
+    }
+
+    // Terminate Auth sessions so a removed teammate cannot keep using refresh
+    // tokens after they lose the org seat. Best-effort — unlink already succeeded.
+    if (admin) {
+      const revoked = await revokeAllAuthSessionsForUser(admin, targetUserId);
+      if (!revoked.ok) {
+        console.warn('[org] session revoke after member removal:', revoked.reason);
+      }
     }
 
     res.json({ ok: true });
