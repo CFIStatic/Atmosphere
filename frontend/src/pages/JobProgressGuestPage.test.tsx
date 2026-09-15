@@ -174,7 +174,7 @@ describe('JobProgressGuestPage', () => {
     expect(screen.queryByTestId('homeowner-job-facts')).not.toBeInTheDocument();
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
     expect(screen.getByText('Carrier declined them on revision 4.')).toBeInTheDocument();
-    expect(await screen.findByText('All recordings')).toBeInTheDocument();
+    expect(await screen.findByText('Videos')).toBeInTheDocument();
     expect(await screen.findByTestId('homeowner-live-progress-story')).toHaveTextContent(
       /north slope is stripped to decking/i,
     );
