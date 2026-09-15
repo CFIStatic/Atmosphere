@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { GripVertical } from 'lucide-react';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { VideoSeekProvider } from '../lib/videoSeek';
@@ -62,7 +63,7 @@ function isOverviewBack(node: ReactNode): boolean {
  * Never paints an Overview back/breadcrumb. Callers that still pass one are
  * stripped here so File / Ask sit flush under the account header.
  *
- * On desktop (lg+), a thin drag handle between Ask and the job file lets users
+ * On desktop (lg+), a visible drag handle between Ask and the job file lets users
  * widen either pane; preferred width persists in localStorage. Double-click
  * the handle to reset the default. Phone / stacked layouts are unchanged.
  */
@@ -202,8 +203,8 @@ export function JobFileAskChrome({
           </aside>
 
           {/*
-            Thin Atmosphere-style splitter: 1px line, wider hit target.
-            Desktop split only — phone uses File/Ask tabs; mid widths stack.
+            Desktop Ask | job-file splitter: always-visible grip + brand tint on
+            hover/drag, wide hit target, col-resize. Phone tabs unchanged.
           */}
           <div
             role="separator"
@@ -214,7 +215,8 @@ export function JobFileAskChrome({
             title="Drag to resize · double-click to reset"
             data-testid="job-file-ask-split"
             data-dragging={dragging ? 'true' : undefined}
-            className={`group relative z-10 hidden w-0 shrink-0 cursor-col-resize touch-none lg:block ${
+            tabIndex={0}
+            className={`group relative z-10 hidden w-0 shrink-0 cursor-col-resize touch-none outline-none lg:block ${
               dragging ? 'select-none' : ''
             }`}
             onPointerDown={onSplitPointerDown}
@@ -223,13 +225,29 @@ export function JobFileAskChrome({
             onPointerCancel={onSplitPointerUp}
             onDoubleClick={onSplitDoubleClick}
           >
-            <span aria-hidden className="absolute inset-y-0 -left-1.5 w-3" />
+            {/* Hit target wider than the painted line so grab is easy. */}
+            <span aria-hidden className="absolute inset-y-0 -left-2 w-4" />
+            {/* Track line — thicker + brand on hover / focus / drag. */}
             <span
               aria-hidden
-              className={`pointer-events-none absolute inset-y-0 left-0 w-px transition-colors ${
-                dragging ? 'bg-brand-400' : 'bg-line group-hover:bg-brand-300'
+              className={`pointer-events-none absolute inset-y-0 left-0 transition-[width,background-color,box-shadow] ${
+                dragging
+                  ? 'w-0.5 bg-brand-400 shadow-[0_0_0_1px_rgb(var(--brand-400)/0.35)]'
+                  : 'w-0.5 bg-line group-hover:bg-brand-300 group-focus-visible:bg-brand-300'
               }`}
             />
+            {/* Centered grip pill so the split reads as adjustable at rest. */}
+            <span
+              aria-hidden
+              data-testid="job-file-ask-split-grip"
+              className={`pointer-events-none absolute left-0 top-1/2 flex h-9 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition ${
+                dragging
+                  ? 'border-brand-400/70 bg-paper-0 text-brand-400'
+                  : 'border-line bg-paper-0 text-ink-500 group-hover:border-brand-300/80 group-hover:text-brand-400 group-focus-visible:border-brand-300/80 group-focus-visible:text-brand-400'
+              }`}
+            >
+              <GripVertical className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </span>
           </div>
 
           <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
