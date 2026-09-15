@@ -1077,10 +1077,6 @@ export interface ProofChildPrivacyRedactions {
   ranges: ChildPrivacyRedactionRange[];
 }
 
-export interface ChildBlurSettings {
-  orgId: string;
-  childBlurEnabled: boolean;
-}
 
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
@@ -3922,14 +3918,6 @@ export const api = {
   getDailyReportSettings: () =>
     request<{ settings: DailyReportSettings }>('/api/daily-report/settings', { method: 'GET' }),
 
-  getChildPrivacySettings: () =>
-    request<{ settings: ChildBlurSettings }>('/api/child-privacy/settings', { method: 'GET' }),
-
-  updateChildPrivacySettings: (patch: { childBlurEnabled?: boolean }) =>
-    request<{ settings: ChildBlurSettings }>('/api/child-privacy/settings', {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    }),
 
   updateDailyReportSettings: (patch: {
     enabled?: boolean;

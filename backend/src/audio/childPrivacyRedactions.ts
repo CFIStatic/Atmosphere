@@ -313,11 +313,7 @@ export function deriveChildPrivacyRedactions(input: {
   summary?: string | null;
   visionRanges?: ChildPrivacyRange[] | null;
   model?: string | null;
-  /** When false, skip detection entirely (org policy off). */
-  enabled?: boolean;
 }): ChildPrivacyRange[] {
-  if (input.enabled === false) return [];
-
   const duration =
     Number.isFinite(Number(input.durationSeconds)) && Number(input.durationSeconds) > 0
       ? Number(input.durationSeconds)

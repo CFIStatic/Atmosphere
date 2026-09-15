@@ -1,63 +1,44 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Org policy for child privacy blur. Default ON (protect by default).
- * Stored on public.orgs.child_blur_enabled.
+ * Child privacy blur is mandatory for every org — always on, no opt-out.
+ * `orgs.child_blur_enabled` may still exist from an earlier optional policy;
+ * application code ignores stored false and treats blur as always enabled.
  */
 
 export type OrgChildBlurSettings = {
   orgId: string;
-  /** When true, detect + apply child privacy blur. Default true. */
-  childBlurEnabled: boolean;
+  /** Always true. Child privacy blur cannot be disabled. */
+  childBlurEnabled: true;
 };
 
 export function defaultChildBlurSettings(orgId: string): OrgChildBlurSettings {
   return { orgId, childBlurEnabled: true };
 }
 
+/** Always returns enabled — stored org flag is ignored. */
 export async function loadOrgChildBlurSettings(
-  admin: any,
+  _admin: any,
   orgId: string,
 ): Promise<OrgChildBlurSettings> {
-  const { data, error } = await admin
-    .from('orgs')
-    .select('id, child_blur_enabled')
-    .eq('id', orgId)
-    .maybeSingle();
-
-  if (error || !data) {
-    // Missing column (pre-migration) or missing org → protect by default.
-    return defaultChildBlurSettings(orgId);
-  }
-
-  return {
-    orgId,
-    // null/undefined → ON; only explicit false disables.
-    childBlurEnabled: data.child_blur_enabled !== false,
-  };
+  return defaultChildBlurSettings(orgId);
 }
 
+/**
+ * No-op writer kept for API compatibility. Never persists a disable;
+ * always returns childBlurEnabled: true.
+ */
 export async function updateOrgChildBlurSettings(
-  admin: any,
+  _admin: any,
   orgId: string,
-  patch: { childBlurEnabled?: boolean },
+  _patch: { childBlurEnabled?: boolean } = {},
 ): Promise<OrgChildBlurSettings> {
-  const row: Record<string, unknown> = {};
-  if (patch.childBlurEnabled !== undefined) {
-    row.child_blur_enabled = Boolean(patch.childBlurEnabled);
-  }
-  if (Object.keys(row).length) {
-    const { error } = await admin.from('orgs').update(row).eq('id', orgId);
-    if (error) throw new Error(error.message);
-  }
-  return loadOrgChildBlurSettings(admin, orgId);
+  return defaultChildBlurSettings(orgId);
 }
 
-export async function isChildBlurEnabledForOrg(admin: any, orgId: string | null | undefined): Promise<boolean> {
-  if (!orgId) return true;
-  try {
-    const settings = await loadOrgChildBlurSettings(admin, orgId);
-    return settings.childBlurEnabled;
-  } catch {
-    return true;
-  }
+/** Child privacy blur is mandatory for all orgs. */
+export async function isChildBlurEnabledForOrg(
+  _admin: any,
+  _orgId: string | null | undefined,
+): Promise<boolean> {
+  return true;
 }

@@ -27,9 +27,10 @@ parallel category `child_privacy` stored under
      mute + full-frame blur.
 4. **Ask / Analysis**: speech and identifiable child descriptions become
    `child present [privacy redacted]`.
-5. **Org policy**: `orgs.child_blur_enabled` (default **true**). Settings →
-   Organization → Child privacy blur. When off, new detections are skipped and
-   API payloads omit child ranges.
+5. **Mandatory**: child privacy blur is **always on** for every org. There is
+   no Settings toggle and orgs cannot opt out. Detection, player blur, and Ask
+   redaction run for all orgs. (`orgs.child_blur_enabled` may still exist from
+   an earlier optional policy; application code ignores stored `false`.)
 
 Stored ranges are authoritative for clients. Phase 1 does **not** re-encode the
 underlying media — share/export of the raw signed URL could still expose bytes

@@ -46,7 +46,6 @@ import {
   toStoredChildPrivacyRedactions,
   type StoredChildPrivacyRedactions,
 } from './childPrivacyRedactions.js';
-import { isChildBlurEnabledForOrg } from '../childPrivacy/index.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -210,8 +209,6 @@ export async function enrichProofConversation(
     logEntries = applyPrivacyToEvidenceEntries(logEntries, privacyRanges);
   }
 
-  const orgId = typeof proof?.org_id === 'string' ? proof.org_id : null;
-  const childEnabled = await isChildBlurEnabledForOrg(admin, orgId);
   const existingChild = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
   const childPeopleNotes = people.people.flatMap((person) => {
     const ageAppearance = (person as { ageAppearance?: unknown }).ageAppearance ?? null;
@@ -225,6 +222,7 @@ export async function enrichProofConversation(
       ageAppearance,
     }));
   });
+  // Child privacy blur is mandatory for all orgs — always derive.
   const childRanges = deriveChildPrivacyRedactions({
     durationSeconds,
     events: logEntries.map((e) => ({ atSeconds: e.atSeconds, text: e.text, type: e.type })),
@@ -232,7 +230,6 @@ export async function enrichProofConversation(
     narrationText,
     summary,
     visionRanges: existingChild,
-    enabled: childEnabled,
   });
   const childStored = toStoredChildPrivacyRedactions(childRanges);
   if (childRanges.length) {
