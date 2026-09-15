@@ -25,17 +25,17 @@ test('similar-jobs is org-only — requireOrgContext, no grant fallback', () => 
   assert.match(sharedJobsSrc, /Org members only/);
 });
 
-test('SharedDashboard mounts Similar jobs only when !grantViewer', () => {
+test('SharedDashboard does not mount Similar jobs UI', () => {
   const page = readFileSync(
     join(root, '../frontend/src/pages/SharedDashboardPage.tsx'),
     'utf8',
   );
-  assert.match(page, /SimilarPastJobs/);
-  // Office panels (roster + similar jobs) use grantViewer so grant-only /
-  // no-membership deep links never mount the component before access loads.
-  const blockStart = page.indexOf('<SimilarPastJobs');
+  assert.doesNotMatch(page, /SimilarPastJobs/);
+  assert.doesNotMatch(page, /similar-past-jobs/);
+  // Who-has-access remains office/org only via !grantViewer.
+  assert.match(page, /JobAccessRoster/);
+  const blockStart = page.indexOf('<JobAccessRoster');
   assert.ok(blockStart >= 0);
   const before = page.slice(Math.max(0, blockStart - 500), blockStart);
   assert.match(before, /!grantViewer/);
-  assert.match(before, /JobAccessRoster/);
 });
