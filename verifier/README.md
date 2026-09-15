@@ -50,11 +50,13 @@ an Atmosphere account.
 
 The share itself travels by email, sent from the sharing org's own connected
 mailbox. The wording forks on whether the address already answers to an
-account — sign in, or create one with this exact address — because the link
-refuses any other account, forwarded or not. Erasure tombstones outrank the
-notification (an address that asked to be forgotten gets no mail; the link
-can be handed over any other way), and whether the email actually went out is
-recorded in the custody entry for the share.
+account — sign in, or create one with this exact address — because the share
+opens only for a signed-in Atmosphere account matching that email. (A separate
+job-progress guest link is bearer-style and works for whoever holds the URL
+until revoked or claimed.) Erasure tombstones outrank the notification (an
+address that asked to be forgotten gets no mail; the link can be handed over
+any other way), and whether the email actually went out is recorded in the
+custody entry for the share.
 
 Watching is free; keeping a copy is not. A download by an external account
 settles the sharing organization's fee first (their `evidence_download_policy`

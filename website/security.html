@@ -124,23 +124,25 @@
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Architecture</div>
-      <h2>Every request wears the caller's identity</h2>
+      <h2>Authorization lives in the application — and RLS where we use it</h2>
       <p>
-        The browser talks to our application. The application talks to the database as
-        the signed-in person — never with a privileged bypass — so access rules in the
-        database decide what every query can see.
+        The browser talks to our application. The application checks who you are and what
+        you may access, then performs server operations against the database with a
+        privileged service role that never ships to the browser. Where Row-Level Security
+        is enabled, it still constrains direct client access; the app layer remains the
+        gate for privileged reads and writes.
       </p>
     </div>
     <div class="diagram mono">
       <pre>
-┌───────────┐    httpOnly cookies    ┌───────────────┐    caller's identity     ┌──────────────────┐
-│  Browser  │ ─────────────────────▶ │  Application  │ ──never a privileged───▶ │     Database     │
-│ (no       │ ◀───────────────────── │    server     │ ◀──────────────────────  │  (enforces who   │
-│  tokens)  │                        └───────────────┘                          │   can see what)  │
+┌───────────┐    httpOnly cookies    ┌───────────────┐   app-layer authz +      ┌──────────────────┐
+│  Browser  │ ─────────────────────▶ │  Application  │ ──service role (server)─▶ │     Database     │
+│ (no       │ ◀───────────────────── │    server     │ ◀──────────────────────  │  (RLS where used │
+│  srv role)│                        └───────────────┘                          │   + stored data) │
 └───────────┘                                                                   └──────────────────┘</pre>
       <p class="diagram-caption">
-        The frontend holds no tokens. The database enforces access. Devices in the field
-        only ever dial out.
+        The frontend never receives the service role. The application authorizes access;
+        RLS applies where enabled. Devices in the field only ever dial out.
       </p>
     </div>
   </div>
@@ -176,11 +178,11 @@
       </div>
       <div class="sec-card">
         <span class="kbd mono">access</span>
-        <h3>The database is the source of truth</h3>
+        <h3>App-layer authz, plus RLS where used</h3>
         <p>
-          Every query runs as the signed-in person — never with a privileged bypass.
-          Who can see what is decided at the database, where another organization's
-          data simply doesn't exist for you.
+          Server operations use a service role on the BFF after the application checks
+          session, org, and role. RLS still protects direct client paths where enabled —
+          another organization's data is not exposed through those policies.
         </p>
       </div>
       <div class="sec-card">

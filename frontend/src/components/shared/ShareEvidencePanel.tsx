@@ -150,8 +150,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
           {/* The pin, stated before the button: it changes what "share" means. */}
           <p className="text-[11px] text-ink-500">
             The link is emailed to them and opens only for an Atmosphere account signed in with
-            that address — forwarded, it refuses. Watching is free; keeping a copy settles your
-            download fee first.
+            that address. Watching is free; keeping a copy settles your download fee first.
           </p>
           <button
             type="submit"

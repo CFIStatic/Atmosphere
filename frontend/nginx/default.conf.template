@@ -85,6 +85,36 @@ server {
     try_files $uri =404;
   }
 
+  # Share / guest surfaces must not be indexed: tokens in the path are
+  # credentials. X-Robots-Tag covers crawlers that never run SPA JS.
+  location ^~ /progress {
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location ^~ /progress-view {
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location ^~ /shared {
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location ^~ /verifier/shared {
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    try_files $uri $uri/ /verifier/index.html;
+  }
+
   location /verifier/ {
     add_header Cache-Control "no-store";
     add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
