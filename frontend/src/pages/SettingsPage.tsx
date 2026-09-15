@@ -12,7 +12,6 @@ import { api, ApiError, ROLE_LABELS, WORK_TYPE_LABELS, type OrgMember } from '..
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
-import { DailyReportSection } from '../components/settings/DailyReportSection';
 import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
@@ -148,7 +147,6 @@ export function SettingsPage() {
           {active === 'organization' && (
             <>
               <InvitePanel />
-              <DailyReportSection />
               <LinkedAccountsCard />
               <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
                 <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>

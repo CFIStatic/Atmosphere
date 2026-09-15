@@ -177,11 +177,14 @@ describe('Settings organization', () => {
     apiMocks.removeMember.mockResolvedValue({ ok: true });
   });
 
-  it('keeps team invites and linked accounts, without the org profile or Field Capture cards', async () => {
+  it('keeps team invites and linked accounts, without daily report, org profile, or Field Capture cards', async () => {
     renderSettings('/settings?section=organization');
 
     expect(screen.getByText('Invite teammates')).toBeInTheDocument();
     expect(screen.getByText('Linked accounts')).toBeInTheDocument();
+    expect(screen.queryByTestId('daily-report-settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Auto daily job report')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save daily report' })).not.toBeInTheDocument();
     expect(screen.queryByText(/join code/i)).toBeNull();
     expect(screen.queryByText('ABC123')).toBeNull();
     expect(screen.queryByText('Field Capture app')).toBeNull();
