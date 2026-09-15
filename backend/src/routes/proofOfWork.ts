@@ -98,6 +98,17 @@ import {
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
+import {
+  endProofLiveSession,
+  listLandedPartIndexes,
+  listLiveSessionsForJob,
+  LIVE_PRIVACY_NOTE,
+  LIVE_VIEW_LATENCY_NOTE,
+  presentLiveSession,
+  signedLivePartUrls,
+  touchProofLiveSession,
+  type LiveSessionRow,
+} from '../live/officeLiveView.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import {
   assertOwnedProofStoragePath,
@@ -528,6 +539,20 @@ export async function createPartUploadUrl(
   const path = proofObjectPath(party, { ...input, clipId });
   const partPath = partObjectPath(path, input.index);
   const signed = await mintSignedUpload(admin, partPath);
+  // Office Live index — best-effort; never block the crew's part mint.
+  void touchProofLiveSession(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    partyId: party.id,
+    clipId,
+    storagePath: path,
+    workDate: input.workDate,
+    phase: input.phase,
+    extension: input.extension,
+    index: input.index,
+  }).catch((err) => {
+    console.warn('[live] touch session failed:', err instanceof Error ? err.message : err);
+  });
   return {
     path,
     clipId,
@@ -761,6 +786,14 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     : admin.from('job_proofs').insert(proofRow);
   const { data: proof, error } = await write.select(PROOF_SELECT).single();
   if (error) throw new HttpError(400, error.message, 'proof_failed');
+
+  void endProofLiveSession(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    clipId: recordedClipId,
+  }).catch((err) => {
+    console.warn('[live] end session failed:', err instanceof Error ? err.message : err);
+  });
 
   // Client stills are useful, but a crew in the doorway must not wait on
   // twelve JPEG uploads before "filed" returns. Store them off the critical
@@ -2957,6 +2990,77 @@ export async function createJobAskThread(req: Request, res: Response, next: Next
  *
  * Signed rather than public: these are the insides of somebody's house.
  */
+
+/**
+ * GET /api/operations/shared/:jobId/live
+ * Org office only — active Field Capture stream-while-recording sessions.
+ * Homeowners / progress-grant viewers are not included (requireOrgContext).
+ */
+export async function listJobLiveSessions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId } = await requireOrgContext(req);
+    const jobId = String(req.params.jobId || '');
+    const admin = unscopedAdminOrNull();
+    if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+    const sessions = await listLiveSessionsForJob(admin, orgId, jobId);
+    res.json({
+      sessions,
+      latencyNote: LIVE_VIEW_LATENCY_NOTE,
+      privacyNote: LIVE_PRIVACY_NOTE,
+      pollIntervalSeconds: 5,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/operations/shared/:jobId/live/:clipId
+ * Signed URLs for the contiguous landed part prefix of one live clip.
+ */
+export async function getJobLiveSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId } = await requireOrgContext(req);
+    const jobId = String(req.params.jobId || '');
+    const clipId = String(req.params.clipId || '');
+    const admin = unscopedAdminOrNull();
+    if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+    const { data: row, error } = await admin
+      .from('proof_live_sessions')
+      .select(
+        'id, org_id, job_id, party_id, clip_id, storage_path, work_date, phase, extension, mime_type, status, last_mint_index, started_at, last_part_at, ended_at',
+      )
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .eq('clip_id', clipId)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message, 'live_lookup_failed');
+    if (!row) throw new HttpError(404, 'No live session for that clip.', 'not_found');
+
+    const presented = presentLiveSession(row as LiveSessionRow);
+    if (!presented) {
+      throw new HttpError(404, 'That live session has ended or gone stale.', 'not_live');
+    }
+
+    const partIndexes = await listLandedPartIndexes(admin, presented.storagePath);
+    const parts = await signedLivePartUrls(admin, presented.storagePath, partIndexes, 600);
+
+    res.json({
+      session: presented,
+      parts,
+      partCount: parts.length,
+      ready: parts.length >= 1,
+      expiresInSeconds: 600,
+      latencyNote: LIVE_VIEW_LATENCY_NOTE,
+      privacyNote: LIVE_PRIVACY_NOTE,
+      pollIntervalSeconds: 5,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
   try {
     // Resolve after we know the job — proof rows carry job_id.

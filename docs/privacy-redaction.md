@@ -53,3 +53,7 @@ of scope for privacy enforcement, and prefer in-app players.
 - Dictation JSON parse: `backend/test/videoIntelligence.test.ts`
 - Ask transcript scrub: `backend/test/clipAsk.test.ts` (privacy cases)
 - Player mute/blur: `frontend/src/components/shared/JobFilePlayer.test.tsx`
+
+## Live / near-live office view
+
+While Field Capture is still recording, office **Live** playback may show **raw** segments until the film is filed and analysis writes `privacyRedactions` ranges. See `docs/office-live-view.md`.

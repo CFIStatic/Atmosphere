@@ -29,6 +29,7 @@ import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
 import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
 import { DownloadProofPackButton } from '../components/analysis/DownloadProofPackButton';
 import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
+import { OfficeLiveView } from '../components/shared/OfficeLiveView';
 
 /**
  * The job file.
@@ -183,6 +184,8 @@ export function JobDetailPage() {
           <PulseTile label="Heard on mic" value={String(pulse.heard)} />
           <PulseTile label="Last filmed" value={lastFilmed ?? '—'} />
         </dl>
+
+        <OfficeLiveView jobId={job.id} />
 
         {error && (
           <div className="mt-4">

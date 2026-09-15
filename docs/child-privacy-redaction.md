@@ -52,3 +52,7 @@ privacy enforcement; prefer in-app players.
 - Schema / derive / merge: `backend/test/childPrivacyRedactions.test.ts`
 - Dictation JSON parse: `backend/test/videoIntelligence.test.ts`
 - Player blur: `frontend/src/components/shared/JobFilePlayer.test.tsx`
+
+## Live / near-live office view
+
+Office **Live** may lag analysis: child blur ranges apply after file + dictation. Live can be raw until then. See `docs/office-live-view.md`.
