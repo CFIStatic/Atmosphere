@@ -37,6 +37,21 @@ function grantedLine(person: JobAccessPerson): string {
   return 'Granted by office';
 }
 
+/** Subtitle: email · role · Granted by … — skip role when already in the title. */
+function personSubtitle(person: JobAccessPerson, title: string): string {
+  const parts: string[] = [];
+  const email = person.email?.trim();
+  if (email) parts.push(email);
+
+  const role = (person.accessType || person.displayLabel || '').trim();
+  if (role && !title.toLowerCase().includes(role.toLowerCase())) {
+    parts.push(role);
+  }
+
+  parts.push(grantedLine(person));
+  return parts.join(' · ');
+}
+
 function revokeConfirmLabel(person: JobAccessPerson): string {
   const who =
     person.email?.trim() ||
@@ -47,6 +62,13 @@ function revokeConfirmLabel(person: JobAccessPerson): string {
     return `Revoke Field Capture access for ${who}? They lose access immediately.`;
   }
   return `Revoke job progress access for ${who}? They lose access immediately.`;
+}
+
+function statusBadgeLabel(person: JobAccessPerson): string {
+  if (person.kind === 'homeowner') {
+    return person.state === 'claimed' ? 'account' : 'invite';
+  }
+  return 'Field Capture';
 }
 
 export function JobAccessRoster({ jobId }: { jobId: string }) {
@@ -118,53 +140,47 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
         </p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {people.map((person) => (
-            <li
-              key={person.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-800">{personLabel(person)}</p>
-                <p className="text-[11px] text-ink-500">
-                  {person.email && person.name && person.email !== person.name.toLowerCase()
-                    ? `${person.email} · `
-                    : ''}
-                  {person.accessType}
-                  {' · '}
-                  {grantedLine(person)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <div className="flex flex-col items-end gap-1">
-                  <span className="text-[11px] text-ink-500">
-                    Last access {when(person.lastAccessedAt).toLowerCase()}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-                      person.state === 'claimed' || person.state === 'live'
-                        ? 'bg-success-50 text-success-600'
-                        : 'bg-paper-200/60 text-ink-500'
-                    }`}
-                  >
-                    {person.kind === 'homeowner'
-                      ? person.state === 'claimed'
-                        ? 'account'
-                        : 'invite'
-                      : 'Field Capture'}
-                  </span>
+          {people.map((person) => {
+            const title = personLabel(person);
+            const subtitle = personSubtitle(person, title);
+            return (
+              <li
+                key={person.id}
+                data-testid="job-access-roster-row"
+                className="flex flex-col gap-2 rounded-lg border border-line px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink-800">{title}</p>
+                  <p className="truncate text-[11px] text-ink-500">{subtitle}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void revoke(person)}
-                  disabled={revokingId === person.id}
-                  aria-label={`Revoke access for ${personLabel(person)}`}
-                  className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
-                >
-                  <TrashIcon width={14} height={14} />
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="whitespace-nowrap text-[11px] text-ink-500">
+                      Last access {when(person.lastAccessedAt).toLowerCase()}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                        person.state === 'claimed' || person.state === 'live'
+                          ? 'bg-success-50 text-success-600'
+                          : 'bg-paper-200/60 text-ink-500'
+                      }`}
+                    >
+                      {statusBadgeLabel(person)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void revoke(person)}
+                    disabled={revokingId === person.id}
+                    aria-label={`Revoke access for ${title}`}
+                    className="rounded-lg p-1.5 text-ink-400 transition hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+                  >
+                    <TrashIcon width={14} height={14} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
