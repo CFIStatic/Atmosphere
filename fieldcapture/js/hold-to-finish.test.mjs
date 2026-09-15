@@ -327,6 +327,16 @@ assert.match(appSrc, /function flushFieldWork/);
 assert.match(appSrc, /addEventListener\('online'/);
 assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
 assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
+assert.doesNotMatch(
+  appSrc,
+  /j\.number \? j\.number \+ ' · '/,
+  'job list names must not prepend #N · ',
+);
+assert.doesNotMatch(
+  appSrc,
+  /num \? num \+ ' · '/,
+  'live job names must not prepend number · ',
+);
 assert.doesNotMatch(coreSrc, /function joinCrew/);
 assert.match(appSrc, /resolveOfficeHref\('\/forgot-password'\)/);
 assert.match(appSrc, /resolveOfficeHref\('\/signup'\)/);

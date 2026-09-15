@@ -233,7 +233,8 @@ describe('Usage by job', () => {
     render(<TokenUsageSection />);
     expect(await screen.findByText(/Usage by job/i)).toBeInTheDocument();
     expect(screen.getByText(/This job used 12.5 analysis minutes/i)).toBeInTheDocument();
-    expect(screen.getByText(/#1042 · Oak Street water loss/)).toBeInTheDocument();
+    expect(screen.getByText('Oak Street water loss')).toBeInTheDocument();
+    expect(screen.queryByText(/#1042/)).not.toBeInTheDocument();
   });
 
   it('shows an honest empty state when no jobs are attributed', async () => {

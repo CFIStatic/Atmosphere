@@ -137,6 +137,9 @@ describe('JobProgressDashboard', () => {
     expect(screen.queryByText('Overall progress')).not.toBeInTheDocument();
     expect(screen.queryByText('Already done')).not.toBeInTheDocument();
     expect(screen.queryByText('Still ahead')).not.toBeInTheDocument();
+
+    expect(screen.getByRole('heading', { name: 'Cedar Ridge rebuild' })).toBeInTheDocument();
+    expect(screen.queryByText(/#1038/)).not.toBeInTheDocument();
   });
 
   it('omits Needs attention when there are no blockers or warnings', async () => {

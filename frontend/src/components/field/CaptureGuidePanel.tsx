@@ -95,13 +95,13 @@ export function CaptureGuidePanel({
         >
           {jobs.map((job) => (
             <option key={job.jobId} value={job.jobId}>
-              #{job.jobNumber} — {job.title}
+              {job.title}
             </option>
           ))}
         </select>
       ) : jobs?.length === 1 ? (
         <p className="mt-2 text-xs font-medium text-ink-700">
-          #{jobs[0].jobNumber} — {jobs[0].title}
+          {jobs[0].title}
         </p>
       ) : null}
 

@@ -318,8 +318,7 @@ function Meter({
 function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
   const minutes = formatAnalysisMinutes(row.analysisMinutes);
   const feature = (key: TokenFeature) => formatTokens(row.byFeature?.[key]?.totalTokens ?? 0);
-  const label =
-    row.jobNumber != null ? `#${row.jobNumber} · ${row.title}` : row.title;
+  const label = row.title;
   return (
     <tr className="border-b border-line/60 last:border-b-0">
       <td className="py-2.5 pr-3">

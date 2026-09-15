@@ -193,9 +193,6 @@ export function JobProgressDashboard({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-xl font-semibold text-ink-900 sm:text-2xl">
-                {record.job.jobNumber !== null && (
-                  <span className="tabular-nums text-ink-500">#{record.job.jobNumber} </span>
-                )}
                 {record.job.title}
               </h2>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-500">
