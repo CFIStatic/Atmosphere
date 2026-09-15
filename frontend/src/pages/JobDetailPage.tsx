@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -23,11 +23,6 @@ import {
   type JobFileBeat,
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
-import { ShowDispute } from '../components/analysis/ShowDispute';
-import { PunchListPanel } from '../components/analysis/PunchListPanel';
-import { ClipAnalysisLayers } from '../components/analysis/ClipAnalysisLayers';
-import { evidenceEntriesFromVideo } from '../components/analysis/EvidenceLog';
-import { DownloadProofPackButton } from '../components/analysis/DownloadProofPackButton';
 import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { OfficeLiveView } from '../components/shared/OfficeLiveView';
 
@@ -49,9 +44,6 @@ export function JobDetailPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const [playbookBusy, setPlaybookBusy] = useState(false);
-  const [playbookMsg, setPlaybookMsg] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setError(null);
@@ -84,30 +76,6 @@ export function JobDetailPage() {
 
   const file = useMemo(() => ({ record, proofs }), [record, proofs]);
   const pulse = useMemo(() => filePulse(proofs), [proofs]);
-  const hasCompletedAnalysis = useMemo(() => {
-    const videos = proofs?.videos ?? [];
-    return videos.some(
-      (v) =>
-        v.analysisStatus === 'done' ||
-        Boolean(v.aiSummary?.trim()) ||
-        (Array.isArray(v.events) && v.events.length > 0),
-    );
-  }, [proofs]);
-
-  async function saveAsPlaybook() {
-    if (!job?.id || playbookBusy) return;
-    setPlaybookBusy(true);
-    setPlaybookMsg(null);
-    try {
-      const res = await api.createPlaybookFromJob(job.id);
-      setPlaybookMsg('Saved to playbook library.');
-      navigate(`/playbooks?id=${encodeURIComponent(res.playbook.id)}`);
-    } catch (err) {
-      setPlaybookMsg(err instanceof ApiError ? err.message : 'Could not save playbook.');
-    } finally {
-      setPlaybookBusy(false);
-    }
-  }
 
   const beats = useMemo(
     () =>
@@ -253,116 +221,6 @@ export function JobDetailPage() {
         </section>
       )}
 
-        {proofs && ((proofs.videos?.length ?? 0) > 0 || (proofs.disputes?.length ?? 0) > 0 || (proofs.punchList?.length ?? 0) > 0) && (
-          <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-analysis">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-ink-900">Analysis</h2>
-                <p className="mt-0.5 text-xs text-ink-500">
-                  Know what happened, prove it, decide what&apos;s next — Glance first, Scan for
-                  who / decisions / next steps, Full evidence when you need the timed log.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {hasCompletedAnalysis && (
-                  <button
-                    type="button"
-                    data-testid="save-as-playbook"
-                    disabled={playbookBusy}
-                    onClick={() => void saveAsPlaybook()}
-                    className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-800 hover:bg-paper-100 disabled:opacity-50"
-                  >
-                    {playbookBusy ? 'Saving…' : 'Save as playbook'}
-                  </button>
-                )}
-                <DownloadProofPackButton jobId={job.id} />
-              </div>
-            </div>
-            {playbookMsg && (
-              <p className="mt-2 text-xs text-ink-600" data-testid="playbook-save-msg">
-                {playbookMsg}
-              </p>
-            )}
-            {(proofs.disputes?.length ?? 0) > 0 && (
-              <div className="mt-3">
-                <ShowDispute disputes={proofs.disputes ?? []} />
-              </div>
-            )}
-            {(proofs.punchList?.length ?? 0) > 0 && (
-              <div className="mt-3">
-                <PunchListPanel
-                  jobId={job.id}
-                  items={proofs.punchList ?? []}
-                  onSeek={(item) => {
-                    if (item.proofId == null || item.seekSeconds == null) return;
-                    const el = document.querySelector(
-                      `[data-proof-id="${item.proofId}"]`,
-                    ) as HTMLElement | null;
-                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    window.dispatchEvent(
-                      new CustomEvent('atmosphere:seek-proof', {
-                        detail: { proofId: item.proofId, seconds: item.seekSeconds },
-                      }),
-                    );
-                  }}
-                />
-              </div>
-            )}
-            <ol className="mt-4 space-y-4">
-              {(proofs.videos ?? []).map((video) => {
-                const pending =
-                  video.analysisStatus === 'queued' ||
-                  video.analysisStatus === 'running' ||
-                  video.narrationStatus === 'queued' ||
-                  video.narrationStatus === 'running';
-                const failed = video.analysisStatus === 'failed' || video.narrationStatus === 'failed';
-                return (
-                  <li key={video.id}>
-                    <p className="text-[11px] font-medium text-ink-500">
-                      {video.workDate}
-                      <span className="ml-1.5 font-normal text-ink-400">
-                        {video.company}
-                        {video.phase ? ` · ${video.phase}` : ''}
-                      </span>
-                    </p>
-                    {video.transcriptStatus && video.transcriptStatus !== 'done' ? (
-                      <p className="mt-1.5 text-[11px] text-ink-500">
-                        Mic: {video.transcriptStatus}
-                        {video.transcriptError ? ` — ${video.transcriptError}` : ''}
-                      </p>
-                    ) : null}
-                    {failed ? (
-                      <p className="mt-1.5 text-[11px] text-danger-600">
-                        Analysis failed{video.analysisStatus === 'failed' ? ' on the picture' : ''}.
-                        Re-run from Proof of work — Hear the mic / Watch it again.
-                      </p>
-                    ) : null}
-                    <ClipAnalysisLayers
-                      conversation={{
-                        ...(video.conversation ?? {}),
-                        transcriptText:
-                          video.transcriptText ??
-                          video.heardOnMic ??
-                          video.conversation?.transcriptText,
-                        transcriptSegments:
-                          video.transcriptSegments ?? video.conversation?.transcriptSegments,
-                      }}
-                      people={video.people}
-                      evidenceEntries={evidenceEntriesFromVideo(video)}
-                      evidenceStatus={
-                        failed
-                          ? 'failed'
-                          : pending && !evidenceEntriesFromVideo(video).length
-                            ? 'pending'
-                            : null
-                      }
-                    />
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        )}
 
         {blockers.length > 0 && (
           <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">

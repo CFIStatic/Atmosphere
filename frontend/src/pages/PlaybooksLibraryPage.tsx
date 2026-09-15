@@ -174,8 +174,8 @@ export function PlaybooksLibraryPage() {
         <div className="mt-8 rounded-xl border border-dashed border-line bg-paper-0/60 px-5 py-10 text-center">
           <p className="text-sm font-medium text-ink-800">No playbooks yet</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
-            Open a job file with completed analysis and choose <strong>Save as playbook</strong>.
-            Atmosphere turns the day&apos;s work into an ordered checklist your crew can reuse.
+            Playbooks are ordered checklists your crew can reuse. Ask your admin to add the first
+            one for your trade, or create one from a completed job via the API.
           </p>
           <Link
             to="/verifier-library"

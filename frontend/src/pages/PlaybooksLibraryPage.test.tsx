@@ -42,7 +42,7 @@ describe('PlaybooksLibraryPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/No playbooks yet/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Save as playbook/i)).toBeInTheDocument();
+    expect(screen.getByText(/ordered checklists/i)).toBeInTheDocument();
   });
 
   it('lists playbook cards', async () => {

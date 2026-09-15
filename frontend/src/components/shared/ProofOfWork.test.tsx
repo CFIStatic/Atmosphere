@@ -91,23 +91,20 @@ describe('ProofOfWork video collection', () => {
   });
 
   it('lists every uploaded video with picture and mic status', async () => {
-    const user = userEvent.setup();
     render(<ProofOfWork jobId="job-1" heading="Videos and analysis" initialData={catalog} />);
 
     expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Show me the dispute/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/None on this (clip|file)/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Every video on this job')).toBeInTheDocument();
+    expect(screen.getByTestId('job-video-list')).toBeInTheDocument();
+    expect(screen.getByText('Videos')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
-    expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
-    // Dense proof (exact transcript + evidence log) stays behind Full evidence.
+    // Dense Glance / Scan / Full evidence walls are off the job file.
+    expect(screen.queryByTestId('full-evidence')).not.toBeInTheDocument();
     expect(screen.queryByTestId('verbatim-transcript')).not.toBeInTheDocument();
     expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
-    expect(screen.getByTestId('full-evidence')).toBeInTheDocument();
-    await user.click(screen.getByTestId('full-evidence-summary'));
-    expect(screen.getByTestId('verbatim-transcript')).toBeInTheDocument();
-    expect(screen.getByTestId('evidence-log').textContent).toMatch(/We have not started the subfloor yet/);
-    expect(screen.getAllByText(/We have not started the subfloor yet/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByTestId('punch-list-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-as-playbook')).not.toBeInTheDocument();
     expect(
       screen.getByText((_, el) => el?.textContent === '42 seconds · Picture: read · Mic: heard'),
     ).toBeInTheDocument();
