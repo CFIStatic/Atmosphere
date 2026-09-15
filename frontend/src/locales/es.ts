@@ -33,6 +33,8 @@ export const ES: MessageCatalog = {
   'nav.themeModeHint': 'Modo {current}. Clic para {next}.',
   'nav.chatHistory': 'Historial de chats',
   'nav.newChat': 'Nuevo chat',
+  'nav.collapse': 'Contraer navegación',
+  'nav.expand': 'Expandir navegación',
 
   'settings.title': 'Ajustes',
   'settings.sectionsAria': 'Secciones de ajustes',
