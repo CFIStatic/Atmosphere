@@ -153,7 +153,8 @@ describe('JobAskPanel', () => {
     expect(
       await screen.findByText('Yes. The homeowner asked that the skylights be left alone.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('Live model · gemini-3.6-flash')).toBeInTheDocument();
+    expect(await screen.findByText('From this job file')).toBeInTheDocument();
+    expect(screen.queryByText(/Live model/)).not.toBeInTheDocument();
   });
 
   it('asks through a guest share instead of the office session', async () => {

@@ -593,9 +593,7 @@ export function JobAskPanel({
                     <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
                   )}
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
-                    <p className="mt-1.5 text-[11px] text-ink-400">
-                      {turn.model ? `Live model · ${turn.model}` : 'From this job file'}
-                    </p>
+                    <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                 </div>
               </li>
