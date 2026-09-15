@@ -88,6 +88,10 @@ describe('JobFileAskChrome source', () => {
     expect(chromeSrc).toContain('lg:block');
     expect(chromeSrc).toContain('writeAskSplitWidth');
     expect(chromeSrc).toContain('onDoubleClick');
+    expect(chromeSrc).toContain('cursor-col-resize');
+    expect(chromeSrc).toContain('job-file-ask-split-grip');
+    expect(chromeSrc).toContain('GripVertical');
+    expect(chromeSrc).toContain('-left-2 w-4');
   });
 
   it('does not put a bare flex utility on the Ask TabPanel', () => {
@@ -183,7 +187,10 @@ describe('JobFileAskChrome desktop split', () => {
         <p>File body</p>
       </JobFileAskChrome>,
     );
-    expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
+    const split = screen.getByTestId('job-file-ask-split');
+    expect(split).toBeInTheDocument();
+    expect(split).toHaveClass('cursor-col-resize');
+    expect(screen.getByTestId('job-file-ask-split-grip')).toBeInTheDocument();
     expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-width');
     unmount();
 
