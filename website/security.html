@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, database-enforced access, and an append-only audit trail." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Security · Atmosphere</title>
-  <meta property="og:title" content="Security · Atmosphere" />
+  <title>Security &amp; Architecture · Atmosphere</title>
+  <meta property="og:title" content="Security &amp; Architecture · Atmosphere" />
   <meta property="og:description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, database-enforced access, and an append-only audit trail." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
@@ -99,12 +99,14 @@
 
 <header class="page-hero">
   <div class="wrap">
-    <div class="eyebrow mono">Security</div>
+    <div class="eyebrow mono">Security &amp; Architecture</div>
     <h1>The shape of the system is the security model</h1>
     <p class="lede">
-      Access control at Atmosphere isn't a policy we promise to enforce in application
-      code. It's architecture: the database, the cookie jar, and the network direction
-      do the enforcing — and they can't be talked out of it.
+      Atmosphere is built for real job records: every claim can trace to source footage,
+      original uploads stay preserved, and access is controlled by organization and job.
+      Access control isn't a policy we promise to enforce in application code — it's
+      architecture. The database, the cookie jar, and the network direction do the
+      enforcing, and they can't be talked out of it.
     </p>
   </div>
 </header>
