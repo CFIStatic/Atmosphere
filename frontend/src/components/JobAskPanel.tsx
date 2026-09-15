@@ -24,6 +24,7 @@ import {
   seekTargetFromAnswer,
   splitAnswerCites,
 } from '../lib/askSeek';
+import { parseAskProseBlocks, type AskInline } from '../lib/askProse';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
@@ -41,7 +42,7 @@ export async function waitOutAskHold(startedAt: number, holdMs = ASK_MIN_TYPING_
   });
 }
 
-function AskAnswerBody({
+function AskCiteSpans({
   text,
   events,
   onSeek,
@@ -52,7 +53,7 @@ function AskAnswerBody({
 }) {
   const parts = splitAnswerCites(text, events);
   return (
-    <p className="whitespace-pre-wrap leading-relaxed">
+    <>
       {parts.map((part, index) =>
         part.kind === 'cite' && part.atSeconds != null ? (
           <button
@@ -69,7 +70,83 @@ function AskAnswerBody({
           <span key={`t-${index}`}>{part.text}</span>
         ),
       )}
-    </p>
+    </>
+  );
+}
+
+function AskInlineNodes({
+  nodes,
+  events,
+  onSeek,
+}: {
+  nodes: AskInline[];
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  return (
+    <>
+      {nodes.map((node, index) => {
+        if (node.kind === 'text') {
+          return <AskCiteSpans key={`t-${index}`} text={node.text} events={events} onSeek={onSeek} />;
+        }
+        if (node.kind === 'bold') {
+          return (
+            <strong key={`b-${index}`} className="font-semibold text-ink-900">
+              <AskInlineNodes nodes={node.children} events={events} onSeek={onSeek} />
+            </strong>
+          );
+        }
+        return (
+          <em key={`i-${index}`} className="italic text-ink-700">
+            <AskInlineNodes nodes={node.children} events={events} onSeek={onSeek} />
+          </em>
+        );
+      })}
+    </>
+  );
+}
+
+function AskAnswerBody({
+  text,
+  events,
+  onSeek,
+}: {
+  text: string;
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  const blocks = parseAskProseBlocks(text);
+  if (!blocks.length) {
+    return <p className="leading-relaxed">{text}</p>;
+  }
+  return (
+    <div className="space-y-2.5 text-[15px] leading-relaxed" data-testid="ask-answer-body">
+      {blocks.map((block, bi) =>
+        block.kind === 'list' ? (
+          block.ordered ? (
+            <ol key={`l-${bi}`} className="list-decimal space-y-1.5 pl-5 marker:text-ink-500">
+              {block.items.map((item, ii) => (
+                <li key={`i-${bi}-${ii}`} className="pl-0.5">
+                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <ul key={`l-${bi}`} className="list-disc space-y-1.5 pl-5 marker:text-ink-500">
+              {block.items.map((item, ii) => (
+                <li key={`i-${bi}-${ii}`} className="pl-0.5">
+                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <p key={`p-${bi}`} className="whitespace-pre-wrap">
+            <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
+          </p>
+        ),
+      )}
+    </div>
   );
 }
 

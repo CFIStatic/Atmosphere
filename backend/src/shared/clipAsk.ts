@@ -12,6 +12,7 @@
  * tab works in demo and in environments without a provider.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   extractPeoplePresent,
@@ -183,7 +184,7 @@ Rules:
 2. If the reading does not contain the answer, say so briefly ("The footage on file does not show that") and stop. Do not guess. EXCEPTION: when "Heard on the mic" is present and the question is about talk / conversation / what was said, answer from that transcript — never deny on-file speech (including TV/laptop audio in the room).
 3. LAYERED DEFAULT (Glance style) for broad asks ("what is happening", "what's going on", "describe this", "what are they talking about", "summarize") unless the user asks for depth:
    - Open with ONE plain sentence on what happened.
-   - Follow with a few key points only — prefer who was involved, what was decided, and what's next when the reading has them.
+   - Follow with a few markdown bullets only (use **Label:** sparingly) — prefer who was involved, what was decided, and what's next when the reading has them.
    - Optionally invite a deeper dig ("Want the exact quotes / who said what / timestamps?").
    - Do NOT paste every timestamped quote, the full transcript, or a wall of evidence on this first pass. A desk, TV, news clip, or conversation is a valid scene — not every film is construction.
 4. GO DEEP when they ask for specifics: exact quotes, who said X, timestamps, "be specific", "more detail", full conversation, verbatim, or follow-ups that dig in. Then quote EXACT transcript words with seek times ([m:ss] / spoken clock). Never invent, paraphrase, or clean up dialogue. Structured agreements may summarize, but any speech claim in deep mode still needs an exact quote.
@@ -192,7 +193,9 @@ Rules:
 7. When asked who is present / talking, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
 8. Never estimate cost, hours, or whether work was worth paying for.
 9. Preserve uncertainty marked in the reading ("unclear", "cannot confirm"). Prefer "the footage does not show that" over a plausible guess.
-10. Tone: warm expert colleague, lightly structured, no stiff disclaimers, no wall-of-evidence unless depth was requested.`;
+10. Tone: warm expert colleague, lightly structured, no stiff disclaimers, no wall-of-evidence unless depth was requested.
+
+` + ASK_PROSE_FORMAT_RULES;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -1079,5 +1082,6 @@ export async function answerFromClip(input: {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
-  return { answer: completed.text, model: completed.model, usage: completed.usage };
+  const answer = normalizeAskProse(completed.text);
+  return { answer, model: completed.model, usage: completed.usage };
 }
