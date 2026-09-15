@@ -22,6 +22,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DocumentTitle } from './components/DocumentTitle';
+import { DocumentRobotsMeta } from './components/DocumentRobotsMeta';
 import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
@@ -332,6 +333,7 @@ export default function App() {
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
         <DocumentTitle />
+        <DocumentRobotsMeta />
         <Suspense fallback={<FullScreenSpinner />}>
           <TermsGate>
           <Routes>

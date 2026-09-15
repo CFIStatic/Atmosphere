@@ -273,7 +273,7 @@
       <p>
         Once integrity checks and the reading are attached, the clip enters the chain of
         custody. The hash is fixed. The findings are fixed. The custody log is append-only:
-        nothing edits history, including whoever owns the job. Eighteen months later, the
+        prior entries are not rewritten, including by whoever owns the job. Eighteen months later, the
         disputed Tuesday is still footage with a location, a timestamp, a reading, and
         every access since — not two memories of a phone call.
       </p>
@@ -288,8 +288,8 @@
         <p>Before, after, stage of work, coverage gaps — every label ties back to what the footage actually showed.</p>
       </div>
       <div class="quiet-item">
-        <h3>Nothing deletes</h3>
-        <p>Revocation, correction, and dispute all add entries. The log outranks its owner.</p>
+        <h3>History is not rewritten</h3>
+        <p>Revocation, correction, and dispute add entries. Soft-delete can hide a clip from everyday views; the custody log still records what happened.</p>
       </div>
     </div>
   </div>
@@ -302,10 +302,12 @@
       <h2>Hand the record to the person who releases the money</h2>
       <p>
         Customers, reviewers, and attorneys review evidence in the Verifier — a records
-        screen, not an operations console. Shares are account-to-account: issued to a
-        named person's email, opening only for an Atmosphere account signed in with it.
-        Forwarded, the link refuses — which is what puts a verified name on every
-        custody entry instead of "someone with the link".
+        screen, not an operations console. Verifier evidence shares are account-to-account:
+        issued to a named person's email, and they open only for an Atmosphere account
+        signed in with that address — so custody entries can name the signed-in reviewer
+        rather than "someone with the link". Separate job-progress invites for homeowners
+        use a guest link that works for whoever holds the URL until it is revoked or
+        claimed to an account.
       </p>
     </div>
     <div class="quiet-row">
@@ -352,7 +354,7 @@
       <div class="sec-card">
         <span class="kbd mono">append-only</span>
         <h3>The log outranks its owner</h3>
-        <p>Nothing in the chain of custody can be edited or removed — including by whoever owns the job. A custody record the custodian can change is not a custody record.</p>
+        <p>The custody log is append-only: new events are recorded and prior entries are not rewritten — including by whoever owns the job. Clips can be hidden from everyday product views; vault and legal-hold paths may still retain them for preservation.</p>
       </div>
     </div>
   </div>

@@ -7466,6 +7466,21 @@
    * ------------------------------------------------------------------ */
 
   var SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+  // Path form used in emails: /verifier/shared/<token>
+  if (!SHARE_TOKEN) {
+    var sharePathMatch = location.pathname.match(/\/verifier\/shared\/([^/]+)/);
+    if (sharePathMatch) SHARE_TOKEN = decodeURIComponent(sharePathMatch[1]);
+  }
+  // Share URLs carry credentials — keep them out of search indexes.
+  if (SHARE_TOKEN) {
+    var robotsMeta = document.querySelector('meta[name="robots"]');
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.setAttribute('name', 'robots');
+      document.head.appendChild(robotsMeta);
+    }
+    robotsMeta.setAttribute('content', 'noindex, nofollow, noarchive');
+  }
   // Inside the platform the same page hydrates with the org's whole library —
   // no token, the signed-in session is the credential.
   var ORG_MODE = false;
