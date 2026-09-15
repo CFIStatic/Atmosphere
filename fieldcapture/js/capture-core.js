@@ -1706,7 +1706,7 @@
 
   /* ---------- upload while recording ----------
      MediaRecorder hands over a chunk every second. The streamer groups them
-     into parts of ~8 MB and PUTs each one to its own signed URL while the
+     into parts of ~4 MB and PUTs each one to its own signed URL while the
      camera keeps rolling — one part at a time, strictly in order. By
      hold-to-finish most of the film is already in storage; the queue sends
      the tail and asks the office to stitch. This is a head start, never the
@@ -1714,7 +1714,8 @@
      everything from `bytesDone` on. */
 
   var CLIP_ID = /^[a-z0-9]{6,32}$/;
-  var STREAM_PART_BYTES = 8 * 1024 * 1024;
+  /* ~4 MB ≈ 16s at 2 Mbps — keeps office Live under ~30s lag. */
+  var STREAM_PART_BYTES = 4 * 1024 * 1024;
   var STREAM_MAX_BYTES = 512 * 1024 * 1024;
   var STREAM_MAX_PARTS = 128;
   var STREAM_FINISH_WAIT_MS = 20 * 1000;

@@ -63,6 +63,8 @@ import {
   listJobAskThreads,
   createJobAskThread,
   proofVideoUrl,
+  listJobLiveSessions,
+  getJobLiveSession,
   reanalyseProofDay,
   requeueProofTranscript,
   liveObserve,
@@ -1824,6 +1826,9 @@ sharedJobsRouter.get(
 
 sharedJobsRouter.get('/proofs/pulse', proofsPulse);
 sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
+/** Org office Live / near-live Field Capture — not homeowner progress grants. */
+sharedJobsRouter.get('/shared/:jobId/live', listJobLiveSessions);
+sharedJobsRouter.get('/shared/:jobId/live/:clipId', getJobLiveSession);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/disputes', jobDisputes);
 sharedJobsRouter.get('/shared/:jobId/punch-list', jobPunchList);

@@ -169,7 +169,8 @@
     "20260914210000_daily_job_reports.sql",
     "20260914220000_trade_playbooks.sql",
     "20260915010000_ask_threads.sql",
-    "20260915120000_child_blur_enabled.sql"
+    "20260915120000_child_blur_enabled.sql",
+    "20260915180000_proof_live_sessions.sql"
   ],
   "migrations": [
     {
@@ -5458,6 +5459,23 @@
       "indistinguishableReason": null,
       "expect": [
         "column|public.orgs.child_blur_enabled"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260915180000_proof_live_sessions",
+      "file": "20260915180000_proof_live_sessions.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.proof_live_sessions",
+        "index|public.proof_live_sessions.proof_live_sessions_pkey",
+        "index|public.proof_live_sessions.proof_live_sessions_org_job_clip_uidx",
+        "index|public.proof_live_sessions.proof_live_sessions_job_live_idx",
+        "policy|public.proof_live_sessions.proof_live_sessions_select_member",
+        "rls|public.proof_live_sessions"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

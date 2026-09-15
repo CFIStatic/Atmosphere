@@ -3231,6 +3231,34 @@ export interface SafetyIncident {
   createdAt: string;
 }
 
+
+export type OfficeLiveSession = {
+  clipId: string;
+  partyId: string;
+  workDate: string;
+  phase: string;
+  mimeType: string;
+  extension: string;
+  storagePath: string;
+  startedAt: string;
+  lastPartAt: string;
+  lastMintIndex: number;
+  status: 'live';
+  latencyNote: string;
+  privacyNote: string;
+};
+
+export type OfficeLiveSessionDetail = {
+  session: OfficeLiveSession;
+  parts: Array<{ index: number; path: string; url: string }>;
+  partCount: number;
+  ready: boolean;
+  expiresInSeconds: number;
+  latencyNote: string;
+  privacyNote: string;
+  pollIntervalSeconds: number;
+};
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -3947,6 +3975,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+
+  jobLiveSessions: (jobId: string) =>
+    request<{
+      sessions: OfficeLiveSession[];
+      latencyNote: string;
+      privacyNote: string;
+      pollIntervalSeconds: number;
+    }>(`/api/operations/shared/${jobId}/live`, { method: 'GET' }),
+
+  jobLiveSession: (jobId: string, clipId: string) =>
+    request<OfficeLiveSessionDetail>(
+      `/api/operations/shared/${jobId}/live/${encodeURIComponent(clipId)}`,
+      { method: 'GET' },
+    ),
 
   jobSafetyIncidents: (jobId: string, status: 'open' | 'all' = 'open') =>
     request<{

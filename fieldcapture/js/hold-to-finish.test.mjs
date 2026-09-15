@@ -1219,7 +1219,7 @@ assert.equal(typeof Core.createDayFilmStreamer, 'function');
 assert.equal(typeof Core.mintPartUploadUrl, 'function');
 assert.equal(typeof Core.newClipId, 'function');
 assert.equal(typeof Core.localDateISO, 'function');
-assert.equal(Core.STREAM_PART_BYTES, 8 * 1024 * 1024);
+assert.equal(Core.STREAM_PART_BYTES, 4 * 1024 * 1024);
 assert.equal(Core.STREAM_MAX_BYTES, 512 * 1024 * 1024, 'the office stitches at most 512 MB');
 assert.equal(Core.STREAM_MAX_PARTS, 128);
 assert.match(Core.newClipId(), Core.CLIP_ID, 'clip ids fit the storage path rule');

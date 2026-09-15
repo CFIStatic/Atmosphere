@@ -15,6 +15,7 @@ export function isLiveFirstPath(path: string): boolean {
   if (path === '/api/operations/proofs/pulse') return true;
   if (/^\/api\/operations\/shared\/[^/]+$/.test(path)) return true;
   if (/^\/api\/operations\/shared\/[^/]+\/proof$/.test(path)) return true;
+  if (/^\/api\/operations\/shared\/[^/]+\/live(\/[^/]+)?$/.test(path)) return true;
   if (/^\/api\/operations\/shared\/[^/]+\/duplicate$/.test(path)) return true;
   if (/^\/api\/operations\/shared\/[^/]+\/evidence\/[^/]+$/.test(path)) return true;
   return false;
