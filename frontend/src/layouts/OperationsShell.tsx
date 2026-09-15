@@ -5,6 +5,10 @@ import { VerifierFrame } from '../components/VerifierFrame';
 import { MenuIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useT } from '../lib/i18n';
+import {
+  OFFICE_RAIL_COLLAPSED_KEY,
+  readOfficeRailCollapsed,
+} from '../lib/officeRailCollapsed';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { isJobFilePath } from './jobFilePath';
 
@@ -23,6 +27,9 @@ import { isJobFilePath } from './jobFilePath';
  * becomes a hamburger drawer. The account chip stays in the top-right of
  * that header so Platform is not missing a profile while Field Capture's own
  * top bar is hidden.
+ *
+ * Desktop can collapse the rail to an icon strip (preference in localStorage)
+ * so Ask / job content can widen; phone drawer is unchanged.
  */
 export function OperationsShell() {
   const t = useT();
@@ -31,11 +38,39 @@ export function OperationsShell() {
   const isJobFile = isJobFilePath(pathname);
   const phone = usePhoneShell();
   const [railOpen, setRailOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(() =>
+    typeof window === 'undefined' ? false : readOfficeRailCollapsed(),
+  );
   useFeatureTimer('verifier_library', isLibrary);
 
   useEffect(() => {
     setRailOpen(false);
   }, [pathname]);
+
+  // Mirror the verifier iframe's collapse preference so host padding tracks
+  // the icon rail. Same-origin storage events cover other frames; postMessage
+  // covers the writing frame itself.
+  useEffect(() => {
+    function syncFromStorage() {
+      setRailCollapsed(readOfficeRailCollapsed());
+    }
+    function onStorage(event: StorageEvent) {
+      if (event.key === OFFICE_RAIL_COLLAPSED_KEY) syncFromStorage();
+    }
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { atmosphere?: string; collapsed?: unknown } | null;
+      if (data?.atmosphere === 'rail-collapsed' && typeof data.collapsed === 'boolean') {
+        setRailCollapsed(data.collapsed);
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('message', onMessage);
+    syncFromStorage();
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('message', onMessage);
+    };
+  }, []);
 
   const railClass = isLibrary
     ? 'fixed inset-0 z-0 h-full w-full'
@@ -45,6 +80,8 @@ export function OperationsShell() {
         }`
       : 'operations-rail fixed inset-y-0 start-0 z-20 h-full overflow-hidden bg-panel';
 
+  const hostCollapsed = !phone && railCollapsed;
+
   return (
     <div
       className={
@@ -52,6 +89,7 @@ export function OperationsShell() {
           ? 'operations-chrome relative h-[100dvh] overflow-hidden bg-paper-100'
           : 'operations-chrome relative min-h-screen bg-paper-100'
       }
+      data-office-rail-collapsed={hostCollapsed ? 'true' : undefined}
     >
       <VerifierFrame railOnly={!isLibrary} className={railClass} />
       {phone && !isLibrary && railOpen && (

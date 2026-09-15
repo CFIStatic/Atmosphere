@@ -181,6 +181,19 @@ describe('verifier office rail', () => {
     );
   });
 
+
+  it('offers a collapsible icon rail with a11y and localStorage persistence', () => {
+    expect(verifierHtml).toContain('id="rail-collapse"');
+    expect(verifierHtml).toContain('html[data-rail-collapsed]');
+    expect(verifierHtml).toContain("RAIL_COLLAPSED_KEY = 'atmosphere.officeRailCollapsed'");
+    expect(verifierHtml).toContain('function setRailCollapsed');
+    expect(verifierHtml).toContain("atmosphere: 'rail-collapsed'");
+    expect(verifierHtml).toContain('aria-expanded');
+    expect(verifierHtml).toContain('data-i18n-chrome-aria="collapseNav"');
+    expect(verifierHtml).toContain('--rail-w: 56px');
+    expect(verifierHtml).toContain('body[data-atm-phone-drawer] .rail-collapse');
+  });
+
   it('does not show a Legal hold filter on the Dashboard', () => {
     expect(verifierHtml).not.toContain('data-view="hold"');
     expect(verifierHtml).not.toContain('id="n-hold"');

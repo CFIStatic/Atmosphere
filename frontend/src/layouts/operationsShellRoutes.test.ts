@@ -100,11 +100,16 @@ describe('office rail width', () => {
     expect(css).toContain('--office-rail-w: 248px');
     expect(css).toContain('--office-rail-w: 236px');
     expect(css).toContain('--office-rail-w: 228px');
+    expect(css).toContain("--office-rail-w: 56px");
+    expect(css).toContain("data-office-rail-collapsed='true'");
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
     expect(shell).toContain('operations-chrome');
+    expect(shell).toContain('data-office-rail-collapsed');
+    expect(shell).toContain('readOfficeRailCollapsed');
+    expect(shell).toContain("'rail-collapsed'");
     expect(shell).not.toContain('w-[248px]');
   });
 });
