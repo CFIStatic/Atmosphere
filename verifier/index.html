@@ -1957,16 +1957,13 @@
   </div>
 </div>
 
-<!-- One menu, repositioned to whichever row's dots opened it. Share, Delete,
-     Save, Export — clip actions only appear once a video exists. -->
+<!-- One menu, repositioned to whichever row's dots opened it. Share, Restore,
+     Save, Export — no Delete: product policy keeps evidence. Restore remains for
+     Global Admin when a clip is already queued for purge. -->
 <div class="rowmenu" id="rowmenu" role="menu" aria-label="Clip actions" hidden>
   <button role="menuitem" data-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg>
     Share
-  </button>
-  <button role="menuitem" data-act="delete" class="danger" id="rowmenu-delete">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
-    Delete
   </button>
   <button role="menuitem" data-act="restore" id="rowmenu-restore" hidden>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
@@ -2001,10 +1998,6 @@
   <button role="menuitem" data-job-act="record">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
     Open full record
-  </button>
-  <button role="menuitem" data-job-act="delete" class="danger" id="jobmenu-delete">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
-    Delete
   </button>
 </div>
 <div class="detail" id="jobfile-sheet" role="dialog" aria-modal="true" aria-labelledby="jf-title">
@@ -4208,9 +4201,9 @@
    * One menu element, moved to whichever row's dots opened it — a menu per
    * row is a hundred hidden nodes doing the job of one. Each action lands
    * somewhere honest today: share hands over a reference and names where
-   * real shares come from, delete respects a legal hold before it respects
-   * a click, save routes to the download flow that settles the fee, and
-   * export produces the record itself.
+   * real shares come from, restore undoes a pending purge for Global Admin,
+   * save routes to the download flow that settles the fee, and
+   * export produces the record itself. Product UI never deletes evidence.
    * ------------------------------------------------------------------ */
 
   var menuEl = $('#rowmenu');
@@ -4225,10 +4218,7 @@
     btn.setAttribute('aria-expanded', 'true');
     var clip = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     var pending = !!(clip && clip.pendingDeletion);
-    var admin = !ORG_MODE || isSessionGlobalAdmin();
-    var delBtn = document.getElementById('rowmenu-delete');
     var restoreBtn = document.getElementById('rowmenu-restore');
-    if (delBtn) delBtn.hidden = !admin || pending;
     if (restoreBtn) restoreBtn.hidden = !(ORG_MODE && isSessionGlobalAdmin() && pending);
     menuEl.hidden = false;
     var r = btn.getBoundingClientRect();
@@ -4258,8 +4248,6 @@
     closeJobMenu();
     jobMenuFor = jobKey; jobMenuBtn = btn;
     btn.setAttribute('aria-expanded', 'true');
-    var jdel = document.getElementById('jobmenu-delete');
-    if (jdel) jdel.hidden = ORG_MODE && !isSessionGlobalAdmin();
     jobMenuEl.hidden = false;
     var r = btn.getBoundingClientRect();
     var mw = jobMenuEl.offsetWidth, mh = jobMenuEl.offsetHeight;
@@ -4331,21 +4319,6 @@
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(link).then(done, function () { window.prompt('Clip reference', link); done(); });
       } else { window.prompt('Clip reference', link); done(); }
-      return;
-    }
-
-    if (act === 'delete') {
-      if (ORG_MODE && !isSessionGlobalAdmin()) {
-        toast('Only a Global Admin can delete a video.');
-        return;
-      }
-      // The hold outranks the click, exactly as it outranks the retention
-      // schedule. The refusal is the feature.
-      if (item.hold && item.hold.on) {
-        toast('On legal hold — this clip cannot be deleted while the hold stands.');
-        return;
-      }
-      deleteLibraryClip(item);
       return;
     }
 
@@ -4442,14 +4415,9 @@
     if (tab === 'share') return 'Share with homeowner';
     if (tab === 'rename') return 'Rename this job file';
     if (tab === 'duplicate') return 'Duplicate this job file';
-    if (tab === 'delete') return 'Delete this job file';
     return 'Share this job file';
   }
 
-  function jobFileDeleteNameMatches(fileName, typed) {
-    var expected = String(fileName || '').trim();
-    return expected.length > 0 && expected === String(typed || '').trim();
-  }
 
   function suggestedDuplicateTitle(name) {
     var base = String(name || 'Job').trim() || 'Job';
@@ -4469,7 +4437,7 @@
     closeJobMenu();
     hydrateJobBoard(jobKey);
     jobSheet.key = jobKey;
-    jobSheet.tab = tab === 'invite' || tab === 'rename' || tab === 'duplicate' || tab === 'delete' ? tab : 'share';
+    jobSheet.tab = tab === 'invite' || tab === 'rename' || tab === 'duplicate' ? tab : 'share';
     jobSheet.made = null;
     jobSheet.error = null;
     jobSheet.busy = false;
@@ -4479,7 +4447,7 @@
     if (title) title.textContent = jobFileSheetTitle(jobSheet.tab);
     if (meta) meta.textContent = job.name + (job.number ? ' · #' + job.number : '');
     var tabs = document.querySelector('#jobfile-sheet .jf-tabs');
-    if (tabs) tabs.hidden = jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate' || jobSheet.tab === 'delete';
+    if (tabs) tabs.hidden = jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate';
     document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
       btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
     });
@@ -4500,42 +4468,6 @@
     var key = jobSheet.key;
     var job = JOBS[key] || { name: 'Job' };
     var b = JOB_BOARD[key];
-    if (jobSheet.tab === 'delete') {
-      body.innerHTML =
-        '<p class="jf-warn">This cannot be undone. The file leaves the dashboard. Footage and the record stay in the vault, but you cannot open them from here again.</p>' +
-        '<p class="jf-note">Type <span class="jf-name-exact">' + esc(job.name) + '</span> to confirm you want to delete this job file.</p>' +
-        (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
-        '<form id="jf-delete-form">' +
-          '<label><span>File name</span><input name="title" required autocomplete="off" spellcheck="false" placeholder="' + esc(job.name) + '" /></label>' +
-          '<div class="jf-actions">' +
-            '<button type="button" class="jf-cancel" id="jf-delete-cancel">Cancel</button>' +
-            '<button type="submit" class="jf-submit danger" disabled>' +
-              (jobSheet.busy ? 'Deleting…' : 'Delete permanently') +
-            '</button>' +
-          '</div>' +
-        '</form>';
-      var deleteForm = document.getElementById('jf-delete-form');
-      if (deleteForm) {
-        var confirmInput = deleteForm.querySelector('input[name="title"]');
-        var deleteBtn = deleteForm.querySelector('button[type="submit"]');
-        var cancelBtn = document.getElementById('jf-delete-cancel');
-        if (cancelBtn) cancelBtn.addEventListener('click', closeJobFileSheet);
-        function syncDeleteBtn() {
-          if (!deleteBtn) return;
-          deleteBtn.disabled = jobSheet.busy || !jobFileDeleteNameMatches(job.name, confirmInput && confirmInput.value);
-        }
-        if (confirmInput) {
-          confirmInput.addEventListener('input', syncDeleteBtn);
-          confirmInput.focus();
-        }
-        deleteForm.addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          submitJobFileDelete(deleteForm);
-        });
-        syncDeleteBtn();
-      }
-      return;
-    }
     if (jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate') {
       var suggested = jobSheet.tab === 'duplicate' ? suggestedDuplicateTitle(job.name) : job.name;
       body.innerHTML =
@@ -4626,52 +4558,8 @@
     if (EMBEDDED) window.parent.postMessage({ atmosphere: 'library-changed' }, '*');
   }
 
-  function applyDeletedJob(key) {
-    delete JOBS[key];
-    EVIDENCE = EVIDENCE.filter(function (e) { return e.job !== key; });
-    render();
-    notifyLibraryChanged();
-  }
 
-  function applyDeletedClip(id) {
-    EVIDENCE = EVIDENCE.filter(function (e) { return e.id !== id; });
-    if (state.open && state.open.id === id) closePreview();
-    render();
-    notifyLibraryChanged();
-  }
 
-  function deleteLibraryClip(item) {
-    if (!item || !item.id) return;
-    if (ORG_MODE && !isSessionGlobalAdmin()) {
-      toast('Only a Global Admin can delete a video.');
-      return;
-    }
-    if (item._remote && ORG_MODE && item.job) {
-      apiFetch('/api/operations/shared/' + encodeURIComponent(item.job) + '/evidence/' + encodeURIComponent(item.id), {
-        method: 'DELETE'
-      }).then(function (r) {
-        return r.json().then(function (body) { return { ok: r.ok, body: body }; }).catch(function () {
-          return { ok: r.ok, body: {} };
-        });
-      }).then(function (res) {
-        if (!res.ok) {
-          toast((res.body && (res.body.error || res.body.message)) || 'Could not delete that clip.');
-          return;
-        }
-        item.pendingDeletion = true;
-        item.deletedAt = res.body && res.body.deletedAt;
-        item.scheduledPurgeAt = res.body && res.body.scheduledPurgeAt;
-        render();
-            notifyLibraryChanged();
-        toast('Queued for permanent deletion in 30 days. You can restore until then.');
-      }).catch(function (err) {
-        toast(err && err.message ? err.message : 'Could not delete that clip.');
-      });
-      return;
-    }
-    applyDeletedClip(item.id);
-    toast('Removed from this library view.');
-  }
 
   function restoreLibraryClip(item) {
     if (!item || !item.id || !item.job) return;
@@ -4717,49 +4605,6 @@
     return id;
   }
 
-  function submitJobFileDelete(form) {
-    var key = jobSheet.key;
-    var job = JOBS[key] || { name: 'Job' };
-    var typed = (form.title.value || '').trim();
-    if (!jobFileDeleteNameMatches(job.name, typed)) {
-      jobSheet.error = 'Type the file name exactly as it appears on the dashboard.';
-      paintJobFileSheet();
-      return;
-    }
-    jobSheet.busy = true;
-    jobSheet.error = null;
-    paintJobFileSheet();
-    if (!canOpenJobRecord(key) || !ORG_MODE) {
-      applyDeletedJob(key);
-      jobSheet.busy = false;
-      closeJobFileSheet();
-      toast('Deleted ' + job.name + '. This cannot be undone.');
-      return;
-    }
-    apiFetch('/api/operations/shared/' + encodeURIComponent(key), {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: job.name })
-    }).then(function (r) {
-      return r.json().then(function (body) { return { ok: r.ok, body: body }; }).catch(function () {
-        return { ok: r.ok, body: {} };
-      });
-    }).then(function (res) {
-      jobSheet.busy = false;
-      if (!res.ok) {
-        jobSheet.error = friendlyJobFileError(res.body && (res.body.error || res.body.message), 'Could not delete that job file.');
-        paintJobFileSheet();
-        return;
-      }
-      applyDeletedJob(key);
-      closeJobFileSheet();
-      toast('Deleted ' + job.name + '. This cannot be undone.');
-    }).catch(function (err) {
-      jobSheet.busy = false;
-      jobSheet.error = err && err.message ? err.message : 'Could not delete that job file.';
-      paintJobFileSheet();
-    });
-  }
 
   function submitJobFileName(form) {
     var key = jobSheet.key;

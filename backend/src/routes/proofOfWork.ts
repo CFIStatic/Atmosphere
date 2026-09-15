@@ -5,10 +5,6 @@ import { HttpError } from '../lib/errors.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
-import {
-  assertGlobalAdminCanDeleteVideo,
-  scheduledPurgeAt,
-} from '../lib/videoDeletePolicy.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
 import {
   createAskThread,
@@ -72,7 +68,7 @@ import {
   persistProofActions,
   type VisionAction,
 } from '../shared/proofActions.js';
-import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
+import { applyOpenHoldToProof, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { transcriptionEnabled } from '../lib/transcription.js';
 import { enrichProofConversation } from '../audio/proofConversation.js';
@@ -3806,74 +3802,18 @@ export async function setEvidenceHold(req: Request, res: Response, next: NextFun
 
 /**
  * DELETE /api/operations/shared/:jobId/evidence/:proofId
- * Global Admin only. Queue the clip for permanent purge in 30 days.
+ * Product policy: no deleting evidence from the application. Soft-delete /
+ * scheduled purge / legal-hold infrastructure remains for ops retention
+ * sweeps and Global Admin restore of already-queued clips.
  */
-export async function deleteEvidence(req: Request, res: Response, next: NextFunction) {
+export async function deleteEvidence(req: Request, _res: Response, next: NextFunction) {
   try {
-    const { orgId, userId, role, supabase } = await requireOrgContext(req);
-    assertGlobalAdminCanDeleteVideo(role);
-    const now = new Date();
-    const nowIso = now.toISOString();
-    const purgeAt = scheduledPurgeAt(now);
-    // SELECT policies hide deleted_at rows. Postgres treats that as an implicit
-    // WITH CHECK on UPDATE, so a user-JWT stamp fails with an RLS error.
-    // Service role bypasses it; the caller is already a Global Admin here.
-    const writer = writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw;
-    const { data: existing, error: existingErr } = await writer
-      .from('job_proofs')
-      .select('id, legal_hold')
-      .eq('org_id', orgId)
-      .eq('job_id', req.params.jobId)
-      .eq('id', req.params.proofId)
-      .is('deleted_at', null)
-      .maybeSingle();
-    if (existingErr) throw new HttpError(400, existingErr.message, 'delete_failed');
-    if (!existing) throw new HttpError(404, 'Evidence not found', 'proof_not_found');
-    if ((existing as { legal_hold?: boolean | null }).legal_hold) {
-      throw new HttpError(
-        409,
-        'On legal hold — this clip cannot be deleted while the hold stands.',
-        'legal_hold',
-      );
-    }
-
-    const { data, error } = await writer
-      .from('job_proofs')
-      .update({
-        deleted_at: nowIso,
-        deleted_by: userId,
-        scheduled_purge_at: purgeAt,
-      })
-      .eq('org_id', orgId)
-      .eq('job_id', req.params.jobId)
-      .eq('id', req.params.proofId)
-      .is('deleted_at', null)
-      .select('id, storage_path, job_id')
-      .maybeSingle();
-    if (error) throw new HttpError(400, error.message, 'delete_failed');
-    if (!data) throw new HttpError(404, 'Evidence not found', 'proof_not_found');
-
-    await markSourceDeleted('job_proof', req.params.proofId);
-    const actor = await actorFor(supabase, userId);
-    await recordAccess(supabase, {
-      orgId,
-      jobId: req.params.jobId,
-      proofId: req.params.proofId,
-      action: 'deleted',
-      detail: `Global Admin queued permanent deletion for ${purgeAt}.`,
-      ...actor,
-    });
-    await recordUserAction({
-      actorUserId: userId,
-      actorLabel: actor.actorLabel,
-      orgId,
-      action: 'video.deleted',
-      resourceType: 'proof',
-      resourceId: req.params.proofId,
-      detail: { jobId: req.params.jobId, scheduledPurgeAt: purgeAt },
-    });
-
-    res.json({ ok: true, deletedAt: nowIso, scheduledPurgeAt: purgeAt });
+    await requireOrgContext(req);
+    throw new HttpError(
+      410,
+      'Deleting evidence from the application is no longer available.',
+      'evidence_delete_removed',
+    );
   } catch (err) {
     next(err);
   }

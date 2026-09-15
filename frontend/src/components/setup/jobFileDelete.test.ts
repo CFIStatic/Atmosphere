@@ -5,41 +5,37 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
+const sharedJobsSrc = readFileSync(
+  resolve(here, '../../../../backend/src/routes/sharedJobs.ts'),
+  'utf8',
+);
 
-describe('Dashboard job-file delete', () => {
-  it('puts Delete on the kebab menu next to rename and duplicate', () => {
+describe('Dashboard job-file delete policy', () => {
+  it('removes Delete from the job-file kebab and keeps rename / duplicate / share', () => {
     const menu = verifierHtml.match(/id="jobmenu"[\s\S]*?<\/div>/);
     expect(menu).not.toBeNull();
     expect(menu![0]).toContain('data-job-act="rename"');
     expect(menu![0]).toContain('data-job-act="duplicate"');
-    expect(menu![0]).toContain('data-job-act="delete"');
-    expect(menu![0]).toMatch(/data-job-act="delete"[\s\S]*Delete/);
-    expect(menu![0]).toContain('class="danger"');
+    expect(menu![0]).toContain('data-job-act="share"');
+    expect(menu![0]).not.toContain('data-job-act="delete"');
+    expect(menu![0]).not.toMatch(/>\s*Delete\s*</);
+    expect(verifierHtml).not.toContain('jobmenu-delete');
+    expect(verifierHtml).not.toContain('Delete permanently');
+    expect(verifierHtml).not.toContain('function submitJobFileDelete');
   });
 
-  it('asks for the file name and says the delete cannot be undone', () => {
-    expect(verifierHtml).toContain("if (tab === 'delete') return 'Delete this job file'");
-    expect(verifierHtml).toContain('This cannot be undone.');
-    expect(verifierHtml).toContain('Type <span class="jf-name-exact">');
-    expect(verifierHtml).toContain('Delete permanently');
-    expect(verifierHtml).toContain('function jobFileDeleteNameMatches');
-    expect(verifierHtml).toContain("method: 'DELETE'");
-    expect(verifierHtml).toContain('function submitJobFileDelete');
-    expect(verifierHtml).toContain('function applyDeletedJob');
-    expect(verifierHtml).toContain('function notifyLibraryChanged');
-    expect(verifierHtml).toContain("atmosphere: 'library-changed'");
-    expect(verifierHtml).toContain('!canOpenJobRecord(key) || !ORG_MODE');
-  });
-
-  it('sizes the Dashboard delete sheet like the office job-file dialog', () => {
+  it('keeps the compact job-file sheet for rename / duplicate / share', () => {
     expect(verifierHtml).toContain('class="sheet sheet-narrow"');
     expect(verifierHtml).toMatch(/\.sheet\.sheet-narrow\s*\{[^}]*width:\s*min\(28rem,\s*100%\)/);
-    expect(verifierHtml).toMatch(/\.sheet\.sheet-narrow\s*\{[^}]*height:\s*auto/);
-    const fullBleed = verifierHtml.indexOf('.sheet {\n    position: relative;\n    width: min(1440px, 100%)');
-    const compact = verifierHtml.indexOf('.sheet.sheet-narrow {');
-    expect(fullBleed).toBeGreaterThan(-1);
-    expect(compact).toBeGreaterThan(fullBleed);
-    expect(verifierHtml).toContain('class="jf-actions"');
-    expect(verifierHtml).toContain('id="jf-delete-cancel"');
+    expect(verifierHtml).toContain('class="jf-submit"');
+    expect(verifierHtml).toContain("if (tab === 'rename') return 'Rename this job file'");
+  });
+
+  it('returns 410 from the job-file DELETE API so old clients cannot delete', () => {
+    const start = sharedJobsSrc.indexOf("sharedJobsRouter.delete('/shared/:jobId'");
+    expect(start).toBeGreaterThan(0);
+    const fn = sharedJobsSrc.slice(start, start + 800);
+    expect(fn).toMatch(/410/);
+    expect(fn).toContain('job_file_delete_removed');
   });
 });

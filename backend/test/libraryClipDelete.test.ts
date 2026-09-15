@@ -16,20 +16,21 @@ const purgeSql = readFileSync(
   'utf8',
 );
 
-test('clip delete does not open a browser confirm dialog', () => {
-  assert.equal(verifierHtml.includes('The chain of custody keeps the record of its life either way.'), false);
-  assert.match(verifierHtml, /if \(act === 'delete'\)[\s\S]*deleteLibraryClip\(item\)/);
-  assert.doesNotMatch(verifierHtml, /window\.confirm\(\s*'Delete '/);
+test('clip overflow menu has no Delete affordance', () => {
+  assert.equal(verifierHtml.includes('data-act="delete"'), false);
+  assert.equal(verifierHtml.includes('function deleteLibraryClip'), false);
+  assert.match(verifierHtml, /data-act="restore"/);
+  assert.match(verifierHtml, /data-act="share"/);
+  assert.match(verifierHtml, /function restoreLibraryClip/);
 });
 
-test('deleteEvidence is Global Admin only and queues a 30-day purge', () => {
+test('deleteEvidence returns 410 so product clients cannot queue a purge', () => {
   const fn = deleteEvidenceSrc.slice(deleteEvidenceSrc.indexOf('export async function deleteEvidence'));
   const end = fn.indexOf('export async function restoreEvidence');
   const body = end > 0 ? fn.slice(0, end) : fn;
-  assert.match(body, /assertGlobalAdminCanDeleteVideo\(role\)/);
-  assert.match(body, /scheduled_purge_at:\s*purgeAt/);
-  assert.match(body, /const writer = writerForJob\(\{ orgId, jobId: req\.params\.jobId \}, supabase\)\.raw/);
-  assert.equal(body.includes("await supabase\n      .from('job_proofs')"), false);
+  assert.match(body, /410/);
+  assert.match(body, /evidence_delete_removed/);
+  assert.doesNotMatch(body, /scheduled_purge_at:\s*purgeAt/);
 });
 
 test('restoreEvidence clears the pending purge for Global Admin', () => {
@@ -49,19 +50,19 @@ test('scheduled_purge_at migration exists for the 30-day queue', () => {
   assert.match(purgeSql, /job_proofs_scheduled_purge_idx/);
 });
 
-test('verifier hides delete for non–Global Admins and offers restore while pending', () => {
+test('verifier keeps restore for pending purge and never shows Delete', () => {
   assert.match(verifierHtml, /function isSessionGlobalAdmin/);
   assert.match(verifierHtml, /function restoreLibraryClip/);
-  assert.match(verifierHtml, /Queued for permanent deletion in 30 days/);
-  assert.match(verifierHtml, /delBtn\.hidden = !admin \|\| pending/);
+  assert.equal(verifierHtml.includes('rowmenu-delete'), false);
+  assert.equal(verifierHtml.includes('Queued for permanent deletion in 30 days'), false);
 });
 
-test('job file delete is Global Admin only and queues proof purges', () => {
+test('job file DELETE API is gone; restore route remains', () => {
   const shared = readFileSync(join(here, '../src/routes/sharedJobs.ts'), 'utf8');
   const start = shared.indexOf("sharedJobsRouter.delete('/shared/:jobId'");
   assert.ok(start > 0);
-  const fn = shared.slice(start, start + 2500);
-  assert.match(fn, /requireGlobalAdmin\(req\)/);
-  assert.match(shared, /scheduled_purge_at:\s*purgeAt/);
+  const fn = shared.slice(start, start + 800);
+  assert.match(fn, /410/);
+  assert.match(fn, /job_file_delete_removed/);
   assert.match(shared, /evidence\/:proofId\/restore', restoreEvidence/);
 });
