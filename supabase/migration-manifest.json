@@ -170,7 +170,8 @@
     "20260914220000_trade_playbooks.sql",
     "20260915010000_ask_threads.sql",
     "20260915120000_child_blur_enabled.sql",
-    "20260915180000_proof_live_sessions.sql"
+    "20260915180000_proof_live_sessions.sql",
+    "20260915210000_child_blur_always_on_comment.sql"
   ],
   "migrations": [
     {
@@ -5477,6 +5478,16 @@
         "policy|public.proof_live_sessions.proof_live_sessions_select_member",
         "rls|public.proof_live_sessions"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260915210000_child_blur_always_on_comment",
+      "file": "20260915210000_child_blur_always_on_comment.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
