@@ -26,6 +26,7 @@ import {
   listJobProgressGrants,
 } from '../shared/jobProgressGrants.js';
 import { composeHomeownerLiveStory } from '../shared/homeownerLiveStory.js';
+import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 
 /**
  * Guest access to a read-only job file.
@@ -93,6 +94,16 @@ async function progressShareForToken(token: string) {
   if (state === 'expired') throw new HttpError(410, 'This link has expired.', 'expired');
   if ((share as any)?.share_kind !== 'progress') {
     throw new HttpError(404, 'This link does not exist.', 'not_found');
+  }
+
+  // Soft-deleted job files invalidate guest media even if the share row lingers.
+  const { data: jobRow } = await raw
+    .from('crm_jobs')
+    .select('id, deleted_at')
+    .eq('id', (share as any).job_id)
+    .maybeSingle();
+  if (!jobRow || (jobRow as any).deleted_at) {
+    throw new HttpError(410, 'This job file is no longer available.', 'job_deleted');
   }
 
   const scoped = adminForJob({ orgId: (share as any).org_id, jobId: (share as any).job_id }, raw);
@@ -352,7 +363,11 @@ progressShareRouter.post(
   },
 );
 
-/** GET /api/progress-share/:token/proof/:proofId/video — watch a clip through the share. */
+/**
+ * GET /api/progress-share/:token/proof/:proofId/video — watch a clip through the share.
+ * Soft-deleted proofs are excluded. When privacy/child redaction ranges exist,
+ * refuse raw signed URLs (Phase 1 MVP — see guestMediaAccess).
+ */
 progressShareRouter.get(
   '/:token/proof/:proofId/video',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -361,11 +376,14 @@ progressShareRouter.get(
 
       const { data: proof } = await admin
         .from('job_proofs')
-        .select('id, storage_path, job_id, work_date, phase')
+        .select('id, storage_path, job_id, work_date, phase, deleted_at, ai_findings')
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
+        .is('deleted_at', null)
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such video on this job.', 'not_found');
+
+      assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const { data, error } = await admin.storage
         .from(PROOF_BUCKET)

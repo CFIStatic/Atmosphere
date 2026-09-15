@@ -41,6 +41,7 @@ import { config } from '../config.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 import { libraryJobCaptureStatus } from '../lib/proofUploadChunks.js';
+import { assertGuestMayMintRawMedia } from '../shared/guestMediaAccess.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -1304,6 +1305,15 @@ async function shareForToken(token: string, req: Request) {
     throw new HttpError(404, 'This link does not exist.', 'not_found');
   }
 
+  const { data: jobRow } = await admin
+    .from('crm_jobs')
+    .select('id, deleted_at')
+    .eq('id', (share as any).job_id)
+    .maybeSingle();
+  if (!jobRow || (jobRow as any).deleted_at) {
+    throw new HttpError(410, 'This job file is no longer available.', 'job_deleted');
+  }
+
   const sessionEmail = req.user?.email ?? null;
   if (!shareRecipientAllowed((share as any).recipient_email, sessionEmail)) {
     throw new HttpError(
@@ -1417,7 +1427,10 @@ evidenceShareRouter.get(
   },
 );
 
-/** GET /api/verifier-share/:token/evidence/:proofId/video — the file itself. */
+/**
+ * GET /api/verifier-share/:token/evidence/:proofId/video — the file itself.
+ * Soft-deleted proofs excluded; privacy/child redaction ranges refuse raw mint.
+ */
 evidenceShareRouter.get(
   '/:token/evidence/:proofId/video',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -1426,11 +1439,14 @@ evidenceShareRouter.get(
 
       const { data: proof } = await admin
         .from('job_proofs')
-        .select('id, storage_path, phase, work_date')
+        .select('id, storage_path, phase, work_date, deleted_at, ai_findings')
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
+        .is('deleted_at', null)
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const { data, error } = await admin.storage
         .from(PROOF_BUCKET)
@@ -1516,11 +1532,14 @@ evidenceShareRouter.post(
 
       const { data: proof } = await admin
         .from('job_proofs')
-        .select('id, job_id, storage_path, phase, work_date')
+        .select('id, job_id, storage_path, phase, work_date, deleted_at, ai_findings')
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
+        .is('deleted_at', null)
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      assertGuestMayMintRawMedia((proof as any).ai_findings);
 
       const { data: policy } = await admin
         .from('evidence_download_policy')
