@@ -1,7 +1,24 @@
-import { isValidElement, useEffect, useState, type ReactNode } from 'react';
+import {
+  isValidElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { VideoSeekProvider } from '../lib/videoSeek';
+import {
+  clampAskWidth,
+  clearAskSplitWidth,
+  DEFAULT_ASK_WIDTH_PX,
+  MIN_ASK_WIDTH_PX,
+  readAskSplitWidth,
+  writeAskSplitWidth,
+} from '../lib/jobFileAskSplit';
 import { TabPanel, Tabs } from '../design/Tabs';
 import { JobAskPanel, type JobAskFn } from './JobAskPanel';
 import type { AskThread, ProofQuestion } from '../lib/api';
@@ -44,6 +61,10 @@ function isOverviewBack(node: ReactNode): boolean {
  *
  * Never paints an Overview back/breadcrumb. Callers that still pass one are
  * stripped here so File / Ask sit flush under the account header.
+ *
+ * On desktop (lg+), a thin drag handle between Ask and the job file lets users
+ * widen either pane; preferred width persists in localStorage. Double-click
+ * the handle to reset the default. Phone / stacked layouts are unchanged.
  */
 export function JobFileAskChrome({
   jobId,
@@ -72,17 +93,62 @@ export function JobFileAskChrome({
   const phone = usePhoneShell();
   const [pane, setPane] = useState<JobFilePane>(initialPane);
   const shownBack = back && !isOverviewBack(back) ? back : undefined;
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [askWidth, setAskWidth] = useState(() => readAskSplitWidth());
+  const [dragging, setDragging] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(DEFAULT_ASK_WIDTH_PX);
 
   useEffect(() => {
     setPane(initialPane);
   }, [jobId, initialPane]);
 
+  const onSplitPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      dragStartX.current = event.clientX;
+      dragStartWidth.current = askWidth;
+      setDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [askWidth],
+  );
+
+  const onSplitPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const container = splitRef.current?.clientWidth ?? 0;
+    const next = clampAskWidth(
+      dragStartWidth.current + (event.clientX - dragStartX.current),
+      container || undefined,
+    );
+    setAskWidth(next);
+  }, []);
+
+  const onSplitPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setDragging(false);
+    setAskWidth((w) => writeAskSplitWidth(w));
+  }, []);
+
+  const onSplitDoubleClick = useCallback(() => {
+    clearAskSplitWidth();
+    setAskWidth(DEFAULT_ASK_WIDTH_PX);
+  }, []);
+
+  const askPaneStyle = {
+    ['--job-file-ask-width' as string]: `${askWidth}px`,
+  } as CSSProperties;
+
   return (
     <VideoSeekProvider>
     <div
+      ref={splitRef}
       className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden"
       data-testid="job-file"
       data-job-file-chrome="no-overview-back"
+      data-ask-width={askWidth}
     >
       {phone ? (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -127,12 +193,44 @@ export function JobFileAskChrome({
       ) : (
         <>
           <aside
-            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-r lg:border-t-0"
+            className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[var(--job-file-ask-width)] lg:border-t-0"
+            style={askPaneStyle}
             aria-label="Ask this job"
             data-testid="job-file-ask"
           >
             <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} />
           </aside>
+
+          {/*
+            Thin Atmosphere-style splitter: 1px line, wider hit target.
+            Desktop split only — phone uses File/Ask tabs; mid widths stack.
+          */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize Ask and job file"
+            aria-valuenow={askWidth}
+            aria-valuemin={MIN_ASK_WIDTH_PX}
+            title="Drag to resize · double-click to reset"
+            data-testid="job-file-ask-split"
+            data-dragging={dragging ? 'true' : undefined}
+            className={`group relative z-10 hidden w-0 shrink-0 cursor-col-resize touch-none lg:block ${
+              dragging ? 'select-none' : ''
+            }`}
+            onPointerDown={onSplitPointerDown}
+            onPointerMove={onSplitPointerMove}
+            onPointerUp={onSplitPointerUp}
+            onPointerCancel={onSplitPointerUp}
+            onDoubleClick={onSplitDoubleClick}
+          >
+            <span aria-hidden className="absolute inset-y-0 -left-1.5 w-3" />
+            <span
+              aria-hidden
+              className={`pointer-events-none absolute inset-y-0 left-0 w-px transition-colors ${
+                dragging ? 'bg-brand-400' : 'bg-line group-hover:bg-brand-300'
+              }`}
+            />
+          </div>
 
           <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
             {shownBack ? <div data-testid="job-file-back">{shownBack}</div> : null}
