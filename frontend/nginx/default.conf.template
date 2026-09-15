@@ -2,6 +2,16 @@
 # PORT and API_UPSTREAM are substituted at container start
 # (NGINX_ENVSUBST_FILTER). Every other $var is nginx's own.
 
+# Share / guest URLs carry tokens. Stamp noindex even when try_files
+# internally redirects to /index.html (location-scoped add_header is lost
+# on that redirect unless the fallback location also emits the tag).
+map $request_uri $share_robots_tag {
+  default "";
+  ~*^/progress(?:-view)?(?:/|\?|$) "noindex, nofollow, noarchive";
+  ~*^/shared(?:/|\?|$) "noindex, nofollow, noarchive";
+  ~*^/verifier/shared(?:/|\?|$) "noindex, nofollow, noarchive";
+}
+
 server {
   listen ${PORT};
   server_name _;
@@ -117,6 +127,7 @@ server {
 
   location /verifier/ {
     add_header Cache-Control "no-store";
+    add_header X-Robots-Tag $share_robots_tag always;
     add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
     try_files $uri $uri/ /verifier/index.html;
   }
@@ -132,6 +143,7 @@ server {
   # themselves stay immutable below).
   location = /index.html {
     add_header Cache-Control "no-store";
+    add_header X-Robots-Tag $share_robots_tag always;
     add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
   }
 
@@ -141,6 +153,7 @@ server {
 
   location / {
     add_header Cache-Control "no-store";
+    add_header X-Robots-Tag $share_robots_tag always;
     add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
     try_files $uri $uri/ /index.html;
   }

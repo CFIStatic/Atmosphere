@@ -33,6 +33,8 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('location ^~ /shared');
     expect(nginx).toContain('location ^~ /verifier/shared');
     expect(nginx).toContain('X-Robots-Tag "noindex, nofollow, noarchive"');
+    expect(nginx).toContain('map $request_uri $share_robots_tag');
+    expect(nginx).toContain('add_header X-Robots-Tag $share_robots_tag always');
     expect(nginx).toMatch(/location \/verifier\/ \{\s*add_header Cache-Control "no-store";/);
     expect(nginx).toMatch(/location \/fieldcapture\/ \{\s*add_header Cache-Control "no-store";/);
     expect(nginx).toContain('location = /index.html');
