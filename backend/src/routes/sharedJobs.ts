@@ -879,6 +879,14 @@ sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, ne
       await markSourceDeleted('job_proof', proof.id).catch(() => undefined);
     }
 
+    // Soft-deleted job files must not keep guest/progress share tokens live.
+    await writer
+      .from('verifier_shares')
+      .update({ revoked_at: now })
+      .eq('org_id', orgId)
+      .eq('job_id', job.id)
+      .is('revoked_at', null);
+
     await recordAccess(supabase, {
       orgId,
       jobId: job.id,

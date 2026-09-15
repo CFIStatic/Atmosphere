@@ -48,6 +48,14 @@ Server-side path for share / export (same plan as private moments):
 Until phase 2 ships, external share of the original file is out of scope for
 privacy enforcement; prefer in-app players.
 
+### Guest / share raw mint (MVP, Phase 1.5)
+
+Same gate as private moments: guest/progress/verifier-share token surfaces
+refuse raw signed playback/download when `childPrivacyRedactions` (or private
+moment) ranges exist. Soft-deleted media is unreachable; job delete revokes
+share tokens. See `backend/src/shared/guestMediaAccess.ts`.
+
+
 ## Tests
 
 - Schema / derive / merge: `backend/test/childPrivacyRedactions.test.ts`

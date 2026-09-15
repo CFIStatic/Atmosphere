@@ -47,6 +47,16 @@ Server-side path for share / export:
 Until phase 2 ships, document that external share of the original file is out
 of scope for privacy enforcement, and prefer in-app players.
 
+### Guest / share raw mint (MVP, Phase 1.5)
+
+Progress-share and verifier-share token routes **refuse** `createSignedUrl` on
+the original `storage_path` when `privacyRedactions` (or child privacy) ranges
+exist (`privacy_raw_unavailable`). Soft-deleted proofs are excluded
+(`deleted_at`). Job soft-delete revokes related `verifier_shares`. Office
+authenticated playback may still mint raw until Phase 2. Metadata and Ask on
+guest surfaces stay available.
+
+
 ## Tests
 
 - Schema / derive / merge: `backend/test/privacyRedactions.test.ts`
