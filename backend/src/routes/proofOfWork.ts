@@ -119,6 +119,11 @@ import {
   proofObjectPath,
   resolveClipId,
 } from '../shared/proofStoragePath.js';
+import {
+  assertAllowedProofExtension,
+  assertProofBytesMatchExtension,
+  extensionOfProofStoragePath,
+} from '../lib/proofMediaType.js';
 import { resolveDictationEntries, sanitizeDictationEvents } from '../shared/dictationEvents.js';
 import { speechEventsFromTranscript } from '../audio/speechEvents.js';
 import {
@@ -425,6 +430,37 @@ async function mintSignedUpload(admin: any, path: string) {
   return data as { signedUrl: string; token: string };
 }
 
+/**
+ * Range-read the first bytes of a stored proof object and reject non-video.
+ * Full download is avoided so day-length films stay off the BFF heap.
+ */
+export async function assertStoredProofMediaAllowed(admin: any, storagePath: string): Promise<void> {
+  const extension = extensionOfProofStoragePath(storagePath);
+  if (!extension) {
+    throw new HttpError(400, 'storagePath does not include a file extension.', 'invalid_extension');
+  }
+  assertAllowedProofExtension(extension);
+
+  const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(storagePath, 60);
+  const signedUrl = (data as { signedUrl?: string } | null)?.signedUrl;
+  if (error || !signedUrl) {
+    throw new HttpError(409, 'Uploaded film is not in storage yet. Retry filing.', 'upload_missing');
+  }
+
+  let head: Buffer;
+  try {
+    const res = await fetch(signedUrl, { headers: { Range: 'bytes=0-63' } });
+    if (!res.ok && res.status !== 206) {
+      throw new Error(`head fetch ${res.status}`);
+    }
+    head = Buffer.from(await res.arrayBuffer());
+  } catch {
+    throw new HttpError(409, 'Could not verify the uploaded film type. Retry filing.', 'upload_verify_failed');
+  }
+  assertProofBytesMatchExtension(head, extension);
+}
+
+
 export type ProofUploadPart = {
   index: number;
   start: number;
@@ -457,6 +493,8 @@ export async function createUploadUrl(
       clipId: z.string().regex(CLIP_ID).optional(),
     })
     .parse(body ?? {});
+  const extension = assertAllowedProofExtension(input.extension);
+  input.extension = extension;
 
   // Always mint when the phone omits clipId — hours-long / multi-clip days
   // must never share the legacy day-phase stem or they overwrite each other.
@@ -535,8 +573,9 @@ export async function createPartUploadUrl(
   assembleMaxBytes: number;
 }> {
   const input = partUploadSchema.parse(body ?? {});
+  const extension = assertAllowedProofExtension(input.extension);
   const clipId = resolveClipId(input.clipId);
-  const path = proofObjectPath(party, { ...input, clipId });
+  const path = proofObjectPath(party, { ...input, extension, clipId });
   const partPath = partObjectPath(path, input.index);
   const signed = await mintSignedUpload(admin, partPath);
   // Office Live index — best-effort; never block the crew's part mint.
@@ -548,7 +587,7 @@ export async function createPartUploadUrl(
     storagePath: path,
     workDate: input.workDate,
     phase: input.phase,
-    extension: input.extension,
+    extension,
     index: input.index,
   }).catch((err) => {
     console.warn('[live] touch session failed:', err instanceof Error ? err.message : err);
@@ -652,8 +691,10 @@ export async function completeChunkedProofUpload(
     buffers.push(bytes);
   }
   const assembled = Buffer.concat(buffers);
+  const extension = extensionOfProofStoragePath(path) ?? 'mp4';
+  const sniffed = assertProofBytesMatchExtension(assembled, extension);
   const { error: upErr } = await admin.storage.from(PROOF_BUCKET).upload(path, assembled, {
-    contentType: 'application/octet-stream',
+    contentType: sniffed,
     upsert: true,
   });
   if (upErr) {
@@ -715,6 +756,7 @@ const recordSchema = z.object({
 export async function recordProof(party: any, admin: any, body: unknown) {
   const input = recordSchema.parse(body);
   const storagePath = assertOwnedProofStoragePath(party, input);
+  await assertStoredProofMediaAllowed(admin, storagePath);
 
   // Everything already filed on this job, for the re-upload check. Hashes only.
   const { data: priorRows } = await admin

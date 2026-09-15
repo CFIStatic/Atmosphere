@@ -183,7 +183,7 @@ export function OfficeLiveView({ jobId }: Props) {
 
       <p className="mt-2 text-xs text-ink-600">
         {detail?.privacyNote ??
-          'Live may be raw until analysis applies child blur / private-moment ranges after the film is filed.'}
+          'Live may show unredacted footage until analysis applies child blur / private-moment ranges after the film is filed.'}
         {detail ? ` · ${detail.partCount} segment${detail.partCount === 1 ? '' : 's'} on hand.` : ''}
       </p>
 

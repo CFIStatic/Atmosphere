@@ -56,6 +56,12 @@ function memoryAdmin(existing: Record<string, Buffer> = {}) {
 
 const party = { org_id: 'org-1', job_id: 'job-1', id: 'party-1' };
 
+/** Minimal EBML/WebM header so assemble magic-byte checks accept test fixtures. */
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+function webmPart(tail: string): Buffer {
+  return Buffer.concat([WEBM_MAGIC, Buffer.from(tail)]);
+}
+
 test('createUploadUrl mints part URLs for a resumable film', async () => {
   const admin = memoryAdmin();
   const slot = await createUploadUrl(party, admin, {
@@ -77,7 +83,7 @@ test('createUploadUrl mints part URLs for a resumable film', async () => {
 test('completeChunkedProofUpload concatenates landed parts onto the final path', async () => {
   const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
   const admin = memoryAdmin({
-    [`${path}.parts/0000`]: Buffer.from('AAA'),
+    [`${path}.parts/0000`]: webmPart('AAA'),
     [`${path}.parts/0001`]: Buffer.from('BBB'),
   });
   const out = await completeChunkedProofUpload(party, admin, {
@@ -87,14 +93,15 @@ test('completeChunkedProofUpload concatenates landed parts onto the final path',
     partCount: 2,
   });
   assert.equal(out.path, path);
-  assert.equal(out.byteSize, 6);
-  assert.equal(admin.objects[path].toString(), 'AAABBB');
+  assert.equal(out.byteSize, WEBM_MAGIC.length + 6);
+  assert.equal(admin.objects[path].subarray(WEBM_MAGIC.length).toString(), 'AAABBB');
   assert.equal(admin.objects[`${path}.parts/0000`], undefined);
 });
 
 test('completeChunkedProofUpload refuses an oversized part before concatenating', async () => {
   const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
   const admin = memoryAdmin({
+    // Tiny first part on purpose — budget fails before magic-byte sniff.
     [`${path}.parts/0000`]: Buffer.from('AAA'),
     [`${path}.parts/0001`]: Buffer.from('BBBBBB'),
   });
@@ -144,7 +151,7 @@ test('completeChunkedProofUpload does not download a part whose listed size alre
 test('completeChunkedProofUpload refuses to invent a missing slice', async () => {
   const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
   const admin = memoryAdmin({
-    [`${path}.parts/0000`]: Buffer.from('AAA'),
+    [`${path}.parts/0000`]: webmPart('AAA'),
   });
   await assert.rejects(
     () =>
@@ -227,7 +234,7 @@ test('createPartUploadUrl mints one slice of a film that is still recording', as
 test('completeChunkedProofUpload stitches streamed slices under a clip path', async () => {
   const path = 'org-1/job-1/party-1/2026-09-09-after-mf3k9x2abc.webm';
   const admin = memoryAdmin({
-    [`${path}.parts/0000`]: Buffer.from('AAAA'),
+    [`${path}.parts/0000`]: webmPart('AAAA'),
     [`${path}.parts/0001`]: Buffer.from('BB'),
     [`${path}.parts/0002`]: Buffer.from('C'),
     // Another film the same day keeps its own slices.
@@ -240,12 +247,44 @@ test('completeChunkedProofUpload stitches streamed slices under a clip path', as
     partCount: 3,
   });
   assert.equal(out.path, path);
-  assert.equal(out.byteSize, 7);
-  assert.equal(admin.objects[path].toString(), 'AAAABBC');
+  assert.equal(out.byteSize, WEBM_MAGIC.length + 7);
+  assert.equal(admin.objects[path].subarray(WEBM_MAGIC.length).toString(), 'AAAABBC');
   assert.equal(admin.objects[`${path}.parts/0000`], undefined, 'stitched slices are removed');
   assert.equal(
     admin.objects['org-1/job-1/party-1/2026-09-09-after-zzzzzz.webm.parts/0000'].toString(),
     'ZZZ',
     "another clip's slices are untouched",
   );
+});
+
+test('createUploadUrl rejects a non-allowlisted extension', async () => {
+  const admin = memoryAdmin();
+  await assert.rejects(
+    () =>
+      createUploadUrl(party, admin, {
+        workDate: '2026-09-09',
+        phase: 'after',
+        extension: 'exe',
+      }),
+    /Unsupported video type/i,
+  );
+});
+
+test('completeChunkedProofUpload rejects assembled bytes that are not video', async () => {
+  const path = 'org-1/job-1/party-1/2026-09-05-after.webm';
+  const admin = memoryAdmin({
+    [`${path}.parts/0000`]: Buffer.from('NOT-A-VIDEO-FILE!!'),
+    [`${path}.parts/0001`]: Buffer.from('BBB'),
+  });
+  await assert.rejects(
+    () =>
+      completeChunkedProofUpload(party, admin, {
+        workDate: '2026-09-05',
+        phase: 'after',
+        storagePath: path,
+        partCount: 2,
+      }),
+    /not a recognized video/i,
+  );
+  assert.equal(admin.objects[path], undefined);
 });

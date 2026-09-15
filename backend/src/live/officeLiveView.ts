@@ -61,7 +61,7 @@ export type OfficeLiveSessionSummary = {
 };
 
 export const LIVE_PRIVACY_NOTE =
-  'Live may show raw video until the film is filed and analysis applies child blur / private-moment ranges. Prefer the filed player once analysis finishes.';
+  'Live may show unredacted (raw) footage until the film is filed and analysis applies child blur / private-moment ranges. Prefer the filed player once analysis finishes.';
 
 /** Parse `0000`, `0001.webm`, etc. into part indexes. */
 export function parsePartIndexName(name: string): number | null {
