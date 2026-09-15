@@ -45,6 +45,7 @@ import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
+import { assertRecordingAckForProof } from '../legal/recordingAckStore.js';
 import { runSafetyScanForProof } from '../safety/sample.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelForCheck, labelsForProof } from '../verifier/library.js';
@@ -496,6 +497,13 @@ export async function createUploadUrl(
   const extension = assertAllowedProofExtension(input.extension);
   input.extension = extension;
 
+  await assertRecordingAckForProof({
+    admin,
+    jobId: party.job_id,
+    workDate: input.workDate,
+    actorPartyId: party.id ?? null,
+  });
+
   // Always mint when the phone omits clipId — hours-long / multi-clip days
   // must never share the legacy day-phase stem or they overwrite each other.
   const clipId = resolveClipId(input.clipId);
@@ -573,6 +581,12 @@ export async function createPartUploadUrl(
   assembleMaxBytes: number;
 }> {
   const input = partUploadSchema.parse(body ?? {});
+  await assertRecordingAckForProof({
+    admin,
+    jobId: party.job_id,
+    workDate: input.workDate,
+    actorPartyId: party.id ?? null,
+  });
   const extension = assertAllowedProofExtension(input.extension);
   const clipId = resolveClipId(input.clipId);
   const path = proofObjectPath(party, { ...input, extension, clipId });
@@ -645,6 +659,12 @@ export async function completeChunkedProofUpload(
   options?: { maxBytes?: number },
 ): Promise<{ path: string; byteSize: number }> {
   const input = completeChunksSchema.parse(body ?? {});
+  await assertRecordingAckForProof({
+    admin,
+    jobId: party.job_id,
+    workDate: input.workDate,
+    actorPartyId: party.id ?? null,
+  });
   const path = assertOwnedProofStoragePath(party, input);
   const maxBytes = options?.maxBytes ?? PROOF_ASSEMBLE_MAX_BYTES;
   const buffers: Buffer[] = [];
@@ -755,6 +775,12 @@ const recordSchema = z.object({
  */
 export async function recordProof(party: any, admin: any, body: unknown) {
   const input = recordSchema.parse(body);
+  await assertRecordingAckForProof({
+    admin,
+    jobId: party.job_id,
+    workDate: input.workDate,
+    actorPartyId: party.id ?? null,
+  });
   const storagePath = assertOwnedProofStoragePath(party, input);
   await assertStoredProofMediaAllowed(admin, storagePath);
 

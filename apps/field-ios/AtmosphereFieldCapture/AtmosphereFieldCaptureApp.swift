@@ -145,6 +145,22 @@ struct RootView: View {
                 Task { await session.enterShareMode(token: shareToken, api: api) }
             }
         }
+        .sheet(isPresented: Binding(
+            get: { session.pendingRecordingConsentJobId != nil },
+            set: { if !$0 { session.cancelRecordingConsent() } }
+        )) {
+            if let jobId = session.pendingRecordingConsentJobId {
+                RecordingConsentView(
+                    jobId: jobId,
+                    onCancel: { session.cancelRecordingConsent() },
+                    onAcknowledged: {
+                        Task { await session.confirmRecordingConsentAndStart() }
+                    }
+                )
+                .environmentObject(session)
+                .environmentObject(api)
+            }
+        }
     }
 
     @ViewBuilder

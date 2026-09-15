@@ -757,6 +757,128 @@
     });
   }
 
+  /** Versioned recording-on-property disclosure — separate from worker ToS. */
+  var RECORDING_DISCLOSURE_VERSION = 'recording-disclosure-v1';
+  var RECORDING_DISCLOSURE_TEXT =
+    'Video and audio may be recorded on this job site while you use Field Capture. ' +
+    'Recordings are stored by Atmosphere and analyzed to build the job record ' +
+    '(what was done, where, and related site context). ' +
+    'Authorized parties — such as your office, invited homeowner contacts, and ' +
+    'other people your company invites to this job — may be given access to the ' +
+    'job record and recordings as needed for the work. ' +
+    'This notice is a product disclosure, not legal advice. Your company may ' +
+    'provide additional notices for this property.';
+
+  function todayWorkDateStamp() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+
+  function recordingAckStorageKey(jobId, workDate, version) {
+    return (
+      'atm.field.recordingAck:' +
+      String(jobId || '') +
+      ':' +
+      String(workDate || '') +
+      ':' +
+      String(version || RECORDING_DISCLOSURE_VERSION)
+    );
+  }
+
+  function hasLocalRecordingAck(jobId, workDate, version) {
+    try {
+      return (
+        typeof localStorage !== 'undefined' &&
+        localStorage.getItem(
+          recordingAckStorageKey(jobId, workDate, version || RECORDING_DISCLOSURE_VERSION),
+        ) === '1'
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markLocalRecordingAck(jobId, workDate, version) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(
+          recordingAckStorageKey(jobId, workDate, version || RECORDING_DISCLOSURE_VERSION),
+          '1',
+        );
+      }
+    } catch (e) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function isServerJobId(jobId) {
+    return (
+      typeof jobId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)
+    );
+  }
+
+  function loadRecordingDisclosure(apiBase, accessToken) {
+    return apiJson(origin(apiBase) + '/api/field-app/recording-disclosure', {
+      accessToken: accessToken,
+    }).catch(function () {
+      return {
+        version: RECORDING_DISCLOSURE_VERSION,
+        text: RECORDING_DISCLOSURE_TEXT,
+      };
+    });
+  }
+
+  function acceptRecordingAck(opts) {
+    opts = opts || {};
+    var apiBase = opts.apiBase;
+    var accessToken = opts.accessToken;
+    var jobId = opts.jobId;
+    var workDate = opts.workDate || todayWorkDateStamp();
+    var version = opts.disclosureVersion || RECORDING_DISCLOSURE_VERSION;
+    var shareToken = opts.shareToken;
+    if (!isServerJobId(jobId)) {
+      markLocalRecordingAck(jobId, workDate, version);
+      return Promise.resolve({
+        ack: {
+          required: false,
+          currentVersion: version,
+          acknowledgedVersion: version,
+          workDate: workDate,
+          jobId: jobId,
+        },
+        localOnly: true,
+      });
+    }
+    var path = shareToken
+      ? '/api/job-share/' + encodeURIComponent(shareToken) + '/recording-ack'
+      : '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/recording-ack';
+    return apiJson(origin(apiBase) + path, {
+      method: 'POST',
+      accessToken: accessToken,
+      body: { disclosureVersion: version, workDate: workDate },
+    }).then(function (body) {
+      markLocalRecordingAck(jobId, workDate, version);
+      return body;
+    });
+  }
+
+  /** After a local draft remaps to a server job id, POST any pending same-day ack. */
+  function flushRecordingAckForJob(opts) {
+    opts = opts || {};
+    var jobId = opts.jobId;
+    var workDate = opts.workDate || todayWorkDateStamp();
+    var version = opts.disclosureVersion || RECORDING_DISCLOSURE_VERSION;
+    if (!isServerJobId(jobId)) return Promise.resolve(null);
+    var localHit =
+      hasLocalRecordingAck(jobId, workDate, version) ||
+      (opts.localJobId && hasLocalRecordingAck(opts.localJobId, workDate, version));
+    if (!opts.force && !localHit) return Promise.resolve(null);
+    return acceptRecordingAck(opts);
+  }
+
   function loadFieldMe(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
   }
@@ -3174,6 +3296,15 @@
     loadAuthMe: loadAuthMe,
     acceptTerms: acceptTerms,
     CURRENT_TERMS_VERSION: CURRENT_TERMS_VERSION,
+    RECORDING_DISCLOSURE_VERSION: RECORDING_DISCLOSURE_VERSION,
+    RECORDING_DISCLOSURE_TEXT: RECORDING_DISCLOSURE_TEXT,
+    todayWorkDateStamp: todayWorkDateStamp,
+    hasLocalRecordingAck: hasLocalRecordingAck,
+    markLocalRecordingAck: markLocalRecordingAck,
+    isServerJobId: isServerJobId,
+    loadRecordingDisclosure: loadRecordingDisclosure,
+    acceptRecordingAck: acceptRecordingAck,
+    flushRecordingAckForJob: flushRecordingAckForJob,
     linkOffice: linkOffice,
     resolveApiBase: resolveApiBase,
     resolveOfficeHref: resolveOfficeHref,

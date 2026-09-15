@@ -36,6 +36,8 @@
 		AFC000000000000000000220 /* NewJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000120 /* NewJobView.swift */; };
 		AFC000000000000000000221 /* SupportLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000121 /* SupportLinks.swift */; };
 		AFC000000000000000000222 /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000122 /* SafariView.swift */; };
+		AFC000000000000000000223 /* RecordingConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000123 /* RecordingConsentView.swift */; };
+		AFC000000000000000000224 /* RecordingAckStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000124 /* RecordingAckStore.swift */; };
 		AFC000000000000000000215 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000115 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +74,8 @@
 		AFC000000000000000000120 /* NewJobView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewJobView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000121 /* SupportLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportLinks.swift; sourceTree = "<group>"; };
 		AFC000000000000000000122 /* SafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000123 /* RecordingConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingConsentView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000124 /* RecordingAckStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingAckStore.swift; sourceTree = "<group>"; };
 		AFC000000000000000000115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -127,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				AFC00000000000000000011F /* PendingJobsStore.swift */,
+				AFC000000000000000000124 /* RecordingAckStore.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
@@ -196,6 +201,7 @@
 				AFC000000000000000000119 /* ElevateSplashView.swift */,
 				AFC000000000000000000116 /* SignUpView.swift */,
 				AFC00000000000000000011A /* TermsAcknowledgmentView.swift */,
+				AFC000000000000000000123 /* RecordingConsentView.swift */,
 				AFC00000000000000000010E /* RecordingView.swift */,
 				AFC00000000000000000010F /* DoorView.swift */,
 				AFC000000000000000000122 /* SafariView.swift */,
@@ -319,6 +325,8 @@
 				AFC000000000000000000220 /* NewJobView.swift in Sources */,
 				AFC000000000000000000221 /* SupportLinks.swift in Sources */,
 				AFC000000000000000000222 /* SafariView.swift in Sources */,
+				AFC000000000000000000223 /* RecordingConsentView.swift in Sources */,
+				AFC000000000000000000224 /* RecordingAckStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

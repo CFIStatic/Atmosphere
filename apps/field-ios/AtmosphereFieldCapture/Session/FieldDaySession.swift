@@ -23,6 +23,8 @@ final class FieldDaySession: ObservableObject {
     @Published var shareToken: String?
     @Published var isShareMode: Bool = false
     @Published var shareCompany: String?
+    /// When set, RootView presents the recording-on-property disclosure before startDay.
+    @Published var pendingRecordingConsentJobId: String?
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
@@ -137,6 +139,7 @@ final class FieldDaySession: ObservableObject {
                         situation: local.situation
                     )
                     await self.remapLocalJob(localId: local.id, serverJob: server)
+                    await self.flushRecordingAckIfNeeded(api: api, jobId: server.id)
                     PendingJobsStore.markSynced(localId: local.id)
                 } catch {
                     // Transient — upload queue / next Today refresh will retry.
@@ -169,10 +172,60 @@ final class FieldDaySession: ObservableObject {
         )
         jobs = jobs.map { $0.id == localId ? listed : $0 }
         if activeJobId == localId { activeJobId = listed.id }
+        let workDate = Self.todayStamp()
+        let version = AtmosphereClient.recordingDisclosureVersion
+        if RecordingAckStore.hasAck(jobId: localId, workDate: workDate, version: version) {
+            RecordingAckStore.mark(jobId: listed.id, workDate: workDate, version: version)
+        }
         await uploadQueue.remapJobId(from: localId, to: listed.id)
+        // Caller with api should also flush; DayFilmQueue remap notification may lack api.
+    }
+
+    /// After a local draft becomes a server job, POST the disclosure ack so production upload checks pass.
+    func flushRecordingAckIfNeeded(api: AtmosphereClient, jobId: String) async {
+        let workDate = Self.todayStamp()
+        let version = AtmosphereClient.recordingDisclosureVersion
+        guard RecordingAckStore.hasAck(jobId: jobId, workDate: workDate, version: version) else { return }
+        guard !PendingJobsStore.isLocalJobId(jobId) else { return }
+        do {
+            _ = try await api.acceptRecordingAck(
+                jobId: jobId,
+                disclosureVersion: version,
+                workDate: workDate,
+                shareToken: isShareMode ? shareToken : nil
+            )
+        } catch {
+            // Upload queue / next start will retry; do not block remap.
+        }
     }
 
     func startDay() async {
+        lastError = nil
+        guard activeJobId != nil || !jobs.isEmpty else {
+            lastError = "No job for today. Tap + to start a new job, or ask the office to put you on one."
+            return
+        }
+        if activeJobId == nil { activeJobId = jobs.first?.id }
+        guard let jobId = activeJobId else { return }
+        let workDate = Self.todayStamp()
+        let version = AtmosphereClient.recordingDisclosureVersion
+        if !RecordingAckStore.hasAck(jobId: jobId, workDate: workDate, version: version) {
+            pendingRecordingConsentJobId = jobId
+            return
+        }
+        await beginRecordingAfterConsent()
+    }
+
+    func cancelRecordingConsent() {
+        pendingRecordingConsentJobId = nil
+    }
+
+    func confirmRecordingConsentAndStart() async {
+        pendingRecordingConsentJobId = nil
+        await beginRecordingAfterConsent()
+    }
+
+    func beginRecordingAfterConsent() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
             lastError = "No job for today. Tap + to start a new job, or ask the office to put you on one."
@@ -429,6 +482,8 @@ final class FieldDaySession: ObservableObject {
             ),
         ]
     }
+
+    static func todayStampPublic() -> String { todayStamp() }
 
     private static func todayStamp() -> String {
         let f = DateFormatter()

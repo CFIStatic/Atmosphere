@@ -20,6 +20,11 @@ import {
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
 import { clientIp, clientUserAgent } from '../legal/terms.js';
 import { recordTermsAcceptance, requireAcceptedTermsVersion } from '../legal/termsStore.js';
+import { recordingDisclosure } from '../legal/recordingDisclosure.js';
+import {
+  loadRecordingAckStatus,
+  recordRecordingAcknowledgment,
+} from '../legal/recordingAckStore.js';
 import { linkFieldOffice } from '../field/officeLink.js';
 import { authLimiter } from './auth.js';
 import {
@@ -712,6 +717,110 @@ function proofRoute(
     }
   };
 }
+
+
+const workDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional();
+
+function todayWorkDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * GET /api/field-app/recording-disclosure
+ * Versioned recording-on-property disclosure text (separate from worker ToS).
+ */
+fieldAppRouter.get('/recording-disclosure', (_req: Request, res: Response) => {
+  res.json(recordingDisclosure());
+});
+
+/**
+ * GET /api/field-app/jobs/:jobId/recording-ack?workDate=YYYY-MM-DD
+ * Whether this crew member already acknowledged for the job/day.
+ */
+fieldAppRouter.get(
+  '/jobs/:jobId/recording-ack',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const workDate = workDateSchema.parse(req.query.workDate) ?? todayWorkDate();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const status = await loadRecordingAckStatus({
+        jobId,
+        workDate,
+        actorUserId: userId,
+        actorPartyId: party.id,
+      });
+      res.json({ ack: status, disclosure: recordingDisclosure() });
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/field-app/jobs/:jobId/recording-ack
+ * Record that the signed-in crew acknowledged the live disclosure for this job/day.
+ */
+fieldAppRouter.post(
+  '/jobs/:jobId/recording-ack',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const jobId = z.string().uuid().parse(req.params.jobId);
+      const input = z
+        .object({
+          disclosureVersion: z.string().trim().min(1).max(64),
+          workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        })
+        .parse(req.body ?? {});
+      const workDate = input.workDate ?? todayWorkDate();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const ack = await recordRecordingAcknowledgment({
+        jobId,
+        workDate,
+        disclosureVersion: input.disclosureVersion,
+        actorUserId: userId,
+        actorPartyId: party.id,
+        orgId,
+        ip: clientIp(req),
+        userAgent: clientUserAgent(req),
+      });
+      res.status(201).json({ ack, disclosure: recordingDisclosure() });
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
 
 /**
  * The crew's side, in the order the phone calls them: somewhere to put the
