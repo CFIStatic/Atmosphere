@@ -90,15 +90,15 @@ describe('ProofOfWork video collection', () => {
     jobEpisodes.mockResolvedValue({ episodes: [] });
   });
 
-  it('lists every uploaded video with picture and mic status', async () => {
-    render(<ProofOfWork jobId="job-1" heading="Videos and analysis" initialData={catalog} />);
+  it('lists every uploaded video once with mic status — no separate transcripts section', async () => {
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} />);
 
-    expect(screen.getByRole('heading', { name: 'Videos and analysis' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Show me the dispute/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/None on this (clip|file)/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('job-video-list')).toBeInTheDocument();
-    expect(screen.getByText('Videos')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Transcripts and analysis/i })).not.toBeInTheDocument();
     // Dense Glance / Scan / Full evidence walls are off the job file.
     expect(screen.queryByTestId('full-evidence')).not.toBeInTheDocument();
     expect(screen.queryByTestId('verbatim-transcript')).not.toBeInTheDocument();
@@ -106,15 +106,14 @@ describe('ProofOfWork video collection', () => {
     expect(screen.queryByTestId('punch-list-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('save-as-playbook')).not.toBeInTheDocument();
     expect(
-      screen.getByText((_, el) => el?.textContent === '42 seconds · Picture: read · Mic: heard'),
+      screen.getByText((_, el) => el?.textContent === '42 seconds · Mic: heard'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        (_, el) => el?.textContent === '10 minutes · Picture: reading · Mic: skipped',
-      ),
+      screen.getByText((_, el) => el?.textContent === '10 minutes · Mic: skipped'),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Ask the video collection/i)).toBeInTheDocument();
-    expect(screen.getByTestId('hear-the-mic')).toHaveTextContent(/Hear the mic/i);
+    // Hear-the-mic lives in the expanded row, not the collapsed list.
+    expect(screen.queryByTestId('hear-the-mic')).not.toBeInTheDocument();
   });
 
   it('opens the named clip on a dispute tap and seeks once metadata is ready', async () => {
@@ -143,7 +142,7 @@ describe('ProofOfWork video collection', () => {
     render(
       <ProofOfWork
         jobId="job-1"
-        heading="Videos and analysis"
+        heading="Videos"
         initialData={withDispute}
         videoFetcher={videoFetcher}
       />,
@@ -162,13 +161,13 @@ describe('ProofOfWork video collection', () => {
     expect(video.currentTime).toBe(41);
   });
 
-  it('loads a signed URL when Play is clicked', async () => {
+  it('loads a signed URL when Play is clicked and shows transcript with Copy', async () => {
     const user = userEvent.setup();
     const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
     render(
       <ProofOfWork
         jobId="job-1"
-        heading="Videos and analysis"
+        heading="Videos"
         initialData={catalog}
         videoFetcher={videoFetcher}
       />,
@@ -181,6 +180,11 @@ describe('ProofOfWork video collection', () => {
     expect(document.querySelector('video')?.getAttribute('src')).toBe(
       'https://signed.test/morning.mp4',
     );
+    expect(await screen.findByTestId('job-video-expansion')).toBeInTheDocument();
+    expect(await screen.findByTestId('verbatim-transcript')).toBeInTheDocument();
+    expect(screen.getByTestId('copy-transcript')).toHaveTextContent('Copy');
+    expect(screen.queryByTestId('full-evidence')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
   });
 
   it('shows volume controls and captions when a Whisper transcript exists', async () => {
@@ -189,7 +193,7 @@ describe('ProofOfWork video collection', () => {
     render(
       <ProofOfWork
         jobId="job-1"
-        heading="Videos and analysis"
+        heading="Videos"
         initialData={catalog}
         videoFetcher={videoFetcher}
       />,
@@ -213,7 +217,7 @@ describe('ProofOfWork video collection', () => {
     proofQuestions.mockResolvedValue({ questions: [] });
     jobEpisodes.mockResolvedValue({ episodes: [] });
 
-    render(<ProofOfWork jobId="job-1" heading="Videos and analysis" />);
+    render(<ProofOfWork jobId="job-1" heading="Videos" />);
 
     // Flush the initial load.
     await act(async () => {
@@ -269,7 +273,7 @@ describe('ProofOfWork video collection', () => {
         <FireSeek />
         <ProofOfWork
           jobId="job-1"
-          heading="Videos and analysis"
+          heading="Videos"
           initialData={catalog}
           videoFetcher={videoFetcher}
           showCollectionAsk={false}
@@ -302,7 +306,7 @@ describe('ProofOfWork video collection', () => {
         <FireSeek />
         <ProofOfWork
           jobId="job-1"
-          heading="Videos and analysis"
+          heading="Videos"
           initialData={catalog}
           videoFetcher={videoFetcher}
           showCollectionAsk={false}
@@ -320,5 +324,29 @@ describe('ProofOfWork video collection', () => {
     await waitFor(() => {
       expect(player.currentTime).toBe(18);
     });
+  });
+
+  it('copies the transcript text from the expanded clip', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const videoFetcher = vi.fn().mockResolvedValue({ url: 'https://signed.test/morning.mp4' });
+    render(
+      <ProofOfWork
+        jobId="job-1"
+        heading="Videos"
+        initialData={catalog}
+        videoFetcher={videoFetcher}
+        showCollectionAsk={false}
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Play' })[0]!);
+    await user.click(await screen.findByTestId('copy-transcript'));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(String(writeText.mock.calls[0]![0])).toMatch(/We have not started the subfloor yet/);
+    expect(screen.getByTestId('copy-transcript')).toHaveTextContent('Copied');
   });
 });

@@ -434,7 +434,7 @@ export function SharedDashboardPage() {
 
             {!viewerOnly && (
             <div className="mt-4 space-y-4">
-              <ProofOfWork jobId={record.job.id} heading="Videos and analysis" showCollectionAsk={false} />
+              <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
               <ClaimReadyPacketPanel jobId={record.job.id} />
               <EvidenceLocker jobId={record.job.id} />
             </div>

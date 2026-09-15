@@ -155,7 +155,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Videos and analysis')).toBeInTheDocument();
+    expect(screen.getByText('Videos')).toBeInTheDocument();
     expect(screen.getByText('Evidence locker')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
@@ -362,7 +362,7 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Videos and analysis')).toBeInTheDocument();
+    expect(await screen.findByText('Videos')).toBeInTheDocument();
     await user.click(screen.getByText(/Job setup/));
     expect(await screen.findByRole('heading', { name: 'Scope' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add a line' })).toBeInTheDocument();
@@ -382,7 +382,7 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Videos and analysis')).toBeInTheDocument();
+    expect(await screen.findByText('Videos')).toBeInTheDocument();
     expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
     expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
     expect(
