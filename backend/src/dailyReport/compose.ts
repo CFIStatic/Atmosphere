@@ -9,6 +9,9 @@ import {
   PRIVACY_REDACTED_LABEL,
   redactTranscriptForAsk,
 } from '../audio/privacyRedactions.js';
+import {
+  childPrivacyRedactionsFromStored,
+} from '../audio/childPrivacyRedactions.js';
 import type { DailyJobGlanceReport, GlanceClipSummary } from './types.js';
 
 type ProofRow = {
@@ -109,7 +112,8 @@ export function composeClipGlance(row: ProofRow): GlanceClipSummary {
       ? (row.ai_findings as Record<string, unknown>)
       : {};
   const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
-  const privacyProtected = ranges.length > 0;
+  const childRanges = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
+  const privacyProtected = ranges.length > 0 || childRanges.length > 0;
 
   const conversation =
     findings.conversation && typeof findings.conversation === 'object'

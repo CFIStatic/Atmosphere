@@ -1011,6 +1011,21 @@ export interface PrivacyRedactionRange {
   source: 'vision' | 'heuristic' | 'merged' | 'manual' | string;
 }
 
+/** Normalized 0–1 face/body box for child region blur. */
+export interface ChildPrivacyRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  tSec?: number | null;
+}
+
+/** Child privacy interval — blur regions or full frame; never identifies minors. */
+export interface ChildPrivacyRedactionRange extends PrivacyRedactionRange {
+  category?: 'child_privacy';
+  regions?: ChildPrivacyRegion[];
+}
+
 
 export interface MotionClip {
   startSec: number;
@@ -1078,6 +1093,17 @@ export interface ProofPrivacyRedactions {
   ranges: PrivacyRedactionRange[];
 }
 
+export interface ProofChildPrivacyRedactions {
+  version: number;
+  category: 'child_privacy';
+  ranges: ChildPrivacyRedactionRange[];
+}
+
+export interface ChildBlurSettings {
+  orgId: string;
+  childBlurEnabled: boolean;
+}
+
 /** One filed video, as the collection list wants it. */
 export interface ProofVideoRecord {
   id: string;
@@ -1111,6 +1137,8 @@ export interface ProofVideoRecord {
   people?: ProofPeoplePresent | null;
   /** Private intervals — player blurs + mutes; Ask skips speech. */
   privacyRedactions?: ProofPrivacyRedactions | null;
+  /** Child privacy intervals — blur (mute only if whole-frame). */
+  childPrivacyRedactions?: ProofChildPrivacyRedactions | null;
   motionClips?: ProofMotionClips | null;
   /** Event-boundary timestamps from Analysis — Ask seek and the today strip. */
   events?: ProofVideoEvent[];
@@ -3892,6 +3920,15 @@ export const api = {
 
   getDailyReportSettings: () =>
     request<{ settings: DailyReportSettings }>('/api/daily-report/settings', { method: 'GET' }),
+
+  getChildPrivacySettings: () =>
+    request<{ settings: ChildBlurSettings }>('/api/child-privacy/settings', { method: 'GET' }),
+
+  updateChildPrivacySettings: (patch: { childBlurEnabled?: boolean }) =>
+    request<{ settings: ChildBlurSettings }>('/api/child-privacy/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
 
   updateDailyReportSettings: (patch: {
     enabled?: boolean;

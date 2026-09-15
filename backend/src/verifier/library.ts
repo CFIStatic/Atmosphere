@@ -28,6 +28,12 @@ import {
   publicPrivacyFields,
   redactTranscriptForAsk,
 } from '../audio/privacyRedactions.js';
+import {
+  applyChildPrivacyToEvidenceEntries,
+  childPrivacyRedactionsFromStored,
+  publicChildPrivacyFields,
+  redactTranscriptForChildPrivacy,
+} from '../audio/childPrivacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
@@ -409,10 +415,17 @@ export function serializeEvidence(input: {
             transcript: (() => {
               const raw = typeof proof.transcript_text === 'string' ? proof.transcript_text : null;
               const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
-              return redactTranscriptForAsk(raw, ranges);
+              const childRanges = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
+              return redactTranscriptForChildPrivacy(
+                redactTranscriptForAsk(raw, ranges),
+                childRanges,
+              );
             })(),
             privacyRedactions: publicPrivacyFields(
               privacyRedactionsFromStored(findings.privacyRedactions),
+            ),
+            childPrivacyRedactions: publicChildPrivacyFields(
+              childPrivacyRedactionsFromStored(findings.childPrivacyRedactions),
             ),
             ...(() => {
               const peopleResolved = resolvePeoplePresent({
@@ -424,7 +437,7 @@ export function serializeEvidence(input: {
                 visionPeople: findings.visionPeople,
                 actions,
               });
-              const evidence = applyPrivacyToEvidenceEntries(
+              let evidence = applyPrivacyToEvidenceEntries(
                 buildEvidenceLog({
                   storedLog: findings.evidenceLog,
                   storedEntries: proof.narration?.entries,
@@ -438,6 +451,10 @@ export function serializeEvidence(input: {
                   conversation: conversationFromStored(proof.transcript_text, findings.conversation),
                 }),
                 privacyRedactionsFromStored(findings.privacyRedactions),
+              );
+              evidence = applyChildPrivacyToEvidenceEntries(
+                evidence,
+                childPrivacyRedactionsFromStored(findings.childPrivacyRedactions),
               );
               return {
                 ...conversationFields(proof.transcript_text, findings.conversation, peopleResolved),

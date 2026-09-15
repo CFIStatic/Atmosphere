@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VIDEO_PLAYER_PREFS_KEY } from '../../lib/videoPlayerPrefs';
-import { JobFilePlayer, activePrivacyRange } from './JobFilePlayer';
+import { JobFilePlayer, activePrivacyRange, resolveActivePrivacy } from './JobFilePlayer';
 
 describe('JobFilePlayer', () => {
   beforeEach(() => {
@@ -55,7 +55,6 @@ describe('JobFilePlayer', () => {
     expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('Captions pending');
     expect(document.querySelector('track')).toBeNull();
   });
-});
 
   it('activePrivacyRange matches inclusive private windows', () => {
     const ranges = [{ startSec: 10, endSec: 20, reason: 'bathroom', confidence: 0.8, source: 'vision' as const }];
@@ -84,3 +83,60 @@ describe('JobFilePlayer', () => {
     expect(video.className).toMatch(/job-file-player-privacy-blur/);
     expect(video.muted).toBe(true);
   });
+
+
+  it('resolveActivePrivacy prefers private moments over child ranges', () => {
+    const active = resolveActivePrivacy(
+      12,
+      [{ startSec: 10, endSec: 20, reason: 'bathroom', confidence: 0.9, source: 'vision' }],
+      [{ startSec: 10, endSec: 20, reason: 'child present', confidence: 0.9, source: 'vision' }],
+    );
+    expect(active?.kind).toBe('private');
+  });
+
+  it('blurs child ranges with Child privacy badge', async () => {
+    render(
+      <JobFilePlayer
+        src="https://signed.test/clip.mp4"
+        childPrivacyRedactions={[
+          { startSec: 5, endSec: 15, reason: 'child present', confidence: 0.9, source: 'vision' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('job-file-privacy-hint')).toHaveTextContent('Privacy-protected');
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 8, set: () => undefined });
+    video.dispatchEvent(new Event('timeupdate'));
+    await waitFor(() => {
+      expect(screen.getByTestId('job-file-privacy-badge')).toHaveTextContent('Child privacy');
+    });
+    expect(video.getAttribute('data-privacy-kind')).toBe('child');
+    expect(video.className).toMatch(/job-file-player-privacy-blur/);
+    expect(video.muted).toBe(true);
+  });
+
+  it('uses region blur without force-mute when child boxes exist', async () => {
+    render(
+      <JobFilePlayer
+        src="https://signed.test/clip.mp4"
+        childPrivacyRedactions={[
+          {
+            startSec: 5,
+            endSec: 15,
+            reason: 'child present',
+            confidence: 0.9,
+            source: 'vision',
+            regions: [{ x: 0.2, y: 0.1, w: 0.2, h: 0.3 }],
+          },
+        ]}
+      />,
+    );
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 8, set: () => undefined });
+    video.dispatchEvent(new Event('timeupdate'));
+    await waitFor(() => {
+      expect(screen.getByTestId('job-file-child-region-blur')).toBeInTheDocument();
+    });
+    expect(video.className).not.toMatch(/job-file-player-privacy-blur/);
+  });
+});

@@ -703,6 +703,10 @@ export function ProofOfWork({
                           privacyRedactions={
                             (data.videos ?? []).find((v) => v.id === id)?.privacyRedactions?.ranges ?? null
                           }
+                          childPrivacyRedactions={
+                            (data.videos ?? []).find((v) => v.id === id)?.childPrivacyRedactions?.ranges ??
+                            null
+                          }
                           onTimeUpdate={(seconds) => onClipTimeUpdate(id, seconds)}
                         />
                       ))}
@@ -966,21 +970,33 @@ function VideoCatalog({
                   autoOpen={seekProofId === video.id}
                   captions={captionsForVideo(video)}
                   privacyRedactions={video.privacyRedactions?.ranges ?? null}
+                  childPrivacyRedactions={video.childPrivacyRedactions?.ranges ?? null}
                   onTimeUpdate={(seconds) => onTimeUpdate?.(video.id, seconds)}
                 />
-                {video.privacyRedactions?.ranges?.length ? (
+                {video.privacyRedactions?.ranges?.length || video.childPrivacyRedactions?.ranges?.length ? (
                   <p
                     className="max-w-[14rem] text-right text-[10px] text-ink-400"
                     data-testid="privacy-redaction-review"
-                    title={video.privacyRedactions.ranges
-                      .map(
+                    title={[
+                      ...(video.privacyRedactions?.ranges ?? []).map(
                         (r) =>
                           `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
-                      )
-                      .join('\n')}
+                      ),
+                      ...(video.childPrivacyRedactions?.ranges ?? []).map(
+                        (r) =>
+                          `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · child · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+                      ),
+                    ].join('\n')}
                   >
-                    Privacy-protected · {video.privacyRedactions.ranges.length} segment
-                    {video.privacyRedactions.ranges.length === 1 ? '' : 's'}
+                    Privacy-protected ·{' '}
+                    {(video.privacyRedactions?.ranges?.length ?? 0) +
+                      (video.childPrivacyRedactions?.ranges?.length ?? 0)}{' '}
+                    segment
+                    {(video.privacyRedactions?.ranges?.length ?? 0) +
+                      (video.childPrivacyRedactions?.ranges?.length ?? 0) ===
+                    1
+                      ? ''
+                      : 's'}
                   </p>
                 ) : null}
                 {jobId && video.transcriptStatus !== 'done' ? (
@@ -1003,6 +1019,7 @@ function MeasuredVideo({
   seekNonce = 0,
   captions,
   privacyRedactions,
+  childPrivacyRedactions,
   onTimeUpdate,
 }: {
   src: string;
@@ -1011,6 +1028,7 @@ function MeasuredVideo({
   seekNonce?: number;
   captions?: JobFilePlayerCaptions | null;
   privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
+  childPrivacyRedactions?: import('../../lib/api').ChildPrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   return (
@@ -1022,6 +1040,7 @@ function MeasuredVideo({
       captions={captions}
       knownDurationSeconds={captions?.durationSeconds}
       privacyRedactions={privacyRedactions}
+          childPrivacyRedactions={childPrivacyRedactions}
       onTimeUpdate={onTimeUpdate}
     />
   );
@@ -1039,6 +1058,7 @@ function PlayClip({
   autoOpen = false,
   captions,
   privacyRedactions,
+  childPrivacyRedactions,
   onTimeUpdate,
 }: {
   proofId: string;
@@ -1048,6 +1068,7 @@ function PlayClip({
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
   privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
+  childPrivacyRedactions?: import('../../lib/api').ChildPrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -1083,6 +1104,7 @@ function PlayClip({
           seekNonce={seekNonce}
           captions={captions}
           privacyRedactions={privacyRedactions}
+          childPrivacyRedactions={childPrivacyRedactions}
           onTimeUpdate={onTimeUpdate}
           className="block max-h-40 w-full rounded-lg bg-black"
         />
@@ -1118,6 +1140,7 @@ function ProofVideo({
   autoOpen = false,
   captions,
   privacyRedactions,
+  childPrivacyRedactions,
   onTimeUpdate,
 }: {
   proofId: string;
@@ -1128,6 +1151,7 @@ function ProofVideo({
   autoOpen?: boolean;
   captions?: JobFilePlayerCaptions | null;
   privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
+  childPrivacyRedactions?: import('../../lib/api').ChildPrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -1179,6 +1203,7 @@ function ProofVideo({
           seekNonce={seekNonce}
           captions={captions}
           privacyRedactions={privacyRedactions}
+          childPrivacyRedactions={childPrivacyRedactions}
           onTimeUpdate={onTimeUpdate}
           className="block max-h-64 w-full bg-black"
         />

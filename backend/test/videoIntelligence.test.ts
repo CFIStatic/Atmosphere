@@ -460,3 +460,24 @@ test('parseDictationPayload extracts privacyRedactions from the model JSON', () 
   assert.equal(parsed.privacyRedactions[0]!.reason, 'bathroom');
   assert.ok(parsed.privacyRedactions[0]!.confidence >= 0.8);
 });
+
+
+test('parseDictationPayload extracts childPrivacyRedactions and skips cannotTell', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'Kitchen work.',
+      summary: 'Crew installs cabinets.',
+      people: [],
+      events: [],
+      actions: [],
+      privacyRedactions: [],
+      childPrivacyRedactions: [
+        { startSec: 20, endSec: 50, reason: 'child present', confidence: 0.88, source: 'vision' },
+        { startSec: 60, endSec: 90, reason: 'maybe', confidence: 0.9, ageAppearance: 'cannotTell' },
+      ],
+    }),
+  );
+  assert.equal(parsed.childPrivacyRedactions.length, 1);
+  assert.equal(parsed.childPrivacyRedactions[0]!.startSec, 20);
+  assert.ok(parsed.childPrivacyRedactions[0]!.confidence >= 0.8);
+});

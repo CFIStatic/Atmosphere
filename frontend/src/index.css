@@ -696,3 +696,12 @@ html[data-field-embed] #root {
 .job-file-player-privacy-veil {
   background: rgba(15, 18, 22, 0.18);
 }
+
+
+/* Child privacy: region blur overlays (when face/body boxes exist). */
+.job-file-player-child-region-blur {
+  border-radius: 9999px;
+  backdrop-filter: blur(18px);
+  background: rgba(15, 18, 22, 0.22);
+  box-shadow: 0 0 0 2px rgba(15, 18, 22, 0.15);
+}

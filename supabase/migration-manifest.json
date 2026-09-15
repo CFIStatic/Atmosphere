@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 154,
+    "migrationCount": 155,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -168,7 +168,8 @@
     "20260914200000_wellness_check.sql",
     "20260914210000_daily_job_reports.sql",
     "20260914220000_trade_playbooks.sql",
-    "20260915010000_ask_threads.sql"
+    "20260915010000_ask_threads.sql",
+    "20260915120000_child_blur_enabled.sql"
   ],
   "migrations": [
     {
@@ -5445,6 +5446,18 @@
         "policy|public.ask_threads.ask_threads_update",
         "policy|public.job_proof_questions.job_proof_questions_update",
         "rls|public.ask_threads"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260915120000_child_blur_enabled",
+      "file": "20260915120000_child_blur_enabled.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.orgs.child_blur_enabled"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

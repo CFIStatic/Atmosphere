@@ -15,6 +15,10 @@ import {
   derivePrivacyRedactions,
   toStoredPrivacyRedactions,
 } from '../audio/privacyRedactions.js';
+import {
+  deriveChildPrivacyRedactions,
+  toStoredChildPrivacyRedactions,
+} from '../audio/childPrivacyRedactions.js';
 
 export function scopeContextNote(scopeTitles: string[]): string {
   const lines = scopeTitles.map((t) => t.trim()).filter(Boolean);
@@ -138,6 +142,46 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
         model: dictation.model,
       });
       return toStoredPrivacyRedactions(ranges, dictation.model);
+    })(),
+    childPrivacyRedactions: (() => {
+      const peopleNotes: Array<{
+        tSec?: number | null;
+        note?: string | null;
+        ageAppearance?: unknown;
+      }> = [];
+      for (const person of Array.isArray(dictation.people) ? dictation.people : []) {
+        if (!person || typeof person !== 'object') continue;
+        const ageAppearance = (person as { ageAppearance?: unknown }).ageAppearance;
+        const moments = (person as { appearMoments?: unknown }).appearMoments;
+        if (!Array.isArray(moments) || !moments.length) {
+          peopleNotes.push({ tSec: 0, note: String((person as { label?: unknown }).label ?? ''), ageAppearance });
+          continue;
+        }
+        for (const m of moments) {
+          if (m && typeof m === 'object') {
+            peopleNotes.push({
+              tSec: Number((m as { tSec?: unknown }).tSec),
+              note: String((m as { note?: unknown }).note ?? ''),
+              ageAppearance,
+            });
+          } else if (typeof m === 'number') {
+            peopleNotes.push({ tSec: m, note: null, ageAppearance });
+          }
+        }
+      }
+      const ranges = deriveChildPrivacyRedactions({
+        events: (dictation.events ?? []).map((e) => ({
+          atSeconds: e.atSeconds,
+          text: e.text,
+          type: e.type,
+        })),
+        peopleNotes,
+        narrationText: dictation.narrationText,
+        summary: dictation.narrationSummary,
+        visionRanges: dictation.childPrivacyRedactions ?? [],
+        model: dictation.model,
+      });
+      return toStoredChildPrivacyRedactions(ranges, dictation.model);
     })(),
   };
 }
