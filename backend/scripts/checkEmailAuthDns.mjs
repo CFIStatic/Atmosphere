@@ -15,8 +15,9 @@
 import { resolveTxt } from 'node:dns/promises';
 
 const APEX = 'atmosphereteam.com';
-const RUA = 'hello@atmosphereteam.com';
-const DMARC = `v=DMARC1; p=none; rua=mailto:${RUA}; fo=1; adkim=r; aspf=r`;
+/** Preferred DMARC — no rua (aggregate reports must not flood hello@). */
+const DMARC = 'v=DMARC1; p=none; fo=1; adkim=r; aspf=r';
+const MAIN_INBOX_RUA = /rua\s*=\s*mailto:\s*hello@atmosphereteam\.com\b/i;
 
 async function txt(name) {
   try {
@@ -41,6 +42,11 @@ const [apexTxt, apexDmarc, invitesDmarc, invitesDkim, sendInvitesSpf] =
     txt(`send.invites.${APEX}`),
   ]);
 
+const apexHasDmarc = apexDmarc.some((t) => /\bv=DMARC1\b/i.test(t));
+const invitesHasDmarc = invitesDmarc.some((t) => /\bv=DMARC1\b/i.test(t));
+const apexDmarcJoined = apexDmarc.join(' ');
+const invitesDmarcJoined = invitesDmarc.join(' ');
+
 const findings = [
   {
     name: 'apex-spf',
@@ -51,16 +57,17 @@ const findings = [
   },
   {
     name: 'apex-dmarc',
-    ok: apexDmarc.some((t) => /\bv=DMARC1\b/i.test(t)),
-    detail: apexDmarc.some((t) => /\bv=DMARC1\b/i.test(t))
-      ? `_dmarc.atmosphereteam.com is ${apexDmarc.join(' ')}`
+    // v=DMARC1 is enough — rua is optional and must not point at hello@.
+    ok: apexHasDmarc,
+    detail: apexHasDmarc
+      ? `_dmarc.atmosphereteam.com is ${apexDmarcJoined}`
       : 'atmosphereteam.com has no DMARC record. Gmail, Yahoo, and Outlook treat unauthenticated mail as junk.',
   },
   {
     name: 'invites-dmarc',
-    ok: invitesDmarc.some((t) => /\bv=DMARC1\b/i.test(t)),
-    detail: invitesDmarc.some((t) => /\bv=DMARC1\b/i.test(t))
-      ? `_dmarc.invites.atmosphereteam.com is ${invitesDmarc.join(' ')}`
+    ok: invitesHasDmarc,
+    detail: invitesHasDmarc
+      ? `_dmarc.invites.atmosphereteam.com is ${invitesDmarcJoined}`
       : 'invites.atmosphereteam.com (Resend From) has no DMARC record.',
   },
   {
@@ -78,6 +85,23 @@ const findings = [
       : 'send.invites.atmosphereteam.com has no SPF; the Resend return-path will fail.',
   },
 ];
+
+if (apexHasDmarc && MAIN_INBOX_RUA.test(apexDmarcJoined)) {
+  findings.push({
+    name: 'apex-dmarc-rua',
+    ok: false,
+    detail:
+      'Apex DMARC rua points at hello@atmosphereteam.com — aggregate reports will flood the main inbox. Remove rua (or use a dedicated mailbox).',
+  });
+}
+if (invitesHasDmarc && MAIN_INBOX_RUA.test(invitesDmarcJoined)) {
+  findings.push({
+    name: 'invites-dmarc-rua',
+    ok: false,
+    detail:
+      'invites DMARC rua points at hello@atmosphereteam.com — aggregate reports will flood the main inbox. Remove rua (or use a dedicated mailbox).',
+  });
+}
 
 const missing = findings.filter((f) => !f.ok);
 console.log('atmosphereteam.com email authentication (public DNS)');
@@ -97,6 +121,9 @@ console.log('Resend authenticates on send.invites.atmosphereteam.com only.');
 console.log('');
 console.log(`  TXT   _dmarc            ${DMARC}`);
 console.log(`  TXT   _dmarc.invites    ${DMARC}`);
+console.log('');
+console.log('Omit rua on DMARC — do not set rua=mailto:hello@atmosphereteam.com');
+console.log('(aggregate reports flood the main inbox). rua is optional; if needed use a dedicated mailbox.');
 console.log('');
 console.log('Also publish the Resend DKIM + return-path records from the Resend dashboard');
 console.log('for invites.atmosphereteam.com, and turn click tracking OFF.');

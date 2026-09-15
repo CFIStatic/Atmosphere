@@ -115,10 +115,20 @@ export function resendTags(kind: MailKind): Array<{ name: string; value: string 
   ];
 }
 
-/** DMARC record receivers require in 2024+ even at p=none. */
-export function recommendedDmarcTxt(ruaEmail: string): string {
-  const rua = ruaEmail.trim().toLowerCase();
-  return `v=DMARC1; p=none; rua=mailto:${rua}; fo=1; adkim=r; aspf=r`;
+/**
+ * Preferred DMARC receivers require in 2024+ even at p=none.
+ * Omit rua — aggregate reports must not flood hello@ / the main inbox.
+ * If you need rua later, use a dedicated mailbox, never hello@.
+ */
+export function recommendedDmarcTxt(): string {
+  return `v=DMARC1; p=none; fo=1; adkim=r; aspf=r`;
+}
+
+const MAIN_INBOX_RUA = /rua\s*=\s*mailto:\s*hello@atmosphereteam\.com\b/i;
+
+/** True when a DMARC TXT routes aggregate reports to the main inbox. */
+export function dmarcRuaPointsAtMainInbox(dmarcTxt: string): boolean {
+  return MAIN_INBOX_RUA.test(dmarcTxt);
 }
 
 export interface DnsAuthFinding {
@@ -158,8 +168,17 @@ export function evaluateEmailAuthDns(input: {
     detail: dmarc
       ? `_dmarc.atmosphereteam.com is ${dmarc}`
       : 'atmosphereteam.com has no DMARC record. Gmail, Yahoo, and Outlook treat unauthenticated mail as junk.',
-    fix: dmarc ? undefined : `TXT  _dmarc  ${recommendedDmarcTxt('hello@atmosphereteam.com')}`,
+    fix: dmarc ? undefined : `TXT  _dmarc  ${recommendedDmarcTxt()}`,
   });
+  if (dmarc && dmarcRuaPointsAtMainInbox(dmarc)) {
+    findings.push({
+      name: 'apex-dmarc-rua',
+      ok: false,
+      detail:
+        'Apex DMARC rua points at hello@atmosphereteam.com — aggregate reports will flood the main inbox.',
+      fix: 'Remove rua=mailto:hello@atmosphereteam.com from _dmarc (omit rua, or use a dedicated mailbox).',
+    });
+  }
 
   const invitesDmarc = input.invitesDmarc.find((t) => /\bv=DMARC1\b/i.test(t));
   findings.push({
@@ -170,8 +189,17 @@ export function evaluateEmailAuthDns(input: {
       : 'invites.atmosphereteam.com (Resend From) has no DMARC record.',
     fix: invitesDmarc
       ? undefined
-      : `TXT  _dmarc.invites  ${recommendedDmarcTxt('hello@atmosphereteam.com')}`,
+      : `TXT  _dmarc.invites  ${recommendedDmarcTxt()}`,
   });
+  if (invitesDmarc && dmarcRuaPointsAtMainInbox(invitesDmarc)) {
+    findings.push({
+      name: 'invites-dmarc-rua',
+      ok: false,
+      detail:
+        'invites DMARC rua points at hello@atmosphereteam.com — aggregate reports will flood the main inbox.',
+      fix: 'Remove rua=mailto:hello@atmosphereteam.com from _dmarc.invites (omit rua, or use a dedicated mailbox).',
+    });
+  }
 
   const dkim = input.invitesDkim.find((t) => /\bp=/.test(t));
   findings.push({
