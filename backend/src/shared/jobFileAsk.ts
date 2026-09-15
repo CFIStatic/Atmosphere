@@ -10,6 +10,7 @@
  * otherwise a grounded lookup still answers from the same text.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   formatCollectionRecord,
@@ -99,12 +100,14 @@ The record may contain any mix of: job identity, brief facts (any labels), scope
 Rules:
 1. Answer only from the record given. Do not invent facts, prices, or coverage decisions.
 2. If the record does not contain the answer, say "This job file does not have that" and stop.
-3. LAYERED DEFAULT for broad asks: short natural opener, a few clear key points, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
+3. LAYERED DEFAULT for broad asks: short natural opener, a few markdown bullets with **Label:** when listing, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and cite the source (brief field, scope line, note, clip date, task, log, seek time).
 5. Cite which part of the file you used so the answer can be checked.
 6. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
 7. Speech on a recording and written notes are both evidence. For conversation topics, summarize first; only paste verbatim lines when depth was requested — never answer talk questions from vision-only room/screen descriptions.
-8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.`;
+8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.
+
+` + ASK_PROSE_FORMAT_RULES;
 
 const STOP = new Set([
   'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',
@@ -491,5 +494,6 @@ export async function answerFromJobFile(input: {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, groundedOn, usage: null };
   }
-  return { answer: completed.text, model: completed.model, groundedOn, usage: completed.usage };
+  const answer = normalizeAskProse(completed.text);
+  return { answer, model: completed.model, groundedOn, usage: completed.usage };
 }
