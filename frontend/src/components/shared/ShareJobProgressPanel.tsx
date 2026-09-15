@@ -95,10 +95,6 @@ export function ShareJobProgressPanel({
   }
 
   async function revoke(share: EvidenceShare) {
-    const who = share.recipientEmail ?? share.label;
-    if (!window.confirm(`Revoke the invite to ${who}? Their link stops working immediately.`)) {
-      return;
-    }
     await api.revokeEvidenceShare(share.id);
     await load();
   }
