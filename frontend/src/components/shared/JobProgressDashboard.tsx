@@ -284,7 +284,7 @@ export function JobProgressDashboard({
       {showProofOfWork && (alwaysShowRecordings || historyOpen) && proof && (
         <ProofOfWork
           jobId={readOnly ? undefined : jobId}
-          heading={alwaysShowRecordings ? 'All recordings' : 'Full work history'}
+          heading="Videos"
           readOnly={readOnly}
           initialData={proof}
           videoFetcher={videoFetcher}

@@ -151,7 +151,7 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
         <div>
           <h2 className="text-base font-semibold text-ink-900">Evidence</h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            Every file on this job, who filed it, and everyone who has opened it since.
+            Custody for every file on this job — who filed it, and who has opened it.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">

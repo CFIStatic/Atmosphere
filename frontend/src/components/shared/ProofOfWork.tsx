@@ -12,13 +12,14 @@ import type { AskSeekTarget } from '../../lib/askSeek';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
+import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
 
 /**
- * Proof of work — light job-file surface.
+ * Proof of work — light job-file Videos surface.
  *
- * Crews film the day; the office gets a simple video list (Play + mic) and can
- * Ask the collection. Dense punch / playbook / day-film / Glance walls live
- * elsewhere (clip player / Ask), not piled onto the job file.
+ * One clip list: expand/Play shows the player and transcript (Copy) together.
+ * Dense punch / playbook / Glance walls stay with the clip player / Ask —
+ * not piled onto the job file. Evidence custody stays in EvidenceLocker.
  */
 
 function matchSeekVideo(
@@ -42,7 +43,7 @@ function matchSeekVideo(
 
 export function ProofOfWork({
   jobId,
-  heading = 'Proof of work',
+  heading = 'Videos',
   readOnly = false,
   initialData,
   videoFetcher,
@@ -176,8 +177,8 @@ export function ProofOfWork({
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        Every uploaded video is kept. Play a clip here, or Ask the collection — dense analysis stays
-        with the clip player and Ask, not piled onto this file.
+        Every uploaded clip is kept. Expand a row to play and read the transcript — dense analysis
+        stays with Ask, not piled onto this file.
       </p>
 
       {data && ((data.disputes?.length ?? 0) > 0) && (
@@ -336,6 +337,44 @@ function HearMicButton({
   );
 }
 
+function transcriptPlainText(video: ProofVideoRecord): string {
+  const captions = captionsForVideo(video);
+  if (captions?.segments?.length) {
+    return captions.segments
+      .map((row) => {
+        const who = row.speakerLabel ? `${row.speakerLabel}: ` : '';
+        return `${who}${row.text}`;
+      })
+      .join('\n');
+  }
+  return String(captions?.transcriptText || video.heardOnMic || '').trim();
+}
+
+function CopyTranscriptButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!text.trim()) return null;
+  return (
+    <button
+      type="button"
+      data-testid="copy-transcript"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+          },
+          () => {
+            window.prompt('Copy transcript', text);
+          },
+        );
+      }}
+      className="rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 function VideoCatalog({
   jobId,
   videos,
@@ -351,77 +390,137 @@ function VideoCatalog({
   seekAt?: number | null;
   seekNonce?: number;
 }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (seekProofId) setOpenId(seekProofId);
+  }, [seekProofId, seekNonce]);
+
   if (!videos.length) return null;
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-line" data-testid="job-video-list">
-      <p className="border-b border-line bg-paper-50/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-        Videos
-      </p>
       <ul>
-        {videos.map((video) => (
-          <li key={video.id} className="border-b border-line/70 px-3 py-2 last:border-b-0">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-ink-800">
-                  {new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                  <span className="ml-1.5 font-normal text-ink-500">{video.company}</span>
-                </p>
-                <p className="mt-0.5 text-[11px] text-ink-500">
-                  {formatClipLength(video.durationSeconds)}
-                  {' · '}
-                  Picture: {statusWord(video.analysisStatus ?? video.narrationStatus, 'read')}
-                  {' · '}
-                  Mic: {statusWord(video.transcriptStatus, 'heard')}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1.5">
-                <PlayClip
-                  proofId={video.id}
-                  videoFetcher={videoFetcher}
-                  seekAt={seekProofId === video.id ? seekAt : null}
-                  seekNonce={seekProofId === video.id ? seekNonce : 0}
-                  autoOpen={seekProofId === video.id}
-                  captions={captionsForVideo(video)}
-                  privacyRedactions={video.privacyRedactions?.ranges ?? null}
-                  childPrivacyRedactions={video.childPrivacyRedactions?.ranges ?? null}
-                />
-                {video.privacyRedactions?.ranges?.length || video.childPrivacyRedactions?.ranges?.length ? (
-                  <p
-                    className="max-w-[14rem] text-right text-[10px] text-ink-400"
-                    data-testid="privacy-redaction-review"
-                    title={[
-                      ...(video.privacyRedactions?.ranges ?? []).map(
-                        (r) =>
-                          `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
-                      ),
-                      ...(video.childPrivacyRedactions?.ranges ?? []).map(
-                        (r) =>
-                          `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · child · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
-                      ),
-                    ].join('\n')}
-                  >
-                    Privacy-protected ·{' '}
-                    {(video.privacyRedactions?.ranges?.length ?? 0) +
-                      (video.childPrivacyRedactions?.ranges?.length ?? 0)}{' '}
-                    segment
-                    {(video.privacyRedactions?.ranges?.length ?? 0) +
-                      (video.childPrivacyRedactions?.ranges?.length ?? 0) ===
-                    1
-                      ? ''
-                      : 's'}
+        {videos.map((video) => {
+          const open = openId === video.id;
+          const captions = captionsForVideo(video);
+          const plain = transcriptPlainText(video);
+          const hasTranscript = Boolean(plain);
+          return (
+            <li
+              key={video.id}
+              className="border-b border-line/70 last:border-b-0"
+              data-testid="job-video-row"
+              data-open={open ? '1' : undefined}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => setOpenId(open ? null : video.id)}
+                  aria-expanded={open}
+                >
+                  <p className="text-xs font-medium text-ink-800">
+                    {new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                    <span className="ml-1.5 font-normal text-ink-500">
+                      {video.company || 'Field Capture'}
+                    </span>
                   </p>
-                ) : null}
-                {jobId && video.transcriptStatus !== 'done' ? (
-                  <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
-                ) : null}
+                  <p className="mt-0.5 text-[11px] text-ink-500">
+                    {formatClipLength(video.durationSeconds)}
+                    {' · '}
+                    Mic: {statusWord(video.transcriptStatus, 'heard')}
+                  </p>
+                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {!open ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(video.id)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
+                    >
+                      Play
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(null)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
+                    >
+                      Close
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+
+              {open ? (
+                <div className="space-y-3 border-t border-line/70 bg-paper-50/40 px-3 py-3" data-testid="job-video-expansion">
+                  <ClipPlayer
+                    proofId={video.id}
+                    videoFetcher={videoFetcher}
+                    seekAt={seekProofId === video.id ? seekAt : null}
+                    seekNonce={seekProofId === video.id ? seekNonce : 0}
+                    autoOpen
+                    captions={captions}
+                    privacyRedactions={video.privacyRedactions?.ranges ?? null}
+                    childPrivacyRedactions={video.childPrivacyRedactions?.ranges ?? null}
+                  />
+                  {video.privacyRedactions?.ranges?.length || video.childPrivacyRedactions?.ranges?.length ? (
+                    <p
+                      className="text-[10px] text-ink-400"
+                      data-testid="privacy-redaction-review"
+                      title={[
+                        ...(video.privacyRedactions?.ranges ?? []).map(
+                          (r) =>
+                            `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+                        ),
+                        ...(video.childPrivacyRedactions?.ranges ?? []).map(
+                          (r) =>
+                            `${Math.round(r.startSec)}s–${Math.round(r.endSec)}s · child · ${r.reason} (${Math.round(r.confidence * 100)}%)`,
+                        ),
+                      ].join('\n')}
+                    >
+                      Privacy-protected ·{' '}
+                      {(video.privacyRedactions?.ranges?.length ?? 0) +
+                        (video.childPrivacyRedactions?.ranges?.length ?? 0)}{' '}
+                      segment
+                      {(video.privacyRedactions?.ranges?.length ?? 0) +
+                        (video.childPrivacyRedactions?.ranges?.length ?? 0) ===
+                      1
+                        ? ''
+                        : 's'}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    {hasTranscript ? <CopyTranscriptButton text={plain} /> : null}
+                    {jobId && video.transcriptStatus !== 'done' ? (
+                      <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
+                    ) : null}
+                  </div>
+                  {hasTranscript ? (
+                    <div className="-mt-1">
+                      <VerbatimTranscript
+                        segments={captions?.segments}
+                        transcriptText={captions?.transcriptText ?? video.heardOnMic}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-ink-500" data-testid="transcript-empty">
+                      {video.transcriptStatus === 'queued' || video.transcriptStatus === 'running'
+                        ? 'Hearing the mic…'
+                        : video.transcriptStatus === 'skipped' || video.transcriptStatus === 'failed'
+                          ? video.transcriptError || 'No transcript on this clip yet.'
+                          : 'No transcript on this clip yet.'}
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -461,7 +560,8 @@ function MeasuredVideo({
   );
 }
 
-function PlayClip({
+
+function ClipPlayer({
   proofId,
   videoFetcher,
   seekAt,
@@ -508,18 +608,16 @@ function PlayClip({
 
   if (url) {
     return (
-      <div className="basis-full sm:basis-64">
-        <MeasuredVideo
-          src={url}
-          seekTo={seekAt}
-          seekNonce={seekNonce}
-          captions={captions}
-          privacyRedactions={privacyRedactions}
-          childPrivacyRedactions={childPrivacyRedactions}
-          onTimeUpdate={onTimeUpdate}
-          className="block max-h-40 w-full rounded-lg bg-black"
-        />
-      </div>
+      <MeasuredVideo
+        src={url}
+        seekTo={seekAt}
+        seekNonce={seekNonce}
+        captions={captions}
+        privacyRedactions={privacyRedactions}
+        childPrivacyRedactions={childPrivacyRedactions}
+        onTimeUpdate={onTimeUpdate}
+        className="block max-h-56 w-full rounded-lg bg-black"
+      />
     );
   }
 
@@ -528,9 +626,9 @@ function PlayClip({
       type="button"
       onClick={() => void open()}
       disabled={loading || failed}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
+      className="flex h-40 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 disabled:opacity-50"
     >
-      {loading && <SpinnerIcon className="animate-spin" width={11} height={11} />}
+      {loading && <SpinnerIcon className="animate-spin" width={14} height={14} />}
       {failed ? 'Could not load' : loading ? 'Loading…' : 'Play'}
     </button>
   );
