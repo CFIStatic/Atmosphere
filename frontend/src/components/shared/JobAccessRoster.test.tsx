@@ -90,7 +90,6 @@ describe('JobAccessRoster', () => {
     revokeJobAccess.mockReset();
     jobAccessRoster.mockResolvedValue({ people });
     revokeJobAccess.mockResolvedValue({ ok: true, kind: 'share' });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   it('lists people with grantor and last access', async () => {
@@ -166,19 +165,10 @@ describe('JobAccessRoster', () => {
         'share:11111111-1111-4111-8111-111111111111',
       );
     });
-    expect(window.confirm).toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.queryByText('Homeowner')).toBeNull();
     });
     expect(screen.getByText('Sam Rivera — Crew')).toBeInTheDocument();
   });
 
-  it('does not call revoke when confirm is cancelled', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<JobAccessRoster jobId="job-1" />);
-    const trash = await screen.findByRole('button', { name: /Revoke access for Homeowner/i });
-    await user.click(trash);
-    expect(revokeJobAccess).not.toHaveBeenCalled();
-  });
 });

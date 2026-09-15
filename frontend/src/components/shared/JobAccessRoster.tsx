@@ -52,18 +52,6 @@ function personSubtitle(person: JobAccessPerson, title: string): string {
   return parts.join(' · ');
 }
 
-function revokeConfirmLabel(person: JobAccessPerson): string {
-  const who =
-    person.email?.trim() ||
-    person.displayName?.trim() ||
-    person.name?.trim() ||
-    (person.kind === 'homeowner' ? 'this homeowner' : 'this person');
-  if (person.kind === 'field_capture') {
-    return `Revoke Field Capture access for ${who}? They lose access immediately.`;
-  }
-  return `Revoke job progress access for ${who}? They lose access immediately.`;
-}
-
 function statusBadgeLabel(person: JobAccessPerson): string {
   if (person.kind === 'homeowner') {
     return person.state === 'claimed' ? 'account' : 'invite';
@@ -103,7 +91,6 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
   }, [jobId]);
 
   async function revoke(person: JobAccessPerson) {
-    if (!window.confirm(revokeConfirmLabel(person))) return;
     setRevokingId(person.id);
     setError(null);
     try {
