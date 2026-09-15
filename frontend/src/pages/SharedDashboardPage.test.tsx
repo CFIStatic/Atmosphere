@@ -59,10 +59,6 @@ vi.mock('../components/shared/JobAccessRoster', () => ({
   JobAccessRoster: () => <div data-testid="job-access-roster">Who has access</div>,
 }));
 
-vi.mock('../components/shared/SimilarPastJobs', () => ({
-  SimilarPastJobs: () => <section data-testid="similar-past-jobs">Similar jobs</section>,
-}));
-
 vi.mock('../components/shared/ScopeDocPanel', () => ({
   ScopeDocPanel: () => null,
 }));
@@ -330,7 +326,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByRole('button', { name: 'Share with homeowner' })).not.toBeInTheDocument();
   });
 
-  it('hides Similar jobs for grant / homeowner viewers', async () => {
+  it('hides Who-has-access for grant / homeowner viewers', async () => {
     authMembership.current = null;
     sharedJob.mockResolvedValue({ ...record, access: 'viewer' });
 
@@ -341,11 +337,11 @@ describe('SharedDashboardPage job file identity', () => {
     );
 
     expect(await screen.findByTestId('your-job-files')).toBeInTheDocument();
-    expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
   });
 
-  it('shows Similar jobs for office org members', async () => {
+  it('shows Who-has-access for office org members without Similar jobs', async () => {
     authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
     sharedJob.mockResolvedValue({ ...record, access: 'org' });
 
@@ -355,8 +351,8 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId('similar-past-jobs')).toBeInTheDocument();
-    expect(screen.getByTestId('job-access-roster')).toBeInTheDocument();
+    expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
+    expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
   });
 
   it('never mounts Motion clips on the job file (org or grant)', async () => {

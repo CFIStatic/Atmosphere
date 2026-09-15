@@ -14,7 +14,6 @@ import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
-import { SimilarPastJobs } from '../components/shared/SimilarPastJobs';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
@@ -429,12 +428,11 @@ export function SharedDashboardPage() {
               }
             />
 
-            {/* Similar jobs + Who-has-access are office/org only — never for
-                homeowners, grant-only, guest progress, or invitee viewers. */}
+            {/* Who-has-access is office/org only — never for homeowners,
+                grant-only, guest progress, or invitee viewers. */}
             {!grantViewer && (
               <div className="mt-4 space-y-4">
                 <JobAccessRoster jobId={record.job.id} />
-                <SimilarPastJobs jobId={record.job.id} />
               </div>
             )}
 
