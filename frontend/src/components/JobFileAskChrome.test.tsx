@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,11 +72,22 @@ describe('JobFileAskChrome source', () => {
   it('pins Ask on the left of the job file on desktop', () => {
     const desktop = chromeSrc.slice(chromeSrc.indexOf(') : ('));
     const askIdx = desktop.indexOf('data-testid="job-file-ask"');
+    const splitIdx = desktop.indexOf('data-testid="job-file-ask-split"');
     const fileIdx = desktop.indexOf('{children}');
     expect(askIdx).toBeGreaterThan(-1);
-    expect(fileIdx).toBeGreaterThan(askIdx);
-    expect(chromeSrc).toContain('lg:border-r');
+    expect(splitIdx).toBeGreaterThan(askIdx);
+    expect(fileIdx).toBeGreaterThan(splitIdx);
+    expect(chromeSrc).toContain('lg:w-[var(--job-file-ask-width)]');
     expect(chromeSrc).toContain('Desktop pins Ask on the left');
+  });
+
+  it('exposes a desktop-only drag resize handle between Ask and the job file', () => {
+    expect(chromeSrc).toContain('data-testid="job-file-ask-split"');
+    expect(chromeSrc).toContain('role="separator"');
+    expect(chromeSrc).toContain('hidden');
+    expect(chromeSrc).toContain('lg:block');
+    expect(chromeSrc).toContain('writeAskSplitWidth');
+    expect(chromeSrc).toContain('onDoubleClick');
   });
 
   it('does not put a bare flex utility on the Ask TabPanel', () => {
@@ -161,5 +172,41 @@ describe('JobFileAskChrome forbids Overview back', () => {
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-file-back')).not.toBeInTheDocument();
     expect(screen.getByText('File body')).toBeInTheDocument();
+  });
+});
+
+describe('JobFileAskChrome desktop split', () => {
+  it('renders the resize handle on desktop and not on phone', () => {
+    usePhoneShell.mockReturnValue(false);
+    const { unmount } = render(
+      <JobFileAskChrome jobId="job-1">
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+    expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-width');
+    unmount();
+
+    usePhoneShell.mockReturnValue(true);
+    render(
+      <JobFileAskChrome jobId="job-1">
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+    expect(screen.queryByTestId('job-file-ask-split')).not.toBeInTheDocument();
+  });
+
+  it('resets the Ask width on double-click of the splitter', () => {
+    window.localStorage.setItem('atmosphere.jobFileAskWidth', '420');
+    usePhoneShell.mockReturnValue(false);
+    render(
+      <JobFileAskChrome jobId="job-1">
+        <p>File body</p>
+      </JobFileAskChrome>,
+    );
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-width', '420');
+    fireEvent.doubleClick(screen.getByTestId('job-file-ask-split'));
+    expect(window.localStorage.getItem('atmosphere.jobFileAskWidth')).toBeNull();
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-width', '512');
   });
 });
