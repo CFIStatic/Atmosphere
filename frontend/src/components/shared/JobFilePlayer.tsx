@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PrivacyRedactionRange, TranscriptSegment } from '../../lib/api';
+import type {
+  ChildPrivacyRedactionRange,
+  PrivacyRedactionRange,
+  TranscriptSegment,
+} from '../../lib/api';
 import { bindMeasuredDuration } from '../../lib/clipDuration';
 import { webVttFromTranscript } from '../../lib/transcriptCaptions';
 import {
@@ -17,9 +21,10 @@ import { SpeakerIcon } from '../icons';
  * segments / timestamped transcript_text via a real WebVTT TextTrack —
  * never a fake empty track when nothing was transcribed yet.
  *
- * Phase 1 privacy: when `privacyRedactions` are present, force mute + heavy
- * blur (or blackout) while the playhead is inside a range. Seeking into a
- * range stays redacted. Server-side re-encode is phase 2.
+ * Phase 1 privacy: private-moment ranges force mute + heavy blur. Child
+ * privacy ranges prefer region blur (no mute) when boxes exist; otherwise
+ * full-frame blur + mute. Seeking into a range stays redacted. Server-side
+ * re-encode is phase 2.
  */
 
 export type JobFilePlayerCaptions = {
@@ -42,6 +47,39 @@ export function activePrivacyRange(
   return null;
 }
 
+export type ActivePrivacy =
+  | { kind: 'private'; range: PrivacyRedactionRange }
+  | { kind: 'child'; range: ChildPrivacyRedactionRange };
+
+export function activeChildPrivacyRange(
+  tSec: number,
+  ranges: ChildPrivacyRedactionRange[] | null | undefined,
+): ChildPrivacyRedactionRange | null {
+  if (!Number.isFinite(tSec) || !ranges?.length) return null;
+  for (const r of ranges) {
+    if (tSec >= r.startSec && tSec < r.endSec) return r;
+    if (Math.abs(tSec - r.endSec) < 0.05) return r;
+  }
+  return null;
+}
+
+/** Private moments take priority; then child privacy. */
+export function resolveActivePrivacy(
+  tSec: number,
+  privateRanges: PrivacyRedactionRange[] | null | undefined,
+  childRanges: ChildPrivacyRedactionRange[] | null | undefined,
+): ActivePrivacy | null {
+  const priv = activePrivacyRange(tSec, privateRanges);
+  if (priv) return { kind: 'private', range: priv };
+  const child = activeChildPrivacyRange(tSec, childRanges);
+  if (child) return { kind: 'child', range: child };
+  return null;
+}
+
+export function childRangeUsesRegionBlur(range: ChildPrivacyRedactionRange | null | undefined): boolean {
+  return Boolean(range?.regions && range.regions.length > 0);
+}
+
 export function JobFilePlayer({
   src,
   className,
@@ -50,6 +88,7 @@ export function JobFilePlayer({
   captions,
   knownDurationSeconds,
   privacyRedactions,
+  childPrivacyRedactions,
   onTimeUpdate,
   testId = 'job-file-player',
 }: {
@@ -62,6 +101,8 @@ export function JobFilePlayer({
   knownDurationSeconds?: number | null;
   /** Stored ai_findings.privacyRedactions ranges — blur + mute while active. */
   privacyRedactions?: PrivacyRedactionRange[] | null;
+  /** Child privacy ranges — region blur when boxes exist; else full-frame blur+mute. */
+  childPrivacyRedactions?: ChildPrivacyRedactionRange[] | null;
   /** Throttled playhead seconds for analysis highlight (does not seek). */
   onTimeUpdate?: (seconds: number) => void;
   testId?: string;
@@ -72,9 +113,20 @@ export function JobFilePlayer({
   const [volume, setVolume] = useState(() => readVideoPlayerPrefs().volume);
   const [muted, setMuted] = useState(() => readVideoPlayerPrefs().muted);
   const [captionsOn, setCaptionsOn] = useState(() => readVideoPlayerPrefs().captionsOn);
-  const [privacyActive, setPrivacyActive] = useState<PrivacyRedactionRange | null>(null);
+  const [privacyActive, setPrivacyActive] = useState<ActivePrivacy | null>(null);
 
   const ranges = privacyRedactions ?? null;
+  const childRanges = childPrivacyRedactions ?? null;
+  const forceMute =
+    privacyActive?.kind === 'private' ||
+    (privacyActive?.kind === 'child' && !childRangeUsesRegionBlur(privacyActive.range));
+  const fullFrameBlur =
+    privacyActive?.kind === 'private' ||
+    (privacyActive?.kind === 'child' && !childRangeUsesRegionBlur(privacyActive.range));
+  const regionBlur =
+    privacyActive?.kind === 'child' && childRangeUsesRegionBlur(privacyActive.range)
+      ? privacyActive.range.regions ?? []
+      : [];
 
   const vtt = useMemo(
     () =>
@@ -129,13 +181,21 @@ export function JobFilePlayer({
     const tick = () => {
       const t = el.currentTime;
       if (!Number.isFinite(t)) return;
-      const active = activePrivacyRange(t, ranges);
+      const active = resolveActivePrivacy(t, ranges, childRanges);
       setPrivacyActive((prev) => {
-        if (prev?.startSec === active?.startSec && prev?.endSec === active?.endSec) return prev;
+        if (
+          prev?.kind === active?.kind &&
+          prev?.range.startSec === active?.range.startSec &&
+          prev?.range.endSec === active?.range.endSec
+        ) {
+          return prev;
+        }
         return active;
       });
-      // Force mute inside private ranges; restore user preference outside.
-      if (active) {
+      const shouldMute =
+        active?.kind === 'private' ||
+        (active?.kind === 'child' && !childRangeUsesRegionBlur(active.range));
+      if (shouldMute) {
         el.muted = true;
       } else {
         el.muted = prefsMutedRef.current || volume === 0;
@@ -155,23 +215,23 @@ export function JobFilePlayer({
       el.removeEventListener('seeked', tick);
       el.removeEventListener('play', tick);
     };
-  }, [src, onTimeUpdate, ranges, volume]);
+  }, [src, onTimeUpdate, ranges, childRanges, volume]);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.volume = volume;
-    if (!privacyActive) {
+    if (!forceMute) {
       el.muted = muted;
     }
-  }, [volume, muted, privacyActive]);
+  }, [volume, muted, forceMute]);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const sync = () => {
       // Ignore mute flips forced by privacy enforcement.
-      if (privacyActive) return;
+      if (forceMute) return;
       setVolume(el.volume);
       setMuted(el.muted);
       prefsMutedRef.current = el.muted;
@@ -179,7 +239,7 @@ export function JobFilePlayer({
     };
     el.addEventListener('volumechange', sync);
     return () => el.removeEventListener('volumechange', sync);
-  }, [src, privacyActive]);
+  }, [src, forceMute]);
 
   useEffect(() => {
     const el = ref.current;
@@ -191,7 +251,7 @@ export function JobFilePlayer({
         if (track.kind !== 'captions' && track.kind !== 'subtitles') continue;
         // Hide captions while privacy-protected so on-screen speech is not leaked.
         track.mode =
-          captionsAvailable && captionsOn && !privacyActive ? 'showing' : 'hidden';
+          captionsAvailable && captionsOn && !forceMute ? 'showing' : 'hidden';
       }
     };
     applyMode();
@@ -200,10 +260,10 @@ export function JobFilePlayer({
     return () => {
       if (trackEl) trackEl.removeEventListener('load', applyMode);
     };
-  }, [src, vttUrl, captionsOn, captionsAvailable, privacyActive]);
+  }, [src, vttUrl, captionsOn, captionsAvailable, forceMute]);
 
   function toggleMute() {
-    if (privacyActive) return; // cannot unmute through a private range
+    if (forceMute) return; // cannot unmute through a full-frame privacy range
     const nextMuted = !muted;
     setMuted(nextMuted);
     prefsMutedRef.current = nextMuted;
@@ -220,7 +280,7 @@ export function JobFilePlayer({
     writeVideoPlayerPrefs({ volume: clamped, muted: nextMuted });
     if (ref.current) {
       ref.current.volume = clamped;
-      if (!privacyActive) ref.current.muted = nextMuted;
+      if (!forceMute) ref.current.muted = nextMuted;
     }
   }
 
@@ -243,9 +303,10 @@ export function JobFilePlayer({
           data-testid={testId}
           data-seek={seekTo == null ? undefined : String(seekTo)}
           data-privacy-active={privacyActive ? '1' : '0'}
+          data-privacy-kind={privacyActive?.kind ?? undefined}
           className={
             (className ?? '') +
-            (privacyActive ? ' job-file-player-privacy-blur' : '')
+            (fullFrameBlur ? ' job-file-player-privacy-blur' : '')
           }
         >
           {vttUrl ? (
@@ -259,6 +320,22 @@ export function JobFilePlayer({
             />
           ) : null}
         </video>
+        {regionBlur.length
+          ? regionBlur.map((box, i) => (
+              <div
+                key={`child-region-${i}`}
+                className="job-file-player-child-region-blur pointer-events-none absolute"
+                data-testid="job-file-child-region-blur"
+                style={{
+                  left: `${box.x * 100}%`,
+                  top: `${box.y * 100}%`,
+                  width: `${box.w * 100}%`,
+                  height: `${box.h * 100}%`,
+                }}
+                aria-hidden="true"
+              />
+            ))
+          : null}
         {privacyActive ? (
           <div
             className="job-file-player-privacy-veil pointer-events-none absolute inset-0 flex items-end justify-start p-2"
@@ -269,7 +346,7 @@ export function JobFilePlayer({
               className="rounded-full bg-ink-900/75 px-2 py-0.5 text-[10px] font-medium tracking-wide text-paper-50"
               data-testid="job-file-privacy-badge"
             >
-              Privacy protected
+              {privacyActive.kind === 'child' ? 'Child privacy' : 'Privacy protected'}
             </span>
           </div>
         ) : null}
@@ -282,21 +359,21 @@ export function JobFilePlayer({
           type="button"
           onClick={toggleMute}
           aria-label={
-            privacyActive
+            forceMute
               ? 'Muted — privacy protected'
               : muted || volume === 0
                 ? 'Unmute'
                 : 'Mute'
           }
-          aria-pressed={Boolean(privacyActive) || muted || volume === 0}
-          disabled={Boolean(privacyActive)}
+          aria-pressed={Boolean(forceMute) || muted || volume === 0}
+          disabled={Boolean(forceMute)}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-700 hover:bg-paper-100 disabled:opacity-50"
           data-testid="job-file-mute"
         >
           <SpeakerIcon
             width={14}
             height={14}
-            className={privacyActive || muted || volume === 0 ? 'opacity-40' : undefined}
+            className={forceMute || muted || volume === 0 ? 'opacity-40' : undefined}
           />
         </button>
         <input
@@ -304,7 +381,7 @@ export function JobFilePlayer({
           min={0}
           max={1}
           step={0.01}
-          value={privacyActive || muted ? 0 : volume}
+          value={forceMute || muted ? 0 : volume}
           aria-label="Volume"
           onChange={(e) => onVolumeInput(Number(e.target.value))}
           className="h-1.5 w-24 cursor-pointer accent-ink-800"
@@ -313,7 +390,7 @@ export function JobFilePlayer({
         <button
           type="button"
           onClick={toggleCaptions}
-          disabled={!captionsAvailable || Boolean(privacyActive)}
+          disabled={!captionsAvailable || Boolean(forceMute)}
           aria-label={
             captionsAvailable
               ? captionsOn
@@ -325,7 +402,7 @@ export function JobFilePlayer({
           }
           aria-pressed={captionsAvailable ? captionsOn : undefined}
           title={
-            privacyActive
+            forceMute
               ? 'Captions hidden while privacy-protected'
               : captionsAvailable
                 ? undefined
@@ -335,7 +412,7 @@ export function JobFilePlayer({
           }
           className={
             'inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-bold tracking-wide ' +
-            (captionsAvailable && !privacyActive
+            (captionsAvailable && !forceMute
               ? captionsOn
                 ? 'bg-ink-900 text-paper-50'
                 : 'text-ink-700 hover:bg-paper-100'
@@ -350,11 +427,18 @@ export function JobFilePlayer({
             {captions?.status === 'pending' ? 'Captions pending' : 'Captions unavailable'}
           </span>
         ) : null}
-        {ranges?.length ? (
+        {ranges?.length || childRanges?.length ? (
           <span
             className="ml-auto text-[10px] text-ink-400"
             data-testid="job-file-privacy-hint"
-            title={ranges.map((r) => `${r.startSec.toFixed(0)}s–${r.endSec.toFixed(0)}s · ${r.reason}`).join('\n')}
+            title={[
+              ...(ranges ?? []).map(
+                (r) => `${r.startSec.toFixed(0)}s–${r.endSec.toFixed(0)}s · ${r.reason}`,
+              ),
+              ...(childRanges ?? []).map(
+                (r) => `${r.startSec.toFixed(0)}s–${r.endSec.toFixed(0)}s · child · ${r.reason}`,
+              ),
+            ].join('\n')}
           >
             Privacy-protected segments on file
           </span>

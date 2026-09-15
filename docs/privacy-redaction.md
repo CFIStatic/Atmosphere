@@ -1,5 +1,8 @@
 # Private moment redaction
 
+See also: [Child privacy redaction](./child-privacy-redaction.md)
+
+
 Automatically identify private intervals in Field Capture / job videos and
 block them out for viewers: **blur video + mute audio** for those ranges;
 outside those ranges playback is normal.

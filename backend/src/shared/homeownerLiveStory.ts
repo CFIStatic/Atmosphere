@@ -8,6 +8,11 @@ import {
   privacyRedactionsFromStored,
   PRIVACY_REDACTED_LABEL,
 } from '../audio/privacyRedactions.js';
+import {
+  CHILD_PRIVACY_REDACTED_LABEL,
+  childPrivacyRedactionsFromStored,
+  isChildPresenceText,
+} from '../audio/childPrivacyRedactions.js';
 
 export type LiveStoryMoment = {
   id: string;
@@ -49,6 +54,7 @@ function scrubText(text: string | null | undefined, privacyProtected: boolean): 
   const t = asString(text);
   if (!t || t === PRIVACY_REDACTED_LABEL) return null;
   if (privacyProtected && isPrivateMomentText(t)) return null;
+  if (privacyProtected && isChildPresenceText(t)) return CHILD_PRIVACY_REDACTED_LABEL;
   if (isPrivateMomentText(t)) return null;
   return t.replace(/\s+/g, ' ').trim().slice(0, 400);
 }
@@ -146,7 +152,10 @@ export function composeHomeownerLiveStory(
 
   for (const video of list) {
     const ranges = privacyRedactionsFromStored(video.privacyRedactions);
-    const privacyProtected = ranges.length > 0;
+    const childRanges = childPrivacyRedactionsFromStored(
+      (video as { childPrivacyRedactions?: unknown }).childPrivacyRedactions,
+    );
+    const privacyProtected = ranges.length > 0 || childRanges.length > 0;
     const c = conversationFields(
       video.conversation && typeof video.conversation === 'object'
         ? video.conversation

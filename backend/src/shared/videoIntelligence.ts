@@ -37,6 +37,10 @@ import {
   parsePrivacyRedactions,
   type PrivacyRedactionRange,
 } from '../audio/privacyRedactions.js';
+import {
+  parseChildPrivacyRedactions,
+  type ChildPrivacyRange,
+} from '../audio/childPrivacyRedactions.js';
 
 export type VideoSourceKind =
   | 'proof_of_work'
@@ -87,6 +91,8 @@ export type VideoDictationResult = {
   people: unknown[];
   /** Private intervals to blur+mute (bathroom, undressing, intimate spaces). */
   privacyRedactions: PrivacyRedactionRange[];
+  /** Child privacy intervals (age appearance child vs adult only — never identify). */
+  childPrivacyRedactions: ChildPrivacyRange[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -224,8 +230,9 @@ export async function dictatePreparedFrames(
     'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp.',
     'PRIVACY: when stills show a bathroom/toilet/shower, locker/changing room, explicit undressing, or clearly intimate/private space not meant for work evidence, add privacyRedactions ranges {startSec,endSec,reason,confidence}. Prefer over-redacting private spaces over leaking them. Mark confidence; never invent a private room that is not evidenced. Empty array when nothing private is visible.',
-    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}],"privacyRedactions":[{"startSec":60,"endSec":95,"reason":"bathroom","confidence":0.85}]}',
-    'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary. privacyRedactions may be empty.',
+    'CHILD PRIVACY (protective only): when stills show a person who appears to be a minor (child/infant/toddler/teen by appearance), add childPrivacyRedactions ranges {startSec,endSec,reason,confidence,regions?}. ageAppearance on people must be only "child", "adult", or "cannotTell" — NEVER invent names, NEVER reverse-search faces of children, NEVER identify minors. Skip cannotTell. Prefer over-redacting when clearly a child. Optional regions are normalized 0-1 face/body boxes. Empty array when no child is evidenced.',
+    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","ageAppearance":"adult","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}],"privacyRedactions":[{"startSec":60,"endSec":95,"reason":"bathroom","confidence":0.85}],"childPrivacyRedactions":[{"startSec":40,"endSec":70,"reason":"child present","confidence":0.85,"regions":[{"x":0.2,"y":0.1,"w":0.15,"h":0.25}]}]}',
+    'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary. privacyRedactions and childPrivacyRedactions may be empty.',
   ].join(' ');
 
   const userText = [
@@ -311,6 +318,7 @@ export async function dictatePreparedFrames(
     events: parsed.events,
     people: parsed.people,
     privacyRedactions: parsed.privacyRedactions,
+    childPrivacyRedactions: parsed.childPrivacyRedactions,
   };
 }
 
@@ -402,6 +410,7 @@ async function dictateWithGemini(input: {
     events: parsed.events,
     people: parsed.people,
     privacyRedactions: parsed.privacyRedactions,
+    childPrivacyRedactions: parsed.childPrivacyRedactions,
   };
 }
 
@@ -470,6 +479,7 @@ export function parseDictationPayload(
   events: DictationEvent[];
   people: unknown[];
   privacyRedactions: PrivacyRedactionRange[];
+  childPrivacyRedactions: ChildPrivacyRange[];
 } {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -482,6 +492,7 @@ export function parseDictationPayload(
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
       people: [],
       privacyRedactions: [],
+      childPrivacyRedactions: [],
     };
   }
   try {
@@ -495,6 +506,8 @@ export function parseDictationPayload(
       persons?: unknown;
       privacyRedactions?: unknown;
       privacy_redactions?: unknown;
+      childPrivacyRedactions?: unknown;
+      child_privacy_redactions?: unknown;
     };
     const narration = String(data.narration ?? '').trim();
     const summary = String(data.summary ?? '').trim() || null;
@@ -508,6 +521,9 @@ export function parseDictationPayload(
       privacyRedactions: parsePrivacyRedactions(
         data.privacyRedactions ?? data.privacy_redactions,
       ),
+      childPrivacyRedactions: parseChildPrivacyRedactions(
+        data.childPrivacyRedactions ?? data.child_privacy_redactions,
+      ),
     };
   } catch {
     const trimmed = text.trim();
@@ -518,6 +534,7 @@ export function parseDictationPayload(
       events: sanitizeDictationEvents(parseTimestampedNarration(trimmed)),
       people: [],
       privacyRedactions: [],
+      childPrivacyRedactions: [],
     };
   }
 }

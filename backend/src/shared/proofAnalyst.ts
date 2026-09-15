@@ -5,6 +5,10 @@ import {
   privacyRedactionsFromStored,
   redactTranscriptForAsk,
 } from '../audio/privacyRedactions.js';
+import {
+  childPrivacyRedactionsFromStored,
+  redactTranscriptForChildPrivacy,
+} from '../audio/childPrivacyRedactions.js';
 
 /**
  * Reading the proof videos, and answering questions about them.
@@ -520,13 +524,19 @@ export function collectionClipsFromRows(
     const ranges = privacyRedactionsFromStored(
       (findings as { privacyRedactions?: unknown }).privacyRedactions,
     );
+    const childRanges = childPrivacyRedactionsFromStored(
+      (findings as { childPrivacyRedactions?: unknown }).childPrivacyRedactions,
+    );
     return {
       workDate: String(row.work_date ?? row.workDate ?? ''),
       phase: row.phase ?? null,
       company: row.company ?? null,
       summary: row.ai_summary ?? row.narration_text ?? null,
       narration: row.narration_text ?? null,
-      transcript: redactTranscriptForAsk(row.transcript_text ?? null, ranges),
+      transcript: redactTranscriptForChildPrivacy(
+        redactTranscriptForAsk(row.transcript_text ?? null, ranges),
+        childRanges,
+      ),
       changes: asStrings(
         (findings as { changes?: unknown; workPerformed?: unknown }).changes ??
           (findings as { workPerformed?: unknown }).workPerformed,

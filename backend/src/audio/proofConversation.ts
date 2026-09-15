@@ -39,6 +39,14 @@ import {
   toStoredPrivacyRedactions,
   type StoredPrivacyRedactions,
 } from './privacyRedactions.js';
+import {
+  applyChildPrivacyToEvidenceEntries,
+  childPrivacyRedactionsFromStored,
+  deriveChildPrivacyRedactions,
+  toStoredChildPrivacyRedactions,
+  type StoredChildPrivacyRedactions,
+} from './childPrivacyRedactions.js';
+import { isChildBlurEnabledForOrg } from '../childPrivacy/index.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -71,7 +79,7 @@ export async function enrichProofConversation(
   {
     const { data } = await admin
       .from('job_proofs')
-      .select('transcript_text, duration_seconds, ai_findings, ai_summary, narration_text, narration, actions')
+      .select('org_id, transcript_text, duration_seconds, ai_findings, ai_summary, narration_text, narration, actions')
       .eq('id', proofId)
       .maybeSingle();
     proof = data;
@@ -202,11 +210,41 @@ export async function enrichProofConversation(
     logEntries = applyPrivacyToEvidenceEntries(logEntries, privacyRanges);
   }
 
+  const orgId = typeof proof?.org_id === 'string' ? proof.org_id : null;
+  const childEnabled = await isChildBlurEnabledForOrg(admin, orgId);
+  const existingChild = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
+  const childPeopleNotes = people.people.flatMap((person) => {
+    const ageAppearance = (person as { ageAppearance?: unknown }).ageAppearance ?? null;
+    const moments = person.appearMoments ?? [];
+    if (!moments.length) {
+      return [{ tSec: person.firstSeenSec ?? 0, note: person.label, ageAppearance }];
+    }
+    return moments.map((m) => ({
+      tSec: m.tSec,
+      note: m.note ?? person.label,
+      ageAppearance,
+    }));
+  });
+  const childRanges = deriveChildPrivacyRedactions({
+    durationSeconds,
+    events: logEntries.map((e) => ({ atSeconds: e.atSeconds, text: e.text, type: e.type })),
+    peopleNotes: childPeopleNotes,
+    narrationText,
+    summary,
+    visionRanges: existingChild,
+    enabled: childEnabled,
+  });
+  const childStored = toStoredChildPrivacyRedactions(childRanges);
+  if (childRanges.length) {
+    logEntries = applyChildPrivacyToEvidenceEntries(logEntries, childRanges);
+  }
+
   await mergeFindings(admin, proofId, {
     conversation: hasConversation(details) ? toStoredConversation(details) : null,
     evidenceLog: logEntries.length ? toStoredEvidenceLog(logEntries) : null,
     people: hasPeople(people) ? toStoredPeople(people) : null,
     privacyRedactions: privacyStored,
+    childPrivacyRedactions: childStored,
   });
 
   return hasConversation(details) ? details : null;
@@ -331,6 +369,7 @@ async function mergeFindings(
     evidenceLog: StoredEvidenceLog | null;
     people: StoredPeoplePresent | null;
     privacyRedactions: StoredPrivacyRedactions | null;
+    childPrivacyRedactions: StoredChildPrivacyRedactions | null;
   },
 ): Promise<void> {
   const { data: proof } = await admin
@@ -350,6 +389,8 @@ async function mergeFindings(
   else delete prev.people;
   if (patch.privacyRedactions) prev.privacyRedactions = patch.privacyRedactions;
   else delete prev.privacyRedactions;
+  if (patch.childPrivacyRedactions) prev.childPrivacyRedactions = patch.childPrivacyRedactions;
+  else delete prev.childPrivacyRedactions;
   await admin.from('job_proofs').update({ ai_findings: prev }).eq('id', proofId);
 }
 

@@ -90,6 +90,11 @@ import {
   privacyRedactionsFromStored,
   publicPrivacyFields,
 } from '../audio/privacyRedactions.js';
+import {
+  applyChildPrivacyToEvidenceEntries,
+  childPrivacyRedactionsFromStored,
+  publicChildPrivacyFields,
+} from '../audio/childPrivacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { summarizeProofPulse } from '../shared/proofPulse.js';
@@ -236,7 +241,8 @@ function evidenceLogFromRow(row: any) {
     actions,
   });
   const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
-  const entries = applyPrivacyToEvidenceEntries(
+  const childRanges = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
+  let entries = applyPrivacyToEvidenceEntries(
     buildEvidenceLog({
       storedLog: findings.evidenceLog,
       storedEntries: row?.narration?.entries,
@@ -251,6 +257,7 @@ function evidenceLogFromRow(row: any) {
     }),
     ranges,
   );
+  entries = applyChildPrivacyToEvidenceEntries(entries, childRanges);
   return overlaySpeakerLabels(entries, people);
 }
 
@@ -258,6 +265,11 @@ function evidenceLogFromRow(row: any) {
 function privacyRedactionsPayloadFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
   return publicPrivacyFields(privacyRedactionsFromStored(findings.privacyRedactions));
+}
+
+function childPrivacyRedactionsPayloadFromRow(row: any) {
+  const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  return publicChildPrivacyFields(childPrivacyRedactionsFromStored(findings.childPrivacyRedactions));
 }
 
 function peoplePayloadFromRow(row: any) {
@@ -2314,6 +2326,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       evidenceLog: evidenceLogFromRow(row),
       people: peoplePayloadFromRow(row),
       privacyRedactions: privacyRedactionsPayloadFromRow(row),
+      childPrivacyRedactions: childPrivacyRedactionsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),

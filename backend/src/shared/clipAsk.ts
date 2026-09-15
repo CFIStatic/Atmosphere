@@ -29,6 +29,13 @@ import {
   secondsInPrivacyRange,
   type PrivacyRedactionRange,
 } from '../audio/privacyRedactions.js';
+import {
+  CHILD_PRIVACY_REDACTED_LABEL,
+  childPrivacyRedactionsFromStored,
+  redactTranscriptForChildPrivacy,
+  secondsInChildPrivacyRange,
+  type ChildPrivacyRange,
+} from '../audio/childPrivacyRedactions.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -93,6 +100,7 @@ export type ClipAskRecord = {
   peopleSource?: string | null;
   /** Private intervals — Ask must not quote speech inside these ranges. */
   privacyRedactions?: PrivacyRedactionRange[] | { ranges?: PrivacyRedactionRange[] } | null;
+  childPrivacyRedactions?: ChildPrivacyRange[] | { ranges?: ChildPrivacyRange[] } | null;
 };
 
 
@@ -218,6 +226,7 @@ export function clipRecordFromEvidenceItem(item: {
     transcript: analysis?.transcript ?? null,
     transcriptStatus: item.transcriptStatus ?? analysis?.transcriptStatus ?? null,
     privacyRedactions: analysis?.privacyRedactions ?? null,
+    childPrivacyRedactions: analysis?.childPrivacyRedactions ?? null,
     conversationDetails: Array.isArray(analysis?.conversationDetails) ? analysis.conversationDetails : [],
     conversationAgreements: Array.isArray(analysis?.conversationAgreements)
       ? analysis.conversationAgreements
@@ -302,18 +311,28 @@ function privacyRangesOf(record: ClipAskRecord): PrivacyRedactionRange[] {
   return privacyRedactionsFromStored(record.privacyRedactions);
 }
 
-/** Transcript + conversation turns with private intervals scrubbed for Ask. */
+function childPrivacyRangesOf(record: ClipAskRecord): ChildPrivacyRange[] {
+  return childPrivacyRedactionsFromStored(record.childPrivacyRedactions);
+}
+
+/** Transcript + conversation turns with private + child intervals scrubbed for Ask. */
 export function speechSafeClipRecord(record: ClipAskRecord): ClipAskRecord {
   const ranges = privacyRangesOf(record);
-  if (!ranges.length) return record;
-  const transcript = redactTranscriptForAsk(record.transcript, ranges);
+  const childRanges = childPrivacyRangesOf(record);
+  if (!ranges.length && !childRanges.length) return record;
+  let transcript = redactTranscriptForAsk(record.transcript, ranges);
+  transcript = redactTranscriptForChildPrivacy(transcript, childRanges);
   const turns = Array.isArray(record.conversationTurns)
     ? record.conversationTurns.map((t) => {
         const tSec = t.tSec == null ? null : Number(t.tSec);
-        if (tSec == null || !Number.isFinite(tSec) || !secondsInPrivacyRange(tSec, ranges)) {
-          return t;
+        if (tSec == null || !Number.isFinite(tSec)) return t;
+        if (secondsInPrivacyRange(tSec, ranges)) {
+          return { ...t, text: PRIVACY_REDACTED_LABEL };
         }
-        return { ...t, text: PRIVACY_REDACTED_LABEL };
+        if (secondsInChildPrivacyRange(tSec, childRanges)) {
+          return { ...t, text: CHILD_PRIVACY_REDACTED_LABEL };
+        }
+        return t;
       })
     : record.conversationTurns;
   return { ...record, transcript, conversationTurns: turns };

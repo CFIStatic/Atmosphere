@@ -20,6 +20,10 @@ import {
   privacyRedactionsFromStored,
   type PrivacyRedactionRange,
 } from '../audio/privacyRedactions.js';
+import {
+  childPrivacyRedactionsFromStored,
+  combinedPrivacyRangesForOverlap,
+} from '../audio/childPrivacyRedactions.js';
 import type { VisionAction } from './proofActions.js';
 
 export const MOTION_CLIPS_VERSION = 1;
@@ -419,7 +423,10 @@ export function motionClipsFromProofRow(row: {
   const stored = motionClipsFromStored(findings.motionClips);
   if (stored?.clips.length) return stored;
 
-  const privacy = privacyRedactionsFromStored(findings.privacyRedactions);
+  const privacy = combinedPrivacyRangesForOverlap(
+    privacyRedactionsFromStored(findings.privacyRedactions),
+    childPrivacyRedactionsFromStored(findings.childPrivacyRedactions),
+  );
   const actions = Array.isArray(row.actions)
     ? row.actions
     : Array.isArray(findings.actions)
