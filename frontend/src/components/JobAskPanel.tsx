@@ -25,6 +25,8 @@ import {
   splitAnswerCites,
 } from '../lib/askSeek';
 import { parseAskProseBlocks, type AskInline } from '../lib/askProse';
+import { extractAskSources, type AskSourceChip } from '../lib/askSources';
+import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
 
@@ -74,6 +76,33 @@ function AskCiteSpans({
   );
 }
 
+
+function AskSourceChips({
+  sources,
+  onOpen,
+}: {
+  sources: AskSourceChip[];
+  onOpen: (source: AskSourceChip) => void;
+}) {
+  if (!sources.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-source-chips">
+      {sources.map((source) => (
+        <button
+          key={source.id}
+          type="button"
+          data-testid="ask-source-chip"
+          data-source-id={source.id}
+          onClick={() => onOpen(source)}
+          className="rounded-full border border-line bg-paper-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800"
+        >
+          {source.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AskInlineNodes({
   nodes,
   events,
@@ -110,14 +139,24 @@ function AskAnswerBody({
   text,
   events,
   onSeek,
+  sources,
+  onOpenSource,
 }: {
   text: string;
   events: number[];
   onSeek: (atSeconds: number) => void;
+  sources: AskSourceChip[];
+  onOpenSource: (source: AskSourceChip) => void;
 }) {
-  const blocks = parseAskProseBlocks(text);
+  const { body } = extractAskSources(text);
+  const blocks = parseAskProseBlocks(body);
   if (!blocks.length) {
-    return <p className="leading-relaxed">{text}</p>;
+    return (
+      <>
+        <p className="leading-relaxed">{body || text}</p>
+        <AskSourceChips sources={sources} onOpen={onOpenSource} />
+      </>
+    );
   }
   return (
     <div className="space-y-2.5 text-[15px] leading-relaxed" data-testid="ask-answer-body">
@@ -146,6 +185,7 @@ function AskAnswerBody({
           </p>
         ),
       )}
+      <AskSourceChips sources={sources} onOpen={onOpenSource} />
     </div>
   );
 }
@@ -224,6 +264,7 @@ export function JobAskPanel({
   const seq = useRef(0);
   const activeThreadIdRef = useRef<string | null>(null);
   const { seek } = useVideoSeek();
+  const { focus: focusJobFile } = useJobFileFocus();
   const record = file ? file.record : ownRecord;
   const proofs = file ? file.proofs : ownProofs;
   const preloaded = file !== undefined;
@@ -386,6 +427,18 @@ export function JobAskPanel({
     hasMic: hasMicOnFile(proofs),
     hasNotes: (record?.messages.length ?? 0) > 0,
   });
+
+  function openAskSource(source: AskSourceChip) {
+    if (source.workDate || source.section === 'videos') {
+      seek({
+        atSeconds: 0,
+        workDate: source.workDate,
+      });
+    }
+    if (source.section) {
+      focusJobFile({ section: source.section, workDate: source.workDate });
+    }
+  }
 
   function seekCite(turn: JobFileTurn, atSeconds: number) {
     const scoped = eventsForGrounded(analysisEvents, turn.groundedIds, proofs?.videos);
@@ -588,6 +641,8 @@ export function JobAskPanel({
                         )
                         .map((event) => event.atSeconds)}
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
+                      sources={extractAskSources(turn.content).sources}
+                      onOpenSource={openAskSource}
                     />
                   ) : (
                     <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>

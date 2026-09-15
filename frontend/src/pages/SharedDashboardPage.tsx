@@ -441,7 +441,7 @@ export function SharedDashboardPage() {
             )}
 
             {!viewerOnly && (
-            <details className="mt-4 rounded-xl glass-card group">
+            <details className="mt-4 rounded-xl glass-card group" data-job-section="setup">
               <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center justify-between gap-2">
                   Job setup — scope, crew &amp; documents
@@ -523,7 +523,7 @@ function PartyList({ record, onChanged }: { record: SharedJobRecord; onChanged: 
   }
 
   return (
-    <section className="rounded-xl glass-card p-5">
+    <section className="rounded-xl glass-card p-5" data-job-section="parties">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-ink-900">Who is on this job</h2>
         <button
@@ -664,7 +664,7 @@ function ScopeList({
   }
 
   return (
-    <section className="rounded-xl glass-card p-5">
+    <section className="rounded-xl glass-card p-5" data-job-section="scope">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-ink-900">Scope</h2>
         <div className="flex items-center gap-3 text-xs">

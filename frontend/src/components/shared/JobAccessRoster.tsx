@@ -104,7 +104,7 @@ export function JobAccessRoster({ jobId }: { jobId: string }) {
   }
 
   return (
-    <section className="rounded-xl glass-card p-5" data-testid="job-access-roster">
+    <section className="rounded-xl glass-card p-5" data-testid="job-access-roster" data-job-section="access">
       <div>
         <h2 className="text-base font-semibold text-ink-900">Who has access</h2>
         <p className="mt-0.5 text-xs text-ink-500">

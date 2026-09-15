@@ -146,7 +146,7 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
   );
 
   return (
-    <section className="rounded-xl glass-card">
+    <section className="rounded-xl glass-card" data-job-section="evidence" data-testid="evidence-locker">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
         <div>
           <h2 className="text-base font-semibold text-ink-900">Evidence</h2>

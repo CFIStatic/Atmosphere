@@ -153,7 +153,7 @@ export function ProofOfWork({
   }
 
   return (
-    <section className="rounded-xl glass-card p-5">
+    <section className="rounded-xl glass-card p-5" data-job-section="videos" data-testid="proof-of-work">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-ink-900">{heading}</h2>
         {data && (
@@ -410,6 +410,7 @@ function VideoCatalog({
               key={video.id}
               className="border-b border-line/70 last:border-b-0"
               data-testid="job-video-row"
+              data-job-clip-date={video.workDate}
               data-open={open ? '1' : undefined}
             >
               <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">

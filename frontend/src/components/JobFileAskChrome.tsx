@@ -13,6 +13,11 @@ import type { ProofResponse, SharedJobRecord } from '../lib/api';
 import { usePhoneShell } from '../lib/usePhoneShell';
 import { VideoSeekProvider } from '../lib/videoSeek';
 import {
+  JobFileFocusListener,
+  JobFileFocusProvider,
+  useJobFileFocus,
+} from '../lib/jobFileFocus';
+import {
   clampAskWidth,
   clearAskSplitWidth,
   DEFAULT_ASK_WIDTH_PX,
@@ -25,6 +30,17 @@ import { JobAskPanel, type JobAskFn } from './JobAskPanel';
 import type { AskThread, ProofQuestion } from '../lib/api';
 
 type JobFilePane = 'file' | 'ask';
+
+function JobFileFocusRevealBridge({ reveal }: { reveal: () => void }) {
+  const { setRevealFile } = useJobFileFocus();
+  useEffect(() => {
+    setRevealFile(reveal);
+    return () => setRevealFile(undefined);
+  }, [reveal, setRevealFile]);
+  return null;
+}
+
+
 
 function reactNodeText(node: ReactNode): string {
   if (node == null || typeof node === 'boolean') return '';
@@ -142,8 +158,15 @@ export function JobFileAskChrome({
     ['--job-file-ask-width' as string]: `${askWidth}px`,
   } as CSSProperties;
 
+  const revealFilePane = useCallback(() => {
+    setPane('file');
+  }, []);
+
   return (
     <VideoSeekProvider>
+    <JobFileFocusProvider>
+    <JobFileFocusListener />
+    <JobFileFocusRevealBridge reveal={revealFilePane} />
     <div
       ref={splitRef}
       className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden"
@@ -258,6 +281,7 @@ export function JobFileAskChrome({
       )}
       {extra}
     </div>
+    </JobFileFocusProvider>
     </VideoSeekProvider>
   );
 }
