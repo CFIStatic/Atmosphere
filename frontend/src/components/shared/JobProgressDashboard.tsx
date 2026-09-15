@@ -15,9 +15,9 @@ import { LiveProgressStory } from './LiveProgressStory';
 import { siteLine } from '../../lib/jobFileAsk';
 
 /**
- * Homeowner-clear job progress: progress meter, a live plain-English
- * What happened story (Glance/Scan across clips), then a single Now / Done / Left
- * brief (with a compact Needs attention strip when needed).
+ * Homeowner-clear job progress: a live plain-English What happened story
+ * (Glance/Scan across clips), then a single Now / Done / Left brief
+ * (with a compact Needs attention strip when needed).
  * Shared by office /job-progress and guest /progress/:token.
  * Does not own Ask/chat chrome.
  */
@@ -157,31 +157,12 @@ export function JobProgressDashboard({
     [record.scope, record.risks, proof],
   );
 
-  const verifiedDaysComputed = proof?.days.filter((d) => d.payable || d.accepted).length ?? 0;
-  const inProgressComputed = proof?.days.filter((d) => !d.hasAfter && d.hasBefore).length ?? 0;
-
-  const verifiedDays = metricsOverride?.verifiedDays ?? verifiedDaysComputed;
-  const inProgress = metricsOverride?.inProgress ?? inProgressComputed;
-
-  const happeningCount =
-    story.happening.length > 0 ? story.happening.length : inProgress;
-  const doneCount = story.trackedCount > 0 ? story.doneCount : verifiedDays;
   const nextCount =
     story.next.length ||
     Math.max(
       0,
       (metricsOverride?.scopeTotal ?? 0) - (metricsOverride?.scopeApproved ?? 0),
     );
-  const trackedCount =
-    story.trackedCount > 0
-      ? story.trackedCount
-      : metricsOverride?.scopeTotal ?? Math.max(doneCount + happeningCount + nextCount, 0);
-  const donePct =
-    metricsOverride && story.trackedCount === 0
-      ? metricsOverride.scopePct
-      : trackedCount
-        ? Math.round((doneCount / trackedCount) * 100)
-        : 0;
 
   const liveStory = useMemo(() => {
     if (liveStoryOverride) return liveStoryOverride;
@@ -207,8 +188,8 @@ export function JobProgressDashboard({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl glass-card p-5 sm:p-6">
-        {showIdentity && (
+      {showIdentity && (
+        <section className="rounded-xl glass-card p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-xl font-semibold text-ink-900 sm:text-2xl">
@@ -222,34 +203,22 @@ export function JobProgressDashboard({
               </div>
             </div>
           </div>
-        )}
 
-        {loading ? (
-          <div className="mt-6 flex items-center gap-2 text-sm text-ink-600">
-            <SpinnerIcon className="animate-spin" width={16} height={16} />
-            Loading…
-          </div>
-        ) : (
-          <>
-            {trackedCount > 0 && (
-              <div className={`${showIdentity ? 'mt-5' : ''}`} data-testid="job-progress-meter">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="font-medium text-ink-800">
-                    {doneCount} of {trackedCount} done
-                  </span>
-                  <span className="tabular-nums font-semibold text-ink-900">{donePct}%</span>
-                </div>
-                <div className="h-3 overflow-hidden rounded-full bg-paper-200">
-                  <div
-                    className="h-full rounded-full bg-brand-600 transition-all"
-                    style={{ width: `${Math.max(donePct, donePct > 0 ? 2 : 0)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+          {loading && (
+            <div className="mt-6 flex items-center gap-2 text-sm text-ink-600">
+              <SpinnerIcon className="animate-spin" width={16} height={16} />
+              Loading…
+            </div>
+          )}
+        </section>
+      )}
+
+      {!showIdentity && loading && (
+        <div className="flex items-center gap-2 text-sm text-ink-600">
+          <SpinnerIcon className="animate-spin" width={16} height={16} />
+          Loading…
+        </div>
+      )}
 
       {!loading && <LiveProgressStory story={liveStory} />}
 

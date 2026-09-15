@@ -98,12 +98,12 @@ const proof: ProofResponse = {
   siteKnown: true,
 };
 
-describe('JobProgressDashboard even simpler', () => {
+describe('JobProgressDashboard', () => {
   beforeEach(() => {
     jobProofs.mockReset();
   });
 
-  it('shows progress meter, then Needs attention / Now / Done / Left — no status prose banner', async () => {
+  it('shows Needs attention / Now / Done / Left — no status prose or progress meter', async () => {
     render(
       <JobProgressDashboard
         jobId="job-1"
@@ -118,12 +118,11 @@ describe('JobProgressDashboard even simpler', () => {
     expect(screen.queryByText(/Needs your attention:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Crews finished/i)).not.toBeInTheDocument();
 
-    expect(await screen.findByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
-    // Demoted 3-stat jump line is gone
-    expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/happening/);
-    expect(screen.getByTestId('job-progress-meter')).not.toHaveTextContent(/still to do/i);
+    expect(screen.queryByTestId('job-progress-meter')).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ of \d+ done/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument();
 
-    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Needs attention' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Now' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Done' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Left' })).toBeInTheDocument();
@@ -150,7 +149,8 @@ describe('JobProgressDashboard even simpler', () => {
       />,
     );
 
-    expect(await screen.findByTestId('job-progress-meter')).toHaveTextContent(/1 of 2 done/);
+    expect(await screen.findByRole('heading', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.queryByTestId('job-progress-meter')).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-progress-up-to-speed')).not.toBeInTheDocument();
     expect(screen.queryByText(/Crews finished/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument();
