@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AskSeekTarget } from '../lib/askSeek';
 import { VideoSeekProvider, useVideoSeek } from '../lib/videoSeek';
+import { JobFileFocusProvider, useJobFileFocus } from '../lib/jobFileFocus';
 import type { ProofResponse, SharedJobRecord } from '../lib/api';
 
 const sharedJob = vi.fn();
@@ -134,7 +135,11 @@ describe('JobAskPanel', () => {
 
   it('asks from inside the job profile', async () => {
     const user = userEvent.setup();
-    render(<JobAskPanel jobId="job-1038" />);
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" />
+      </JobFileFocusProvider>,
+    );
 
     expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
     await user.click(
@@ -171,12 +176,14 @@ describe('JobAskPanel', () => {
     });
     const user = userEvent.setup();
     render(
-      <JobAskPanel
-        jobId="job-1038"
-        file={{ record, proofs }}
-        ask={ask}
-        loadQuestions={async () => ({ questions: [] })}
-      />,
+      <JobFileFocusProvider>
+        <JobAskPanel
+          jobId="job-1038"
+          file={{ record, proofs }}
+          ask={ask}
+          loadQuestions={async () => ({ questions: [] })}
+        />
+      </JobFileFocusProvider>,
     );
 
     await user.click(
@@ -212,10 +219,10 @@ describe('JobAskPanel', () => {
     const seeks: AskSeekTarget[] = [];
     const user = userEvent.setup();
     render(
-      <VideoSeekProvider>
+      <JobFileFocusProvider><VideoSeekProvider>
         <SeekProbe onSeek={(target) => seeks.push(target)} />
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
-      </VideoSeekProvider>,
+      </VideoSeekProvider></JobFileFocusProvider>,
     );
 
     await user.click(await screen.findByRole('button', { name: 'What happened with the tarp?' }));
@@ -248,10 +255,10 @@ describe('JobAskPanel', () => {
     const seeks: AskSeekTarget[] = [];
     const user = userEvent.setup();
     render(
-      <VideoSeekProvider>
+      <JobFileFocusProvider><VideoSeekProvider>
         <SeekProbe onSeek={(target) => seeks.push(target)} />
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
-      </VideoSeekProvider>,
+      </VideoSeekProvider></JobFileFocusProvider>,
     );
 
     const cites = await screen.findAllByTestId('ask-cite');
@@ -277,10 +284,10 @@ describe('JobAskPanel', () => {
     });
     const seeks: AskSeekTarget[] = [];
     render(
-      <VideoSeekProvider>
+      <JobFileFocusProvider><VideoSeekProvider>
         <SeekProbe onSeek={(target) => seeks.push(target)} />
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
-      </VideoSeekProvider>,
+      </VideoSeekProvider></JobFileFocusProvider>,
     );
 
     expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
@@ -323,9 +330,9 @@ describe('JobAskPanel', () => {
     );
     const user = userEvent.setup();
     render(
-      <VideoSeekProvider>
+      <JobFileFocusProvider><VideoSeekProvider>
         <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
-      </VideoSeekProvider>,
+      </VideoSeekProvider></JobFileFocusProvider>,
     );
     const box = await screen.findByPlaceholderText(/ask what you forgot/i);
     await user.type(box, 'Was the tarp removed?');
@@ -334,4 +341,55 @@ describe('JobAskPanel', () => {
     expect(askAboutProofsStream).toHaveBeenCalled();
     expect(askAboutProofs).not.toHaveBeenCalled();
   });
+
+  it('renders source chips instead of Source parentheticals and focuses the job file', async () => {
+    askAboutProofs.mockResolvedValue({
+      answer:
+        'Do not touch the skylights.\n\n(Source: Field Capture / Brief note / Scope).',
+      groundedOn: 2,
+      model: 'gemini-3.6-flash',
+      question: {
+        id: 'q-src',
+        question: 'Any do-nots?',
+        answer:
+          'Do not touch the skylights.\n\n(Source: Field Capture / Brief note / Scope).',
+        grounded_on: ['scope'],
+        created_at: '2026-08-06T12:00:00Z',
+      },
+    });
+    const user = userEvent.setup();
+    const focused: string[] = [];
+    function FocusProbe() {
+      const { request } = useJobFileFocus();
+      useEffect(() => {
+        if (request) focused.push(request.section);
+      }, [request]);
+      return null;
+    }
+    render(
+      <JobFileFocusProvider>
+        <FocusProbe />
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Any do-nots?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+
+    expect(await screen.findByText(/skylights/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\(Source:/i)).not.toBeInTheDocument();
+    const chips = await screen.findAllByTestId('ask-source-chip');
+    expect(chips.map((el) => el.textContent)).toEqual([
+      'Who has access',
+      'Brief note',
+      'Scope',
+    ]);
+    await user.click(screen.getByRole('button', { name: 'Scope' }));
+    await waitFor(() => {
+      expect(focused).toContain('scope');
+    });
+  });
+
 });

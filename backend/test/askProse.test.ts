@@ -7,6 +7,8 @@ test('ASK_PROSE_FORMAT_RULES asks for ChatGPT-quality safe markdown', () => {
   assert.match(ASK_PROSE_FORMAT_RULES, /\*\*bold\*\*/);
   assert.match(ASK_PROSE_FORMAT_RULES, /Glance-simple/);
   assert.match(ASK_PROSE_FORMAT_RULES, /never invent/i);
+  assert.match(ASK_PROSE_FORMAT_RULES, /⟦sources:/);
+  assert.match(ASK_PROSE_FORMAT_RULES, /Never write parenthetical/);
 });
 
 test('normalizeAskProse keeps bold labels and cleans list markers', () => {

@@ -7,6 +7,8 @@
  * never invents facts.
  */
 
+import { ASK_SOURCE_FORMAT_RULES, normalizeAskSources } from './askSources.js';
+
 /** Appended to interactive Ask system prompts (job file + clip). */
 export const ASK_PROSE_FORMAT_RULES = `FORMAT (ChatGPT / Claude / Grok quality — the UI renders safe markdown):
 - Write like a top-tier chat assistant: short opener paragraph, then a tight bullet list when listing facts, optional invite to go deeper.
@@ -14,7 +16,9 @@ export const ASK_PROSE_FORMAT_RULES = `FORMAT (ChatGPT / Claude / Grok quality �
 - Never dump raw asterisk soup (no "***", no decorative * around every phrase). One clean **Label:** per bullet is enough.
 - No headings (#), no links, no images, no HTML, no code fences unless quoting a short on-file code-like string.
 - Glance-simple first; save long quotes and timestamps for when they ask for depth.
-- Stay grounded: only facts from the record — never invent evidence.`;
+- Stay grounded: only facts from the record — never invent evidence.
+
+` + ASK_SOURCE_FORMAT_RULES;
 
 /**
  * Light cleanup before store/return. Keeps intentional **bold** / *italic*
@@ -51,7 +55,8 @@ export function normalizeAskProse(input: string): string {
   // (e.g. a lone "**" left after a bad stream) — but keep balanced pairs.
   text = stripOrphanEmphasis(text);
 
-  return text.replace(/\n{3,}/g, '\n\n').trim();
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  return normalizeAskSources(text);
 }
 
 function stripOrphanEmphasis(text: string): string {
