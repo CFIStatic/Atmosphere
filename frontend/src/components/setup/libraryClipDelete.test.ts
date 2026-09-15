@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const verifierHtml = readFileSync(resolve(here, '../../../../verifier/index.html'), 'utf8');
-const verifierFrame = readFileSync(resolve(here, '../VerifierFrame.tsx'), 'utf8');
 const softDeleteRlsSql = readFileSync(
   resolve(here, '../../../../supabase/migrations/20260902010000_job_proofs_soft_delete_rls.sql'),
   'utf8',
@@ -30,19 +29,13 @@ function jsonResponse(body: unknown, status = 200) {
 function bootVerifier(opts: {
   url?: string;
   fetchImpl?: typeof fetch;
-  confirm?: () => boolean;
 } = {}) {
-  let confirmCalls = 0;
   const dom = new JSDOM(verifierHtml, {
     url: opts.url ?? 'https://atmosphere.test/verifier/?demo=1',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
       window.fetch = opts.fetchImpl ?? (() => Promise.reject(new Error('offline')));
-      window.confirm = () => {
-        confirmCalls += 1;
-        return opts.confirm ? opts.confirm() : false;
-      };
       window.matchMedia = ((query: string) => ({
         matches: false,
         media: query,
@@ -56,7 +49,7 @@ function bootVerifier(opts: {
       })) as unknown as typeof window.matchMedia;
     },
   });
-  return { dom, confirmCalls: () => confirmCalls };
+  return { dom };
 }
 
 async function waitForRow(document: Document, id: string) {
@@ -67,68 +60,36 @@ async function waitForRow(document: Document, id: string) {
   throw new Error(`clip row ${id} never rendered`);
 }
 
-function deleteClipFromMenu(document: Document, id: string) {
-  const row = document.querySelector(`tr[data-id="${id}"]`) as HTMLElement | null;
-  expect(row).not.toBeNull();
-  const kebab = row!.querySelector('.kebab') as HTMLButtonElement | null;
-  expect(kebab).not.toBeNull();
-  kebab!.dispatchEvent(new kebab!.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));
-  const del = document.querySelector('#rowmenu button[data-act="delete"]') as HTMLButtonElement | null;
-  expect(del).not.toBeNull();
-  del!.dispatchEvent(new del!.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));
-}
-
-describe('Dashboard clip delete', () => {
-  it('removes the clip from the live record, not only this view', () => {
-    expect(verifierHtml).toContain('function deleteLibraryClip');
-    expect(verifierHtml).toContain('function applyDeletedClip');
-    expect(verifierHtml).toContain("method: 'DELETE'");
-    expect(verifierHtml).toContain("/evidence/' + encodeURIComponent(item.id)");
-    expect(verifierHtml).toContain("atmosphere: 'library-changed'");
-    expect(verifierHtml).not.toContain('Deletion on the record itself is wired next.');
+describe('Dashboard clip delete policy', () => {
+  it('removes Delete from the clip overflow menu and keeps Restore / Share / Save / Export', () => {
+    const menu = verifierHtml.match(/id="rowmenu"[\s\S]*?<\/div>/);
+    expect(menu).not.toBeNull();
+    expect(menu![0]).toContain('data-act="share"');
+    expect(menu![0]).toContain('data-act="restore"');
+    expect(menu![0]).toContain('data-act="save"');
+    expect(menu![0]).toContain('data-act="export"');
+    expect(menu![0]).not.toContain('data-act="delete"');
+    expect(menu![0]).not.toMatch(/>\s*Delete\s*</);
+    expect(verifierHtml).not.toContain('rowmenu-delete');
+    expect(verifierHtml).not.toContain('function deleteLibraryClip');
   });
 
-  it('deletes on the menu click without a browser confirm dialog', () => {
-    expect(verifierHtml).not.toContain(
-      'The chain of custody keeps the record of its life either way.',
-    );
-    expect(verifierHtml).not.toMatch(/window\.confirm\(\s*'Delete '/);
-    expect(verifierHtml).toMatch(/if \(act === 'delete'\)[\s\S]*deleteLibraryClip\(item\)/);
-  });
-
-  it('lets the hide stamp survive job_proofs RLS and queues a 30-day purge', () => {
+  it('keeps soft-delete RLS and restore; product DELETE API returns gone', () => {
     expect(softDeleteRlsSql).toContain('deleted_at is null or deleted_by = auth.uid()');
     expect(softDeleteRlsSql).toContain('drop policy if exists job_proofs_select');
-    expect(deleteEvidenceSrc).toContain('writerForJob({ orgId, jobId: req.params.jobId }, supabase).raw');
-    expect(deleteEvidenceSrc).toMatch(
-      /export async function deleteEvidence[\s\S]*assertGlobalAdminCanDeleteVideo/,
-    );
-    expect(deleteEvidenceSrc).toMatch(/scheduled_purge_at:\s*purgeAt/);
     expect(deleteEvidenceSrc).toContain('export async function restoreEvidence');
+    const fn = deleteEvidenceSrc.slice(deleteEvidenceSrc.indexOf('export async function deleteEvidence'));
+    const end = fn.indexOf('export async function restoreEvidence');
+    const body = end > 0 ? fn.slice(0, end) : fn;
+    expect(body).toMatch(/410/);
+    expect(body).toContain('evidence_delete_removed');
+    expect(body).not.toMatch(/scheduled_purge_at:\s*purgeAt/);
   });
 
-  it('tells the office shell so Overview can drop the clip', () => {
-    expect(verifierFrame).toContain("data.atmosphere === 'library-changed'");
-    expect(verifierFrame).toContain("data.atmosphere === 'reload-library'");
-    expect(verifierFrame).toContain("atmosphere: 'reload-library'");
-    expect(verifierFrame).toContain('notifyLibraryChanged');
-  });
-
-  it('removes a demo clip from the list without asking first', async () => {
-    const { dom, confirmCalls } = bootVerifier();
-    await waitForRow(dom.window.document, 'EV-1038-0805-A');
-    deleteClipFromMenu(dom.window.document, 'EV-1038-0805-A');
-    expect(confirmCalls()).toBe(0);
-    expect(dom.window.document.querySelector('tr[data-id="EV-1038-0805-A"]')).toBeNull();
-    expect(dom.window.document.getElementById('toast')?.textContent).toMatch(/Removed/);
-    dom.window.close();
-  });
-
-  it('queues a live clip for 30-day purge when Global Admin deletes', async () => {
-    const deletes: string[] = [];
-    const { dom, confirmCalls } = bootVerifier({
+  it('still offers Restore for Global Admin on a pending-deletion clip', async () => {
+    const { dom } = bootVerifier({
       url: 'https://atmosphere.test/verifier/',
-      fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) => {
+      fetchImpl: ((input: RequestInfo | URL) => {
         const url = String(input);
         if (url.includes('/api/evidence-portal/library')) {
           return jsonResponse({
@@ -139,7 +100,7 @@ describe('Dashboard clip delete', () => {
                 jobId: 'job-1',
                 jobName: 'Cedar Ridge — storm damage',
                 person: 'Jack Cyganiak',
-                company: 'Jettx LLC',
+                company: 'Field Capture',
                 phase: 'after',
                 workDate: '2026-09-01',
                 capturedAt: '2026-09-01T12:00:00Z',
@@ -147,16 +108,11 @@ describe('Dashboard clip delete', () => {
                 durationSeconds: 60,
                 analysisState: 'done',
                 analysis: { summary: 'Recorded walkthrough.' },
+                pendingDeletion: true,
+                deletedAt: '2026-09-02T01:00:00.000Z',
+                scheduledPurgeAt: '2026-10-02T01:00:00.000Z',
               },
             ],
-          });
-        }
-        if (init?.method === 'DELETE' && url.includes(`/evidence/${CLIP_ID}`)) {
-          deletes.push(url);
-          return jsonResponse({
-            ok: true,
-            deletedAt: '2026-09-02T01:00:00.000Z',
-            scheduledPurgeAt: '2026-10-02T01:00:00.000Z',
           });
         }
         return Promise.reject(new Error(`unexpected fetch ${url}`));
@@ -178,70 +134,18 @@ describe('Dashboard clip delete', () => {
       '*',
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
-    deleteClipFromMenu(dom.window.document, CLIP_ID);
-    expect(confirmCalls()).toBe(0);
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(deletes).toEqual([
-      `/api/operations/shared/${encodeURIComponent('job-1')}/evidence/${encodeURIComponent(CLIP_ID)}`,
-    ]);
-    // Pending deletion stays visible so Global Admin can restore.
-    expect(dom.window.document.querySelector(`tr[data-id="${CLIP_ID}"]`)).not.toBeNull();
-    expect(dom.window.document.getElementById('toast')?.textContent).toMatch(/Queued for permanent deletion/);
-    expect(dom.window.document.getElementById('toast')?.textContent).not.toMatch(/row-level security/i);
-    dom.window.close();
-  });
-
-  it('hides delete for employees on the live dashboard', async () => {
-    const { dom } = bootVerifier({
-      url: 'https://atmosphere.test/verifier/',
-      fetchImpl: ((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes('/api/evidence-portal/library')) {
-          return jsonResponse({
-            jobs: [{ jobId: 'job-1', jobName: 'Cedar Ridge — storm damage' }],
-            items: [
-              {
-                id: CLIP_ID,
-                jobId: 'job-1',
-                jobName: 'Cedar Ridge — storm damage',
-                person: 'Tech',
-                company: 'Jettx LLC',
-                phase: 'after',
-                workDate: '2026-09-01',
-                capturedAt: '2026-09-01T12:00:00Z',
-                uploadedAt: '2026-09-01T12:05:00Z',
-                durationSeconds: 60,
-                analysisState: 'done',
-                analysis: { summary: 'Recorded walkthrough.' },
-              },
-            ],
-          });
-        }
-        return Promise.reject(new Error(`unexpected fetch ${url}`));
-      }) as typeof fetch,
-    });
-    await waitForRow(dom.window.document, CLIP_ID);
-    dom.window.postMessage(
-      {
-        atmosphere: 'session',
-        user: {
-          name: 'Employee',
-          email: 'crew@example.com',
-          initials: 'E',
-          orgName: 'Jettx',
-          role: 'employee',
-        },
-      },
-      '*',
-    );
-    await new Promise((resolve) => setTimeout(resolve, 20));
     const row = dom.window.document.querySelector(`tr[data-id="${CLIP_ID}"]`) as HTMLElement;
     const kebab = row.querySelector('.kebab') as HTMLButtonElement;
     kebab.dispatchEvent(new kebab.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));
     const del = dom.window.document.querySelector(
       '#rowmenu button[data-act="delete"]',
     ) as HTMLButtonElement | null;
-    expect(del?.hidden).toBe(true);
+    expect(del).toBeNull();
+    const restore = dom.window.document.querySelector(
+      '#rowmenu button[data-act="restore"]',
+    ) as HTMLButtonElement | null;
+    expect(restore).not.toBeNull();
+    expect(restore?.hidden).toBe(false);
     dom.window.close();
   });
 });

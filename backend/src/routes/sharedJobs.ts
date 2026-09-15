@@ -4,7 +4,6 @@ import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { assertInviteeAccount } from '../shared/inviteeJobAccess.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
-import { scheduledPurgeAt } from '../lib/videoDeletePolicy.js';
 import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import {
@@ -88,12 +87,9 @@ import {
   recordAccess,
 } from './proofOfWork.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
-import { jobHasOpenHold, markSourceDeleted, recordUserAction } from '../legal/index.js';
 import {
   JOB_FILE_TITLE_MAX,
   JOB_FILE_TITLE_MIN,
-  displayJobFileName,
-  jobFileDeleteNameMatches,
   normalizeJobFileTitle,
   scopeLinesForDuplicate,
   suggestedDuplicateTitle,
@@ -106,8 +102,6 @@ import {
 import {
   jobFileIsTombstoned,
   listTombstonedJobIds,
-  softDeleteCrmJobRow,
-  writeJobFileDeleteTombstone,
 } from '../lib/jobFileDelete.js';
 import { renameCrmJobTitle } from '../lib/jobFileRename.js';
 
@@ -763,156 +757,20 @@ sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, nex
   }
 });
 
-const deleteJobFileSchema = z.object({
-  title: z
-    .string({ required_error: 'Type the file name to delete it.' })
-    .trim()
-    .min(1, 'Type the file name to delete it.')
-    .max(JOB_FILE_TITLE_MAX, 'Job name is too long'),
-});
-
 /**
  * DELETE /api/operations/shared/:jobId
- * Hide a job file from the dashboard. The vault keeps the record. The
- * office must type the file name — a click is not enough, and a hold
- * outranks the click.
+ * Product policy: no deleting job files / evidence from the application.
+ * Soft-delete, tombstone, and proof purge infrastructure remain for ops
+ * retention sweeps; Restore stays available for already-queued clips.
  */
-sharedJobsRouter.delete('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
+sharedJobsRouter.delete('/shared/:jobId', async (req: Request, _res: Response, next: NextFunction) => {
   try {
-    const { orgId, userId, supabase } = await requireGlobalAdmin(req);
-    const { title } = deleteJobFileSchema.parse(req.body ?? {});
-
-    const { data: job, error: readError } = await supabase
-      .from('crm_jobs')
-      .select('id, title, property_id, deleted_at')
-      .eq('org_id', orgId)
-      .eq('id', req.params.jobId)
-      .maybeSingle();
-    if (readError) throw new HttpError(500, readError.message, 'job_read_failed');
-    if (!job) throw new HttpError(404, 'No such job.', 'job_not_found');
-    const alreadyHidden =
-      Boolean(job.deleted_at) ||
-      (await jobFileIsTombstoned(writerForJob({ orgId, jobId: job.id }, supabase).raw, orgId, job.id));
-    if (alreadyHidden) {
-      // Dashboard and Job Files must agree. A second delete is a success, not
-      // "No such job", so the file leaves every list.
-      res.json({
-        ok: true,
-        deletedAt: (job.deleted_at as string | null) ?? new Date().toISOString(),
-        jobId: job.id,
-      });
-      return;
-    }
-
-    let address = '';
-    if (job.property_id) {
-      const { data: property } = await supabase
-        .from('crm_properties')
-        .select('address_line1, city, region, postal_code')
-        .eq('id', job.property_id)
-        .maybeSingle();
-      if (property) {
-        address = [property.address_line1, property.city, property.region, property.postal_code]
-          .map((part: unknown) => (typeof part === 'string' ? part.trim() : ''))
-          .filter(Boolean)
-          .join(', ');
-      }
-    }
-
-    if (!jobFileDeleteNameMatches(displayJobFileName(job.title, address), title)) {
-      throw new HttpError(
-        400,
-        'Type the file name exactly as it appears on the dashboard.',
-        'title_mismatch',
-      );
-    }
-
-    const hold = await jobHasOpenHold(job.id, orgId);
-    if (hold) {
-      throw new HttpError(
-        409,
-        'On legal hold — this job file cannot be deleted while the hold stands.',
-        'job_on_legal_hold',
-      );
-    }
-
-    const now = new Date().toISOString();
-    const writer = writerForOrg(orgId, supabase).raw;
-    let deletedTitle = job.title as string;
-    let usedTombstone = false;
-
-    try {
-      const deleted = await softDeleteCrmJobRow(writer, {
-        orgId,
-        jobId: job.id,
-        userId,
-        now,
-      });
-      if (!deleted) throw new HttpError(404, 'No such job.', 'job_not_found');
-      deletedTitle = deleted.title;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const auditMissing =
-        (err as { code?: string } | null)?.code === 'crm_audit_log_missing' ||
-        /crm_audit_log/i.test(msg);
-      if (!auditMissing) {
-        throw err instanceof HttpError ? err : new HttpError(400, msg, 'delete_failed');
-      }
-      // Leftover CRM audit trigger still points at a dropped table. Hide the
-      // file with a tombstone so Delete permanently works before deploy SQL runs.
-      await writeJobFileDeleteTombstone(
-        writer,
-        {
-          orgId,
-          jobId: job.id,
-          title: deletedTitle,
-          actorId: userId,
-        },
-        supabase,
-      );
-      usedTombstone = true;
-    }
-
-    const purgeAt = scheduledPurgeAt(new Date(now));
-    const { data: proofs } = await writer
-      .from('job_proofs')
-      .update({ deleted_at: now, deleted_by: userId, scheduled_purge_at: purgeAt })
-      .eq('org_id', orgId)
-      .eq('job_id', job.id)
-      .is('deleted_at', null)
-      .select('id');
-    for (const proof of (proofs ?? []) as Array<{ id: string }>) {
-      await markSourceDeleted('job_proof', proof.id).catch(() => undefined);
-    }
-
-    // Soft-deleted job files must not keep guest/progress share tokens live.
-    await writer
-      .from('verifier_shares')
-      .update({ revoked_at: now })
-      .eq('org_id', orgId)
-      .eq('job_id', job.id)
-      .is('revoked_at', null);
-
-    await recordAccess(supabase, {
-      orgId,
-      jobId: job.id,
-      action: 'deleted',
-      actorId: userId,
-      actorLabel: 'Office',
-      detail: `Job file “${deletedTitle}” deleted from the library. The vault still holds it.`,
-    }).catch(() => undefined);
-
-    await recordUserAction({
-      actorUserId: userId,
-      actorLabel: 'Office',
-      orgId,
-      action: 'job.deleted',
-      resourceType: 'job',
-      resourceId: job.id,
-      detail: { title: deletedTitle, tombstone: usedTombstone },
-    });
-
-    res.json({ ok: true, deletedAt: now, jobId: job.id });
+    await requireGlobalAdmin(req);
+    throw new HttpError(
+      410,
+      'Deleting job files from the application is no longer available.',
+      'job_file_delete_removed',
+    );
   } catch (err) {
     next(err);
   }

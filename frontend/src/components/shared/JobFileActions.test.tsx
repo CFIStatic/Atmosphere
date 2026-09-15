@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
-const deleteJobFile = vi.fn();
-
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ membership: { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } } }),
 }));
@@ -14,7 +12,6 @@ vi.mock('../../lib/api', () => ({
   api: {
     renameJobFile: (...args: unknown[]) => renameJobFile(...args),
     duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
-    deleteJobFile: (...args: unknown[]) => deleteJobFile(...args),
   },
 }));
 
@@ -24,8 +21,6 @@ describe('JobFileActions', () => {
   beforeEach(() => {
     renameJobFile.mockReset();
     duplicateJobFile.mockReset();
-    deleteJobFile.mockReset();
-    deleteJobFile.mockResolvedValue({ ok: true, deletedAt: '2026-08-31T00:00:00Z', jobId: 'job-1' });
     renameJobFile.mockResolvedValue({
       job: { id: 'job-1', jobNumber: 12, title: 'Kitchen rebuild', status: 'scheduled', claimNumber: null },
     });
@@ -121,34 +116,5 @@ describe('JobFileActions', () => {
     });
   });
 
-  it('refuses to delete until the file name is typed exactly', async () => {
-    const onDeleted = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <JobFileActions
-        jobId="job-1"
-        title="Cedar Ridge"
-        onRenamed={() => undefined}
-        onDuplicated={() => undefined}
-        onDeleted={onDeleted}
-        onShare={() => undefined}
-      />,
-    );
 
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(screen.getByRole('heading', { name: 'Delete this job file' })).toBeInTheDocument();
-    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
-    const confirm = screen.getByRole('button', { name: 'Delete permanently' });
-    expect(confirm).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/^File name$/i), 'cedar ridge');
-    expect(confirm).toBeDisabled();
-    await user.clear(screen.getByLabelText(/^File name$/i));
-    await user.type(screen.getByLabelText(/^File name$/i), 'Cedar Ridge');
-    expect(confirm).toBeEnabled();
-    await user.click(confirm);
-
-    expect(deleteJobFile).toHaveBeenCalledWith('job-1', 'Cedar Ridge');
-    expect(onDeleted).toHaveBeenCalled();
-  });
 });
