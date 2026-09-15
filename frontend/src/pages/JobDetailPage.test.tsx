@@ -214,16 +214,11 @@ describe('JobDetailPage', () => {
     expect(screen.getByText('Clips on file')).toBeInTheDocument();
     expect(screen.getByText('Heard on mic')).toBeInTheDocument();
     expect(screen.getByText('Do not remove the skylights')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Show me the dispute/i })).toBeInTheDocument();
-    expect(screen.getByTestId('full-evidence')).toBeInTheDocument();
-    expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
-    const user = userEvent.setup();
-    await user.click(screen.getByTestId('full-evidence-summary'));
-    expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:12/);
-    expect(screen.getByTestId('evidence-log').textContent).toMatch(/0:28/);
-    expect(screen.getByTestId('evidence-log').textContent).toMatch(/said/i);
-    expect(screen.getByTestId('evidence-log').textContent).toMatch(/skylight/i);
+    expect(screen.queryByRole('heading', { name: 'Analysis' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-analysis')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('punch-list-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-as-playbook')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('full-evidence')).not.toBeInTheDocument();
     expect(
       screen.getByText('Delgado Roofing accepted revision 3; the job is on 4'),
     ).toBeInTheDocument();
