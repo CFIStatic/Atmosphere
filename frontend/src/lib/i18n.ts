@@ -92,11 +92,6 @@ export interface VerifierChromeStrings {
   account: string;
   switchToLight: string;
   switchToDark: string;
-  videos: string;
-  allVideos: string;
-  classified: string;
-  awaitingAnalysis: string;
-  needsReview: string;
   chatHistory: string;
   newChat: string;
 }
@@ -120,11 +115,6 @@ export function verifierChromeStrings(
     account: translate(locale, 'nav.account'),
     switchToLight: translate(locale, 'nav.switchToLight'),
     switchToDark: translate(locale, 'nav.switchToDark'),
-    videos: translate(locale, 'nav.videos'),
-    allVideos: translate(locale, 'nav.allVideos'),
-    classified: translate(locale, 'nav.classified'),
-    awaitingAnalysis: translate(locale, 'nav.awaitingAnalysis'),
-    needsReview: translate(locale, 'nav.needsReview'),
     chatHistory: translate(locale, 'nav.chatHistory'),
     newChat: translate(locale, 'nav.newChat'),
   };

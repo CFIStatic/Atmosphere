@@ -109,52 +109,41 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("createdAt: j.createdAt || ''");
   });
 
-  it('keeps Chat history under Videos on the job file rail', () => {
+  it('keeps Chat history on the job file rail without a Videos section', () => {
     expect(verifierHtml).toContain('id="ask-history-nav"');
     expect(verifierHtml).toContain('data-i18n-chrome="chatHistory"');
     expect(verifierHtml).toContain('data-i18n-chrome="newChat"');
     expect(verifierHtml).toContain("d.atmosphere === 'ask-history'");
     expect(verifierHtml).toContain("atmosphere: 'ask-history-action'");
-  });
-
-  it('keeps the Videos filters on every office page, not only Dashboard', () => {
-    expect(verifierHtml).toContain('id="evidence-nav"');
-    expect(verifierHtml).toMatch(/<h3[^>]*>Videos<\/h3>/);
-    expect(verifierHtml).not.toMatch(
-      /body\[data-atm-rail-only\]\s+#evidence-nav\s*\{[^}]*display:\s*none/,
-    );
+    expect(verifierHtml).not.toContain('id="evidence-nav"');
+    expect(verifierHtml).not.toMatch(/<h3[^>]*>Videos<\/h3>/);
+    expect(verifierHtml).not.toContain('data-i18n-chrome="videos"');
+    expect(verifierHtml).not.toContain('data-i18n-chrome="allVideos"');
+    expect(verifierHtml).not.toContain('data-i18n-chrome="classified"');
+    expect(verifierHtml).not.toContain('data-i18n-chrome="awaitingAnalysis"');
+    expect(verifierHtml).not.toContain('data-i18n-chrome="needsReview"');
+    expect(verifierHtml).not.toContain('id="n-all"');
     expect(verifierHtml).toContain(
       "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
     );
   });
 
-  it('marks Videos rail labels for the same chrome i18n as Settings/nav', () => {
-    const nav = verifierHtml.match(
-      /<div class="rail-section" id="evidence-nav">[\s\S]*?<\/div>/,
-    );
-    expect(nav).not.toBeNull();
-    expect(nav![0]).toContain('data-i18n-chrome="videos"');
-    expect(nav![0]).toContain('data-i18n-chrome="allVideos"');
-    expect(nav![0]).toContain('data-i18n-chrome="classified"');
-    expect(nav![0]).toContain('data-i18n-chrome="awaitingAnalysis"');
-    expect(nav![0]).toContain('data-i18n-chrome="needsReview"');
-    expect(verifierHtml).toContain("item.setAttribute('data-label', chromeI18n[key])");
-    expect(verifierHtml).toContain("item.setAttribute('title', chromeI18n[key])");
-    expect(verifierHtml).toContain("titleEl.textContent = active.getAttribute('data-label')");
-  });
-
-  it('applies locale chrome to Videos labels without dropping count badges', () => {
+  it('applies locale chrome to Chat history labels on the rail', () => {
     const start = verifierHtml.indexOf('function applyChromeI18n(chrome, locale)');
     const end = verifierHtml.indexOf('function labelThemeToggle');
     if (start < 0 || end <= start) {
       throw new Error('Could not find applyChromeI18n in verifier/index.html');
     }
-    const nav = verifierHtml.match(
-      /<div class="rail-section" id="evidence-nav">[\s\S]*?<\/div>/,
-    );
-    const dom = new JSDOM(
-      `<!doctype html><html><body>${nav![0]}<h1 id="viewtitle">All videos</h1></body></html>`,
-    );
+    expect(verifierHtml).toContain('id="ask-history-nav"');
+    const dom = new JSDOM(`<!doctype html><html><body>
+      <div class="rail-section" id="ask-history-nav">
+        <h3 data-i18n-chrome="chatHistory">Chat history</h3>
+        <button type="button" class="navitem nav-icon" id="ask-new-chat">
+          <span class="label" data-i18n-chrome="newChat">New chat</span>
+        </button>
+        <div id="ask-history-list"></div>
+      </div>
+    </body></html>`);
     const apply = new Function(
       'document',
       'state',
@@ -163,43 +152,25 @@ describe('verifier office rail', () => {
        function readThemePref() { return 'light'; }
        var chromeI18n = null;
        return applyChromeI18n;`,
-    )(dom.window.document, { view: 'classified' }) as (
+    )(dom.window.document, { view: 'all' }) as (
       chrome: Record<string, string>,
       locale: string,
     ) => void;
 
     apply(
       {
-        videos: 'Vídeos',
-        allVideos: 'Todos los vídeos',
-        classified: 'Clasificados',
-        awaitingAnalysis: 'Pendiente de análisis',
-        needsReview: 'Requiere revisión',
+        chatHistory: 'Historial de chats',
+        newChat: 'Nuevo chat',
       },
       'es',
     );
 
     const { document } = dom.window;
     expect(document.documentElement.lang).toBe('es');
-    expect(document.querySelector('[data-i18n-chrome="videos"]')?.textContent).toBe('Vídeos');
-    expect(document.querySelector('[data-view="all"]')?.getAttribute('data-label')).toBe(
-      'Todos los vídeos',
+    expect(document.querySelector('[data-i18n-chrome="chatHistory"]')?.textContent).toBe(
+      'Historial de chats',
     );
-    expect(document.querySelector('[data-view="all"]')?.getAttribute('title')).toBe(
-      'Todos los vídeos',
-    );
-    expect(document.querySelector('[data-view="classified"] .label')?.textContent).toBe(
-      'Clasificados',
-    );
-    expect(document.querySelector('[data-view="unanalysed"] .label')?.textContent).toBe(
-      'Pendiente de análisis',
-    );
-    expect(document.querySelector('[data-view="flagged"] .label')?.textContent).toBe(
-      'Requiere revisión',
-    );
-    expect(document.getElementById('n-all')?.textContent).toBe('0');
-    expect(document.getElementById('n-classified')?.textContent).toBe('0');
-    expect(document.getElementById('viewtitle')?.textContent).toBe('Clasificados');
+    expect(document.querySelector('[data-i18n-chrome="newChat"]')?.textContent).toBe('Nuevo chat');
   });
 
   it('keeps untranslated Dashboard chrome LTR when the nav locale is RTL', () => {
