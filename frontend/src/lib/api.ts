@@ -57,15 +57,6 @@ export interface Org {
   contractorType?: ContractorType | null;
 }
 
-export interface DailyReportSettings {
-  orgId: string;
-  enabled: boolean;
-  timezone: string;
-  channel: 'email' | 'sms' | 'email_and_sms';
-  sendHour: number;
-  extraEmails: string[];
-}
-
 export interface Membership {
   role: MemberRole;
   workType: WorkType;
@@ -3914,28 +3905,6 @@ export const api = {
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
 
-
-  getDailyReportSettings: () =>
-    request<{ settings: DailyReportSettings }>('/api/daily-report/settings', { method: 'GET' }),
-
-
-  updateDailyReportSettings: (patch: {
-    enabled?: boolean;
-    timezone?: string;
-    channel?: DailyReportSettings['channel'];
-    sendHour?: number;
-    extraEmails?: string[];
-  }) =>
-    request<{ settings: DailyReportSettings }>('/api/daily-report/settings', {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    }),
-
-  runDailyReportNow: (input: { jobId: string; localDay?: string }) =>
-    request<{ status: string; emailed: string[]; error?: string }>('/api/daily-report/run', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
 
 
   jobLiveSessions: (jobId: string) =>
