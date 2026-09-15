@@ -50,15 +50,15 @@ test('deriveChildPrivacyRedactions pads child beats from events', () => {
   assert.equal(secondsInChildPrivacyRange(160, ranges), null);
 });
 
-test('derive skips when org policy disabled', () => {
+test('derive always runs — child privacy blur is mandatory', () => {
   const ranges = deriveChildPrivacyRedactions({
-    enabled: false,
     events: [{ atSeconds: 10, text: 'A toddler is visible.' }],
     visionRanges: [
       { startSec: 5, endSec: 20, reason: 'child present', confidence: 0.9, source: 'vision' },
     ],
   });
-  assert.equal(ranges.length, 0);
+  assert.ok(ranges.length >= 1);
+  assert.ok(secondsInChildPrivacyRange(10, ranges));
 });
 
 test('derive uses people ageAppearance=child and skips cannotTell', () => {

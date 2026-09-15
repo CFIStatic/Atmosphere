@@ -13,7 +13,6 @@ import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
 import { DailyReportSection } from '../components/settings/DailyReportSection';
-import { ChildPrivacySection } from '../components/settings/ChildPrivacySection';
 import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
 import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
@@ -150,7 +149,6 @@ export function SettingsPage() {
             <>
               <InvitePanel />
               <DailyReportSection />
-              <ChildPrivacySection />
               <LinkedAccountsCard />
               <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
                 <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>
