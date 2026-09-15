@@ -104,11 +104,10 @@ test('verifier-share video and download exclude deleted proofs and refuse raw wh
   assert.match(download, /assertGuestMayMintRawMedia/);
 });
 
-test('job soft-delete revokes related verifier_shares', () => {
+test('job-file DELETE API is gone so product clients cannot soft-delete', () => {
   const start = sharedJobs.indexOf("sharedJobsRouter.delete('/shared/:jobId'");
   assert.ok(start > 0);
-  const body = sharedJobs.slice(start, start + 4500);
-  assert.match(body, /from\('verifier_shares'\)/);
-  assert.match(body, /revoked_at:\s*now/);
-  assert.match(body, /\.is\('revoked_at',\s*null\)/);
+  const body = sharedJobs.slice(start, start + 800);
+  assert.match(body, /410/);
+  assert.match(body, /job_file_delete_removed/);
 });
