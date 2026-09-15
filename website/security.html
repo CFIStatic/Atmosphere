@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/site.css?v=20260906-logo" />
+  <link rel="stylesheet" href="assets/site.css?v=20260915-arch" />
   <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark')p=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',p);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
 </head>
 <body>
@@ -124,27 +124,46 @@
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Architecture</div>
-      <h2>Authorization lives in the application — and RLS where we use it</h2>
+      <h2>Privileged credentials stay on the server</h2>
       <p>
-        The browser talks to our application. The application checks who you are and what
-        you may access, then performs server operations against the database with a
-        privileged service role that never ships to the browser. Where Row-Level Security
-        is enabled, it still constrains direct client access; the app layer remains the
-        gate for privileged reads and writes.
+        Clients authenticate to the Atmosphere application over TLS. The application
+        verifies identity and authorization, then performs database operations with a
+        server-side service role that is never sent to the browser. Where Row-Level
+        Security is enabled, it constrains direct client access; the application layer
+        remains the gate for privileged reads and writes. Field devices initiate
+        outbound connections only.
       </p>
     </div>
-    <div class="diagram mono">
-      <pre>
-┌───────────┐    httpOnly cookies    ┌───────────────┐   app-layer authz +      ┌──────────────────┐
-│  Browser  │ ─────────────────────▶ │  Application  │ ──service role (server)─▶ │     Database     │
-│ (no       │ ◀───────────────────── │    server     │ ◀──────────────────────  │  (RLS where used │
-│  srv role)│                        └───────────────┘                          │   + stored data) │
-└───────────┘                                                                   └──────────────────┘</pre>
-      <p class="diagram-caption">
-        The frontend never receives the service role. The application authorizes access;
-        RLS applies where enabled. Devices in the field only ever dial out.
-      </p>
-    </div>
+    <figure class="diagram arch-diagram">
+      <div class="arch-flow" role="group" aria-label="Request path from browser through application server to database">
+        <div class="arch-node">
+          <span class="arch-node-title">Browser</span>
+          <span class="arch-node-meta">No service-role credentials</span>
+        </div>
+        <div class="arch-edge" aria-hidden="true">
+          <span class="arch-edge-label">Session cookies · TLS</span>
+          <span class="arch-edge-line"></span>
+        </div>
+        <div class="arch-node arch-node-mid">
+          <span class="arch-node-title">Application server</span>
+          <span class="arch-node-meta">Identity and authorization</span>
+        </div>
+        <div class="arch-edge" aria-hidden="true">
+          <span class="arch-edge-label">Authorized server access</span>
+          <span class="arch-edge-line"></span>
+        </div>
+        <div class="arch-node">
+          <span class="arch-node-title">Database</span>
+          <span class="arch-node-meta">RLS where enabled</span>
+        </div>
+      </div>
+      <figcaption class="diagram-caption">
+        The browser never receives the service role. After the application authenticates
+        the session and authorizes the request, it performs database operations with
+        server-side credentials. Where Row-Level Security is enabled, it further
+        constrains direct client access. Field devices initiate outbound connections only.
+      </figcaption>
+    </figure>
   </div>
 </section>
 

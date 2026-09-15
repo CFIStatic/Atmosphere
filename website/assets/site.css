@@ -532,13 +532,125 @@ a { color: inherit; }
 /* ---------- Diagram ---------- */
 .diagram {
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  padding: 24px 28px; box-shadow: var(--shadow-card);
+  padding: 28px 32px; box-shadow: var(--shadow-card);
+  margin: 0;
   overflow-x: auto;
 }
 .diagram pre {
   margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft);
 }
-.diagram-caption { margin: 14px 0 0; font-size: 13px; color: var(--ink-faint); }
+.diagram-caption {
+  margin: 20px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-faint);
+  max-width: 52em;
+}
+
+/* Architecture flow (security page) */
+.arch-flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.arch-node {
+  flex: 0 1 180px;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: center;
+}
+.arch-node-mid {
+  border-color: var(--accent);
+}
+.arch-node-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.arch-node-meta {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-faint);
+}
+.arch-edge {
+  flex: 1 1 88px;
+  min-width: 72px;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 6px;
+  align-self: center;
+}
+.arch-edge-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.3;
+}
+.arch-edge-line {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: var(--line-strong);
+  position: relative;
+}
+.arch-edge-line::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--line-strong);
+  border-top: 1.5px solid var(--line-strong);
+  transform: translateY(-50%) rotate(45deg);
+}
+@media (max-width: 720px) {
+  .arch-flow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .arch-node {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+  .arch-edge {
+    flex: none;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 10px 0;
+    gap: 6px;
+  }
+  .arch-edge-line {
+    width: 1px;
+    height: 28px;
+    margin: 0 auto;
+  }
+  .arch-edge-line::after {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: -1px;
+    transform: translateX(-50%) rotate(135deg);
+  }
+}
 
 /* ---------- Security cards ---------- */
 .sec-grid {
