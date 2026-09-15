@@ -174,7 +174,7 @@
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
-  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-platform'];
+  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-recording-consent', 's-platform'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -465,7 +465,37 @@
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     /* Every day film waiting on the phone-only id follows the office id —
        including films from an earlier session still in the store. */
-    return filmQueue ? filmQueue.remapJob(localId, listed.id) : Promise.resolve(0);
+    var remapPromise = filmQueue ? filmQueue.remapJob(localId, listed.id) : Promise.resolve(0);
+    if (
+      Core.flushRecordingAckForJob &&
+      Core.isServerJobId &&
+      Core.isServerJobId(listed.id) &&
+      state.accessToken
+    ) {
+      var workDate = Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : '';
+      var version = Core.RECORDING_DISCLOSURE_VERSION || 'recording-disclosure-v1';
+      if (Core.hasLocalRecordingAck && Core.hasLocalRecordingAck(localId, workDate, version)) {
+        if (Core.markLocalRecordingAck) Core.markLocalRecordingAck(listed.id, workDate, version);
+        remapPromise = remapPromise.then(function (n) {
+          return Core.flushRecordingAckForJob({
+            apiBase: state.apiBase || API_BASE || Core.resolveApiBase(),
+            accessToken: state.accessToken,
+            jobId: listed.id,
+            localJobId: localId,
+            workDate: workDate,
+            disclosureVersion: version,
+            force: true,
+          })
+            .catch(function () {
+              return null;
+            })
+            .then(function () {
+              return n;
+            });
+        });
+      }
+    }
+    return remapPromise;
   }
 
   var pendingSync = null;
@@ -1426,7 +1456,143 @@
       : m + ':' + String(s).padStart(2, '0');
   }
 
+
+  var pendingRecordingStart = null;
+
+  function showRecordingConsentError(msg) {
+    var el = $('#recording-consent-err');
+    if (!el) return;
+    if (msg) {
+      el.hidden = false;
+      el.textContent = msg;
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+
+  function bindRecordingConsent() {
+    var ack = $('#recording-consent-ack');
+    var btn = $('#recording-consent-btn');
+    var cancel = $('#recording-consent-cancel');
+    if (ack && ack.getAttribute('data-bound') !== '1') {
+      ack.setAttribute('data-bound', '1');
+      ack.addEventListener('change', function () {
+        if (btn) btn.disabled = !ack.checked;
+      });
+    }
+    if (btn && btn.getAttribute('data-bound') !== '1') {
+      btn.setAttribute('data-bound', '1');
+      btn.addEventListener('click', function () {
+        if (!pendingRecordingStart) return;
+        if (ack && !ack.checked) {
+          showRecordingConsentError('Acknowledge the recording notice to continue.');
+          return;
+        }
+        var pending = pendingRecordingStart;
+        pendingRecordingStart = null;
+        btn.disabled = true;
+        showRecordingConsentError('');
+        var jobId = pending.jobId || state.activeJobId;
+        var workDate = Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : '';
+        var version = Core.RECORDING_DISCLOSURE_VERSION || 'recording-disclosure-v1';
+        var post =
+          Core.acceptRecordingAck && (state.accessToken || state.shareToken)
+            ? Core.acceptRecordingAck({
+                apiBase: state.apiBase || API_BASE || Core.resolveApiBase(),
+                accessToken: state.accessToken,
+                jobId: jobId,
+                workDate: workDate,
+                disclosureVersion: version,
+                shareToken: LIVE ? state.shareToken : null,
+              })
+            : Promise.resolve({ localOnly: true });
+        post
+          .then(function () {
+            if (Core.markLocalRecordingAck) Core.markLocalRecordingAck(jobId, workDate, version);
+            proceedStartLiveDay(pending.stream);
+          })
+          .catch(function (err) {
+            pendingRecordingStart = pending;
+            btn.disabled = !(ack && ack.checked);
+            showRecordingConsentError(
+              (err && err.message) || 'Could not save acknowledgment. Try again.',
+            );
+          });
+      });
+    }
+    if (cancel && cancel.getAttribute('data-bound') !== '1') {
+      cancel.setAttribute('data-bound', '1');
+      cancel.addEventListener('click', function (event) {
+        event.preventDefault();
+        var stream = pendingRecordingStart && pendingRecordingStart.stream;
+        pendingRecordingStart = null;
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach(function (t) {
+            t.stop();
+          });
+        }
+        show('s-home');
+      });
+    }
+  }
+
+  function needsRecordingConsent(jobId) {
+    if (DEMO) return false;
+    var workDate = Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : '';
+    var version = Core.RECORDING_DISCLOSURE_VERSION || 'recording-disclosure-v1';
+    if (Core.hasLocalRecordingAck && Core.hasLocalRecordingAck(jobId, workDate, version)) {
+      return false;
+    }
+    return true;
+  }
+
+  function openRecordingConsent(stream) {
+    bindRecordingConsent();
+    pendingRecordingStart = { stream: stream, jobId: state.activeJobId };
+    var textEl = $('#recording-consent-text');
+    var ack = $('#recording-consent-ack');
+    var btn = $('#recording-consent-btn');
+    showRecordingConsentError('');
+    if (ack) ack.checked = false;
+    if (btn) btn.disabled = true;
+    var fallback =
+      (Core && Core.RECORDING_DISCLOSURE_TEXT) ||
+      'Video and audio may be recorded on this job site while you use Field Capture.';
+    if (textEl) textEl.textContent = fallback;
+    show('s-recording-consent');
+    if (Core.loadRecordingDisclosure && state.accessToken) {
+      Core.loadRecordingDisclosure(state.apiBase || API_BASE || Core.resolveApiBase(), state.accessToken)
+        .then(function (body) {
+          if (body && body.text && textEl) textEl.textContent = body.text;
+        })
+        .catch(function () {});
+    }
+  }
+
+  function proceedStartLiveDay(stream) {
+    startLiveDayAfterConsent(stream);
+  }
+
   function startLiveDay(stream) {
+    if (needsRecordingConsent(state.activeJobId)) {
+      openRecordingConsent(stream);
+      return;
+    }
+    // Already acknowledged for this job/day — flush server ack if a local draft remapped.
+    if (Core.flushRecordingAckForJob && state.activeJobId && Core.isServerJobId && Core.isServerJobId(state.activeJobId) && state.accessToken) {
+      Core.flushRecordingAckForJob({
+        apiBase: state.apiBase || API_BASE || Core.resolveApiBase(),
+        accessToken: state.accessToken,
+        jobId: state.activeJobId,
+        shareToken: LIVE ? state.shareToken : null,
+        force: true,
+      }).catch(function () {});
+    }
+    startLiveDayAfterConsent(stream);
+  }
+
+  function startLiveDayAfterConsent(stream) {
     if (stream && typeof stream.getTracks !== 'function') stream = undefined;
     if (LIVE && !state.accessToken) {
       bootAccount();
@@ -2557,6 +2723,7 @@
 
   bindJobSearch();
   bindNewJob();
+  bindRecordingConsent();
   bindFilingStrip();
   (function bindOfflineSync() {
     if (typeof window === 'undefined' || window.__fieldOfflineSyncBound) return;

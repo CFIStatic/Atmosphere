@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 155,
+    "migrationCount": 158,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -171,7 +171,8 @@
     "20260915010000_ask_threads.sql",
     "20260915120000_child_blur_enabled.sql",
     "20260915180000_proof_live_sessions.sql",
-    "20260915210000_child_blur_always_on_comment.sql"
+    "20260915210000_child_blur_always_on_comment.sql",
+    "20260915220000_recording_acknowledgments.sql"
   ],
   "migrations": [
     {
@@ -5488,6 +5489,28 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "creates no durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260915220000_recording_acknowledgments",
+      "file": "20260915220000_recording_acknowledgments.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.recording_acknowledgments",
+        "index|public.recording_acknowledgments.recording_acknowledgments_pkey",
+        "index|public.recording_acknowledgments.recording_acknowledgments_job_id_actor_user_id_work_date_disclosure_version_key",
+        "index|public.recording_acknowledgments.recording_acknowledgments_job_day_idx",
+        "index|public.recording_acknowledgments.recording_acknowledgments_party_day_idx",
+        "index|public.recording_acknowledgments.recording_acknowledgments_org_idx",
+        "policy|public.recording_acknowledgments.recording_acknowledgments_self_select",
+        "policy|public.recording_acknowledgments.recording_acknowledgments_self_insert",
+        "policy|public.recording_acknowledgments.recording_acknowledgments_self_update",
+        "policy|public.recording_acknowledgments.recording_acknowledgments_org_select",
+        "rls|public.recording_acknowledgments"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

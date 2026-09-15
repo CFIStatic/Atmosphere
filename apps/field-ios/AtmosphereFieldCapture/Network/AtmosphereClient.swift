@@ -95,6 +95,16 @@ final class AtmosphereClient: ObservableObject {
     static let currentTermsVersion = "2026-09-10"
     static let termsURL = URL(string: "https://atmosphereteam.com/terms")!
     static let privacyURL = URL(string: "https://atmosphereteam.com/privacy")!
+    static let recordingDisclosureVersion = "recording-disclosure-v1"
+    static let recordingDisclosureText =
+        "Video and audio may be recorded on this job site while you use Field Capture. " +
+        "Recordings are stored by Atmosphere and analyzed to build the job record " +
+        "(what was done, where, and related site context). " +
+        "Authorized parties — such as your office, invited homeowner contacts, and " +
+        "other people your company invites to this job — may be given access to the " +
+        "job record and recordings as needed for the work. " +
+        "This notice is a product disclosure, not legal advice. Your company may " +
+        "provide additional notices for this property."
 
     struct TermsStatus: Decodable {
         let required: Bool
@@ -173,6 +183,67 @@ final class AtmosphereClient: ObservableObject {
             body: Body(acceptedTermsVersion: version)
         )
         return res.terms
+    }
+
+    struct RecordingDisclosure: Decodable {
+        let version: String
+        let text: String
+    }
+
+    struct RecordingAckStatus: Decodable {
+        let required: Bool
+        let currentVersion: String
+        let acknowledgedVersion: String?
+        let acknowledgedAt: String?
+        let workDate: String?
+        let jobId: String?
+    }
+
+    func recordingDisclosure() async throws -> RecordingDisclosure {
+        do {
+            return try await get(path: "/api/field-app/recording-disclosure")
+        } catch {
+            return RecordingDisclosure(
+                version: Self.recordingDisclosureVersion,
+                text: Self.recordingDisclosureText
+            )
+        }
+    }
+
+    func acceptRecordingAck(
+        jobId: String,
+        disclosureVersion: String = AtmosphereClient.recordingDisclosureVersion,
+        workDate: String,
+        shareToken: String? = nil
+    ) async throws -> RecordingAckStatus {
+        struct Body: Encodable {
+            let disclosureVersion: String
+            let workDate: String
+        }
+        struct Res: Decodable { let ack: RecordingAckStatus }
+        if PendingJobsStore.isLocalJobId(jobId) {
+            return RecordingAckStatus(
+                required: false,
+                currentVersion: disclosureVersion,
+                acknowledgedVersion: disclosureVersion,
+                acknowledgedAt: nil,
+                workDate: workDate,
+                jobId: jobId
+            )
+        }
+        let body = Body(disclosureVersion: disclosureVersion, workDate: workDate)
+        if let token = shareToken, !token.isEmpty {
+            let res: Res = try await post(
+                path: "/api/job-share/\(token)/recording-ack",
+                body: body
+            )
+            return res.ack
+        }
+        let res: Res = try await post(
+            path: "/api/field-app/jobs/\(jobId)/recording-ack",
+            body: body
+        )
+        return res.ack
     }
 
     /// Join an office by pending email invite, or start one when `orgName` is set.

@@ -1446,4 +1446,15 @@ assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }, { id: 'b' }]), true
 assert.equal(Core.preferTodayAfterInviteSignIn([{ id: 'a' }]), false);
 assert.match(appSrc, /openInviteAfterAccountSignIn/, 'account=1 sign-in can prefer Today');
 
+
+assert.equal(Core.RECORDING_DISCLOSURE_VERSION, 'recording-disclosure-v1');
+assert.match(Core.RECORDING_DISCLOSURE_TEXT, /Video and audio may be recorded/i);
+assert.equal(typeof Core.acceptRecordingAck, 'function');
+assert.equal(typeof Core.hasLocalRecordingAck, 'function');
+assert.match(appSrc, /s-recording-consent/, 'web FC has a recording consent screen');
+assert.match(appSrc, /needsRecordingConsent/, 'web FC gates startLiveDay on disclosure ack');
+assert.match(appSrc, /openRecordingConsent/, 'web FC opens the disclosure before recording');
+assert.match(appSrc, /acceptRecordingAck/, 'web FC posts recording acknowledgment');
+assert.doesNotMatch(Core.RECORDING_DISCLOSURE_TEXT, /HIPAA|GDPR|legally binding/i);
+
 console.log('hold-to-finish OK');

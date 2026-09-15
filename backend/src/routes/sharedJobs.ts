@@ -30,6 +30,12 @@ import {
   fieldCaptureInvitePath,
 } from '../verifier/deliverPartyInvite.js';
 import { acknowledgeShareRevision, ackDisplayName } from '../shared/acknowledgeShareRevision.js';
+import { recordingDisclosure } from '../legal/recordingDisclosure.js';
+import {
+  loadRecordingAckStatus,
+  recordRecordingAcknowledgment,
+} from '../legal/recordingAckStore.js';
+import { clientIp, clientUserAgent } from '../legal/terms.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
@@ -1863,6 +1869,89 @@ sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/restore', restoreEvidenc
 sharedJobsRouter.get('/shared/:jobId/legal-hold', getJobLegalHold);
 sharedJobsRouter.post('/shared/:jobId/legal-hold', setJobLegalHold);
 sharedJobsRouter.post('/shared/:jobId/legal-hold/release', releaseJobHold);
+
+
+/** GET …/recording-disclosure — versioned recording-on-property text for Field Capture. */
+jobShareRouter.get(
+  jobShareActionPattern('/recording-disclosure'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      res.json({ ...recordingDisclosure(), jobId: party.job_id });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET …/recording-ack?workDate= — whether this invitee already acknowledged today. */
+jobShareRouter.get(
+  jobShareActionPattern('/recording-ack'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      const workDate =
+        z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .parse(req.query.workDate) ?? new Date().toISOString().slice(0, 10);
+      const status = await loadRecordingAckStatus({
+        admin,
+        jobId: party.job_id,
+        workDate,
+        actorUserId: req.user!.id,
+        actorPartyId: party.id,
+      });
+      res.json({ ack: status, disclosure: recordingDisclosure() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST …/recording-ack — acknowledge recording disclosure before startRecording. */
+jobShareRouter.post(
+  jobShareActionPattern('/recording-ack'),
+  shareLimiter,
+  requireAuth,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      assertInviteeAccount(req, party);
+      const input = z
+        .object({
+          disclosureVersion: z.string().trim().min(1).max(64),
+          workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        })
+        .parse(req.body ?? {});
+      const workDate = input.workDate ?? new Date().toISOString().slice(0, 10);
+      const ack = await recordRecordingAcknowledgment({
+        admin,
+        jobId: party.job_id,
+        workDate,
+        disclosureVersion: input.disclosureVersion,
+        actorUserId: req.user!.id,
+        actorPartyId: party.id,
+        orgId: party.org_id,
+        ip: clientIp(req),
+        userAgent: clientUserAgent(req),
+      });
+      res.status(201).json({ ack, disclosure: recordingDisclosure() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * The subcontractor's side, through their job token.
