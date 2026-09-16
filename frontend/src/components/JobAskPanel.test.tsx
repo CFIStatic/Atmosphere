@@ -141,7 +141,9 @@ describe('JobAskPanel', () => {
       </JobFileFocusProvider>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('job-ask-panel')).toHaveAttribute('aria-label', 'Ask this job');
+    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
     await user.click(
       await screen.findByRole('button', {
         name: 'What did the homeowner say about the skylights?',

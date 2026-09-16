@@ -188,14 +188,16 @@ describe('JobProgressGuestPage', () => {
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-ask-panel')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
   });
 
   it('opens Ask when the emailed Ask link is used', async () => {
     renderGuest('/progress/demo-homeowner?ask=1');
 
-    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
   });
 
   it('puts Atmosphere on the left and stacks the job file plus share email on the right', async () => {

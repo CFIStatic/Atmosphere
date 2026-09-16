@@ -11,7 +11,7 @@ vi.mock('../lib/usePhoneShell', () => ({
 }));
 
 vi.mock('./JobAskPanel', () => ({
-  JobAskPanel: () => <h2>Ask this job</h2>,
+  JobAskPanel: () => <div data-testid="job-ask-panel" aria-label="Ask this job" />,
 }));
 
 import { JobFileAskChrome } from './JobFileAskChrome';
@@ -64,7 +64,7 @@ describe('JobFileAskChrome initial pane', () => {
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('data-state', 'active');
     expect(ask).not.toHaveAttribute('hidden');
-    expect(screen.getByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-ask-panel')).toBeInTheDocument();
   });
 });
 
