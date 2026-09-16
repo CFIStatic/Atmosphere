@@ -110,8 +110,9 @@ assert.match(html, /id="daybtn"/, 'Today must keep the Start the day record butt
 assert.match(html, /Start the day/);
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
-assert.match(html, /id="product-switch"/, 'home keeps the Field Capture / Platform bar');
+assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platform bar starts hidden until sign-in');
 assert.match(html, /id="app"[^>]*data-switch="off"/, 'login hides the Field Capture / Platform bar');
+assert.match(appSrc, /switchbar\.hidden = !showSwitch/, 'show() toggles the product bar with the signed-in screens only');
 assert.match(html, /Field Capture<small>/);
 assert.match(html, /Platform<small>/);
 assert.match(

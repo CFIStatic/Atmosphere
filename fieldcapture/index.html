@@ -206,9 +206,12 @@
   /* Sign-in / terms: product chrome stays off — no Field Capture / Platform dock,
      no Field Capture subtitle. Login is Atmosphere only. */
   body[data-screen="s-blocked"] .switchbar,
-  body[data-screen="s-terms"] .switchbar { display: none !important; }
+  body[data-screen="s-terms"] .switchbar,
+  .switchbar[hidden] { display: none !important; }
   body[data-screen="s-blocked"] .brand .sub,
-  body[data-screen="s-terms"] .brand .sub { display: none; }
+  body[data-screen="s-terms"] .brand .sub { display: none !important; }
+  body[data-screen="s-blocked"] .top .who-wrap,
+  body[data-screen="s-terms"] .top .who-wrap { display: none !important; }
 
   .pad { padding: 18px; }
 
@@ -1072,7 +1075,7 @@
     ></iframe>
   </div>
 
-  <nav class="switchbar" id="product-switch" aria-label="Product">
+  <nav class="switchbar" id="product-switch" aria-label="Product" hidden>
     <a href="#today" aria-current="page">Field Capture<small>Your jobs</small></a>
     <a id="platform-link" href="https://platform.atmosphereteam.com/verifier-library?embed=field&amp;v=no-overview-back-2">Platform<small>The office</small></a>
   </nav>
@@ -1098,7 +1101,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=offline-capture-guarantees-1"></script>
-<script src="js/app.js?v=offline-capture-guarantees-1"></script>
+<script src="js/capture-core.js?v=hide-switchbar-until-login-1"></script>
+<script src="js/app.js?v=hide-switchbar-until-login-1"></script>
 </body>
 </html>
