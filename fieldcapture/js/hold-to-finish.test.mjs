@@ -1458,6 +1458,8 @@ assert.match(appSrc, /openInviteAfterAccountSignIn/, 'account=1 sign-in can pref
 
 
 assert.match(appSrc, /Recording disclosure gate removed/, 'web FC no longer gates startLiveDay on disclosure');
+assert.doesNotMatch(appSrc, /bindRecordingConsent\(\);/, 'disclosure removal must not leave a crashing bindRecordingConsent() call');
+
 assert.doesNotMatch(appSrc, /openRecordingConsentForFiling/, 'Resume filing no longer opens disclosure');
 assert.doesNotMatch(appSrc, /function needsRecordingConsent/, 'needsRecordingConsent removed with disclosure gate');
 assert.doesNotMatch(html, /id="s-recording-consent"/, 'recording consent screen removed from Field Capture html');

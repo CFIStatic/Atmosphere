@@ -2594,7 +2594,7 @@
 
   bindJobSearch();
   bindNewJob();
-  bindRecordingConsent();
+  /* bindRecordingConsent removed with disclosure gate */
   bindFilingStrip();
   (function bindOfflineSync() {
     if (typeof window === 'undefined' || window.__fieldOfflineSyncBound) return;
