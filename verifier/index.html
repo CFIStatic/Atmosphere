@@ -782,42 +782,60 @@
     height: 72px;
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 10px 0 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
     gap: 8px;
   }
+  /* Wordmark grows; collapse control stays on the trailing edge of the header. */
   .rail-head .brand { font-size: 24px; flex: 1; min-width: 0; }
   .rail-collapse {
     flex: none;
     display: inline-grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     margin: 0;
+    margin-inline-start: auto;
     padding: 0;
     border: 0;
-    border-radius: 8px;
-    background: none;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
     color: var(--muted);
     cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease;
+    transition: color 0.12s ease, opacity 0.12s ease;
   }
+  /* Ghost / icon-only — quiet hover, no bordered chip fighting the wordmark. */
   .rail-collapse:hover {
-    background: var(--line-soft);
+    background: transparent;
     color: var(--ink);
   }
   .rail-collapse:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .rail-collapse svg { display: block; }
+  .rail-collapse svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    color: inherit;
+  }
   /* Desktop icon rail — labels hide, destinations stay one click away. */
   html[data-rail-collapsed] .app-frame.has-sidebar { --rail-w: 56px; }
+  /* Collapsed: stack toggle above the logo mark so they never share a row. */
   html[data-rail-collapsed] .rail-head {
+    flex-direction: column;
     justify-content: center;
-    gap: 2px;
-    padding: 0 4px;
+    align-items: center;
+    height: auto;
+    min-height: 72px;
+    gap: 6px;
+    padding: 10px 4px 8px;
+  }
+  html[data-rail-collapsed] .rail-collapse {
+    order: -1;
+    margin-inline-start: 0;
   }
   html[data-rail-collapsed] .rail-head .brand {
     flex: none;
@@ -1869,7 +1887,7 @@
       </button>
       <button type="button" class="rail-collapse" id="rail-collapse" aria-controls="main-rail" aria-expanded="true" aria-label="Collapse navigation" data-i18n-chrome-aria="collapseNav" title="Collapse navigation">
         <!-- Lucide PanelLeft — same glyph expanded/collapsed (VS Code / Notion convention). -->
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
       </button>
     </div>
 
