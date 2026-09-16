@@ -20,7 +20,7 @@ import { isJobFilePath } from './jobFilePath';
  * hidden in rail-only mode. Appearance, Settings, and sign-out live in that
  * menu — same as Dashboard. Support lives there too. The rail itself only has Settings.
  *
- * Every rail-only tab uses Dashboard's 72px top bar so the hairline under
+ * Every rail-only tab uses Dashboard's 61px top bar so the hairline under
  * the Atmosphere wordmark continues straight across into the page.
  *
  * On a phone — including the Field Capture 480px web frame — the office rail
@@ -116,7 +116,7 @@ export function OperationsShell() {
             className={
               phone
                 ? 'flex min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line bg-paper-0 px-3 py-2'
-                : 'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
+                : 'sticky top-0 z-30 flex h-[61px] shrink-0 items-center gap-[18px] border-b border-line bg-paper-0 px-4'
             }
           >
             {phone && (

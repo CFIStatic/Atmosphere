@@ -15,7 +15,7 @@ export function DashboardSearchBar({
   'aria-label'?: string;
 }) {
   return (
-    <div className={`relative min-w-0 flex-1 md:max-w-[520px] ${className ?? ''}`}>
+    <div className={`relative min-w-0 flex-1 md:max-w-[598px] ${className ?? ''}`}>
       <svg
         width="14"
         height="14"

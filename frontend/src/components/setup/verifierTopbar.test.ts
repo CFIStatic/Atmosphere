@@ -42,21 +42,21 @@ describe('verifier dashboard top bar', () => {
 
   it('renders a large wordmark that fills the top-left corner', () => {
     const brand = cssBlock('.brand');
-    expect(brand).toContain('font-size: 24px');
-    expect(brand).toContain('gap: 14px');
+    expect(brand).toContain('font-size: 20px');
+    expect(brand).toContain('gap: 12px');
 
     const mark = cssBlock('.brand svg');
-    expect(mark).toContain('width: 40px');
-    expect(mark).toContain('height: 40px');
+    expect(mark).toContain('width: 34px');
+    expect(mark).toContain('height: 34px');
 
     const railHead = cssBlock('.rail-head');
-    expect(railHead).toContain('height: 72px');
-    expect(cssBlock('.topbar')).toContain('height: 72px');
+    expect(railHead).toContain('height: 61px');
+    expect(cssBlock('.topbar')).toContain('height: 61px');
 
     const railBrand = verifierHtml.match(/id="brand-home"[\s\S]*?<\/button>/);
     expect(railBrand).not.toBeNull();
-    expect(railBrand![0]).toContain('width="40"');
-    expect(railBrand![0]).toContain('height="40"');
+    expect(railBrand![0]).toContain('width="34"');
+    expect(railBrand![0]).toContain('height="34"');
   });
 
   it('places the search bar outside the scrolling list', () => {
