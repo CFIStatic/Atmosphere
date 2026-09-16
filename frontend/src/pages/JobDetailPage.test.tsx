@@ -231,7 +231,7 @@ describe('JobDetailPage', () => {
     expect(ask.className).toMatch(/lg:h-full/);
     expect(ask.className).toMatch(/lg:w-\[var\(--job-file-ask-width\)\]/);
     expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
-    expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
+    expect(ask).toContainElement(screen.getByTestId('job-ask-panel'));
 
     expect(screen.queryByRole('tab', { name: 'Work' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Crew' })).not.toBeInTheDocument();
@@ -272,10 +272,10 @@ describe('JobDetailPage', () => {
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Place on legal hold')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Ask' }));
-    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).not.toHaveAttribute('hidden');
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
   });
 

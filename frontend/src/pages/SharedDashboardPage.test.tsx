@@ -33,7 +33,7 @@ vi.mock('../lib/usePhoneShell', () => ({
 }));
 
 vi.mock('../components/JobAskPanel', () => ({
-  JobAskPanel: () => <h2>Ask this job</h2>,
+  JobAskPanel: () => <div data-testid="job-ask-panel" aria-label="Ask this job" />,
 }));
 
 vi.mock('../components/shared/JobProgressDashboard', () => ({
@@ -192,7 +192,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(ask.className).toMatch(/lg:h-full/);
     expect(ask.className).toMatch(/lg:w-\[var\(--job-file-ask-width\)\]/);
     expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
-    expect(ask).toContainElement(screen.getByRole('heading', { name: 'Ask this job' }));
+    expect(ask).toContainElement(screen.getByTestId('job-ask-panel'));
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
@@ -296,14 +296,15 @@ describe('SharedDashboardPage job file identity', () => {
       'data-job-file-chrome',
       'no-overview-back',
     );
-    expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('hidden');
     expect(ask.className.split(/\s+/)).not.toContain('flex');
     expect(ask.className).toMatch(/data-\[state=active\]:flex/);
+    expect(screen.queryByTestId('job-ask-panel')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Ask' }));
-    expect(await screen.findByRole('heading', { name: 'Ask this job' })).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).not.toHaveAttribute('hidden');
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
   });
 

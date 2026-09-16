@@ -10,7 +10,6 @@ import {
 import { onAskHistoryAction, publishAskHistory } from '../lib/askHistoryBridge';
 import {
   buildJobFileDossier,
-  fileKnowsCopy,
   hasMicOnFile,
   hasVideoOnFile,
   jobFileSuggestions,
@@ -422,12 +421,6 @@ export function JobAskPanel({
     latestDate: latestFilmedDate(proofs),
     beats: dossier,
   });
-  const knows = fileKnowsCopy({
-    clipCount: proofs?.videos?.length ?? 0,
-    hasMic: hasMicOnFile(proofs),
-    hasNotes: (record?.messages.length ?? 0) > 0,
-  });
-
   function openAskSource(source: AskSourceChip) {
     if (source.workDate || source.section === 'videos') {
       seek({
@@ -571,13 +564,9 @@ export function JobAskPanel({
           ? 'flex h-full min-h-0 flex-col bg-paper-50'
           : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
       }
+      aria-label="Ask this job"
       data-testid="job-ask-panel"
     >
-      <div className="shrink-0 border-b border-line px-5 py-4">
-        <h2 className="text-base font-semibold text-ink-900">Ask this job</h2>
-        <p className="mt-0.5 text-xs text-ink-500">{knows}</p>
-      </div>
-
       <div
         ref={scrollerRef}
         className={

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildJobFileDossier,
   buildJobFileSearchHaystack,
-  fileKnowsCopy,
   filePulse,
   jobFileMatches,
   jobFilePath,
@@ -197,14 +196,6 @@ describe('turnsFromQuestions', () => {
   });
 });
 
-describe('fileKnowsCopy', () => {
-  it('sounds like the file is already read, not like a dashboard', () => {
-    expect(fileKnowsCopy({ clipCount: 2, hasMic: true, hasNotes: true })).toBe(
-      "I've already read 2 clips and what was said on the mic. Ask what you forgot.",
-    );
-    expect(fileKnowsCopy({ clipCount: 0, hasMic: false, hasNotes: false })).toMatch(/ask what you forgot/i);
-  });
-});
 
 describe('jobFileMatches', () => {
   const job: JobSummary = {
