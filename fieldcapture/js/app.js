@@ -188,6 +188,13 @@
         id === 's-home' || id === 's-new-job' || id === 's-platform' ? 'on' : 'off',
       );
     }
+    var switchbar = document.getElementById('product-switch');
+    if (switchbar) {
+      /* Only after sign-in (Today / new job / Platform). Never on login or terms. */
+      var showSwitch =
+        id === 's-home' || id === 's-new-job' || id === 's-platform';
+      switchbar.hidden = !showSwitch;
+    }
     var todayTab = document.querySelector('#product-switch a[href="#today"]');
     var platformTab = document.getElementById('platform-link');
     if (todayTab) {
