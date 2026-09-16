@@ -203,6 +203,13 @@
     background: var(--bg);
   }
   body[data-screen="s-platform"] .top { display: none; }
+  /* Sign-in / terms: product chrome stays off — no Field Capture / Platform dock,
+     no Field Capture subtitle. Login is Atmosphere only. */
+  body[data-screen="s-blocked"] .switchbar,
+  body[data-screen="s-terms"] .switchbar { display: none !important; }
+  body[data-screen="s-blocked"] .brand .sub,
+  body[data-screen="s-terms"] .brand .sub { display: none; }
+
   .pad { padding: 18px; }
 
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
@@ -802,7 +809,7 @@
   .upload-meter-fill { height: 100%; width: 0%; background: var(--pass); transition: width .15s linear; }
 </style>
 </head>
-<body>
+<body data-screen="s-blocked">
 <div class="app" id="app" data-switch="off">
 
   <!-- ================= header ================= -->
