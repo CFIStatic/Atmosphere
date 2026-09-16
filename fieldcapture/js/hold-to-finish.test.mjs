@@ -1155,6 +1155,29 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   assert.match(stuck.detail, /Safe on this phone until filed/);
   assert.equal(stuck.resume, true);
   assert.deepEqual(stuck.rows.map((r) => r.state), ['Needs the office']);
+  const disclosureStuck = Core.summarizeDayFilms(
+    [{
+      id: 'f4b',
+      owner: 'user:1',
+      status: 'waiting',
+      lastError: 'Acknowledge the recording disclosure for this job before uploading Field Capture film.',
+      lastStatus: 403,
+      lastCode: 'recording_ack_required',
+      jobId: 'job-a',
+      workDate: '2026-09-15',
+    }],
+    { owner: 'user:1', online: true, signedIn: true },
+  );
+  assert.equal(disclosureStuck.needsRecordingAck, true);
+  assert.equal(disclosureStuck.ackFilmId, 'f4b');
+  assert.deepEqual(disclosureStuck.rows.map((r) => r.state), ['Needs disclosure']);
+  assert.equal(Core.isRecordingAckRequiredError(disclosureStuck.rows[0] ? {
+    lastError: 'Acknowledge the recording disclosure for this job before uploading Field Capture film.',
+    lastCode: 'recording_ack_required',
+  } : null) || Core.isRecordingAckRequiredError({
+    lastError: 'Acknowledge the recording disclosure for this job before uploading Field Capture film.',
+    lastCode: 'recording_ack_required',
+  }), true);
   const volatile = Core.summarizeDayFilms(
     [{ id: 'f5', owner: 'user:1', status: 'queued', volatile: true, jobId: 'job-a' }],
     { owner: 'user:1', online: true, signedIn: true },
@@ -1465,6 +1488,9 @@ assert.match(appSrc, /s-recording-consent/, 'web FC has a recording consent scre
 assert.match(appSrc, /needsRecordingConsent/, 'web FC gates startLiveDay on disclosure ack');
 assert.match(appSrc, /openRecordingConsent/, 'web FC opens the disclosure before recording');
 assert.match(appSrc, /acceptRecordingAck/, 'web FC posts recording acknowledgment');
+assert.match(appSrc, /openRecordingConsentForFiling/, 'Resume filing opens disclosure when upload is ack-blocked');
+assert.match(appSrc, /purpose === 'filing'/, 'disclosure accept can resume filing instead of only starting record');
+assert.equal(typeof Core.isRecordingAckRequiredError, 'function');
 assert.doesNotMatch(Core.RECORDING_DISCLOSURE_TEXT, /HIPAA|GDPR|legally binding/i);
 
 console.log('hold-to-finish OK');

@@ -1458,6 +1458,29 @@
 
   var pendingRecordingStart = null;
 
+  function isRecordingAckRequiredError(errOrFilm) {
+    if (!errOrFilm) return false;
+    if (typeof Core.isRecordingAckRequiredError === 'function') {
+      return Core.isRecordingAckRequiredError(errOrFilm);
+    }
+    var code = errOrFilm.code || errOrFilm.lastCode || '';
+    var msg = String(errOrFilm.message || errOrFilm.lastError || '');
+    return (
+      code === 'recording_ack_required' ||
+      /Acknowledge the recording disclosure for this job before uploading/i.test(msg)
+    );
+  }
+
+  function filmNeedingRecordingAck(films) {
+    var list = Array.isArray(films) ? films : filmQueue ? filmQueue.films() : [];
+    for (var i = 0; i < list.length; i += 1) {
+      var f = list[i];
+      if (!f || f.status === 'done') continue;
+      if (isRecordingAckRequiredError(f)) return f;
+    }
+    return null;
+  }
+
   function showRecordingConsentError(msg) {
     var el = $('#recording-consent-err');
     if (!el) return;
@@ -1493,7 +1516,9 @@
         btn.disabled = true;
         showRecordingConsentError('');
         var jobId = pending.jobId || state.activeJobId;
-        var workDate = Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : '';
+        var workDate =
+          pending.workDate ||
+          (Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : '');
         var version = Core.RECORDING_DISCLOSURE_VERSION || 'recording-disclosure-v1';
         var post =
           Core.acceptRecordingAck && (state.accessToken || state.shareToken)
@@ -1509,7 +1534,14 @@
         post
           .then(function () {
             if (Core.markLocalRecordingAck) Core.markLocalRecordingAck(jobId, workDate, version);
+            if (pending.purpose === 'filing') {
+              show('s-home');
+              setStatus('Disclosure acknowledged — filing with the office…');
+              if (filmQueue) return filmQueue.retryNow();
+              return null;
+            }
             proceedStartLiveDay(pending.stream);
+            return null;
           })
           .catch(function (err) {
             pendingRecordingStart = pending;
@@ -1546,9 +1578,15 @@
     return true;
   }
 
-  function openRecordingConsent(stream) {
+  function openRecordingConsent(stream, opts) {
+    opts = opts || {};
     bindRecordingConsent();
-    pendingRecordingStart = { stream: stream, jobId: state.activeJobId };
+    pendingRecordingStart = {
+      stream: stream,
+      jobId: opts.jobId || state.activeJobId,
+      workDate: opts.workDate || null,
+      purpose: opts.purpose || 'record',
+    };
     var textEl = $('#recording-consent-text');
     var ack = $('#recording-consent-ack');
     var btn = $('#recording-consent-btn');
@@ -1567,6 +1605,21 @@
         })
         .catch(function () {});
     }
+  }
+
+  /** Stuck uploads that need disclosure: open consent for that film's job/day, then retry. */
+  function openRecordingConsentForFiling(film) {
+    if (!film || !film.jobId) return false;
+    if (!sessionUsable()) {
+      setStatus('Sign in to acknowledge the recording disclosure, then resume filing.', true);
+      return false;
+    }
+    openRecordingConsent(null, {
+      purpose: 'filing',
+      jobId: film.jobId,
+      workDate: film.workDate || (Core.todayWorkDateStamp ? Core.todayWorkDateStamp() : ''),
+    });
+    return true;
   }
 
   function proceedStartLiveDay(stream) {
@@ -2239,6 +2292,11 @@
   }
 
   function resumeFilingNow() {
+    /* Disclosure-blocked film: Resume must open consent, not spin on the same 403. */
+    var needsAck = filmNeedingRecordingAck();
+    if (needsAck && openRecordingConsentForFiling(needsAck)) {
+      return Promise.resolve(null);
+    }
     /* Claim share-owner films onto this account first, then skip backoff. */
     var claimed = claimShareFilmsForAccount();
     return Promise.resolve(claimed).then(function () {
