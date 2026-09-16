@@ -111,6 +111,12 @@ assert.match(html, /Start the day/);
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
 assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platform bar starts hidden until sign-in');
+assert.match(
+  html,
+  /\.auth-form input[\s\S]*?font-size:\s*16px/,
+  'login fields are 16px so iOS Safari does not zoom on focus',
+);
+
 assert.match(html, /id="app"[^>]*data-switch="off"/, 'login hides the Field Capture / Platform bar');
 assert.match(appSrc, /switchbar\.hidden = !showSwitch/, 'show() toggles the product bar with the signed-in screens only');
 assert.match(html, /Field Capture<small>/);
@@ -171,8 +177,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=hide-switchbar-until-login-1/);
-assert.match(html, /js\/app\.js\?v=hide-switchbar-until-login-1/);
+assert.match(html, /js\/capture-core\.js\?v=login-no-ios-zoom-1/);
+assert.match(html, /js\/app\.js\?v=login-no-ios-zoom-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
