@@ -122,6 +122,17 @@ assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platfo
     else i += 1;
   }
   assert.ok(depth >= 1, 'switchbar stays inside the phone-width .app column (not full-bleed)');
+
+assert.match(appSrc, /function syncAppHeight/, 'Today height tracks the visible Safari viewport');
+assert.match(appSrc, /visualViewport/, 'uses visualViewport so the URL bar does not cover Start the day');
+assert.match(html, /--app-height/, 'app height is driven by --app-height');
+assert.match(html, /100svh/, 'falls back to small viewport height when JS has not run');
+assert.match(
+  appSrc,
+  /function playElevate[\s\S]*?show\('s-home'\)/,
+  'playElevate restores Today so Field Capture / Platform show after the short connect video',
+);
+
 }
 assert.match(
   html,
@@ -189,8 +200,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=switchbar-phone-width-1/);
-assert.match(html, /js\/app\.js\?v=switchbar-phone-width-1/);
+assert.match(html, /js\/capture-core\.js\?v=comfortable-fit-1/);
+assert.match(html, /js\/app\.js\?v=comfortable-fit-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');

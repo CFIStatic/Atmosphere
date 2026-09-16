@@ -175,6 +175,23 @@
   }
 
   var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-platform'];
+
+  /** Keep .app inside the visible Safari viewport (URL bar expanded or not). */
+  function syncAppHeight() {
+    try {
+      var vv = window.visualViewport;
+      var h = vv && vv.height ? vv.height : window.innerHeight;
+      if (!(h > 0)) return;
+      document.documentElement.style.setProperty('--app-height', Math.round(h) + 'px');
+    } catch (e) {}
+  }
+  syncAppHeight();
+  window.addEventListener('resize', syncAppHeight);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncAppHeight);
+    window.visualViewport.addEventListener('scroll', syncAppHeight);
+  }
+
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -232,6 +249,14 @@
         resolve();
         return;
       }
+      /* Hide Field Capture | Platform during the short connect animation;
+         Today re-shows it when the mark melts away. */
+      var switchbar = document.getElementById('product-switch');
+      var restoreSwitch = false;
+      if (switchbar && !switchbar.hidden) {
+        switchbar.hidden = true;
+        restoreSwitch = true;
+      }
       el.setAttribute('aria-hidden', 'false');
       el.setAttribute('aria-label', 'Connected');
       el.setAttribute('data-on', '1');
@@ -250,6 +275,13 @@
           el.setAttribute('data-on', '0');
           el.setAttribute('aria-hidden', 'true');
           el.classList.remove('play', 'out');
+          /* Land on Today with the product bar visible after the short video. */
+          show('s-home');
+          if (restoreSwitch) {
+            var bar = document.getElementById('product-switch');
+            if (bar) bar.hidden = false;
+          }
+          syncAppHeight();
           resolve();
         }, fade);
       }, hold);
