@@ -197,6 +197,12 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('<path d="M9 3v18"/>');
     expect(verifierHtml).not.toContain('class="icon-collapse"');
     expect(verifierHtml).not.toContain('class="icon-expand"');
+    // Trailing-edge ghost control — not glued to the wordmark / logo mark.
+    expect(verifierHtml).toContain('margin-inline-start: auto');
+    expect(verifierHtml).toContain('html[data-rail-collapsed] .rail-collapse');
+    expect(verifierHtml).toContain('order: -1');
+    expect(verifierHtml).toContain('flex-direction: column');
+    expect(verifierHtml).toContain('background: transparent');
   });
 
   it('does not show a Legal hold filter on the Dashboard', () => {
