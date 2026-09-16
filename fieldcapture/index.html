@@ -237,7 +237,7 @@
   .job-search input {
     flex: 1; min-width: 0;
     border: 0; background: transparent; outline: none;
-    color: var(--ink); font: inherit; font-size: 15px;
+    color: var(--ink); font: inherit; font-size: 16px;
     padding: 11px 0;
     -webkit-appearance: none;
   }
@@ -635,10 +635,13 @@
 
   .auth-form { margin-top: 22px; display: grid; gap: 14px; }
   .auth-form label { display: block; font-size: 13px; font-weight: 650; color: var(--ink-2); }
-  .auth-form input {
+  /* 16px minimum: iOS Safari zooms the page when a focused field is smaller. */
+  .auth-form input,
+  .auth-form textarea {
     display: block; width: 100%; margin-top: 6px; padding: 12px 14px;
     border: 1px solid var(--line); border-radius: 10px;
     background: var(--panel); color: var(--ink); font: inherit;
+    font-size: 16px;
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .tos-ack {
@@ -1101,7 +1104,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=hide-switchbar-until-login-1"></script>
-<script src="js/app.js?v=hide-switchbar-until-login-1"></script>
+<script src="js/capture-core.js?v=login-no-ios-zoom-1"></script>
+<script src="js/app.js?v=login-no-ios-zoom-1"></script>
 </body>
 </html>
