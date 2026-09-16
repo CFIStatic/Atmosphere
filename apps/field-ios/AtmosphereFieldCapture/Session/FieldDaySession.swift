@@ -206,13 +206,8 @@ final class FieldDaySession: ObservableObject {
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }
-        guard let jobId = activeJobId else { return }
-        let workDate = Self.todayStamp()
-        let version = AtmosphereClient.recordingDisclosureVersion
-        if !RecordingAckStore.hasAck(jobId: jobId, workDate: workDate, version: version) {
-            pendingRecordingConsentJobId = jobId
-            return
-        }
+        guard activeJobId != nil else { return }
+        /* Recording disclosure gate removed — start filming immediately. */
         await beginRecordingAfterConsent()
     }
 

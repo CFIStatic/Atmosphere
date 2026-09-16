@@ -2876,7 +2876,6 @@
     else if (opts && opts.signedIn === false) state = 'Needs sign-in';
     else if (opts && opts.online === false) state = 'Waiting for signal';
     else if (isLocalJobId(film.jobId)) state = 'Creating the job';
-    else if (isRecordingAckRequiredError(film)) state = 'Needs disclosure'
     else if (isStuckStatus(film.lastStatus)) state = 'Needs the office';
     else if (film.status === 'waiting') state = 'Retrying…';
     else state = 'On this phone';
@@ -2974,14 +2973,6 @@
       out.detail =
         'Safe on this phone until filed. Waiting for signal — tap Resume when you are back online.';
       out.resume = true;
-    } else if (stuck && isRecordingAckRequiredError(stuck)) {
-      out.tone = 'warn';
-      out.title = days + ' saved on this phone';
-      out.detail =
-        'Acknowledge the recording disclosure for this job before uploading Field Capture film. Safe on this phone until filed.';
-      out.resume = true;
-      out.needsRecordingAck = true;
-      out.ackFilmId = stuck.id;
     } else if (stuck) {
       out.tone = 'warn';
       out.title = days + ' saved on this phone';

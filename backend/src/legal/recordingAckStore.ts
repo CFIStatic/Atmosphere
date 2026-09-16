@@ -1,10 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
-import { config } from '../config.js';
 import {
-  RECORDING_ACK_REQUIRED_CODE,
-  RECORDING_ACK_REQUIRED_MESSAGE,
   RECORDING_DISCLOSURE_VERSION,
   RECORDING_VERSION_MISMATCH_CODE,
   isAcceptableRecordingDisclosureVersion,
@@ -218,7 +215,11 @@ export async function recordRecordingAcknowledgment(input: {
  * disclosure version. Development / test stay open so local capture and CI
  * are not blocked before the table exists.
  */
-export async function assertRecordingAckForProof(input: {
+/**
+ * Recording disclosure gate retired — uploads must not block on acknowledgment.
+ * Kept as a no-op so older callers compile; table/APIs may remain for history.
+ */
+export async function assertRecordingAckForProof(_input: {
   admin: SupabaseClient;
   jobId: string;
   workDate: string;
@@ -226,11 +227,5 @@ export async function assertRecordingAckForProof(input: {
   actorUserId?: string | null;
   enforce?: boolean;
 }): Promise<void> {
-  const enforce = input.enforce ?? config.isProduction;
-  if (!enforce) return;
-
-  const ack = await findRecordingAckForProof(input);
-  if (!ack) {
-    throw new HttpError(403, RECORDING_ACK_REQUIRED_MESSAGE, RECORDING_ACK_REQUIRED_CODE);
-  }
+  return;
 }
