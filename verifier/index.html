@@ -1868,8 +1868,8 @@
         <span>Atmosphere</span>
       </button>
       <button type="button" class="rail-collapse" id="rail-collapse" aria-controls="main-rail" aria-expanded="true" aria-label="Collapse navigation" data-i18n-chrome-aria="collapseNav" title="Collapse navigation">
-        <svg class="icon-collapse" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6 9 12l6 6"/><path d="M20 4v16"/><path d="M4 4v16" opacity="0.35"/></svg>
-        <svg class="icon-expand" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M9 6l6 6-6 6"/><path d="M4 4v16"/><path d="M20 4v16" opacity="0.35"/></svg>
+        <!-- Lucide PanelLeft — same glyph expanded/collapsed (VS Code / Notion convention). -->
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
       </button>
     </div>
 
@@ -6758,10 +6758,6 @@
     btn.setAttribute('aria-label', label);
     btn.setAttribute('title', label);
     btn.setAttribute('data-i18n-chrome-aria', on ? 'expandNav' : 'collapseNav');
-    var collapseIcon = btn.querySelector('.icon-collapse');
-    var expandIcon = btn.querySelector('.icon-expand');
-    if (collapseIcon) collapseIcon.hidden = !!on;
-    if (expandIcon) expandIcon.hidden = !on;
   }
 
   function syncNavItemTitles() {
