@@ -192,6 +192,11 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('data-i18n-chrome-aria="collapseNav"');
     expect(verifierHtml).toContain('--rail-w: 56px');
     expect(verifierHtml).toContain('body[data-atm-phone-drawer] .rail-collapse');
+    // Lucide PanelLeft (rounded square + left divider) — not chevron-between-bars.
+    expect(verifierHtml).toContain('<rect width="18" height="18" x="3" y="3" rx="2"/>');
+    expect(verifierHtml).toContain('<path d="M9 3v18"/>');
+    expect(verifierHtml).not.toContain('class="icon-collapse"');
+    expect(verifierHtml).not.toContain('class="icon-expand"');
   });
 
   it('does not show a Legal hold filter on the Dashboard', () => {
