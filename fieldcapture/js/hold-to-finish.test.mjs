@@ -111,6 +111,18 @@ assert.match(html, /Start the day/);
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
 assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platform bar starts hidden until sign-in');
+{
+  const appAt = html.indexOf('<div class="app"');
+  const swAt = html.indexOf('id="product-switch"');
+  assert.ok(appAt >= 0 && swAt > appAt, 'product switch markup follows .app');
+  let depth = 0;
+  for (let i = appAt; i < swAt; ) {
+    if (html.startsWith('<div', i)) { depth += 1; i += 4; }
+    else if (html.startsWith('</div>', i)) { depth -= 1; i += 6; }
+    else i += 1;
+  }
+  assert.ok(depth >= 1, 'switchbar stays inside the phone-width .app column (not full-bleed)');
+}
 assert.match(
   html,
   /\.auth-form input[\s\S]*?font-size:\s*16px/,
@@ -177,8 +189,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=login-no-ios-zoom-1/);
-assert.match(html, /js\/app\.js\?v=login-no-ios-zoom-1/);
+assert.match(html, /js\/capture-core\.js\?v=switchbar-phone-width-1/);
+assert.match(html, /js\/app\.js\?v=switchbar-phone-width-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');

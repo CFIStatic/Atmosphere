@@ -328,16 +328,24 @@
   /* Field Capture | Platform — shown after sign-in (Today / office link).
      Hidden on the login form and while filming so Sign in / hold-to-finish
      stay the only control. The office console has no bar. */
+  /* Stays inside the 480px phone column — never full-bleed on desktop. */
   .switchbar {
     display: grid; grid-template-columns: 1fr 1fr;
+    flex: none;
+    width: 100%;
+    max-width: 100%;
     border-top: 1px solid var(--line);
     background: var(--panel);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .switchbar a {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 10px 8px 12px; text-decoration: none; color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 10px 8px 12px;
+    text-decoration: none; color: var(--muted);
     font-size: 13px; font-weight: 700;
+    -webkit-tap-highlight-color: transparent;
   }
   .switchbar a small { font-size: 10.5px; font-weight: 600; color: var(--faint); }
   .switchbar a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
@@ -1010,10 +1018,6 @@
     </div>
   </div>
 
-
-    </div>
-  </div>
-
   <!-- ================= THE DAY, RUNNING ================= -->
   <div class="screen" id="s-rec">
     <div class="finder">
@@ -1104,7 +1108,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=login-no-ios-zoom-1"></script>
-<script src="js/app.js?v=login-no-ios-zoom-1"></script>
+<script src="js/capture-core.js?v=switchbar-phone-width-1"></script>
+<script src="js/app.js?v=switchbar-phone-width-1"></script>
 </body>
 </html>
