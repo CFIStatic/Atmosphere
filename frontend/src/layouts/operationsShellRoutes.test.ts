@@ -92,7 +92,7 @@ describe('phone and Field Capture frame', () => {
 });
 
 describe('office rail width', () => {
-  it('uses the same rail width on Dashboard and the other office tabs', () => {
+  it('uses the same always-expanded rail width on Dashboard and the other office tabs', () => {
     const css = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), '../index.css'),
       'utf8',
@@ -100,16 +100,17 @@ describe('office rail width', () => {
     expect(css).toContain('--office-rail-w: 248px');
     expect(css).toContain('--office-rail-w: 236px');
     expect(css).toContain('--office-rail-w: 228px');
-    expect(css).toContain("--office-rail-w: 56px");
-    expect(css).toContain("data-office-rail-collapsed='true'");
+    expect(css).not.toContain("--office-rail-w: 56px");
+    expect(css).not.toContain("data-office-rail-collapsed");
     const shell = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), './OperationsShell.tsx'),
       'utf8',
     );
     expect(shell).toContain('operations-chrome');
-    expect(shell).toContain('data-office-rail-collapsed');
-    expect(shell).toContain('readOfficeRailCollapsed');
-    expect(shell).toContain("'rail-collapsed'");
+    expect(shell).not.toContain('data-office-rail-collapsed');
+    expect(shell).not.toContain('readOfficeRailCollapsed');
+    expect(shell).not.toContain("'rail-collapsed'");
+    expect(shell).not.toContain('officeRailCollapsed');
     expect(shell).not.toContain('w-[248px]');
   });
 });

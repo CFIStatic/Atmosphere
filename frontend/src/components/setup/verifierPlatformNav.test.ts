@@ -182,27 +182,22 @@ describe('verifier office rail', () => {
   });
 
 
-  it('offers a collapsible icon rail with a11y and localStorage persistence', () => {
-    expect(verifierHtml).toContain('id="rail-collapse"');
-    expect(verifierHtml).toContain('html[data-rail-collapsed]');
-    expect(verifierHtml).toContain("RAIL_COLLAPSED_KEY = 'atmosphere.officeRailCollapsed'");
-    expect(verifierHtml).toContain('function setRailCollapsed');
-    expect(verifierHtml).toContain("atmosphere: 'rail-collapsed'");
-    expect(verifierHtml).toContain('aria-expanded');
-    expect(verifierHtml).toContain('data-i18n-chrome-aria="collapseNav"');
-    expect(verifierHtml).toContain('--rail-w: 56px');
-    expect(verifierHtml).toContain('body[data-atm-phone-drawer] .rail-collapse');
-    // Lucide PanelLeft (rounded square + left divider) — not chevron-between-bars.
-    expect(verifierHtml).toContain('<rect width="18" height="18" x="3" y="3" rx="2"/>');
-    expect(verifierHtml).toContain('<path d="M9 3v18"/>');
+  it('keeps the office rail always expanded with no collapse toggle', () => {
+    expect(verifierHtml).not.toContain('id="rail-collapse"');
+    expect(verifierHtml).not.toContain('class="rail-collapse"');
+    expect(verifierHtml).not.toContain('html[data-rail-collapsed]');
+    expect(verifierHtml).not.toContain('function setRailCollapsed');
+    expect(verifierHtml).not.toContain("atmosphere: 'rail-collapsed'");
+    expect(verifierHtml).not.toContain('data-i18n-chrome-aria="collapseNav"');
+    expect(verifierHtml).not.toContain('--rail-w: 56px');
     expect(verifierHtml).not.toContain('class="icon-collapse"');
     expect(verifierHtml).not.toContain('class="icon-expand"');
-    // Trailing-edge ghost control — not glued to the wordmark / logo mark.
-    expect(verifierHtml).toContain('margin-inline-start: auto');
-    expect(verifierHtml).toContain('html[data-rail-collapsed] .rail-collapse');
-    expect(verifierHtml).toContain('order: -1');
-    expect(verifierHtml).toContain('flex-direction: column');
-    expect(verifierHtml).toContain('background: transparent');
+    // Stale localStorage key is cleared so users are never stuck collapsed.
+    expect(verifierHtml).toContain("localStorage.removeItem('atmosphere.officeRailCollapsed')");
+    expect(verifierHtml).toContain('id="brand-home"');
+    expect(verifierHtml).toContain('id="nav-start-job"');
+    expect(verifierHtml).toContain('data-screen="dashboard"');
+    expect(verifierHtml).toContain('id="nav-settings"');
   });
 
   it('does not show a Legal hold filter on the Dashboard', () => {

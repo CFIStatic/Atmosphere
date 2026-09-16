@@ -31,8 +31,6 @@ export const EN = {
   'nav.themeModeHint': '{current} mode. Click for {next}.',
   'nav.chatHistory': 'Chat history',
   'nav.newChat': 'New chat',
-  'nav.collapse': 'Collapse navigation',
-  'nav.expand': 'Expand navigation',
 
   'settings.title': 'Settings',
   'settings.sectionsAria': 'Settings sections',
