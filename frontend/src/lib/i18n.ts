@@ -94,8 +94,6 @@ export interface VerifierChromeStrings {
   switchToDark: string;
   chatHistory: string;
   newChat: string;
-  collapseNav: string;
-  expandNav: string;
 }
 
 export function verifierChromeStrings(
@@ -119,7 +117,5 @@ export function verifierChromeStrings(
     switchToDark: translate(locale, 'nav.switchToDark'),
     chatHistory: translate(locale, 'nav.chatHistory'),
     newChat: translate(locale, 'nav.newChat'),
-    collapseNav: translate(locale, 'nav.collapse'),
-    expandNav: translate(locale, 'nav.expand'),
   };
 }
