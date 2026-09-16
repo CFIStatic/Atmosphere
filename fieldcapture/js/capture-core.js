@@ -787,6 +787,16 @@
     );
   }
 
+  function isRecordingAckRequiredError(errOrFilm) {
+    if (!errOrFilm) return false;
+    var code = errOrFilm.code || errOrFilm.lastCode || '';
+    var msg = String(errOrFilm.message || errOrFilm.lastError || '');
+    return (
+      code === 'recording_ack_required' ||
+      /Acknowledge the recording disclosure for this job before uploading/i.test(msg)
+    );
+  }
+
   function hasLocalRecordingAck(jobId, workDate, version) {
     try {
       return (
@@ -2094,6 +2104,7 @@
       attempts: 0,
       lastError: '',
       lastStatus: 0,
+      lastCode: '',
       nextAttemptAt: 0,
       volatile: false,
     };
@@ -2636,6 +2647,7 @@
       entry.attempts += 1;
       entry.lastError = '';
       entry.lastStatus = 0;
+      entry.lastCode = '';
       var r = rt(entry);
       r.progress = 0;
       r.step = 'Starting…';
@@ -2725,6 +2737,7 @@
             entry.status = 'waiting';
             entry.lastError = (err && err.message) || 'Upload did not go through.';
             entry.lastStatus = err && typeof err.status === 'number' ? err.status : 0;
+            entry.lastCode = err && typeof err.code === 'string' ? err.code : '';
             if (err && err.streamFailed && entry.stream) {
               // The office would not stitch the streamed head: send the
               // whole film, and do it now — nothing about signal changed.
@@ -2738,6 +2751,7 @@
               status: 'waiting',
               lastError: entry.lastError,
               lastStatus: entry.lastStatus,
+              lastCode: entry.lastCode || '',
               nextAttemptAt: entry.nextAttemptAt,
               attempts: entry.attempts,
               stream: entry.stream,
@@ -2862,6 +2876,7 @@
     else if (opts && opts.signedIn === false) state = 'Needs sign-in';
     else if (opts && opts.online === false) state = 'Waiting for signal';
     else if (isLocalJobId(film.jobId)) state = 'Creating the job';
+    else if (isRecordingAckRequiredError(film)) state = 'Needs disclosure'
     else if (isStuckStatus(film.lastStatus)) state = 'Needs the office';
     else if (film.status === 'waiting') state = 'Retrying…';
     else state = 'On this phone';
@@ -2959,6 +2974,14 @@
       out.detail =
         'Safe on this phone until filed. Waiting for signal — tap Resume when you are back online.';
       out.resume = true;
+    } else if (stuck && isRecordingAckRequiredError(stuck)) {
+      out.tone = 'warn';
+      out.title = days + ' saved on this phone';
+      out.detail =
+        'Acknowledge the recording disclosure for this job before uploading Field Capture film. Safe on this phone until filed.';
+      out.resume = true;
+      out.needsRecordingAck = true;
+      out.ackFilmId = stuck.id;
     } else if (stuck) {
       out.tone = 'warn';
       out.title = days + ' saved on this phone';
@@ -3299,6 +3322,7 @@
     RECORDING_DISCLOSURE_VERSION: RECORDING_DISCLOSURE_VERSION,
     RECORDING_DISCLOSURE_TEXT: RECORDING_DISCLOSURE_TEXT,
     todayWorkDateStamp: todayWorkDateStamp,
+    isRecordingAckRequiredError: isRecordingAckRequiredError,
     hasLocalRecordingAck: hasLocalRecordingAck,
     markLocalRecordingAck: markLocalRecordingAck,
     isServerJobId: isServerJobId,

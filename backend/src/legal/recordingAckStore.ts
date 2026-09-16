@@ -78,9 +78,8 @@ export async function latestRecordingAck(input: {
     query = query.eq('actor_user_id', input.actorUserId);
   } else if (input.actorPartyId) {
     query = query.eq('actor_party_id', input.actorPartyId);
-  } else {
-    return null;
   }
+  /* No actor filter: any acknowledgment for this job/day/version. */
 
   const { data, error } = await query.maybeSingle();
   if (error) {
@@ -92,7 +91,7 @@ export async function latestRecordingAck(input: {
   return { disclosureVersion: row.disclosure_version, acknowledgedAt: row.acknowledged_at };
 }
 
-/** Prefer party-scoped ack, then user-scoped — either satisfies the gate. */
+/** Prefer party-scoped ack, then user-scoped, then any ack for this job/day. */
 export async function findRecordingAckForProof(input: {
   admin: SupabaseClient;
   jobId: string;
@@ -110,14 +109,21 @@ export async function findRecordingAckForProof(input: {
     if (byParty) return byParty;
   }
   if (input.actorUserId) {
-    return latestRecordingAck({
+    const byUser = await latestRecordingAck({
       admin: input.admin,
       jobId: input.jobId,
       workDate: input.workDate,
       actorUserId: input.actorUserId,
     });
+    if (byUser) return byUser;
   }
-  return null;
+  /* Upload gate is per job/day disclosure version. If the crew remapped
+     parties or ack landed under a different actor row, still allow filing. */
+  return latestRecordingAck({
+    admin: input.admin,
+    jobId: input.jobId,
+    workDate: input.workDate,
+  });
 }
 
 export async function loadRecordingAckStatus(input: {

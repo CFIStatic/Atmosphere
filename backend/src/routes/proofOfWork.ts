@@ -498,6 +498,10 @@ export async function createUploadUrl(
     jobId: party.job_id,
     workDate: input.workDate,
     actorPartyId: party.id ?? null,
+    actorUserId:
+      (typeof party.user_id === 'string' && party.user_id) ||
+      (typeof party.created_by === 'string' && party.created_by) ||
+      null,
   });
 
   // Always mint when the phone omits clipId — hours-long / multi-clip days
@@ -582,6 +586,10 @@ export async function createPartUploadUrl(
     jobId: party.job_id,
     workDate: input.workDate,
     actorPartyId: party.id ?? null,
+    actorUserId:
+      (typeof party.user_id === 'string' && party.user_id) ||
+      (typeof party.created_by === 'string' && party.created_by) ||
+      null,
   });
   const extension = assertAllowedProofExtension(input.extension);
   const clipId = resolveClipId(input.clipId);
@@ -660,6 +668,10 @@ export async function completeChunkedProofUpload(
     jobId: party.job_id,
     workDate: input.workDate,
     actorPartyId: party.id ?? null,
+    actorUserId:
+      (typeof party.user_id === 'string' && party.user_id) ||
+      (typeof party.created_by === 'string' && party.created_by) ||
+      null,
   });
   const path = assertOwnedProofStoragePath(party, input);
   const maxBytes = options?.maxBytes ?? PROOF_ASSEMBLE_MAX_BYTES;
@@ -776,6 +788,10 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     jobId: party.job_id,
     workDate: input.workDate,
     actorPartyId: party.id ?? null,
+    actorUserId:
+      (typeof party.user_id === 'string' && party.user_id) ||
+      (typeof party.created_by === 'string' && party.created_by) ||
+      null,
   });
   const storagePath = assertOwnedProofStoragePath(party, input);
   await assertStoredProofMediaAllowed(admin, storagePath);
