@@ -6,6 +6,7 @@ import {
   jobFileIsTombstoned,
   jobLooksDeletedFromLibrary,
 } from '../lib/jobFileDelete.js';
+import { findOpenCrmJobByTitle } from '../shared/openJobByTitle.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
@@ -214,6 +215,19 @@ jobsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => 
   try {
     const input = createJobSchema.parse(req.body);
     const { orgId, supabase } = await requireOrgContext(req);
+
+    // Same org + normalized title → reuse the open job (Platform / CRM create).
+    const reused = await findOpenCrmJobByTitle(supabase, orgId, input.title);
+    if (reused) {
+      const { data: existing, error: loadError } = await supabase
+        .from('crm_jobs')
+        .select(JOB_SELECT)
+        .eq('id', reused.id)
+        .single();
+      if (loadError) throw dbError(loadError, 'Could not open that job.');
+      res.status(200).json({ job: serializeJob(existing), reused: true });
+      return;
+    }
 
     const { data, error } = await supabase
       .from('crm_jobs')

@@ -25,6 +25,7 @@ import {
   propertyRowFromTyped,
   siteAddressFacts,
 } from '../lib/propertyAddress.js';
+import { findOpenCrmJobByTitle } from '../shared/openJobByTitle.js';
 
 /**
  * How a job gets here, and what that costs.
@@ -564,6 +565,32 @@ export async function createJobFile(
     : null;
   const scopeLines = scopeLinesForDb(input);
   const jobTitle = jobTitleForIntake(input.title, site?.line ?? '');
+  // Platform intake / Field Capture: reuse an open job with the same title
+  // instead of minting a second crm_jobs row (Tiffany & Co. duplicates).
+  const reused = await findOpenCrmJobByTitle(supabase, orgId, jobTitle);
+  if (reused) {
+    return {
+      job: {
+        id: reused.id,
+        title: reused.title,
+        jobNumber: reused.job_number,
+      },
+      briefRevision: 1,
+      scopeSaved: 0,
+      parties: [],
+      summary: {
+        jobId: reused.id,
+        jobNumber: reused.job_number,
+        title: reused.title,
+        status: reused.status,
+        parties: 0,
+        currentRevision: 1,
+        behind: 0,
+        awaiting: 0,
+        exclusions: 0,
+      },
+    };
+  }
   const invitees = input.invitees.map((person) => ({
     userId: person.userId ?? null,
     fullName: person.fullName,
