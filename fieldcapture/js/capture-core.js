@@ -2594,7 +2594,9 @@
         reason === 'retry' ||
         reason === 'session' ||
         reason === 'remap' ||
-        reason === 'claim'
+        reason === 'claim' ||
+        reason === 'enqueue' ||
+        reason === 'settled'
       );
     }
 
@@ -2738,11 +2740,19 @@
             entry.lastError = (err && err.message) || 'Upload did not go through.';
             entry.lastStatus = err && typeof err.status === 'number' ? err.status : 0;
             entry.lastCode = err && typeof err.code === 'string' ? err.code : '';
+            var waitingSignal =
+              entry.lastError === WAITING_FOR_SIGNAL ||
+              (entry.lastError && entry.lastError.indexOf('Waiting for signal') === 0);
             if (err && err.streamFailed && entry.stream) {
               // The office would not stitch the streamed head: send the
               // whole film, and do it now — nothing about signal changed.
               entry.stream = null;
               entry.nextAttemptAt = now();
+            } else if (waitingSignal) {
+              /* Phone-only job still creating — not a real upload failure.
+                 Keep attempt count down and retry ASAP once remap/sync lands. */
+              entry.attempts = Math.max(0, (entry.attempts || 1) - 1);
+              entry.nextAttemptAt = now() + 2000;
             } else {
               entry.nextAttemptAt = now() + backoffMs(entry.attempts - 1);
             }

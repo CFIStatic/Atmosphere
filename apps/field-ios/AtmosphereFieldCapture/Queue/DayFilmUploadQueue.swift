@@ -86,10 +86,40 @@ final class DayFilmUploadQueue: ObservableObject {
         monitor.start(queue: DispatchQueue(label: "atm.field.dayfilm.path"))
     }
 
+    /// Matches web `skipFailureBackoff`: online / foreground / bind / remap / enqueue / retry
+    /// must not leave a film parked behind an offline backoff timer.
+    private func shouldSkipBackoff(_ reason: String) -> Bool {
+        switch reason {
+        case "online", "foreground", "bind", "launch", "remap", "enqueue", "retry", "session":
+            return true
+        default:
+            return false
+        }
+    }
+
     private func kick(reason: String) {
         kickTask?.cancel()
         kickTask = Task { [weak self] in
-            await self?.pump(reason: reason)
+            guard let self else { return }
+            if self.shouldSkipBackoff(reason) {
+                do {
+                    var list = try await self.store.list()
+                    var changed = false
+                    for i in list.indices where list[i].isPending {
+                        if list[i].nextAttemptAt != 0 {
+                            list[i].nextAttemptAt = 0
+                            try await self.store.save(list[i])
+                            changed = true
+                        }
+                    }
+                    if changed {
+                        self.entries = list.filter(\.isPending)
+                    }
+                } catch {
+                    /* still pump — best effort */
+                }
+            }
+            await self.pump(reason: reason)
         }
     }
 
