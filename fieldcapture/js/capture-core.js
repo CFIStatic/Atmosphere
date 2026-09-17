@@ -624,6 +624,70 @@
     return 'Request failed.';
   }
 
+  /** Express / proxy 413 — never treat as offline "Waiting for signal". */
+  function isPayloadTooLarge(err) {
+    if (!err) return false;
+    var code = err.code || err.lastCode || '';
+    if (code === 'payload_too_large' || code === 'upload_too_large') return true;
+    var status = Number(err.status || err.lastStatus) || 0;
+    if (status === 413) return true;
+    var msg = String(err.message || err.lastError || '').toLowerCase();
+    return (
+      msg.indexOf('request body is too large') >= 0 ||
+      msg.indexOf('payload too large') >= 0 ||
+      msg.indexOf('entity too large') >= 0 ||
+      msg.indexOf('too large to assemble') >= 0
+    );
+  }
+
+  function friendlyPayloadTooLargeMessage(err) {
+    var msg = String((err && (err.message || err.lastError)) || '');
+    if (/too large to assemble/i.test(msg)) {
+      return 'That day film is too large to assemble here. Ask the office for help.';
+    }
+    return 'This day film is too large for one send. Splitting into pieces and retrying…';
+  }
+
+  /**
+   * Proof POST carries base64 stills under Express's JSON cap (and nginx
+   * client_max_body_size). Drop trailing frames until the array fits.
+   */
+  function fitProofFrames(frames, maxChars) {
+    maxChars = Math.max(0, Math.floor(Number(maxChars) || 180000));
+    var list = Array.isArray(frames) ? frames.slice() : [];
+    function sizeOf(arr) {
+      try {
+        return JSON.stringify(arr).length;
+      } catch (e) {
+        return maxChars + 1;
+      }
+    }
+    while (list.length && sizeOf(list) > maxChars) list.pop();
+    return list;
+  }
+
+  function normalizeJobTitle(title) {
+    return String(title || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  /** Prefer reusing an office job with the same title over minting a duplicate. */
+  function findOfficeJobByTitle(title, jobs) {
+    var want = normalizeJobTitle(title);
+    if (!want) return null;
+    var list = Array.isArray(jobs) ? jobs : [];
+    for (var i = 0; i < list.length; i += 1) {
+      var j = list[i];
+      if (!j || !j.id) continue;
+      if (isLocalJobId(j.id)) continue;
+      var name = normalizeJobTitle(j.name || j.title || '');
+      if (name === want) return j;
+    }
+    return null;
+  }
+
   function origin(apiBase) {
     return (apiBase || '').replace(/\/$/, '');
   }
@@ -984,6 +1048,11 @@
   }
 
   var PROOF_UPLOAD_ATTEMPTS = 8;
+  /** Match BFF proof chunk floor — above this, never PUT the whole film as one body. */
+  var STREAM_PART_BYTES = 4 * 1024 * 1024;
+  var STREAM_MAX_BYTES = 512 * 1024 * 1024;
+  var STREAM_MAX_PARTS = 128;
+  var WHOLE_BODY_MAX_BYTES = 8 * 1024 * 1024;
 
   function nextUploadBackoffMs(attempt) {
     var n = Math.max(0, Math.floor(Number(attempt) || 0));
@@ -994,6 +1063,11 @@
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
+  }
+
+  function shouldMultipartUpload(byteSize) {
+    var size = Math.max(0, Math.floor(Number(byteSize) || 0));
+    return size > WHOLE_BODY_MAX_BYTES && size <= STREAM_MAX_BYTES;
   }
 
   function slotPutUrl(slot, storageBase) {
@@ -1274,27 +1348,104 @@
     // hash/GPS/frames do not delay the storage transfer on truck signal. A
     // film that streamed while recording skips the mint: its head is already
     // in storage and only the tail is left.
+    //
+    // Large films MUST use chunked parts (minted parts or upload-part-url),
+    // never one whole-body PUT — Express/nginx/proxy caps and laptop single
+    // POSTs otherwise surface as "request body is too large".
     onStep('Uploading…');
+    var forceChunked = Boolean(opts.forceChunked) || shouldMultipartUpload(file.size);
+    var leanProof = Boolean(opts.leanProof);
+
+    function uploadMultipartViaPartUrls(pathHint, partBytes) {
+      onStep('Uploading in pieces…');
+      return uploadStreamedTail({
+        path: pathHint,
+        partBytes: Math.max(4096, Number(partBytes) || STREAM_PART_BYTES),
+        bytesDone: 0,
+        partCount: 0,
+      });
+    }
+
+    function putLargeOrResumable(slot) {
+      var parts = slot && slot.parts && slot.parts.length > 1 ? slot.parts : null;
+      if (parts) {
+        return putFileResumable({
+          slot: slot,
+          file: file,
+          mimeType: mimeType,
+          storageBase: storageBase,
+          onStep: onStep,
+          onProgress: onProgress,
+          remint: mintSlot,
+          complete: function (current) {
+            if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
+            return stitch(current.path, current.parts.length).then(function () {
+              return current;
+            });
+          },
+        });
+      }
+      if (forceChunked || shouldMultipartUpload(file.size)) {
+        return uploadMultipartViaPartUrls(slot.path, slot.chunkSize);
+      }
+      return putFileResumable({
+        slot: slot,
+        file: file,
+        mimeType: mimeType,
+        storageBase: storageBase,
+        onStep: onStep,
+        onProgress: onProgress,
+        remint: mintSlot,
+        complete: function (current) {
+          if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
+          return stitch(current.path, current.parts.length).then(function () {
+            return current;
+          });
+        },
+      }).catch(function (err) {
+        if (!isPayloadTooLarge(err) && !(err && Number(err.status) === 413)) throw err;
+        err.forceChunked = true;
+        err.message = friendlyPayloadTooLargeMessage(err);
+        return uploadMultipartViaPartUrls(slot.path, slot.chunkSize);
+      });
+    }
+
+    function postProof(facts, used, lean) {
+      var frames = lean ? [] : fitProofFrames(facts.frames || [], 180000);
+      return apiJson(filePath, {
+        method: 'POST',
+        accessToken: accessToken,
+        headers: authHeaders,
+        body: {
+          workDate: workDate,
+          phase: 'after',
+          storagePath: used.path,
+          byteSize: file.size,
+          durationSeconds: knownDurationSeconds(facts.durationSeconds) || undefined,
+          contentHash: facts.contentHash || undefined,
+          capturedAt: facts.capturedAt,
+          lat: facts.lat != null ? facts.lat : undefined,
+          lon: facts.lon != null ? facts.lon : undefined,
+          accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
+          frames: frames.length ? frames : undefined,
+        },
+      });
+    }
+
     var slotP = stream ? Promise.resolve(null) : mintSlot();
     return slotP.then(function (slot) {
       var factsP = readFacts();
       var putP = stream
-        ? uploadStreamedTail(stream)
-        : putFileResumable({
-            slot: slot,
-            file: file,
-            mimeType: mimeType,
-            storageBase: storageBase,
-            onStep: onStep,
-            onProgress: onProgress,
-            remint: mintSlot,
-            complete: function (current) {
-              if (!current.parts || current.parts.length < 2) return Promise.resolve(current);
-              return stitch(current.path, current.parts.length).then(function () {
-                return current;
+        ? uploadStreamedTail(stream).catch(function (err) {
+            if (err && err.streamFailed && shouldMultipartUpload(file.size)) {
+              // Stitch refused or stream broke — do not fall back to one body.
+              return mintSlot().then(function (fresh) {
+                return uploadMultipartViaPartUrls(fresh.path, fresh.chunkSize);
               });
-            },
-          });
+            }
+            throw err;
+          })
+        : putLargeOrResumable(slot);
 
       return Promise.all([factsP, putP]).then(function (parts) {
         var facts = parts[0];
@@ -1303,23 +1454,17 @@
         if (duration != null) facts.durationSeconds = duration;
         onStep('Uploaded');
         onProgress(1);
-        return apiJson(filePath, {
-          method: 'POST',
-          accessToken: accessToken,
-          headers: authHeaders,
-          body: {
-            workDate: workDate,
-            phase: 'after',
-            storagePath: used.path,
-            byteSize: file.size,
-            durationSeconds: knownDurationSeconds(facts.durationSeconds) || undefined,
-            contentHash: facts.contentHash || undefined,
-            capturedAt: facts.capturedAt,
-            lat: facts.lat != null ? facts.lat : undefined,
-            lon: facts.lon != null ? facts.lon : undefined,
-            accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
-            frames: facts.frames,
-          },
+        return postProof(facts, used, leanProof).catch(function (err) {
+          if (isPayloadTooLarge(err) && !leanProof) {
+            // Stills blew the JSON body cap — file the film without frames.
+            return postProof(facts, used, true);
+          }
+          if (isPayloadTooLarge(err)) {
+            err.message = friendlyPayloadTooLargeMessage(err);
+            err.forceChunked = true;
+            err.leanProof = true;
+          }
+          throw err;
         }).then(function (body) {
           return {
             proof: body.proof,
@@ -1393,6 +1538,15 @@
             slot = next;
             parts = next.parts && next.parts.length > 1 ? next.parts : [];
             if (!parts.length) {
+              if (shouldMultipartUpload(file.size)) {
+                var whole = new Error(
+                  'This day film is too large for one send. Splitting into pieces and retrying…',
+                );
+                whole.forceChunked = true;
+                whole.status = 413;
+                whole.code = 'payload_too_large';
+                return Promise.reject(whole);
+              }
               return putBytesWithRetry(
                 slotPutUrl(next, opts.storageBase),
                 file,
@@ -1847,9 +2001,7 @@
 
   var CLIP_ID = /^[a-z0-9]{6,32}$/;
   /* ~4 MB ≈ 16s at 2 Mbps — keeps office Live under ~30s lag. */
-  var STREAM_PART_BYTES = 4 * 1024 * 1024;
-  var STREAM_MAX_BYTES = 512 * 1024 * 1024;
-  var STREAM_MAX_PARTS = 128;
+  /* STREAM_* hoisted near uploadDayFilm */
   var STREAM_FINISH_WAIT_MS = 20 * 1000;
 
   /** What the queue keeps about a film's streamed head, or null when there is none. */
@@ -2106,6 +2258,8 @@
       attempts: 0,
       lastError: '',
       lastStatus: 0,
+      preferChunked: Boolean(input.preferChunked),
+      leanProof: Boolean(input.leanProof),
       lastCode: '',
       nextAttemptAt: 0,
       volatile: false,
@@ -2764,10 +2918,18 @@
               (entry.lastError && entry.lastError.indexOf('Waiting for signal') === 0) ||
               (entry.lastError && entry.lastError.indexOf('Creating the job') === 0);
             if (err && err.streamFailed && entry.stream) {
-              // The office would not stitch the streamed head: send the
-              // whole film, and do it now — nothing about signal changed.
+              // Stitch refused the streamed head: clear stream and force
+              // chunked parts on the next attempt — never one whole-body PUT.
               entry.stream = null;
+              entry.preferChunked = true;
               entry.nextAttemptAt = now();
+            } else if (isPayloadTooLarge(err) || (err && err.forceChunked)) {
+              entry.stream = null;
+              entry.preferChunked = true;
+              entry.leanProof = true;
+              entry.lastError = friendlyPayloadTooLargeMessage(err);
+              entry.nextAttemptAt = now();
+              rt(entry).step = entry.lastError;
             } else if (softGate) {
               /* Job still creating or offline gate — not a real upload failure.
                  Keep attempt count down and retry ASAP once remap/sync lands. */
@@ -2785,6 +2947,8 @@
               nextAttemptAt: entry.nextAttemptAt,
               attempts: entry.attempts,
               stream: entry.stream,
+              preferChunked: Boolean(entry.preferChunked),
+              leanProof: Boolean(entry.leanProof),
             });
             emit('failed');
             try {
@@ -3331,6 +3495,13 @@
     summarizeDayFilms: summarizeDayFilms,
     filingHomeVisible: filingHomeVisible,
     isStuckStatus: isStuckStatus,
+    isPayloadTooLarge: isPayloadTooLarge,
+    friendlyPayloadTooLargeMessage: friendlyPayloadTooLargeMessage,
+    fitProofFrames: fitProofFrames,
+    shouldMultipartUpload: shouldMultipartUpload,
+    normalizeJobTitle: normalizeJobTitle,
+    findOfficeJobByTitle: findOfficeJobByTitle,
+    WHOLE_BODY_MAX_BYTES: WHOLE_BODY_MAX_BYTES,
     nextFilingBackoffMs: nextFilingBackoffMs,
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,

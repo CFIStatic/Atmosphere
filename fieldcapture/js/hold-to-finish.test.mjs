@@ -200,8 +200,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=queue-upload-online-1/);
-assert.match(html, /js\/app\.js\?v=queue-upload-online-1/);
+assert.match(html, /js\/capture-core\.js\?v=fc-body-too-large-1/);
+assert.match(html, /js\/app\.js\?v=fc-body-too-large-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -556,13 +556,23 @@ assert.match(
   assert.match(src, /function sessionStillOpen/);
   assert.match(
     src,
-    /withSession\(function \(accessToken\) \{\s*return Core\.createTodayJob/,
+    /withSession\(function \(accessToken\) \{\s*return resolveServerJob/,
     'pending-job POST must refresh a one-hour token on 401 instead of failing the day',
   );
   assert.match(
     src,
-    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?Core\.createTodayJob/,
+    /findOfficeJobByTitle/,
+    'pending sync must reuse an office job with the same title before createTodayJob',
+  );
+  assert.match(
+    src,
+    /if \(!sessionStillOpen\(bound\)\) return;[\s\S]*?resolveServerJob/,
     'sign-out must stop the next pending-job POST',
+  );
+  assert.match(
+    src,
+    /Core\.createTodayJob\(\{/,
+    'when no title match exists, sync still POSTs createTodayJob',
   );
   assert.match(src, /function refreshAccess/);
   assert.match(src, /Core\.refreshSession\(API_BASE, refreshToken\)/);
@@ -604,8 +614,13 @@ assert.match(
   assert.match(src, /function resolveFilmJob/);
   assert.match(
     src,
-    /!hasDraft && Core\.upsertPendingJob/,
-    'a film on a cleared phone-only job recreates that job from draft or jobName',
+    /findOfficeJobByTitle/,
+    'orphan local films reuse an office job with the same title before recreating',
+  );
+  assert.match(
+    src,
+    /Core\.upsertPendingJob/,
+    'a film on a cleared phone-only job recreates that job from draft or jobName when no title match',
   );
   assert.match(
     src,
@@ -1677,3 +1692,54 @@ console.log('hold-to-finish OK');
   assert.match(iosQ, /shouldSkipBackoff/, 'iOS clears backoff when online/foreground so saved films file ASAP');
   assert.match(iosQ, /"online"/, 'iOS online path skips backoff');
 }
+
+
+/* ---------- body-too-large / chunked upload + job title reuse (#fc-body-too-large) ---------- */
+assert.equal(typeof Core.isPayloadTooLarge, 'function');
+assert.equal(typeof Core.shouldMultipartUpload, 'function');
+assert.equal(typeof Core.fitProofFrames, 'function');
+assert.equal(typeof Core.findOfficeJobByTitle, 'function');
+assert.equal(Core.WHOLE_BODY_MAX_BYTES, 8 * 1024 * 1024);
+assert.equal(Core.shouldMultipartUpload(8 * 1024 * 1024), false, '8 MiB may still be one PUT');
+assert.equal(Core.shouldMultipartUpload(8 * 1024 * 1024 + 1), true, 'above 8 MiB must multipart');
+assert.equal(Core.shouldMultipartUpload(512 * 1024 * 1024), true);
+assert.equal(Core.shouldMultipartUpload(512 * 1024 * 1024 + 1), false, 'over assemble cap is not client-multipart');
+
+assert.equal(
+  Core.isPayloadTooLarge({ status: 413, message: 'That request body is too large.', code: 'payload_too_large' }),
+  true,
+);
+assert.equal(Core.isPayloadTooLarge({ message: 'Waiting for signal…' }), false);
+assert.match(
+  Core.friendlyPayloadTooLargeMessage({ message: 'That request body is too large.' }),
+  /too large for one send|Splitting into pieces/i,
+);
+
+{
+  const big = 'x'.repeat(100000);
+  const frames = [
+    { atSeconds: 0, base64: big },
+    { atSeconds: 1, base64: big },
+    { atSeconds: 2, base64: big },
+  ];
+  const fit = Core.fitProofFrames(frames, 150000);
+  assert.ok(fit.length < frames.length, 'fitProofFrames drops stills to fit the JSON cap');
+  assert.ok(JSON.stringify(fit).length <= 150000);
+}
+
+assert.equal(Core.normalizeJobTitle('  Project Tiffany & Co. '), 'project tiffany & co.');
+{
+  const jobs = [
+    { id: 'local-1', name: 'Project Tiffany & Co.' },
+    { id: '54731af3-f1f0-4bf8-bd15-bd3abf9076fd', name: 'Project Tiffany & Co.' },
+  ];
+  const hit = Core.findOfficeJobByTitle('Project Tiffany & Co.', jobs);
+  assert.equal(hit.id, '54731af3-f1f0-4bf8-bd15-bd3abf9076fd', 'reuse office id, skip local-*');
+}
+
+assert.match(coreSrc, /forceChunked|uploadMultipartViaPartUrls|Uploading in pieces/, 'large films force part-url path');
+assert.match(coreSrc, /fitProofFrames/, 'proof POST trims stills under the body cap');
+assert.match(appSrc, /findOfficeJobByTitle/, 'syncPendingJobs reuses office jobs by title');
+assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
+assert.match(html, /js\/capture-core\.js\?v=fc-body-too-large-1/);
+assert.match(html, /js\/app\.js\?v=fc-body-too-large-1/);

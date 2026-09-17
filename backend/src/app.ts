@@ -145,18 +145,25 @@ export function createApp(): Express {
   // Near-real-time safety samples carry 1–3 small JPEGs while recording.
   const safetySamplePath =
     /\/proof\/safety-sample\/?$/;
+  // Day-film filing POSTs stills (base64 JPEG). Never the video bytes — those
+  // go to signed storage / multipart parts. Cap high enough for a handful of
+  // phone stills; clients also trim frames before POST.
+  const proofRecordPath = /\/proof\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
   const safetySampleJson = express.json({ limit: '1.5mb' });
+  const proofRecordJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {
     const parse = avatarPath.test(req.path)
       ? avatarJson
       : safetySamplePath.test(req.path)
         ? safetySampleJson
-        : standardJson;
+        : proofRecordPath.test(req.path) && req.method === 'POST'
+          ? proofRecordJson
+          : standardJson;
     parse(req, res, next);
   });
 

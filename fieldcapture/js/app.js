@@ -645,18 +645,65 @@
       return j && Core.isLocalJobId(j.id) && !j.serverId;
     });
     if (!queue.length) return Promise.resolve();
+
+    function resolveServerJob(localJob, accessToken) {
+      var title = localJob.title || localJob.name || 'Job';
+      var existing =
+        Core.findOfficeJobByTitle && Core.findOfficeJobByTitle(title, state.jobs || []);
+      if (existing) {
+        return Promise.resolve({
+          id: existing.id,
+          name: existing.name || existing.title || title,
+          number: existing.number || '',
+          address: existing.address || '',
+          at: existing.at || '',
+          status: existing.status || '',
+          placed: true,
+          filmed: Boolean(existing.filmed),
+        });
+      }
+      var load = Core.loadTodayJobs
+        ? Core.loadTodayJobs(API_BASE, accessToken)
+        : Promise.resolve([]);
+      return load.then(function (jobs) {
+        if (!sessionStillOpen(bound)) return null;
+        if (Array.isArray(jobs) && jobs.length) {
+          state.jobs = Core.mergeTodayJobs
+            ? Core.mergeTodayJobs(state.jobs || [], jobs)
+            : jobs.concat(state.jobs || []);
+          renderExpect(state.jobs);
+        }
+        var hit =
+          Core.findOfficeJobByTitle &&
+          Core.findOfficeJobByTitle(title, jobs && jobs.length ? jobs : state.jobs || []);
+        if (hit) {
+          return {
+            id: hit.id,
+            name: hit.name || hit.title || title,
+            number: hit.number || '',
+            address: hit.address || '',
+            at: hit.at || '',
+            status: hit.status || '',
+            placed: true,
+            filmed: Boolean(hit.filmed),
+          };
+        }
+        return Core.createTodayJob({
+          apiBase: API_BASE,
+          accessToken: accessToken,
+          title: title,
+          situation: localJob.situation || '',
+        });
+      });
+    }
+
     var work = queue.reduce(function (chain, localJob) {
       return chain.then(function () {
         if (!sessionStillOpen(bound)) return;
         return withSession(function (accessToken) {
-          return Core.createTodayJob({
-            apiBase: API_BASE,
-            accessToken: accessToken,
-            title: localJob.title || localJob.name,
-            situation: localJob.situation || '',
-          });
+          return resolveServerJob(localJob, accessToken);
         }).then(function (serverJob) {
-          if (!sessionStillOpen(bound)) return;
+          if (!sessionStillOpen(bound) || !serverJob || !serverJob.id) return;
           /* Films follow the office id before the draft is forgotten, so a
              tab killed between the two steps re-syncs rather than orphans. */
           return remapLocalJob(localJob.id, serverJob).then(function () {
@@ -705,30 +752,40 @@
     var hasDraft = drafts.some(function (j) {
       return j && j.id === jobId;
     });
-    /* Orphan local films (draft list cleared, no jobDraft): recreate from the
-       name stamped on the film so createTodayJob can run. Never soft-loop
-       forever on "Waiting for signal" while the radio is up. */
-    if (!hasDraft && Core.upsertPendingJob) {
+    /* Orphan local films (draft list cleared, no jobDraft): reuse an office
+       job with the same title when one already exists — never mint a
+       duplicate Tiffany folder — otherwise recreate the draft from jobName. */
+    if (!hasDraft) {
       var title =
         (entry.jobDraft && (entry.jobDraft.title || entry.jobDraft.name)) ||
         entry.jobName ||
         'Job';
       var situation = (entry.jobDraft && entry.jobDraft.situation) || '';
-      var draft = {
-        id: jobId,
-        title: title,
-        name: title,
-        situation: situation,
-        address: '',
-        at: 'Today',
-        placed: true,
-        filmed: true,
-        pending: true,
-        createdAt: entry.recordedAt,
-      };
-      Core.upsertPendingJob(draft);
-      listDraftOnToday(draft);
-      if (!entry.jobDraft) entry.jobDraft = { title: title, situation: situation };
+      var existing =
+        Core.findOfficeJobByTitle && Core.findOfficeJobByTitle(title, state.jobs || []);
+      if (existing && existing.id) {
+        return remapLocalJob(jobId, existing).then(function () {
+          if (!sessionStillOpen(bound)) throw new Error('Session ended.');
+          return existing.id;
+        });
+      }
+      if (Core.upsertPendingJob) {
+        var draft = {
+          id: jobId,
+          title: title,
+          name: title,
+          situation: situation,
+          address: '',
+          at: 'Today',
+          placed: true,
+          filmed: true,
+          pending: true,
+          createdAt: entry.recordedAt,
+        };
+        Core.upsertPendingJob(draft);
+        listDraftOnToday(draft);
+        if (!entry.jobDraft) entry.jobDraft = { title: title, situation: situation };
+      }
     }
     return syncPendingJobs().then(function () {
       if (!sessionStillOpen(bound)) throw new Error('Session ended.');
@@ -1911,14 +1968,24 @@
     if (film.status === 'uploading') step = film.step || 'Uploading…';
     else if (!sessionUsable()) step = 'Sign in to finish filing';
     else if (navigator.onLine === false) step = Core.WAITING_FOR_SIGNAL || 'Waiting for signal…';
-    else if (stuck) step = film.lastError;
-    else if (film.status === 'waiting') {
+    else if (stuck) {
+      step =
+        Core.isPayloadTooLarge && Core.isPayloadTooLarge(film)
+          ? Core.friendlyPayloadTooLargeMessage
+            ? Core.friendlyPayloadTooLargeMessage(film)
+            : film.lastError
+          : film.lastError;
+    } else if (film.status === 'waiting') {
       /* Never show offline wording while the radio is up — another gate failed. */
       var err = film.lastError || '';
       var offlineWording =
         err === (Core.WAITING_FOR_SIGNAL || '') ||
         (err && err.indexOf('Waiting for signal') === 0);
-      if (offlineWording) {
+      if (Core.isPayloadTooLarge && Core.isPayloadTooLarge(film)) {
+        step = Core.friendlyPayloadTooLargeMessage
+          ? Core.friendlyPayloadTooLargeMessage(film)
+          : err || 'This day film is too large for one send. Splitting into pieces…';
+      } else if (offlineWording) {
         step =
           Core.isLocalJobId && Core.isLocalJobId(film.jobId)
             ? Core.CREATING_JOB || 'Creating the job…'
@@ -2093,6 +2160,8 @@
         clipId: entry.clipId,
         stream: entry.stream || null,
         facts: entry.facts || null,
+        forceChunked: Boolean(entry.preferChunked),
+        leanProof: Boolean(entry.leanProof),
         onFacts: hooks.onFacts,
         onStreamAdvance: hooks.onStreamAdvance,
         onStep: hooks.onStep,
