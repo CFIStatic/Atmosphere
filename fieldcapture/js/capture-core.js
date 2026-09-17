@@ -193,8 +193,20 @@
     });
   }
 
-  function grabPaintedFrame(video, maxEdge) {
-    maxEdge = maxEdge || 900;
+  /**
+   * Proof filing POSTs these stills as JSON under Express's body cap
+   * (was 256kb globally; proof route is now 2mb). Keep stills small so a
+   * normal 30–60s laptop clip never 413s on POST …/proof.
+   */
+  var PROOF_STILL_COUNT = 3;
+  var PROOF_STILL_MAX_EDGE = 480;
+  var PROOF_STILL_JPEG_QUALITY = 0.55;
+  /** Stay under the historical 256kb JSON cap even if an old BFF is live. */
+  var PROOF_FRAMES_JSON_BUDGET = 180000;
+
+  function grabPaintedFrame(video, maxEdge, quality) {
+    maxEdge = maxEdge || PROOF_STILL_MAX_EDGE;
+    quality = quality == null ? PROOF_STILL_JPEG_QUALITY : quality;
     if (!video.videoWidth) return null;
     var canvas = document.createElement('canvas');
     var context = canvas.getContext('2d');
@@ -207,14 +219,14 @@
     } catch (e) {
       return null;
     }
-    var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    var dataUrl = canvas.toDataURL('image/jpeg', quality);
     var base64 = dataUrl.split(',')[1];
     return base64 || null;
   }
 
   function extractFrames(file, count, maxEdge) {
-    count = count || 6;
-    maxEdge = maxEdge || 900;
+    count = count || PROOF_STILL_COUNT;
+    maxEdge = maxEdge || PROOF_STILL_MAX_EDGE;
     var url = URL.createObjectURL(file);
     var video = document.createElement('video');
     video.preload = 'metadata';
@@ -367,7 +379,7 @@
         hashP,
         longForm
           ? Promise.resolve({ durationSeconds: durationHint, frames: [] })
-          : extractFrames(file),
+          : extractFrames(file, PROOF_STILL_COUNT, PROOF_STILL_MAX_EDGE),
       ]).then(function (parts) {
         var position = parts[0];
         var hash = parts[1];
@@ -653,7 +665,7 @@
    * client_max_body_size). Drop trailing frames until the array fits.
    */
   function fitProofFrames(frames, maxChars) {
-    maxChars = Math.max(0, Math.floor(Number(maxChars) || 180000));
+    maxChars = Math.max(0, Math.floor(Number(maxChars) || PROOF_FRAMES_JSON_BUDGET));
     var list = Array.isArray(frames) ? frames.slice() : [];
     function sizeOf(arr) {
       try {
@@ -1411,7 +1423,7 @@
     }
 
     function postProof(facts, used, lean) {
-      var frames = lean ? [] : fitProofFrames(facts.frames || [], 180000);
+      var frames = lean ? [] : fitProofFrames(facts.frames || [], PROOF_FRAMES_JSON_BUDGET);
       return apiJson(filePath, {
         method: 'POST',
         accessToken: accessToken,
@@ -3502,6 +3514,9 @@
     normalizeJobTitle: normalizeJobTitle,
     findOfficeJobByTitle: findOfficeJobByTitle,
     WHOLE_BODY_MAX_BYTES: WHOLE_BODY_MAX_BYTES,
+    PROOF_STILL_COUNT: PROOF_STILL_COUNT,
+    PROOF_STILL_MAX_EDGE: PROOF_STILL_MAX_EDGE,
+    PROOF_FRAMES_JSON_BUDGET: PROOF_FRAMES_JSON_BUDGET,
     nextFilingBackoffMs: nextFilingBackoffMs,
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,

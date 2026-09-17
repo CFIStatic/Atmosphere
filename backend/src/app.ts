@@ -145,9 +145,10 @@ export function createApp(): Express {
   // Near-real-time safety samples carry 1–3 small JPEGs while recording.
   const safetySamplePath =
     /\/proof\/safety-sample\/?$/;
-  // Day-film filing POSTs stills (base64 JPEG). Never the video bytes — those
-  // go to signed storage / multipart parts. Cap high enough for a handful of
-  // phone stills; clients also trim frames before POST.
+  // Day-film filing POSTs stills (base64 JPEG) only — never the video bytes
+  // (those go to signed storage / multipart parts). A ~32s laptop clip still
+  // used to 413 here: six ~900px JPEGs as base64 routinely exceed the global
+  // 256kb JSON cap ("That request body is too large."). Raise this route only.
   const proofRecordPath = /\/proof\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   // A profile photo is small after the client squares it, but a raw phone
