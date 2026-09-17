@@ -200,8 +200,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=comfortable-fit-1/);
-assert.match(html, /js\/app\.js\?v=comfortable-fit-1/);
+assert.match(html, /js\/capture-core\.js\?v=upload-asap-online-1/);
+assert.match(html, /js\/app\.js\?v=upload-asap-online-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -329,6 +329,12 @@ assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the
 assert.match(appSrc, /notifyOfficeLibraryChanged/, 'a new Field Capture job must refresh the office list');
 assert.match(appSrc, /atmosphere: 'library-changed'/);
 assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
+
+assert.match(coreSrc, /reason === 'enqueue'/, 'enqueue skips failure backoff so online films start ASAP');
+assert.match(coreSrc, /reason === 'settled'/, 'stream settle release skips failure backoff');
+assert.match(coreSrc, /waitingSignal/, 'Waiting for signal does not burn exponential upload backoff');
+assert.match(coreSrc, /entry\.nextAttemptAt = now\(\) \+ 2000/, 'job-create wait retries in ~2s, not a full backoff ladder');
+
 assert.match(coreSrc, /filingHomeVisible/, 'home shows filing while anything is still local or uploading');
 assert.match(coreSrc, /isStuckStatus: isStuckStatus/, 'door can detect stuck multipart answers');
 assert.match(appSrc, /showHomeAction\(\{ retry: true \}\)/, 'stuck upload turns Retry on at the door');
@@ -1495,3 +1501,12 @@ assert.doesNotMatch(appSrc, /function needsRecordingConsent/, 'needsRecordingCon
 assert.doesNotMatch(html, /id="s-recording-consent"/, 'recording consent screen removed from Field Capture html');
 
 console.log('hold-to-finish OK');
+
+{
+  const iosQ = readFileSync(
+    join(here, '..', '..', 'apps/field-ios/AtmosphereFieldCapture/Queue/DayFilmUploadQueue.swift'),
+    'utf8',
+  );
+  assert.match(iosQ, /shouldSkipBackoff/, 'iOS clears backoff when online/foreground so saved films file ASAP');
+  assert.match(iosQ, /"online"/, 'iOS online path skips backoff');
+}
