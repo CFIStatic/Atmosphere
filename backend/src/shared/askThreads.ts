@@ -186,16 +186,59 @@ export async function getAskThreadForOwner(
   return data as AskThreadRow;
 }
 
+
+export async function renameAskThread(
+  supabase: SupabaseClient,
+  input: { orgId: string; jobId: string; threadId: string; owner: AskThreadOwner; title: string },
+): Promise<AskThreadRow> {
+  const title = input.title.trim().replace(/\s+/g, ' ').slice(0, 200);
+  if (!title) throw new HttpError(400, 'Chat name cannot be empty.', 'ask_thread_title_empty');
+
+  // Ownership check first.
+  await getAskThreadForOwner(supabase, {
+    orgId: input.orgId,
+    jobId: input.jobId,
+    threadId: input.threadId,
+    owner: input.owner,
+  });
+
+  const { data, error } = await supabase
+    .from('ask_threads')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('id', input.threadId)
+    .eq('org_id', input.orgId)
+    .eq('job_id', input.jobId)
+    .select('id, org_id, job_id, owner_user_id, share_id, title, created_at, updated_at, last_message_at')
+    .single();
+  if (error) {
+    if (missingAskThreadsTable(error)) {
+      throw new HttpError(503, 'Ask history is not available yet.', 'ask_threads_unavailable');
+    }
+    throw new HttpError(500, error.message, 'ask_threads_rename_failed');
+  }
+  return data as AskThreadRow;
+}
+
 export async function touchAskThreadAfterMessage(
   supabase: SupabaseClient,
   input: { threadId: string; question: string; isFirstMessage: boolean },
 ): Promise<void> {
+  const now = new Date().toISOString();
   const patch: Record<string, unknown> = {
-    last_message_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    last_message_at: now,
+    updated_at: now,
   };
+  /* Auto-title only while the chat is still the default name — a user rename sticks. */
   if (input.isFirstMessage) {
-    patch.title = titleFromFirstQuestion(input.question);
+    const { data: row } = await supabase
+      .from('ask_threads')
+      .select('title')
+      .eq('id', input.threadId)
+      .maybeSingle();
+    const current = ((row as { title?: string } | null)?.title || '').trim();
+    if (!current || current === 'New chat' || current === 'Earlier questions') {
+      patch.title = titleFromFirstQuestion(input.question);
+    }
   }
   await supabase.from('ask_threads').update(patch).eq('id', input.threadId);
 }

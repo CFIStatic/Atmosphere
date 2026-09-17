@@ -962,6 +962,57 @@
     background: var(--line-soft);
   }
   .navitem .label { min-width: 0; flex: 1; }
+
+  /* Ask chat history — ChatGPT-style rename on each row */
+  #ask-history-list .ask-hist-row {
+    display: flex; align-items: stretch; gap: 2px;
+    position: relative;
+  }
+  #ask-history-list .ask-hist-row .navitem {
+    flex: 1; min-width: 0;
+  }
+  #ask-history-list .ask-hist-rename {
+    flex: none;
+    width: 28px;
+    margin: 2px 4px 2px 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    display: grid; place-items: center;
+  }
+  #ask-history-list .ask-hist-row:hover .ask-hist-rename,
+  #ask-history-list .ask-hist-row:focus-within .ask-hist-rename,
+  #ask-history-list .ask-hist-rename:focus {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    #ask-history-list .ask-hist-rename { opacity: 0.85; }
+  }
+  body[data-atm-phone-drawer] #ask-history-list .ask-hist-rename { opacity: 0.85; }
+  #ask-history-list .ask-hist-rename:hover {
+    background: var(--line-soft); color: var(--ink);
+  }
+  #ask-history-list .ask-hist-edit {
+    flex: 1;
+    min-width: 0;
+    margin: 2px 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  #ask-history-list .ask-hist-edit:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
   .navitem[aria-current="true"] .count {
     color: var(--accent);
     background: var(--accent-soft);
@@ -6850,10 +6901,13 @@
     nav.hidden = !onJobFile || !askHistoryJobId;
     list.innerHTML = '';
     threads.forEach(function (thread) {
+      var row = document.createElement('div');
+      row.className = 'ask-hist-row';
+      row.dataset.askThread = thread.id;
+
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'navitem nav-icon';
-      btn.dataset.askThread = thread.id;
       btn.title = thread.title || 'Chat';
       if (thread.id === askHistoryActiveId) btn.setAttribute('aria-current', 'true');
       btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.5a6.5 6.5 0 0 1-6.5 6.5H9l-4 2.5.9-3.4A6.5 6.5 0 0 1 9.5 6h4A6.5 6.5 0 0 1 21 12.5Z"/></svg><span class="label"></span>';
@@ -6870,7 +6924,84 @@
           }, '*');
         }
       });
-      list.appendChild(btn);
+      btn.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        startAskHistoryRename(row, thread);
+      });
+
+      var renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'ask-hist-rename';
+      renameBtn.setAttribute('aria-label', 'Rename chat');
+      renameBtn.title = 'Rename';
+      renameBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+      renameBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        startAskHistoryRename(row, thread);
+      });
+
+      row.appendChild(btn);
+      row.appendChild(renameBtn);
+      list.appendChild(row);
+    });
+  }
+
+  function startAskHistoryRename(row, thread) {
+    if (!row || !askHistoryJobId) return;
+    if (row.querySelector('.ask-hist-edit')) return;
+    var btn = row.querySelector('.navitem');
+    var renameBtn = row.querySelector('.ask-hist-rename');
+    var current = (thread && thread.title) || (btn && btn.querySelector('.label') && btn.querySelector('.label').textContent) || '';
+    if (btn) btn.hidden = true;
+    if (renameBtn) renameBtn.hidden = true;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ask-hist-edit';
+    input.value = current;
+    input.maxLength = 200;
+    input.setAttribute('aria-label', 'Chat name');
+    row.insertBefore(input, renameBtn || null);
+    input.focus();
+    input.select();
+
+    var finished = false;
+    function cleanup() {
+      if (finished) return;
+      finished = true;
+      input.remove();
+      if (btn) btn.hidden = false;
+      if (renameBtn) renameBtn.hidden = false;
+    }
+    function commit() {
+      if (finished) return;
+      var next = (input.value || '').trim().replace(/\s+/g, ' ');
+      cleanup();
+      if (!next || next === current) return;
+      if (btn) {
+        btn.title = next;
+        var label = btn.querySelector('.label');
+        if (label) label.textContent = next;
+      }
+      thread.title = next;
+      if (EMBEDDED) {
+        window.parent.postMessage({
+          atmosphere: 'ask-history-action',
+          action: { type: 'rename-thread', jobId: askHistoryJobId, threadId: thread.id, title: next }
+        }, '*');
+      }
+    }
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cleanup();
+      }
+    });
+    input.addEventListener('blur', function () {
+      commit();
     });
   }
 

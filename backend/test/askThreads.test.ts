@@ -25,18 +25,24 @@ test('migration defines ask_threads and job_proof_questions.thread_id', () => {
   assert.match(sql, /ask_threads_owner_xor/);
 });
 
-test('office Ask routes expose thread list/create and threadId on ask', () => {
+test('office Ask routes expose thread list/create/rename and threadId on ask', () => {
   const proof = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
   const shared = readFileSync(join(here, '../src/routes/sharedJobs.ts'), 'utf8');
+  const threads = readFileSync(join(here, '../src/shared/askThreads.ts'), 'utf8');
   assert.match(proof, /export async function listJobAskThreads/);
   assert.match(proof, /export async function createJobAskThread/);
+  assert.match(proof, /export async function renameJobAskThread/);
   assert.match(proof, /threadId: input\.threadId/);
   assert.match(shared, /ask\/threads/);
+  assert.match(shared, /ask\/threads\/:threadId/);
+  assert.match(threads, /export async function renameAskThread/);
+  assert.match(threads, /user rename sticks/);
 });
 
 test('progress-share Ask persists share-scoped threads', () => {
   const progress = readFileSync(join(here, '../src/routes/progressShare.ts'), 'utf8');
   assert.match(progress, /ask\/threads/);
+  assert.match(progress, /ask\/threads\/:threadId/);
   assert.match(progress, /shareId: share\.id/);
   assert.match(progress, /kind: 'share'/);
 });

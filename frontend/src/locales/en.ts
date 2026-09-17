@@ -30,6 +30,8 @@ export const EN = {
   'nav.signOutConfirm': 'Sign out of Atmosphere?',
   'nav.themeModeHint': '{current} mode. Click for {next}.',
   'nav.chatHistory': 'Chat history',
+  'nav.renameChat': 'Rename chat',
+  'nav.rename': 'Rename',
   'nav.newChat': 'New chat',
 
   'settings.title': 'Settings',

@@ -32,6 +32,8 @@ export const ES: MessageCatalog = {
   'nav.signOutConfirm': '¿Cerrar sesión en Atmosphere?',
   'nav.themeModeHint': 'Modo {current}. Clic para {next}.',
   'nav.chatHistory': 'Historial de chats',
+  'nav.renameChat': 'Renombrar chat',
+  'nav.rename': 'Renombrar',
   'nav.newChat': 'Nuevo chat',
 
   'settings.title': 'Ajustes',

@@ -11,6 +11,7 @@ import {
   ensureAskThreads,
   getAskThreadForOwner,
   presentAskThread,
+  renameAskThread,
   touchAskThreadAfterMessage,
   type AskThreadOwner,
 } from '../shared/askThreads.js';
@@ -3064,6 +3065,28 @@ export async function createJobAskThread(req: Request, res: Response, next: Next
     next(err);
   }
 }
+
+/** PATCH /api/operations/shared/:jobId/ask/threads/:threadId — rename a chat. */
+export async function renameJobAskThread(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const writeDb = askWriteClient(supabase);
+    const input = z
+      .object({ title: z.string().trim().min(1).max(200) })
+      .parse(req.body ?? {});
+    const thread = await renameAskThread(writeDb, {
+      orgId,
+      jobId: req.params.jobId,
+      threadId: req.params.threadId,
+      owner: { kind: 'user', userId },
+      title: input.title,
+    });
+    res.json({ thread: presentAskThread(thread) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 
 /**
  * A short-lived link to actually watch a video.
