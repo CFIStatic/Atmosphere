@@ -17,7 +17,8 @@ export type AskHistoryPayload = {
 
 export type AskHistoryAction =
   | { type: 'new-chat'; jobId: string }
-  | { type: 'select-thread'; jobId: string; threadId: string };
+  | { type: 'select-thread'; jobId: string; threadId: string }
+  | { type: 'rename-thread'; jobId: string; threadId: string; title: string };
 
 export function publishAskHistory(payload: AskHistoryPayload) {
   window.dispatchEvent(new CustomEvent(ASK_HISTORY_EVENT, { detail: payload }));

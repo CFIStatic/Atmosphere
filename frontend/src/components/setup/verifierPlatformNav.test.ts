@@ -115,6 +115,9 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('data-i18n-chrome="newChat"');
     expect(verifierHtml).toContain("d.atmosphere === 'ask-history'");
     expect(verifierHtml).toContain("atmosphere: 'ask-history-action'");
+    expect(verifierHtml).toContain('startAskHistoryRename');
+    expect(verifierHtml).toContain("type: 'rename-thread'");
+    expect(verifierHtml).toContain('ask-hist-rename');
     expect(verifierHtml).not.toContain('id="evidence-nav"');
     expect(verifierHtml).not.toMatch(/<h3[^>]*>Videos<\/h3>/);
     expect(verifierHtml).not.toContain('data-i18n-chrome="videos"');

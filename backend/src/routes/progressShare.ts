@@ -16,6 +16,7 @@ import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 import {
   createAskThread,
+  renameAskThread,
   ensureAskThreads,
   presentAskThread,
 } from '../shared/askThreads.js';
@@ -297,6 +298,29 @@ progressShareRouter.post(
         title: input.title ?? 'New chat',
       });
       res.status(201).json({ thread: presentAskThread(thread) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+progressShareRouter.patch(
+  '/:token/ask/threads/:threadId',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
+      const input = z
+        .object({ title: z.string().trim().min(1).max(200) })
+        .parse(req.body ?? {});
+      const thread = await renameAskThread(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        threadId: req.params.threadId,
+        owner: { kind: 'share', shareId: share.id },
+        title: input.title,
+      });
+      res.json({ thread: presentAskThread(thread) });
     } catch (err) {
       next(err);
     }

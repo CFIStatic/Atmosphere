@@ -4158,6 +4158,12 @@ export const api = {
       body: JSON.stringify(title ? { title } : {}),
     }),
 
+  renameAskThread: (jobId: string, threadId: string, title: string) =>
+    request<{ thread: AskThread }>(
+      `/api/operations/shared/${jobId}/ask/threads/${encodeURIComponent(threadId)}`,
+      { method: 'PATCH', body: JSON.stringify({ title }) },
+    ),
+
   jobEvidence: (jobId: string) =>
     request<{ items: EvidenceItem[]; counts: { items: number; onHold: number; neverViewed: number } }>(
       `/api/operations/shared/${jobId}/evidence`,
@@ -4322,6 +4328,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(title ? { title } : {}),
     }),
+
+  progressShareRenameAskThread: (token: string, threadId: string, title: string) =>
+    request<{ thread: AskThread }>(
+      progressShareApiPath(token, `/ask/threads/${encodeURIComponent(threadId)}`),
+      { method: 'PATCH', body: JSON.stringify({ title }) },
+    ),
 
   progressShareAskQuestions: (token: string, opts?: { threadId?: string | null }) => {
     const q = opts?.threadId ? `?threadId=${encodeURIComponent(opts.threadId)}` : '';

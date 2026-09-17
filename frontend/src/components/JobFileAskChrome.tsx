@@ -94,6 +94,7 @@ export function JobFileAskChrome({
   loadQuestions,
   loadThreads,
   createThread,
+  renameThread,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -106,6 +107,7 @@ export function JobFileAskChrome({
   loadQuestions?: (threadId?: string | null) => Promise<{ questions: ProofQuestion[] }>;
   loadThreads?: () => Promise<{ threads: AskThread[] }>;
   createThread?: (title?: string) => Promise<{ thread: AskThread }>;
+  renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
 }) {
   const phone = usePhoneShell();
   const [pane, setPane] = useState<JobFilePane>(initialPane);
@@ -210,7 +212,7 @@ export function JobFileAskChrome({
               aria-label="Ask this job"
               data-testid="job-file-ask"
             >
-              <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} />
+              <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} renameThread={renameThread} />
             </TabPanel>
           </Tabs>
         </div>
@@ -222,7 +224,7 @@ export function JobFileAskChrome({
             aria-label="Ask this job"
             data-testid="job-file-ask"
           >
-            <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} />
+            <JobAskPanel jobId={jobId} file={file} fill ask={ask} loadQuestions={loadQuestions} loadThreads={loadThreads} createThread={createThread} renameThread={renameThread} />
           </aside>
 
           {/*

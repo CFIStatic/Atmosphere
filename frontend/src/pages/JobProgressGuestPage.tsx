@@ -200,6 +200,7 @@ export function JobProgressGuestPage() {
         loadQuestions={(threadId) => api.progressShareAskQuestions(token, { threadId })}
         loadThreads={() => api.progressShareAskThreads(token)}
         createThread={(title) => api.progressShareCreateAskThread(token, title)}
+        renameThread={(threadId, title) => api.progressShareRenameAskThread(token, threadId, title)}
       >
         <div className="mx-auto max-w-3xl space-y-4">
           {exclusions.length > 0 && (

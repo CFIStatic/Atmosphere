@@ -239,6 +239,7 @@ export function JobAskPanel({
   loadQuestions,
   loadThreads,
   createThread,
+  renameThread,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -390,6 +391,23 @@ export function JobAskPanel({
           } finally {
             setLoading(false);
             inputRef.current?.focus();
+          }
+        })();
+      }
+
+      if (action.type === 'rename-thread') {
+        void (async () => {
+          const nextTitle = action.title.trim();
+          if (!nextTitle) return;
+          try {
+            const renamed = renameThread
+              ? await renameThread(action.threadId, nextTitle)
+              : await api.renameAskThread(jobId, action.threadId, nextTitle);
+            setThreads((prev) =>
+              prev.map((th) => (th.id === renamed.thread.id ? renamed.thread : th)),
+            );
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : 'Could not rename this chat.');
           }
         })();
       }
