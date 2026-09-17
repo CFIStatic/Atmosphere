@@ -200,8 +200,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=upload-asap-online-1/);
-assert.match(html, /js\/app\.js\?v=upload-asap-online-1/);
+assert.match(html, /js\/capture-core\.js\?v=queue-upload-online-1/);
+assert.match(html, /js\/app\.js\?v=queue-upload-online-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -331,8 +331,27 @@ assert.match(appSrc, /atmosphere: 'library-changed'/);
 assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
 
 assert.match(coreSrc, /reason === 'enqueue'/, 'enqueue skips failure backoff so online films start ASAP');
+assert.match(coreSrc, /reason === 'tick'/, '15s safety tick skips failure backoff while online');
+assert.match(coreSrc, /reason === 'flush'/, 'flushFieldWork skips failure backoff');
+assert.match(coreSrc, /releaseHold/, 'online/tick kicks release a stuck settle-hold');
+assert.match(coreSrc, /running !== e\.id/, 'stale uploading without a runner is reset to queued');
+assert.match(coreSrc, /CREATING_JOB/, 'online job-create uses Creating the job, not Waiting for signal');
+assert.match(appSrc, /Core\.CREATING_JOB/, 'resolveFilmJob throws Creating the job while online');
+assert.match(appSrc, /navigator\.onLine === false/, 'Waiting for signal only when actually offline');
+assert.match(appSrc, /entry\.jobName/, 'orphan local films recreate a draft from jobName');
+assert.match(
+  appSrc,
+  /job to still be on Today/,
+  'share films claim without requiring the job on Today',
+);
+assert.match(appSrc, /claimShareFilmsForAccount\(\)/, 'flush claims share films then kicks');
+assert.match(
+  appSrc,
+  /Never show offline wording while the radio is up/,
+  'door never shows Waiting for signal while online',
+);
 assert.match(coreSrc, /reason === 'settled'/, 'stream settle release skips failure backoff');
-assert.match(coreSrc, /waitingSignal/, 'Waiting for signal does not burn exponential upload backoff');
+assert.match(coreSrc, /softGate/, 'job-create / offline soft gates do not burn exponential upload backoff');
 assert.match(coreSrc, /entry\.nextAttemptAt = now\(\) \+ 2000/, 'job-create wait retries in ~2s, not a full backoff ladder');
 
 assert.match(coreSrc, /filingHomeVisible/, 'home shows filing while anything is still local or uploading');
@@ -585,8 +604,13 @@ assert.match(
   assert.match(src, /function resolveFilmJob/);
   assert.match(
     src,
-    /entry\.jobDraft && Core\.upsertPendingJob/,
-    'a film on a cleared phone-only job recreates that job from its own draft',
+    /!hasDraft && Core\.upsertPendingJob/,
+    'a film on a cleared phone-only job recreates that job from draft or jobName',
+  );
+  assert.match(
+    src,
+    /entry\.jobName/,
+    'orphan local films fall back to jobName when jobDraft is missing',
   );
   assert.match(
     src,
@@ -758,6 +782,7 @@ assert.equal(Core.nextFilingBackoffMs(0), 5000);
 assert.equal(Core.nextFilingBackoffMs(1), 10000);
 assert.equal(Core.nextFilingBackoffMs(9), 60000, 'retries settle at once a minute and never give up');
 assert.equal(Core.WAITING_FOR_SIGNAL, 'Waiting for signal…');
+assert.equal(Core.CREATING_JOB, 'Creating the job…');
 assert.equal(Core.POSITION_FRESH_MS, 10 * 60 * 1000);
 assert.match(coreSrc, /workDate: workDate,/, 'upload files under the day it was filmed, not the day signal came back');
 assert.doesNotMatch(coreSrc, /workDate: todayISO\(\)/);
@@ -952,7 +977,8 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
 }
 
 {
-  // Backoff applies only after a failed attempt. A later tick must not skip it.
+  // After a failed attempt, backoff is scheduled — but while online the safety
+  // tick must retry automatically (no Resume tap). Session still skips too.
   const store = Core.openDayFilmStore({ indexedDB: null });
   const clock = fakeClock();
   const uploads = [];
@@ -976,10 +1002,7 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   assert.equal(queue.get(a.id).nextAttemptAt, clock.now() + 5000, 'first retry after 5s');
   await queue.kick('tick');
   await flush();
-  assert.equal(uploads.length, 1, 'the safety tick does not burn a real failure backoff');
-  await queue.kick('session');
-  await flush();
-  assert.equal(uploads.length, 2, 're-auth skips backoff and files immediately');
+  assert.equal(uploads.length, 2, 'while online the safety tick retries without waiting out failure backoff');
   uploads[1].d.resolve(okResult);
   await flush();
 }
@@ -1058,6 +1081,150 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
   const saved = (await store.list())[0];
   assert.equal(saved.owner, 'user:1', 'claim is durable on the phone');
   assert.equal(saved.mode, 'account');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+
+{
+  // Stuck online: settle-hold never cleared — tick must release hold and file.
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-online', jobName: 'Online Job', blob: fakeBlob(10),
+  });
+  const settle = deferred();
+  await queue.enqueue(a, { settle: settle.promise });
+  await flush();
+  assert.equal(uploads.length, 0, 'settle-hold blocks the first attempt');
+  assert.ok(queue.get(a.id));
+  await queue.kick('tick');
+  await flush();
+  assert.equal(uploads.length, 1, 'tick while online releases hold and starts upload — no Resume tap');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // Leftover failure backoff while online: tick skips it and files (no Resume).
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  let failOnce = true;
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      if (failOnce) {
+        failOnce = false;
+        return Promise.reject(Object.assign(new Error('temporary'), { status: 503 }));
+      }
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'job-backoff', blob: fakeBlob(10),
+  });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 0);
+  assert.ok(queue.get(a.id).nextAttemptAt > clock.now(), 'failure parks behind backoff');
+  await queue.kick('tick');
+  await flush();
+  assert.equal(uploads.length, 1, 'tick clears leftover backoff while online');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // Soft gate: Creating the job while online retries in ~2s (not failure ladder).
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    resolveJob(entry) {
+      if (Core.isLocalJobId(entry.jobId)) return Promise.reject(new Error(Core.CREATING_JOB));
+      return Promise.resolve(entry.jobId);
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'user:1', jobId: 'local-orphan-1', jobName: 'Orphan Court', blob: fakeBlob(10),
+  });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 0);
+  assert.equal(queue.get(a.id).lastError, Core.CREATING_JOB);
+  assert.equal(queue.get(a.id).nextAttemptAt, clock.now() + 2000, 'creating-job soft retry in 2s');
+  assert.equal(queue.get(a.id).attempts, 0, 'soft gate does not burn attempts');
+  await queue.remapJob('local-orphan-1', 'job-55');
+  await flush();
+  assert.equal(uploads.length, 1, 'remap while online files automatically');
+  uploads[0].d.resolve(okResult);
+  await flush();
+}
+
+{
+  // claimSession adopts share films without a Today membership check (accept fn).
+  const store = Core.openDayFilmStore({ indexedDB: null });
+  const clock = fakeClock();
+  const uploads = [];
+  const queue = Core.createDayFilmQueue({
+    store,
+    canRun(entry) {
+      return entry.owner === 'user:1' && entry.mode === 'account';
+    },
+    upload(entry) {
+      const d = deferred();
+      uploads.push({ entry, d });
+      return d.promise;
+    },
+    isOnline: () => true,
+    now: clock.now,
+    timers: clock.timers,
+  });
+  const a = Core.newDayFilmEntry({
+    owner: 'share:job-z', mode: 'share', jobId: 'job-z', jobName: 'Invite', blob: fakeBlob(10),
+  });
+  await queue.enqueue(a);
+  await flush();
+  assert.equal(uploads.length, 0, 'share owner does not match account canRun');
+  const n = await queue.claimSession({
+    owner: 'user:1',
+    mode: 'account',
+    accept(f) {
+      return f.mode === 'share' && f.jobId && !Core.isLocalJobId(f.jobId);
+    },
+  });
+  await flush();
+  assert.equal(n, 1);
+  assert.equal(uploads.length, 1, 'claim without Today list starts upload while online');
+  assert.equal(uploads[0].entry.owner, 'user:1');
+  assert.equal(uploads[0].entry.mode, 'account');
   uploads[0].d.resolve(okResult);
   await flush();
 }

@@ -2056,6 +2056,8 @@
   var FILING_RETRY_BASE_MS = 5000;
   var FILING_RETRY_CAP_MS = 60 * 1000;
   var WAITING_FOR_SIGNAL = 'Waiting for signal…';
+  /** Online but the phone-only job is still being created at the office. */
+  var CREATING_JOB = 'Creating the job…';
   /** Past this age, an unplaced film is not stamped with wherever the phone is now. */
   var POSITION_FRESH_MS = 10 * 60 * 1000;
 
@@ -2596,23 +2598,39 @@
         reason === 'remap' ||
         reason === 'claim' ||
         reason === 'enqueue' ||
-        reason === 'settled'
+        reason === 'settled' ||
+        reason === 'tick' ||
+        reason === 'flush'
       );
     }
 
-    /** Try now. Signal back, app back in front, a fresh session: skip any backoff. */
+    /** Try now. Signal back, app back in front, a fresh session, or the
+     * safety tick: skip any backoff. Hold / stale uploading must not park a
+     * film forever while the device is online — upload is automatic. */
     function kick(reason) {
       var skipBackoff = skipFailureBackoff(reason);
+      /* enqueue sets hold; settled clears it. Every other nudge may release a
+         stuck settle-hold so filing starts without a tap. */
+      var releaseHold = skipBackoff && reason !== 'enqueue' && reason !== 'settled';
       return load().then(function () {
         entries.forEach(function (e) {
-          if (!eligible(e)) return;
+          if (!isPendingFilm(e)) return;
+          // Tab died mid-run: status stayed uploading with no runner.
+          if (e.status === 'uploading' && running !== e.id) {
+            e.status = 'queued';
+          }
+          if (releaseHold && rt(e).hold) {
+            rt(e).hold = false;
+          }
+          if (e.status === 'uploading' || rt(e).hold) return;
           if (skipBackoff) {
+            // Clear even when canRun is still false (claim/session about to
+            // land): the following drain/claim kick then files immediately.
             e.nextAttemptAt = 0;
             return;
           }
-          // First eligible attempt (never failed): do not honor an offline
-          // parking time. Real failure backoff stays 5s / 10s / 20s / 40s / 1m.
-          if (!(e.attempts > 0)) e.nextAttemptAt = 0;
+          // First attempt (never failed): do not honor an offline parking time.
+          if (!(e.attempts > 0) && canRun(e)) e.nextAttemptAt = 0;
         });
         drain(reason || 'kick');
         return films();
@@ -2740,16 +2758,18 @@
             entry.lastError = (err && err.message) || 'Upload did not go through.';
             entry.lastStatus = err && typeof err.status === 'number' ? err.status : 0;
             entry.lastCode = err && typeof err.code === 'string' ? err.code : '';
-            var waitingSignal =
+            var softGate =
               entry.lastError === WAITING_FOR_SIGNAL ||
-              (entry.lastError && entry.lastError.indexOf('Waiting for signal') === 0);
+              entry.lastError === CREATING_JOB ||
+              (entry.lastError && entry.lastError.indexOf('Waiting for signal') === 0) ||
+              (entry.lastError && entry.lastError.indexOf('Creating the job') === 0);
             if (err && err.streamFailed && entry.stream) {
               // The office would not stitch the streamed head: send the
               // whole film, and do it now — nothing about signal changed.
               entry.stream = null;
               entry.nextAttemptAt = now();
-            } else if (waitingSignal) {
-              /* Phone-only job still creating — not a real upload failure.
+            } else if (softGate) {
+              /* Job still creating or offline gate — not a real upload failure.
                  Keep attempt count down and retry ASAP once remap/sync lands. */
               entry.attempts = Math.max(0, (entry.attempts || 1) - 1);
               entry.nextAttemptAt = now() + 2000;
@@ -3314,6 +3334,7 @@
     nextFilingBackoffMs: nextFilingBackoffMs,
     FILING_RETRY_CAP_MS: FILING_RETRY_CAP_MS,
     WAITING_FOR_SIGNAL: WAITING_FOR_SIGNAL,
+    CREATING_JOB: CREATING_JOB,
     POSITION_FRESH_MS: POSITION_FRESH_MS,
     loginWithPassword: loginWithPassword,
     signupWithPassword: signupWithPassword,

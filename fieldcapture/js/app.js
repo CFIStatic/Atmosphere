@@ -705,12 +705,20 @@
     var hasDraft = drafts.some(function (j) {
       return j && j.id === jobId;
     });
-    if (!hasDraft && entry.jobDraft && Core.upsertPendingJob) {
+    /* Orphan local films (draft list cleared, no jobDraft): recreate from the
+       name stamped on the film so createTodayJob can run. Never soft-loop
+       forever on "Waiting for signal" while the radio is up. */
+    if (!hasDraft && Core.upsertPendingJob) {
+      var title =
+        (entry.jobDraft && (entry.jobDraft.title || entry.jobDraft.name)) ||
+        entry.jobName ||
+        'Job';
+      var situation = (entry.jobDraft && entry.jobDraft.situation) || '';
       var draft = {
         id: jobId,
-        title: entry.jobDraft.title,
-        name: entry.jobDraft.title,
-        situation: entry.jobDraft.situation || '',
+        title: title,
+        name: title,
+        situation: situation,
         address: '',
         at: 'Today',
         placed: true,
@@ -720,13 +728,17 @@
       };
       Core.upsertPendingJob(draft);
       listDraftOnToday(draft);
+      if (!entry.jobDraft) entry.jobDraft = { title: title, situation: situation };
     }
     return syncPendingJobs().then(function () {
       if (!sessionStillOpen(bound)) throw new Error('Session ended.');
       var latest = filmQueue ? filmQueue.get(entry.id) : null;
       var resolved = (latest && latest.jobId) || entry.jobId;
       if (resolved && !Core.isLocalJobId(resolved)) return resolved;
-      throw new Error(Core.WAITING_FOR_SIGNAL || 'Waiting for signal…');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error(Core.WAITING_FOR_SIGNAL || 'Waiting for signal…');
+      }
+      throw new Error(Core.CREATING_JOB || 'Creating the job…');
     });
   }
 
@@ -741,11 +753,19 @@
       if (!filmQueue) return undefined;
       return filmQueue.kick(reason || 'flush');
     }
-    var filing = file();
+    /* Claim share→account ownership first so canFileFilm is true, then kick.
+       Online / visible / 15s tick must file automatically — no Resume tap. */
+    function claimThenFile() {
+      return Promise.resolve(claimShareFilmsForAccount()).then(function () {
+        if (!sessionStillOpen(bound)) return undefined;
+        return file();
+      });
+    }
+    var filing = claimThenFile();
     return syncPendingJobs().then(
       function () {
         if (!sessionStillOpen(bound)) return undefined;
-        return file();
+        return claimThenFile();
       },
       function () {
         return filing;
@@ -1168,7 +1188,12 @@
       owner: state.owner,
       mode: 'account',
       accept: function (f) {
-        return f.mode === 'share' && f.jobId && jobById(f.jobId);
+        /* Share-invite days carry a real office job id. Do not require that
+           job to still be on Today — otherwise films stay queued forever
+           after the day rolls off the list. */
+        if (f.mode !== 'share' || !f.jobId) return false;
+        if (Core.isLocalJobId && Core.isLocalJobId(f.jobId)) return false;
+        return true;
       },
     });
   }
@@ -1887,8 +1912,21 @@
     else if (!sessionUsable()) step = 'Sign in to finish filing';
     else if (navigator.onLine === false) step = Core.WAITING_FOR_SIGNAL || 'Waiting for signal…';
     else if (stuck) step = film.lastError;
-    else if (film.status === 'waiting') step = film.lastError || 'Upload interrupted — retrying…';
-    else step = film.step || 'Saved on this phone';
+    else if (film.status === 'waiting') {
+      /* Never show offline wording while the radio is up — another gate failed. */
+      var err = film.lastError || '';
+      var offlineWording =
+        err === (Core.WAITING_FOR_SIGNAL || '') ||
+        (err && err.indexOf('Waiting for signal') === 0);
+      if (offlineWording) {
+        step =
+          Core.isLocalJobId && Core.isLocalJobId(film.jobId)
+            ? Core.CREATING_JOB || 'Creating the job…'
+            : 'Upload interrupted — retrying…';
+      } else {
+        step = err || 'Upload interrupted — retrying…';
+      }
+    } else step = film.step || 'Saved on this phone';
     stepEl.textContent = step;
     stepEl.style.color = stuck ? '#c43b2a' : '';
     if (pctEl) pctEl.textContent = film.status === 'uploading' ? pct + '%' : '';
