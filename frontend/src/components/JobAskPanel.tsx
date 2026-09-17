@@ -249,6 +249,7 @@ export function JobAskPanel({
   loadQuestions?: (threadId?: string | null) => Promise<{ questions: ProofQuestion[] }>;
   loadThreads?: () => Promise<{ threads: AskThread[] }>;
   createThread?: (title?: string) => Promise<{ thread: AskThread }>;
+  renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
