@@ -200,8 +200,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=fc-body-too-large-2/);
-assert.match(html, /js\/app\.js\?v=fc-body-too-large-2/);
+assert.match(html, /js\/capture-core\.js\?v=no-dup-job-1/);
+assert.match(html, /js\/app\.js\?v=no-dup-job-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -1745,7 +1745,29 @@ assert.equal(Core.normalizeJobTitle('  Project Tiffany & Co. '), 'project tiffan
 
 assert.match(coreSrc, /forceChunked|uploadMultipartViaPartUrls|Uploading in pieces/, 'large films force part-url path');
 assert.match(coreSrc, /fitProofFrames/, 'proof POST trims stills under the body cap');
+
 assert.match(appSrc, /findOfficeJobByTitle/, 'syncPendingJobs reuses office jobs by title');
+assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed when reusing by title');
+{
+  const closed = Core.findOfficeJobByTitle('Project Tiffany & Co.', [
+    {
+      id: '54731af3-f1f0-4bf8-bd15-bd3abf9076fd',
+      name: 'Project Tiffany & Co.',
+      status: 'cancelled',
+    },
+    {
+      id: 'd7fe1a01-4483-42c5-abb8-eaaa4c6988df',
+      name: 'Project Tiffany & Co.',
+      status: 'scheduled',
+    },
+  ]);
+  assert.equal(
+    closed.id,
+    'd7fe1a01-4483-42c5-abb8-eaaa4c6988df',
+    'skip cancelled duplicate; reuse open job #12',
+  );
+}
+
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=fc-body-too-large-2/);
-assert.match(html, /js\/app\.js\?v=fc-body-too-large-2/);
+assert.match(html, /js\/capture-core\.js\?v=no-dup-job-1/);
+assert.match(html, /js\/app\.js\?v=no-dup-job-1/);

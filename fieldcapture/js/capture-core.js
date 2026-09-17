@@ -685,19 +685,30 @@
       .toLowerCase();
   }
 
-  /** Prefer reusing an office job with the same title over minting a duplicate. */
+  /** Prefer reusing an open office job with the same title over minting a duplicate. */
+  var CLOSED_JOB_STATUSES = {
+    cancelled: true,
+    completed: true,
+    invoiced: true,
+    paid: true,
+  };
+
   function findOfficeJobByTitle(title, jobs) {
     var want = normalizeJobTitle(title);
     if (!want) return null;
     var list = Array.isArray(jobs) ? jobs : [];
+    var hit = null;
     for (var i = 0; i < list.length; i += 1) {
       var j = list[i];
       if (!j || !j.id) continue;
       if (isLocalJobId(j.id)) continue;
+      if (j.status && CLOSED_JOB_STATUSES[String(j.status)]) continue;
       var name = normalizeJobTitle(j.name || j.title || '');
-      if (name === want) return j;
+      if (name !== want) continue;
+      hit = j;
+      break;
     }
-    return null;
+    return hit;
   }
 
   function origin(apiBase) {

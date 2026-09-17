@@ -144,10 +144,25 @@ test('POST /api/field-app/jobs starts a job from Field Capture then assigns the 
   assert.match(src, /fieldStartJobSchema\.parse/);
   assert.match(src, /intakeFromFieldStart/);
   assert.match(src, /createJobFile/);
+  assert.match(src, /findOpenCrmJobByTitle/, 'POST /jobs reuses open jobs by normalized title');
   assert.match(src, /allowTypedFallback: true/);
   assert.match(src, /fieldAppRouter\.get\('\/places\/status'/);
   assert.match(src, /fieldAppRouter\.post\('\/places\/autocomplete'/);
   assert.match(src, /fieldAppRouter\.post\('\/places\/resolve'/);
   assert.match(src, /role_on_job: 'crew'/);
   assert.match(src, /j\.created_by === userId/);
+});
+
+test('job create paths reuse open crm_jobs by normalized title', async () => {
+  const { readFileSync } = await import('node:fs');
+  const fieldApp = readFileSync(new URL('../src/routes/fieldApp.ts', import.meta.url), 'utf8');
+  const jobs = readFileSync(new URL('../src/routes/jobs.ts', import.meta.url), 'utf8');
+  const intake = readFileSync(new URL('../src/routes/jobIntake.ts', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('../src/shared/openJobByTitle.ts', import.meta.url), 'utf8');
+  assert.match(helper, /normalizeJobTitleKey/);
+  assert.match(helper, /findOpenCrmJobByTitle/);
+  assert.match(helper, /deleted_at/);
+  assert.match(fieldApp, /findOpenCrmJobByTitle/);
+  assert.match(jobs, /findOpenCrmJobByTitle/);
+  assert.match(intake, /findOpenCrmJobByTitle/);
 });

@@ -49,6 +49,7 @@ import { isDisplayableAvatarUrl } from '../lib/avatar.js';
 import { fieldStartJobSchema } from '../lib/validation.js';
 import { intakeFromFieldStart } from '../field/startJob.js';
 import { createJobFile } from './jobIntake.js';
+import { findOpenCrmJobByTitle } from '../shared/openJobByTitle.js';
 import {
   autocompletePlaces,
   detailsForPlace,
@@ -541,22 +542,9 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = fieldStartJobSchema.parse(req.body ?? {});
-    const wantTitle = input.title.trim();
-    // Orphan local-* remaps must not mint a second crm_jobs row when the
-    // office already has this title (e.g. "Project Tiffany & Co.").
-    const { data: titledRows } = await supabase
-      .from('crm_jobs')
-      .select('id, title, job_number, status')
-      .eq('org_id', orgId)
-      .ilike('title', wantTitle.replace(/%/g, ''))
-      .order('created_at', { ascending: false })
-      .limit(8);
-    const reused = ((titledRows ?? []) as Array<{
-      id: string;
-      title: string;
-      job_number: number | null;
-      status: string;
-    }>).find((row) => row.title.trim().toLowerCase() === wantTitle.toLowerCase());
+    // Orphan local-* remaps / syncPendingJobs must not mint a second crm_jobs
+    // row when the office already has an open job with this title.
+    const reused = await findOpenCrmJobByTitle(supabase, orgId, input.title);
     if (reused) {
       const jobId = reused.id;
       const { error: assignError } = await supabase.from('job_assignments').insert({
