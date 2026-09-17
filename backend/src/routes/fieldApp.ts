@@ -541,6 +541,69 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = fieldStartJobSchema.parse(req.body ?? {});
+    const wantTitle = input.title.trim();
+    // Orphan local-* remaps must not mint a second crm_jobs row when the
+    // office already has this title (e.g. "Project Tiffany & Co.").
+    const { data: titledRows } = await supabase
+      .from('crm_jobs')
+      .select('id, title, job_number, status')
+      .eq('org_id', orgId)
+      .ilike('title', wantTitle.replace(/%/g, ''))
+      .order('created_at', { ascending: false })
+      .limit(8);
+    const reused = ((titledRows ?? []) as Array<{
+      id: string;
+      title: string;
+      job_number: number | null;
+      status: string;
+    }>).find((row) => row.title.trim().toLowerCase() === wantTitle.toLowerCase());
+    if (reused) {
+      const jobId = reused.id;
+      const { error: assignError } = await supabase.from('job_assignments').insert({
+        org_id: orgId,
+        job_id: jobId,
+        user_id: userId,
+        role_on_job: 'crew',
+      });
+      if (assignError && assignError.code !== '23505') {
+        console.warn('[field-app] could not assign creator to reused job:', assignError.message);
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const email = req.user?.email ?? null;
+      let sharePath: string | null = null;
+      try {
+        const party = await ensureFieldParty(
+          supabase,
+          orgId,
+          jobId,
+          userId,
+          email,
+          (profile as { full_name?: string } | null)?.full_name,
+        );
+        if (party.access_token) sharePath = jobSharePagePath(party.access_token, email);
+      } catch {
+        /* still return the existing job */
+      }
+      res.status(200).json({
+        job: {
+          id: jobId,
+          number: reused.job_number != null ? `#${reused.job_number}` : '',
+          name: reused.title,
+          address: '',
+          at: '',
+          status: reused.status,
+          placed: true,
+          filmed: false,
+          sharePath,
+        },
+        reused: true,
+      });
+      return;
+    }
     const created = await createJobFile(supabase, orgId, userId, intakeFromFieldStart(input), {
       allowTypedFallback: true,
     });
