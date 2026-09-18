@@ -471,6 +471,7 @@ billingRouter.get('/token-usage', async (req: Request, res: Response, next: Next
       ? (raw as TokenUsageRange)
       : 'period';
 
+    res.setHeader('Cache-Control', 'private, no-store');
     res.json(await loadTokenUsageReport(supabase, req.orgId!, range));
   } catch (err) {
     next(err);

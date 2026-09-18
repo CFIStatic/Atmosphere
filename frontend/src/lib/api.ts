@@ -4782,7 +4782,10 @@ export const api = {
     request<WorkspaceBilling>('/api/billing/workspace', { method: 'GET' }),
 
   getTokenUsage: (range: TokenUsageRange = 'period') =>
-    request<TokenUsageReport>(`/api/billing/token-usage?range=${range}`, { method: 'GET' }),
+    request<TokenUsageReport>(`/api/billing/token-usage?range=${encodeURIComponent(range)}`, {
+      method: 'GET',
+      cache: 'no-store',
+    }),
 
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
@@ -6063,6 +6066,8 @@ export interface TokenUsageReport {
   periodStart: string;
   periodEnd: string;
   range: TokenUsageRange;
+  /** Signed-in organization name, when the API could load it. */
+  orgName?: string | null;
   totals: TokenTotals;
   byFeature: TokenFeatureBreakdown[];
   byDay: TokenUsageDay[];

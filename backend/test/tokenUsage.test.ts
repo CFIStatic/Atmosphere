@@ -5,8 +5,10 @@ import { billableNanosFromCost } from '../src/metering/customerMarkup.js';
 import {
   aggregateJobTokenUsage,
   aggregateTokenUsage,
+  collectPaged,
   eachUtcDay,
   estimatedUsdToNanos,
+  eventBillableNanos,
   quoteMeasuredUsageCostNanos,
   recordMeasuredTokenUsageAsync,
   recordTokenUsage,
@@ -437,4 +439,127 @@ test('aggregateTokenUsage includes byJob when job context is provided', () => {
   assert.equal(report.byJob.length, 1);
   assert.equal(report.byJob[0]?.analysisMinutes, 2);
   assert.equal(report.byJob[0]?.title, 'Zeta');
+});
+
+test('resolveTokenUsageWindow caps an open billing period at now', () => {
+  const now = new Date('2026-08-15T18:00:00.000Z');
+  const window = resolveTokenUsageWindow({
+    range: 'period',
+    periodStart: '2026-08-01T00:00:00.000Z',
+    periodEnd: '2026-09-01T00:00:00.000Z',
+    now,
+  });
+  assert.equal(window.start, '2026-08-01T00:00:00.000Z');
+  assert.equal(window.end, now.toISOString());
+});
+
+test('eventBillableNanos prices zero-dollar Gemini rows and leaves unknown models at zero', () => {
+  const gemini = eventBillableNanos({
+    modelId: 'gemini-3.6-flash',
+    inputTokens: 529,
+    outputTokens: 39,
+    cacheTokens: 0,
+    costNanos: 0,
+    priceNanos: 0,
+  });
+  assert.equal(gemini, (529 * 100 + 39 * 400) * 10);
+
+  const unknown = eventBillableNanos({
+    modelId: 'mystery-model',
+    inputTokens: 529,
+    outputTokens: 39,
+    cacheTokens: 0,
+    costNanos: 0,
+    priceNanos: 0,
+  });
+  assert.equal(unknown, 0);
+
+  const stored = eventBillableNanos({
+    modelId: 'gemini-3.6-flash',
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheTokens: 0,
+    costNanos: 100,
+    priceNanos: 1_890_000,
+  });
+  assert.equal(stored, 1_890_000);
+});
+
+test('aggregateTokenUsage includes Gemini ask spend that was stored as zero', () => {
+  const rows: TokenUsageEventRow[] = [
+    event({
+      id: 'ask-zero',
+      feature: 'ask',
+      modelId: 'gemini-3.6-flash',
+      createdAt: '2026-09-04T13:04:30.000Z',
+      inputTokens: 529,
+      outputTokens: 39,
+      cacheTokens: 0,
+      totalTokens: 568,
+      costNanos: 0,
+      priceNanos: 0,
+    }),
+  ];
+  const report = aggregateTokenUsage(
+    rows,
+    { start: '2026-09-01T00:00:00.000Z', end: '2026-09-05T00:00:00.000Z' },
+    [{ userId: 'user-1', fullName: 'Elena Ortiz', email: 'elena@example.com', role: 'global_admin' }],
+  );
+  assert.equal(report.totals.events, 1);
+  assert.equal(report.totals.totalTokens, 568);
+  assert.equal(report.totals.priceNanos, (529 * 100 + 39 * 400) * 10);
+  assert.equal(report.byFeature.find((row) => row.feature === 'ask')?.priceNanos, report.totals.priceNanos);
+});
+
+test('quoteMeasuredUsageCostNanos prices Gemini when the rate card does not know the model', async () => {
+  const cost = await quoteMeasuredUsageCostNanos(
+    {
+      rpc: async () => ({ data: null, error: { message: 'unknown_model' } }),
+    } as any,
+    'gemini-3.6-flash',
+    askUsage,
+  );
+  assert.equal(cost, askUsage.inputTokens * 100 + askUsage.outputTokens * 400);
+});
+
+test('recordMeasuredTokenUsageAsync stores 10× Gemini COGS when quote_usage has no card', async () => {
+  const rpcs: Array<{ name: string; params: Record<string, unknown> }> = [];
+  const client = {
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      rpcs.push({ name, params });
+      if (name === 'quote_usage') return { data: null, error: { message: 'unknown_model' } };
+      return { data: { eventId: 'evt-gem', duplicate: false }, error: null };
+    },
+  } as any;
+  const usage = {
+    inputTokens: 529,
+    outputTokens: 39,
+    cacheWrite5mTokens: 0,
+    cacheWrite1hTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 568,
+  };
+  await recordMeasuredTokenUsageAsync(client, {
+    orgId: 'org-1',
+    requestId: 'ask:gem',
+    feature: 'ask',
+    modelId: 'gemini-3.6-flash',
+    usage,
+  });
+  const record = rpcs.find((row) => row.name === 'record_token_usage');
+  const cogs = 529 * 100 + 39 * 400;
+  assert.equal(record?.params.p_cost_nanos, cogs);
+  assert.equal(record?.params.p_price_nanos, cogs * 10);
+});
+
+test('collectPaged walks past a 1000-row PostgREST page', async () => {
+  const calls: Array<[number, number]> = [];
+  const rows = await collectPaged(3, async (from, to) => {
+    calls.push([from, to]);
+    if (from === 0) return [1, 2, 3];
+    if (from === 3) return [4];
+    return [];
+  });
+  assert.deepEqual(rows, [1, 2, 3, 4]);
+  assert.deepEqual(calls, [[0, 2], [3, 5]]);
 });

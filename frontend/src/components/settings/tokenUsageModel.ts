@@ -1,4 +1,4 @@
-import type { TokenFeature, TokenTotals, TokenUsageDay } from '../../lib/api';
+import type { TokenFeature, TokenTotals, TokenUsageDay, TokenUsageRange } from '../../lib/api';
 import { TOKEN_FEATURES } from '../../lib/api';
 
 export const TOKEN_FEATURE_COLOR: Record<TokenFeature, string> = {
@@ -52,4 +52,29 @@ export function formatAnalysisMinutes(minutes: number | null | undefined): strin
   if (minutes == null || !Number.isFinite(minutes) || minutes < 0) return '—';
   if (minutes === 0) return '0';
   return Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
+}
+
+export function formatUtcDateLabel(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** Period + unit + whose spend, for the Settings token-spend figure. */
+export function tokenSpendCaption(input: {
+  range: TokenUsageRange;
+  periodStart: string;
+  periodEnd: string;
+  orgName?: string | null;
+}): string {
+  const period =
+    input.range === '90d' ? 'Last 90 days' : input.range === '30d' ? 'Last 30 days' : 'This billing period';
+  const who = input.orgName?.trim() || 'this organization';
+  return `${period}, ${formatUtcDateLabel(input.periodStart)} to ${formatUtcDateLabel(input.periodEnd)} UTC · USD · ${who}`;
 }
