@@ -8,6 +8,9 @@
  *
  * `cost_nanos` is provider COGS. `price_nanos` is the org billable
  * (cost × USAGE_CUSTOMER_MARKUP, default 10). Spend KPIs read price_nanos.
+ * A Gemini row stored at $0 is priced from the same card video analysis uses
+ * so the number matches tokens that were actually spent. The query is always
+ * the signed-in org — never the global ledger.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -16,9 +19,11 @@ import { toNanos } from '../lib/money.js';
 import { labelForMemberRole } from '../lib/productRoles.js';
 import { usdToNanos } from './costEngine.js';
 import {
+  billableNanosFromCost,
   resolveTokenLedgerAmounts,
   usageCustomerMarkup,
 } from './customerMarkup.js';
+import { fallbackProviderCogsNanos } from './providerCogs.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
 import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
 
@@ -120,6 +125,8 @@ export interface TokenUsageReport {
   periodStart: string;
   periodEnd: string;
   range: TokenUsageRange;
+  /** Signed-in organization. Null when the name could not be loaded. */
+  orgName?: string | null;
   totals: TokenTotals;
   byFeature: TokenFeatureBreakdown[];
   byDay: TokenUsageDay[];
@@ -204,6 +211,28 @@ function addTo(target: TokenTotals, row: TokenTotals): void {
   target.priceNanos += row.priceNanos;
 }
 
+/**
+ * Billable nanodollars for one event.
+ * Stored price_nanos wins. Zero-price rows with a stored COGS are marked up.
+ * Gemini rows with neither amount use the video-analysis rate card × markup
+ * so Ask/chat tokens are not shown as free.
+ */
+export function eventBillableNanos(row: Pick<
+  TokenUsageEventRow,
+  'priceNanos' | 'costNanos' | 'modelId' | 'inputTokens' | 'outputTokens' | 'cacheTokens'
+>): number {
+  if (row.priceNanos > 0) return row.priceNanos;
+  const stored = row.costNanos > 0 ? row.costNanos : 0;
+  const cost = stored > 0
+    ? stored
+    : fallbackProviderCogsNanos(row.modelId, {
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheTokens: row.cacheTokens,
+      });
+  return billableNanosFromCost(cost);
+}
+
 function asEventTotals(row: TokenUsageEventRow): TokenTotals {
   return {
     events: 1,
@@ -211,7 +240,7 @@ function asEventTotals(row: TokenUsageEventRow): TokenTotals {
     outputTokens: row.outputTokens,
     cacheTokens: row.cacheTokens,
     totalTokens: row.totalTokens,
-    priceNanos: row.priceNanos,
+    priceNanos: eventBillableNanos(row),
   };
 }
 
@@ -237,15 +266,20 @@ export function resolveTokenUsageWindow(opts: {
   now?: Date;
 }): { start: string; end: string } {
   const now = opts.now ?? new Date();
+  const nowIso = now.toISOString();
   if (opts.range === 'period' && opts.periodStart) {
-    return {
-      start: opts.periodStart,
-      end: opts.periodEnd ?? now.toISOString(),
-    };
+    // Billing period end is often in the future. Cap at now so "this period"
+    // is spend so far, in UTC, not an empty tail of days that have not happened.
+    // A period that already closed stays closed.
+    const periodEndMs = opts.periodEnd ? Date.parse(opts.periodEnd) : Number.NaN;
+    const end = Number.isFinite(periodEndMs) && periodEndMs < now.getTime()
+      ? opts.periodEnd!
+      : nowIso;
+    return { start: opts.periodStart, end };
   }
   const days = opts.range === '90d' ? 90 : 30;
   const start = new Date(now.getTime() - days * 86_400_000);
-  return { start: start.toISOString(), end: now.toISOString() };
+  return { start: start.toISOString(), end: nowIso };
 }
 
 export function aggregateTokenUsage(
@@ -348,7 +382,7 @@ export function aggregateTokenUsage(
         outputTokens: row.outputTokens,
         cacheTokens: row.cacheTokens,
         totalTokens: row.totalTokens,
-        priceNanos: row.priceNanos,
+        priceNanos: eventBillableNanos(row),
       };
     });
 
@@ -439,7 +473,9 @@ export function recordTokenUsageAsync(
  *
  * Prefers `cost_nanos` (true COGS). Falls back to `price_nanos` when an older
  * quote_usage still strips cost — that value is then treated as cost and
- * marked up by the customer multiplier. Returns 0 when the model is unknown.
+ * marked up once by the customer multiplier. Gemini models missing from the
+ * rate card use the video-analysis card instead of $0. Other unknown models
+ * stay 0 — we do not invent a price.
  */
 export async function quoteMeasuredUsageCostNanos(
   client: SupabaseClient,
@@ -457,14 +493,29 @@ export async function quoteMeasuredUsageCostNanos(
       p_cache_read_tokens: usage.cacheReadTokens,
       p_is_batch: false,
     });
-    if (error || !data) return 0;
+    if (error || !data) {
+      return fallbackProviderCogsNanos(modelId, {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheTokens: cacheTokensOf(usage),
+      });
+    }
     const row = data as { cost_nanos?: unknown; price_nanos?: unknown };
     const cost = toNanos(row.cost_nanos ?? 0);
     if (cost > 0) return cost;
-    const fallback = toNanos(row.price_nanos ?? 0);
-    return fallback > 0 ? fallback : 0;
+    const legacy = toNanos(row.price_nanos ?? 0);
+    if (legacy > 0) return legacy;
+    return fallbackProviderCogsNanos(modelId, {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheTokens: cacheTokensOf(usage),
+    });
   } catch {
-    return 0;
+    return fallbackProviderCogsNanos(modelId, {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheTokens: cacheTokensOf(usage),
+    });
   }
 }
 
@@ -606,6 +657,60 @@ async function resolvePeriodBounds(
   };
 }
 
+/**
+ * PostgREST's default db-max-rows is 1_000. A single `.limit(20000)` still
+ * returns the first page and drops the rest with no error, so spend under-counts.
+ */
+export const TOKEN_USAGE_PAGE = 1000;
+
+const TOKEN_USAGE_SELECT =
+  'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, cost_nanos, price_nanos, created_at';
+
+export async function collectPaged<T>(
+  pageSize: number,
+  fetchPage: (from: number, to: number) => Promise<T[]>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  const size = Math.max(1, Math.floor(pageSize));
+  for (let from = 0; ; from += size) {
+    if (from >= size * 500) {
+      throw new Error('token usage exceeded the paging safety cap');
+    }
+    const page = await fetchPage(from, from + size - 1);
+    rows.push(...page);
+    if (page.length < size) break;
+  }
+  return rows;
+}
+
+async function loadTokenUsageEvents(
+  client: SupabaseClient,
+  orgId: string,
+  window: { start: string; end: string },
+): Promise<TokenUsageEventRow[]> {
+  const raw = await collectPaged<Record<string, unknown>>(TOKEN_USAGE_PAGE, async (from, to) => {
+    const { data, error } = await client
+      .from('token_usage_events')
+      .select(TOKEN_USAGE_SELECT)
+      .eq('org_id', orgId)
+      .gte('created_at', window.start)
+      .lt('created_at', window.end)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    return (data ?? []) as Array<Record<string, unknown>>;
+  });
+  return raw.map(parseEventRow);
+}
+
+async function loadOrgName(client: SupabaseClient, orgId: string): Promise<string | null> {
+  const { data, error } = await client.from('orgs').select('name').eq('id', orgId).maybeSingle();
+  if (error) return null;
+  const name = (data as { name?: string | null } | null)?.name;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
 export async function loadTokenUsageReport(
   client: SupabaseClient,
   orgId: string,
@@ -618,23 +723,11 @@ export async function loadTokenUsageReport(
     periodEnd: bounds.periodEnd,
   });
 
-  const [{ data, error }, members] = await Promise.all([
-    client
-      .from('token_usage_events')
-      .select(
-        'id, org_id, user_id, job_id, request_id, feature, source, model_id, input_tokens, output_tokens, cache_tokens, total_tokens, price_nanos, created_at',
-      )
-      .eq('org_id', orgId)
-      .gte('created_at', window.start)
-      .lt('created_at', window.end)
-      .order('created_at', { ascending: true })
-      .limit(20_000),
+  const [rows, members, orgName] = await Promise.all([
+    loadTokenUsageEvents(client, orgId, window),
     loadMembers(client, orgId),
+    loadOrgName(client, orgId),
   ]);
-
-  if (error) throw error;
-
-  const rows = ((data ?? []) as Array<Record<string, unknown>>).map(parseEventRow);
   const jobIds = [...new Set(rows.map((r) => r.jobId).filter((id): id is string => Boolean(id)))];
   const [jobs, analysisSecondsByJob] = await Promise.all([
     loadJobMeta(client, orgId, jobIds),
@@ -643,6 +736,7 @@ export async function loadTokenUsageReport(
 
   return {
     range,
+    orgName,
     ...aggregateTokenUsage(rows, window, members, { jobs, analysisSecondsByJob }),
   };
 }

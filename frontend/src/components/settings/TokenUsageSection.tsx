@@ -9,9 +9,9 @@ import {
   type TokenUsageRange,
   type TokenUsageReport,
 } from '../../lib/api';
-import { formatTokens, formatUsd, formatUsdCompact } from '../../lib/money';
+import { formatSpendUsd, formatTokens, formatUsdCompact } from '../../lib/money';
 import { TokenUsageChart } from './TokenUsageChart';
-import { TOKEN_FEATURE_TRACK, formatAnalysisMinutes, sharePct } from './tokenUsageModel';
+import { TOKEN_FEATURE_TRACK, formatAnalysisMinutes, sharePct, tokenSpendCaption } from './tokenUsageModel';
 
 const RANGES: { id: TokenUsageRange; label: string }[] = [
   { id: 'period', label: 'This period' },
@@ -51,7 +51,8 @@ export function TokenUsageSection() {
     return Math.max(1, ...report.byFeature.map((row) => row.totalTokens));
   }, [report]);
 
-  if (error && !report) {
+  const matchesRange = report?.range === range;
+  if (error && !matchesRange) {
     return (
       <p role="alert" className="text-sm text-danger-600">
         {error}
@@ -59,7 +60,7 @@ export function TokenUsageSection() {
     );
   }
 
-  if (!report || !totals) {
+  if (!report || !totals || !matchesRange) {
     return <p className="text-sm text-ink-600">Loading token usage…</p>;
   }
 
@@ -73,8 +74,7 @@ export function TokenUsageSection() {
           <div>
             <h3 className="text-base font-semibold text-ink-900">Token usage</h3>
             <p className="mt-0.5 text-xs text-ink-500">
-              Tokens spent analysing videos, chatting with the assistant, and asking the record.
-              {report.periodStart ? ` ${day(report.periodStart)} — ${day(report.periodEnd)}.` : null}
+              Model calls for the signed-in organization. Spend is dollars (USD), not a token count.
             </p>
           </div>
           <div className="flex rounded-lg border border-line bg-paper-50 p-0.5" role="tablist" aria-label="Usage window">
@@ -100,7 +100,7 @@ export function TokenUsageSection() {
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi label="Tokens used" value={formatTokens(totals.totalTokens)} hint={`${totals.events.toLocaleString()} metered calls`} />
-          <Kpi label="Token spend" value={formatUsd(totals.priceNanos, { precise: true })} hint="Usage billed to this organization" />
+          <Kpi label="Spend (USD)" value={formatSpendUsd(totals.priceNanos)} hint={tokenSpendCaption(report)} />
           <Kpi
             label="Input / output"
             value={`${formatTokens(totals.inputTokens)} / ${formatTokens(totals.outputTokens)}`}
@@ -177,7 +177,7 @@ export function TokenUsageSection() {
       <section className="rounded-xl glass-card p-5">
         <h3 className="text-base font-semibold text-ink-900">By employee</h3>
         <p className="mt-0.5 text-xs text-ink-500">
-          Every seat on this organization. Spend is the usage billed to this org. Unattributed rows are usage we could not tie to an uploader, job owner, or signed-in teammate.
+          Every seat on this organization. Spend is USD billed to this organization for the selected period — not provider cost, and not another company. Unattributed rows are usage we could not tie to an uploader, job owner, or signed-in teammate.
         </p>
         {employees.length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -193,7 +193,7 @@ export function TokenUsageSection() {
                   <th className="px-3 py-2 text-right font-semibold">Chat</th>
                   <th className="px-3 py-2 text-right font-semibold">Ask</th>
                   <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">Spend</th>
+                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,7 +210,7 @@ export function TokenUsageSection() {
         <h3 className="text-base font-semibold text-ink-900">Usage by job</h3>
         <p className="mt-0.5 text-xs text-ink-500">
           Job costing view for this window: analysis minutes are the length of film that finished AI
-          analysis (proof duration), not a tokens-to-minutes estimate. Token spend matches the bill.
+          analysis (proof duration), not a tokens-to-minutes estimate. Spend is this organization’s USD for the same window.
         </p>
         {(report.byJob ?? []).length === 0 ? (
           <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
@@ -226,7 +226,7 @@ export function TokenUsageSection() {
                   <th className="px-3 py-2 text-right font-semibold">Video</th>
                   <th className="px-3 py-2 text-right font-semibold">Ask</th>
                   <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">Spend</th>
+                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
                 </tr>
               </thead>
               <tbody>
@@ -255,7 +255,7 @@ export function TokenUsageSection() {
                   <th className="px-3 py-2 font-semibold">Who</th>
                   <th className="px-3 py-2 font-semibold">Surface</th>
                   <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                  <th className="py-2 pl-3 text-right font-semibold">Spend</th>
+                  <th className="py-2 pl-3 text-right font-semibold">USD</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,7 +268,7 @@ export function TokenUsageSection() {
                       {formatTokens(row.totalTokens)}
                     </td>
                     <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-                      {formatUsd(row.priceNanos, { precise: true })}
+                      {formatSpendUsd(row.priceNanos)}
                     </td>
                   </tr>
                 ))}
@@ -336,7 +336,7 @@ function JobUsageRow({ row }: { row: TokenJobBreakdown }) {
         {formatTokens(row.totalTokens)}
       </td>
       <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-        {formatUsd(row.priceNanos, { precise: true })}
+        {formatSpendUsd(row.priceNanos)}
       </td>
     </tr>
   );
@@ -361,7 +361,7 @@ function EmployeeRow({ row, totalTokens }: { row: TokenEmployeeBreakdown; totalT
         {formatTokens(row.totalTokens)}
       </td>
       <td className="py-2.5 pl-3 text-right tabular-nums font-medium text-ink-900">
-        {formatUsd(row.priceNanos, { precise: true })}
+        {formatSpendUsd(row.priceNanos)}
       </td>
     </tr>
   );

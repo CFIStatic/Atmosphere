@@ -26,6 +26,22 @@ export function formatUsd(nanos: number, opts: { precise?: boolean } = {}): stri
   });
 }
 
+/**
+ * Settings spend. Amounts under a dime keep fractional cents so $0.01249
+ * does not display as $0.01. Larger amounts stay ordinary dollars.
+ */
+export function formatSpendUsd(nanos: number): string {
+  const dollars = nanos / NANOS_PER_CREDIT;
+  if (!Number.isFinite(dollars) || dollars === 0) return formatUsd(0);
+  if (Math.abs(dollars) < 0.1) {
+    const raw = dollars.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    const [whole, frac = ''] = raw.split('.');
+    const padded = frac.length < 2 ? frac.padEnd(2, '0') : frac;
+    return `$${whole}.${padded}`;
+  }
+  return formatUsd(nanos);
+}
+
 /** Compact form for headline figures: `$1.2k`. */
 export function formatUsdCompact(nanos: number): string {
   const dollars = nanos / NANOS_PER_CREDIT;

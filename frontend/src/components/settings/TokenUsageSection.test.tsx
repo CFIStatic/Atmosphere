@@ -138,7 +138,8 @@ describe('TokenUsageSection', () => {
     expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
     expect(screen.getByText('288k')).toBeInTheDocument();
     expect(screen.getByText('$18.40')).toBeInTheDocument();
-    expect(screen.getByText('Usage billed to this organization')).toBeInTheDocument();
+    expect(screen.getByText(/This billing period, Aug 1, 2026 to Sep 1, 2026 UTC · USD · this organization/)).toBeInTheDocument();
+    expect(screen.getByText('Spend (USD)')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /token usage by day/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Metering' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'By employee' })).toBeInTheDocument();
@@ -182,7 +183,7 @@ describe('TokenUsageSection', () => {
     render(<TokenUsageSection />);
     expect(await screen.findByText('Jack Cyganiak')).toBeInTheDocument();
     expect(screen.getByText(/uploader, job owner, or signed-in teammate/i)).toBeInTheDocument();
-    expect(screen.getByText(/spend is the usage billed to this org/i)).toBeInTheDocument();
+    expect(screen.getByText(/USD billed to this organization for the selected period/i)).toBeInTheDocument();
     expect(screen.getAllByText('$12.80').length).toBeGreaterThan(0);
     expect(screen.queryByText('$1.28')).not.toBeInTheDocument();
     expect(screen.queryByText('Unattributed')).not.toBeInTheDocument();
