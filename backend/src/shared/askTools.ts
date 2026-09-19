@@ -6,7 +6,7 @@
  */
 
 import { presentJobAccessRoster, type JobAccessPerson } from './jobAccessRoster.js';
-import { buildJobPunchList, type PunchListItem } from './jobPunchList.js';
+import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
 import {
   askWebSearchBlockedReason,
@@ -879,4 +879,3 @@ export function parseJobFieldUpdatesFromQuestion(question: string): {
 
   return out;
 }
-\n

@@ -51,9 +51,9 @@ export type AskActionChip = {
   path?: string;
 };
 
-const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
-const WEB_TRAILER_RE = /(?:\n|^)\s*⟦web:\s*([^⟧]+)⟧\s*/i;
-const ACTIONS_TRAILER_RE = /(?:\n|^)\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
+const SOURCE_TRAILER_RE = /\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
+const WEB_TRAILER_RE = /\s*⟦web:\s*([^⟧]+)⟧\s*/i;
+const ACTIONS_TRAILER_RE = /\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
 const KNOWN = new Set<string>([
