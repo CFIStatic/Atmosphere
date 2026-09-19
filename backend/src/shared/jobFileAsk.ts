@@ -17,6 +17,24 @@ import {
   groundedCollectionAnswer,
   type CollectionClip,
 } from './proofAnalyst.js';
+import {
+  ASK_WEB_FORMAT_RULES,
+  formatAskWebContext,
+  normalizeAskWebCitations,
+  searchAskWeb,
+  shouldSupplementWithWebSearch,
+  type AskWebHit,
+} from './askWebSearch.js';
+import {
+  collectWebHitsFromToolResults,
+  executeAskTool,
+  formatActionsTrailer,
+  formatAskToolResultsForModel,
+  parseJobFieldUpdatesFromQuestion,
+  pickAskToolsHeuristically,
+  type AskToolContext,
+  type AskToolResult,
+} from './askTools.js';
 
 export interface JobFileAskJob {
   title?: string | null;
@@ -98,11 +116,11 @@ const FILE_QA_SYSTEM = `You are a sharp, friendly expert on this job file. Answe
 The record may contain any mix of: job identity, brief facts (any labels), scope lines including do-nots, notes and messages, invited companies, tasks, crew, work logs, memory events, uploaded documents, and video readings / mic transcripts. Treat every section as first-class evidence. A job with no video is still answerable from the rest of the file.
 
 Rules:
-1. Answer only from the record given. Do not invent facts, prices, or coverage decisions.
-2. If the record does not contain the answer, say "This job file does not have that" and stop.
+1. Answer job facts only from the record given. Do not invent facts, prices, or coverage decisions.
+2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When WEB SEARCH RESULTS are provided, you may supplement with outside knowledge (codes, products, manufacturers, standards, general how-to) — never invent what happened on this job from the web.
 3. LAYERED DEFAULT for broad asks: short natural opener, a few markdown bullets with **Label:** when listing, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
-5. Cite sources only via the ⟦sources: …⟧ machine line in FORMAT — never "(Source: …)" parentheticals.
+5. Cite job-file sources via ⟦sources: …⟧ and web via ⟦web: Title|url, …⟧ machine lines in FORMAT — never "(Source: …)" parentheticals or raw URL dumps in prose.
 6. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
 7. Speech on a recording and written notes are both evidence. For conversation topics, summarize first; only paste verbatim lines when depth was requested — never answer talk questions from vision-only room/screen descriptions.
 8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.
@@ -450,28 +468,107 @@ export async function answerFromJobFile(input: {
   history?: JobFileAskTurn[];
   apiKey?: string | null;
   onToken?: (text: string) => void;
-}): Promise<{ answer: string; model: string | null; groundedOn: number; usage: MeasuredUsage | null }> {
+  /** Optional fetch override for tests. */
+  fetchFn?: typeof fetch;
+  /**
+   * When set, Ask may run safe in-product tools (web search, job field
+   * get/update, punch list, drafts). Updates are office-only.
+   */
+  toolContext?: AskToolContext | null;
+}): Promise<{
+  answer: string;
+  model: string | null;
+  groundedOn: number;
+  usage: MeasuredUsage | null;
+  webHits: AskWebHit[];
+  toolResults: AskToolResult[];
+}> {
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
   const apiKey = (input.apiKey ?? '').trim();
+  const empty = {
+    answer: grounded,
+    model: null as string | null,
+    groundedOn: 0,
+    usage: null as MeasuredUsage | null,
+    webHits: [] as AskWebHit[],
+    toolResults: [] as AskToolResult[],
+  };
 
-  if (!jobFileHasContent(input.file)) {
-    input.onToken?.(grounded);
-    return { answer: grounded, model: null, groundedOn: 0, usage: null };
+  // Run safe tools first so field updates apply before the model writes prose.
+  let toolResults: AskToolResult[] = [];
+  let webHits: AskWebHit[] = [];
+  if (input.toolContext) {
+    const picks = pickAskToolsHeuristically(input.question, input.toolContext.access);
+    for (const name of picks) {
+      const rawInput =
+        name === 'web_search'
+          ? { query: input.question }
+          : name === 'find_evidence_moments'
+            ? { topic: input.question }
+            : name === 'update_job_fields'
+              ? parseJobFieldUpdatesFromQuestion(input.question)
+              : name === 'propose_revoke_access'
+                ? {
+                    personLabel:
+                      input.question.match(/revoke(?:\s+access)?(?:\s+for)?\s+(.+)$/i)?.[1] ??
+                      input.question,
+                  }
+                : {};
+      const result = await executeAskTool(name, rawInput, {
+        ...input.toolContext,
+        fetchFn: input.fetchFn ?? input.toolContext.fetchFn,
+        file: input.file,
+      });
+      toolResults.push(result);
+    }
+    webHits = collectWebHitsFromToolResults(toolResults);
   }
-  if (preferJobFileGroundedFastPath(input.question, grounded)) {
+
+  if (!jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, groundedOn, usage: null };
+    return { ...empty, answer: grounded, groundedOn: 0, toolResults };
+  }
+
+  // Prefer tools when they answered (status/fields/update) — still allow model
+  // polish when a key is configured, but skip the grounded fast-path so updates
+  // are not ignored.
+  const toolsHandled =
+    toolResults.some((r) => r.ok && ['update_job_fields', 'get_job_fields', 'get_job_status', 'list_who_has_access', 'get_punch_list', 'get_claim_ready_summary', 'propose_revoke_access', 'draft_progress_share_copy', 'draft_field_invite_copy'].includes(r.tool));
+
+  if (
+    !toolsHandled &&
+    preferJobFileGroundedFastPath(input.question, grounded) &&
+    !webHits.length
+  ) {
+    input.onToken?.(grounded);
+    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
   if (!isAskModelConfigured(apiKey || null)) {
+    const toolOnly = toolResults.filter((r) => r.ok);
+    if (toolOnly.length) {
+      const prose =
+        toolOnly.map((r) => r.summary).join(' ') +
+        (toolOnly.some((r) => r.needsConfirmation)
+          ? ' Confirmation required before anything irreversible happens.'
+          : '');
+      const trailer = formatActionsTrailer(toolResults);
+      const answer = trailer ? `${prose}\n\n${trailer}` : prose;
+      input.onToken?.(answer);
+      return { ...empty, answer, groundedOn, toolResults, webHits };
+    }
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, groundedOn, usage: null };
+    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
 
   const record = formatJobFileRecord(input.file).trim();
-  if (!record) {
+  if (!record && !toolResults.length && !webHits.length) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, groundedOn, usage: null };
+    return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
+  }
+
+  if (!webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
+    webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
   }
 
   const history = (input.history ?? [])
@@ -480,20 +577,55 @@ export async function answerFromJobFile(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
     .join('\n');
 
+  const system =
+    FILE_QA_SYSTEM +
+    (webHits.length ? `\n\n${ASK_WEB_FORMAT_RULES}` : '') +
+    (toolResults.length
+      ? `\n\nIN-PRODUCT ACTIONS: Tool results below already ran. Summarize what changed or what you found. Never claim you emailed anyone. If a tool needs confirmation, tell the user clearly and do not pretend it already happened. Append ⟦actions: …⟧ only if tools already attached it — the server appends the trailer.`
+      : '');
+
+  const webBlock = webHits.length
+    ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins):\n${formatAskWebContext(webHits)}`
+    : '';
+  const toolBlock = toolResults.length
+    ? `\n\nTOOL RESULTS (already executed):\n${formatAskToolResultsForModel(toolResults)}`
+    : '';
+
   const completed = await completeAskText({
-    system: FILE_QA_SYSTEM,
+    system,
     user:
-      `Job file record:\n\n${record}` +
+      `Job file record:\n\n${record || '(empty record)'}` +
+      webBlock +
+      toolBlock +
       (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
       `\n\nQuestion: ${input.question}`,
     anthropicApiKey: apiKey || null,
     mode: 'interactive',
     onToken: input.onToken,
+    fetchFn: input.fetchFn,
   });
   if (!completed) {
-    input.onToken?.(grounded);
-    return { answer: grounded, model: null, groundedOn, usage: null };
+    const toolOnly = toolResults.filter((r) => r.ok);
+    const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : grounded;
+    const trailer = formatActionsTrailer(toolResults);
+    const answer = trailer ? `${prose}\n\n${trailer}` : prose;
+    input.onToken?.(answer);
+    return { ...empty, answer, groundedOn, toolResults, webHits };
   }
-  const answer = normalizeAskProse(completed.text);
-  return { answer, model: completed.model, groundedOn, usage: completed.usage };
+  let answer = normalizeAskProse(completed.text);
+  if (webHits.length) {
+    answer = normalizeAskWebCitations(answer, webHits);
+  }
+  const actions = formatActionsTrailer(toolResults);
+  if (actions && !/⟦actions:/i.test(answer)) {
+    answer = `${answer.trimEnd()}\n\n${actions}`;
+  }
+  return {
+    answer,
+    model: completed.model,
+    groundedOn,
+    usage: completed.usage,
+    webHits,
+    toolResults,
+  };
 }

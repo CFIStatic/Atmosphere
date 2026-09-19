@@ -47,4 +47,25 @@ describe('askSources', () => {
   it('labels clip dates short and clear', () => {
     expect(askSourceLabel('clip:2026-09-05')).toBe('Sep 5 clip');
   });
+
+  it('extracts web citation trailers into clickable link chips', () => {
+    const { body, sources, webSources } = extractAskSources(
+      'IRC R905 covers asphalt shingle underlayment.\n\n⟦sources: scope⟧\n\n⟦web: IRC R905|https://codes.iccsafe.org/r905, GAF guide|https://www.gaf.com/install⟧',
+    );
+    expect(body).toBe('IRC R905 covers asphalt shingle underlayment.');
+    expect(sources.map((s) => s.label)).toEqual(['Scope']);
+    expect(webSources).toEqual([
+      { title: 'IRC R905', url: 'https://codes.iccsafe.org/r905' },
+      { title: 'GAF guide', url: 'https://www.gaf.com/install' },
+    ]);
+  });
+
+  it('extracts action trailers from Ask tools', () => {
+    const { body, actions } = extractAskSources(
+      'Updated claim number on this job.\n\n⟦actions: update_job_fields|Updated claimNumber on this Atmosphere job file|setup|⟧',
+    );
+    expect(body).toBe('Updated claim number on this job.');
+    expect(actions[0]?.tool).toBe('update_job_fields');
+    expect(actions[0]?.section).toBe('setup');
+  });
 });

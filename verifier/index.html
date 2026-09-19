@@ -1843,6 +1843,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label" data-i18n-chrome="dashboard">Dashboard</span>
       </button>
+      <button type="button" class="navitem nav-icon" id="nav-connect-crm" data-route="/crm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span class="label" data-i18n-chrome="connectCrm">Connect CRM</span>
+      </button>
     </div>
 
     <div class="rail-section" id="ask-history-nav" hidden>
@@ -6869,6 +6873,11 @@
       if (dashOnRecord) dashOnRecord.setAttribute('aria-current', 'true');
       return;
     }
+    if (activeRoute === '/crm' || activeRoute.indexOf('/crm/') === 0) {
+      var crmBtn = document.getElementById('nav-connect-crm');
+      if (crmBtn) crmBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/settings') {
       var settings = document.getElementById('nav-settings');
       if (settings) settings.setAttribute('aria-current', 'true');
@@ -7320,6 +7329,12 @@
         activeRailItem = '';
         syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/settings' }, '*');
+      });
+    }
+    var navConnectCrm = document.getElementById('nav-connect-crm');
+    if (navConnectCrm) {
+      navConnectCrm.addEventListener('click', function () {
+        goShell('/crm');
       });
     }
   }

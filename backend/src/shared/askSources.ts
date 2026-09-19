@@ -27,7 +27,7 @@ export const ASK_SOURCE_IDS = [
 
 export type AskSourceId = (typeof ASK_SOURCE_IDS)[number] | `clip:${string}`;
 
-const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*$/i;
+const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
 /** Prompt block appended to Ask system prompts. */

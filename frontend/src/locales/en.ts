@@ -17,6 +17,7 @@ export const EN = {
   'nav.system': 'System',
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
+  'nav.connectCrm': 'Connect CRM',
   'nav.settings': 'Settings',
   'nav.support': 'Support',
   'nav.fieldCapture': 'Field capture',
@@ -33,6 +34,9 @@ export const EN = {
   'nav.renameChat': 'Rename chat',
   'nav.rename': 'Rename',
   'nav.newChat': 'New chat',
+
+  'crm.title': 'Connect CRM',
+  'crm.subtitle': 'Link JobNimbus, AccuLynx, Salesforce, ServiceTitan, or use Atmosphere native fields.',
 
   'settings.title': 'Settings',
   'settings.sectionsAria': 'Settings sections',

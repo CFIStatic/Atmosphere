@@ -369,6 +369,7 @@ progressShareRouter.post(
         shareId: share.id,
         threadId: input.threadId ?? null,
         requestId: `ask:progress:${share.id}:${randomUUID()}`,
+        access: 'viewer',
       });
 
       await recordAccess(admin, {

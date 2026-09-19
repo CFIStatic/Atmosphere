@@ -19,6 +19,7 @@ export const ES: MessageCatalog = {
   'nav.system': 'Sistema',
   'nav.startJob': 'Empezar un trabajo',
   'nav.dashboard': 'Panel',
+  'nav.connectCrm': 'Conectar CRM',
   'nav.settings': 'Ajustes',
   'nav.support': 'Soporte',
   'nav.fieldCapture': 'Captura de campo',
@@ -35,6 +36,9 @@ export const ES: MessageCatalog = {
   'nav.renameChat': 'Renombrar chat',
   'nav.rename': 'Renombrar',
   'nav.newChat': 'Nuevo chat',
+
+  'crm.title': 'Conectar CRM',
+  'crm.subtitle': 'Vincula JobNimbus, AccuLynx, Salesforce, ServiceTitan o usa los campos nativos de Atmosphere.',
 
   'settings.title': 'Ajustes',
   'settings.sectionsAria': 'Secciones de ajustes',
