@@ -4,4 +4,4 @@
  * control are almost always on a cached HTML document that names the old
  * `/assets/index-….js`.
  */
-export const OFFICE_HTML_BUILD = 'no-overview-back-2';
+export const OFFICE_HTML_BUILD = 'ask-web-search-1';

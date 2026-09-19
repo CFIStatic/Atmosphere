@@ -14,7 +14,7 @@ export const ASK_PROSE_FORMAT_RULES = `FORMAT (ChatGPT / Claude / Grok quality �
 - Write like a top-tier chat assistant: short opener paragraph, then a tight bullet list when listing facts, optional invite to go deeper.
 - Use markdown for structure only: **bold** for short section labels (e.g. **Job setup:**), *italics* sparingly for asides, and "-" or "•" for bullet lists.
 - Never dump raw asterisk soup (no "***", no decorative * around every phrase). One clean **Label:** per bullet is enough.
-- No headings (#), no links, no images, no HTML, no code fences unless quoting a short on-file code-like string.
+- No headings (#), no inline URLs, no images, no HTML, no code fences unless quoting a short on-file code-like string. Web citations use the ⟦web: Title|url⟧ trailer only (see WEB rules when search results are present).
 - Glance-simple first; save long quotes and timestamps for when they ask for depth.
 - Stay grounded: only facts from the record — never invent evidence.
 

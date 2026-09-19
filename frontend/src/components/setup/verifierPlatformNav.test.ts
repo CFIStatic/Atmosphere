@@ -15,7 +15,7 @@ describe('verifier office rail', () => {
     );
     expect(nav).not.toBeNull();
     const labels = [...nav![0].matchAll(/<span class="label"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
-    expect(labels).toEqual(['Start a job', 'Dashboard']);
+    expect(labels).toEqual(['Start a job', 'Dashboard', 'Connect CRM']);
     expect(nav![0]).not.toContain('data-route="/field"');
     expect(nav![0]).not.toContain('data-route="/my-work"');
     expect(nav![0]).toContain('data-screen="dashboard"');

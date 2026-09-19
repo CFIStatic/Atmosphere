@@ -274,6 +274,21 @@ describe('SharedDashboardPage job file identity', () => {
     expect(strip).toHaveTextContent('1 unanswered Ask');
   });
 
+  it('opens Ask first when Field Capture deep-links with ?ask=1', async () => {
+    usePhoneShell.mockReturnValue(true);
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&ask=1']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    const ask = screen.getByTestId('job-file-ask');
+    expect(ask).toHaveAttribute('data-state', 'active');
+    expect(ask).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('tab', { name: 'Ask' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('uses File and Ask tabs on a phone so chat is not buried under the file', async () => {
     usePhoneShell.mockReturnValue(true);
     const user = userEvent.setup();

@@ -2642,6 +2642,8 @@ export async function runProofAsk(input: {
   threadId?: string | null;
   requestId: string;
   onToken?: (text: string) => void;
+  /** org = office member; viewer = progress-share homeowner. */
+  access?: 'org' | 'viewer';
 }): Promise<{
   answer: string;
   model: string | null;
@@ -2704,7 +2706,7 @@ export async function runProofAsk(input: {
       supabase
         .from('crm_jobs')
         .select(
-          'id, job_number, title, status, claim_number, policy_number, work_type, loss_type, description, scheduled_start, scheduled_end',
+          'id, job_number, title, status, claim_number, policy_number, work_type, loss_type, description, scheduled_start, scheduled_end, property_id',
         )
         .eq('org_id', orgId)
         .eq('id', jobId)
@@ -2865,6 +2867,38 @@ export async function runProofAsk(input: {
       clips,
     };
 
+    const propertyId = (jobRow?.property_id as string | null | undefined) ?? null;
+    let siteAddress: string | null = null;
+    if (propertyId) {
+      const { data: prop } = await supabase
+        .from('crm_properties')
+        .select('address_line1, address_line2, city, region, postal_code')
+        .eq('org_id', orgId)
+        .eq('id', propertyId)
+        .maybeSingle();
+      if (prop) {
+        siteAddress = [prop.address_line1, prop.address_line2, prop.city, prop.region, prop.postal_code]
+          .map((p: unknown) => String(p ?? '').trim())
+          .filter(Boolean)
+          .join(', ');
+      }
+    }
+
+    const askAccess: 'org' | 'viewer' = input.access === 'org' ? 'org' : 'viewer';
+    let authorLabel: string | null = null;
+    if (userId && askAccess === 'org') {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userId)
+          .maybeSingle();
+        authorLabel = (profile as any)?.full_name ?? (profile as any)?.email ?? null;
+      } catch {
+        authorLabel = null;
+      }
+    }
+
     const history: JobFileAskTurn[] = ((recentRes.data ?? []) as any[])
       .reverse()
       .flatMap((row) => {
@@ -2881,6 +2915,18 @@ export async function runProofAsk(input: {
       history,
       apiKey,
       onToken: input.onToken,
+      toolContext: {
+        orgId,
+        jobId,
+        supabase,
+        access: askAccess,
+        file,
+        userId: userId ?? null,
+        authorLabel,
+        propertyId,
+        address: siteAddress,
+        jobTitle: file.job?.title ?? null,
+      },
     });
 
     recordMeasuredTokenUsage(supabase, {
@@ -2954,7 +3000,7 @@ export async function runProofAsk(input: {
 export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
   try {
     // Org members and claimed progress-share homeowners (grant viewers).
-    const { orgId, userId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const input = z
       .object({
         question: z.string().trim().min(3).max(1000),
@@ -2982,6 +3028,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         userId,
         threadId: input.threadId ?? null,
         requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+        access: access === 'org' ? 'org' : 'viewer',
         onToken: (text) => writeEvent({ type: 'token', text }),
       });
       writeEvent({
@@ -3004,6 +3051,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       userId,
       threadId: input.threadId ?? null,
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+      access: access === 'org' ? 'org' : 'viewer',
     });
     res.status(201).json(result);
   } catch (err) {

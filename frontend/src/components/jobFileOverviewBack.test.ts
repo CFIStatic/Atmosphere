@@ -89,8 +89,8 @@ describe('job file chrome has no Overview back', () => {
     const html = readFileSync(resolve(repoRoot, 'frontend/index.html'), 'utf8');
     const stamp = read('../lib/officeHtmlBuild.ts');
     const main = read('../main.tsx');
-    expect(stamp).toContain("export const OFFICE_HTML_BUILD = 'no-overview-back-2'");
-    expect(html).toContain('name="atmosphere-build" content="no-overview-back-2"');
+    expect(stamp).toContain("export const OFFICE_HTML_BUILD = 'ask-web-search-1'");
+    expect(html).toContain('name="atmosphere-build" content="ask-web-search-1"');
     expect(main).toContain('OFFICE_HTML_BUILD');
   });
 

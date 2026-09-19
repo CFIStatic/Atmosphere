@@ -23,11 +23,12 @@ export const ASK_SOURCE_IDS = [
   'document',
   'videos',
   'evidence',
+  'crm',
 ] as const;
 
 export type AskSourceId = (typeof ASK_SOURCE_IDS)[number] | `clip:${string}`;
 
-const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*$/i;
+const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
 /** Prompt block appended to Ask system prompts. */
@@ -35,7 +36,7 @@ export const ASK_SOURCE_FORMAT_RULES = `SOURCES (required for checkable answers 
 - Never write parenthetical prose like "(Source: Field Capture / Brief note / Scope)" or "(Source: Videos and mic, …)".
 - After the human answer, append exactly one machine line the UI strips:
   ⟦sources: scope, access, brief_note, clip:2026-09-12⟧
-- Use only these ids (comma-separated): job, claim, policy, brief, brief_note, scope, notes, invited, access, task, crew, log, memory, document, videos, evidence, and clip:YYYY-MM-DD for a specific filmed day.
+- Use only these ids (comma-separated): job, claim, policy, brief, brief_note, scope, notes, invited, access, task, crew, log, memory, document, videos, evidence, crm, and clip:YYYY-MM-DD for a specific filmed day.
 - Prefer one id per distinct place you used. Multiple clip days → multiple clip:DATE ids. Skip the line only when the file truly has nothing relevant.`;
 
 function trim(value: unknown): string {
@@ -85,6 +86,7 @@ export function mapAskSourceFragment(raw: string): AskSourceId | null {
   if (/^memory$|^recent\s+record$/.test(lower)) return 'memory';
   if (/^documents?$|^uploaded/.test(lower)) return 'document';
   if (/^claim$/.test(lower)) return 'claim';
+  if (/^crm$|\b(jobnimbus|acculynx|salesforce|servicetitan)\b/.test(lower)) return 'crm';
   if (/^policy$/.test(lower)) return 'policy';
   if (/^job(\s+(setup|identity|file))?$/.test(lower) || /^description$|^schedule$/.test(lower)) {
     return 'job';

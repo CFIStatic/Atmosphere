@@ -1,6 +1,6 @@
 /**
  * Ask source citations — parse structured trailers (and legacy Source prose)
- * into short chip labels that navigate the job file.
+ * into short chip labels that navigate the job file, plus optional web links.
  */
 
 export type AskSourceId =
@@ -20,6 +20,7 @@ export type AskSourceId =
   | 'document'
   | 'videos'
   | 'evidence'
+  | 'crm'
   | `clip:${string}`;
 
 export type AskSourceChip = {
@@ -37,7 +38,23 @@ export type AskSourceChip = {
   workDate?: string;
 };
 
-const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*$/i;
+/** Public-web citation chip — opens in a new tab. */
+export type AskWebCitation = {
+  title: string;
+  url: string;
+};
+
+/** In-product Ask action chip (tool that already ran). */
+export type AskActionChip = {
+  tool: string;
+  label: string;
+  section?: string;
+  path?: string;
+};
+
+const SOURCE_TRAILER_RE = /\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
+const WEB_TRAILER_RE = /\s*⟦web:\s*([^⟧]+)⟧\s*/i;
+const ACTIONS_TRAILER_RE = /\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
 const KNOWN = new Set<string>([
@@ -57,6 +74,7 @@ const KNOWN = new Set<string>([
   'document',
   'videos',
   'evidence',
+  'crm',
 ]);
 
 function trim(value: unknown): string {
@@ -100,6 +118,7 @@ export function mapAskSourceFragment(raw: string): AskSourceId | null {
   if (/^memory$|^recent\s+record$/.test(lower)) return 'memory';
   if (/^documents?$|^uploaded/.test(lower)) return 'document';
   if (/^claim$/.test(lower)) return 'claim';
+  if (/^crm$|\b(jobnimbus|acculynx|salesforce|servicetitan)\b/.test(lower)) return 'crm';
   if (/^policy$/.test(lower)) return 'policy';
   if (/^job(\s+(setup|identity|file))?$/.test(lower) || /^description$|^schedule$/.test(lower)) {
     return 'job';
@@ -182,6 +201,8 @@ export function askSourceLabel(id: AskSourceId): string {
       return 'Videos';
     case 'evidence':
       return 'Evidence';
+    case 'crm':
+      return 'CRM';
     case 'notes':
       return 'Notes';
     case 'task':
@@ -233,21 +254,68 @@ export function askSourceChip(id: AskSourceId): AskSourceChip {
       return { id, label, section: 'videos' };
     case 'evidence':
       return { id, label, section: 'evidence' };
+    case 'crm':
+      return { id, label, section: 'setup' };
     default:
       return { id, label, section: 'setup' };
   }
 }
 
+export function parseAskWebTrailer(raw: string): AskWebCitation[] {
+  const match = trim(raw).match(WEB_TRAILER_RE);
+  if (!match) return [];
+  const out: AskWebCitation[] = [];
+  const blob = match[1] ?? '';
+  const pairRe = /([^|,][^|]*?)\|(https?:\/\/[^,\s⟧]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = pairRe.exec(blob)) !== null) {
+    const title = trim(m[1]);
+    const url = trim(m[2]);
+    if (!title || !url) continue;
+    if (out.some((c) => c.url === url)) continue;
+    out.push({ title: title.slice(0, 120), url: url.slice(0, 500) });
+  }
+  return out;
+}
+
+
+export function parseAskActionsTrailer(raw: string): AskActionChip[] {
+  const match = trim(raw).match(ACTIONS_TRAILER_RE);
+  if (!match) return [];
+  const out: AskActionChip[] = [];
+  for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
+    const [tool, label, section, path] = part.split('|');
+    if (!trim(tool) || !trim(label)) continue;
+    out.push({
+      tool: trim(tool),
+      label: trim(label).slice(0, 120),
+      section: trim(section) || undefined,
+      path: trim(path) || undefined,
+    });
+  }
+  return out;
+}
+
 /**
- * Pull structured / legacy sources out of an Ask answer for chip rendering.
- * Body text no longer contains "(Source: …)" or the machine trailer.
+ * Pull structured / legacy sources and optional web citations out of an Ask
+ * answer for chip rendering. Body text no longer contains "(Source: …)" or
+ * the machine trailers.
  */
-export function extractAskSources(answer: string): { body: string; sources: AskSourceChip[] } {
+export function extractAskSources(answer: string): {
+  body: string;
+  sources: AskSourceChip[];
+  webSources: AskWebCitation[];
+  actions: AskActionChip[];
+} {
   let text = String(answer ?? '');
   const ids: AskSourceId[] = [];
+  const webSources = parseAskWebTrailer(text);
+  const actions = parseAskActionsTrailer(text);
 
   for (const id of parseTrailerIds(text)) pushUnique(ids, id);
   text = text.replace(SOURCE_TRAILER_RE, '').trimEnd();
+  text = text.replace(WEB_TRAILER_RE, '').trimEnd();
+  text = text.replace(ACTIONS_TRAILER_RE, '').trimEnd();
 
   text = text.replace(LEGACY_SOURCE_RE, (_full, blob: string) => {
     for (const id of parseLegacySourceBlob(blob)) pushUnique(ids, id);
@@ -260,5 +328,5 @@ export function extractAskSources(answer: string): { body: string; sources: AskS
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 
-  return { body: text, sources: ids.map(askSourceChip) };
+  return { body: text, sources: ids.map(askSourceChip), webSources, actions };
 }
