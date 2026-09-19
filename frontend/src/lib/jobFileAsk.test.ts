@@ -58,6 +58,10 @@ describe('jobFilePath', () => {
       '/job-progress?job=job-1038&title=Cedar+Ridge',
     );
   });
+
+  it('can open Ask first for Field Capture / emailed Ask links (?ask=1)', () => {
+    expect(jobFilePath('job-1038', { ask: true })).toBe('/job-progress?job=job-1038&ask=1');
+  });
 });
 
 describe('sharedJobsRedirectTo', () => {

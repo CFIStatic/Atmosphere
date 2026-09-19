@@ -437,6 +437,37 @@
     row.hidden = false;
   }
 
+  /**
+   * Signed-in Field Capture: open Platform Ask for the selected office job.
+   * No separate FC chat UI — JobAskPanel in the iframe hits the same
+   * /api/operations/shared/:jobId/proof/ask path (web search + CRM tools).
+   */
+  function paintJobAskLink(jobId) {
+    var row = $('#job-ask-link');
+    var href = $('#job-ask-href');
+    if (!row || !href) return;
+    var id = String(jobId || '').trim();
+    var usable =
+      !LIVE &&
+      state.account &&
+      id &&
+      !(Core.isLocalJobId && Core.isLocalJobId(id));
+    if (!usable) {
+      row.hidden = true;
+      href.removeAttribute('href');
+      return;
+    }
+    var path = Core.jobAskPlatformPath
+      ? Core.jobAskPlatformPath(id)
+      : '/job-progress?job=' + encodeURIComponent(id) + '&ask=1';
+    href.href = Core.resolveOfficePlatformHref
+      ? Core.resolveOfficePlatformHref(path)
+      : path;
+    href.removeAttribute('target');
+    href.rel = 'noopener noreferrer';
+    row.hidden = false;
+  }
+
   function bindJobSearch() {
     var input = $('#job-search');
     if (!input || input.getAttribute('data-bound') === '1') return;
@@ -999,9 +1030,11 @@
       row.addEventListener('click', function () {
         state.activeJobId = row.getAttribute('data-job-id');
         renderExpect();
+        paintJobAskLink(state.activeJobId);
         when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
       });
     });
+    paintJobAskLink(state.activeJobId);
   }
 
   function escapeHtml(s) {
@@ -1041,6 +1074,7 @@
     ]);
     showJobAdd(false);
     paintJobFileLink(sharePath);
+    paintJobAskLink(null);
     setStatus('Ready — film here, or open the job file for scope and recordings.');
     when('#daybtn', function (btn) { btn.disabled = false; });
     state.owner = 'share:' + ((payload.job && payload.job.id) || 'job');
@@ -1103,6 +1137,7 @@
     showFieldAccount(false);
     showJobAdd(false);
     paintJobFileLink('');
+    paintJobAskLink(state.activeJobId);
     showBlockedMsg('');
     /* Days saved on this phone are the reason to sign back in. */
     if (filmQueue) paintFiling(filmQueue.films(), 'blocked');
@@ -2451,6 +2486,7 @@
   }
 
   var warmPlatformFrame = function () {};
+  var openPlatformAskJob = function (_jobId) {};
   var notifyOfficeLibraryChanged = function () {};
 
   /* ---------- wire ---------- */
@@ -2587,6 +2623,28 @@
       show('s-platform');
       postFieldSession();
       notifyOfficeLibraryChanged();
+    }
+
+    openPlatformAskJob = function (jobId) {
+      var id = String(jobId || state.activeJobId || '').trim();
+      if (!id || (Core.isLocalJobId && Core.isLocalJobId(id))) return;
+      var path = Core.jobAskPlatformPath
+        ? Core.jobAskPlatformPath(id)
+        : '/job-progress?job=' + encodeURIComponent(id) + '&ask=1';
+      openPlatformInFrame(path);
+    };
+
+    var askHref = document.getElementById('job-ask-href');
+    if (askHref && askHref.getAttribute('data-bound') !== '1') {
+      askHref.setAttribute('data-bound', '1');
+      askHref.addEventListener('click', function (event) {
+        event.preventDefault();
+        var blocked = document.getElementById('s-blocked');
+        if (blocked && blocked.getAttribute('data-on') === '1') return;
+        var terms = document.getElementById('s-terms');
+        if (terms && terms.getAttribute('data-on') === '1') return;
+        openPlatformAskJob(state.activeJobId);
+      });
     }
 
     function signOutFieldAccount() {

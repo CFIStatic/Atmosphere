@@ -118,6 +118,8 @@ export function SharedDashboardPage() {
   const requestedJob = searchParams.get('job');
   const requestedTitle = searchParams.get('title');
   const requestedNumber = searchParams.get('number');
+  /** Field Capture / emailed Ask links open the Ask tab (?ask=1). */
+  const openAsk = searchParams.get('ask') === '1';
   const parsedNumber =
     requestedNumber != null && requestedNumber !== '' ? Number(requestedNumber) : null;
   const jobNumberHint = Number.isFinite(parsedNumber) ? parsedNumber : null;
@@ -185,6 +187,7 @@ export function SharedDashboardPage() {
       const next: Record<string, string> = jobId ? { job: jobId } : {};
       if (requestedTitle) next.title = requestedTitle;
       if (requestedNumber) next.number = requestedNumber;
+      if (openAsk) next.ask = '1';
       setSearchParams(next, {
         replace: true,
         state: location.state,
@@ -486,6 +489,7 @@ export function SharedDashboardPage() {
   return (
     <JobFileAskChrome
       jobId={jobId}
+      initialPane={openAsk ? 'ask' : 'file'}
       extra={
         shareFormOpen && record ? (
           <ShareJobProgressPanel

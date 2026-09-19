@@ -9,12 +9,13 @@ import type {
 /** Office path for the job file — briefs, proofs, invites, readiness. */
 export function jobFilePath(
   jobId: string,
-  extra?: { title?: string; number?: string | number | null },
+  extra?: { title?: string; number?: string | number | null; ask?: boolean },
 ): string {
   const params = new URLSearchParams();
   params.set('job', jobId);
   if (extra?.title) params.set('title', extra.title);
   if (extra?.number != null && extra.number !== '') params.set('number', String(extra.number));
+  if (extra?.ask) params.set('ask', '1');
   return `/job-progress?${params.toString()}`;
 }
 
