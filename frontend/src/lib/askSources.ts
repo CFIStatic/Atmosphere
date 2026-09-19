@@ -20,6 +20,7 @@ export type AskSourceId =
   | 'document'
   | 'videos'
   | 'evidence'
+  | 'crm'
   | `clip:${string}`;
 
 export type AskSourceChip = {
@@ -73,6 +74,7 @@ const KNOWN = new Set<string>([
   'document',
   'videos',
   'evidence',
+  'crm',
 ]);
 
 function trim(value: unknown): string {
@@ -116,6 +118,7 @@ export function mapAskSourceFragment(raw: string): AskSourceId | null {
   if (/^memory$|^recent\s+record$/.test(lower)) return 'memory';
   if (/^documents?$|^uploaded/.test(lower)) return 'document';
   if (/^claim$/.test(lower)) return 'claim';
+  if (/^crm$|\b(jobnimbus|acculynx|salesforce|servicetitan)\b/.test(lower)) return 'crm';
   if (/^policy$/.test(lower)) return 'policy';
   if (/^job(\s+(setup|identity|file))?$/.test(lower) || /^description$|^schedule$/.test(lower)) {
     return 'job';
@@ -198,6 +201,8 @@ export function askSourceLabel(id: AskSourceId): string {
       return 'Videos';
     case 'evidence':
       return 'Evidence';
+    case 'crm':
+      return 'CRM';
     case 'notes':
       return 'Notes';
     case 'task':
@@ -249,6 +254,8 @@ export function askSourceChip(id: AskSourceId): AskSourceChip {
       return { id, label, section: 'videos' };
     case 'evidence':
       return { id, label, section: 'evidence' };
+    case 'crm':
+      return { id, label, section: 'setup' };
     default:
       return { id, label, section: 'setup' };
   }

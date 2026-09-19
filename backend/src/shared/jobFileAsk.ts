@@ -506,6 +506,8 @@ export async function answerFromJobFile(input: {
           ? { query: input.question }
           : name === 'find_evidence_moments'
             ? { topic: input.question }
+            : name === 'search_crm'
+              ? { query: input.question }
             : name === 'update_job_fields'
               ? parseJobFieldUpdatesFromQuestion(input.question)
               : name === 'propose_revoke_access'
@@ -534,7 +536,7 @@ export async function answerFromJobFile(input: {
   // polish when a key is configured, but skip the grounded fast-path so updates
   // are not ignored.
   const toolsHandled =
-    toolResults.some((r) => r.ok && ['update_job_fields', 'get_job_fields', 'get_job_status', 'list_who_has_access', 'get_punch_list', 'get_claim_ready_summary', 'propose_revoke_access', 'draft_progress_share_copy', 'draft_field_invite_copy'].includes(r.tool));
+    toolResults.some((r) => r.ok && ['update_job_fields', 'get_job_fields', 'get_job_status', 'get_crm_record', 'search_crm', 'list_who_has_access', 'get_punch_list', 'get_claim_ready_summary', 'propose_revoke_access', 'draft_progress_share_copy', 'draft_field_invite_copy'].includes(r.tool));
 
   if (
     !toolsHandled &&

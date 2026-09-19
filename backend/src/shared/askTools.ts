@@ -16,6 +16,11 @@ import {
 import type { JobFileAskContext } from './jobFileAsk.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { requireAdmin } from '../lib/scopedAdmin.js';
+import {
+  getAskCrmRecord,
+  searchAskCrm,
+  summarizeAskCrmRecord,
+} from './askCrm.js';
 
 export type AskAccessRole = 'org' | 'viewer';
 
@@ -61,6 +66,8 @@ export type AskToolName =
   | 'get_job_status'
   | 'get_job_fields'
   | 'update_job_fields'
+  | 'get_crm_record'
+  | 'search_crm'
   | 'list_who_has_access'
   | 'get_punch_list'
   | 'get_claim_ready_summary'
@@ -130,6 +137,35 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
         address: { type: 'string', description: 'Site street address (updates the linked property).' },
         note: { type: 'string', description: 'Note body to append on the job file (not email).' },
       },
+    },
+  },
+  {
+    name: 'get_crm_record',
+    description:
+      'Pull claim, contact, and job fields from the connected CRM (JobNimbus, AccuLynx, Salesforce, ServiceTitan) plus Atmosphere-native fields for this job. Soft-fails with Atmosphere fields only when no external CRM is connected. Cite CRM as a source when used.',
+    audience: 'both',
+    input_schema: {
+      type: 'object',
+      properties: {
+        focus: {
+          type: 'string',
+          description: 'Optional focus: claim | contact | job | all (default all).',
+        },
+      },
+    },
+  },
+  {
+    name: 'search_crm',
+    description:
+      'Search connected CRM / Atmosphere records for a claim, contact, or job by name, email, phone, or claim number. Soft-fails to Atmosphere-native search when no external CRM is connected.',
+    audience: 'org',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search text (claim #, person name, email, phone, job title).' },
+        limit: { type: 'number', description: 'Max hits (default 8).' },
+      },
+      required: ['query'],
     },
   },
   {
@@ -268,6 +304,18 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   }
   if (/revoke|remove access|cut off access/.test(q)) {
     add('propose_revoke_access');
+  }
+  if (
+    /\b(crm|jobnimbus|acculynx|salesforce|servicetitan|in (the )?crm|from (the )?crm)\b/.test(q) ||
+    /\b(claim|contact|insured|homeowner)\b/.test(q) && /\b(crm|jobnimbus|acculynx|salesforce|servicetitan)\b/.test(q)
+  ) {
+    add('get_crm_record');
+  }
+  if (
+    /\b(search|find|look up|lookup)\b/.test(q) &&
+    /\b(crm|jobnimbus|acculynx|salesforce|servicetitan|contact|claim)\b/.test(q)
+  ) {
+    add('search_crm');
   }
   if (
     /\b(irc|ibc|nec|code|manufacturer|product spec|how (do|to)|standard)\b/i.test(q) ||
@@ -581,6 +629,72 @@ export async function executeAskTool(
           summary: `Updated ${changed.join(', ')} on this Atmosphere job file (not emailed; not pushed to external CRM).`,
           data: { changed, ...data },
           ui: { section: note && !title && !claimNumber && !address ? 'brief' : 'setup' },
+        };
+      }
+
+
+      case 'get_crm_record': {
+        const record = await getAskCrmRecord({
+          supabase: ctx.supabase,
+          orgId: ctx.orgId,
+          jobId: ctx.jobId,
+          addressHint: ctx.address ?? null,
+        });
+        const focus = trim(input.focus).toLowerCase();
+        let data: Record<string, unknown> = { ...record };
+        if (focus === 'claim') {
+          data = {
+            claimNumber: record.claimNumber,
+            policyNumber: record.policyNumber,
+            softFail: record.softFail,
+            connectedProviders: record.connectedProviders,
+          };
+        } else if (focus === 'contact') {
+          data = {
+            contact: record.contact,
+            softFail: record.softFail,
+            connectedProviders: record.connectedProviders,
+          };
+        } else if (focus === 'job') {
+          data = {
+            title: record.title,
+            status: record.status,
+            jobNumber: record.jobNumber,
+            address: record.address,
+            softFail: record.softFail,
+            connectedProviders: record.connectedProviders,
+          };
+        }
+        return {
+          ok: true,
+          tool: name,
+          summary: summarizeAskCrmRecord(record),
+          data,
+          ui: { section: 'setup', path: '/crm' },
+        };
+      }
+
+      case 'search_crm': {
+        const query = trim(input.query) || trim(input.q);
+        if (!query) {
+          return { ok: false, tool: name, summary: 'Missing CRM search query.' };
+        }
+        const limit = Number(input.limit);
+        const result = await searchAskCrm({
+          supabase: ctx.supabase,
+          orgId: ctx.orgId,
+          query,
+          limit: Number.isFinite(limit) ? limit : 8,
+        });
+        const summary = result.hits.length
+          ? `Found ${result.hits.length} CRM hit(s) for “${query.slice(0, 60)}”.${result.softFail ? ' ' + result.softFail : ''}`
+          : `No CRM hits for “${query.slice(0, 60)}”.${result.softFail ? ' ' + result.softFail : ''}`;
+        return {
+          ok: true,
+          tool: name,
+          summary,
+          data: result,
+          ui: { section: 'setup', path: '/crm' },
         };
       }
 

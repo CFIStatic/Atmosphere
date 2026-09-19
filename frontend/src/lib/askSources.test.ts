@@ -68,4 +68,13 @@ describe('askSources', () => {
     expect(actions[0]?.tool).toBe('update_job_fields');
     expect(actions[0]?.section).toBe('setup');
   });
+
+  it('cites CRM trailers as CRM source chips', () => {
+    const { body, sources } = extractAskSources(
+      'Claim CLM-9 is on the JobNimbus file.\n\n⟦sources: crm, claim⟧',
+    );
+    expect(body).toBe('Claim CLM-9 is on the JobNimbus file.');
+    expect(sources.map((s) => s.label)).toEqual(['CRM', 'Claim']);
+  });
+
 });
