@@ -73,7 +73,7 @@ test('getAskCrmRecord soft-fails when no external CRM is connected but returns A
   assert.equal(record.address, '12 Main St');
   assert.match(String(record.softFail), /No external CRM connected/i);
   assert.match(summarizeAskCrmRecord(record), /CLM-9/);
-  assert.match(summarizeAskCrmRecord(record), /Connect CRM/i);
+  assert.match(summarizeAskCrmRecord(record), /Settings → Connect|Connect/i);
 });
 
 test('searchAskCrm soft-fails to Atmosphere-native search', async () => {
