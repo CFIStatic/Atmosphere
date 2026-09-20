@@ -77,4 +77,47 @@ describe('askSources', () => {
     expect(sources.map((s) => s.label)).toEqual(['CRM', 'Claim']);
   });
 
+
+  it('strips ASCII [[web:…]] trailers from display prose', () => {
+    const { body, webSources } = extractAskSources(
+      'Would you like to search the web?[[web: Google|https://www.google.com/xhtml/search, Google Search|https://search.google/]]',
+    );
+    expect(body).toBe('Would you like to search the web?');
+    expect(body).not.toMatch(/\[\[web:/i);
+    expect(body).not.toMatch(/google\.com/i);
+    // Google homepage junk is filtered from chips
+    expect(webSources).toEqual([]);
+  });
+
+  it('still parses unicode ⟦web:…⟧ trailers into chips', () => {
+    const { body, webSources } = extractAskSources(
+      'IRC R905 covers underlayment.\n\n⟦web: IRC R905|https://codes.iccsafe.org/r905⟧',
+    );
+    expect(body).toBe('IRC R905 covers underlayment.');
+    expect(webSources).toEqual([
+      { title: 'IRC R905', url: 'https://codes.iccsafe.org/r905' },
+    ]);
+  });
+
+  it('strips mixed mid-sentence web trailers without leaving junk', () => {
+    const { body } = extractAskSources(
+      'Yes, I can search.[web: How to search Google|https://www.wikihow.com/Search-Google]',
+    );
+    expect(body).toBe('Yes, I can search.');
+    expect(body).not.toMatch(/web:/i);
+  });
+
+  // Exact junk trailer from live user screenshot after “can you search google”
+  it('strips exact screenshot [web:…] google/wikihow junk trailer', () => {
+    const junk =
+      '[web: Google|https://www.google.com/xhtml/search, Google Search - A new kind of help|https://search.google/, How to Search Google: Basic Advanced & AI Options|https://www.wikihow.com/Search-Google]';
+    const { body, webSources } = extractAskSources(
+      `Yes — I can search the public web when you need it.${junk}`,
+    );
+    expect(body).toBe('Yes — I can search the public web when you need it.');
+    expect(body).not.toMatch(/\[web:/i);
+    expect(body).not.toMatch(/google\.com|search\.google|wikihow/i);
+    expect(webSources).toEqual([]);
+  });
+
 });

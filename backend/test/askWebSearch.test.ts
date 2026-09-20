@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ASK_WEB_FORMAT_RULES,
   askWebCapabilityRules,
   askWebSearchBlockedReason,
   askWebSearchProvider,
@@ -8,9 +9,13 @@ import {
   formatWebTrailer,
   geminiWebSearchModel,
   isAskWebSearchConfigured,
+  filterLowValueWebCitations,
+  isLowValueWebCitation,
   looksLikeOutsideKnowledgeAsk,
+  looksLikePureWebCapabilityAsk,
   looksLikeWebCapabilityAsk,
   normalizeAskWebCitations,
+  professionalWebCapabilityAnswer,
   parseDuckDuckGoHtml,
   parseGeminiAskWebHitsJson,
   parseWebTrailer,
@@ -18,6 +23,7 @@ import {
   searchAskWeb,
   shouldSearchAskWeb,
   shouldSupplementWithWebSearch,
+  stripWebTrailer,
   unwrapDuckDuckGoUrl,
 } from '../src/shared/askWebSearch.js';
 
@@ -154,20 +160,22 @@ test('shouldSupplementWithWebSearch when key is set for code questions', async (
         shouldSupplementWithWebSearch('who is this child in the photo', 'This job file does not have that.'),
         false,
       );
+      // Pure capability — answer yes from rules; do not fetch google.com junk
       assert.equal(
         shouldSearchAskWeb('are you connected to the internet', 'This job file does not have that.'),
-        true,
-      );
-      assert.equal(
-        shouldSupplementWithWebSearch('search the web for tile prices', 'brief · Carrier approved deck.'),
-        true,
+        false,
       );
       assert.equal(
         shouldSupplementWithWebSearch('can u search google', 'brief · Carrier approved deck.'),
-        true,
+        false,
       );
       assert.equal(
         shouldSupplementWithWebSearch('what can you search for', 'brief · Carrier approved deck.'),
+        false,
+      );
+      // Topical web intents still search
+      assert.equal(
+        shouldSupplementWithWebSearch('search the web for tile prices', 'brief · Carrier approved deck.'),
         true,
       );
       assert.equal(
@@ -676,6 +684,184 @@ test('searchAskWeb Gemini empty-title grounding uses hostname fallback', async (
       assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
       assert.equal(hits[0]?.title, 'codes.iccsafe.org');
       assert.match(hits[0]?.snippet ?? '', /Asphalt shingle/i);
+    },
+  );
+});
+
+test('looksLikePureWebCapabilityAsk distinguishes capability-only from topical search', () => {
+  assert.equal(looksLikePureWebCapabilityAsk('can you search the web?'), true);
+  assert.equal(looksLikePureWebCapabilityAsk('can u search google'), true);
+  assert.equal(looksLikePureWebCapabilityAsk('are you connected to the internet'), true);
+  assert.equal(looksLikePureWebCapabilityAsk('what can you search for'), true);
+  assert.equal(looksLikePureWebCapabilityAsk('search the web for tile prices'), false);
+  assert.equal(looksLikePureWebCapabilityAsk('google tile prices'), false);
+  assert.equal(looksLikePureWebCapabilityAsk('look up shingle prices online'), false);
+});
+
+test('parseWebTrailer and stripWebTrailer handle ASCII [[web:…]]', () => {
+  const raw =
+    'Would you like to search the web?[[web: Google|https://www.google.com/xhtml/search, Google Search|https://search.google/]]';
+  const parsed = parseWebTrailer(raw);
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0]?.url, 'https://www.google.com/xhtml/search');
+  const stripped = stripWebTrailer(raw);
+  assert.equal(stripped, 'Would you like to search the web?');
+  assert.doesNotMatch(stripped, /\[\[web:/i);
+});
+
+// Exact junk trailer from live user screenshot after “can you search google”
+test('stripWebTrailer removes exact screenshot [web:…] google/wikihow junk', () => {
+  const junk =
+    '[web: Google|https://www.google.com/xhtml/search, Google Search - A new kind of help|https://search.google/, How to Search Google: Basic Advanced & AI Options|https://www.wikihow.com/Search-Google]';
+  const raw = `Yes — I can search the public web when you need it.${junk}`;
+  const parsed = parseWebTrailer(raw);
+  assert.equal(parsed.length, 3);
+  assert.equal(parsed[0]?.url, 'https://www.google.com/xhtml/search');
+  assert.equal(parsed[1]?.url, 'https://search.google/');
+  assert.equal(parsed[2]?.url, 'https://www.wikihow.com/Search-Google');
+  const stripped = stripWebTrailer(raw);
+  assert.equal(stripped, 'Yes — I can search the public web when you need it.');
+  assert.doesNotMatch(stripped, /\[web:/i);
+  assert.doesNotMatch(stripped, /google\.com|search\.google|wikihow/i);
+
+  const normalized = normalizeAskWebCitations(raw, parsed, {
+    question: 'can you search google',
+  });
+  assert.equal(normalized, 'Yes — I can search the public web when you need it.');
+  assert.doesNotMatch(normalized, /web:/i);
+});
+
+test('isLowValueWebCitation flags google homepage and how-to-search junk', () => {
+  assert.equal(
+    isLowValueWebCitation({ title: 'Google', url: 'https://www.google.com/xhtml/search' }),
+    true,
+  );
+  assert.equal(
+    isLowValueWebCitation({ title: 'Google Search', url: 'https://search.google/' }),
+    true,
+  );
+  assert.equal(
+    isLowValueWebCitation({
+      title: 'How to Search Google',
+      url: 'https://www.wikihow.com/Search-Google',
+    }),
+    true,
+  );
+  assert.equal(
+    isLowValueWebCitation({ title: 'IRC R905', url: 'https://codes.iccsafe.org/r905' }),
+    false,
+  );
+  const filtered = filterLowValueWebCitations([
+    { title: 'Google', url: 'https://www.google.com/', snippet: '' },
+    { title: 'IRC R905', url: 'https://codes.iccsafe.org/r905', snippet: '' },
+  ]);
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]?.url, 'https://codes.iccsafe.org/r905');
+});
+
+test('normalizeAskWebCitations strips ASCII trailer and skips capability junk', () => {
+  const junk = [
+    {
+      title: 'Google',
+      url: 'https://www.google.com/xhtml/search',
+      snippet: 'Search',
+    },
+    {
+      title: 'Google Search',
+      url: 'https://search.google/',
+      snippet: 'Search',
+    },
+  ];
+  const capability = normalizeAskWebCitations(
+    'Yes, I can search the public web.[[web: Google|https://www.google.com/xhtml/search]]',
+    junk,
+    { question: 'can you search the web?' },
+  );
+  assert.equal(capability, 'Yes, I can search the public web.');
+  assert.doesNotMatch(capability, /web:/i);
+  assert.doesNotMatch(capability, /google\.com/i);
+
+  const topical = normalizeAskWebCitations(
+    'Tile runs about $2–$8/sq ft.\n\n⟦web: Tile prices|https://www.homedepot.com/tile, Google|https://www.google.com/⟧',
+    [
+      {
+        title: 'Tile prices',
+        url: 'https://www.homedepot.com/tile',
+        snippet: 'Tile',
+      },
+      {
+        title: 'Google',
+        url: 'https://www.google.com/',
+        snippet: '',
+      },
+    ],
+    { question: 'search the web for tile prices' },
+  );
+  assert.match(topical, /⟦web: Tile prices\|https:\/\/www\.homedepot\.com\/tile⟧/);
+  assert.doesNotMatch(topical, /google\.com/);
+  assert.doesNotMatch(topical, /\[\[web:/);
+});
+
+test('askWebCapabilityRules and format rules forbid ASCII [[web:', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      const rules = askWebCapabilityRules();
+      assert.match(rules, /Do NOT append a ⟦web:/i);
+      assert.match(rules, /Never write ASCII \[\[web:/i);
+      assert.match(ASK_WEB_FORMAT_RULES, /Never write ASCII \[\[web:/i);
+      assert.match(ASK_WEB_FORMAT_RULES, /OWN line/i);
+    },
+  );
+});
+
+test('professionalWebCapabilityAnswer is a short yes without citations', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      const yes = professionalWebCapabilityAnswer('can you search google?');
+      assert.match(yes, /^Yes/i);
+      assert.doesNotMatch(yes, /web:/i);
+      assert.doesNotMatch(yes, /google\.com/i);
+      assert.doesNotMatch(yes, /\*/);
+      assert.ok(yes.split(/[.!?]/).filter((s) => s.trim()).length <= 4);
+
+      const what = professionalWebCapabilityAnswer('what can you search for');
+      assert.match(what, /codes|products|prices/i);
+      assert.doesNotMatch(what, /\[\[web:/i);
+    },
+  );
+
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      ASK_WEB_SEARCH_PROVIDER: 'off',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      const offline = professionalWebCapabilityAnswer('can you search the web?');
+      assert.match(offline, /not configured|job file/i);
+      assert.doesNotMatch(offline, /web:/i);
     },
   );
 });
