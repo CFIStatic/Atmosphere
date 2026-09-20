@@ -143,9 +143,11 @@
     background: var(--panel);
     position: sticky; top: 0; z-index: 40;
   }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15.5px; letter-spacing: -0.02em; color: var(--ink); }
+  /* Wordmark baseline on orange bar bottom (matches Platform Logo.tsx). */
+  .brand { display: flex; align-items: flex-end; gap: 9px; font-weight: 800; font-size: 15.5px; letter-spacing: -0.02em; line-height: 1; color: var(--ink); }
+  .brand > span { transform: translateY(4px); }
   .brand svg { display: block; color: var(--ink); }
-  .brand .sub { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 2px; }
+  .brand .sub { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 2px; align-self: center; line-height: 1; }
   .who-wrap { margin-left: auto; position: relative; }
   .who {
     display: flex; align-items: center; gap: 9px;
