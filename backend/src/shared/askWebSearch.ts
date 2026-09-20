@@ -5,12 +5,17 @@
  * only for outside knowledge: codes, products, manufacturers, standards, and
  * general how-to. Soft-fails when no provider key is configured.
  *
+ * Providers: Brave / Serper / Tavily search APIs, or Gemini Google Search
+ * grounding via GEMINI_API_KEY (auto-detected when dedicated search keys are
+ * absent). Honor ASK_WEB_SEARCH_PROVIDER=gemini|brave|serper|tavily|off.
+ *
  * Privacy: never reverse-image-search; never identify children; never identify
  * private job-site people from photos/video. Search queries are sanitized so
  * lockbox codes, claim numbers, and street addresses are not sent upstream.
  */
 
 import { logger } from '../lib/logger.js';
+import { googleVisionApiKey } from '../lib/visionProvider.js';
 
 export type AskWebHit = {
   title: string;
@@ -18,7 +23,7 @@ export type AskWebHit = {
   snippet: string;
 };
 
-export type AskWebSearchProvider = 'brave' | 'serper' | 'tavily';
+export type AskWebSearchProvider = 'brave' | 'serper' | 'tavily' | 'gemini';
 
 const WEB_TRAILER_RE = /(?:\n|^)\s*⟦web:\s*([^⟧]+)⟧\s*/i;
 
@@ -38,18 +43,28 @@ function trim(value: unknown): string {
 export function askWebSearchProvider(): AskWebSearchProvider | null {
   const forced = trim(process.env.ASK_WEB_SEARCH_PROVIDER).toLowerCase();
   if (forced === 'off' || forced === 'none' || forced === 'false') return null;
-  if (forced === 'brave' || forced === 'serper' || forced === 'tavily') {
+  if (
+    forced === 'brave' ||
+    forced === 'serper' ||
+    forced === 'tavily' ||
+    forced === 'gemini'
+  ) {
     return forced;
   }
-  // Auto-detect from whichever key is present (Brave preferred when generic key only).
+  // Auto-detect: dedicated search keys first, then Gemini Google Search grounding
+  // (GEMINI_API_KEY / usable GOOGLE generative key already on Railway).
   if (trim(process.env.BRAVE_SEARCH_API_KEY)) return 'brave';
   if (trim(process.env.SERPER_API_KEY)) return 'serper';
   if (trim(process.env.TAVILY_API_KEY)) return 'tavily';
   if (trim(process.env.ASK_WEB_SEARCH_API_KEY)) return 'brave';
+  if (googleVisionApiKey()) return 'gemini';
   return null;
 }
 
 export function askWebSearchApiKey(provider: AskWebSearchProvider = askWebSearchProvider() ?? 'brave'): string {
+  if (provider === 'gemini') {
+    return googleVisionApiKey();
+  }
   const generic = trim(process.env.ASK_WEB_SEARCH_API_KEY);
   if (provider === 'brave') {
     return trim(process.env.BRAVE_SEARCH_API_KEY) || generic;
@@ -64,6 +79,19 @@ export function isAskWebSearchConfigured(): boolean {
   const provider = askWebSearchProvider();
   if (!provider) return false;
   return Boolean(askWebSearchApiKey(provider));
+}
+
+/** Prompt rules when web search is wired (Gemini grounding or Brave/Serper/Tavily). */
+export function askWebCapabilityRules(): string {
+  if (isAskWebSearchConfigured()) {
+    return `INTERNET / WEB ACCESS:
+- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, general how-to) when WEB SEARCH RESULTS are provided or the user asks you to search online.
+- Never claim you are offline, not connected to the internet, or unable to search the web.
+- If asked whether you are connected to the internet or can search the web, say yes — you can use the public web for outside knowledge. Job-file evidence still always wins for what happened on this job.
+- Still never reverse-image-search, identify children, or identify private job-site people from photos/video.`;
+  }
+  return `INTERNET / WEB ACCESS:
+- Public web search is not configured in this environment. If asked whether you can search the internet, say you can only use this job file and in-product tools right now — do not invent web results.`;
 }
 
 /**
@@ -98,10 +126,26 @@ export function askWebSearchBlockedReason(question: string): string | null {
   return null;
 }
 
+/** Capability / connectivity asks — trigger search so Ask can prove web access. */
+export function looksLikeWebCapabilityAsk(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
+  return (
+    /\b(connected to (the )?internet|have (internet|web) access|online access)\b/i.test(q) ||
+    /\b(can you|are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)\b/i.test(
+      q,
+    ) ||
+    /\b(search|look\s*(this|it|that)?\s*up|find)\s+(online|on the web|on the internet|via google)\b/i.test(q) ||
+    /\b(look this up online|google (this|that|it)|web search)\b/i.test(q) ||
+    /\bare you (online|offline|connected)\b/i.test(q)
+  );
+}
+
 /** Outside-knowledge asks that benefit from the public web. */
 export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   const q = trim(question);
   if (!q) return false;
+  if (looksLikeWebCapabilityAsk(q)) return true;
   return (
     /\b(IRC|IBC|NEC|IMC|IPC|IECC|ASTM|UL\s*\d|NFPA|OSHA)\b/i.test(q) ||
     /\b(building|electrical|plumbing|mechanical|fire)\s+code\b/i.test(q) ||
@@ -113,6 +157,11 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
     /\b(warranty|standard\s+practice|best\s+practice|code\s+requirement)\b/i.test(q) ||
     /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q)
   );
+}
+
+/** @deprecated alias — prefer shouldSupplementWithWebSearch */
+export function shouldSearchAskWeb(question: string, grounded: string): boolean {
+  return shouldSupplementWithWebSearch(question, grounded);
 }
 
 function groundedMisses(grounded: string): boolean {
@@ -267,6 +316,142 @@ async function searchTavily(
   return hits;
 }
 
+function geminiWebSearchModel(): string {
+  return (
+    process.env.ASK_WEB_SEARCH_MODEL ||
+    process.env.VERIFICATION_PRIMARY_MODEL ||
+    'gemini-2.5-flash'
+  ).trim();
+}
+
+function geminiWebSearchBaseUrl(): string {
+  return (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+}
+
+type GeminiGroundingChunk = {
+  web?: { uri?: string; title?: string; snippet?: string };
+};
+type GeminiGeneratePayload = {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+    groundingMetadata?: {
+      groundingChunks?: GeminiGroundingChunk[];
+      webSearchQueries?: string[];
+    };
+  }>;
+};
+
+/** Parse {"hits":[{title,url,snippet}]} (or a bare array) from model text. */
+export function parseGeminiAskWebHitsJson(raw: string, limit = 5): AskWebHit[] {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return [];
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = (fence?.[1] ?? trimmed).trim();
+  const startObj = body.indexOf('{');
+  const startArr = body.indexOf('[');
+  let data: unknown;
+  try {
+    if (startObj >= 0 && (startArr < 0 || startObj < startArr)) {
+      const end = body.lastIndexOf('}');
+      if (end <= startObj) return [];
+      data = JSON.parse(body.slice(startObj, end + 1));
+    } else if (startArr >= 0) {
+      const end = body.lastIndexOf(']');
+      if (end <= startArr) return [];
+      data = JSON.parse(body.slice(startArr, end + 1));
+    } else {
+      return [];
+    }
+  } catch {
+    return [];
+  }
+  const rows: unknown[] = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { hits?: unknown }).hits)
+      ? ((data as { hits: unknown[] }).hits)
+      : Array.isArray((data as { results?: unknown }).results)
+        ? ((data as { results: unknown[] }).results)
+        : [];
+  const hits: AskWebHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    pushHit(hits, {
+      title: trim(r.title ?? r.name),
+      url: trim(r.url ?? r.link ?? r.uri),
+      snippet: trim(r.snippet ?? r.description ?? r.content ?? ''),
+    });
+    if (hits.length >= limit) break;
+  }
+  return hits;
+}
+
+function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number): AskWebHit[] {
+  const chunks = payload.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const hits: AskWebHit[] = [];
+  for (const chunk of chunks) {
+    const web = chunk.web;
+    if (!web) continue;
+    pushHit(hits, {
+      title: trim(web.title) || trim(web.uri),
+      url: trim(web.uri),
+      snippet: trim(web.snippet),
+    });
+    if (hits.length >= limit) break;
+  }
+  return hits;
+}
+
+/**
+ * Gemini generateContent + Google Search grounding.
+ * Parses groundingMetadata chunks and/or JSON hit lists from model text.
+ */
+async function searchGemini(
+  query: string,
+  apiKey: string,
+  limit: number,
+  fetchFn: typeof fetch,
+): Promise<AskWebHit[]> {
+  const model = geminiWebSearchModel();
+  const url = `${geminiWebSearchBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const system = [
+    'You search the public web and return citation-ready hits.',
+    `Reply JSON only: {"hits":[{"title":"...","url":"https://...","snippet":"..."}]} with up to ${limit} results.`,
+    'Prefer official codes, manufacturer docs, and standards. Never invent URLs.',
+    'Never reverse-image-search or identify private people.',
+  ].join(' ');
+  const body = {
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: `Search the public web for:\n${query}` }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 2048,
+    },
+  };
+  const res = await fetchFn(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    throw new Error(`gemini_search_${res.status}`);
+  }
+  const payload = (await res.json()) as GeminiGeneratePayload;
+  const fromGrounding = hitsFromGeminiGrounding(payload, limit);
+  const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  const fromJson = parseGeminiAskWebHitsJson(text, limit);
+
+  // Prefer grounding URIs (server-attested) and fill gaps from JSON parts.
+  const hits: AskWebHit[] = [];
+  for (const hit of [...fromGrounding, ...fromJson]) {
+    pushHit(hits, hit);
+    if (hits.length >= limit) break;
+  }
+  return hits;
+}
+
 /**
  * Public web search for Ask. Returns [] when unset, blocked, or upstream fails.
  */
@@ -288,7 +473,8 @@ export async function searchAskWeb(
   try {
     if (provider === 'brave') return await searchBrave(query, apiKey, limit, fetchFn);
     if (provider === 'serper') return await searchSerper(query, apiKey, limit, fetchFn);
-    return await searchTavily(query, apiKey, limit, fetchFn);
+    if (provider === 'tavily') return await searchTavily(query, apiKey, limit, fetchFn);
+    return await searchGemini(query, apiKey, limit, fetchFn);
   } catch (err) {
     const detail = (err instanceof Error ? err.message : String(err)).slice(0, 200);
     logger.warn('ask_web_search_failed', { provider, detail });

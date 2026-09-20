@@ -19,6 +19,7 @@ import {
 } from './proofAnalyst.js';
 import {
   ASK_WEB_FORMAT_RULES,
+  askWebCapabilityRules,
   formatAskWebContext,
   normalizeAskWebCitations,
   searchAskWeb,
@@ -581,6 +582,7 @@ export async function answerFromJobFile(input: {
 
   const system =
     FILE_QA_SYSTEM +
+    `\n\n${askWebCapabilityRules()}` +
     (webHits.length ? `\n\n${ASK_WEB_FORMAT_RULES}` : '') +
     (toolResults.length
       ? `\n\nIN-PRODUCT ACTIONS: Tool results below already ran. Summarize what changed or what you found. Never claim you emailed anyone. If a tool needs confirmation, tell the user clearly and do not pretend it already happened. Append ⟦actions: …⟧ only if tools already attached it — the server appends the trailer.`
