@@ -141,20 +141,22 @@ test('preferJobFileGroundedFastPath refuses web / capability / price asks', () =
   assert.equal(preferJobFileGroundedFastPath('how much does tile cost', briefHit), false);
 });
 
-test('pickAskToolsHeuristically always includes web_search for explicit web intents', () => {
-  for (const q of [
-    'search the web for tile prices',
-    'can u search google',
-    'what can you search for',
-    'google IRC R905',
-  ]) {
+test('pickAskToolsHeuristically includes web_search for topical web intents, not capability-only', () => {
+  for (const q of ['search the web for tile prices', 'google IRC R905']) {
     const picks = pickAskToolsHeuristically(q, 'org');
     assert.ok(picks.includes('web_search'), `expected web_search for: ${q} got ${picks.join(',')}`);
     assert.equal(picks[0], 'web_search', `web_search should be first for: ${q}`);
   }
+  for (const q of ['can u search google', 'what can you search for', 'can you search the web?']) {
+    const picks = pickAskToolsHeuristically(q, 'org');
+    assert.ok(
+      !picks.includes('web_search'),
+      `capability-only should not fetch google junk via web_search: ${q} got ${picks.join(',')}`,
+    );
+  }
 });
 
-test('answerFromJobFile runs web search before grounded fast-path for capability asks', async () => {
+test('answerFromJobFile searches topical web asks but skips capability-only', async () => {
   const prev = {
     ASK_WEB_SEARCH_API_KEY: process.env.ASK_WEB_SEARCH_API_KEY,
     ASK_WEB_SEARCH_PROVIDER: process.env.ASK_WEB_SEARCH_PROVIDER,
@@ -176,7 +178,36 @@ test('answerFromJobFile runs web search before grounded fast-path for capability
 
   let searched = false;
   try {
-    for (const question of ['search the web for tile prices', 'can u search google', 'what can you search for']) {
+    // Topical web ask still searches before grounded fast-path
+    searched = false;
+    const topical = await answerFromJobFile({
+      question: 'search the web for tile prices',
+      file,
+      apiKey: null,
+      fetchFn: async () => {
+        searched = true;
+        return new Response(
+          JSON.stringify({
+            web: {
+              results: [
+                {
+                  title: 'Tile price guide',
+                  url: 'https://example.com/tile-prices',
+                  description: 'Average tile prices',
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    });
+    assert.equal(searched, true, 'expected searchAskWeb for topical web ask');
+    assert.ok(topical.webHits.length >= 1, 'expected webHits for topical web ask');
+    assert.equal(topical.webHits[0]?.url, 'https://example.com/tile-prices');
+
+    // Capability-only: no live fetch (avoids google.com homepage junk citations)
+    for (const question of ['can u search google', 'what can you search for']) {
       searched = false;
       const result = await answerFromJobFile({
         question,
@@ -184,26 +215,11 @@ test('answerFromJobFile runs web search before grounded fast-path for capability
         apiKey: null,
         fetchFn: async () => {
           searched = true;
-          return new Response(
-            JSON.stringify({
-              web: {
-                results: [
-                  {
-                    title: 'Tile price guide',
-                    url: 'https://example.com/tile-prices',
-                    description: 'Average tile prices',
-                  },
-                ],
-              },
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          );
+          return new Response('should not run', { status: 500 });
         },
       });
-      assert.equal(searched, true, `expected searchAskWeb for: ${question}`);
-      assert.ok(result.webHits.length >= 1, `expected webHits for: ${question}`);
-      assert.equal(result.webHits[0]?.url, 'https://example.com/tile-prices');
-      // Fast-path would have returned before fetchFn ran — reaching here proves it did not swallow the ask.
+      assert.equal(searched, false, `capability-only must not search: ${question}`);
+      assert.equal(result.webHits.length, 0, `capability-only must not attach webHits: ${question}`);
     }
   } finally {
     for (const [key, value] of Object.entries(prev)) {

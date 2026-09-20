@@ -633,9 +633,10 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
   let answer = normalizeAskProse(completed.text);
-  if (webHits.length) {
-    answer = normalizeAskWebCitations(answer, webHits);
-  }
+  answer = normalizeAskWebCitations(answer, webHits, {
+    question: input.question,
+    attachIfMissing: webHits.length > 0,
+  });
   const actions = formatActionsTrailer(toolResults);
   if (actions && !/⟦actions:/i.test(answer)) {
     answer = `${answer.trimEnd()}\n\n${actions}`;

@@ -27,7 +27,13 @@ export type AskWebHit = {
 
 export type AskWebSearchProvider = 'brave' | 'serper' | 'tavily' | 'gemini';
 
-const WEB_TRAILER_RE = /(?:\n|^)\s*⟦web:\s*([^⟧]+)⟧\s*/i;
+/**
+ * Unicode ⟦web:…⟧ (preferred), ASCII [[web:…]], or single [web:…].
+ * Matches mid-sentence so misbehaved model trailers never stay in prose.
+ */
+const WEB_TRAILER_RE =
+  /(?:⟦\s*web:\s*([^⟧]*)\s*⟧|\[\[\s*web:\s*((?:(?!\]\]).)*)\s*\]\]|\[\s*web:\s*([^\[\]]*)\s*\])/gi;
+const WEB_PAIR_RE = /([^|,][^|]*?)\|(https?:\/\/[^\s,⟧\]]+)/g;
 
 /** Prompt block when web hits were retrieved for this turn. */
 /** Prompt note when live web search ran but returned no usable hits. */
@@ -41,9 +47,10 @@ export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided b
 - Use them ONLY for outside knowledge: building codes, product/manufacturer specs, standards, general how-to.
 - Job-file evidence always wins over the web. Never invent what happened on this job from a webpage.
 - Never reverse-image-search, identify children, or identify private job-site people from photos/video.
-- Do not paste raw URLs in the prose. After the human answer, append one machine line the UI strips:
+- Do not paste raw URLs in the prose. After the human answer, on its OWN line (never mid-sentence / never glued to the last word), append exactly one machine line the UI strips:
   ⟦web: Title One|https://example.com/a, Title Two|https://example.com/b⟧
-- Cite only URLs that appear in WEB SEARCH RESULTS. Skip the web line when you did not use the web.`;
+- Never write ASCII [[web: …]] or [web: …] — only the unicode form ⟦web: …⟧.
+- Cite only URLs that appear in WEB SEARCH RESULTS. Skip the web line when you did not use the web, or when the user only asked whether you can search.`;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -96,8 +103,9 @@ export function askWebCapabilityRules(): string {
     return `INTERNET / WEB ACCESS:
 - You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, prices/costs, general how-to) when WEB SEARCH RESULTS are provided or the user asks you to search online.
 - Never claim you lack a live web search tool, cannot query prices, are offline, not connected to the internet, or unable to search the web.
-- When the user asks to search the web/Google/internet, results are fetched for outside knowledge — say that clearly. Do not hedge that you cannot search.
-- If asked whether you are connected to the internet or can search the web, say yes — you can use the public web for outside knowledge. Job-file evidence still always wins for on-job facts.
+- When the user asks to search the web/Google/internet *for a topic*, results are fetched for outside knowledge — say that clearly. Do not hedge that you cannot search.
+- If asked ONLY whether you are connected to the internet or can search the web/Google (no specific topic), answer briefly yes — Ask can search the public web for outside knowledge; job-file evidence still always wins for on-job facts. Do NOT append a ⟦web: …⟧ trailer and do not cite google.com, search.google, wikiHow "how to search Google", or similar junk.
+- Never write ASCII [[web: …]] — only unicode ⟦web: …⟧ on its own line after the answer when you actually used WEB SEARCH RESULTS.
 - Still never reverse-image-search, identify children, or identify private job-site people from photos/video.`;
   }
   return `INTERNET / WEB ACCESS:
@@ -162,6 +170,74 @@ export function looksLikeWebCapabilityAsk(question: string): boolean {
   );
 }
 
+/**
+ * Capability / connectivity only — no topical "search for X".
+ * These should get a short yes without google.com homepage citations.
+ */
+export function looksLikePureWebCapabilityAsk(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
+  if (!looksLikeWebCapabilityAsk(q)) return false;
+
+  // Connectivity / meta "what can you search"
+  if (
+    /\b(connected to (the )?internet|have (internet|web) access|online access)\b/i.test(q) ||
+    /\bare you (online|offline|connected)\b/i.test(q) ||
+    /\bwhat\s+can\s+you\s+search\b/i.test(q) ||
+    /\bwhat\s+(do|can)\s+you\s+(look\s*up|search\s+for)\b/i.test(q)
+  ) {
+    return true;
+  }
+
+  // "can you search the web/google?" without a real topic after for/about
+  const topic = q.match(
+    /\b(?:search|browse|look\s*up|google|find)\s+(?:the\s+)?(?:web|internet|google|online)?\s*(?:for|about)\s+(.+)$/i,
+  )?.[1];
+  if (topic) {
+    const t = trim(topic).replace(/[?.!]+$/, '');
+    // "for me" / "for us" / "for the web" are not topics
+    if (
+      t &&
+      !/^(me|us|this|that)$/i.test(t) &&
+      !/^(the\s+)?(web|internet|google|online)$/i.test(t)
+    ) {
+      return false;
+    }
+  }
+
+  // "google tile prices" / "search online for shingles" style — has substance after the verb
+  if (/\bgoogle\s+\S+/i.test(q)) {
+    const after = trim(q.replace(/^.*?\bgoogle\s+/i, '')).replace(/[?.!]+$/, '');
+    if (after && !/^(it|this|that|please|now)$/i.test(after)) return false;
+  }
+  if (/\b(find|look\s*up|search).{0,48}\bonline\b/i.test(q) && /\bonline\s+(for|about)\s+\S+/i.test(q)) {
+    return false;
+  }
+  if (/\bsearch\s+(the\s+)?(web|internet|google|online)\s+for\s+\S+/i.test(q)) {
+    const afterFor = trim(q.replace(/^.*?\bfor\s+/i, '')).replace(/[?.!]+$/, '');
+    if (
+      afterFor &&
+      !/^(me|us|this|that)$/i.test(afterFor) &&
+      !/^(the\s+)?(web|internet|google|online)$/i.test(afterFor)
+    ) {
+      return false;
+    }
+  }
+
+  // Bare capability: can/could/are you able / do you + search/google…
+  return (
+    /\b(can|could)\s+(you|u|ya)\s+(search|browse|look\s*up|google|use)\b/i.test(q) ||
+    /\b(are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)?\b/i.test(
+      q,
+    ) ||
+    /\b(search|look\s*(this|it|that)?\s*up|find)\s+(online|on the web|on the internet|via google)\s*[?.!]*$/i.test(
+      q,
+    ) ||
+    /\bweb[\s-]?search\s*[?.!]*$/i.test(q) ||
+    /\bsearch\s+(the\s+)?(web|internet|google|online)\s*[?.!]*$/i.test(q)
+  );
+}
+
 /** Outside-knowledge asks that benefit from the public web. */
 export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   const q = trim(question);
@@ -205,6 +281,9 @@ function groundedMisses(grounded: string): boolean {
 export function shouldSupplementWithWebSearch(question: string, grounded: string): boolean {
   if (askWebSearchBlockedReason(question)) return false;
   if (!isAskWebSearchConfigured()) return false;
+  // Capability-only ("can you search the web?") — answer yes from rules; do not
+  // fetch google.com homepage junk to cite.
+  if (looksLikePureWebCapabilityAsk(question)) return false;
   if (looksLikeOutsideKnowledgeAsk(question)) return true;
   if (
     groundedMisses(grounded) &&
@@ -876,18 +955,87 @@ export function formatWebTrailer(hits: AskWebHit[]): string {
   return `⟦web: ${parts.join(', ')}⟧`;
 }
 
-export function parseWebTrailer(raw: string): AskWebHit[] {
-  const match = trim(raw).match(WEB_TRAILER_RE);
-  if (!match) return [];
+function webTrailerBlobs(raw: string): string[] {
+  const blobs: string[] = [];
+  const re = new RegExp(WEB_TRAILER_RE.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(String(raw ?? ''))) !== null) {
+    const blob = m[1] ?? m[2] ?? m[3] ?? '';
+    if (trim(blob)) blobs.push(blob);
+  }
+  return blobs;
+}
+
+function parseWebCitationBlob(blob: string): AskWebHit[] {
   const hits: AskWebHit[] = [];
-  const blob = match[1] ?? '';
-  // Entries are "Title|https://…" — match each title|url pair.
-  const pairRe = /([^|,][^|]*?)\|(https?:\/\/[^,\s⟧]+)/g;
+  const pairRe = new RegExp(WEB_PAIR_RE.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = pairRe.exec(blob)) !== null) {
     pushHit(hits, { title: trim(m[1]), url: trim(m[2]), snippet: '' });
   }
   return hits;
+}
+
+export function parseWebTrailer(raw: string): AskWebHit[] {
+  const hits: AskWebHit[] = [];
+  for (const blob of webTrailerBlobs(raw)) {
+    for (const hit of parseWebCitationBlob(blob)) {
+      pushHit(hits, hit);
+    }
+  }
+  return hits;
+}
+
+/**
+ * Google homepage / search UI and "how to search Google" pages are useless
+ * citations — especially for capability-only asks.
+ */
+export function isLowValueWebCitation(hit: { title?: string; url: string }): boolean {
+  const title = trim(hit.title).toLowerCase();
+  let host = '';
+  let path = '';
+  try {
+    const u = new URL(hit.url);
+    host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    path = (u.pathname || '/').toLowerCase();
+  } catch {
+    return false;
+  }
+
+  const isGoogleSearchUi =
+    host === 'google.com' ||
+    host === 'search.google' ||
+    host === 'search.google.com' ||
+    /^google\.[a-z.]+$/.test(host);
+
+  if (isGoogleSearchUi) {
+    if (
+      host === 'search.google' ||
+      host === 'search.google.com' ||
+      path === '/' ||
+      path === '' ||
+      path.startsWith('/search') ||
+      path.startsWith('/xhtml') ||
+      path.startsWith('/webhp') ||
+      path.startsWith('/url')
+    ) {
+      return true;
+    }
+  }
+
+  if (
+    /^google(\s+search)?$/.test(title) ||
+    /how\s+to\s+(search|use|google)\b/.test(title) ||
+    /search(ing)?\s+(the\s+)?(web|google|internet)\b/.test(title)
+  ) {
+    return true;
+  }
+  if (/wikihow\.com$/i.test(host) && /search|google/i.test(title)) return true;
+  return false;
+}
+
+export function filterLowValueWebCitations<T extends { title?: string; url: string }>(hits: T[]): T[] {
+  return hits.filter((h) => !isLowValueWebCitation(h));
 }
 
 /** Keep only URLs the server actually retrieved (block model-hallucinated links). */
@@ -905,29 +1053,39 @@ export function filterWebHitsToAllowed(cited: AskWebHit[], allowed: AskWebHit[])
 }
 
 /**
- * Strip ⟦web: …⟧ from prose and re-attach a validated trailer.
- * When the model omitted citations but we supplied hits, attach those hits.
+ * Strip any web trailer (unicode or ASCII) from prose and re-attach a validated
+ * unicode trailer. When the model omitted citations but we supplied hits, attach
+ * those hits — except for capability-only asks / low-value google junk.
  */
 export function normalizeAskWebCitations(
   answer: string,
   supplied: AskWebHit[],
-  opts?: { attachIfMissing?: boolean },
+  opts?: { attachIfMissing?: boolean; question?: string },
 ): string {
   let text = String(answer ?? '');
   if (!text) return text;
 
-  const cited = filterWebHitsToAllowed(parseWebTrailer(text), supplied);
-  text = text.replace(WEB_TRAILER_RE, '').trimEnd();
+  const question = opts?.question ?? '';
+  const capabilityOnly = question ? looksLikePureWebCapabilityAsk(question) : false;
+
+  // Drop google homepage / "how to search" junk from citations always.
+  let cited = filterLowValueWebCitations(filterWebHitsToAllowed(parseWebTrailer(text), supplied));
+  const usableSupplied = filterLowValueWebCitations(supplied);
+
+  text = stripWebTrailer(text);
   text = text
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
+  // Capability-only: never leave a web trailer (clean yes; no google.com chips).
+  if (capabilityOnly) return text;
+
   const attach =
     cited.length > 0
       ? cited
-      : opts?.attachIfMissing !== false && supplied.length
-        ? supplied.slice(0, 3)
+      : opts?.attachIfMissing !== false && usableSupplied.length
+        ? usableSupplied.slice(0, 3)
         : [];
 
   // Only auto-attach when the answer looks like it used outside knowledge —
@@ -944,5 +1102,9 @@ export function normalizeAskWebCitations(
 }
 
 export function stripWebTrailer(answer: string): string {
-  return String(answer ?? '').replace(WEB_TRAILER_RE, '').trimEnd();
+  return String(answer ?? '')
+    .replace(new RegExp(WEB_TRAILER_RE.source, 'gi'), '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
 }

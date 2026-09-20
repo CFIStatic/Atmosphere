@@ -53,7 +53,13 @@ export type AskActionChip = {
 };
 
 const SOURCE_TRAILER_RE = /\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
-const WEB_TRAILER_RE = /\s*⟦web:\s*([^⟧]+)⟧\s*/i;
+/**
+ * Unicode ⟦web:…⟧ (preferred), ASCII [[web:…]], or single [web:…].
+ * Matches mid-sentence so misbehaved model trailers never stay in prose.
+ */
+const WEB_TRAILER_RE =
+  /(?:⟦\s*web:\s*([^⟧]*)\s*⟧|\[\[\s*web:\s*((?:(?!\]\]).)*)\s*\]\]|\[\s*web:\s*([^\[\]]*)\s*\])/gi;
+const WEB_PAIR_RE = /([^|,][^|]*?)\|(https?:\/\/[^\s,⟧\]]+)/g;
 const ACTIONS_TRAILER_RE = /\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
@@ -261,12 +267,20 @@ export function askSourceChip(id: AskSourceId): AskSourceChip {
   }
 }
 
-export function parseAskWebTrailer(raw: string): AskWebCitation[] {
-  const match = trim(raw).match(WEB_TRAILER_RE);
-  if (!match) return [];
+function webTrailerBlobs(raw: string): string[] {
+  const blobs: string[] = [];
+  const re = new RegExp(WEB_TRAILER_RE.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    const blob = m[1] ?? m[2] ?? m[3] ?? '';
+    if (trim(blob)) blobs.push(blob);
+  }
+  return blobs;
+}
+
+function parseWebCitationBlob(blob: string): AskWebCitation[] {
   const out: AskWebCitation[] = [];
-  const blob = match[1] ?? '';
-  const pairRe = /([^|,][^|]*?)\|(https?:\/\/[^,\s⟧]+)/g;
+  const pairRe = new RegExp(WEB_PAIR_RE.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = pairRe.exec(blob)) !== null) {
     const title = trim(m[1]);
@@ -276,6 +290,69 @@ export function parseAskWebTrailer(raw: string): AskWebCitation[] {
     out.push({ title: title.slice(0, 120), url: url.slice(0, 500) });
   }
   return out;
+}
+
+/** Google homepage / search UI and "how to search" pages are never useful chips. */
+export function isLowValueWebCitation(hit: { title?: string; url: string }): boolean {
+  const title = trim(hit.title).toLowerCase();
+  let host = '';
+  let path = '';
+  try {
+    const u = new URL(hit.url);
+    host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    path = (u.pathname || '/').toLowerCase();
+  } catch {
+    return false;
+  }
+  const isGoogleSearchUi =
+    host === 'google.com' ||
+    host === 'search.google' ||
+    host === 'search.google.com' ||
+    /^google\.[a-z.]+$/.test(host);
+  if (isGoogleSearchUi) {
+    if (
+      host === 'search.google' ||
+      host === 'search.google.com' ||
+      path === '/' ||
+      path === '' ||
+      path.startsWith('/search') ||
+      path.startsWith('/xhtml') ||
+      path.startsWith('/webhp') ||
+      path.startsWith('/url')
+    ) {
+      return true;
+    }
+  }
+  if (
+    /^google(\s+search)?$/.test(title) ||
+    /how\s+to\s+(search|use|google)\b/.test(title) ||
+    /search(ing)?\s+(the\s+)?(web|google|internet)\b/.test(title)
+  ) {
+    return true;
+  }
+  if (/wikihow\.com$/i.test(host) && /search|google/i.test(title)) return true;
+  return false;
+}
+
+export function parseAskWebTrailer(raw: string): AskWebCitation[] {
+  const out: AskWebCitation[] = [];
+  for (const blob of webTrailerBlobs(raw)) {
+    for (const hit of parseWebCitationBlob(blob)) {
+      if (isLowValueWebCitation(hit)) continue;
+      if (out.some((c) => c.url === hit.url)) continue;
+      out.push(hit);
+    }
+  }
+  return out;
+}
+
+/** Remove any web citation trailer (unicode or ASCII) from displayed prose. */
+export function stripAskWebTrailer(answer: string): string {
+  return String(answer ?? '')
+    .replace(new RegExp(WEB_TRAILER_RE.source, 'gi'), '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
 }
 
 
@@ -314,7 +391,7 @@ export function extractAskSources(answer: string): {
 
   for (const id of parseTrailerIds(text)) pushUnique(ids, id);
   text = text.replace(SOURCE_TRAILER_RE, '').trimEnd();
-  text = text.replace(WEB_TRAILER_RE, '').trimEnd();
+  text = stripAskWebTrailer(text);
   text = text.replace(ACTIONS_TRAILER_RE, '').trimEnd();
 
   text = text.replace(LEGACY_SOURCE_RE, (_full, blob: string) => {
