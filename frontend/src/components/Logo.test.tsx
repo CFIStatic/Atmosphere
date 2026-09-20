@@ -36,8 +36,8 @@ describe('Logo brand mark', () => {
     expect(svg?.getAttribute('width')).toBe('34');
     expect(svg?.getAttribute('height')).toBe('34');
     expect(getByText('Atmosphere').className).toContain('text-[23px]');
-    expect(getByText('Atmosphere').getAttribute('data-word-nudge')).toBe('5');
-    expect(getByText('Atmosphere').getAttribute('style')).toContain('translateY(5px)');
+    expect(getByText('Atmosphere').getAttribute('data-word-nudge')).toBe('3');
+    expect(getByText('Atmosphere').getAttribute('style')).toContain('translateY(3px)');
   });
 
   it('aligns the wordmark baseline to the orange bar bottom', () => {
@@ -45,8 +45,8 @@ describe('Logo brand mark', () => {
     const lockup = container.querySelector('[data-atmosphere-lockup]');
     expect(lockup?.className).toContain('items-end');
     expect(getByText('Atmosphere').className).toContain('leading-none');
-    expect(getByText('Atmosphere').getAttribute('data-word-nudge')).toBe('4');
-    expect(getByText('Atmosphere').getAttribute('style')).toContain('translateY(4px)');
+    expect(getByText('Atmosphere').getAttribute('data-word-nudge')).toBe('2');
+    expect(getByText('Atmosphere').getAttribute('style')).toContain('translateY(2px)');
   });
 
   it('paints ink from the theme token so dark mode is light and light mode is dark', () => {

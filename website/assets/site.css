@@ -134,7 +134,7 @@ a { color: inherit; }
 .wordmark > span,
 .wordmark .wordmark-text {
   /* Match Platform Logo.tsx md word nudge (A baseline on orange bar bottom). */
-  transform: translateY(4px);
+  transform: translateY(2px);
 }
 /* Logo mark: four atmosphere bars fading toward the ground, one orange base.
    Bars are ink at rising opacity, so the one asset matches both brand
