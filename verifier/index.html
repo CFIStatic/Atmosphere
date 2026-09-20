@@ -215,16 +215,20 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  /* The wordmark, identical to the console's and the site's: four bars of ink
-     at rising opacity over one terracotta base. The same asset works on paper
-     and on a dark ground because the bars take their colour from the text. */
+  /* Wordmark: four ink bars + terracotta base. Baseline on orange bar bottom
+     (matches Platform Logo.tsx).
+     #508/#509 only updated React Logo.tsx — the Operations sidebar is this
+     verifier iframe mark (align-items:center, no nudge), which is what users
+     still see floating above the orange bar. */
   .brand {
-    display: flex; align-items: center; gap: 12px;
-    font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--ink);
+    display: flex; align-items: flex-end; gap: 12px;
+    font-weight: 800; font-size: 20px; letter-spacing: -0.02em; line-height: 1; color: var(--ink);
     background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
   }
   .brand:hover { opacity: 0.88; }
   .brand svg { display: block; flex: none; width: 34px; height: 34px; color: var(--ink); }
+  /* Descender on "p" — nudge so capital-A baseline hits orange bottom (measured 3px + hair). */
+  .brand > .brand-word { display: inline-block; line-height: 1; transform: translateY(4px); }
 
   .search { flex: 1; max-width: 598px; position: relative; }
   .search input {
@@ -1829,7 +1833,7 @@
           <rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88" />
           <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
         </svg>
-        <span>Atmosphere</span>
+        <span class="brand-word">Atmosphere</span>
       </button>
     </div>
 
@@ -1876,7 +1880,7 @@
       <rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88" />
       <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
     </svg>
-    <span>Atmosphere</span>
+    <span class="brand-word">Atmosphere</span>
   </button>
   <div class="search">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
