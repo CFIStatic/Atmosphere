@@ -1,10 +1,16 @@
 import { NavLink } from 'react-router-dom';
 import { DASHBOARD_HOME } from '../lib/platforms';
 
-const SIZES = {
-  md: { svg: 28, text: 'text-[21px]', gap: 'gap-3', wordNudge: 'translate-y-[4px]' },
+/** Downward wordmark nudge (px) so the capital-A baseline sits on the orange bar bottom. */
+const WORD_NUDGE_Y = {
+  md: 9,
   /** Full-width auth headers — login, signup, password reset. */
-  lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3', wordNudge: 'translate-y-[5px]' },
+  lg: 11,
+} as const;
+
+const SIZES = {
+  md: { svg: 28, text: 'text-[21px]', gap: 'gap-3' },
+  lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3' },
 } as const;
 
 interface Props {
@@ -32,9 +38,10 @@ interface Props {
  * Match the marketing site wordmark in website/assets/site.css (.lb1–.lb4, .lb-a).
  *
  * Vertical alignment: wordmark baseline sits on the orange bar's bottom edge
- * (`items-end` + `leading-none`). Small downward nudge so the A baseline
- * meets the orange bar bottom. Extra nudge offsets the descender on "p"
- * so the A baseline — not the line-box bottom — hits the bar (md +4px, lg +5px).
+ * (`items-end` + `leading-none`). Explicit translateY offsets the descender on
+ * "p" so the A baseline — not the line-box bottom — hits the bar
+ * (md +9px, lg +11px). Inline style is more reliable than Tailwind arbitrary
+ * translate classes across builds.
  */
 export function Logo({
   className = '',
@@ -42,7 +49,8 @@ export function Logo({
   to = DASHBOARD_HOME,
   size = 'md',
 }: Props) {
-  const { svg, text, gap, wordNudge } = SIZES[size];
+  const { svg, text, gap } = SIZES[size];
+  const wordNudgeY = WORD_NUDGE_Y[size];
   const mark = (
     <div
       data-atmosphere-lockup=""
@@ -51,7 +59,9 @@ export function Logo({
       <AtmosphereBars size={svg} />
       {!compact && (
         <span
-          className={`whitespace-nowrap ${text} font-bold tracking-tight leading-none text-current ${wordNudge}`}
+          className={`whitespace-nowrap ${text} font-bold tracking-tight leading-none text-current`}
+          style={{ transform: `translateY(${wordNudgeY}px)` }}
+          data-word-nudge={wordNudgeY}
         >
           Atmosphere
         </span>
