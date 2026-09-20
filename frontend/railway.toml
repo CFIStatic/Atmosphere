@@ -11,6 +11,10 @@
 # origin on the backend as FRONTEND_ORIGIN. See docs/production.md.
 # Production CORS also allows https://platform.atmosphereteam.com without that
 # edit so login keeps working after a domain cutover.
+#
+# Trio with Atmosphere APIs + Field Capture: watch backend/** (and migrations)
+# so GitHub Autodeploy rebuilds Platform when APIs change. Deploy Work
+# Verification also `railway up`s Platform after every backend deploy.
 
 [build]
 builder = "DOCKERFILE"
@@ -19,6 +23,8 @@ watchPatterns = [
   "frontend/**",
   "verifier/**",
   "fieldcapture/**",
+  "backend/**",
+  "supabase/migrations/**",
   "frontend/Dockerfile",
 ]
 

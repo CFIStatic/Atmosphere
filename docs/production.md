@@ -29,10 +29,12 @@ Railway service aliases (document once; do not invent parallel names):
 
 ## Railway auto-deploy
 
-Do this once in the Railway dashboard. GitHub Actions deploys the backend
-(`Atmosphere`) and the office app (`Atmosphere-web`) on `main`. GitHub
-Autodeploy is the fallback if Actions is skipped; without either, a service
-stays on its last successful image.
+Do this once in the Railway dashboard. GitHub Actions **Deploy Work
+Verification** deploys the sold-path trio on every matching `main` push:
+**Atmosphere APIs**, **Platform** (office), and **Field Capture** — same SHA,
+backend first, then Platform + Field Capture in parallel. GitHub Autodeploy is
+the fallback if Actions is skipped; without either, a service stays on its
+last successful image.
 
 Databases, Redis, and volumes are not git apps — skip them. iOS is App Store.
 The marketing site (`website/`) deploys to the Railway nginx service `website`
@@ -42,9 +44,16 @@ from its own workflow (GitHub Pages is an optional second host — see
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
 | --- | --- | --- | --- |
 | Backend BFF | `/backend/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
-| Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+| Office console (Platform) | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `backend/**`, `supabase/migrations/**`, `frontend/Dockerfile` |
+| Field Capture | `/fieldcapture/railway.toml` | `fieldcapture/Dockerfile` | `fieldcapture/**`, `backend/**`, `supabase/migrations/**`, `fieldcapture/Dockerfile` |
 | Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 | Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
+
+**APIs + Platform + Field Capture ship together.** Deploy Work Verification
+always `railway up`s all three after Keys sync / migrate. Platform and Field
+Capture also watch `backend/**` so Railway Autodeploy rebuilds them on
+APIs-only SHAs (and each Actions job stamps an nginx template with
+`GITHUB_SHA` so CLI uploads never no-op as “unchanged”).
 
 Low-risk IaC notes (no live `.railway/railway.ts` graph): [`docs/railway-iac.md`](./railway-iac.md).
 
@@ -189,7 +198,8 @@ dashboard visit:
 
 | Service | Set by |
 | --- | --- |
-| `Atmosphere-web` | `deploy-production.yml` → office app job (`api.upstream`) |
+| `Atmosphere-web` / Platform | `deploy-production.yml` → office app job (`api.upstream`) |
+| `Field Capture` | Existing service variable / Autodeploy; repair + deploy jobs keep Config File; unset falls back to public BFF |
 | `website` | `deploy-website.yml` (override with the `API_UPSTREAM` Actions variable only if the site ever moves out of this project) |
 | `Internal Growth Metrics` | `deploy-production.yml` → internal site job (public BFF; name it with `RAILWAY_INTERNAL_SERVICE`) |
 
@@ -238,13 +248,15 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 
 ### Step 4 — Prove it
 
-1. Merge a no-op or real change to `backend/` on `main` → backend service
-   **Deployments** shows a new deploy (or a skip if CI failed). Frontend
-   should **not** rebuild (watch paths).
-2. Merge a change under `frontend/`, `verifier/`, or `fieldcapture/` →
-   frontend rebuilds; backend does not.
+1. Merge a no-op or real change to `backend/` on `main` → Atmosphere APIs,
+   Platform, and Field Capture all show a new deploy (Deploy Work Verification
+   trio, or Autodeploy via shared `backend/**` watch paths).
+2. Merge a change under `frontend/` or `verifier/` → Platform rebuilds; Field
+   Capture may skip Autodeploy but still ships via the Actions `fieldcapture`
+   job whenever Deploy Work Verification runs.
 3. Open a PR that touches `backend/` → a PR environment appears with the
-   backend (and skipped frontend if Focused is on).
+   backend (Focused PR Environments still copy services whose watch paths
+   match — Platform and FC now include `backend/**`).
 
 ### If a push did not deploy
 
@@ -419,8 +431,9 @@ iframe shows a refused-to-connect page.
 Fix:
 
 1. Settings → **Config-as-code** → Config File = `/fieldcapture/railway.toml`
-   and Root Directory = `/`. `.github/workflows/repair-field-capture-config.yml`
-   stamps this and `railway up`s the nginx image.
+   and Root Directory = `/`. Deploy Work Verification (`fieldcapture` job)
+   and `.github/workflows/repair-field-capture-config.yml` stamp this and
+   `railway up` the nginx image.
 2. Optional: set `API_UPSTREAM` to the Atmosphere APIs private HTTP URL
    (`api.upstream`). Unset or broken values fall back to the public BFF so
    the connect screen still works.
@@ -442,7 +455,8 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | Surface | Artifact | Notes |
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
-| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
+| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service Platform / `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** Ships with APIs + Field Capture on every Deploy Work Verification run. |
+| Field Capture host | `fieldcapture/` | Standalone nginx at `app.atmosphereteam.com`. **Railway service `Field Capture`.** Same trio deploy as Platform. |
 | Marketing site | `website/` | nginx image on Railway service **Corporate Website**; live URL `https://website-production-7e3f.up.railway.app`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
 | Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
@@ -487,7 +501,11 @@ Production CORS already allows `https://platform.atmosphereteam.com` even if `FR
 
 ### 3. Ship it
 
-`.github/workflows/deploy-production.yml` deploys **both** services (`railway up --service Atmosphere` and `--service Atmosphere-web`). Needs `RAILWAY_TOKEN` in the `Keys` environment. Optional: `RAILWAY_APP_SERVICE` if the office service is not named `Atmosphere-web`.
+`.github/workflows/deploy-production.yml` deploys the sold-path **trio**:
+Atmosphere APIs, Platform (office), and Field Capture (`railway up` after
+Keys sync / migrate). Needs `RAILWAY_TOKEN` in the `Keys` environment.
+Optional: `RAILWAY_APP_SERVICE` / `RAILWAY_FIELD_CAPTURE_SERVICE` if those
+canvas names differ from `Platform` / `Field Capture`.
 
 ```bash
 # Or from a laptop, after `railway link` (repo root, not frontend/):
