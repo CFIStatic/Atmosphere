@@ -55,7 +55,7 @@ crmCredentialsRouter.get('/', async (req: Request, res: Response, next: NextFunc
     res.json({
       systems,
       copy: {
-        headline: 'Connect CRM',
+        headline: 'Connect',
         body: 'An Atmosphere agent signs in with your CRM login to pull and update jobs, contacts, and claims.',
       },
     });

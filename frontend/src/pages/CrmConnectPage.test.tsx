@@ -29,7 +29,7 @@ vi.mock('../hooks/useFeatureTimer', () => ({
 vi.mock('../lib/i18n', () => ({
   useT: () => (key: string) =>
     ({
-      'crm.title': 'Connect CRM',
+      'crm.title': 'Connect',
       'crm.subtitle':
         'An Atmosphere agent signs in with your CRM username and password to pull and update jobs, contacts, and claims.',
     })[key] ?? key,

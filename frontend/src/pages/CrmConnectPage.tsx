@@ -39,11 +39,14 @@ type Draft = { username: string; password: string; notes: string };
 const emptyDraft = (): Draft => ({ username: '', password: '', notes: '' });
 
 /**
- * Connect CRM — username/password credentials for agent login into
+ * Connect — username/password credentials for agent login into
  * JobNimbus, AccuLynx, Salesforce, and ServiceTitan. No API-key / OAuth UX
- * and no Atmosphere-native row on this page.
+ * and no Atmosphere-native / LIVE / Always on row on this page.
+ *
+ * Canonical home is Settings → Connect (`/settings?section=connect`).
+ * `/crm` redirects there; this panel also renders inside that Settings tab.
  */
-export function CrmConnectPage() {
+export function CrmConnectPanel({ embedded = false }: { embedded?: boolean } = {}) {
   useFeatureTimer('crm_connect');
   const t = useT();
   const outlet = useOutletContext<{ chrome?: string } | null>();
@@ -151,13 +154,26 @@ export function CrmConnectPage() {
   }
 
   return (
-    <div className={inShell ? 'mx-auto max-w-3xl' : 'mx-auto max-w-3xl px-4 py-8'}>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          {t('crm.title')}
-        </h1>
-        <p className="mt-1 text-sm text-ink-500">{t('crm.subtitle')}</p>
-      </header>
+    <div
+      className={
+        embedded
+          ? 'max-w-3xl'
+          : inShell
+            ? 'mx-auto max-w-3xl'
+            : 'mx-auto max-w-3xl px-4 py-8'
+      }
+      data-testid="crm-connect-panel"
+    >
+      {embedded ? (
+        <p className="mb-5 text-sm text-ink-500">{t('crm.subtitle')}</p>
+      ) : (
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+            {t('crm.title')}
+          </h1>
+          <p className="mt-1 text-sm text-ink-500">{t('crm.subtitle')}</p>
+        </header>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-ink-500">
@@ -301,3 +317,9 @@ export function CrmConnectPage() {
     </div>
   );
 }
+
+/** Standalone page wrapper (tests / rare direct mounts). Prefer Settings → Connect. */
+export function CrmConnectPage() {
+  return <CrmConnectPanel />;
+}
+

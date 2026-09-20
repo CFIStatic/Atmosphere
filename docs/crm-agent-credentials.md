@@ -1,11 +1,11 @@
-# Connect CRM — agent credentials
+# Connect — agent credentials
 
-Atmosphere Connect CRM (`/crm`) stores **username + password** so an **agent**
+Atmosphere Connect (`/settings?section=connect`, legacy `/crm` redirects) stores **username + password** so an **agent**
 can sign into JobNimbus, AccuLynx, Salesforce, and ServiceTitan to pull and
 update jobs, contacts, and claims.
 
 This is **not** the old API-key / OAuth Connect UX. Atmosphere-native job fields
-live on the job file elsewhere — they are not a row on Connect CRM.
+live on the job file elsewhere — they are not a row on Connect.
 
 ## Threat model
 

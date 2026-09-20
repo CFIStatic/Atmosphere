@@ -17,7 +17,7 @@ export const EN = {
   'nav.system': 'System',
   'nav.startJob': 'Start a job',
   'nav.dashboard': 'Dashboard',
-  'nav.connectCrm': 'Connect CRM',
+  'nav.connectCrm': 'Connect',
   'nav.settings': 'Settings',
   'nav.support': 'Support',
   'nav.fieldCapture': 'Field capture',
@@ -35,7 +35,7 @@ export const EN = {
   'nav.rename': 'Rename',
   'nav.newChat': 'New chat',
 
-  'crm.title': 'Connect CRM',
+  'crm.title': 'Connect',
   'crm.subtitle': 'An Atmosphere agent signs in with your CRM username and password to pull and update jobs, contacts, and claims.',
 
   'settings.title': 'Settings',
@@ -50,6 +50,8 @@ export const EN = {
   'settings.section.billingBlurb': 'Plan, tokens, and receipts',
   'settings.section.support': 'Support',
   'settings.section.supportBlurb': 'Get help from a person',
+  'settings.section.connect': 'Connect',
+  'settings.section.connectBlurb': 'CRM logins for agent access',
 
   'settings.support.title': 'Support',
   'settings.support.description':
@@ -127,6 +129,7 @@ export const EN = {
   'theme.dark': 'Dark',
 
   'document.settings': 'Settings',
+  'document.connect': 'Connect',
   'document.startJob': 'Start a job',
   'document.dashboard': 'Dashboard',
 } as const;

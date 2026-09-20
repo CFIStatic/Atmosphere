@@ -36,10 +36,12 @@ import {
   TrashIcon,
   UserIcon,
   CreditCardIcon,
+  PlugIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { CrmConnectPanel } from './CrmConnectPage';
 
-type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'support';
+type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'support' | 'connect';
 
 interface SettingsSection {
   id: SectionId;
@@ -48,7 +50,7 @@ interface SettingsSection {
   icon: typeof UserIcon;
 }
 
-const SECTION_IDS: SectionId[] = ['profile', 'security', 'organization', 'billing', 'support'];
+const SECTION_IDS: SectionId[] = ['profile', 'security', 'organization', 'billing', 'support', 'connect'];
 
 function isSectionId(value: string | null): value is SectionId {
   return SECTION_IDS.includes(value as SectionId);
@@ -79,6 +81,12 @@ export function SettingsPage() {
       label: t('settings.section.support'),
       blurb: t('settings.section.supportBlurb'),
       icon: HelpIcon,
+    },
+    {
+      id: 'connect',
+      label: t('settings.section.connect'),
+      blurb: t('settings.section.connectBlurb'),
+      icon: PlugIcon,
     },
   ];
   const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'billing' || showBilling);
@@ -167,6 +175,7 @@ export function SettingsPage() {
           )}
           {active === 'billing' && showBilling && <BillingSection />}
           {active === 'support' && <SupportSection />}
+          {active === 'connect' && <CrmConnectPanel embedded />}
         </div>
       </div>
     </div>

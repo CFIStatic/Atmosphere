@@ -19,7 +19,7 @@ export const ES: MessageCatalog = {
   'nav.system': 'Sistema',
   'nav.startJob': 'Empezar un trabajo',
   'nav.dashboard': 'Panel',
-  'nav.connectCrm': 'Conectar CRM',
+  'nav.connectCrm': 'Conectar',
   'nav.settings': 'Ajustes',
   'nav.support': 'Soporte',
   'nav.fieldCapture': 'Captura de campo',
@@ -37,7 +37,7 @@ export const ES: MessageCatalog = {
   'nav.rename': 'Renombrar',
   'nav.newChat': 'Nuevo chat',
 
-  'crm.title': 'Conectar CRM',
+  'crm.title': 'Conectar',
   'crm.subtitle': 'Un agente de Atmosphere inicia sesión con tu usuario y contraseña del CRM para obtener y actualizar trabajos, contactos y reclamos.',
 
   'settings.title': 'Ajustes',
@@ -52,6 +52,8 @@ export const ES: MessageCatalog = {
   'settings.section.billingBlurb': 'Plan, tokens y recibos',
   'settings.section.support': 'Soporte',
   'settings.section.supportBlurb': 'Pide ayuda a una persona',
+  'settings.section.connect': 'Conectar',
+  'settings.section.connectBlurb': 'Accesos CRM para el agente',
 
   'settings.support.title': 'Soporte',
   'settings.support.description':
@@ -131,6 +133,7 @@ export const ES: MessageCatalog = {
   'theme.light': 'Claro',
   'theme.dark': 'Oscuro',
 
+  'document.connect': 'Conectar',
   'document.settings': 'Ajustes',
   'document.startJob': 'Empezar un trabajo',
   'document.dashboard': 'Panel',

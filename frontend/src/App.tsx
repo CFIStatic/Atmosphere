@@ -43,9 +43,6 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
-const CrmConnectPage = lazy(() =>
-  import('./pages/CrmConnectPage').then((m) => ({ default: m.CrmConnectPage })),
-);
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
@@ -421,7 +418,7 @@ export default function App() {
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/crm" element={<CrmConnectPage />} />
+            <Route path="/crm" element={<Navigate to="/settings?section=connect" replace />} />
             <Route path="/playbooks" element={<PlaybooksLibraryPage />} />
           </Route>
 

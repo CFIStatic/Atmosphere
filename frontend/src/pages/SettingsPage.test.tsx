@@ -35,6 +35,16 @@ const apiMocks = vi.hoisted(() => ({
   createOrgInvite: vi.fn(),
   revokeOrgInvite: vi.fn(),
   removeMember: vi.fn().mockResolvedValue({ ok: true }),
+  crmCredentialStatus: vi.fn().mockResolvedValue({
+    systems: [
+      { system: 'jobnimbus', connected: false, username: null, notes: null, status: null, lastVerifiedAt: null, lastError: null, connectedAt: null },
+      { system: 'acculynx', connected: false, username: null, notes: null, status: null, lastVerifiedAt: null, lastError: null, connectedAt: null },
+      { system: 'salesforce', connected: false, username: null, notes: null, status: null, lastVerifiedAt: null, lastError: null, connectedAt: null },
+      { system: 'servicetitan', connected: false, username: null, notes: null, status: null, lastVerifiedAt: null, lastError: null, connectedAt: null },
+    ],
+  }),
+  connectCrmCredentials: vi.fn(),
+  disconnectCrmCredentials: vi.fn(),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -263,6 +273,18 @@ describe('Settings sections', () => {
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
+
+  it('shows Connect under Settings without Connect CRM in the page chrome', async () => {
+    renderSettings('/settings?section=connect');
+    expect(screen.getByRole('button', { name: 'Connect' })).toHaveAttribute('aria-current', 'page');
+    await waitFor(() => expect(screen.getByTestId('crm-card-jobnimbus')).toBeInTheDocument());
+    expect(screen.getByTestId('crm-card-acculynx')).toBeInTheDocument();
+    expect(screen.getByTestId('crm-card-salesforce')).toBeInTheDocument();
+    expect(screen.getByTestId('crm-card-servicetitan')).toBeInTheDocument();
+    expect(screen.queryByText('Connect CRM')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Atmosphere native/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Always on/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('Settings language', () => {
@@ -307,4 +329,5 @@ describe('Settings language', () => {
     expect(document.documentElement.dir).toBe('rtl');
     expect(screen.getByRole('heading', { name: 'الإعدادات' })).toBeInTheDocument();
   });
+
 });

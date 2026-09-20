@@ -20,6 +20,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/job-progress': 'Job file',
   '/jobs': 'Dashboard',
   '/settings': 'Settings',
+  '/crm': 'Connect',
   '/field': 'Overview',
   '/my-jobs': 'My jobs',
   '/my-job-files': 'Your job files',
@@ -44,6 +45,10 @@ function pageNameFor(pathname: string): string | undefined {
 /** Title shown in the browser tab for a dashboard path. */
 export function documentTitleFor(pathname: string, search = ''): string {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+
+  if (pathname === '/settings' && params.get('section') === 'connect') {
+    return `${t('document.connect')} · ${APP_NAME}`;
+  }
 
   if (pathname === '/signup' || pathname.startsWith('/signup/')) {
     const intent = parseSignupIntent(params.get('intent'));
