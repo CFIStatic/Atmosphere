@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type OfficeLiveSession, type OfficeLiveSessionDetail } from '../../lib/api';
+import { connectOfficeLiveRtc, type LiveRtcViewerHandle } from './officeLiveRtc';
 
 type Props = {
   jobId: string;
 };
 
+type Transport = 'webrtc' | 'parts' | 'waiting';
+
 /**
- * Org-office Live / near-live player for Field Capture stream-while-recording.
- * Polls session list + part URLs; concatenates contiguous WebM/MP4 parts into
- * a Blob for <video>. Not shown to homeowners.
+ * Org-office Live player for Field Capture.
+ * Prefers WebRTC (≤1–2s); falls back to concatenating durable stream parts.
+ * Not shown to homeowners.
  */
 export function OfficeLiveView({ jobId }: Props) {
   const [sessions, setSessions] = useState<OfficeLiveSession[]>([]);
@@ -17,9 +20,21 @@ export function OfficeLiveView({ jobId }: Props) {
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [transport, setTransport] = useState<Transport>('waiting');
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
+  const [latencyNote, setLatencyNote] = useState<string | null>(null);
+  const [pollSeconds, setPollSeconds] = useState(2);
+  const [signalPath, setSignalPath] = useState('/api/live/signal');
+  const [iceServers, setIceServers] = useState<
+    Array<{ urls: string | string[]; username?: string; credential?: string }>
+  >([]);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastPartCountRef = useRef(0);
   const playbackUrlRef = useRef<string | null>(null);
+  const rtcRef = useRef<LiveRtcViewerHandle | null>(null);
+  const webrtcFailedRef = useRef(false);
+  const hasRemoteStreamRef = useRef(false);
 
   const replacePlaybackUrl = useCallback((next: string | null) => {
     if (playbackUrlRef.current) {
@@ -30,12 +45,31 @@ export function OfficeLiveView({ jobId }: Props) {
     setPlaybackUrl(next);
   }, []);
 
+  const stopRtc = useCallback(() => {
+    if (rtcRef.current) {
+      rtcRef.current.stop();
+      rtcRef.current = null;
+    }
+    hasRemoteStreamRef.current = false;
+    setHasRemoteStream(false);
+    const el = videoRef.current;
+    if (el && el.srcObject) {
+      el.srcObject = null;
+    }
+  }, []);
+
   const refreshSessions = useCallback(async () => {
     try {
       const res = await api.jobLiveSessions(jobId);
       const next = res.sessions ?? [];
       setSessions(next);
       setError(null);
+      if (res.latencyNote) setLatencyNote(res.latencyNote);
+      if (typeof res.pollIntervalSeconds === 'number' && res.pollIntervalSeconds > 0) {
+        setPollSeconds(res.pollIntervalSeconds);
+      }
+      if (res.signalPath) setSignalPath(res.signalPath);
+      if (res.iceServers?.length) setIceServers(res.iceServers);
       setActiveClipId((prev) => {
         if (prev && next.some((s) => s.clipId === prev)) return prev;
         return next[0]?.clipId ?? null;
@@ -45,13 +79,34 @@ export function OfficeLiveView({ jobId }: Props) {
     }
   }, [jobId]);
 
-  const loadDetail = useCallback(
+  const loadPartsDetail = useCallback(
     async (clipId: string) => {
+      // Skip regenerating blob while WebRTC is healthy.
+      if (hasRemoteStreamRef.current && !webrtcFailedRef.current) {
+        try {
+          const res = await api.jobLiveSession(jobId, clipId);
+          setDetail(res);
+          if (res.signalPath) setSignalPath(res.signalPath);
+          if (res.iceServers?.length) setIceServers(res.iceServers);
+        } catch {
+          /* ignore background refresh errors while live */
+        }
+        return;
+      }
+
       setBusy(true);
       try {
         const res = await api.jobLiveSession(jobId, clipId);
         setDetail(res);
         setError(null);
+        if (res.signalPath) setSignalPath(res.signalPath);
+        if (res.iceServers?.length) setIceServers(res.iceServers);
+        if (res.latencyNote) setLatencyNote(res.latencyNote);
+
+        if (res.session.realtimePublisher && !webrtcFailedRef.current) {
+          return;
+        }
+
         if (!res.ready || !res.parts.length) {
           return;
         }
@@ -71,6 +126,9 @@ export function OfficeLiveView({ jobId }: Props) {
         const wasPlaying = el ? !el.paused : true;
         const t = el?.currentTime || 0;
         lastPartCountRef.current = res.parts.length;
+        stopRtc();
+        if (el) el.srcObject = null;
+        setTransport('parts');
         replacePlaybackUrl(url);
         if (el) {
           const resume = () => {
@@ -90,35 +148,93 @@ export function OfficeLiveView({ jobId }: Props) {
         setBusy(false);
       }
     },
-    [jobId, replacePlaybackUrl],
+    [jobId, replacePlaybackUrl, stopRtc],
   );
 
   useEffect(() => {
     void refreshSessions();
-    const id = window.setInterval(() => void refreshSessions(), 5000);
+    const id = window.setInterval(() => void refreshSessions(), pollSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [refreshSessions]);
+  }, [refreshSessions, pollSeconds]);
 
   useEffect(() => {
-    if (!activeClipId) {
-      setDetail(null);
-      lastPartCountRef.current = 0;
-      replacePlaybackUrl(null);
-      return;
-    }
+    webrtcFailedRef.current = false;
+    stopRtc();
+    replacePlaybackUrl(null);
     lastPartCountRef.current = 0;
-    void loadDetail(activeClipId);
-    const id = window.setInterval(() => void loadDetail(activeClipId), 5000);
-    return () => window.clearInterval(id);
-  }, [activeClipId, loadDetail, replacePlaybackUrl]);
+    setTransport('waiting');
+    setDetail(null);
 
-  useEffect(() => () => replacePlaybackUrl(null), [replacePlaybackUrl]);
+    if (!activeClipId) return;
+
+    const session = sessions.find((s) => s.clipId === activeClipId);
+    const path = session?.signalPath || signalPath;
+
+    let fallbackTimer: number | undefined;
+    let partsInterval: number | undefined;
+
+    rtcRef.current = connectOfficeLiveRtc({
+      jobId,
+      clipId: activeClipId,
+      signalPath: path,
+      iceServers: iceServers.length ? iceServers : undefined,
+      onStream: (stream) => {
+        const el = videoRef.current;
+        replacePlaybackUrl(null);
+        if (el) {
+          el.srcObject = stream;
+          void el.play().catch(() => {});
+        }
+        hasRemoteStreamRef.current = true;
+        setHasRemoteStream(true);
+        setTransport('webrtc');
+        setError(null);
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      },
+      onError: (message) => {
+        if (hasRemoteStreamRef.current) return;
+        webrtcFailedRef.current = true;
+        setError(message);
+        stopRtc();
+        void loadPartsDetail(activeClipId);
+      },
+    });
+
+    fallbackTimer = window.setTimeout(() => {
+      if (hasRemoteStreamRef.current) return;
+      webrtcFailedRef.current = true;
+      stopRtc();
+      void loadPartsDetail(activeClipId);
+    }, 6000);
+
+    void loadPartsDetail(activeClipId);
+    partsInterval = window.setInterval(() => {
+      void loadPartsDetail(activeClipId);
+    }, pollSeconds * 1000);
+
+    return () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      if (partsInterval) window.clearInterval(partsInterval);
+      stopRtc();
+    };
+    // Re-bind when the active clip changes; session list / ICE refresh separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeClipId, jobId]);
+
+  useEffect(
+    () => () => {
+      stopRtc();
+      replacePlaybackUrl(null);
+    },
+    [replacePlaybackUrl, stopRtc],
+  );
 
   if (!sessions.length) {
     return null;
   }
 
   const session = sessions.find((s) => s.clipId === activeClipId) ?? sessions[0] ?? null;
+  const showVideo = Boolean(playbackUrl || hasRemoteStream);
 
   return (
     <section
@@ -133,10 +249,27 @@ export function OfficeLiveView({ jobId }: Props) {
               Live
             </span>
             Field Capture on site
+            {transport === 'webrtc' && (
+              <span
+                className="ml-2 text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300"
+                data-testid="office-live-transport"
+              >
+                ≤2s
+              </span>
+            )}
+            {transport === 'parts' && (
+              <span
+                className="ml-2 text-[11px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300"
+                data-testid="office-live-transport"
+              >
+                segments
+              </span>
+            )}
           </p>
           <p className="mt-1 text-xs text-ink-600">
-            {session?.latencyNote ??
-              'Near-live from stream-while-recording parts. Not WebRTC sub-second.'}
+            {latencyNote ??
+              session?.latencyNote ??
+              'Live (WebRTC): typically ≤1–2 seconds behind the camera. Parts fallback ~15–35s.'}
           </p>
         </div>
         {sessions.length > 1 && (
@@ -161,22 +294,21 @@ export function OfficeLiveView({ jobId }: Props) {
         </p>
       )}
 
-      <div className="mt-3 overflow-hidden rounded-lg bg-black">
-        {playbackUrl ? (
-          <video
-            ref={videoRef}
-            className="aspect-video w-full"
-            controls
-            playsInline
-            autoPlay
-            muted
-            src={playbackUrl}
-          />
-        ) : (
+      <div className="mt-3 relative overflow-hidden rounded-lg bg-black">
+        <video
+          ref={videoRef}
+          className={`aspect-video w-full ${showVideo ? '' : 'invisible absolute inset-0 h-full w-full'}`}
+          controls={showVideo}
+          playsInline
+          autoPlay
+          muted
+          src={playbackUrl ?? undefined}
+        />
+        {!showVideo && (
           <div className="grid aspect-video place-items-center px-4 text-center text-sm text-white/80">
             {busy
-              ? 'Loading latest segments…'
-              : 'Waiting for the first uploaded segment (~15–30s after recording starts online).'}
+              ? 'Connecting to Live…'
+              : 'Waiting for Field Capture (WebRTC connects in about a second when the crew is online).'}
           </div>
         )}
       </div>
@@ -184,14 +316,20 @@ export function OfficeLiveView({ jobId }: Props) {
       <p className="mt-2 text-xs text-ink-600">
         {detail?.privacyNote ??
           'Live may show unredacted footage until analysis applies child blur / private-moment ranges after the film is filed.'}
-        {detail ? ` · ${detail.partCount} segment${detail.partCount === 1 ? '' : 's'} on hand.` : ''}
+        {detail && transport === 'parts'
+          ? ` · ${detail.partCount} segment${detail.partCount === 1 ? '' : 's'} on hand.`
+          : ''}
+        {transport === 'webrtc' ? ' · Realtime peer stream (pre-redaction).' : ''}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           className="inline-flex items-center rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
-          onClick={() => activeClipId && void loadDetail(activeClipId)}
+          onClick={() => {
+            webrtcFailedRef.current = false;
+            if (activeClipId) void loadPartsDetail(activeClipId);
+          }}
           disabled={!activeClipId || busy}
         >
           Watch now

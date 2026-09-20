@@ -564,6 +564,9 @@
           recorder.stop();
         });
       },
+      getStream: function () {
+        return state.stream;
+      },
       watchPosition: function (onSite) {
         if (!navigator.geolocation) return function () {};
         var id = navigator.geolocation.watchPosition(
@@ -3377,6 +3380,252 @@
      While the camera rolls (and chunks stream), grab a sparse JPEG from the
      live preview every ~25s and POST it for emergency classification.
      This is near-real-time — not WebRTC sub-second live (TODO). */
+
+  /* ---------- Office Live WebRTC publisher ----------
+     Parallel to durable part uploads: publish the same camera MediaStream so
+     the office can watch with ≤1–2s lag. Failures never stop recording. */
+
+  var LIVE_SIGNAL_PATH = '/api/live/signal';
+
+  function liveSignalUrl(apiBase) {
+    var base = origin(apiBase || '');
+    if (!base) {
+      var proto = typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var host = typeof location !== 'undefined' ? location.host : 'localhost';
+      return proto + '//' + host + LIVE_SIGNAL_PATH;
+    }
+    return base.replace(/^http/, 'ws') + LIVE_SIGNAL_PATH;
+  }
+
+  /**
+   * Publish `stream` to org office viewers via the BFF signaling hub.
+   * cfg: { apiBase, jobId, clipId, accessToken|fn, shareToken, stream, iceServers? }
+   */
+  function createLiveRtcPublisher(cfg) {
+    cfg = cfg || {};
+    var stream = cfg.stream;
+    var jobId = cfg.jobId;
+    var clipId = cfg.clipId;
+    var closed = false;
+    var ws = null;
+    var peerId = '';
+    var pcs = {}; // remotePeerId -> RTCPeerConnection
+    var iceServers = cfg.iceServers || [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+    var reconnectTimer = null;
+    var intentionalClose = false;
+
+    function token() {
+      if (typeof cfg.accessToken === 'function') {
+        try {
+          return cfg.accessToken() || '';
+        } catch (e) {
+          return '';
+        }
+      }
+      return cfg.accessToken || '';
+    }
+
+    function send(msg) {
+      if (!ws || ws.readyState !== 1) return;
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function closePc(id) {
+      var pc = pcs[id];
+      if (!pc) return;
+      try {
+        pc.close();
+      } catch (e) {}
+      delete pcs[id];
+    }
+
+    function ensurePc(remoteId) {
+      if (pcs[remoteId]) return pcs[remoteId];
+      if (typeof RTCPeerConnection === 'undefined') return null;
+      var pc = new RTCPeerConnection({ iceServers: iceServers });
+      pcs[remoteId] = pc;
+      if (stream) {
+        stream.getTracks().forEach(function (track) {
+          try {
+            pc.addTrack(track, stream);
+          } catch (e) {
+            /* ignore */
+          }
+        });
+      }
+      pc.onicecandidate = function (ev) {
+        if (!ev.candidate) return;
+        send({
+          type: 'signal',
+          to: remoteId,
+          data: { type: 'ice', candidate: ev.candidate },
+        });
+      };
+      pc.onconnectionstatechange = function () {
+        var st = pc.connectionState;
+        if (st === 'failed' || st === 'closed' || st === 'disconnected') {
+          /* keep PC briefly; viewer may reconnect via peer-joined */
+        }
+      };
+      return pc;
+    }
+
+    function offerTo(remoteId) {
+      var pc = ensurePc(remoteId);
+      if (!pc) return;
+      pc
+        .createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false })
+        .then(function (offer) {
+          return pc.setLocalDescription(offer);
+        })
+        .then(function () {
+          send({
+            type: 'signal',
+            to: remoteId,
+            data: { type: 'offer', sdp: pc.localDescription },
+          });
+        })
+        .catch(function () {
+          /* never block capture */
+        });
+    }
+
+    function onSignal(from, data) {
+      if (!data || !from) return;
+      var pc = ensurePc(from);
+      if (!pc) return;
+      if (data.type === 'answer' && data.sdp) {
+        pc.setRemoteDescription(data.sdp).catch(function () {});
+        return;
+      }
+      if (data.type === 'ice' && data.candidate) {
+        pc.addIceCandidate(data.candidate).catch(function () {});
+        return;
+      }
+      // Viewer-initiated offer (rare) — answer it.
+      if (data.type === 'offer' && data.sdp) {
+        pc
+          .setRemoteDescription(data.sdp)
+          .then(function () {
+            return pc.createAnswer();
+          })
+          .then(function (answer) {
+            return pc.setLocalDescription(answer);
+          })
+          .then(function () {
+            send({
+              type: 'signal',
+              to: from,
+              data: { type: 'answer', sdp: pc.localDescription },
+            });
+          })
+          .catch(function () {});
+      }
+    }
+
+    function connect() {
+      if (closed || intentionalClose) return;
+      if (!jobId || !clipId || !stream) return;
+      if (typeof WebSocket === 'undefined') return;
+      try {
+        ws = new WebSocket(liveSignalUrl(cfg.apiBase));
+      } catch (e) {
+        scheduleReconnect();
+        return;
+      }
+      ws.onopen = function () {
+        var auth = {
+          type: 'auth',
+          role: 'publisher',
+          jobId: jobId,
+          clipId: clipId,
+        };
+        var at = token();
+        if (at) auth.accessToken = at;
+        if (cfg.shareToken) auth.shareToken = cfg.shareToken;
+        send(auth);
+      };
+      ws.onmessage = function (ev) {
+        var msg;
+        try {
+          msg = JSON.parse(ev.data);
+        } catch (e) {
+          return;
+        }
+        if (!msg || !msg.type) return;
+        if (msg.type === 'welcome') {
+          peerId = msg.peerId || '';
+          if (msg.iceServers && msg.iceServers.length) iceServers = msg.iceServers;
+          (msg.peers || []).forEach(function (p) {
+            if (p && p.role === 'viewer' && p.peerId) offerTo(p.peerId);
+          });
+          return;
+        }
+        if (msg.type === 'peer-joined' && msg.role === 'viewer' && msg.peerId) {
+          offerTo(msg.peerId);
+          return;
+        }
+        if (msg.type === 'peer-left' && msg.peerId) {
+          closePc(msg.peerId);
+          return;
+        }
+        if (msg.type === 'signal') {
+          onSignal(msg.from, msg.data);
+          return;
+        }
+        if (msg.type === 'error') {
+          /* auth failures: stop trying until next recording */
+          if (/auth|sign in|session|token/i.test(String(msg.message || ''))) {
+            intentionalClose = true;
+          }
+        }
+      };
+      ws.onclose = function () {
+        ws = null;
+        Object.keys(pcs).forEach(closePc);
+        if (!closed && !intentionalClose) scheduleReconnect();
+      };
+      ws.onerror = function () {
+        /* onclose will fire */
+      };
+    }
+
+    function scheduleReconnect() {
+      if (closed || intentionalClose || reconnectTimer) return;
+      reconnectTimer = setTimeout(function () {
+        reconnectTimer = null;
+        connect();
+      }, 2000);
+    }
+
+    connect();
+
+    return {
+      stop: function () {
+        closed = true;
+        intentionalClose = true;
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        Object.keys(pcs).forEach(closePc);
+        if (ws) {
+          try {
+            ws.close();
+          } catch (e) {}
+          ws = null;
+        }
+      },
+    };
+  }
+
   function postSafetySample(opts) {
     opts = opts || {};
     var apiBase = origin(opts.apiBase);
@@ -3514,6 +3763,8 @@
     CLIP_ID: CLIP_ID,
     mintPartUploadUrl: mintPartUploadUrl,
     createDayFilmStreamer: createDayFilmStreamer,
+    createLiveRtcPublisher: createLiveRtcPublisher,
+    LIVE_SIGNAL_PATH: LIVE_SIGNAL_PATH,
     postSafetySample: postSafetySample,
     createLiveSafetySampler: createLiveSafetySampler,
     postWellnessHeartbeat: postWellnessHeartbeat,

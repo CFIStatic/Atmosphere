@@ -12,6 +12,12 @@ vi.mock('../../lib/api', () => ({
   },
 }));
 
+vi.mock('./officeLiveRtc', () => ({
+  connectOfficeLiveRtc: () => ({
+    stop: vi.fn(),
+  }),
+}));
+
 describe('OfficeLiveView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -27,7 +33,9 @@ describe('OfficeLiveView', () => {
       sessions: [],
       latencyNote: '',
       privacyNote: '',
-      pollIntervalSeconds: 5,
+      pollIntervalSeconds: 2,
+      signalPath: '/api/live/signal',
+      iceServers: [],
     });
     const { container } = render(<OfficeLiveView jobId="job-1" />);
     await waitFor(() => expect(jobLiveSessions).toHaveBeenCalled());
@@ -49,13 +57,17 @@ describe('OfficeLiveView', () => {
           lastPartAt: new Date().toISOString(),
           lastMintIndex: 0,
           status: 'live',
-          latencyNote: 'Near-live: typically 15–35 seconds',
+          latencyNote: 'Live (WebRTC): typically ≤1–2 seconds',
           privacyNote: 'Live may show raw video',
+          realtimePublisher: false,
+          signalPath: '/api/live/signal',
         },
       ],
-      latencyNote: '',
+      latencyNote: 'Live (WebRTC): typically ≤1–2 seconds',
       privacyNote: '',
-      pollIntervalSeconds: 5,
+      pollIntervalSeconds: 2,
+      signalPath: '/api/live/signal',
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     });
     jobLiveSession.mockResolvedValue({
       session: {
@@ -70,8 +82,10 @@ describe('OfficeLiveView', () => {
         lastPartAt: new Date().toISOString(),
         lastMintIndex: 0,
         status: 'live',
-        latencyNote: 'Near-live: typically 15–35 seconds',
+        latencyNote: 'Live (WebRTC): typically ≤1–2 seconds',
         privacyNote: 'Live may show raw video',
+        realtimePublisher: false,
+        signalPath: '/api/live/signal',
       },
       parts: [],
       partCount: 0,
@@ -79,11 +93,14 @@ describe('OfficeLiveView', () => {
       expiresInSeconds: 600,
       latencyNote: '',
       privacyNote: 'Live may show raw video',
-      pollIntervalSeconds: 5,
+      pollIntervalSeconds: 2,
+      signalPath: '/api/live/signal',
+      iceServers: [],
     });
     render(<OfficeLiveView jobId="job-1" />);
     expect(await screen.findByTestId('office-live-view')).toBeInTheDocument();
     expect(screen.getByText('Watch now')).toBeInTheDocument();
     expect(screen.getByText(/Field Capture on site/i)).toBeInTheDocument();
+    expect(screen.getByText(/≤1–2/)).toBeInTheDocument();
   });
 });

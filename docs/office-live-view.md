@@ -1,36 +1,33 @@
-# Office Live view (near-realtime Field Capture)
+# Office Live view (low-latency Field Capture)
 
 Let the office watch what a crew is filming **while** Field Capture is still
-recording — without building a WebRTC SFU.
+recording — targeting **≤1–2 seconds** end-to-end lag under normal conditions.
 
-## Architecture (MVP)
+## Architecture
 
 | Piece | Behavior |
 | --- | --- |
-| **FC streamer** | `MediaRecorder` timeslice **1s** → `createDayFilmStreamer` groups ~**4 MB** parts → PUT to signed `storage_path.parts/NNNN` while the camera rolls. Offline: streamer stops; the day-film queue keeps the full blob and files later. |
+| **FC durable streamer** | `MediaRecorder` timeslice **1s** → `createDayFilmStreamer` groups ~**4 MB** parts → PUT to signed `storage_path.parts/NNNN` while the camera rolls. Offline: streamer stops; the day-film queue keeps the full blob and files later. **Unchanged** for historical / Resume / ASAP-when-online filing. |
+| **FC WebRTC publisher** | Same camera `MediaStream` published via `createLiveRtcPublisher` → BFF signaling at `/api/live/signal`. Failures never stop recording or part uploads. |
 | **Part mint** | `POST …/proof/upload-part-url` upserts `proof_live_sessions` (org/job/clip). |
 | **Finalize** | Hold-to-finish → queue sends the tail → `upload-complete` stitches parts → `POST …/proof` files the row and **ends** the live session. No duplicate film: one clip id / storage path. |
-| **Office API** | `GET /api/operations/shared/:jobId/live` and `…/live/:clipId` (org members via `requireOrgContext` — **not** homeowners / progress grants). Lists contiguous landed parts and mints signed read URLs. |
-| **Player** | Platform job file shows a **Live** / **Watch now** panel (`OfficeLiveView`). Polls every **5s**, concatenates part bytes into a Blob for `<video>`. |
-
-True WebRTC / SFU is **not** wired (same TODO family as safety live analysis).
+| **Office API** | `GET /api/operations/shared/:jobId/live` and `…/live/:clipId` (org members via `requireOrgContext` — **not** homeowners / progress grants). Lists contiguous landed parts, mints signed read URLs, and advertises `signalPath` + `iceServers`. |
+| **Player** | Platform job file **Live** panel (`OfficeLiveView`). Prefers **WebRTC**; falls back to part Blob playback if the peer path fails. Session list polls ~**2s**. Stale/offline sessions drop off Live. |
 
 ## Latency expectations
 
-| Stage | Typical |
+| Path | Typical end-to-end lag |
 | --- | --- |
-| Fill one ~4 MB part at ~2 Mbps | ~16 s of camera time |
-| Upload + mint | a few seconds on decent signal |
-| Office poll | ≤ 5 s |
-| **End-to-end lag** | **~15–35 s** behind the camera |
+| **WebRTC (primary)** | **≤1–2 s** behind the camera (encode + ICE + network). Needs STUN; **TURN** (`LIVE_TURN_*`) for restrictive NATs. |
+| **Parts fallback** | Fill one ~4 MB part at ~2 Mbps ≈ **~16 s** + upload + poll (≤2 s) ≈ **15–35 s** |
 
-Documented string: see `LIVE_VIEW_LATENCY_NOTE` in `backend/src/live/officeLiveView.ts`.
+Documented string: `LIVE_VIEW_LATENCY_NOTE` in `backend/src/live/officeLiveView.ts`.
 
 ## How the office opens Live
 
 1. Open the **job file** (Platform / Dashboard → job).
 2. While a crew is recording **online**, a green **Live** card appears under the pulse tiles.
-3. Click **Watch now** (or wait for auto-load) to play the latest contiguous segments.
+3. Click **Watch now** (or wait for auto-connect). A **≤2s** badge means WebRTC is up; **segments** means the parts fallback.
 4. When recording ends and the film is filed, the Live card disappears; use the normal proof player (with privacy redaction once analysis finishes).
 
 ## Privacy / unredacted disclosure
@@ -44,16 +41,31 @@ Documented string: see `LIVE_VIEW_LATENCY_NOTE` in `backend/src/live/officeLiveV
 
 ## Auth
 
-- Office / org members only (`requireOrgContext`).
-- Field Capture continues to use existing field-app / job-share upload auth.
+- Office / org members only for watching (`requireOrgContext` + signal hub viewer role).
+- Field Capture publishes with the same field-app JWT or job-share token used for part uploads.
+- Homeowners / invitees / progress grants never receive Live.
+
+## Env (production)
+
+| Variable | Purpose |
+| --- | --- |
+| `LIVE_TURN_URLS` | Comma-separated TURN URLs (e.g. `turn:turn.example.com:3478`) |
+| `LIVE_TURN_USERNAME` | TURN username |
+| `LIVE_TURN_CREDENTIAL` | TURN credential |
+
+STUN (`stun.l.google.com`) is always included. Without TURN, some mobile↔office
+pairs will fall back to the parts player (~15–35s).
 
 ## Tests
 
-- `backend/test/officeLiveView.test.ts` — contiguous parts, freshness, presenters
-- FC `hold-to-finish.test.mjs` — streamer part size
+- `backend/test/officeLiveView.test.ts` — contiguous parts, freshness, presenters, latency copy
+- `backend/test/liveSignalHub.test.ts` — ICE helpers / room key behaviour
+- FC `hold-to-finish.test.mjs` — streamer part size + live publisher export
+- `frontend/src/components/shared/OfficeLiveView.test.tsx`
 - `frontend/src/demo/liveFirst.test.ts` — live API paths hit the real backend in demo mode
 
 ## Related
 
-- Stream-while-recording: `fieldcapture/js/capture-core.js` (`createDayFilmStreamer`)
+- Stream-while-recording: `fieldcapture/js/capture-core.js` (`createDayFilmStreamer`, `createLiveRtcPublisher`)
+- Signaling: `backend/src/live/liveSignalHub.ts`
 - Safety near-realtime samples (~25s): `docs/safety-alerts.md`

@@ -11,6 +11,7 @@ import { startDailyJobReportSweep, stopDailyJobReportSweep } from './dailyReport
 import { askProviderLabel } from './lib/askModel.js';
 import { visionProviderLabel } from './lib/visionProvider.js';
 import { logger } from './lib/logger.js';
+import { liveSignalHub } from './live/liveSignalHub.js';
 
 try {
   assertProductionReady();
@@ -29,6 +30,7 @@ const app = createApp();
 
 const host = listenHost();
 const server = app.listen(config.port, host, () => {
+  liveSignalHub.attach(server);
   logger.info('listening', {
     host,
     port: config.port,
@@ -39,6 +41,7 @@ const server = app.listen(config.port, host, () => {
     vision: visionProviderLabel(),
     workerRole,
     mode: config.isProduction ? 'production' : 'development',
+    liveSignal: '/api/live/signal',
   });
 
   // Sold-path outbox. Default (WORKER_ROLE=all) runs in this process.
@@ -62,6 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();
+    liveSignalHub.close();
     server.close(() => process.exit(0));
   });
 }

@@ -392,6 +392,17 @@ export const config = {
   },
 
   /**
+   * Office Live WebRTC — optional TURN for strict NAT.
+   * STUN defaults are always advertised; set LIVE_TURN_URLS (comma-separated)
+   * plus LIVE_TURN_USERNAME / LIVE_TURN_CREDENTIAL when you run a TURN relay.
+   */
+  liveRtc: {
+    turnUrls: process.env.LIVE_TURN_URLS ?? '',
+    turnUsername: process.env.LIVE_TURN_USERNAME ?? '',
+    turnCredential: process.env.LIVE_TURN_CREDENTIAL ?? '',
+  },
+
+  /**
    * Atmosphere corporate staff who get /analytics without a manual SQL grant.
    * On sign-in / access probe the BFF upserts analytics_staff for these emails
    * (requires SUPABASE_SERVICE_ROLE_KEY). Defaults include jack@jettx.ai so

@@ -100,6 +100,7 @@ import {
   endProofLiveSession,
   listLandedPartIndexes,
   listLiveSessionsForJob,
+  LIVE_PARTS_POLL_SECONDS,
   LIVE_PRIVACY_NOTE,
   LIVE_VIEW_LATENCY_NOTE,
   presentLiveSession,
@@ -107,6 +108,8 @@ import {
   touchProofLiveSession,
   type LiveSessionRow,
 } from '../live/officeLiveView.js';
+import { liveSignalHub } from '../live/liveSignalHub.js';
+import { buildIceServers, liveSignalPath } from '../live/iceServers.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import {
   assertOwnedProofStoragePath,
@@ -3153,12 +3156,16 @@ export async function listJobLiveSessions(req: Request, res: Response, next: Nex
     const jobId = String(req.params.jobId || '');
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
-    const sessions = await listLiveSessionsForJob(admin, orgId, jobId);
+    const sessions = await listLiveSessionsForJob(admin, orgId, jobId, (o, j, c) =>
+      liveSignalHub.hasPublisher(o, j, c),
+    );
     res.json({
       sessions,
       latencyNote: LIVE_VIEW_LATENCY_NOTE,
       privacyNote: LIVE_PRIVACY_NOTE,
-      pollIntervalSeconds: 5,
+      pollIntervalSeconds: LIVE_PARTS_POLL_SECONDS,
+      signalPath: liveSignalPath(),
+      iceServers: buildIceServers(),
     });
   } catch (err) {
     next(err);
@@ -3189,7 +3196,9 @@ export async function getJobLiveSession(req: Request, res: Response, next: NextF
     if (error) throw new HttpError(500, error.message, 'live_lookup_failed');
     if (!row) throw new HttpError(404, 'No live session for that clip.', 'not_found');
 
-    const presented = presentLiveSession(row as LiveSessionRow);
+    const presented = presentLiveSession(row as LiveSessionRow, {
+      realtimePublisher: liveSignalHub.hasPublisher(orgId, jobId, clipId),
+    });
     if (!presented) {
       throw new HttpError(404, 'That live session has ended or gone stale.', 'not_live');
     }
@@ -3201,11 +3210,13 @@ export async function getJobLiveSession(req: Request, res: Response, next: NextF
       session: presented,
       parts,
       partCount: parts.length,
-      ready: parts.length >= 1,
+      ready: parts.length >= 1 || presented.realtimePublisher,
       expiresInSeconds: 600,
       latencyNote: LIVE_VIEW_LATENCY_NOTE,
       privacyNote: LIVE_PRIVACY_NOTE,
-      pollIntervalSeconds: 5,
+      pollIntervalSeconds: LIVE_PARTS_POLL_SECONDS,
+      signalPath: liveSignalPath(),
+      iceServers: buildIceServers(),
     });
   } catch (err) {
     next(err);

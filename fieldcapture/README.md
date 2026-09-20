@@ -151,4 +151,4 @@ See `apps/field-ios/` for the App Store Swift client (same A/V + upload contract
 
 ## Office Live (near-realtime)
 
-While recording online, parts upload continuously (`createDayFilmStreamer`, ~4 MB). The office job file shows **Live / Watch now** (~15–35s lag). See `docs/office-live-view.md`.
+While recording online, parts upload continuously (`createDayFilmStreamer`, ~4 MB) and WebRTC publishes the camera for Office Live (≤1–2s; parts fallback ~15–35s). See `docs/office-live-view.md`.

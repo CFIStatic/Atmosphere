@@ -211,8 +211,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=no-dup-job-1/);
-assert.match(html, /js\/app\.js\?v=no-dup-job-1/);
+assert.match(html, /js\/capture-core\.js\?v=live-rtc-1/);
+assert.match(html, /js\/app\.js\?v=live-rtc-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -1455,6 +1455,9 @@ const okResult = { proof: { id: 'p' }, checks: [], problems: [], facts: { durati
    the tail and asks the office to stitch. Any failure just stops the head start. */
 
 assert.equal(typeof Core.createDayFilmStreamer, 'function');
+assert.equal(typeof Core.createLiveRtcPublisher, 'function', 'WebRTC live publisher must ship with capture-core');
+assert.equal(Core.LIVE_SIGNAL_PATH, '/api/live/signal');
+
 assert.equal(typeof Core.mintPartUploadUrl, 'function');
 assert.equal(typeof Core.newClipId, 'function');
 assert.equal(typeof Core.localDateISO, 'function');
@@ -1780,5 +1783,5 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 }
 
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=no-dup-job-1/);
-assert.match(html, /js\/app\.js\?v=no-dup-job-1/);
+assert.match(html, /js\/capture-core\.js\?v=live-rtc-1/);
+assert.match(html, /js\/app\.js\?v=live-rtc-1/);

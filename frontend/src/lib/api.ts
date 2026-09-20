@@ -3197,6 +3197,12 @@ export interface SafetyIncident {
 }
 
 
+export type OfficeLiveIceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
 export type OfficeLiveSession = {
   clipId: string;
   partyId: string;
@@ -3211,6 +3217,8 @@ export type OfficeLiveSession = {
   status: 'live';
   latencyNote: string;
   privacyNote: string;
+  realtimePublisher?: boolean;
+  signalPath?: string;
 };
 
 export type OfficeLiveSessionDetail = {
@@ -3222,6 +3230,8 @@ export type OfficeLiveSessionDetail = {
   latencyNote: string;
   privacyNote: string;
   pollIntervalSeconds: number;
+  signalPath?: string;
+  iceServers?: OfficeLiveIceServer[];
 };
 
 export const api = {
@@ -3913,6 +3923,8 @@ export const api = {
       latencyNote: string;
       privacyNote: string;
       pollIntervalSeconds: number;
+      signalPath?: string;
+      iceServers?: OfficeLiveIceServer[];
     }>(`/api/operations/shared/${jobId}/live`, { method: 'GET' }),
 
   jobLiveSession: (jobId: string, clipId: string) =>
