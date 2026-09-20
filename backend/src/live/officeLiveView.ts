@@ -1,18 +1,17 @@
 /**
- * Office Live / near-live view of Field Capture stream-while-recording.
+ * Office Live view of Field Capture while recording.
  *
- * Architecture (MVP — no WebRTC SFU):
- * - FC MediaRecorder timeslice (1s) → DayFilmStreamer groups ~4 MB parts →
- *   PUT to signed `.parts/NNNN` URLs while filming.
- * - createPartUploadUrl upserts proof_live_sessions so the office knows a
- *   clip is live.
- * - Office polls GET …/live and GET …/live/:clipId; we list contiguous landed
- *   parts in storage and mint short-lived signed read URLs.
- * - Browser concatenates WebM/MP4 part bytes into a Blob for <video>.
+ * Dual path:
+ * 1) **WebRTC (primary)** — FC publishes the camera MediaStream; org office
+ *    viewers subscribe via `/api/live/signal`. Target end-to-end lag ≤1–2s
+ *    under normal conditions (STUN; TURN recommended behind strict NAT).
+ * 2) **Durable parts (historical + fallback)** — MediaRecorder → ~4 MB parts →
+ *    signed `.parts/` PUTs → stitch on hold-to-finish. Unchanged filing /
+ *    day-film queue / Resume / ASAP-when-online. Parts player remains the
+ *    fallback when WebRTC cannot connect (~15–35s lag).
  *
- * Latency: part fill (~16s at 2 Mbps / 4 MB) + upload + poll (≤5s) ≈ 15–35s.
- * Offline: streamer stops; day-film queue files the full blob later — live
- * session goes stale and drops from the Live list.
+ * Offline: streamer + publisher stop; day-film queue files later; live session
+ * goes stale and drops from the Live list.
  */
 
 import { partObjectPath, PROOF_MAX_PARTS } from '../lib/proofUploadChunks.js';
@@ -22,9 +21,12 @@ const PROOF_BUCKET = 'job-proofs';
 /** Sessions with no mint for this long are not shown as Live. */
 export const LIVE_SESSION_STALE_MS = 15 * 60 * 1000;
 
-/** Documented target lag for office playback of the latest landed part. */
+/** Documented target lag when WebRTC is connected. */
 export const LIVE_VIEW_LATENCY_NOTE =
-  'Near-live: typically 15–35 seconds behind the camera (part size ~4 MB at ~2 Mbps + upload + poll). Not WebRTC sub-second.';
+  'Live (WebRTC): typically ≤1–2 seconds behind the camera under normal conditions. Parts fallback: ~15–35s if peer connection fails.';
+
+/** Poll cadence for session list / parts fallback (WebRTC does not need this). */
+export const LIVE_PARTS_POLL_SECONDS = 2;
 
 export type LiveSessionRow = {
   id: string;
@@ -58,6 +60,9 @@ export type OfficeLiveSessionSummary = {
   status: 'live';
   latencyNote: string;
   privacyNote: string;
+  /** True when a Field Capture WebRTC publisher is in the signal room. */
+  realtimePublisher: boolean;
+  signalPath: string;
 };
 
 export const LIVE_PRIVACY_NOTE =
@@ -98,7 +103,10 @@ export function isLiveSessionFresh(
   return nowMs - t <= staleMs;
 }
 
-export function presentLiveSession(row: LiveSessionRow): OfficeLiveSessionSummary | null {
+export function presentLiveSession(
+  row: LiveSessionRow,
+  opts?: { realtimePublisher?: boolean },
+): OfficeLiveSessionSummary | null {
   if (row.status !== 'live') return null;
   if (!isLiveSessionFresh(row.last_part_at)) return null;
   return {
@@ -115,6 +123,8 @@ export function presentLiveSession(row: LiveSessionRow): OfficeLiveSessionSummar
     status: 'live',
     latencyNote: LIVE_VIEW_LATENCY_NOTE,
     privacyNote: LIVE_PRIVACY_NOTE,
+    realtimePublisher: Boolean(opts?.realtimePublisher),
+    signalPath: '/api/live/signal',
   };
 }
 
@@ -200,6 +210,7 @@ export async function listLiveSessionsForJob(
   admin: any,
   orgId: string,
   jobId: string,
+  hasPublisher?: (orgId: string, jobId: string, clipId: string) => boolean,
 ): Promise<OfficeLiveSessionSummary[]> {
   const { data, error } = await admin
     .from('proof_live_sessions')
@@ -214,7 +225,11 @@ export async function listLiveSessionsForJob(
   if (error) throw error;
   const out: OfficeLiveSessionSummary[] = [];
   for (const row of (data ?? []) as LiveSessionRow[]) {
-    const presented = presentLiveSession(row);
+    const presented = presentLiveSession(row, {
+      realtimePublisher: hasPublisher
+        ? hasPublisher(orgId, jobId, row.clip_id)
+        : false,
+    });
     if (presented) out.push(presented);
   }
   return out;

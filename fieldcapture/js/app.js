@@ -1734,6 +1734,8 @@
             /* never block capture */
           }
         }
+        // Office Live WebRTC — parallel to durable part uploads; never blocks capture.
+        startLiveRtcPublisher(rec);
       })
       .catch(function (err) {
         if (stream) {
@@ -1767,6 +1769,43 @@
       rec.wellnessMonitor.stop();
     } catch (e) {}
     rec.wellnessMonitor = null;
+  }
+
+  function stopLiveRtcPublisher(rec) {
+    if (!rec || !rec.livePublisher) return;
+    try {
+      rec.livePublisher.stop();
+    } catch (e) {}
+    rec.livePublisher = null;
+  }
+
+  /** Publish camera to office Live (WebRTC). Requires online + job context. */
+  function startLiveRtcPublisher(rec) {
+    if (!rec || DEMO || !Core.createLiveRtcPublisher) return;
+    if (navigator.onLine === false) return;
+    var media =
+      (state.recorder && typeof state.recorder.getStream === 'function' && state.recorder.getStream()) ||
+      null;
+    if (!media) return;
+    var jobId = LIVE ? rec.jobId || state.activeJobId : rec.jobId || state.activeJobId;
+    if (!jobId || (Core.isLocalJobId && Core.isLocalJobId(jobId))) return;
+    if (!LIVE && !(state.account && state.accessToken)) return;
+    if (LIVE && !TOKEN && !state.shareToken) return;
+    try {
+      if (rec.livePublisher && rec.livePublisher.stop) rec.livePublisher.stop();
+      rec.livePublisher = Core.createLiveRtcPublisher({
+        apiBase: state.apiBase || API_BASE || Core.resolveApiBase(),
+        jobId: jobId,
+        clipId: rec.clipId,
+        stream: media,
+        accessToken: function () {
+          return state.accessToken;
+        },
+        shareToken: LIVE ? TOKEN || state.shareToken || null : null,
+      });
+    } catch (e) {
+      /* never block capture */
+    }
   }
 
   function canStreamNow() {
@@ -1872,6 +1911,7 @@
     var rec = state.recording || null;
     stopSafetySampler(rec);
     stopWellnessMonitor(rec);
+    stopLiveRtcPublisher(rec);
     var boundJobId = (rec && rec.jobId) || state.activeJobId;
     var boundJob = jobById(boundJobId);
     var boundOwner = state.filmOwner || state.owner;
