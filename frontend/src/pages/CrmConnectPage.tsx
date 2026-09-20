@@ -1,63 +1,47 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import {
-  api,
-  ApiError,
-  type CrmConnections,
-  type CrmSyncStatus,
-  type CrmSyncSystem,
-} from '../lib/api';
+import { api, ApiError, type CrmAgentSystem, type CrmCredentialStatusRow } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useT } from '../lib/i18n';
 
-type ProviderId = CrmSyncSystem | 'salesforce' | 'atmosphere';
-
 type ProviderCard = {
-  id: ProviderId;
+  id: CrmAgentSystem;
   name: string;
   blurb: string;
-  method: 'native' | 'api_key' | 'oauth';
-  depth?: string;
 };
 
 const PROVIDERS: ProviderCard[] = [
   {
-    id: 'atmosphere',
-    name: 'Atmosphere native',
-    blurb: 'Title, claim #, address, and notes — edit in the job file or Ask.',
-    method: 'native',
-  },
-  {
     id: 'jobnimbus',
     name: 'JobNimbus',
-    blurb: 'Pull and push jobs & notes with a Bearer API key.',
-    method: 'api_key',
-    depth: 'Deepest',
+    blurb: 'An Atmosphere agent signs in with your JobNimbus login to pull and update jobs, contacts, and claims.',
   },
   {
     id: 'acculynx',
     name: 'AccuLynx',
-    blurb: 'Connect with an API key, then pull jobs into Atmosphere.',
-    method: 'api_key',
+    blurb: 'An Atmosphere agent signs in with your AccuLynx login to pull and update jobs, contacts, and claims.',
   },
   {
     id: 'salesforce',
     name: 'Salesforce',
-    blurb: 'Authorise in Salesforce. We never see your password.',
-    method: 'oauth',
+    blurb: 'An Atmosphere agent signs in with your Salesforce login to pull and update jobs, contacts, and claims.',
   },
   {
     id: 'servicetitan',
     name: 'ServiceTitan',
-    blurb: 'Connect with an API key, then pull jobs into Atmosphere.',
-    method: 'api_key',
+    blurb: 'An Atmosphere agent signs in with your ServiceTitan login to pull and update jobs, contacts, and claims.',
   },
 ];
 
+type Draft = { username: string; password: string; notes: string };
+
+const emptyDraft = (): Draft => ({ username: '', password: '', notes: '' });
+
 /**
- * Connect CRM — scaffold for JobNimbus, AccuLynx, Salesforce, ServiceTitan,
- * plus Atmosphere native fields. OAuth/API login may be stubbed when env is unset.
+ * Connect CRM — username/password credentials for agent login into
+ * JobNimbus, AccuLynx, Salesforce, and ServiceTitan. No API-key / OAuth UX
+ * and no Atmosphere-native row on this page.
  */
 export function CrmConnectPage() {
   useFeatureTimer('crm_connect');
@@ -65,26 +49,39 @@ export function CrmConnectPage() {
   const outlet = useOutletContext<{ chrome?: string } | null>();
   const inShell = outlet?.chrome === 'operations';
 
-  const [sync, setSync] = useState<CrmSyncStatus | null>(null);
-  const [crm, setCrm] = useState<CrmConnections | null>(null);
+  const [systems, setSystems] = useState<CrmCredentialStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<ProviderId | null>(null);
-  const [keyDraft, setKeyDraft] = useState<Partial<Record<CrmSyncSystem, string>>>({});
-  const [openKey, setOpenKey] = useState<CrmSyncSystem | null>(null);
+  const [busy, setBusy] = useState<CrmAgentSystem | null>(null);
+  const [openForm, setOpenForm] = useState<CrmAgentSystem | null>(null);
+  const [drafts, setDrafts] = useState<Partial<Record<CrmAgentSystem, Draft>>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [syncStatus, connections] = await Promise.all([
-        api.crmSyncStatus(),
-        api.crmConnections(),
-      ]);
-      setSync(syncStatus);
-      setCrm(connections);
+      const status = await api.crmCredentialStatus();
+      setSystems(status.systems ?? []);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load CRM connections.');
+      // Healthy empty state when the API is briefly unavailable — never show
+      // a stray orange "Not found" from a removed legacy path.
+      if (err instanceof ApiError && (err.status === 404 || /not found/i.test(err.message))) {
+        setSystems(
+          PROVIDERS.map((p) => ({
+            system: p.id,
+            connected: false,
+            username: null,
+            notes: null,
+            status: null,
+            lastVerifiedAt: null,
+            lastError: null,
+            connectedAt: null,
+          })),
+        );
+        setError(null);
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Could not load CRM connections.');
+      }
     } finally {
       setLoading(false);
     }
@@ -94,26 +91,42 @@ export function CrmConnectPage() {
     void refresh();
   }, [refresh]);
 
-  function syncRow(system: CrmSyncSystem) {
-    return sync?.systems.find((s) => s.system === system) ?? null;
+  function rowFor(system: CrmAgentSystem): CrmCredentialStatusRow | undefined {
+    return systems.find((s) => s.system === system);
   }
 
-  function salesforceConnected() {
-    return Boolean(crm?.connected.some((c) => c.system === 'salesforce'));
+  function draftFor(system: CrmAgentSystem): Draft {
+    return drafts[system] ?? emptyDraft();
   }
 
-  async function connectApiKey(system: CrmSyncSystem, e: FormEvent) {
+  function setDraft(system: CrmAgentSystem, patch: Partial<Draft>) {
+    setDrafts((d) => ({ ...d, [system]: { ...draftFor(system), ...patch } }));
+  }
+
+  async function connect(system: CrmAgentSystem, e: FormEvent) {
     e.preventDefault();
-    const apiKey = (keyDraft[system] ?? '').trim();
-    if (!apiKey) return;
+    const draft = draftFor(system);
+    const username = draft.username.trim();
+    const password = draft.password;
+    if (!username || !password) return;
     setBusy(system);
     setNotice(null);
     setError(null);
     try {
-      await api.connectCrmSync({ system, apiKey });
-      setOpenKey(null);
-      setKeyDraft((d) => ({ ...d, [system]: '' }));
-      setNotice(`${PROVIDERS.find((p) => p.id === system)?.name ?? system} connected.`);
+      const result = await api.connectCrmCredentials({
+        system,
+        username,
+        password,
+        notes: draft.notes.trim() || null,
+      });
+      setOpenForm(null);
+      setDrafts((d) => ({ ...d, [system]: emptyDraft() }));
+      const name = PROVIDERS.find((p) => p.id === system)?.name ?? system;
+      setNotice(
+        result.verify?.summary
+          ? `${name} connected. ${result.verify.summary}`
+          : `${name} connected.`,
+      );
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not connect.');
@@ -122,71 +135,16 @@ export function CrmConnectPage() {
     }
   }
 
-  async function disconnectSync(system: CrmSyncSystem) {
+  async function disconnect(system: CrmAgentSystem) {
     setBusy(system);
     setNotice(null);
     setError(null);
     try {
-      await api.disconnectCrmSync(system);
+      await api.disconnectCrmCredentials(system);
       setNotice(`${PROVIDERS.find((p) => p.id === system)?.name ?? system} disconnected.`);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not disconnect.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function pullSync(system: CrmSyncSystem) {
-    setBusy(system);
-    setNotice(null);
-    setError(null);
-    try {
-      const { summary } = await api.runCrmSync(system);
-      setNotice(
-        `Pulled from ${PROVIDERS.find((p) => p.id === system)?.name ?? system}: ${summary.created} new, ${summary.updated} updated, ${summary.conflicts} conflicts.`,
-      );
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not pull jobs.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function connectSalesforce() {
-    setBusy('salesforce');
-    setNotice(null);
-    setError(null);
-    try {
-      const { url } = await api.connectSalesforce();
-      if (url) {
-        window.location.assign(url);
-        return;
-      }
-      setNotice('Salesforce OAuth is scaffolded — configure Salesforce env to go live.');
-    } catch (err) {
-      // Scaffold: env often unset; show honest message instead of raw 500.
-      setNotice(
-        err instanceof ApiError
-          ? err.message
-          : 'Salesforce OAuth is scaffolded — configure Salesforce env to go live.',
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function disconnectSalesforce() {
-    setBusy('salesforce');
-    setNotice(null);
-    setError(null);
-    try {
-      await api.disconnectSalesforce();
-      setNotice('Salesforce disconnected.');
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not disconnect Salesforce.');
     } finally {
       setBusy(null);
     }
@@ -209,137 +167,53 @@ export function CrmConnectPage() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-line bg-paper-0 shadow-sm">
           {PROVIDERS.map((provider) => {
-            if (provider.id === 'atmosphere') {
-              return (
-                <div
-                  key={provider.id}
-                  className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-5"
-                  data-testid="crm-card-atmosphere"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm font-semibold text-ink-900">{provider.name}</h2>
-                      <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-800">
-                        Live
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-ink-500">{provider.blurb}</p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled
-                    className="rounded-full border border-line bg-paper-50 px-3 py-1.5 text-xs font-semibold text-ink-400"
-                  >
-                    Always on
-                  </button>
-                </div>
-              );
-            }
-
-            if (provider.id === 'salesforce') {
-              const connected = salesforceConnected();
-              const sfBusy = busy === 'salesforce';
-              return (
-                <div
-                  key={provider.id}
-                  className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4 last:border-b-0 sm:px-5"
-                  data-testid="crm-card-salesforce"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm font-semibold text-ink-900">{provider.name}</h2>
-                      <span className="rounded-full border border-line bg-paper-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
-                        {connected ? 'Connected' : 'OAuth'}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-ink-500">{provider.blurb}</p>
-                    {crm && !crm.salesforceConfigured && (
-                      <p className="mt-1 text-xs text-ink-400">
-                        Scaffold — Salesforce env not configured yet.
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {connected ? (
-                      <button
-                        type="button"
-                        disabled={sfBusy}
-                        onClick={() => void disconnectSalesforce()}
-                        className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-paper-100"
-                      >
-                        {sfBusy ? '…' : 'Disconnect'}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={sfBusy}
-                        onClick={() => void connectSalesforce()}
-                        className="rounded-full border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800"
-                      >
-                        {sfBusy ? '…' : 'Connect'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-
-            const system = provider.id as CrmSyncSystem;
-            const row = syncRow(system);
+            const row = rowFor(provider.id);
             const connected = Boolean(row?.connected);
-            const isBusy = busy === system;
-            const showForm = openKey === system;
+            const isBusy = busy === provider.id;
+            const showForm = openForm === provider.id;
+            const draft = draftFor(provider.id);
 
             return (
               <div
                 key={provider.id}
                 className="border-b border-line px-4 py-4 last:border-b-0 sm:px-5"
-                data-testid={`crm-card-${system}`}
+                data-testid={`crm-card-${provider.id}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-sm font-semibold text-ink-900">{provider.name}</h2>
-                      <span
-                        className={
-                          connected
-                            ? 'rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-800'
-                            : 'rounded-full border border-line bg-paper-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500'
-                        }
-                      >
-                        {connected ? 'Connected' : provider.depth ?? 'API key'}
-                      </span>
+                      {connected ? (
+                        <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-800">
+                          Connected
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-xs text-ink-500">{provider.blurb}</p>
-                    {connected && row?.accountLabel && (
-                      <p className="mt-1 text-xs text-ink-400">{row.accountLabel}</p>
-                    )}
+                    {connected && row?.username ? (
+                      <p className="mt-1 text-xs text-ink-600">
+                        Signed in as <span className="font-medium">{row.username}</span>
+                      </p>
+                    ) : null}
+                    {connected && row?.lastError ? (
+                      <p className="mt-1 text-xs text-ink-400">{row.lastError}</p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {connected ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void pullSync(system)}
-                          className="rounded-full border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800"
-                        >
-                          {isBusy ? '…' : 'Pull'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void disconnectSync(system)}
-                          className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-paper-100"
-                        >
-                          Disconnect
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => void disconnect(provider.id)}
+                        className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-paper-100"
+                      >
+                        {isBusy ? '…' : 'Disconnect'}
+                      </button>
                     ) : (
                       <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => setOpenKey(showForm ? null : system)}
+                        onClick={() => setOpenForm(showForm ? null : provider.id)}
                         className="rounded-full border border-brand-700 bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800"
                       >
                         Connect
@@ -347,33 +221,69 @@ export function CrmConnectPage() {
                     )}
                   </div>
                 </div>
-                {showForm && !connected && (
+
+                {showForm && !connected ? (
                   <form
-                    className="mt-3 flex flex-wrap items-end gap-2"
-                    onSubmit={(e) => void connectApiKey(system, e)}
+                    className="mt-3 grid gap-3 sm:grid-cols-2"
+                    onSubmit={(e) => void connect(provider.id, e)}
+                    data-testid={`crm-form-${provider.id}`}
                   >
-                    <label className="min-w-[200px] flex-1 text-xs font-medium text-ink-700">
-                      API key
+                    <label className="text-xs font-medium text-ink-700">
+                      Username
                       <input
-                        type="password"
-                        autoComplete="off"
-                        value={keyDraft[system] ?? ''}
-                        onChange={(e) =>
-                          setKeyDraft((d) => ({ ...d, [system]: e.target.value }))
-                        }
+                        type="text"
+                        name="username"
+                        autoComplete="username"
+                        value={draft.username}
+                        onChange={(e) => setDraft(provider.id, { username: e.target.value })}
                         className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900"
-                        placeholder={`${provider.name} API key`}
+                        placeholder={`${provider.name} username or email`}
+                        required
                       />
                     </label>
-                    <button
-                      type="submit"
-                      disabled={isBusy || !(keyDraft[system] ?? '').trim()}
-                      className="rounded-full border border-brand-700 bg-brand-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                    >
-                      {isBusy ? '…' : 'Add'}
-                    </button>
+                    <label className="text-xs font-medium text-ink-700">
+                      Password
+                      <input
+                        type="password"
+                        name="password"
+                        autoComplete="current-password"
+                        value={draft.password}
+                        onChange={(e) => setDraft(provider.id, { password: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900"
+                        placeholder="Password"
+                        required
+                      />
+                    </label>
+                    <label className="text-xs font-medium text-ink-700 sm:col-span-2">
+                      Notes <span className="font-normal text-ink-400">(optional)</span>
+                      <input
+                        type="text"
+                        name="notes"
+                        value={draft.notes}
+                        onChange={(e) => setDraft(provider.id, { notes: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900"
+                        placeholder="e.g. office login, sandbox"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2 sm:col-span-2">
+                      <button
+                        type="submit"
+                        disabled={isBusy || !draft.username.trim() || !draft.password}
+                        className="rounded-full border border-brand-700 bg-brand-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        {isBusy ? '…' : 'Save & connect'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => setOpenForm(null)}
+                        className="rounded-full border border-line bg-paper-0 px-3 py-2 text-xs font-semibold text-ink-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
-                )}
+                ) : null}
               </div>
             );
           })}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Connect CRM — BEFORE (API key / OAuth scaffold)</title>
+<style>
+  body { margin:0; font-family: system-ui,sans-serif; background:#f1f5f9; }
+  .shell { max-width:720px; margin:32px auto; padding:0 16px; }
+  h1 { font-size:1.75rem; margin:0; }
+  .sub { color:#64748b; font-size:.875rem; margin:6px 0 24px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; }
+  .row { border-bottom:1px solid #e2e8f0; padding:16px 20px; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .row:last-child{border:0}
+  h2{margin:0;font-size:.875rem}
+  .blurb{margin:6px 0 0;font-size:.75rem;color:#64748b;max-width:28rem}
+  .pill{display:inline-block;margin-left:8px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:#64748b}
+  .pill.live{border-color:#bfdbfe;background:#eff6ff;color:#1e40af}
+  .btn{border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600}
+  .primary{background:#1d4ed8;color:#fff;border:1px solid #1d4ed8}
+  .ghost{background:#fff;border:1px solid #e2e8f0}
+  .err{margin-top:16px;color:#b91c1c;font-size:.875rem}
+  .tag{position:fixed;top:12px;right:12px;background:#7c2d12;color:#fff;font-size:11px;padding:6px 10px;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="tag">BEFORE — API key / OAuth + native (bug: Not found)</div>
+<div class="shell">
+  <h1>Connect CRM</h1>
+  <p class="sub">Link JobNimbus, AccuLynx, Salesforce, ServiceTitan, or use Atmosphere native fields.</p>
+  <div class="card">
+    <div class="row"><div><h2>Atmosphere native <span class="pill live">Live</span></h2><p class="blurb">Title, claim #, address, and notes — edit in the job file or Ask.</p></div><button class="btn ghost" disabled>Always on</button></div>
+    <div class="row"><div><h2>JobNimbus <span class="pill">Deepest</span></h2><p class="blurb">Pull and push jobs &amp; notes with a Bearer API key.</p></div><button class="btn primary">Connect</button></div>
+    <div class="row"><div><h2>AccuLynx <span class="pill">API key</span></h2><p class="blurb">Connect with an API key, then pull jobs into Atmosphere.</p></div><button class="btn primary">Connect</button></div>
+    <div class="row"><div><h2>Salesforce <span class="pill">OAuth</span></h2><p class="blurb">Authorise in Salesforce. We never see your password.</p></div><button class="btn primary">Connect</button></div>
+    <div class="row"><div><h2>ServiceTitan <span class="pill">API key</span></h2><p class="blurb">Connect with an API key, then pull jobs into Atmosphere.</p></div><button class="btn primary">Connect</button></div>
+  </div>
+  <p class="err">Not found</p>
+</div>
+</body>
+</html>

@@ -99,6 +99,18 @@ export const config = {
     pepper: required('DEVICE_PEPPER', devOnly('atmosphere-dev-pepper-do-not-use-in-production')),
   },
 
+  /**
+   * Seals CRM agent login passwords (AES-256-GCM). Prefer CRM_CREDENTIAL_KEY,
+   * else INTEGRATIONS_CREDENTIAL_KEY, else DEVICE_PEPPER. Rotating the key
+   * invalidates stored CRM passwords (users must reconnect).
+   */
+  crmCredentials: {
+    keyMaterial:
+      process.env.CRM_CREDENTIAL_KEY?.trim() ||
+      process.env.INTEGRATIONS_CREDENTIAL_KEY?.trim() ||
+      required('DEVICE_PEPPER', devOnly('atmosphere-dev-pepper-do-not-use-in-production')),
+  },
+
   // Where the password-reset email sends the user back to when Atmosphere
   // mail is unavailable and we fall through to Supabase's mailer. Prefer
   // passwordResetRedirectUrl() (publicAppOrigin + /reset-password) — do not

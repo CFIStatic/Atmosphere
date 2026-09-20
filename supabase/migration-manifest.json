@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 159,
+    "migrationCount": 160,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -173,7 +173,8 @@
     "20260915180000_proof_live_sessions.sql",
     "20260915210000_child_blur_always_on_comment.sql",
     "20260915220000_recording_acknowledgments.sql",
-    "20260918140000_settings_token_spend_accuracy.sql"
+    "20260918140000_settings_token_spend_accuracy.sql",
+    "20260920010000_crm_agent_credentials.sql"
   ],
   "migrations": [
     {
@@ -5522,6 +5523,27 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "replaces quote_usage and backfills rows; creates no new durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260920010000_crm_agent_credentials",
+      "file": "20260920010000_crm_agent_credentials.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.crm_agent_credentials",
+        "index|public.crm_agent_credentials.crm_agent_credentials_pkey",
+        "policy|public.crm_agent_credentials.crm_agent_credentials_no_user_access",
+        "rls|public.crm_agent_credentials",
+        "table|public.crm_agent_jobs",
+        "index|public.crm_agent_jobs.crm_agent_jobs_pkey",
+        "index|public.crm_agent_jobs.crm_agent_jobs_org_queued_idx",
+        "index|public.crm_agent_jobs.crm_agent_jobs_org_system_idx",
+        "policy|public.crm_agent_jobs.crm_agent_jobs_select",
+        "rls|public.crm_agent_jobs"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

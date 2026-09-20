@@ -36,6 +36,7 @@ import { safetyRouter } from './routes/safety.js';
 import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
 import { childPrivacyRouter } from './routes/childPrivacy.js';
+import { crmCredentialsRouter } from './routes/crmCredentials.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
@@ -181,6 +182,7 @@ export function createApp(): Express {
   app.use('/api/motion-clips', motionClipsRouter);
   app.use('/api/daily-report', dailyReportRouter);
   app.use('/api/child-privacy', childPrivacyRouter);
+  app.use('/api/crm-credentials', crmCredentialsRouter);
   app.use('/api/playbooks', playbooksRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);

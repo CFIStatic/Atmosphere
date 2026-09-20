@@ -3,8 +3,9 @@
  *
  * Atmosphere-native fields always come from crm_jobs / contacts / properties.
  * External systems (JobNimbus, AccuLynx, Salesforce, ServiceTitan) are detected
- * via connection/mirror tables when present. Soft-fails when nothing external
- * is connected — never throws the Ask turn.
+ * primarily via crm_agent_credentials (Connect CRM username/password), then
+ * legacy mirror/sync/oauth tables when present. Soft-fails when nothing
+ * external is connected — never throws the Ask turn.
  */
 
 export type CrmProviderId =
@@ -136,6 +137,21 @@ export async function listAskCrmConnections(
       accountLabel: accountLabel ?? null,
     });
   };
+
+  try {
+    const { data, error } = await supabase
+      .from('crm_agent_credentials')
+      .select('system, username, status')
+      .eq('org_id', orgId)
+      .limit(20);
+    if (!error) {
+      for (const row of data ?? []) {
+        push(normalizeProvider(row.system), trim(row.username) || null);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 
   try {
     const { data, error } = await supabase
@@ -305,7 +321,7 @@ export async function getAskCrmRecord(input: {
 
   const softFail = hasExternal
     ? null
-    : 'No external CRM connected (JobNimbus, AccuLynx, Salesforce, or ServiceTitan). Showing Atmosphere-native fields. Connect a CRM under Connect CRM to pull vendor records.';
+    : 'No external CRM connected (JobNimbus, AccuLynx, Salesforce, or ServiceTitan). Showing Atmosphere-native fields. Connect a CRM under Connect CRM with your username and password so an agent can pull vendor records.';
 
   return {
     provider: 'atmosphere',
@@ -341,7 +357,7 @@ export async function searchAskCrm(input: {
   const hasExternal = externalConnected(connections);
   const softFail = hasExternal
     ? null
-    : 'No external CRM connected — searching Atmosphere-native jobs and contacts only. Connect JobNimbus, AccuLynx, Salesforce, or ServiceTitan under Connect CRM for vendor search.';
+    : 'No external CRM connected — searching Atmosphere-native jobs and contacts only. Connect JobNimbus, AccuLynx, Salesforce, or ServiceTitan under Connect CRM (username + password) for vendor search.';
 
   if (!q) {
     return { hits: [], connectedProviders: connections, softFail: 'Missing search query.' };
@@ -456,4 +472,13 @@ export function summarizeAskCrmRecord(record: AskCrmRecord): string {
     return `${core}. Linked from ${links}.`;
   }
   return `${core}.`;
+}
+
+
+/** Honest soft-fail when Ask wants to push to an external CRM without credentials. */
+export function crmUpdateSoftFail(connectedProviders: CrmConnectionInfo[]): string {
+  if (externalConnected(connectedProviders)) {
+    return 'External CRM credentials are on file. Push/update to the vendor runs via the agent job queue (may be stubbed per CRM). Atmosphere job file fields were updated when requested.';
+  }
+  return 'No external CRM connected. Connect JobNimbus, AccuLynx, Salesforce, or ServiceTitan under Connect CRM with your login so an agent can update vendor records.';
 }

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Connect CRM — Atmosphere</title>
+<style>
+  :root { --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b; --ink-400:#94a3b8;
+    --line:#e2e8f0; --paper-0:#fff; --paper-50:#f8fafc; --brand-50:#eff6ff; --brand-200:#bfdbfe;
+    --brand-700:#1d4ed8; --brand-800:#1e40af; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background:#f1f5f9; color:var(--ink-900); }
+  .shell { max-width: 720px; margin: 32px auto; padding: 0 16px; }
+  h1 { font-size: 1.75rem; margin:0; letter-spacing:-0.02em; }
+  .sub { margin: 6px 0 24px; color:var(--ink-500); font-size: 0.875rem; }
+  .card { background:var(--paper-0); border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; }
+  .row { border-bottom:1px solid var(--line); padding:16px 20px; }
+  .row:last-child { border-bottom:0; }
+  .top { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center; }
+  h2 { margin:0; font-size:0.875rem; font-weight:600; }
+  .blurb { margin:6px 0 0; font-size:0.75rem; color:var(--ink-500); max-width:28rem; }
+  .user { margin:6px 0 0; font-size:0.75rem; color:var(--ink-600); }
+  .user strong { font-weight:600; }
+  .badge { display:inline-block; margin-left:8px; vertical-align:middle;
+    border:1px solid var(--brand-200); background:var(--brand-50); color:var(--brand-800);
+    border-radius:999px; padding:2px 8px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .btn { border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:default; }
+  .btn-primary { background:var(--brand-700); border:1px solid var(--brand-700); color:#fff; }
+  .btn-ghost { background:var(--paper-0); border:1px solid var(--line); color:var(--ink-700); }
+  form { margin-top:12px; display:grid; gap:12px; grid-template-columns:1fr 1fr; }
+  label { font-size:12px; font-weight:500; color:var(--ink-700); display:block; }
+  input { margin-top:4px; width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
+  .span2 { grid-column:1 / -1; }
+  .actions { display:flex; gap:8px; }
+  .tag { position:fixed; top:12px; right:12px; background:#0f172a; color:#fff; font-size:11px; padding:6px 10px; border-radius:8px; opacity:.85; }
+</style>
+</head>
+<body>
+<div class="tag">AFTER — credential + agent login</div>
+<div class="shell">
+  <h1>Connect CRM</h1>
+  <p class="sub">An Atmosphere agent signs in with your CRM username and password to pull and update jobs, contacts, and claims.</p>
+  <div class="card">
+    <div class="row">
+      <div class="top">
+        <div>
+          <h2>JobNimbus</h2>
+          <p class="blurb">An Atmosphere agent signs in with your JobNimbus login to pull and update jobs, contacts, and claims.</p>
+        </div>
+        <button class="btn btn-primary">Connect</button>
+      </div>
+      <form>
+        <label>Username<input value="crew@roofer.com" readonly/></label>
+        <label>Password<input type="password" value="••••••••••" readonly/></label>
+        <label class="span2">Notes <span style="font-weight:400;color:#94a3b8">(optional)</span><input value="office login" readonly/></label>
+        <div class="span2 actions">
+          <button class="btn btn-primary" type="button">Save &amp; connect</button>
+          <button class="btn btn-ghost" type="button">Cancel</button>
+        </div>
+      </form>
+    </div>
+    <div class="row">
+      <div class="top">
+        <div>
+          <h2>AccuLynx <span class="badge">Connected</span></h2>
+          <p class="blurb">An Atmosphere agent signs in with your AccuLynx login to pull and update jobs, contacts, and claims.</p>
+          <p class="user">Signed in as <strong>ops@acme.com</strong></p>
+        </div>
+        <button class="btn btn-ghost">Disconnect</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="top">
+        <div>
+          <h2>Salesforce</h2>
+          <p class="blurb">An Atmosphere agent signs in with your Salesforce login to pull and update jobs, contacts, and claims.</p>
+        </div>
+        <button class="btn btn-primary">Connect</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="top">
+        <div>
+          <h2>ServiceTitan</h2>
+          <p class="blurb">An Atmosphere agent signs in with your ServiceTitan login to pull and update jobs, contacts, and claims.</p>
+        </div>
+        <button class="btn btn-primary">Connect</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
