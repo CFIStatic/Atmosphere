@@ -3,9 +3,13 @@
 # /api to the Atmosphere BFF so Field Capture sign-in works.
 #
 # Office Overview lives in the Platform iframe on this host, not in this
-# nginx image. A frontend-only SHA skips these watch paths, so production
-# can sit behind the office app until this file (or anything else under
-# fieldcapture/) changes — or until Repair Field Capture Railway is run.
+# nginx image.
+#
+# Trio with Atmosphere APIs + Platform: watch backend/** (and migrations) so
+# GitHub Autodeploy rebuilds Field Capture when APIs change. A frontend-only
+# SHA still skips these paths; Deploy Work Verification (`fieldcapture` job)
+# `railway up`s this service on every production deploy so FC never lags APIs.
+# repair-field-capture-config.yml remains for path-triggered / manual repair.
 #
 # Rebuild stamp 2026-09-02T18:00Z: ship the office 72px header-line alignment
 # with this main. The office image already embeds /fieldcapture/; this stamp
@@ -23,6 +27,8 @@ builder = "DOCKERFILE"
 dockerfilePath = "fieldcapture/Dockerfile"
 watchPatterns = [
   "fieldcapture/**",
+  "backend/**",
+  "supabase/migrations/**",
   "fieldcapture/Dockerfile",
 ]
 

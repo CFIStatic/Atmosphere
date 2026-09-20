@@ -129,7 +129,10 @@ test('each deploy job puts its own config on the upload root', () => {
   );
   assert.match(production, /cp backend\/railway\.toml railway\.toml/);
   assert.match(production, /cp frontend\/railway\.toml railway\.toml/);
+  assert.match(production, /cp fieldcapture\/railway\.toml railway\.toml/);
   assert.match(production, /cp internal\/railway\.toml railway\.toml/);
+  assert.match(production, /name: Deploy Field Capture/);
+  assert.match(production, /needs: backend/);
   assert.doesNotMatch(production, /ALLOW_MOCK_DRIVERS:\s*'true'/);
   // The ENABLE_* flags went with the products they gated; nothing to sync.
   assert.doesNotMatch(production, /ENABLE_PLATFORM_APIS/);
@@ -172,6 +175,8 @@ test('the Field Capture service has its own nginx config, not the BFF probe', ()
   assert.match(toml, /dockerfilePath\s*=\s*"fieldcapture\/Dockerfile"/);
   assert.match(toml, /healthcheckPath\s*=\s*"\/healthz"/);
   assert.match(toml, /fieldcapture\/\*\*/);
+  assert.match(toml, /backend\/\*\*/);
+  assert.match(toml, /supabase\/migrations\/\*\*/);
   assert.doesNotMatch(toml, /healthcheckPath\s*=\s*"\/api\/health"/);
   assert.doesNotMatch(toml, /^\s*preDeployCommand\s*=/m);
 
@@ -182,4 +187,26 @@ test('the Field Capture service has its own nginx config, not the BFF probe', ()
   assert.match(dockerfile, /FROM nginx:1\.27-alpine/);
   assert.match(dockerfile, /15-validate-fieldcapture-env\.envsh/);
   assert.match(dockerfile, /NGINX_ENVSUBST_FILTER=\^\(PORT\|API_UPSTREAM\|API_RESOLVERS\)\$\$/);
+});
+
+test('Platform and Field Capture watch backend so the trio Autodeploys together', () => {
+  const frontend = readFileSync(
+    new URL('../../frontend/railway.toml', import.meta.url),
+    'utf8',
+  );
+  const fieldCapture = readFileSync(
+    new URL('../../fieldcapture/railway.toml', import.meta.url),
+    'utf8',
+  );
+  for (const toml of [frontend, fieldCapture]) {
+    assert.match(toml, /backend\/\*\*/);
+    assert.match(toml, /supabase\/migrations\/\*\*/);
+  }
+  const production = readFileSync(
+    new URL('../../.github/workflows/deploy-production.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(production, /name: Deploy Field Capture/);
+  assert.match(production, /RAILWAY_UP_STAMP_FILE="\$PWD\/frontend\/nginx\/default\.conf\.template"/);
+  assert.match(production, /RAILWAY_UP_STAMP_FILE="\$PWD\/fieldcapture\/nginx\/default\.conf\.template"/);
 });
