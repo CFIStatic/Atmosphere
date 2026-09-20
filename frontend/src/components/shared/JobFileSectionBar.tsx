@@ -2,8 +2,10 @@ import { cn } from '../../design/cn';
 
 /**
  * Horizontal section bar for the office job file.
- * Active tab: lighter surface + brand (orange) underline. Inactive: muted.
- * Content for each section lives in the parent — this only switches.
+ * Matches design Tabs: no vertical cell dividers (those washed out against
+ * the selected surface and looked inconsistent), even horizontal padding,
+ * and a full-width brand underline on the active tab. Scrolls horizontally
+ * on narrow viewports.
  */
 
 export type JobFileSectionId =
@@ -36,8 +38,8 @@ export function JobFileSectionBar({
       role="tablist"
       aria-label="Job file sections"
     >
-      <div className="flex min-w-max">
-        {tabs.map((tab, index) => {
+      <div className="flex min-w-max items-stretch px-1">
+        {tabs.map((tab) => {
           const selected = tab.id === active;
           return (
             <button
@@ -49,18 +51,17 @@ export function JobFileSectionBar({
               data-testid={`job-file-section-tab-${tab.id}`}
               onClick={() => onChange(tab.id)}
               className={cn(
-                'relative px-3.5 py-2.5 text-sm font-medium transition sm:px-4',
-                index > 0 && 'border-l border-line',
+                'relative shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition sm:px-5',
                 selected
-                  ? 'bg-paper-200/70 text-ink-900'
-                  : 'text-ink-500 hover:bg-paper-50 hover:text-ink-700',
+                  ? 'bg-paper-200/50 text-ink-900'
+                  : 'text-ink-500 hover:bg-paper-50/60 hover:text-ink-700',
               )}
             >
               {tab.label}
               {selected ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-500"
+                  className="absolute inset-x-0 bottom-0 h-0.5 rounded-sm bg-brand-500"
                 />
               ) : null}
             </button>
