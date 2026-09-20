@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '../components/AppShell';
 import {
   api,
   type SharedJobSummary,
@@ -10,6 +17,7 @@ import {
   type IntakeCaptureInvite,
 } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
+import { JobAskPanel } from '../components/JobAskPanel';
 import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
@@ -20,6 +28,11 @@ import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
+import {
+  JobFileSectionBar,
+  type JobFileSectionId,
+  type JobFileSectionTab,
+} from '../components/shared/JobFileSectionBar';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
@@ -149,6 +162,7 @@ export function SharedDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
+  const [section, setSection] = useState<JobFileSectionId>(openAsk ? 'chat' : 'happening');
 
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
@@ -161,6 +175,11 @@ export function SharedDashboardPage() {
   useEffect(() => {
     if (openId) touchJobFile(openId);
   }, [openId]);
+
+  useEffect(() => {
+    if (!openAsk) return;
+    setSection('chat');
+  }, [openAsk, openId]);
 
   useEffect(() => {
     if (!stayOnRecord) navigate('/verifier-library', { replace: true });
@@ -300,48 +319,48 @@ export function SharedDashboardPage() {
   const jobId = record?.job.id ?? requestedJob ?? '';
 
   const fileBody = (
-    <>
-      <PageHeader
-        title={record?.job.title ?? 'Job'}
-        action={
-          grantViewer ? (
-            <Link
-              to={HOMEOWNER_HUB_PATH}
-              className="text-sm font-medium text-brand-600 hover:text-brand-700"
-              data-testid="your-job-files"
-            >
-              Your job files
-            </Link>
-          ) : record && !viewerOnly ? (
-            <JobFileActions
-              jobId={record.job.id}
-              title={record.job.title}
-              onShare={openShare}
-              onRenamed={(nextTitle) => {
-                setRecord((prev) =>
-                  prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
-                );
-                setList((prev) =>
-                  (prev ?? []).map((job) =>
-                    job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
-                  ),
-                );
-                if (requestedJob === record.job.id) {
-                  const next: Record<string, string> = { job: record.job.id, title: nextTitle };
-                  if (requestedNumber) next.number = requestedNumber;
-                  setSearchParams(next, { replace: true, state: location.state });
-                }
-              }}
-              onDuplicated={({ jobId: nextId, title: nextTitle, summary }) => {
-                ensureListed(summary);
-                navigate(jobFilePath(nextId, { title: nextTitle }), {
-                  state: { freshJob: summary },
-                });
-              }}
-            />
-          ) : undefined
-        }
-      />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <h1 className="min-w-0 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+          {record?.job.title ?? 'Job'}
+        </h1>
+        {grantViewer ? (
+          <Link
+            to={HOMEOWNER_HUB_PATH}
+            className="text-sm font-medium text-brand-600 hover:text-brand-700"
+            data-testid="your-job-files"
+          >
+            Your job files
+          </Link>
+        ) : record && !viewerOnly ? (
+          <JobFileActions
+            jobId={record.job.id}
+            title={record.job.title}
+            onShare={openShare}
+            onRenamed={(nextTitle) => {
+              setRecord((prev) =>
+                prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
+              );
+              setList((prev) =>
+                (prev ?? []).map((job) =>
+                  job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
+                ),
+              );
+              if (requestedJob === record.job.id) {
+                const next: Record<string, string> = { job: record.job.id, title: nextTitle };
+                if (requestedNumber) next.number = requestedNumber;
+                setSearchParams(next, { replace: true, state: location.state });
+              }
+            }}
+            onDuplicated={({ jobId: nextId, title: nextTitle, summary }) => {
+              ensureListed(summary);
+              navigate(jobFilePath(nextId, { title: nextTitle }), {
+                state: { freshJob: summary },
+              });
+            }}
+          />
+        ) : null}
+      </header>
 
       {record && <JobFileTodayStrip jobId={record.job.id} record={record} />}
 
@@ -407,89 +426,35 @@ export function SharedDashboardPage() {
       )}
 
       {record ? (
-        <>
-          <div className="mt-4">
-            <JobProgressDashboard
-              jobId={record.job.id}
-              record={record}
-              readOnly={viewerOnly}
-              showProofOfWork={false}
-              showIdentity={false}
-              initialProof={
-                justApproved
-                  ? {
-                      days: [],
-                      videos: [],
-                      counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-                      siteKnown: Boolean(siteLine(record)),
-                    }
-                  : undefined
-              }
-            />
-
-            {/* Who-has-access is office/org only — never for homeowners,
-                grant-only, guest progress, or invitee viewers. */}
-            {!grantViewer && (
-              <div className="mt-4 space-y-4">
-                <JobAccessRoster jobId={record.job.id} />
-              </div>
-            )}
-
-            {!viewerOnly && (
-            <div className="mt-4 space-y-4">
-              <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
-              <ClaimReadyPacketPanel jobId={record.job.id} />
-              <EvidenceLocker jobId={record.job.id} />
-            </div>
-            )}
-
-            {!viewerOnly && (
-            <details className="mt-4 rounded-xl glass-card group" data-job-section="setup">
-              <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
-                <span className="flex items-center justify-between gap-2">
-                  Job setup — scope, crew &amp; documents
-                  <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
-                  <span className="hidden text-xs font-normal text-ink-500 group-open:inline">
-                    Hide
-                  </span>
-                </span>
-              </summary>
-              <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
-                <PartyList
-                  record={record}
-                  onChanged={() => {
-                    void openJob(record.job.id);
-                    void loadList();
-                  }}
-                />
-                <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
-                <ScopeDocPanel
-                  jobId={record.job.id}
-                  onChanged={() => {
-                    void openJob(record.job.id);
-                    setReadinessKey((k) => k + 1);
-                  }}
-                />
-                <ScopeList
-                  record={record}
-                  onDecide={decide}
-                  onChanged={() => void openJob(record.job.id)}
-                />
-              </div>
-            </details>
-            )}
-          </div>
-        </>
+        <JobFileSections
+          record={record}
+          section={section}
+          onSectionChange={setSection}
+          grantViewer={grantViewer}
+          viewerOnly={viewerOnly}
+          justApproved={justApproved}
+          readinessKey={readinessKey}
+          setReadinessKey={setReadinessKey}
+          onOpenJob={(id) => void openJob(id)}
+          onLoadList={() => void loadList()}
+          onDecide={decide}
+        />
       ) : (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
       )}
-    </>
+    </div>
   );
 
   return (
     <JobFileAskChrome
       jobId={jobId}
+      askPlacement="section"
       initialPane={openAsk ? 'ask' : 'file'}
+      pane={section === 'chat' ? 'ask' : 'file'}
+      onPaneChange={(next) => {
+        if (next === 'ask') setSection('chat');
+        else if (section === 'chat') setSection('happening');
+      }}
       extra={
         shareFormOpen && record ? (
           <ShareJobProgressPanel
@@ -504,6 +469,145 @@ export function SharedDashboardPage() {
     >
       {fileBody}
     </JobFileAskChrome>
+  );
+}
+
+function JobFileSections({
+  record,
+  section,
+  onSectionChange,
+  grantViewer,
+  viewerOnly,
+  justApproved,
+  readinessKey,
+  setReadinessKey,
+  onOpenJob,
+  onLoadList,
+  onDecide,
+}: {
+  record: SharedJobRecord;
+  section: JobFileSectionId;
+  onSectionChange: (id: JobFileSectionId) => void;
+  grantViewer: boolean;
+  viewerOnly: boolean;
+  justApproved: boolean;
+  readinessKey: number;
+  setReadinessKey: Dispatch<SetStateAction<number>>;
+  onOpenJob: (id: string) => void;
+  onLoadList: () => void;
+  onDecide: (item: JobScopeItem, decision: 'approved' | 'declined') => void;
+}) {
+  const tabs = useMemo(() => {
+    const next: JobFileSectionTab[] = [
+      { id: 'chat', label: 'Chat' },
+      { id: 'happening', label: 'Happening Now' },
+    ];
+    if (!grantViewer) next.push({ id: 'access', label: 'Access' });
+    if (!viewerOnly) {
+      next.push(
+        { id: 'videos', label: 'Videos' },
+        { id: 'packet', label: 'Packet' },
+        { id: 'evidence', label: 'Evidence report' },
+        { id: 'history', label: 'Job history' },
+      );
+    }
+    return next;
+  }, [grantViewer, viewerOnly]);
+
+  const active = tabs.some((t) => t.id === section) ? section : 'happening';
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="shrink-0">
+        <JobFileSectionBar tabs={tabs} active={active} onChange={onSectionChange} />
+      </div>
+
+      <div
+        role="tabpanel"
+        aria-labelledby={`job-file-section-${active}`}
+        data-testid={`job-file-section-panel-${active}`}
+        className={
+          active === 'chat'
+            ? 'flex min-h-0 flex-1 flex-col'
+            : 'min-h-0 flex-1 overflow-y-auto'
+        }
+      >
+        {active === 'chat' ? (
+          <div
+            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-paper-50"
+            aria-label="Ask this job"
+            data-testid="job-file-ask"
+          >
+            <JobAskPanel jobId={record.job.id} fill />
+          </div>
+        ) : null}
+
+        {active === 'happening' ? (
+          <JobProgressDashboard
+            jobId={record.job.id}
+            record={record}
+            readOnly={viewerOnly}
+            showProofOfWork={false}
+            showIdentity={false}
+            showLiveStory={false}
+            framed
+            initialProof={
+              justApproved
+                ? {
+                    days: [],
+                    videos: [],
+                    counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+                    siteKnown: Boolean(siteLine(record)),
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+
+        {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
+
+        {active === 'videos' && !viewerOnly ? (
+          <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
+        ) : null}
+
+        {active === 'packet' && !viewerOnly ? (
+          <ClaimReadyPacketPanel jobId={record.job.id} />
+        ) : null}
+
+        {active === 'evidence' && !viewerOnly ? <EvidenceLocker jobId={record.job.id} /> : null}
+
+        {active === 'history' && !viewerOnly ? (
+          <div className="space-y-4" data-job-section="setup" data-testid="job-file-history">
+            <section className="rounded-xl glass-card p-5">
+              <h2 className="text-base font-semibold text-ink-900">Job history</h2>
+              <p className="mt-1 text-sm text-ink-500">
+                Scope, crew, and documents for this job file.
+              </p>
+            </section>
+            <PartyList
+              record={record}
+              onChanged={() => {
+                onOpenJob(record.job.id);
+                onLoadList();
+              }}
+            />
+            <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+            <ScopeDocPanel
+              jobId={record.job.id}
+              onChanged={() => {
+                onOpenJob(record.job.id);
+                setReadinessKey((k) => k + 1);
+              }}
+            />
+            <ScopeList
+              record={record}
+              onDecide={onDecide}
+              onChanged={() => onOpenJob(record.job.id)}
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

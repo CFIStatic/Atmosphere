@@ -53,6 +53,21 @@ describe('JobFileAskChrome phone tabs', () => {
   });
 });
 
+describe('JobFileAskChrome section placement', () => {
+  it('renders a single column with no Ask chrome when askPlacement is section', () => {
+    render(
+      <JobFileAskChrome jobId="job-1" askPlacement="section">
+        <div>File body</div>
+      </JobFileAskChrome>,
+    );
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
+    expect(screen.getByText('File body')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask-split')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+  });
+});
+
 describe('JobFileAskChrome initial pane', () => {
   it('opens Ask when the emailed Ask link requested it', () => {
     render(
@@ -69,16 +84,19 @@ describe('JobFileAskChrome initial pane', () => {
 });
 
 describe('JobFileAskChrome source', () => {
-  it('pins Ask on the left of the job file on desktop', () => {
-    const desktop = chromeSrc.slice(chromeSrc.indexOf(') : ('));
-    const askIdx = desktop.indexOf('data-testid="job-file-ask"');
-    const splitIdx = desktop.indexOf('data-testid="job-file-ask-split"');
-    const fileIdx = desktop.indexOf('{children}');
+  it('pins Ask on the left of the job file on desktop split layout', () => {
+    expect(chromeSrc).toContain('askPlacement === \'section\'');
+    expect(chromeSrc).toContain("askPlacement?: 'split' | 'section'");
+    // Split branch still docks Ask left of the file with the resize handle between.
+    const splitBranch = chromeSrc.slice(chromeSrc.indexOf(') : phone ? ('));
+    const askIdx = splitBranch.indexOf('data-testid="job-file-ask"');
+    const splitIdx = splitBranch.indexOf('data-testid="job-file-ask-split"');
+    const fileIdx = splitBranch.lastIndexOf('{children}');
     expect(askIdx).toBeGreaterThan(-1);
     expect(splitIdx).toBeGreaterThan(askIdx);
     expect(fileIdx).toBeGreaterThan(splitIdx);
     expect(chromeSrc).toContain('lg:w-[var(--job-file-ask-width)]');
-    expect(chromeSrc).toContain('Desktop pins Ask on the left');
+    expect(chromeSrc).toContain('desktop pins Ask on the left');
   });
 
   it('exposes a desktop-only drag resize handle between Ask and the job file', () => {
