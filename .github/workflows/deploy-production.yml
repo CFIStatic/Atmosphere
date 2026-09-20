@@ -1,14 +1,16 @@
 # Deploy Work Verification to Railway using the GitHub environment `Keys`.
 #
 # Railway does not read GitHub Environments on its own. This workflow is the
-# bridge: it copies Keys → the backend service, then `railway up`s backend and
-# the office app.
+# bridge: it copies Keys → the backend service, then `railway up`s backend,
+# the office app (Platform), and Field Capture together.
 #
 # Production only. Feature branches must not `railway up` here — that would
 # overwrite production. For branch / PR previews, enable Railway PR
 # Environments (see docs/production.md → Railway auto-deploy).
 #
-# This workflow ships the backend (Keys sync + railway up) and the office app.
+# Trio on every run: Atmosphere APIs → then Platform + Field Capture in
+# parallel (both need backend). That keeps APIs / Platform / FC on the same
+# SHA — an APIs-only merge must not leave Platform or FC on an older image.
 # If a service also has GitHub Autodeploy on `main`, you will get two deploys
 # per push — Disable Autodeploy on that service, or drop the matching
 # `railway up` step here (see docs/production.md).
@@ -20,6 +22,7 @@
 #   RAILWAY_SERVICE        (backend service name, default: Atmosphere APIs)
 #   RAILWAY_APP_SERVICE    (office app service name, default: Platform)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
+#   RAILWAY_FIELD_CAPTURE_SERVICE (crew host, default: Field Capture)
 #   RAILWAY_INTERNAL_SERVICE (staff site, default: Internal Growth Metrics)
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
@@ -288,9 +291,73 @@ jobs:
           echo "API_UPSTREAM=$upstream"
           printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
           cp frontend/railway.toml railway.toml
+          # Stamp so a backend-only SHA still forces a unique Platform upload
+          # (Railway otherwise no-ops unchanged watch-path content).
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> frontend/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
+          backend/scripts/railwayUp.sh
+
+  fieldcapture:
+    name: Deploy Field Capture
+    needs: backend
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: bash scripts/installRailwayCli.sh
+
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Deploy Field Capture
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
+          RAILWAY_ENVIRONMENT: production
+          RAILWAY_UP_ATTEMPTS: '3'
+        run: |
+          set -euo pipefail
+          project="${RAILWAY_PROJECT_ID}"
+          service="${RAILWAY_FIELD_CAPTURE_SERVICE}"
+          echo "Deploying Field Capture to Railway service '$service' in project $project."
+          case "$service" in
+            fieldcapture|field-capture|Atmosphere-fieldcapture|Atmosphere-Field-Capture)
+              service="Field Capture"
+              ;;
+          esac
+          railway link --project "$project" --environment production --service "$service" \
+            || railway link --project "$project" --environment production \
+            || railway link --project "$project" \
+            || true
+          railway status --project "$project" --environment production || railway status || true
+          chmod +x backend/scripts/railwayUp.sh fieldcapture/scripts/apply-railway-config.sh
+          fieldcapture/scripts/apply-railway-config.sh
+          if service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"; then
+            echo "Resolved '$service' to $service_id"
+            service="$service_id"
+          fi
+          cp fieldcapture/railway.toml railway.toml
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> fieldcapture/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/fieldcapture/nginx/default.conf.template"
+          export RAILWAY_SERVICE="$service"
+          export RAILWAY_PROJECT_ID="$project"
           backend/scripts/railwayUp.sh
 
   website-config:
