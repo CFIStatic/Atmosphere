@@ -10,6 +10,7 @@ import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
 import {
   askWebSearchBlockedReason,
+  looksLikeOutsideKnowledgeAsk,
   searchAskWeb,
   type AskWebHit,
 } from './askWebSearch.js';
@@ -318,9 +319,10 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
     add('search_crm');
   }
   if (
+    looksLikeOutsideKnowledgeAsk(question) ||
     /\b(irc|ibc|nec|code|manufacturer|product spec|how (do|to)|standard)\b/i.test(q) ||
-    askWebSearchBlockedReason(question) == null &&
-      /\b(install guide|warranty|astm|ul\s*\d)\b/i.test(q)
+    (askWebSearchBlockedReason(question) == null &&
+      /\b(install guide|warranty|astm|ul\s*\d)\b/i.test(q))
   ) {
     add('web_search');
   }

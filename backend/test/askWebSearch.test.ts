@@ -1,16 +1,55 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  askWebCapabilityRules,
   askWebSearchBlockedReason,
+  askWebSearchProvider,
   filterWebHitsToAllowed,
   formatWebTrailer,
+  isAskWebSearchConfigured,
   looksLikeOutsideKnowledgeAsk,
+  looksLikeWebCapabilityAsk,
   normalizeAskWebCitations,
+  parseGeminiAskWebHitsJson,
   parseWebTrailer,
   sanitizeAskWebQuery,
   searchAskWeb,
+  shouldSearchAskWeb,
   shouldSupplementWithWebSearch,
 } from '../src/shared/askWebSearch.js';
+
+function withEnv(vars: Record<string, string | undefined>, fn: () => void | Promise<void>) {
+  const prev: Record<string, string | undefined> = {};
+  const keys = Object.keys(vars);
+  for (const key of keys) {
+    prev[key] = process.env[key];
+    if (vars[key] === undefined) delete process.env[key];
+    else process.env[key] = vars[key] as string;
+  }
+  return Promise.resolve()
+    .then(() => fn())
+    .finally(() => {
+      for (const key of keys) {
+        if (prev[key] === undefined) delete process.env[key];
+        else process.env[key] = prev[key]!;
+      }
+    });
+}
+
+async function clearSearchEnv(fn: () => void | Promise<void>) {
+  return withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      ASK_WEB_SEARCH_PROVIDER: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    fn,
+  );
+}
 
 test('privacy blocks reverse-image, child, and private person identification', () => {
   assert.equal(askWebSearchBlockedReason('reverse image search this photo'), 'reverse_image_search');
@@ -22,60 +61,114 @@ test('privacy blocks reverse-image, child, and private person identification', (
   assert.equal(askWebSearchBlockedReason('what is IRC R905 for asphalt shingles'), null);
 });
 
-test('outside-knowledge detection covers codes and products', () => {
+test('outside-knowledge detection covers codes, products, and web capability', () => {
   assert.equal(looksLikeOutsideKnowledgeAsk('what does IRC R905 require for underlayment'), true);
   assert.equal(looksLikeOutsideKnowledgeAsk('GAF Timberline manufacturer install guide'), true);
   assert.equal(looksLikeOutsideKnowledgeAsk('what is the lockbox code'), false);
   assert.equal(looksLikeOutsideKnowledgeAsk('what did the homeowner say about skylights'), false);
+  assert.equal(looksLikeWebCapabilityAsk('are you connected to the internet'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('are you connected to the internet'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('can you search the web'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('look this up online'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('do you have internet access'), true);
 });
 
-test('shouldSupplementWithWebSearch respects grounded hits and privacy', () => {
+test('shouldSupplementWithWebSearch respects grounded hits and privacy', async () => {
   assert.equal(
     shouldSupplementWithWebSearch('what is the lockbox', 'brief · Gate / access: Lockbox 4412'),
     false,
   );
-  // Without a configured key, always false.
-  const prev = process.env.ASK_WEB_SEARCH_API_KEY;
-  const prevBrave = process.env.BRAVE_SEARCH_API_KEY;
-  const prevProv = process.env.ASK_WEB_SEARCH_PROVIDER;
-  delete process.env.ASK_WEB_SEARCH_API_KEY;
-  delete process.env.BRAVE_SEARCH_API_KEY;
-  delete process.env.ASK_WEB_SEARCH_PROVIDER;
-  try {
+  await clearSearchEnv(() => {
     assert.equal(
       shouldSupplementWithWebSearch('what does IRC R905 require', 'This job file does not have that.'),
       false,
     );
-  } finally {
-    if (prev === undefined) delete process.env.ASK_WEB_SEARCH_API_KEY;
-    else process.env.ASK_WEB_SEARCH_API_KEY = prev;
-    if (prevBrave === undefined) delete process.env.BRAVE_SEARCH_API_KEY;
-    else process.env.BRAVE_SEARCH_API_KEY = prevBrave;
-    if (prevProv === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
-    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProv;
-  }
+    assert.equal(isAskWebSearchConfigured(), false);
+  });
 });
 
-test('shouldSupplementWithWebSearch when key is set for code questions', () => {
-  const prev = process.env.ASK_WEB_SEARCH_API_KEY;
-  const prevProv = process.env.ASK_WEB_SEARCH_PROVIDER;
-  process.env.ASK_WEB_SEARCH_API_KEY = 'test-key';
-  process.env.ASK_WEB_SEARCH_PROVIDER = 'brave';
-  try {
-    assert.equal(
-      shouldSupplementWithWebSearch('what does IRC R905 require', 'This job file does not have that.'),
-      true,
-    );
-    assert.equal(
-      shouldSupplementWithWebSearch('who is this child in the photo', 'This job file does not have that.'),
-      false,
-    );
-  } finally {
-    if (prev === undefined) delete process.env.ASK_WEB_SEARCH_API_KEY;
-    else process.env.ASK_WEB_SEARCH_API_KEY = prev;
-    if (prevProv === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
-    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProv;
-  }
+test('shouldSupplementWithWebSearch when key is set for code questions', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(
+        shouldSupplementWithWebSearch('what does IRC R905 require', 'This job file does not have that.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('who is this child in the photo', 'This job file does not have that.'),
+        false,
+      );
+      assert.equal(
+        shouldSearchAskWeb('are you connected to the internet', 'This job file does not have that.'),
+        true,
+      );
+    },
+  );
+});
+
+test('gemini auto-detect: GEMINI_API_KEY alone configures Ask web search', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      ASK_WEB_SEARCH_PROVIDER: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(askWebSearchProvider(), 'gemini');
+      assert.equal(isAskWebSearchConfigured(), true);
+      assert.match(askWebCapabilityRules(), /CAN look up public web/i);
+      assert.doesNotMatch(askWebCapabilityRules(), /not configured/i);
+    },
+  );
+});
+
+test('ASK_WEB_SEARCH_PROVIDER=off disables even with GEMINI_API_KEY', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'off',
+      GEMINI_API_KEY: 'gemini-test-key',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(askWebSearchProvider(), null);
+      assert.equal(isAskWebSearchConfigured(), false);
+      assert.match(askWebCapabilityRules(), /not configured/i);
+    },
+  );
+});
+
+test('brave key preferred over gemini when both present', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: undefined,
+      BRAVE_SEARCH_API_KEY: 'brave-key',
+      GEMINI_API_KEY: 'gemini-test-key',
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(askWebSearchProvider(), 'brave');
+    },
+  );
 });
 
 test('sanitizeAskWebQuery strips lockbox codes and street addresses', () => {
@@ -141,67 +234,177 @@ test('normalizeAskWebCitations attaches validated trailer', () => {
 });
 
 test('searchAskWeb soft-fails when unset and when fetch errors', async () => {
-  const prev = process.env.ASK_WEB_SEARCH_API_KEY;
-  const prevProv = process.env.ASK_WEB_SEARCH_PROVIDER;
-  delete process.env.ASK_WEB_SEARCH_API_KEY;
-  delete process.env.BRAVE_SEARCH_API_KEY;
-  process.env.ASK_WEB_SEARCH_PROVIDER = 'off';
-  try {
-    assert.deepEqual(await searchAskWeb('IRC R905'), []);
-  } finally {
-    if (prev === undefined) delete process.env.ASK_WEB_SEARCH_API_KEY;
-    else process.env.ASK_WEB_SEARCH_API_KEY = prev;
-    if (prevProv === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
-    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProv;
-  }
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'off',
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    async () => {
+      assert.deepEqual(await searchAskWeb('IRC R905'), []);
+    },
+  );
 
-  process.env.ASK_WEB_SEARCH_API_KEY = 'test-key';
-  process.env.ASK_WEB_SEARCH_PROVIDER = 'brave';
-  try {
-    const hits = await searchAskWeb('IRC R905 underlayment', {
-      fetchFn: async () => {
-        throw new Error('network down');
-      },
-    });
-    assert.deepEqual(hits, []);
-  } finally {
-    if (prev === undefined) delete process.env.ASK_WEB_SEARCH_API_KEY;
-    else process.env.ASK_WEB_SEARCH_API_KEY = prev;
-    if (prevProv === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
-    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProv;
-  }
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('IRC R905 underlayment', {
+        fetchFn: async () => {
+          throw new Error('network down');
+        },
+      });
+      assert.deepEqual(hits, []);
+    },
+  );
 });
 
 test('searchAskWeb parses Brave-shaped JSON', async () => {
-  const prev = process.env.ASK_WEB_SEARCH_API_KEY;
-  const prevProv = process.env.ASK_WEB_SEARCH_PROVIDER;
-  process.env.ASK_WEB_SEARCH_API_KEY = 'test-key';
-  process.env.ASK_WEB_SEARCH_PROVIDER = 'brave';
-  try {
-    const hits = await searchAskWeb('IRC R905', {
-      fetchFn: async () =>
-        new Response(
-          JSON.stringify({
-            web: {
-              results: [
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('IRC R905', {
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  {
+                    title: 'IRC R905',
+                    url: 'https://codes.iccsafe.org/r905',
+                    description: 'Roof covering',
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      });
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0]?.title, 'IRC R905');
+      assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
+    },
+  );
+});
+
+test('parseGeminiAskWebHitsJson reads hits object and array forms', () => {
+  const fromObj = parseGeminiAskWebHitsJson(
+    '{"hits":[{"title":"IRC R905","url":"https://codes.iccsafe.org/r905","snippet":"Roof"}]}',
+  );
+  assert.equal(fromObj.length, 1);
+  assert.equal(fromObj[0]?.url, 'https://codes.iccsafe.org/r905');
+
+  const fromArr = parseGeminiAskWebHitsJson(
+    '[{"title":"GAF","url":"https://www.gaf.com/install","description":"Guide"}]',
+  );
+  assert.equal(fromArr.length, 1);
+  assert.equal(fromArr[0]?.snippet, 'Guide');
+});
+
+test('searchAskWeb parses Gemini grounding metadata and JSON parts', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('IRC R905 underlayment', {
+        fetchFn: async (_url, init) => {
+          const body = JSON.parse(String((init as RequestInit)?.body ?? '{}')) as {
+            tools?: unknown[];
+          };
+          assert.ok(body.tools?.some((t) => t && typeof t === 'object' && 'google_search' in (t as object)));
+          return new Response(
+            JSON.stringify({
+              candidates: [
                 {
-                  title: 'IRC R905',
-                  url: 'https://codes.iccsafe.org/r905',
-                  description: 'Roof covering',
+                  content: {
+                    parts: [
+                      {
+                        text: JSON.stringify({
+                          hits: [
+                            {
+                              title: 'From JSON',
+                              url: 'https://example.com/from-json',
+                              snippet: 'JSON part',
+                            },
+                          ],
+                        }),
+                      },
+                    ],
+                  },
+                  groundingMetadata: {
+                    groundingChunks: [
+                      {
+                        web: {
+                          uri: 'https://codes.iccsafe.org/r905',
+                          title: 'IRC R905',
+                        },
+                      },
+                      {
+                        web: {
+                          uri: 'https://example.com/from-json',
+                          title: 'Dup',
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-    });
-    assert.equal(hits.length, 1);
-    assert.equal(hits[0]?.title, 'IRC R905');
-    assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
-  } finally {
-    if (prev === undefined) delete process.env.ASK_WEB_SEARCH_API_KEY;
-    else process.env.ASK_WEB_SEARCH_API_KEY = prev;
-    if (prevProv === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
-    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProv;
-  }
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+      });
+      assert.ok(hits.length >= 1);
+      assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
+      assert.equal(hits[0]?.title, 'IRC R905');
+      // Deduped grounding + JSON share one URL
+      assert.equal(hits.filter((h) => h.url === 'https://example.com/from-json').length, 1);
+    },
+  );
+});
+
+test('searchAskWeb soft-fails on Gemini HTTP errors', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('IRC R905', {
+        fetchFn: async () => new Response('nope', { status: 403 }),
+      });
+      assert.deepEqual(hits, []);
+    },
+  );
 });
