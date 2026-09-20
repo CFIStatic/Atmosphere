@@ -23,7 +23,9 @@ import {
   askWebCapabilityRules,
   formatAskWebContext,
   looksLikeOutsideKnowledgeAsk,
+  looksLikePureWebCapabilityAsk,
   normalizeAskWebCitations,
+  professionalWebCapabilityAnswer,
   searchAskWeb,
   shouldSupplementWithWebSearch,
   type AskWebHit,
@@ -500,6 +502,14 @@ export async function answerFromJobFile(input: {
     webHits: [] as AskWebHit[],
     toolResults: [] as AskToolResult[],
   };
+
+  // Capability-only ("can you search Google?") → short professional yes, no live
+  // search, no model star soup / google.com junk citations.
+  if (looksLikePureWebCapabilityAsk(input.question)) {
+    const answer = professionalWebCapabilityAnswer(input.question);
+    input.onToken?.(answer);
+    return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
+  }
 
   // Run safe tools first so field updates apply before the model writes prose.
   let toolResults: AskToolResult[] = [];

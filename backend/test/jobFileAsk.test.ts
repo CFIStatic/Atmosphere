@@ -206,7 +206,7 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
     assert.ok(topical.webHits.length >= 1, 'expected webHits for topical web ask');
     assert.equal(topical.webHits[0]?.url, 'https://example.com/tile-prices');
 
-    // Capability-only: no live fetch (avoids google.com homepage junk citations)
+    // Capability-only: no live fetch + short professional yes (no google junk / star soup)
     for (const question of ['can u search google', 'what can you search for']) {
       searched = false;
       const result = await answerFromJobFile({
@@ -220,6 +220,11 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
       });
       assert.equal(searched, false, `capability-only must not search: ${question}`);
       assert.equal(result.webHits.length, 0, `capability-only must not attach webHits: ${question}`);
+      assert.match(result.answer, /Yes|search the public web|not configured/i);
+      assert.doesNotMatch(result.answer, /web:/i);
+      assert.doesNotMatch(result.answer, /google\.com/i);
+      assert.doesNotMatch(result.answer, /\*\*\*/);
+      assert.doesNotMatch(result.answer, /brief ·/i);
     }
   } finally {
     for (const [key, value] of Object.entries(prev)) {

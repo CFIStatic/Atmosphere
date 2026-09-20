@@ -107,4 +107,17 @@ describe('askSources', () => {
     expect(body).not.toMatch(/web:/i);
   });
 
+  // Exact junk trailer from live user screenshot after “can you search google”
+  it('strips exact screenshot [web:…] google/wikihow junk trailer', () => {
+    const junk =
+      '[web: Google|https://www.google.com/xhtml/search, Google Search - A new kind of help|https://search.google/, How to Search Google: Basic Advanced & AI Options|https://www.wikihow.com/Search-Google]';
+    const { body, webSources } = extractAskSources(
+      `Yes — I can search the public web when you need it.${junk}`,
+    );
+    expect(body).toBe('Yes — I can search the public web when you need it.');
+    expect(body).not.toMatch(/\[web:/i);
+    expect(body).not.toMatch(/google\.com|search\.google|wikihow/i);
+    expect(webSources).toEqual([]);
+  });
+
 });

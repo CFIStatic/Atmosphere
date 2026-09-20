@@ -238,6 +238,34 @@ export function looksLikePureWebCapabilityAsk(question: string): boolean {
   );
 }
 
+/**
+ * Deterministic 1–3 sentence reply for capability-only asks.
+ * Avoids LLM star soup and google.com junk citations entirely.
+ */
+export function professionalWebCapabilityAnswer(question?: string): string {
+  const q = trim(question ?? '').toLowerCase();
+  if (!isAskWebSearchConfigured()) {
+    return (
+      'I can only use this job file and in-product tools right now — public web search is not configured in this environment. ' +
+      'Ask about anything on the file and I will ground the answer there.'
+    );
+  }
+
+  if (/\bwhat\s+(can|do)\s+you\s+(search|look\s*up)/i.test(q)) {
+    return (
+      'Yes — I can search the public web for outside knowledge like codes, products, manufacturers, standards, and prices. ' +
+      'Job-file evidence still always wins for on-job facts. ' +
+      'Tell me what you want looked up and I will search for it.'
+    );
+  }
+
+  return (
+    'Yes — I can search the public web for outside knowledge when you need it. ' +
+    'Job-file evidence still always wins for on-job facts. ' +
+    'Want me to look something specific up?'
+  );
+}
+
 /** Outside-knowledge asks that benefit from the public web. */
 export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   const q = trim(question);

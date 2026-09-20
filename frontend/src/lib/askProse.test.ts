@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askInlineText, normalizeAskProse, parseAskProseBlocks } from './askProse';
+import { askInlineText, normalizeAskProse, parseAskProseBlocks, stripOrphanEmphasis } from './askProse';
 
 describe('normalizeAskProse', () => {
   it('keeps bold markdown and normalizes list markers', () => {
@@ -13,6 +13,31 @@ Want more?`;
     expect(clean).toContain('**Job Setup:**');
     expect(clean).toMatch(/^- \*\*Job Setup:\*\*/m);
     expect(clean).toMatch(/^- \*\*Recent Activity:\*\*/m);
+  });
+
+  it('never leaves literal star soup or web trailers', () => {
+    const clean = normalizeAskProse(
+      'Yes *** I can search ** google?[[web: Google|https://www.google.com/]]',
+    );
+    expect(clean).not.toMatch(/\*\*\*/);
+    expect(clean).not.toMatch(/\[\[web:/i);
+    expect(clean).not.toMatch(/google\.com/i);
+    expect(clean).toMatch(/Yes/i);
+    expect(clean).toMatch(/search/i);
+    // No unbalanced **
+    expect((clean.match(/\*\*/g) ?? []).length % 2).toBe(0);
+  });
+
+  it('strips unicode and ASCII web trailers during normalize', () => {
+    expect(normalizeAskProse('Hello⟦web: A|https://example.com/a⟧')).toBe('Hello');
+    expect(normalizeAskProse('Hello[[web: A|https://example.com/a]]')).toBe('Hello');
+  });
+});
+
+describe('stripOrphanEmphasis', () => {
+  it('keeps balanced bold/italic and drops decorative runs', () => {
+    expect(stripOrphanEmphasis('**Label:** *aside*')).toBe('**Label:** *aside*');
+    expect(stripOrphanEmphasis('*** soup ***')).not.toMatch(/\*/);
   });
 });
 
@@ -41,5 +66,15 @@ describe('parseAskProseBlocks', () => {
     expect(blocks[0]?.kind).toBe('paragraph');
     if (blocks[0]?.kind !== 'paragraph') throw new Error('expected paragraph');
     expect(askInlineText(blocks[0].children)).toContain('<script>alert(1)</script>');
+  });
+
+  it('never renders unmatched stars as literal text', () => {
+    const blocks = parseAskProseBlocks('Yes *** I can ** search');
+    expect(blocks).toHaveLength(1);
+    if (blocks[0]?.kind !== 'paragraph') throw new Error('expected paragraph');
+    const flat = askInlineText(blocks[0].children);
+    expect(flat).not.toMatch(/\*/);
+    expect(flat).toMatch(/Yes/i);
+    expect(flat).toMatch(/search/i);
   });
 });

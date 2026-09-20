@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from '../src/shared/askProse.js';
+import { ASK_PROSE_FORMAT_RULES, normalizeAskProse, stripOrphanEmphasis } from '../src/shared/askProse.js';
 
 test('ASK_PROSE_FORMAT_RULES asks for ChatGPT-quality safe markdown', () => {
   assert.match(ASK_PROSE_FORMAT_RULES, /ChatGPT|Claude|Grok/);
@@ -9,6 +9,8 @@ test('ASK_PROSE_FORMAT_RULES asks for ChatGPT-quality safe markdown', () => {
   assert.match(ASK_PROSE_FORMAT_RULES, /never invent/i);
   assert.match(ASK_PROSE_FORMAT_RULES, /⟦sources:/);
   assert.match(ASK_PROSE_FORMAT_RULES, /Never write parenthetical/);
+  assert.match(ASK_PROSE_FORMAT_RULES, /Capability-only/);
+  assert.match(ASK_PROSE_FORMAT_RULES, /orphan stars/i);
 });
 
 test('normalizeAskProse keeps bold labels and cleans list markers', () => {
@@ -34,4 +36,30 @@ test('normalizeAskProse keeps bold labels and cleans list markers', () => {
 
 test('normalizeAskProse collapses accidental triple asterisks', () => {
   assert.equal(normalizeAskProse('***Label:*** next'), '**Label:** next');
+});
+
+test('normalizeAskProse never leaves literal star soup', () => {
+  const cases = [
+    'Yes *** I can search ** google?',
+    'A lone * star and **bold** ok',
+    '*** *** *** fancy stars ***',
+    'Would you like me to search for something specific? **',
+    'Here **Job Setup:** broken *** soup * and more*',
+  ];
+  for (const raw of cases) {
+    const clean = normalizeAskProse(raw);
+    assert.doesNotMatch(clean, /\*\*\*/, `triple stars remain in: ${JSON.stringify(clean)}`);
+    // No orphan ** (odd count) and no lone * left as decoration
+    const bold = clean.match(/\*\*/g) ?? [];
+    assert.equal(bold.length % 2, 0, `unbalanced ** in: ${JSON.stringify(clean)}`);
+    // After protecting bold/italic, no leftover single *
+    const withoutBold = clean.replace(/\*\*[^*]+\*\*/g, '');
+    const withoutItalic = withoutBold.replace(/(^|[^*])\*[^*]+\*(?!\*)/g, '$1');
+    assert.doesNotMatch(withoutItalic, /\*/, `lone * remains in: ${JSON.stringify(clean)}`);
+  }
+});
+
+test('stripOrphanEmphasis keeps intentional bold and italic', () => {
+  assert.equal(stripOrphanEmphasis('**Job Setup:** and *aside*'), '**Job Setup:** and *aside*');
+  assert.equal(stripOrphanEmphasis('plain text'), 'plain text');
 });
