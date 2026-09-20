@@ -21,6 +21,7 @@ import {
   ASK_WEB_FORMAT_RULES,
   askWebCapabilityRules,
   formatAskWebContext,
+  looksLikeOutsideKnowledgeAsk,
   normalizeAskWebCitations,
   searchAskWeb,
   shouldSupplementWithWebSearch,
@@ -451,6 +452,9 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
  */
 export function preferJobFileGroundedFastPath(question: string, grounded: string): boolean {
   if (/does not have that|Nothing is on this job file/i.test(grounded)) return false;
+  // Never fast-path web / outside-knowledge / capability asks — those need searchAskWeb
+  // (or a model answer about web access), not a brief-note hit from the job file.
+  if (looksLikeOutsideKnowledgeAsk(question)) return false;
   if (looksLikeOverview(question)) return true;
   // Clear labelled hits from the corpus ("brief · Permit: …", "claim: …").
   if (
@@ -539,6 +543,13 @@ export async function answerFromJobFile(input: {
   const toolsHandled =
     toolResults.some((r) => r.ok && ['update_job_fields', 'get_job_fields', 'get_job_status', 'get_crm_record', 'search_crm', 'list_who_has_access', 'get_punch_list', 'get_claim_ready_summary', 'propose_revoke_access', 'draft_progress_share_copy', 'draft_field_invite_copy'].includes(r.tool));
 
+  // Proactive web search BEFORE grounded fast-path so capability / outside-knowledge
+  // asks (e.g. "search the web for tile prices", "can u search google") are never
+  // swallowed by a brief-note hit from the job file.
+  if (!webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
+    webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
+  }
+
   if (
     !toolsHandled &&
     preferJobFileGroundedFastPath(input.question, grounded) &&
@@ -568,10 +579,6 @@ export async function answerFromJobFile(input: {
   if (!record && !toolResults.length && !webHits.length) {
     input.onToken?.(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
-  }
-
-  if (!webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
-    webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
   }
 
   const history = (input.history ?? [])

@@ -6,8 +6,10 @@ import {
   formatJobFileRecord,
   groundedJobFileAnswer,
   jobFileHasContent,
+  preferJobFileGroundedFastPath,
   type JobFileAskContext,
 } from '../src/shared/jobFileAsk.js';
+import { pickAskToolsHeuristically } from '../src/shared/askTools.js';
 
 const file: JobFileAskContext = {
   job: {
@@ -126,5 +128,87 @@ test('answerFromJobFile uses the grounded file when no model key is wired', asyn
     else process.env.GEMINI_API_KEY = prevGemini;
     if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
     else process.env.GOOGLE_API_KEY = prevGoogle;
+  }
+});
+
+test('preferJobFileGroundedFastPath refuses web / capability / price asks', () => {
+  const briefHit = 'brief · Carrier approved the deck replacement; skylights removed from scope.';
+  assert.equal(preferJobFileGroundedFastPath('what is the permit number', 'brief · Permit: BP-2026-8841'), true);
+  assert.equal(preferJobFileGroundedFastPath('search the web for tile prices', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('can u search google', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what can you search for', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('tile prices', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('how much does tile cost', briefHit), false);
+});
+
+test('pickAskToolsHeuristically always includes web_search for explicit web intents', () => {
+  for (const q of [
+    'search the web for tile prices',
+    'can u search google',
+    'what can you search for',
+    'google IRC R905',
+  ]) {
+    const picks = pickAskToolsHeuristically(q, 'org');
+    assert.ok(picks.includes('web_search'), `expected web_search for: ${q} got ${picks.join(',')}`);
+    assert.equal(picks[0], 'web_search', `web_search should be first for: ${q}`);
+  }
+});
+
+test('answerFromJobFile runs web search before grounded fast-path for capability asks', async () => {
+  const prev = {
+    ASK_WEB_SEARCH_API_KEY: process.env.ASK_WEB_SEARCH_API_KEY,
+    ASK_WEB_SEARCH_PROVIDER: process.env.ASK_WEB_SEARCH_PROVIDER,
+    BRAVE_SEARCH_API_KEY: process.env.BRAVE_SEARCH_API_KEY,
+    SERPER_API_KEY: process.env.SERPER_API_KEY,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  };
+  process.env.ASK_WEB_SEARCH_API_KEY = 'test-key';
+  process.env.ASK_WEB_SEARCH_PROVIDER = 'brave';
+  delete process.env.BRAVE_SEARCH_API_KEY;
+  delete process.env.SERPER_API_KEY;
+  delete process.env.TAVILY_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+
+  let searched = false;
+  try {
+    for (const question of ['search the web for tile prices', 'can u search google', 'what can you search for']) {
+      searched = false;
+      const result = await answerFromJobFile({
+        question,
+        file,
+        apiKey: null,
+        fetchFn: async () => {
+          searched = true;
+          return new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  {
+                    title: 'Tile price guide',
+                    url: 'https://example.com/tile-prices',
+                    description: 'Average tile prices',
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+      });
+      assert.equal(searched, true, `expected searchAskWeb for: ${question}`);
+      assert.ok(result.webHits.length >= 1, `expected webHits for: ${question}`);
+      assert.equal(result.webHits[0]?.url, 'https://example.com/tile-prices');
+      // Fast-path would have returned before fetchFn ran — reaching here proves it did not swallow the ask.
+    }
+  } finally {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
