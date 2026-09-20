@@ -11,6 +11,7 @@ import {
   isAskWebSearchConfigured,
   filterLowValueWebCitations,
   isLowValueWebCitation,
+  looksLikeLiveTopicalAsk,
   looksLikeOutsideKnowledgeAsk,
   looksLikePureWebCapabilityAsk,
   looksLikeWebCapabilityAsk,
@@ -105,6 +106,56 @@ test('explicit web intents and price asks that previously missed detection', () 
   assert.equal(looksLikeOutsideKnowledgeAsk('how much does tile cost'), true);
 });
 
+test('live topical asks (sports / weather / news) take the web_search path', async () => {
+  // Exact production refusal prompt from Tiffany & Co. Chat screenshot
+  assert.equal(looksLikeLiveTopicalAsk('what NFL Games are on today'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('what NFL Games are on today'), true);
+  assert.equal(looksLikeLiveTopicalAsk('NFL games tonight'), true);
+  assert.equal(looksLikeLiveTopicalAsk('what basketball games are on today'), true);
+  assert.equal(looksLikeLiveTopicalAsk('sports scores today'), true);
+  assert.equal(looksLikeLiveTopicalAsk("what's the weather today"), true);
+  assert.equal(looksLikeLiveTopicalAsk('weather forecast in Austin'), true);
+  assert.equal(looksLikeLiveTopicalAsk('latest news headlines'), true);
+  assert.equal(looksLikeLiveTopicalAsk('breaking news about the storm'), true);
+  assert.equal(looksLikeLiveTopicalAsk('where can I buy GAF Timberline shingles'), true);
+
+  // Job-file schedule / evidence asks must NOT look like live sports topical
+  assert.equal(looksLikeLiveTopicalAsk('what is the lockbox code'), false);
+  assert.equal(looksLikeLiveTopicalAsk('what did the homeowner say about skylights'), false);
+  assert.equal(looksLikeLiveTopicalAsk('when is this job scheduled to start'), false);
+
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(
+        shouldSupplementWithWebSearch('what NFL Games are on today', 'brief · Carrier approved deck.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch("what's the weather today", 'This job file does not have that.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('latest news headlines', 'brief · Permit: BP-1'),
+        true,
+      );
+      // Capability-only still skips live fetch
+      assert.equal(
+        shouldSupplementWithWebSearch('can you search the web?', 'brief · Carrier approved deck.'),
+        false,
+      );
+    },
+  );
+});
+
 test('askWebCapabilityRules forbids claiming no live search when configured', async () => {
   await withEnv(
     {
@@ -121,7 +172,10 @@ test('askWebCapabilityRules forbids claiming no live search when configured', as
       assert.match(rules, /results are fetched/i);
       assert.match(rules, /Never claim you lack a live web search tool/i);
       assert.match(rules, /cannot query prices/i);
+      assert.match(rules, /live sports schedules/i);
+      assert.match(rules, /do not soft-refuse/i);
       assert.doesNotMatch(rules, /not configured/i);
+      assert.match(ASK_WEB_FORMAT_RULES, /sports schedules/i);
     },
   );
 });

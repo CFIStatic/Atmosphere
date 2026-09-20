@@ -44,7 +44,7 @@ export const ASK_WEB_EMPTY_RESULTS_NOTE = `WEB SEARCH ATTEMPTED (no usable resul
 - Never claim you lack a web search tool — the tool ran; it just found nothing useful.`;
 
 export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided below):
-- Use them ONLY for outside knowledge: building codes, product/manufacturer specs, standards, general how-to.
+- Use them for outside knowledge: building codes, product/manufacturer specs, standards, general how-to, current events, sports schedules/scores, news, weather, prices, and public product lookups.
 - Job-file evidence always wins over the web. Never invent what happened on this job from a webpage.
 - Never reverse-image-search, identify children, or identify private job-site people from photos/video.
 - Do not paste raw URLs in the prose. After the human answer, on its OWN line (never mid-sentence / never glued to the last word), append exactly one machine line the UI strips:
@@ -101,8 +101,9 @@ export function isAskWebSearchConfigured(): boolean {
 export function askWebCapabilityRules(): string {
   if (isAskWebSearchConfigured()) {
     return `INTERNET / WEB ACCESS:
-- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, prices/costs, general how-to) when WEB SEARCH RESULTS are provided or the user asks you to search online.
-- Never claim you lack a live web search tool, cannot query prices, are offline, not connected to the internet, or unable to search the web.
+- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, prices/costs, general how-to, current events, sports schedules/scores, news, weather, and product lookups) when WEB SEARCH RESULTS are provided or the user asks you to search online.
+- Never claim you lack a live web search tool, cannot query prices, cannot access live sports schedules/scores, weather, or news, are offline, not connected to the internet, or unable to search the web.
+- When WEB SEARCH RESULTS are provided for live topical asks (games on today, weather, headlines, prices), answer helpfully from those results — do not soft-refuse or pivot to the job file only.
 - When the user asks to search the web/Google/internet *for a topic*, results are fetched for outside knowledge — say that clearly. Do not hedge that you cannot search.
 - If asked ONLY whether you are connected to the internet or can search the web/Google (no specific topic), answer briefly yes — Ask can search the public web for outside knowledge; job-file evidence still always wins for on-job facts. Do NOT append a ⟦web: …⟧ trailer and do not cite google.com, search.google, wikiHow "how to search Google", or similar junk.
 - Never write ASCII [[web: …]] — only unicode ⟦web: …⟧ on its own line after the answer when you actually used WEB SEARCH RESULTS.
@@ -253,7 +254,7 @@ export function professionalWebCapabilityAnswer(question?: string): string {
 
   if (/\bwhat\s+(can|do)\s+you\s+(search|look\s*up)/i.test(q)) {
     return (
-      'Yes — I can search the public web for outside knowledge like codes, products, manufacturers, standards, and prices. ' +
+      'Yes — I can search the public web for outside knowledge like codes, products, manufacturers, standards, prices, weather, news, and sports schedules. ' +
       'Job-file evidence still always wins for on-job facts. ' +
       'Tell me what you want looked up and I will search for it.'
     );
@@ -266,11 +267,67 @@ export function professionalWebCapabilityAnswer(question?: string): string {
   );
 }
 
+/**
+ * Live topical asks that need the public web (not the job file): sports
+ * schedules/scores, weather, news/current events, and broad product lookups.
+ * Deliberately avoids job-schedule wording ("what is the schedule on this job").
+ */
+export function looksLikeLiveTopicalAsk(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
+
+  // Sports leagues / games on today / scores (NFL screenshot refusal case)
+  if (
+    /\b(NFL|NBA|MLB|NHL|MLS|NCAA|WNBA|PGA|UFC|Premier\s+League|World\s+Cup|Super\s+Bowl)\b/i.test(q) ||
+    /\b(football|basketball|baseball|hockey|soccer|tennis)\s+(games?|scores?|schedule|standings|match(es)?)\b/i.test(
+      q,
+    ) ||
+    /\b(games?|matches?)\s+(on|today|tonight|this\s+(week|weekend)|tomorrow)\b/i.test(q) ||
+    /\b(sports?)\s+(schedule|scores?|standings|games?|on\s+today)\b/i.test(q) ||
+    /\bwhat\s+(nfl|nba|mlb|nhl)?\s*games?\s+(are\s+)?(on|playing)\b/i.test(q) ||
+    /\bwho\s+(is\s+)?(playing|won)\b/i.test(q)
+  ) {
+    return true;
+  }
+
+  // Weather
+  if (
+    /\b(weather|forecast|temperature|radar)\b/i.test(q) &&
+    /\b(today|tonight|tomorrow|this\s+week|weekend|in\s+\w+|outside|will\s+it)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (/\b(what('s|\s+is)\s+the\s+)?weather\b/i.test(q)) return true;
+  if (/\b(will\s+it\s+rain|chance\s+of\s+rain|uv\s+index)\b/i.test(q)) return true;
+
+  // News / current events / headlines
+  if (
+    /\b(breaking\s+news|latest\s+news|headlines|current\s+events|news\s+today)\b/i.test(q) ||
+    /\b(news|headline)s?\s+(about|on|for)\b/i.test(q) ||
+    /\bwhat('s|\s+is)\s+(happening|going\s+on)\s+(in\s+the\s+news|today)\b/i.test(q)
+  ) {
+    return true;
+  }
+
+  // Broader public product lookups (SKU / buy / where to get) beyond codes/how-to
+  if (
+    /\b(where\s+(can|do)\s+I\s+(buy|get|find)|buy\s+online|amazon|home\s*depot|lowe'?s|grainger)\b/i.test(
+      q,
+    ) ||
+    /\b(product\s+lookup|model\s+(number|#)|SKU|UPC)\b/i.test(q)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /** Outside-knowledge asks that benefit from the public web. */
 export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   const q = trim(question);
   if (!q) return false;
   if (looksLikeWebCapabilityAsk(q)) return true;
+  if (looksLikeLiveTopicalAsk(q)) return true;
   return (
     /\b(IRC|IBC|NEC|IMC|IPC|IECC|ASTM|UL\s*\d|NFPA|OSHA)\b/i.test(q) ||
     /\b(building|electrical|plumbing|mechanical|fire)\s+code\b/i.test(q) ||
