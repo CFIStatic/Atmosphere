@@ -20,6 +20,10 @@ import { siteLine } from '../../lib/jobFileAsk';
  * (with a compact Needs attention strip when needed).
  * Shared by office /job-progress and guest /progress/:token.
  * Does not own Ask/chat chrome.
+ *
+ * When `framed`, paints the office "Happening Now" title + hint around the
+ * brief (section-bar content) and skips the live story so the panel matches
+ * the job-file redesign mockup.
  */
 
 const BADGE_STYLE: Record<StoryTone, string> = {
@@ -54,13 +58,38 @@ function BriefSection({
   items,
   empty,
   footer,
+  rowLayout = false,
 }: {
   id: string;
   title: string;
   items: StoryItem[];
   empty: string;
   footer?: ReactNode;
+  /** Label on the left, content on the right (office Happening Now). */
+  rowLayout?: boolean;
 }) {
+  if (rowLayout) {
+    return (
+      <section id={id} className="scroll-mt-4 py-3 first:pt-0 last:pb-0">
+        <div className="flex gap-4 sm:gap-6">
+          <h3 className="w-14 shrink-0 pt-0.5 text-sm font-medium text-ink-500 sm:w-16">{title}</h3>
+          <div className="min-w-0 flex-1">
+            {items.length === 0 ? (
+              <p className="text-sm text-ink-500">{empty}</p>
+            ) : (
+              <ul className="divide-y divide-line rounded-lg border border-line">
+                {items.map((item) => (
+                  <StoryRow key={item.id} item={item} />
+                ))}
+              </ul>
+            )}
+            {footer}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id={id} className="scroll-mt-4 py-3 first:pt-0 last:pb-0">
       <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
@@ -87,6 +116,8 @@ export function JobProgressDashboard({
   showProofOfWork = true,
   showIdentity = true,
   alwaysShowRecordings = false,
+  showLiveStory = true,
+  framed = false,
   metrics: metricsOverride,
   liveStory: liveStoryOverride,
 }: {
@@ -101,6 +132,10 @@ export function JobProgressDashboard({
   showIdentity?: boolean;
   /** Homeowner / guest shares always show every recording, not a collapsed history. */
   alwaysShowRecordings?: boolean;
+  /** When false, omit the Glance/Scan live story (office Happening Now panel). */
+  showLiveStory?: boolean;
+  /** Office section-bar panel: Happening Now title + hint + row brief. */
+  framed?: boolean;
   /** Guest shares supply pre-computed metrics instead of scope rows. */
   metrics?: {
     scopePct: number;
@@ -186,6 +221,84 @@ export function JobProgressDashboard({
           ]
         : [];
 
+  const brief = !loading && (
+    <div
+      className={
+        framed
+          ? 'rounded-xl border border-line bg-paper-50/40 px-5 py-4 sm:px-6 divide-y divide-line'
+          : 'rounded-xl glass-card px-5 py-4 sm:px-6 divide-y divide-line'
+      }
+      data-testid={framed ? 'job-happening-now' : undefined}
+    >
+      {framed ? (
+        <div className="pb-3">
+          <h2 className="text-base font-semibold text-ink-900">Happening Now</h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            What&apos;s on site right now, what&apos;s done, and what&apos;s left.
+          </p>
+        </div>
+      ) : null}
+
+      {story.attention.length > 0 ? (
+        <div
+          id="attention"
+          className={`scroll-mt-4 ${framed ? 'py-3' : 'pb-3'}`}
+          data-testid="job-progress-needs-attention"
+        >
+          <h3 className="text-sm font-semibold text-danger-700">Needs attention</h3>
+          <ul className="mt-2 divide-y divide-line rounded-lg border border-danger-200 bg-danger-50/40">
+            {story.attention.map((item) => (
+              <StoryRow key={item.id} item={item} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <BriefSection
+        id="happening"
+        title="Now"
+        items={story.happening}
+        empty="Nothing on site."
+        rowLayout={framed}
+      />
+
+      <BriefSection
+        id="happened"
+        title="Done"
+        items={story.happened}
+        empty="Nothing finished yet."
+        rowLayout={framed}
+        footer={
+          showProofOfWork && !alwaysShowRecordings && (proof?.days.length ?? 0) > 5 ? (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="mt-2 text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              {historyOpen ? 'Hide full history' : `Show all ${proof?.days.length} days`}
+            </button>
+          ) : null
+        }
+      />
+
+      <BriefSection
+        id="next"
+        title="Left"
+        items={nextItems}
+        empty="Nothing left."
+        rowLayout={framed}
+        footer={
+          story.exclusionCount > 0 ? (
+            <p className="mt-2 text-xs text-ink-500">
+              {story.exclusionCount} item{story.exclusionCount === 1 ? ' is' : 's are'} out of
+              scope and should not be done. See job setup for the do-not list.
+            </p>
+          ) : null
+        }
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {showIdentity && (
@@ -217,66 +330,9 @@ export function JobProgressDashboard({
         </div>
       )}
 
-      {!loading && <LiveProgressStory story={liveStory} />}
+      {!loading && showLiveStory && !framed ? <LiveProgressStory story={liveStory} /> : null}
 
-      {!loading && (
-        <div className="rounded-xl glass-card px-5 py-4 sm:px-6 divide-y divide-line">
-          {story.attention.length > 0 ? (
-            <div
-              id="attention"
-              className="scroll-mt-4 pb-3"
-              data-testid="job-progress-needs-attention"
-            >
-              <h3 className="text-sm font-semibold text-danger-700">Needs attention</h3>
-              <ul className="mt-2 divide-y divide-line rounded-lg border border-danger-200 bg-danger-50/40">
-                {story.attention.map((item) => (
-                  <StoryRow key={item.id} item={item} />
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <BriefSection
-            id="happening"
-            title="Now"
-            items={story.happening}
-            empty="Nothing on site."
-          />
-
-          <BriefSection
-            id="happened"
-            title="Done"
-            items={story.happened}
-            empty="Nothing finished yet."
-            footer={
-              showProofOfWork && !alwaysShowRecordings && (proof?.days.length ?? 0) > 5 ? (
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className="mt-2 text-sm font-medium text-brand-600 hover:text-brand-700"
-                >
-                  {historyOpen ? 'Hide full history' : `Show all ${proof?.days.length} days`}
-                </button>
-              ) : null
-            }
-          />
-
-          <BriefSection
-            id="next"
-            title="Left"
-            items={nextItems}
-            empty="Nothing left."
-            footer={
-              story.exclusionCount > 0 ? (
-                <p className="mt-2 text-xs text-ink-500">
-                  {story.exclusionCount} item{story.exclusionCount === 1 ? ' is' : 's are'} out of
-                  scope and should not be done. See job setup for the do-not list.
-                </p>
-              ) : null
-            }
-          />
-        </div>
-      )}
+      {brief}
 
       {showProofOfWork && (alwaysShowRecordings || historyOpen) && proof && (
         <ProofOfWork

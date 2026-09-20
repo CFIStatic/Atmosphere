@@ -37,7 +37,15 @@ vi.mock('../components/JobAskPanel', () => ({
 }));
 
 vi.mock('../components/shared/JobProgressDashboard', () => ({
-  JobProgressDashboard: () => <div>Job progress</div>,
+  JobProgressDashboard: ({ framed }: { framed?: boolean }) =>
+    framed ? (
+      <div data-testid="job-happening-now">
+        <h2>Happening Now</h2>
+        <p>What&apos;s on site right now, what&apos;s done, and what&apos;s left.</p>
+      </div>
+    ) : (
+      <div>Job progress</div>
+    ),
 }));
 
 vi.mock('../components/shared/EvidenceLocker', () => ({
@@ -155,8 +163,15 @@ describe('SharedDashboardPage job file identity', () => {
     expect(
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Videos')).toBeInTheDocument();
-    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.getByTestId('job-file-section-bar')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Evidence report' })).toBeInTheDocument();
+    expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Legal hold' })).not.toBeInTheDocument();
     expect(screen.queryByText('Place this job on legal hold')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
@@ -177,7 +192,8 @@ describe('SharedDashboardPage job file identity', () => {
     ).toBeInTheDocument();
   });
 
-  it('pins Ask on the job file so Overview and Job Files share the same chat', async () => {
+  it('keeps Ask under the Chat section tab — not a left column beside the file', async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
         <SharedDashboardPage />
@@ -187,13 +203,24 @@ describe('SharedDashboardPage job file identity', () => {
     expect(
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
+    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask-split')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'File' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Chat' }));
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('aria-label', 'Ask this job');
-    expect(ask.className).toMatch(/lg:h-full/);
-    expect(ask.className).toMatch(/lg:w-\[var\(--job-file-ask-width\)\]/);
-    expect(screen.getByTestId('job-file-ask-split')).toBeInTheDocument();
     expect(ask).toContainElement(screen.getByTestId('job-ask-panel'));
-    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+    // ChatGPT-style: panel fills remaining height; composer sits at bottom (flex-1 + overflow), not a mid-panel min-height card.
+    expect(ask.className).toMatch(/flex-1/);
+    expect(ask.className).toMatch(/min-h-0/);
+    expect(ask.className).not.toMatch(/min-h-\[/);
+    expect(screen.getByTestId('job-file-section-panel-chat').className).toMatch(/flex-1/);
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Overview')).not.toBeInTheDocument();
@@ -274,7 +301,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(strip).toHaveTextContent('1 unanswered Ask');
   });
 
-  it('opens Ask first when Field Capture deep-links with ?ask=1', async () => {
+  it('opens the Chat section first when deep-linked with ?ask=1', async () => {
     usePhoneShell.mockReturnValue(true);
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1038&ask=1']}>
@@ -283,13 +310,13 @@ describe('SharedDashboardPage job file identity', () => {
     );
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
-    const ask = screen.getByTestId('job-file-ask');
-    expect(ask).toHaveAttribute('data-state', 'active');
-    expect(ask).not.toHaveAttribute('hidden');
-    expect(screen.getByRole('tab', { name: 'Ask' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('job-file-ask')).toContainElement(screen.getByTestId('job-ask-panel'));
+    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
   });
 
-  it('uses File and Ask tabs on a phone so chat is not buried under the file', async () => {
+  it('uses the Chat section tab on a phone — same Ask, no File/Ask chrome tabs', async () => {
     usePhoneShell.mockReturnValue(true);
     const user = userEvent.setup();
     render(
@@ -301,8 +328,14 @@ describe('SharedDashboardPage job file identity', () => {
     expect(
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'File' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Ask' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('tab', { name: 'File' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Overview')).not.toBeInTheDocument();
@@ -311,16 +344,12 @@ describe('SharedDashboardPage job file identity', () => {
       'data-job-file-chrome',
       'no-overview-back',
     );
-    const ask = screen.getByTestId('job-file-ask');
-    expect(ask).toHaveAttribute('hidden');
-    expect(ask.className.split(/\s+/)).not.toContain('flex');
-    expect(ask.className).toMatch(/data-\[state=active\]:flex/);
-    expect(screen.queryByTestId('job-ask-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
 
-    await user.click(screen.getByRole('tab', { name: 'Ask' }));
-    expect(screen.getByTestId('job-file-ask')).not.toHaveAttribute('hidden');
+    await user.click(screen.getByRole('tab', { name: 'Chat' }));
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
   });
 
   it('links a grant viewer back to Your job files', async () => {
@@ -354,20 +383,6 @@ describe('SharedDashboardPage job file identity', () => {
   });
 
   it('shows Who-has-access for office org members without Similar jobs', async () => {
-    authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
-    sharedJob.mockResolvedValue({ ...record, access: 'org' });
-
-    render(
-      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
-        <SharedDashboardPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
-    expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
-  });
-
-  it('keeps Scope in Job setup and omits Job facts and On the record', async () => {
     const user = userEvent.setup();
     authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
     sharedJob.mockResolvedValue({ ...record, access: 'org' });
@@ -378,14 +393,56 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Videos')).toBeInTheDocument();
-    await user.click(screen.getByText(/Job setup/));
+    expect(await screen.findByRole('tab', { name: 'Access' })).toBeInTheDocument();
+    expect(screen.queryByTestId('job-access-roster')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Access' }));
+    expect(await screen.findByTestId('job-access-roster')).toBeInTheDocument();
+    expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
+  });
+
+  it('keeps Scope in Job history and omits Job facts and On the record', async () => {
+    const user = userEvent.setup();
+    authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
+    sharedJob.mockResolvedValue({ ...record, access: 'org' });
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('tab', { name: 'Videos' })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Job history' }));
     expect(await screen.findByRole('heading', { name: 'Scope' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add a line' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Job facts' })).not.toBeInTheDocument();
     expect(screen.queryByText('Publish a change')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'On the record' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Nothing here can be edited or deleted/)).not.toBeInTheDocument();
+  });
+
+  it('shows only the active section panel', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Videos' }));
+    expect(screen.getByTestId('job-file-section-panel-videos')).toHaveTextContent('Videos');
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
+    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-section-panel-videos')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Chat' }));
+    expect(screen.getByTestId('job-file-ask')).toContainElement(screen.getByTestId('job-ask-panel'));
+    expect(screen.queryByTestId('job-file-chat-handoff')).not.toBeInTheDocument();
   });
 
   it('never mounts Motion clips on the job file (org or grant)', async () => {
@@ -398,7 +455,7 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Videos')).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
     expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
     expect(

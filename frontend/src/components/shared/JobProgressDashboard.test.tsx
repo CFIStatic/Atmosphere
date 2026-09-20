@@ -231,4 +231,29 @@ describe('JobProgressDashboard', () => {
     expect(screen.getByTestId('live-story-timeline')).toBeInTheDocument();
   });
 
+
+  it('frames Happening Now with title, hint, and row brief when framed', async () => {
+    render(
+      <JobProgressDashboard
+        jobId="job-1"
+        record={{ ...record, risks: [] }}
+        initialProof={proof}
+        showProofOfWork={false}
+        showIdentity={false}
+        showLiveStory={false}
+        framed
+      />,
+    );
+
+    expect(await screen.findByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Happening Now' })).toBeInTheDocument();
+    expect(
+      screen.getByText("What's on site right now, what's done, and what's left."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Done' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Left' })).toBeInTheDocument();
+    expect(screen.queryByTestId('homeowner-live-progress-story')).not.toBeInTheDocument();
+  });
+
 });

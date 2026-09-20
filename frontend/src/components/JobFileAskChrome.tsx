@@ -73,15 +73,16 @@ function isOverviewBack(node: ReactNode): boolean {
 
 /**
  * One job file chrome for the office job file, intake, and the Field Capture
- * frame. Desktop pins Ask on the left; the job file sits on the right. A phone (or the 480px app iframe)
- * uses File / Ask tabs so chat is first-class on both surfaces.
+ * frame.
+ *
+ * Default (`askPlacement="split"`): desktop pins Ask on the left with a drag
+ * handle; phone uses File / Ask tabs.
+ *
+ * Office job progress (`askPlacement="section"`): single-column shell only —
+ * Ask lives under the Chat section tab in the page body, not beside the file.
  *
  * Never paints an Overview back/breadcrumb. Callers that still pass one are
- * stripped here so File / Ask sit flush under the account header.
- *
- * On desktop (lg+), a visible drag handle between Ask and the job file lets users
- * widen either pane; preferred width persists in localStorage. Double-click
- * the handle to reset the default. Phone / stacked layouts are unchanged.
+ * stripped here so content sits flush under the account header.
  */
 export function JobFileAskChrome({
   jobId,
@@ -90,6 +91,9 @@ export function JobFileAskChrome({
   children,
   extra,
   initialPane = 'file',
+  pane: paneControlled,
+  onPaneChange,
+  askPlacement = 'split',
   ask,
   loadQuestions,
   loadThreads,
@@ -103,6 +107,14 @@ export function JobFileAskChrome({
   extra?: ReactNode;
   /** Open Ask first — used by the emailed Ask link (?ask=1). */
   initialPane?: JobFilePane;
+  /** Controlled File / Ask pane (office section bar Chat tab). */
+  pane?: JobFilePane;
+  onPaneChange?: (pane: JobFilePane) => void;
+  /**
+   * `split` — Ask beside the file (default; intake / detail / guest).
+   * `section` — no Ask chrome; page renders Ask under the Chat section tab.
+   */
+  askPlacement?: 'split' | 'section';
   ask?: JobAskFn;
   loadQuestions?: (threadId?: string | null) => Promise<{ questions: ProofQuestion[] }>;
   loadThreads?: () => Promise<{ threads: AskThread[] }>;
@@ -110,7 +122,13 @@ export function JobFileAskChrome({
   renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
 }) {
   const phone = usePhoneShell();
-  const [pane, setPane] = useState<JobFilePane>(initialPane);
+  const [paneUncontrolled, setPaneUncontrolled] = useState<JobFilePane>(initialPane);
+  const controlled = paneControlled !== undefined;
+  const pane = controlled ? paneControlled : paneUncontrolled;
+  const setPane = (next: JobFilePane) => {
+    if (!controlled) setPaneUncontrolled(next);
+    onPaneChange?.(next);
+  };
   const shownBack = back && !isOverviewBack(back) ? back : undefined;
   const splitRef = useRef<HTMLDivElement>(null);
   const [askWidth, setAskWidth] = useState(() => readAskSplitWidth());
@@ -119,8 +137,9 @@ export function JobFileAskChrome({
   const dragStartWidth = useRef(DEFAULT_ASK_WIDTH_PX);
 
   useEffect(() => {
-    setPane(initialPane);
-  }, [jobId, initialPane]);
+    if (controlled) return;
+    setPaneUncontrolled(initialPane);
+  }, [jobId, initialPane, controlled]);
 
   const onSplitPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -171,12 +190,26 @@ export function JobFileAskChrome({
     <JobFileFocusRevealBridge reveal={revealFilePane} />
     <div
       ref={splitRef}
-      className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden"
+      className={
+        askPlacement === 'section'
+          ? 'flex h-full min-h-0 flex-1 flex-col'
+          : 'flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden'
+      }
       data-testid="job-file"
       data-job-file-chrome="no-overview-back"
-      data-ask-width={askWidth}
+      data-ask-placement={askPlacement}
+      data-ask-width={askPlacement === 'split' ? askWidth : undefined}
     >
-      {phone ? (
+      {askPlacement === 'section' ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-6 pb-4 sm:px-6">
+          {shownBack ? (
+            <div className="shrink-0" data-testid="job-file-back">
+              {shownBack}
+            </div>
+          ) : null}
+          {children}
+        </div>
+      ) : phone ? (
         <div className="flex h-full min-h-0 flex-1 flex-col">
           {shownBack && (
             <div

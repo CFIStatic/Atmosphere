@@ -580,7 +580,7 @@ export function JobAskPanel({
     <section
       className={
         fill
-          ? 'flex h-full min-h-0 flex-col bg-paper-50'
+          ? 'flex h-full min-h-0 flex-1 flex-col bg-paper-50'
           : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
       }
       aria-label="Ask this job"
