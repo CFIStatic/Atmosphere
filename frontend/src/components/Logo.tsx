@@ -2,9 +2,9 @@ import { NavLink } from 'react-router-dom';
 import { DASHBOARD_HOME } from '../lib/platforms';
 
 const SIZES = {
-  md: { svg: 28, text: 'text-[21px]', gap: 'gap-3' },
+  md: { svg: 28, text: 'text-[21px]', gap: 'gap-3', wordNudge: 'translate-y-[4px]' },
   /** Full-width auth headers — login, signup, password reset. */
-  lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3' },
+  lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3', wordNudge: 'translate-y-[5px]' },
 } as const;
 
 interface Props {
@@ -30,6 +30,11 @@ interface Props {
  * dark bars and word on light paper, light (near-white) bars and word on a
  * dark ground. The terracotta base stays brand-colored in both palettes.
  * Match the marketing site wordmark in website/assets/site.css (.lb1–.lb4, .lb-a).
+ *
+ * Vertical alignment: wordmark baseline sits on the orange bar's bottom edge
+ * (`items-end` + `leading-none`). Small downward nudge so the A baseline
+ * meets the orange bar bottom. Extra nudge offsets the descender on "p"
+ * so the A baseline — not the line-box bottom — hits the bar (md +4px, lg +5px).
  */
 export function Logo({
   className = '',
@@ -37,15 +42,17 @@ export function Logo({
   to = DASHBOARD_HOME,
   size = 'md',
 }: Props) {
-  const { svg, text, gap } = SIZES[size];
+  const { svg, text, gap, wordNudge } = SIZES[size];
   const mark = (
     <div
       data-atmosphere-lockup=""
-      className={`flex items-center ${gap} text-ink-900 ${className}`}
+      className={`flex items-end ${gap} text-ink-900 ${className}`}
     >
       <AtmosphereBars size={svg} />
       {!compact && (
-        <span className={`whitespace-nowrap ${text} font-bold tracking-tight text-current`}>
+        <span
+          className={`whitespace-nowrap ${text} font-bold tracking-tight leading-none text-current ${wordNudge}`}
+        >
           Atmosphere
         </span>
       )}
