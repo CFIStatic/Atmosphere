@@ -145,7 +145,8 @@
   }
   /* Wordmark baseline on orange bar bottom (matches Platform Logo.tsx). */
   .brand { display: flex; align-items: flex-end; gap: 9px; font-weight: 800; font-size: 15.5px; letter-spacing: -0.02em; line-height: 1; color: var(--ink); }
-  .brand > span { transform: translateY(4px); }
+  /* Match Platform Logo baseline (scaled for 18px bars / 15.5px type). */
+  .brand > .brand-word { transform: translateY(7px); }
   .brand svg { display: block; color: var(--ink); }
   .brand .sub { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 2px; align-self: center; line-height: 1; }
   .who-wrap { margin-left: auto; position: relative; }
@@ -850,7 +851,7 @@
   <div class="top">
     <span class="brand">
       <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="2.8" fill="currentColor" opacity="0.3"/><rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5"/><rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68"/><rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88"/><rect y="19.2" width="22" height="2.8" fill="#F2670C"/></svg>
-      Atmosphere <span class="sub">Field Capture</span>
+      <span class="brand-word">Atmosphere</span> <span class="sub">Field Capture</span>
     </span>
     <div class="who-wrap" id="who-wrap" hidden>
       <button type="button" class="who" id="who-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
