@@ -164,11 +164,9 @@ describe('SharedDashboardPage job file identity', () => {
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('job-file-section-bar')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Evidence report' })).toBeInTheDocument();
     expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
@@ -193,7 +191,6 @@ describe('SharedDashboardPage job file identity', () => {
   });
 
   it('keeps Ask under the Chat section tab — not a left column beside the file', async () => {
-    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
         <SharedDashboardPage />
@@ -204,13 +201,12 @@ describe('SharedDashboardPage job file identity', () => {
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
-    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
-    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-file-ask-split')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'File' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: 'Chat' }));
     const ask = screen.getByTestId('job-file-ask');
     expect(ask).toHaveAttribute('aria-label', 'Ask this job');
     expect(ask).toContainElement(screen.getByTestId('job-ask-panel'));
@@ -301,6 +297,22 @@ describe('SharedDashboardPage job file identity', () => {
     expect(strip).toHaveTextContent('1 unanswered Ask');
   });
 
+  it('lands on Chat by default when opening a job file', async () => {
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+  });
+
   it('opens the Chat section first when deep-linked with ?ask=1', async () => {
     usePhoneShell.mockReturnValue(true);
     render(
@@ -328,14 +340,14 @@ describe('SharedDashboardPage job file identity', () => {
     expect(
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Chat' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
       'aria-selected',
-      'true',
+      'false',
     );
     expect(screen.queryByRole('tab', { name: 'File' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Overview')).not.toBeInTheDocument();
@@ -346,10 +358,12 @@ describe('SharedDashboardPage job file identity', () => {
     );
     expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
 
-    await user.click(screen.getByRole('tab', { name: 'Chat' }));
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Happening Now' }));
+    expect(await screen.findByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
   });
 
   it('links a grant viewer back to Your job files', async () => {
@@ -429,8 +443,15 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId('job-happening-now')).toBeInTheDocument();
+    expect(await screen.findByTestId('job-file-ask')).toContainElement(
+      screen.getByTestId('job-ask-panel'),
+    );
+    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
     expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Happening Now' }));
+    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Videos' }));
     expect(screen.getByTestId('job-file-section-panel-videos')).toHaveTextContent('Videos');

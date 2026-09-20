@@ -162,7 +162,8 @@ export function SharedDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
-  const [section, setSection] = useState<JobFileSectionId>(openAsk ? 'chat' : 'happening');
+  /** Default lands on Chat; ?ask=1 (Field Capture / emailed Ask) also forces Chat. */
+  const [section, setSection] = useState<JobFileSectionId>('chat');
 
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
@@ -449,7 +450,7 @@ export function SharedDashboardPage() {
     <JobFileAskChrome
       jobId={jobId}
       askPlacement="section"
-      initialPane={openAsk ? 'ask' : 'file'}
+      initialPane="ask"
       pane={section === 'chat' ? 'ask' : 'file'}
       onPaneChange={(next) => {
         if (next === 'ask') setSection('chat');
@@ -514,7 +515,7 @@ function JobFileSections({
     return next;
   }, [grantViewer, viewerOnly]);
 
-  const active = tabs.some((t) => t.id === section) ? section : 'happening';
+  const active = tabs.some((t) => t.id === section) ? section : 'chat';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
