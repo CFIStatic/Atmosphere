@@ -131,7 +131,7 @@ test('answerFromJobFile uses the grounded file when no model key is wired', asyn
   }
 });
 
-test('preferJobFileGroundedFastPath refuses web / capability / price asks', () => {
+test('preferJobFileGroundedFastPath refuses web / capability / price / live topical asks', () => {
   const briefHit = 'brief · Carrier approved the deck replacement; skylights removed from scope.';
   assert.equal(preferJobFileGroundedFastPath('what is the permit number', 'brief · Permit: BP-2026-8841'), true);
   assert.equal(preferJobFileGroundedFastPath('search the web for tile prices', briefHit), false);
@@ -139,12 +139,18 @@ test('preferJobFileGroundedFastPath refuses web / capability / price asks', () =
   assert.equal(preferJobFileGroundedFastPath('what can you search for', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('tile prices', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('how much does tile cost', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what NFL Games are on today', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath("what's the weather today", briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('latest news headlines', briefHit), false);
 });
 
 test('pickAskToolsHeuristically includes web_search for topical web intents, not capability-only', () => {
-  for (const q of ['search the web for tile prices', 'google IRC R905']) {
+  for (const q of ['search the web for tile prices', 'google IRC R905', 'what NFL Games are on today']) {
     const picks = pickAskToolsHeuristically(q, 'org');
     assert.ok(picks.includes('web_search'), `expected web_search for: ${q} got ${picks.join(',')}`);
+  }
+  for (const q of ['search the web for tile prices', 'google IRC R905']) {
+    const picks = pickAskToolsHeuristically(q, 'org');
     assert.equal(picks[0], 'web_search', `web_search should be first for: ${q}`);
   }
   for (const q of ['can u search google', 'what can you search for', 'can you search the web?']) {
@@ -205,6 +211,34 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
     assert.equal(searched, true, 'expected searchAskWeb for topical web ask');
     assert.ok(topical.webHits.length >= 1, 'expected webHits for topical web ask');
     assert.equal(topical.webHits[0]?.url, 'https://example.com/tile-prices');
+
+    // NFL / games-today style prompt must take the web_search path (not soft-refuse)
+    searched = false;
+    const nfl = await answerFromJobFile({
+      question: 'what NFL Games are on today',
+      file,
+      apiKey: null,
+      fetchFn: async () => {
+        searched = true;
+        return new Response(
+          JSON.stringify({
+            web: {
+              results: [
+                {
+                  title: 'NFL schedule today',
+                  url: 'https://example.com/nfl-today',
+                  description: 'Games on today',
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    });
+    assert.equal(searched, true, 'expected searchAskWeb for NFL games today');
+    assert.ok(nfl.webHits.length >= 1, 'expected webHits for NFL games today');
+    assert.equal(nfl.webHits[0]?.url, 'https://example.com/nfl-today');
 
     // Capability-only: no live fetch + short professional yes (no google junk / star soup)
     for (const question of ['can u search google', 'what can you search for']) {
