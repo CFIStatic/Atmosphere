@@ -15,13 +15,15 @@ import {
   type AskWebHit,
 } from './askWebSearch.js';
 import type { JobFileAskContext } from './jobFileAsk.js';
-import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
-import { requireAdmin } from '../lib/scopedAdmin.js';
+import { requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   getAskCrmRecord,
   searchAskCrm,
   summarizeAskCrmRecord,
+  crmUpdateSoftFail,
+  listAskCrmConnections,
 } from './askCrm.js';
+import { runCrmAgentJob } from '../crm/agent/index.js';
 
 export type AskAccessRole = 'org' | 'viewer';
 
@@ -625,11 +627,13 @@ export async function executeAskTool(
           ctx.file.messages = messages;
         }
 
+        const connections = await listAskCrmConnections(ctx.supabase, ctx.orgId);
+        const crmHint = crmUpdateSoftFail(connections);
         return {
           ok: true,
           tool: name,
-          summary: `Updated ${changed.join(', ')} on this Atmosphere job file (not emailed; not pushed to external CRM).`,
-          data: { changed, ...data },
+          summary: `Updated ${changed.join(', ')} on this Atmosphere job file. ${crmHint}`,
+          data: { changed, ...data, crmHint },
           ui: { section: note && !title && !claimNumber && !address ? 'brief' : 'setup' },
         };
       }
@@ -688,6 +692,38 @@ export async function executeAskTool(
           query,
           limit: Number.isFinite(limit) ? limit : 8,
         });
+        // When JobNimbus credentials are on file, try a live/API search via the agent runner.
+        const admin = unscopedAdminOrNull();
+        const jnConnected = result.connectedProviders.some(
+          (c) => c.provider === 'jobnimbus' && c.connected,
+        );
+        if (admin && jnConnected) {
+          try {
+            const agent = await runCrmAgentJob(admin, {
+              orgId: ctx.orgId,
+              system: 'jobnimbus',
+              kind: 'search',
+              query,
+            });
+            if (Array.isArray(agent.hits) && agent.hits.length) {
+              for (const hit of agent.hits as Array<Record<string, unknown>>) {
+                result.hits.push({
+                  kind: 'external',
+                  provider: 'jobnimbus',
+                  label: 'JobNimbus',
+                  id: String(hit.externalId ?? hit.id ?? ''),
+                  title: String(hit.title ?? 'JobNimbus record'),
+                  claimNumber: (hit.claimNumber as string | null) ?? null,
+                });
+              }
+              result.softFail = null;
+            } else if (agent.summary && !result.hits.length) {
+              result.softFail = agent.summary;
+            }
+          } catch {
+            /* soft-fail — keep Atmosphere results */
+          }
+        }
         const summary = result.hits.length
           ? `Found ${result.hits.length} CRM hit(s) for “${query.slice(0, 60)}”.${result.softFail ? ' ' + result.softFail : ''}`
           : `No CRM hits for “${query.slice(0, 60)}”.${result.softFail ? ' ' + result.softFail : ''}`;

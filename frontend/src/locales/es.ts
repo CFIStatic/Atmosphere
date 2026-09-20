@@ -38,7 +38,7 @@ export const ES: MessageCatalog = {
   'nav.newChat': 'Nuevo chat',
 
   'crm.title': 'Conectar CRM',
-  'crm.subtitle': 'Vincula JobNimbus, AccuLynx, Salesforce, ServiceTitan o usa los campos nativos de Atmosphere.',
+  'crm.subtitle': 'Un agente de Atmosphere inicia sesión con tu usuario y contraseña del CRM para obtener y actualizar trabajos, contactos y reclamos.',
 
   'settings.title': 'Ajustes',
   'settings.sectionsAria': 'Secciones de ajustes',

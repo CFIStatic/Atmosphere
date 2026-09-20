@@ -36,7 +36,7 @@ export const EN = {
   'nav.newChat': 'New chat',
 
   'crm.title': 'Connect CRM',
-  'crm.subtitle': 'Link JobNimbus, AccuLynx, Salesforce, ServiceTitan, or use Atmosphere native fields.',
+  'crm.subtitle': 'An Atmosphere agent signs in with your CRM username and password to pull and update jobs, contacts, and claims.',
 
   'settings.title': 'Settings',
   'settings.sectionsAria': 'Settings sections',

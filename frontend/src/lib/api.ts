@@ -328,6 +328,27 @@ export interface KnownCrm {
   note: string;
 }
 
+
+/* ---- CRM agent credentials (Connect CRM) -------------------------------- */
+
+export type CrmAgentSystem = 'jobnimbus' | 'acculynx' | 'salesforce' | 'servicetitan';
+
+export interface CrmCredentialStatusRow {
+  system: CrmAgentSystem;
+  connected: boolean;
+  username: string | null;
+  notes: string | null;
+  status: 'connected' | 'pending_verify' | 'error' | null;
+  lastVerifiedAt: string | null;
+  lastError: string | null;
+  connectedAt: string | null;
+}
+
+export interface CrmCredentialsStatus {
+  systems: CrmCredentialStatusRow[];
+  copy?: { headline: string; body: string };
+}
+
 export interface CrmConnections {
   available: KnownCrm[];
   connected: Array<{ system: string; accountLabel: string | null; connectedAt: string }>;
@@ -4507,6 +4528,36 @@ export const api = {
       method: 'POST',
       headers: { Authorization: `Bearer ${session}` },
     }),
+
+
+  // ---- CRM agent credentials (Connect CRM) ----
+  crmCredentialStatus: () =>
+    request<CrmCredentialsStatus>('/api/crm-credentials', { method: 'GET' }),
+
+  connectCrmCredentials: (input: {
+    system: CrmAgentSystem;
+    username: string;
+    password: string;
+    notes?: string | null;
+  }) =>
+    request<{
+      system: CrmCredentialStatusRow;
+      verify: { ok: boolean; summary: string; mode: string | null };
+    }>('/api/crm-credentials/connect', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  disconnectCrmCredentials: (system: CrmAgentSystem) =>
+    request<{ ok: boolean; system: CrmAgentSystem }>(`/api/crm-credentials/${system}`, {
+      method: 'DELETE',
+    }),
+
+  verifyCrmCredentials: (system: CrmAgentSystem) =>
+    request<{
+      verify: { ok: boolean; summary: string; mode: string | null };
+      system: CrmCredentialStatusRow | null;
+    }>(`/api/crm-credentials/${system}/verify`, { method: 'POST' }),
 
   // ---- CRM job sync ----
   crmSyncStatus: () => request<CrmSyncStatus>('/api/crm-sync/status', { method: 'GET' }),

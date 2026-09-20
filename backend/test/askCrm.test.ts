@@ -53,6 +53,7 @@ test('getAskCrmRecord soft-fails when no external CRM is connected but returns A
       },
       error: null,
     }),
+    'crm_agent_credentials:list': () => ({ data: [], error: null }),
     'crm_external_sources:list': () => ({ data: [], error: null }),
     'crm_sync_connections:list': () => ({ data: null, error: { message: 'missing' } }),
     'crm_oauth_grants:list': () => ({ data: null, error: { message: 'missing' } }),
@@ -77,6 +78,7 @@ test('getAskCrmRecord soft-fails when no external CRM is connected but returns A
 
 test('searchAskCrm soft-fails to Atmosphere-native search', async () => {
   const supabase = mockSupabase({
+    'crm_agent_credentials:list': () => ({ data: [], error: null }),
     'crm_external_sources:list': () => ({ data: [], error: null }),
     'crm_sync_connections:list': () => ({ data: null, error: { message: 'missing' } }),
     'crm_oauth_grants:list': () => ({ data: null, error: { message: 'missing' } }),
