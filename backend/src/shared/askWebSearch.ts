@@ -8,6 +8,8 @@
  * Providers: Brave / Serper / Tavily search APIs, or Gemini Google Search
  * grounding via GEMINI_API_KEY (auto-detected when dedicated search keys are
  * absent). Honor ASK_WEB_SEARCH_PROVIDER=gemini|brave|serper|tavily|off.
+ * When the configured provider throws or returns no hits, fall back to
+ * DuckDuckGo HTML scrape (no extra API key).
  *
  * Privacy: never reverse-image-search; never identify children; never identify
  * private job-site people from photos/video. Search queries are sanitized so
@@ -28,6 +30,13 @@ export type AskWebSearchProvider = 'brave' | 'serper' | 'tavily' | 'gemini';
 const WEB_TRAILER_RE = /(?:\n|^)\s*⟦web:\s*([^⟧]+)⟧\s*/i;
 
 /** Prompt block when web hits were retrieved for this turn. */
+/** Prompt note when live web search ran but returned no usable hits. */
+export const ASK_WEB_EMPTY_RESULTS_NOTE = `WEB SEARCH ATTEMPTED (no usable results):
+- Live public web search was attempted for this question but returned no usable results (provider and fallback both empty or unavailable).
+- Do NOT invent web findings, prices, business listings, URLs, or citations.
+- Say clearly that no web results were found for this query, then answer only from the job file if anything applies.
+- Never claim you lack a web search tool — the tool ran; it just found nothing useful.`;
+
 export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided below):
 - Use them ONLY for outside knowledge: building codes, product/manufacturer specs, standards, general how-to.
 - Job-file evidence always wins over the web. Never invent what happened on this job from a webpage.
@@ -221,15 +230,30 @@ export function sanitizeAskWebQuery(question: string): string {
   return q.replace(/\s{2,}/g, ' ').trim().slice(0, 240);
 }
 
+function hostnameFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '') || '';
+  } catch {
+    return '';
+  }
+}
+
+function titleForHit(title: string, url: string): string {
+  const t = trim(title);
+  if (t) return t;
+  return hostnameFromUrl(url) || 'Web result';
+}
+
 function pushHit(hits: AskWebHit[], next: AskWebHit | null) {
   if (!next) return;
-  if (!next.title || !next.url) return;
-  if (!/^https?:\/\//i.test(next.url)) return;
-  if (hits.some((h) => h.url === next.url)) return;
+  const url = trim(next.url);
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) return;
+  if (hits.some((h) => h.url === url)) return;
   hits.push({
-    title: next.title.slice(0, 160),
-    url: next.url.slice(0, 500),
-    snippet: next.snippet.slice(0, 400),
+    title: titleForHit(next.title, url).slice(0, 160),
+    url: url.slice(0, 500),
+    snippet: trim(next.snippet).slice(0, 400),
   });
 }
 
@@ -250,7 +274,8 @@ async function searchBrave(
     signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
-    throw new Error(`brave_search_${res.status}`);
+    const body = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`brave_search_${res.status}:${body}`);
   }
   const body = (await res.json()) as {
     web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
@@ -283,7 +308,8 @@ async function searchSerper(
     signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
-    throw new Error(`serper_search_${res.status}`);
+    const body = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`serper_search_${res.status}:${body}`);
   }
   const body = (await res.json()) as {
     organic?: Array<{ title?: string; link?: string; snippet?: string }>;
@@ -319,7 +345,8 @@ async function searchTavily(
     signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
-    throw new Error(`tavily_search_${res.status}`);
+    const body = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`tavily_search_${res.status}:${body}`);
   }
   const body = (await res.json()) as {
     results?: Array<{ title?: string; url?: string; content?: string }>;
@@ -336,12 +363,11 @@ async function searchTavily(
   return hits;
 }
 
-function geminiWebSearchModel(): string {
-  return (
-    process.env.ASK_WEB_SEARCH_MODEL ||
-    process.env.VERIFICATION_PRIMARY_MODEL ||
-    'gemini-2.5-flash'
-  ).trim();
+/** Prefer ASK_WEB_SEARCH_MODEL; never inherit verification models that may lack google_search. */
+export function geminiWebSearchModel(): string {
+  const forced = trim(process.env.ASK_WEB_SEARCH_MODEL);
+  if (forced) return forced;
+  return 'gemini-2.5-flash';
 }
 
 function geminiWebSearchBaseUrl(): string {
@@ -351,11 +377,16 @@ function geminiWebSearchBaseUrl(): string {
 type GeminiGroundingChunk = {
   web?: { uri?: string; title?: string; snippet?: string };
 };
+type GeminiGroundingSupport = {
+  groundingChunkIndices?: number[];
+  segment?: { text?: string };
+};
 type GeminiGeneratePayload = {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
     groundingMetadata?: {
       groundingChunks?: GeminiGroundingChunk[];
+      groundingSupports?: GeminiGroundingSupport[];
       webSearchQueries?: string[];
     };
   }>;
@@ -406,19 +437,79 @@ export function parseGeminiAskWebHitsJson(raw: string, limit = 5): AskWebHit[] {
   return hits;
 }
 
+function collectUrisFromUnknown(value: unknown, into: Set<string>, depth = 0) {
+  if (depth > 6 || value == null) return;
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (/^https?:\/\//i.test(s)) into.add(s);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectUrisFromUnknown(item, into, depth + 1);
+    return;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    for (const key of ['uri', 'url', 'link', 'web']) {
+      if (key in obj) collectUrisFromUnknown(obj[key], into, depth + 1);
+    }
+    if (obj.web && typeof obj.web === 'object') {
+      collectUrisFromUnknown(obj.web, into, depth + 1);
+    }
+  }
+}
+
 function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number): AskWebHit[] {
-  const chunks = payload.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const meta = payload.candidates?.[0]?.groundingMetadata;
+  const chunks = meta?.groundingChunks ?? [];
+  const supports = meta?.groundingSupports ?? [];
   const hits: AskWebHit[] = [];
+
   for (const chunk of chunks) {
     const web = chunk.web;
     if (!web) continue;
     pushHit(hits, {
-      title: trim(web.title) || trim(web.uri),
+      title: trim(web.title),
       url: trim(web.uri),
       snippet: trim(web.snippet),
     });
     if (hits.length >= limit) break;
   }
+
+  // groundingSupports may reference chunk indices; fold segment text as snippet filler.
+  if (hits.length < limit) {
+    for (const support of supports) {
+      const indices = support.groundingChunkIndices ?? [];
+      const segmentText = trim(support.segment?.text);
+      for (const idx of indices) {
+        const web = chunks[idx]?.web;
+        if (!web?.uri) continue;
+        const existing = hits.find((h) => h.url === trim(web.uri));
+        if (existing && !existing.snippet && segmentText) {
+          existing.snippet = segmentText.slice(0, 400);
+        } else if (!existing) {
+          pushHit(hits, {
+            title: trim(web.title),
+            url: trim(web.uri),
+            snippet: segmentText,
+          });
+        }
+        if (hits.length >= limit) break;
+      }
+      if (hits.length >= limit) break;
+    }
+  }
+
+  // Last resort: any http(s) URI nested under groundingMetadata.
+  if (hits.length < limit && meta) {
+    const uris = new Set<string>();
+    collectUrisFromUnknown(meta, uris);
+    for (const uri of uris) {
+      pushHit(hits, { title: '', url: uri, snippet: '' });
+      if (hits.length >= limit) break;
+    }
+  }
+
   return hits;
 }
 
@@ -456,7 +547,8 @@ async function searchGemini(
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
-    throw new Error(`gemini_search_${res.status}`);
+    const errBody = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`gemini_search_${res.status}:${errBody}`);
   }
   const payload = (await res.json()) as GeminiGeneratePayload;
   const fromGrounding = hitsFromGeminiGrounding(payload, limit);
@@ -472,8 +564,247 @@ async function searchGemini(
   return hits;
 }
 
+const DDG_UA =
+  'Mozilla/5.0 (compatible; AtmosphereAsk/1.0; +https://atmosphereteam.com)';
+
+/** Unwrap DuckDuckGo redirect links (uddg=) to the destination URL. */
+export function unwrapDuckDuckGoUrl(href: string): string {
+  const raw = trim(href).replace(/&amp;/g, '&');
+  if (!raw) return '';
+  try {
+    const abs = raw.startsWith('//') ? `https:${raw}` : raw;
+    const u = new URL(abs, 'https://duckduckgo.com');
+    const uddg = u.searchParams.get('uddg');
+    if (uddg) {
+      const decoded = decodeURIComponent(uddg);
+      if (/^https?:\/\//i.test(decoded)) return decoded;
+    }
+  } catch {
+    /* fall through */
+  }
+  if (/^https?:\/\//i.test(raw) && !/duckduckgo\.com\/l\/?\?/i.test(raw)) {
+    return raw;
+  }
+  return '';
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCharCode(code) : _;
+    });
+}
+
+function stripTags(s: string): string {
+  return decodeHtmlEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+/** Parse DuckDuckGo HTML / lite result pages into AskWebHit[]. */
+export function parseDuckDuckGoHtml(html: string, limit = 5): AskWebHit[] {
+  const hits: AskWebHit[] = [];
+  const src = String(html || '');
+  if (!src) return hits;
+
+  // html.duckduckgo.com: <a class="result__a" href="...">Title</a>
+  const resultA = /<a[^>]*\bclass="[^"]*\bresult__a\b[^"]*"[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  const blocks: Array<{ url: string; title: string; index: number }> = [];
+  while ((m = resultA.exec(src)) !== null) {
+    const url = unwrapDuckDuckGoUrl(m[1] ?? '');
+    const title = stripTags(m[2] ?? '');
+    if (url) blocks.push({ url, title, index: m.index });
+  }
+
+  // lite.duckduckgo.com fallback: class="result-link"
+  if (!blocks.length) {
+    const lite = /<a[^>]*\bclass="[^"]*\bresult-link\b[^"]*"[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    while ((m = lite.exec(src)) !== null) {
+      const url = unwrapDuckDuckGoUrl(m[1] ?? '');
+      const title = stripTags(m[2] ?? '');
+      if (url) blocks.push({ url, title, index: m.index });
+    }
+  }
+
+  for (const block of blocks) {
+    // Snippet: nearest result__snippet after this link
+    const window = src.slice(block.index, block.index + 1200);
+    const snipMatch =
+      window.match(/class="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/a>/i) ||
+      window.match(/class="[^"]*\bresult-snippet\b[^"]*"[^>]*>([\s\S]*?)<\//i);
+    const snippet = snipMatch ? stripTags(snipMatch[1] ?? '') : '';
+    pushHit(hits, { title: block.title, url: block.url, snippet });
+    if (hits.length >= limit) break;
+  }
+
+  return hits;
+}
+
+function hitsFromDuckDuckGoInstantAnswer(body: unknown, limit: number): AskWebHit[] {
+  const hits: AskWebHit[] = [];
+  if (!body || typeof body !== 'object') return hits;
+  const data = body as {
+    AbstractURL?: string;
+    AbstractText?: string;
+    Heading?: string;
+    Results?: Array<{ FirstURL?: string; Text?: string }>;
+    RelatedTopics?: Array<{ FirstURL?: string; Text?: string; Topics?: Array<{ FirstURL?: string; Text?: string }> }>;
+  };
+
+  const pushTopic = (firstUrl?: string, text?: string) => {
+    const url = trim(firstUrl);
+    if (!url) return;
+    const label = trim(text);
+    const title = label.includes(' - ') ? label.split(' - ')[0]!.trim() : label;
+    const snippet = label.includes(' - ') ? label.slice(label.indexOf(' - ') + 3).trim() : '';
+    pushHit(hits, { title, url, snippet });
+  };
+
+  if (trim(data.AbstractURL)) {
+    pushHit(hits, {
+      title: trim(data.Heading),
+      url: trim(data.AbstractURL),
+      snippet: trim(data.AbstractText),
+    });
+  }
+  for (const row of data.Results ?? []) {
+    pushTopic(row.FirstURL, row.Text);
+    if (hits.length >= limit) return hits;
+  }
+  for (const topic of data.RelatedTopics ?? []) {
+    if (topic.FirstURL) pushTopic(topic.FirstURL, topic.Text);
+    for (const nested of topic.Topics ?? []) {
+      pushTopic(nested.FirstURL, nested.Text);
+      if (hits.length >= limit) return hits;
+    }
+    if (hits.length >= limit) return hits;
+  }
+  return hits;
+}
+
 /**
- * Public web search for Ask. Returns [] when unset, blocked, or upstream fails.
+ * DuckDuckGo fallback — Instant Answer JSON + HTML scrape.
+ * No API key. Timeout ~10s. Soft-fails to [] on network/parse errors.
+ */
+export async function searchDuckDuckGo(
+  query: string,
+  limit: number,
+  fetchFn: typeof fetch,
+): Promise<AskWebHit[]> {
+  const hits: AskWebHit[] = [];
+  const q = trim(query);
+  if (!q) return hits;
+
+  // 1) Instant Answer (often sparse for local queries — still free structured URLs)
+  try {
+    const iaUrl = new URL('https://api.duckduckgo.com/');
+    iaUrl.searchParams.set('q', q);
+    iaUrl.searchParams.set('format', 'json');
+    iaUrl.searchParams.set('no_html', '1');
+    iaUrl.searchParams.set('skip_disambig', '1');
+    const iaRes = await fetchFn(iaUrl, {
+      headers: { Accept: 'application/json', 'User-Agent': DDG_UA },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (iaRes.ok) {
+      const iaBody = await iaRes.json().catch(() => null);
+      for (const hit of hitsFromDuckDuckGoInstantAnswer(iaBody, limit)) {
+        pushHit(hits, hit);
+        if (hits.length >= limit) return hits;
+      }
+    } else {
+      logger.info('ask_web_search_ddg_ia_status', {
+        status: iaRes.status,
+        body: (await iaRes.text().catch(() => '')).slice(0, 160),
+      });
+    }
+  } catch (err) {
+    const detail = (err instanceof Error ? err.message : String(err)).slice(0, 160);
+    logger.info('ask_web_search_ddg_ia_failed', { detail });
+  }
+
+  // 2) HTML scrape (primary source of organic results)
+  const htmlEndpoints: Array<{ url: string; method: 'GET' | 'POST'; body?: string }> = [
+    {
+      url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
+      method: 'GET',
+    },
+    {
+      url: 'https://html.duckduckgo.com/html/',
+      method: 'POST',
+      body: `q=${encodeURIComponent(q)}&b=`,
+    },
+    {
+      url: `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(q)}`,
+      method: 'GET',
+    },
+  ];
+
+  for (const endpoint of htmlEndpoints) {
+    if (hits.length >= limit) break;
+    try {
+      const res = await fetchFn(endpoint.url, {
+        method: endpoint.method,
+        headers: {
+          Accept: 'text/html',
+          'User-Agent': DDG_UA,
+          ...(endpoint.method === 'POST'
+            ? { 'Content-Type': 'application/x-www-form-urlencoded' }
+            : {}),
+        },
+        body: endpoint.body,
+        signal: AbortSignal.timeout(10_000),
+        redirect: 'follow',
+      });
+      if (!res.ok) {
+        logger.info('ask_web_search_ddg_html_status', {
+          status: res.status,
+          endpoint: endpoint.url.slice(0, 80),
+          body: (await res.text().catch(() => '')).slice(0, 160),
+        });
+        continue;
+      }
+      const html = await res.text();
+      for (const hit of parseDuckDuckGoHtml(html, limit)) {
+        pushHit(hits, hit);
+        if (hits.length >= limit) break;
+      }
+      if (hits.length) break;
+    } catch (err) {
+      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 160);
+      logger.info('ask_web_search_ddg_html_failed', {
+        detail,
+        endpoint: endpoint.url.slice(0, 80),
+      });
+    }
+  }
+
+  return hits.slice(0, limit);
+}
+
+async function runConfiguredProvider(
+  provider: AskWebSearchProvider,
+  query: string,
+  apiKey: string,
+  limit: number,
+  fetchFn: typeof fetch,
+): Promise<AskWebHit[]> {
+  if (provider === 'brave') return searchBrave(query, apiKey, limit, fetchFn);
+  if (provider === 'serper') return searchSerper(query, apiKey, limit, fetchFn);
+  if (provider === 'tavily') return searchTavily(query, apiKey, limit, fetchFn);
+  return searchGemini(query, apiKey, limit, fetchFn);
+}
+
+/**
+ * Public web search for Ask. Returns [] when unset, blocked, or all providers fail.
+ * Tries the configured provider first; on throw or empty hits, falls back to DuckDuckGo.
  */
 export async function searchAskWeb(
   question: string,
@@ -490,14 +821,44 @@ export async function searchAskWeb(
 
   const limit = opts?.limit ?? 5;
   const fetchFn = opts?.fetchFn ?? fetch;
+
+  let hits: AskWebHit[] = [];
+  let primaryError: string | null = null;
   try {
-    if (provider === 'brave') return await searchBrave(query, apiKey, limit, fetchFn);
-    if (provider === 'serper') return await searchSerper(query, apiKey, limit, fetchFn);
-    if (provider === 'tavily') return await searchTavily(query, apiKey, limit, fetchFn);
-    return await searchGemini(query, apiKey, limit, fetchFn);
+    hits = await runConfiguredProvider(provider, query, apiKey, limit, fetchFn);
+    logger.info('ask_web_search_primary', {
+      provider,
+      queryLen: query.length,
+      hitCount: hits.length,
+      model: provider === 'gemini' ? geminiWebSearchModel() : undefined,
+    });
+  } catch (err) {
+    primaryError = (err instanceof Error ? err.message : String(err)).slice(0, 280);
+    // Never log API keys — error messages must not include the key header value.
+    logger.warn('ask_web_search_failed', {
+      provider,
+      detail: primaryError.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[redacted]'),
+    });
+    hits = [];
+  }
+
+  if (hits.length) return hits;
+
+  try {
+    const ddgHits = await searchDuckDuckGo(query, limit, fetchFn);
+    logger.info('ask_web_search_ddg_fallback', {
+      provider,
+      queryLen: query.length,
+      hitCount: ddgHits.length,
+      primaryEmpty: !primaryError,
+      primaryError: primaryError
+        ? primaryError.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[redacted]').slice(0, 200)
+        : undefined,
+    });
+    return ddgHits;
   } catch (err) {
     const detail = (err instanceof Error ? err.message : String(err)).slice(0, 200);
-    logger.warn('ask_web_search_failed', { provider, detail });
+    logger.warn('ask_web_search_ddg_fallback_failed', { provider, detail });
     return [];
   }
 }

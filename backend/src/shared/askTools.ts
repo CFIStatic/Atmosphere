@@ -441,7 +441,8 @@ export async function executeAskTool(
           return {
             ok: true,
             tool: name,
-            summary: 'No web results (search unset or empty). Answer from the job file only.',
+            summary:
+              'No web results were found or search was not available after provider + DuckDuckGo fallback. Do not invent web findings; answer from the job file only.',
             webHits: [],
           };
         }
