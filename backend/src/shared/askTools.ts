@@ -11,6 +11,7 @@ import { buildJobProofPayload } from '../routes/proofOfWork.js';
 import {
   askWebSearchBlockedReason,
   looksLikeOutsideKnowledgeAsk,
+  looksLikeWebCapabilityAsk,
   searchAskWeb,
   type AskWebHit,
 } from './askWebSearch.js';
@@ -319,12 +320,19 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
     add('search_crm');
   }
   if (
+    looksLikeWebCapabilityAsk(question) ||
     looksLikeOutsideKnowledgeAsk(question) ||
     /\b(irc|ibc|nec|code|manufacturer|product spec|how (do|to)|standard)\b/i.test(q) ||
     (askWebSearchBlockedReason(question) == null &&
       /\b(install guide|warranty|astm|ul\s*\d)\b/i.test(q))
   ) {
     add('web_search');
+  }
+
+  // Explicit web intents always keep web_search even when other tools fill the cap.
+  if (looksLikeWebCapabilityAsk(question) && picks.includes('web_search')) {
+    const rest = picks.filter((name) => name !== 'web_search');
+    return (['web_search', ...rest] as AskToolName[]).slice(0, 3);
   }
 
   return picks.slice(0, 3);

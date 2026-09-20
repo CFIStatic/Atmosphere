@@ -73,6 +73,50 @@ test('outside-knowledge detection covers codes, products, and web capability', (
   assert.equal(looksLikeOutsideKnowledgeAsk('do you have internet access'), true);
 });
 
+test('explicit web intents and price asks that previously missed detection', () => {
+  // Exact failing production strings
+  assert.equal(looksLikeWebCapabilityAsk('search the web for tile prices'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('search the web for tile prices'), true);
+  assert.equal(looksLikeWebCapabilityAsk('can u search google'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('can u search google'), true);
+  assert.equal(looksLikeWebCapabilityAsk('what can you search for'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('what can you search for'), true);
+
+  // Broader explicit intents
+  assert.equal(looksLikeWebCapabilityAsk('search google for IRC R905'), true);
+  assert.equal(looksLikeWebCapabilityAsk('can ya search google'), true);
+  assert.equal(looksLikeWebCapabilityAsk('google tile prices'), true);
+  assert.equal(looksLikeWebCapabilityAsk('look up shingle prices online'), true);
+  assert.equal(looksLikeWebCapabilityAsk('web search for underlayment'), true);
+  assert.equal(looksLikeWebCapabilityAsk('find prices online'), true);
+
+  // Price / product market as outside knowledge
+  assert.equal(looksLikeOutsideKnowledgeAsk('tile prices'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('material cost for plywood'), true);
+  assert.equal(looksLikeOutsideKnowledgeAsk('how much does tile cost'), true);
+});
+
+test('askWebCapabilityRules forbids claiming no live search when configured', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_API_KEY: 'test-key',
+      ASK_WEB_SEARCH_PROVIDER: 'brave',
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      const rules = askWebCapabilityRules();
+      assert.match(rules, /results are fetched/i);
+      assert.match(rules, /Never claim you lack a live web search tool/i);
+      assert.match(rules, /cannot query prices/i);
+      assert.doesNotMatch(rules, /not configured/i);
+    },
+  );
+});
+
 test('shouldSupplementWithWebSearch respects grounded hits and privacy', async () => {
   assert.equal(
     shouldSupplementWithWebSearch('what is the lockbox', 'brief · Gate / access: Lockbox 4412'),
@@ -109,6 +153,22 @@ test('shouldSupplementWithWebSearch when key is set for code questions', async (
       );
       assert.equal(
         shouldSearchAskWeb('are you connected to the internet', 'This job file does not have that.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('search the web for tile prices', 'brief · Carrier approved deck.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('can u search google', 'brief · Carrier approved deck.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('what can you search for', 'brief · Carrier approved deck.'),
+        true,
+      );
+      assert.equal(
+        shouldSupplementWithWebSearch('tile prices', 'brief · Carrier approved deck.'),
         true,
       );
     },

@@ -85,9 +85,10 @@ export function isAskWebSearchConfigured(): boolean {
 export function askWebCapabilityRules(): string {
   if (isAskWebSearchConfigured()) {
     return `INTERNET / WEB ACCESS:
-- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, general how-to) when WEB SEARCH RESULTS are provided or the user asks you to search online.
-- Never claim you are offline, not connected to the internet, or unable to search the web.
-- If asked whether you are connected to the internet or can search the web, say yes — you can use the public web for outside knowledge. Job-file evidence still always wins for what happened on this job.
+- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, prices/costs, general how-to) when WEB SEARCH RESULTS are provided or the user asks you to search online.
+- Never claim you lack a live web search tool, cannot query prices, are offline, not connected to the internet, or unable to search the web.
+- When the user asks to search the web/Google/internet, results are fetched for outside knowledge — say that clearly. Do not hedge that you cannot search.
+- If asked whether you are connected to the internet or can search the web, say yes — you can use the public web for outside knowledge. Job-file evidence still always wins for on-job facts.
 - Still never reverse-image-search, identify children, or identify private job-site people from photos/video.`;
   }
   return `INTERNET / WEB ACCESS:
@@ -132,11 +133,22 @@ export function looksLikeWebCapabilityAsk(question: string): boolean {
   if (!q) return false;
   return (
     /\b(connected to (the )?internet|have (internet|web) access|online access)\b/i.test(q) ||
-    /\b(can you|are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)\b/i.test(
+    // "can you/u/ya search google", "can you search the web", "could you look up…"
+    /\b(can|could)\s+(you|u|ya)\s+(search|browse|look\s*up|google|use)\b/i.test(q) ||
+    /\b(are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)?\b/i.test(
       q,
     ) ||
+    // "search the web for X", "search google for…", "search the internet…"
+    /\bsearch\s+(the\s+)?(web|internet|google|online)\b/i.test(q) ||
     /\b(search|look\s*(this|it|that)?\s*up|find)\s+(online|on the web|on the internet|via google)\b/i.test(q) ||
-    /\b(look this up online|google (this|that|it)|web search)\b/i.test(q) ||
+    /\b(look\s+(this|it|that)?\s*up\s+online|google\s+(this|that|it)|web[\s-]?search)\b/i.test(q) ||
+    // "google tile prices", "google IRC R905"
+    /\bgoogle\s+\S+/i.test(q) ||
+    // "what can you search", "what can you search for"
+    /\bwhat\s+can\s+you\s+search\b/i.test(q) ||
+    /\bwhat\s+(do|can)\s+you\s+(look\s*up|search\s+for)\b/i.test(q) ||
+    // "find prices online", "look up cost online"
+    /\b(find|look\s*up|search).{0,48}\bonline\b/i.test(q) ||
     /\bare you (online|offline|connected)\b/i.test(q)
   );
 }
@@ -155,7 +167,15 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
     ) ||
     /\b(R-?value|gauge\s+steel|nail\s+pattern|flashing\s+detail|underlayment\s+spec)\b/i.test(q) ||
     /\b(warranty|standard\s+practice|best\s+practice|code\s+requirement)\b/i.test(q) ||
-    /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q)
+    /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q) ||
+    // Price / product market asks (tile prices, material cost, how much does X cost)
+    /\b(tile|material|lumber|shingle|roofing|flooring|paint|supply|product|labor)\s+(prices?|pricing|cost|costs)\b/i.test(
+      q,
+    ) ||
+    /\b(prices?|pricing|cost|costs)\s+(for|of)\s+\w+/i.test(q) ||
+    /\bhow\s+much\s+(does|do|is|are)\b/i.test(q) ||
+    /\b(market|retail|wholesale)\s+(price|cost|rate)\b/i.test(q) ||
+    /\b(going\s+rate|price\s+check)\b/i.test(q)
   );
 }
 
