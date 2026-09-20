@@ -17,17 +17,6 @@ A job share link (`?token=`) still works without signing in — that path is for
 subs who were invited to one job.
 
 
-## Ask (same as Platform)
-
-Signed-in Field Capture does **not** ship a separate chat UI. Select a job on
-Today, tap **Ask this job**, and Platform opens in the phone frame on the Ask
-tab (`/job-progress?job=…&ask=1`). Answers use the same
-`/api/operations/shared/:jobId/proof/ask` stack as the office — web search,
-CRM reference when connected, and agent tools.
-
-The native iOS Field Capture app has no Ask surface yet; when it does, it
-should call those same shared Ask APIs.
-
 ## Run live
 
 On a phone, use HTTPS (Safari will not give the camera on `http://`):

@@ -743,17 +743,6 @@
     return '';
   }
 
-  /**
-   * Platform job-file Ask deep link. Field Capture does not ship its own chat
-   * UI — opening this path in the Platform iframe reuses JobAskPanel and the
-   * shared /api/operations/shared/:jobId/proof/ask stack (web search + CRM).
-   */
-  function jobAskPlatformPath(jobId) {
-    var id = String(jobId || '').trim();
-    if (!id) return '';
-    return '/job-progress?job=' + encodeURIComponent(id) + '&ask=1';
-  }
-
   function withFieldEmbed(path) {
     if (/[?&]embed=field(?:&|$)/.test(path)) return path;
     return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'embed=field';
@@ -3816,7 +3805,6 @@
     resolveOfficePlatformHref: resolveOfficePlatformHref,
     localOfficeOrigin: localOfficeOrigin,
     withFieldEmbed: withFieldEmbed,
-    jobAskPlatformPath: jobAskPlatformPath,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,
     LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,

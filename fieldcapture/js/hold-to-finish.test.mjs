@@ -165,17 +165,13 @@ assert.equal(
   '/verifier-library?embed=field&v=no-overview-back-2',
 );
 assert.equal(Core.withFieldEmbed('/verifier-library'), '/verifier-library?embed=field');
-assert.equal(typeof Core.jobAskPlatformPath, 'function');
-assert.equal(
-  Core.jobAskPlatformPath('job-1038'),
-  '/job-progress?job=job-1038&ask=1',
-  'Ask deep-link opens Platform JobAskPanel on the shared proof/ask APIs',
-);
-assert.match(html, /id="job-ask-link"/, 'signed-in Field Capture can open Ask for the selected job');
-assert.match(html, /id="job-ask-href"[^>]*>Ask this job</, 'Ask this job link label');
-assert.match(appSrc, /paintJobAskLink/, 'Ask link paints for signed-in office jobs');
-assert.match(appSrc, /openPlatformAskJob/, 'Ask opens inside the Platform iframe, not a new chat UI');
-assert.match(appSrc, /proof\/ask/, 'FC Ask reuses shared proof/ask (web search + CRM tools)');
+assert.equal(typeof Core.jobAskPlatformPath, 'undefined', 'FC no longer deep-links into Platform Ask');
+assert.doesNotMatch(html, /id="job-ask-link"/, 'Ask this job row removed from Today');
+assert.doesNotMatch(html, /id="job-ask-href"/, 'Ask this job link removed from Today');
+assert.doesNotMatch(html, /Ask this job/, 'Ask this job copy removed from Field Capture Today');
+assert.doesNotMatch(appSrc, /paintJobAskLink/, 'Ask link painter removed');
+assert.doesNotMatch(appSrc, /openPlatformAskJob/, 'Platform Ask iframe opener removed from FC');
+assert.doesNotMatch(appSrc, /job-ask-href/, 'no remaining #job-ask-href wiring');
 assert.equal(
   Core.localOfficeOrigin('?office=http://127.0.0.1:5174'),
   'http://127.0.0.1:5174',
