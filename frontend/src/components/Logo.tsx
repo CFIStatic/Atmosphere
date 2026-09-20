@@ -3,9 +3,9 @@ import { DASHBOARD_HOME } from '../lib/platforms';
 
 /** Downward wordmark nudge (px) so the capital-A baseline sits on the orange bar bottom. */
 const WORD_NUDGE_Y = {
-  md: 4,
+  md: 2,
   /** Full-width auth headers — login, signup, password reset. */
-  lg: 5,
+  lg: 3,
 } as const;
 
 const SIZES = {
@@ -40,7 +40,7 @@ interface Props {
  * Vertical alignment: wordmark baseline sits on the orange bar's bottom edge
  * (`items-end` + `leading-none`). Explicit translateY offsets the descender on
  * "p" so the A baseline — not the line-box bottom — hits the bar
- * (md +4px, lg +5px). Inline style is more reliable than Tailwind arbitrary
+ * (md +2px, lg +3px). Inline style is more reliable than Tailwind arbitrary
  * translate classes across builds.
  */
 export function Logo({
