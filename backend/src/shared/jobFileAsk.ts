@@ -18,6 +18,7 @@ import {
   type CollectionClip,
 } from './proofAnalyst.js';
 import {
+  ASK_WEB_EMPTY_RESULTS_NOTE,
   ASK_WEB_FORMAT_RULES,
   askWebCapabilityRules,
   formatAskWebContext,
@@ -546,7 +547,9 @@ export async function answerFromJobFile(input: {
   // Proactive web search BEFORE grounded fast-path so capability / outside-knowledge
   // asks (e.g. "search the web for tile prices", "can u search google") are never
   // swallowed by a brief-note hit from the job file.
+  let webSearchAttempted = false;
   if (!webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
+    webSearchAttempted = true;
     webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
   }
 
@@ -590,14 +593,20 @@ export async function answerFromJobFile(input: {
   const system =
     FILE_QA_SYSTEM +
     `\n\n${askWebCapabilityRules()}` +
-    (webHits.length ? `\n\n${ASK_WEB_FORMAT_RULES}` : '') +
+    (webHits.length
+      ? `\n\n${ASK_WEB_FORMAT_RULES}`
+      : webSearchAttempted
+        ? `\n\n${ASK_WEB_EMPTY_RESULTS_NOTE}`
+        : '') +
     (toolResults.length
       ? `\n\nIN-PRODUCT ACTIONS: Tool results below already ran. Summarize what changed or what you found. Never claim you emailed anyone. If a tool needs confirmation, tell the user clearly and do not pretend it already happened. Append ⟦actions: …⟧ only if tools already attached it — the server appends the trailer.`
       : '');
 
   const webBlock = webHits.length
     ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins):\n${formatAskWebContext(webHits)}`
-    : '';
+    : webSearchAttempted
+      ? `\n\nWEB SEARCH RESULTS: (none — live search returned no usable hits; do not invent web findings)`
+      : '';
   const toolBlock = toolResults.length
     ? `\n\nTOOL RESULTS (already executed):\n${formatAskToolResultsForModel(toolResults)}`
     : '';

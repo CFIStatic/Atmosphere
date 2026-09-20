@@ -6,16 +6,19 @@ import {
   askWebSearchProvider,
   filterWebHitsToAllowed,
   formatWebTrailer,
+  geminiWebSearchModel,
   isAskWebSearchConfigured,
   looksLikeOutsideKnowledgeAsk,
   looksLikeWebCapabilityAsk,
   normalizeAskWebCitations,
+  parseDuckDuckGoHtml,
   parseGeminiAskWebHitsJson,
   parseWebTrailer,
   sanitizeAskWebQuery,
   searchAskWeb,
   shouldSearchAskWeb,
   shouldSupplementWithWebSearch,
+  unwrapDuckDuckGoUrl,
 } from '../src/shared/askWebSearch.js';
 
 function withEnv(vars: Record<string, string | undefined>, fn: () => void | Promise<void>) {
@@ -465,6 +468,214 @@ test('searchAskWeb soft-fails on Gemini HTTP errors', async () => {
         fetchFn: async () => new Response('nope', { status: 403 }),
       });
       assert.deepEqual(hits, []);
+    },
+  );
+});
+
+
+test('geminiWebSearchModel prefers ASK_WEB_SEARCH_MODEL and ignores verification model', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_MODEL: undefined,
+      VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
+    },
+    () => {
+      assert.equal(geminiWebSearchModel(), 'gemini-2.5-flash');
+    },
+  );
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_MODEL: 'gemini-2.0-flash',
+      VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
+    },
+    () => {
+      assert.equal(geminiWebSearchModel(), 'gemini-2.0-flash');
+    },
+  );
+});
+
+test('unwrapDuckDuckGoUrl and parseDuckDuckGoHtml extract organic hits', () => {
+  const wrapped =
+    'https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.vonmaur.com%2Fstores%2Fbrookfield&rut=abc';
+  assert.equal(unwrapDuckDuckGoUrl(wrapped), 'https://www.vonmaur.com/stores/brookfield');
+
+  const html = `
+    <div class="result">
+      <a rel="nofollow" class="result__a" href="${wrapped}">Von Maur — Corners of Brookfield</a>
+      <a class="result__snippet" href="#">Department store at The Corners of Brookfield.</a>
+    </div>
+    <div class="result">
+      <a class="result__a" href="https://example.com/direct">Direct title</a>
+      <a class="result__snippet" href="#">Direct snippet</a>
+    </div>
+    <div class="result">
+      <a class="result__a" href="https://codes.iccsafe.org/r905"></a>
+      <a class="result__snippet" href="#">Empty title uses hostname</a>
+    </div>
+  `;
+  const hits = parseDuckDuckGoHtml(html, 5);
+  assert.equal(hits.length, 3);
+  assert.equal(hits[0]?.url, 'https://www.vonmaur.com/stores/brookfield');
+  assert.match(hits[0]?.title ?? '', /Von Maur/i);
+  assert.match(hits[0]?.snippet ?? '', /Department store/i);
+  assert.equal(hits[1]?.url, 'https://example.com/direct');
+  assert.equal(hits[2]?.title, 'codes.iccsafe.org');
+});
+
+const DDG_HTML_FIXTURE = `
+<html><body>
+  <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.vonmaur.com%2Flocations%2Fbrookfield&rut=x">Von Maur Corners of Brookfield</a>
+  <a class="result__snippet" href="#">Store hours and directions.</a>
+  <a class="result__a" href="https://www.thecornersofbrookfield.com/">The Corners of Brookfield</a>
+  <a class="result__snippet" href="#">Shopping center directory.</a>
+</body></html>
+`;
+
+test('searchAskWeb falls back to DuckDuckGo when Gemini throws', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+      ASK_WEB_SEARCH_MODEL: undefined,
+      VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
+    },
+    async () => {
+      const urls: string[] = [];
+      const hits = await searchAskWeb('search google for von mour corners of brookfield', {
+        fetchFn: async (input, init) => {
+          const url = String(input);
+          urls.push(url);
+          if (url.includes('generativelanguage.googleapis.com')) {
+            assert.match(url, /gemini-2\.5-flash/);
+            assert.doesNotMatch(url, /gemini-2\.5-pro/);
+            return new Response('{"error":{"message":"model does not support google_search"}}', {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.includes('api.duckduckgo.com')) {
+            return new Response(JSON.stringify({ AbstractURL: '', RelatedTopics: [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.includes('duckduckgo.com')) {
+            return new Response(DDG_HTML_FIXTURE, {
+              status: 200,
+              headers: { 'Content-Type': 'text/html' },
+            });
+          }
+          return new Response('unexpected', { status: 500 });
+        },
+      });
+      assert.ok(hits.length >= 1, `expected DDG hits, got ${hits.length}; urls=${urls.join(' | ')}`);
+      assert.equal(hits[0]?.url, 'https://www.vonmaur.com/locations/brookfield');
+      assert.match(hits[0]?.title ?? '', /Von Maur/i);
+      assert.ok(urls.some((u) => u.includes('generativelanguage')));
+      assert.ok(urls.some((u) => u.includes('duckduckgo')));
+    },
+  );
+});
+
+test('searchAskWeb falls back to DuckDuckGo when Gemini returns empty hits', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('search google for von mour corners of brookfield', {
+        fetchFn: async (input) => {
+          const url = String(input);
+          if (url.includes('generativelanguage.googleapis.com')) {
+            return new Response(
+              JSON.stringify({
+                candidates: [{ content: { parts: [{ text: '{"hits":[]}' }] }, groundingMetadata: {} }],
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (url.includes('api.duckduckgo.com')) {
+            return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('duckduckgo.com')) {
+            return new Response(DDG_HTML_FIXTURE, {
+              status: 200,
+              headers: { 'Content-Type': 'text/html' },
+            });
+          }
+          return new Response('nope', { status: 404 });
+        },
+      });
+      assert.ok(hits.length >= 1);
+      assert.equal(hits[0]?.url, 'https://www.vonmaur.com/locations/brookfield');
+    },
+  );
+});
+
+test('sanitizeAskWebQuery still strips street addresses after fallback path', () => {
+  const cleaned = sanitizeAskWebQuery(
+    'search google for von mour near 2214 Cedar Ridge Dr Round Rock 78681',
+  );
+  assert.doesNotMatch(cleaned, /2214 Cedar Ridge/);
+  assert.doesNotMatch(cleaned, /78681/);
+  assert.match(cleaned, /von mour/i);
+});
+
+test('searchAskWeb Gemini empty-title grounding uses hostname fallback', async () => {
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: undefined,
+    },
+    async () => {
+      const hits = await searchAskWeb('IRC R905', {
+        fetchFn: async (input) => {
+          const url = String(input);
+          if (url.includes('generativelanguage.googleapis.com')) {
+            return new Response(
+              JSON.stringify({
+                candidates: [
+                  {
+                    content: { parts: [{ text: '' }] },
+                    groundingMetadata: {
+                      groundingChunks: [{ web: { uri: 'https://codes.iccsafe.org/r905', title: '' } }],
+                      groundingSupports: [
+                        {
+                          groundingChunkIndices: [0],
+                          segment: { text: 'Asphalt shingle underlayment rules.' },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          // Should not need DDG
+          return new Response('nope', { status: 500 });
+        },
+      });
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
+      assert.equal(hits[0]?.title, 'codes.iccsafe.org');
+      assert.match(hits[0]?.snippet ?? '', /Asphalt shingle/i);
     },
   );
 });
