@@ -215,8 +215,8 @@ assert.match(html, />Sign in</);
 assert.doesNotMatch(html, /Office invite code/);
 assert.doesNotMatch(html, /id="login-name"/);
 assert.doesNotMatch(html, /id="login-code"/);
-assert.match(html, /js\/capture-core\.js\?v=live-rtc-1/);
-assert.match(html, /js\/app\.js\?v=live-rtc-1/);
+assert.match(html, /js\/capture-core\.js\?v=upload-success-simple-1/);
+assert.match(html, /js\/app\.js\?v=upload-success-simple-1/);
 assert.match(html, /Back to Home Screen/, 'door must offer a clear path home after recording');
 assert.match(html, /id="donebtn"/);
 assert.match(html, /id="retrybtn"/, 'stuck multipart failures get an explicit Retry upload on the door');
@@ -319,7 +319,7 @@ assert.equal(Core.formatClipLength(50 * 60), '50 minutes');
 assert.equal(Core.formatClipLength(0), '—');
 assert.match(coreSrc, /currentTime = Number.MAX_SAFE_INTEGER/, 'WebM duration must be discovered by seeking to the end');
 assert.match(appSrc, /durationSeconds: clip.durationSeconds/, 'upload must keep the recorder clock');
-assert.match(appSrc, /Core\.formatClipLength/, 'the door must say 10 seconds / 50 minutes, not 3000s');
+assert.doesNotMatch(appSrc, /Core\.formatClipLength/, 'duration is not primary door UI — Core still formats lengths for other surfaces');
 assert.doesNotMatch(html, /Search Google for the site address/);
 assert.doesNotMatch(html, /new-job-address/);
 assert.doesNotMatch(html, /\.addr-list/);
@@ -376,6 +376,12 @@ assert.match(appSrc, /filmQueue\.retryNow/, 'Retry upload kicks the filing queue
 assert.match(appSrc, /filingHomeVisible\(summary\)/, 'the home strip gates on filingHomeVisible');
 assert.match(html, /id="door-sub"/);
 assert.match(html, /id="doneline-title"/, 'the door done-line changes from Done to Uploaded as the film files');
+assert.match(html, /id="door-title"/, 'door success title is first-principles Uploaded');
+assert.match(html, /id="door-job"/, 'door shows the job name after upload');
+assert.doesNotMatch(html, /Checked at the door/, 'long Checked at the door heading is gone');
+assert.doesNotMatch(html, /Filmed on site/, 'static door checklist placeholders are gone');
+assert.doesNotMatch(html, /SHA-256 into the record/, 'seal checklist row is gone from the door markup');
+
 assert.match(html, /id="filing"/, 'Today keeps a strip for every phone-local pending film');
 assert.match(html, /id="filing-resume"/, 'Resume filing is an explicit control on the Today strip');
 assert.match(appSrc, /function resumeFilingNow/, 'Resume claims share films then kicks the queue');
@@ -683,18 +689,26 @@ assert.match(
   const to = appSrc.indexOf('function paintDoorFilm');
   assert.ok(from >= 0 && to > from, 'renderDoorSaved must exist');
   const src = appSrc.slice(from, to);
-  assert.match(src, /Saved on this phone/);
+  assert.match(src, /setDoorTitle\('Done\.'/);
+  assert.match(src, /setDoorJob\(/);
   assert.match(src, /Filing with the office/);
+  assert.match(src, /filingRowHtml\(/, 'filing progress is one quiet line, not a checklist');
   assert.match(src, /setDoneline\(\s*'Done\.'/, 'the door reads as done immediately');
   assert.match(src, /You can start the next one now/);
   assert.match(src, /classList\.add\('on'\)/);
+  assert.doesNotMatch(src, /Filmed live/, 'no mic/live checklist on the saved door');
 }
 {
   const from = appSrc.indexOf('function renderDoorLive');
   const to = appSrc.indexOf('/* ---------- the filing queue');
   assert.ok(from >= 0 && to > from, 'renderDoorLive must exist');
   const src = appSrc.slice(from, to);
+  assert.match(src, /setDoorTitle\('Uploaded'\)/, 'success title is Uploaded');
+  assert.match(src, /setDoorJob\(jobName, DONELINE_OK\)/, 'job name + office can open it');
+  assert.match(src, /setLedger\(''\)/, 'success clears the checklist ledger');
   assert.match(src, /setDoneline\('Uploaded\.', DONELINE_OK\)/, 'Uploaded is said only once the office really has it');
+  assert.match(src, /classList\.remove\('on'\)/, 'doneline banner stays off — title carries success');
+  assert.doesNotMatch(src, /Filmed live|Location|mic track/, 'no redundant check rows on success');
 }
 {
   const from = appSrc.indexOf('function startLiveDay');
@@ -1787,5 +1801,5 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 }
 
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
-assert.match(html, /js\/capture-core\.js\?v=live-rtc-1/);
-assert.match(html, /js\/app\.js\?v=live-rtc-1/);
+assert.match(html, /js\/capture-core\.js\?v=upload-success-simple-1/);
+assert.match(html, /js\/app\.js\?v=upload-success-simple-1/);
