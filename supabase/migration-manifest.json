@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 160,
+    "migrationCount": 162,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -174,7 +174,9 @@
     "20260915210000_child_blur_always_on_comment.sql",
     "20260915220000_recording_acknowledgments.sql",
     "20260918140000_settings_token_spend_accuracy.sql",
-    "20260920010000_crm_agent_credentials.sql"
+    "20260920010000_crm_agent_credentials.sql",
+    "20260921010000_job_proofs_custom_title.sql",
+    "20260921120000_analytics_usage_events_compat_view.sql"
   ],
   "migrations": [
     {
@@ -5555,6 +5557,18 @@
       "indistinguishableReason": null,
       "expect": [
         "column|public.job_proofs.custom_title"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260921120000_analytics_usage_events_compat_view",
+      "file": "20260921120000_analytics_usage_events_compat_view.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "view|public.usage_events"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
