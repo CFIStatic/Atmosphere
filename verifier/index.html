@@ -1017,6 +1017,48 @@
     outline-offset: 1px;
   }
 
+  /* Videos list — ChatGPT-style rename on clip titles */
+  .clip-title-row {
+    display: flex; align-items: center; gap: 4px; min-width: 0;
+  }
+  .clip-title-row .t { flex: 1; min-width: 0; }
+  .clip-rename {
+    flex: none;
+    width: 26px; height: 26px;
+    border: 0; border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    display: grid; place-items: center;
+  }
+  tr.cliprow:hover .clip-rename,
+  tr.cliprow:focus-within .clip-rename,
+  .clip-rename:focus {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .clip-rename { opacity: 0.85; }
+  }
+  .clip-rename:hover { background: var(--line-soft); color: var(--ink); }
+  .clip-title-edit {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .clip-title-edit:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
   .navitem[aria-current="true"] .count {
     color: var(--accent);
     background: var(--accent-soft);
@@ -2015,6 +2057,10 @@
      Save, Export — no Delete: product policy keeps evidence. Restore remains for
      Global Admin when a clip is already queued for purge. -->
 <div class="rowmenu" id="rowmenu" role="menu" aria-label="Clip actions" hidden>
+  <button role="menuitem" data-act="rename">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    Rename
+  </button>
   <button role="menuitem" data-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg>
     Share
@@ -3719,7 +3765,10 @@
     return '';
   }
   function clipListLabel(e, underJob) {
-    var stored = String(e.title || '').trim();
+    // Office custom name wins; empty custom falls back to AI / stored title.
+    var custom = String(e.customTitle || '').trim();
+    if (custom) return custom;
+    var stored = String(e.aiTitle || e.title || '').trim();
     if (stored) return stored;
     var kind = clipKind(e.phase);
     var shortId = shortClipListId(e);
@@ -3750,7 +3799,12 @@
       '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
-          '<div class="t">' + esc(clipName) + '</div>' +
+          '<div class="clip-title-row">' +
+            '<div class="t" data-clip-title="' + e.id + '">' + esc(clipName) + '</div>' +
+            '<button type="button" class="clip-rename" data-clip-rename="' + e.id + '" aria-label="Rename video" title="Rename">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+            '</button>' +
+          '</div>' +
           (sub ? '<div class="s">' + esc(sub) + '</div>' : '') +
           '<div class="job-card-meta">' +
             '<span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span>' +
@@ -4207,6 +4261,23 @@
       var kb = tr.querySelector('.kebab');
       kb.addEventListener('click', function (ev2) { ev2.stopPropagation(); toggleMenu(kb, tr.dataset.id); });
       kb.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
+      var renameBtn = tr.querySelector('[data-clip-rename]');
+      if (renameBtn) {
+        renameBtn.addEventListener('click', function (ev2) {
+          ev2.preventDefault();
+          ev2.stopPropagation();
+          startClipRename(tr.dataset.id);
+        });
+        renameBtn.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
+      }
+      var titleEl = tr.querySelector('[data-clip-title]');
+      if (titleEl) {
+        titleEl.addEventListener('dblclick', function (ev2) {
+          ev2.preventDefault();
+          ev2.stopPropagation();
+          startClipRename(tr.dataset.id);
+        });
+      }
     });
 
     Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow'), function (tr) {
@@ -4362,7 +4433,122 @@
     });
   });
 
+
+  /**
+   * Inline rename for a Videos-list clip — same feel as Ask chat rename.
+   * Enter saves, Esc cancels. Empty name clears the office override so the
+   * AI label returns.
+   */
+  function startClipRename(id) {
+    var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
+    if (!item) return;
+    if (!ORG_MODE) {
+      toast('Sign in to rename videos.');
+      return;
+    }
+    var tr = document.querySelector('tr.cliprow[data-id="' + id + '"]');
+    if (!tr) return;
+    if (tr.querySelector('.clip-title-edit')) return;
+    var row = tr.querySelector('.clip-title-row');
+    var titleEl = tr.querySelector('[data-clip-title]');
+    var renameBtn = tr.querySelector('[data-clip-rename]');
+    if (!row || !titleEl) return;
+    var currentPainted = clipListLabel(item, true);
+    var currentCustom = String(item.customTitle || '').trim();
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'clip-title-edit';
+    input.value = currentCustom || currentPainted;
+    input.maxLength = 80;
+    input.setAttribute('aria-label', 'Video name');
+    input.placeholder = String(item.aiTitle || currentPainted || 'Video').trim();
+    titleEl.hidden = true;
+    if (renameBtn) renameBtn.hidden = true;
+    row.insertBefore(input, renameBtn || null);
+    input.focus();
+    input.select();
+
+    var finished = false;
+    function cleanup() {
+      if (finished) return;
+      finished = true;
+      input.remove();
+      titleEl.hidden = false;
+      if (renameBtn) renameBtn.hidden = false;
+    }
+    function cancel() {
+      cleanup();
+    }
+    function commit() {
+      if (finished) return;
+      var next = (input.value || '').trim().replace(/\s+/g, ' ');
+      cleanup();
+      // Unchanged painted name (and still no custom) → no write.
+      if (next === currentPainted && !currentCustom) return;
+      // Unchanged custom → no write.
+      if (next === currentCustom && currentCustom) return;
+      saveClipRename(item, next);
+    }
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancel();
+      }
+    });
+    input.addEventListener('click', function (event) { event.stopPropagation(); });
+    input.addEventListener('mousedown', function (event) { event.stopPropagation(); });
+    input.addEventListener('blur', function () { commit(); });
+  }
+
+  function saveClipRename(item, nextTitle) {
+    var previous = {
+      title: item.title,
+      customTitle: item.customTitle,
+      aiTitle: item.aiTitle
+    };
+    // Optimistic paint: empty → AI fallback; non-empty → custom.
+    var ai = String(item.aiTitle || '').trim() || null;
+    if (nextTitle) {
+      item.customTitle = nextTitle;
+      item.title = nextTitle;
+    } else {
+      item.customTitle = null;
+      item.title = ai;
+    }
+    render();
+    apiFetch('/api/evidence-portal/evidence/' + encodeURIComponent(item.id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customTitle: nextTitle || null })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('rename');
+      return r.json();
+    }).then(function (payload) {
+      var mapped = payload && payload.item ? mapRemoteItem(payload.item, item.job) : null;
+      if (mapped) {
+        item.title = mapped.title;
+        item.customTitle = mapped.customTitle;
+        item.aiTitle = mapped.aiTitle || item.aiTitle;
+      }
+      render();
+      toast(nextTitle ? 'Video renamed.' : 'Back to AI label.');
+    }).catch(function () {
+      item.title = previous.title;
+      item.customTitle = previous.customTitle;
+      item.aiTitle = previous.aiTitle;
+      render();
+      toast('Could not rename this video.');
+    });
+  }
+
   function menuAction(act, item) {
+    if (act === 'rename') {
+      startClipRename(item.id);
+      return;
+    }
     if (act === 'share') {
       // Real shares are issued from the platform, to a named account — what
       // this page can hand a colleague today is a reference to the clip.
@@ -7495,6 +7681,8 @@
       person: raw.person || raw.company || '—',
       phase: raw.phase,
       title: raw.title || null,
+      customTitle: raw.customTitle || null,
+      aiTitle: raw.aiTitle || null,
       clipId: raw.clipId || null,
       workDate: raw.workDate,
       capturedAt: raw.capturedAt,

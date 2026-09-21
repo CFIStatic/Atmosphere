@@ -38,7 +38,7 @@ import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
-import { deriveProofClipTitle } from './proofClipTitle.js';
+import { deriveProofClipTitle, normalizeCustomClipTitle } from './proofClipTitle.js';
 import { clipIdOfStoragePath } from '../shared/proofStoragePath.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
@@ -302,12 +302,13 @@ export function serializeEvidence(input: {
       ? findings.actions
       : [];
 
-  const storedTitle =
+  const storedAiTitle =
     typeof proof.title === 'string' && proof.title.trim() ? proof.title.trim() : null;
+  const customTitle = normalizeCustomClipTitle(proof.custom_title);
   // When analysis already produced narration/actions but title was never
   // persisted, still give the list a readable name immediately.
-  const clipTitle =
-    storedTitle ??
+  const derivedTitle =
+    storedAiTitle ??
     deriveProofClipTitle({
       summary: proof.ai_summary ?? findings.summary ?? null,
       narration: dictation,
@@ -315,6 +316,8 @@ export function serializeEvidence(input: {
       labels: Array.isArray(proof.labels) ? proof.labels : null,
       phase: proof.phase,
     });
+  // Office custom name wins; empty/null custom falls back to AI label.
+  const clipTitle = customTitle ?? derivedTitle;
   const clipId =
     (typeof proof.clip_id === 'string' && proof.clip_id.trim()
       ? proof.clip_id.trim().toLowerCase()
@@ -325,8 +328,12 @@ export function serializeEvidence(input: {
     jobId: proof.job_id,
     jobName: input.jobName,
     jobNumber: input.jobNumber,
-    /** Short AI/human clip title for the Videos list — not the job file name. */
+    /** Painted clip name for the Videos list — custom title when set, else AI. */
     title: clipTitle,
+    /** Office override; null means fall back to AI label. */
+    customTitle,
+    /** Stored/derived AI label (ignores custom). Kept so rename can clear back to AI. */
+    aiTitle: derivedTitle,
     /** Phone/server recording id — unique list fallback when title is empty. */
     clipId,
     address: input.address ?? null,

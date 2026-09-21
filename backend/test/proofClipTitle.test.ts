@@ -6,6 +6,8 @@ import {
   proofTitleWritePatch,
   persistProofClipTitleIfEmpty,
   shortProofListId,
+  normalizeCustomClipTitle,
+  setProofCustomTitle,
 } from '../src/verifier/proofClipTitle.js';
 
 test('deriveProofClipTitle: prefers a short narration summary', () => {
@@ -178,4 +180,72 @@ test('persistProofClipTitleIfEmpty: writes only when title is empty', async () =
   assert.equal(second, null);
   assert.equal(updates.length, 1);
   assert.equal(currentTitle, 'Inspection');
+});
+
+test('normalizeCustomClipTitle: trims, collapses, clamps; empty → null', () => {
+  assert.equal(normalizeCustomClipTitle('  Front  door  '), 'Front door');
+  assert.equal(normalizeCustomClipTitle('   '), null);
+  assert.equal(normalizeCustomClipTitle(null), null);
+  assert.equal(normalizeCustomClipTitle('x' + 'y'.repeat(100)).length, 80);
+});
+
+test('proofClipListLabel: customTitle wins over AI title', () => {
+  assert.equal(
+    proofClipListLabel({
+      customTitle: 'My clip',
+      title: 'Laptop Open On A Table',
+      underJob: true,
+      jobName: 'Von mour test',
+    }),
+    'My clip',
+  );
+  assert.equal(
+    proofClipListLabel({
+      customTitle: '   ',
+      title: 'Laptop Open On A Table',
+      underJob: true,
+      jobName: 'Von mour test',
+    }),
+    'Laptop Open On A Table',
+  );
+});
+
+test('setProofCustomTitle: writes custom_title; empty clears back to AI', async () => {
+  let stored: { title: string | null; custom_title: string | null } = {
+    title: 'Laptop Open On A Table',
+    custom_title: null,
+  };
+  const admin = {
+    from() {
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                maybeSingle: async () => ({ data: { ...stored }, error: null }),
+              };
+            },
+          };
+        },
+        update(patch: { custom_title: string | null }) {
+          return {
+            eq: async () => {
+              stored = { ...stored, custom_title: patch.custom_title };
+              return { error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+  const renamed = await setProofCustomTitle(admin as any, 'p1', '  Front porch  ');
+  assert.equal(renamed.customTitle, 'Front porch');
+  assert.equal(renamed.title, 'Front porch');
+  assert.equal(renamed.aiTitle, 'Laptop Open On A Table');
+  assert.equal(stored.custom_title, 'Front porch');
+
+  const cleared = await setProofCustomTitle(admin as any, 'p1', '   ');
+  assert.equal(cleared.customTitle, null);
+  assert.equal(cleared.title, 'Laptop Open On A Table');
+  assert.equal(stored.custom_title, null);
 });

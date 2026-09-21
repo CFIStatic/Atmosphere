@@ -5,6 +5,9 @@
  * every nested row makes three films look identical. After vision/narration
  * reads a clip, we keep a few-word title on job_proofs.title so the list can
  * show "Inspection" or "Tear-off north slope" instead.
+ *
+ * Offices may also set job_proofs.custom_title. That override wins everywhere
+ * the clip name is painted; clearing it falls back to the AI title.
  */
 
 export type ProofTitleAction = {
@@ -178,12 +181,41 @@ export function shortProofListId(input: {
   return null;
 }
 
+/** Max length for an office-chosen clip name (DB check matches). */
+export const CUSTOM_CLIP_TITLE_MAX = 80;
+
+/**
+ * Normalize a typed custom name. Empty / whitespace → null (fall back to AI).
+ * Collapses internal whitespace; clamps to CUSTOM_CLIP_TITLE_MAX.
+ */
+export function normalizeCustomClipTitle(raw: unknown): string | null {
+  if (raw == null) return null;
+  const text = String(raw).trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  return text.slice(0, CUSTOM_CLIP_TITLE_MAX);
+}
+
+/**
+ * Effective painted name: custom title when set, else AI/stored/derived title.
+ */
+export function displayClipTitle(input: {
+  customTitle?: string | null;
+  title?: string | null;
+}): string | null {
+  const custom = normalizeCustomClipTitle(input.customTitle);
+  if (custom) return custom;
+  const stored = typeof input.title === 'string' ? input.title.trim() : '';
+  return stored || null;
+}
+
 /**
  * What the Videos list paints as the clip name under a job group.
- * Prefer stored (or derived) title; else phase + short id — never clock time alone,
- * and never the job name on nested rows.
+ * Prefer custom title, then stored (or derived) AI title; else phase + short id —
+ * never clock time alone, and never the job name on nested rows.
  */
 export function proofClipListLabel(input: {
+  /** Office override — wins over AI title when non-empty. */
+  customTitle?: string | null;
   title?: string | null;
   phase?: string | null;
   capturedAt?: string | null;
@@ -201,6 +233,8 @@ export function proofClipListLabel(input: {
   actions?: ProofTitleAction[] | null;
   labels?: string[] | null;
 }): string {
+  const custom = normalizeCustomClipTitle(input.customTitle);
+  if (custom) return custom;
   const stored = typeof input.title === 'string' ? input.title.trim() : '';
   if (stored) return stored;
 
@@ -222,4 +256,44 @@ export function proofClipListLabel(input: {
   if (input.underJob) return 'Video';
   const job = typeof input.jobName === 'string' ? input.jobName.trim() : '';
   return job || 'Video';
+}
+
+/**
+ * Save or clear an office-chosen clip name.
+ * Pass empty/whitespace to clear (AI title returns). Returns the row fields
+ * the list needs to repaint: customTitle + effective title.
+ */
+export async function setProofCustomTitle(
+  admin: { from: (table: string) => any },
+  proofId: string,
+  rawCustomTitle: unknown,
+): Promise<{ customTitle: string | null; title: string | null; aiTitle: string | null }> {
+  const customTitle = normalizeCustomClipTitle(rawCustomTitle);
+  const { data: row, error: readErr } = await admin
+    .from('job_proofs')
+    .select('title, custom_title')
+    .eq('id', proofId)
+    .maybeSingle();
+  if (readErr) {
+    throw new Error(readErr.message || 'Could not load clip');
+  }
+  if (!row) {
+    throw new Error('No such clip');
+  }
+
+  const { error: writeErr } = await admin
+    .from('job_proofs')
+    .update({ custom_title: customTitle })
+    .eq('id', proofId);
+  if (writeErr) {
+    throw new Error(writeErr.message || 'Could not rename clip');
+  }
+
+  const aiTitle =
+    typeof row.title === 'string' && row.title.trim() ? row.title.trim() : null;
+  return {
+    customTitle,
+    aiTitle,
+    title: customTitle ?? aiTitle,
+  };
 }
