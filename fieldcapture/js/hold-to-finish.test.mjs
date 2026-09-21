@@ -107,7 +107,8 @@ assert.ok(
   'resolveApiBase must run after Core is assigned so the connect screen can boot',
 );
 assert.match(html, /id="daybtn"/, 'Today must keep the Start the day record button');
-assert.match(html, /Start the day/);
+assert.match(html, /id="daybtn"[^>]*aria-label="Start the day"/, 'Start the day stays on aria-label for a11y');
+assert.doesNotMatch(html, /id="daybtn"[\s\S]*?<span class="lbl">Start the day<\/span>/, 'Start the day is not visible text on the CTA');
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
 assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platform bar starts hidden until sign-in');
