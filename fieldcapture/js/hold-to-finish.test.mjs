@@ -111,9 +111,10 @@ assert.match(html, /id="daybtn"[^>]*aria-label="Start the day"/, 'Start the day 
 assert.doesNotMatch(html, /id="daybtn"[\s\S]*?<span class="lbl">Start the day<\/span>/, 'Start the day is not visible text on the CTA');
 assert.match(
   html,
-  /id="daybtn"[\s\S]*?<svg width="60" height="60" viewBox="0 0 24 24"/,
-  'Start the day camera icon is 60px (2× the prior 30px)',
+  /id="daybtn"[\s\S]*?<svg width="38" height="38" viewBox="0 0 24 24"/,
+  'Start the day camera icon is ~38px (~2× original 19px, not 60 fat-bar)',
 );
+assert.match(html, /#daybtn\s*\{\s*padding:\s*12px 18px\s*;\s*\}/, 'Start the day uses compact vertical padding');
 assert.doesNotMatch(html, /#daybtn\s*\{[^}]*min-height:\s*68px/, 'no #daybtn min-height overhaul');
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
