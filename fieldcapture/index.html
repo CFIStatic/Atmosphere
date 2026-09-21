@@ -317,6 +317,9 @@
   .daybtn:disabled { opacity: 0.45; cursor: default; }
   .daybtn .lbl { position: relative; z-index: 1; }
   .daybtn .ico { position: relative; z-index: 1; display: grid; place-items: center; }
+  /* Start the day: larger camera (~2× original 19px) without a fat bar.
+     Keep shared .daybtn padding for login / new-job / stop CTAs. */
+  #daybtn { padding: 12px 18px; }
   /* Finishing is a hold, not a tap. Starting early costs nothing; ending
      the day by accident with the phone in a pocket loses the day, so the
      two presses are deliberately not equally easy. Still one button. */
@@ -933,7 +936,7 @@
     <div class="recwrap">
       <button class="daybtn" id="daybtn" data-state="idle" aria-label="Start the day">
         <span class="ico" aria-hidden="true">
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
         </span>
       </button>
     </div>
