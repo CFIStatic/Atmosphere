@@ -1,5 +1,12 @@
 import { NavLink } from 'react-router-dom';
 
+/** Downward wordmark nudge (px) so the capital-A baseline sits on the orange bar bottom. */
+const WORD_NUDGE_Y = {
+  md: 2,
+  /** Full-width auth headers — login. */
+  lg: 3,
+} as const;
+
 const SIZES = {
   md: { svg: 28, text: 'text-[21px]', gap: 'gap-3' },
   lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3' },
@@ -17,29 +24,30 @@ interface Props {
  * plus the word "Atmosphere". Same mark as the office app and the site.
  *
  * Ink follows the live theme via `text-ink-900` + `currentColor`:
- * dark on light paper, light (near-white) on a dark ground.
+ * dark bars and word on light paper, light (near-white) bars and word on a
+ * dark ground. The terracotta base is corporate #F2670C in both palettes.
+ * Match website/assets/site.css (.lb1–.lb4, .lb-a #F2670C): Inter 700 / 21px,
+ * letter-spacing -0.025em (`tracking-tight`), 28px bars.
+ *
+ * Vertical alignment: wordmark baseline sits on the orange bar's bottom edge
+ * (`items-end` + `leading-none`). Explicit translateY offsets the descender on
+ * "p" so the A baseline — not the line-box bottom — hits the bar
+ * (md +2px, lg +3px).
  */
 export function Logo({ className = '', to = '/overview', size = 'md' }: Props) {
   const { svg, text, gap } = SIZES[size];
+  const wordNudgeY = WORD_NUDGE_Y[size];
   const mark = (
     <div
       data-atmosphere-lockup=""
-      className={`flex items-center ${gap} text-ink-900 ${className}`}
+      className={`flex items-end ${gap} text-ink-900 ${className}`}
     >
-      <svg
-        width={svg}
-        height={svg}
-        viewBox="0 0 22 22"
-        aria-hidden="true"
-        className="shrink-0 text-current"
+      <AtmosphereBars size={svg} />
+      <span
+        className={`whitespace-nowrap ${text} font-bold tracking-tight leading-none text-current`}
+        style={{ transform: `translateY(${wordNudgeY}px)`, letterSpacing: '-0.025em' }}
+        data-word-nudge={wordNudgeY}
       >
-        <rect className="fill-current opacity-30" width="22" height="2.8" />
-        <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
-        <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
-        <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
-        <rect className="fill-brand-500" y="19.2" width="22" height="2.8" />
-      </svg>
-      <span className={`whitespace-nowrap ${text} font-bold tracking-tight text-current`}>
         Atmosphere
       </span>
     </div>
@@ -55,5 +63,24 @@ export function Logo({ className = '', to = '/overview', size = 'md' }: Props) {
     >
       {mark}
     </NavLink>
+  );
+}
+
+/** Five-bar mark. Ink bars inherit `currentColor`; the base stays terracotta. */
+export function AtmosphereBars({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      aria-hidden="true"
+      className="shrink-0 text-current"
+    >
+      <rect className="fill-current opacity-30" width="22" height="2.8" />
+      <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
+      <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
+      <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
+      <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
+    </svg>
   );
 }

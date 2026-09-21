@@ -29,9 +29,11 @@ export function Shell() {
     <div className="min-h-screen bg-paper-100 text-ink-900">
       <header className="sticky top-0 z-20 border-b border-line bg-paper-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-end gap-2.5">
             <Logo />
-            <p className="text-[11px] uppercase tracking-[0.16em] text-ink-500">Internal</p>
+            <span className="mb-px rounded border border-line bg-paper-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-500">
+              Internal
+            </span>
           </div>
           <nav className="flex flex-1 flex-wrap items-center gap-1">
             {links.map((item) => (
