@@ -70,7 +70,7 @@ const PORTAL_PROOF_SELECT =
   'id, org_id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, ' +
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
   'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels, ' +
-  'title, clip_id, narration, narration_text, narration_status, narration_error, actions, ' +
+  'title, custom_title, clip_id, narration, narration_text, narration_status, narration_error, actions, ' +
   'transcript_status, transcript_text, device_metadata, deleted_at, deleted_by, scheduled_purge_at';
 
 export const evidencePortalRouter = Router();
@@ -842,6 +842,77 @@ evidencePortalRouter.post(
 );
 
 /** GET /api/evidence-portal/evidence/:proofId/video — minted and logged. */
+
+/**
+ * PATCH /api/evidence-portal/evidence/:proofId
+ * Set or clear an office-chosen clip name for the Videos list.
+ * Body: { customTitle: string | null }. Empty string clears → AI label returns.
+ * Does not touch job_proofs.title (AI labeling keeps running).
+ */
+const renameClipBody = z.object({
+  customTitle: z.union([z.string().max(120), z.null()]).optional(),
+  // Accept `title` as an alias so clients that mirror chat-rename stay simple.
+  title: z.union([z.string().max(120), z.null()]).optional(),
+});
+
+evidencePortalRouter.patch(
+  '/evidence/:proofId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId } = await requireOrgContext(req);
+      const body = renameClipBody.parse(req.body ?? {});
+      const raw =
+        body.customTitle !== undefined
+          ? body.customTitle
+          : body.title !== undefined
+            ? body.title
+            : undefined;
+      if (raw === undefined) {
+        throw new HttpError(400, 'customTitle is required.', 'custom_title_required');
+      }
+
+      const { data: proof, error } = await supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'evidence_failed');
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const admin = writerForJob(
+        { orgId, jobId: (proof as any).job_id },
+        supabase,
+      ).raw;
+      const { setProofCustomTitle } = await import('../verifier/proofClipTitle.js');
+      let renamed;
+      try {
+        renamed = await setProofCustomTitle(admin, req.params.proofId, raw);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Could not rename clip';
+        throw new HttpError(400, msg, 'rename_failed');
+      }
+
+      const { data: fresh, error: freshErr } = await admin
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (freshErr) throw new HttpError(500, freshErr.message, 'evidence_failed');
+      const items = await assembleLibrary(supabase, orgId, [fresh ?? proof]);
+      const item = items[0] ?? {
+        id: req.params.proofId,
+        title: renamed.title,
+        customTitle: renamed.customTitle,
+        aiTitle: renamed.aiTitle,
+      };
+      res.json({ item });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
 
 /**
