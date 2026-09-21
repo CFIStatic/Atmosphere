@@ -8,6 +8,7 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
 import {
   ensureClipReadingOnce,
   ensureStillsAndDuration,
@@ -1519,10 +1520,12 @@ evidenceShareRouter.get(
 
       assertGuestMayMintRawMedia((proof as any).ai_findings);
 
-      const { data, error } = await admin.storage
-        .from(PROOF_BUCKET)
-        .createSignedUrl((proof as any).storage_path, 600);
-      if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+      const playable = await createSignedPlayableProofUrl({
+        admin,
+        storagePath: (proof as any).storage_path,
+        expiresInSeconds: 600,
+        bucket: PROOF_BUCKET,
+      });
 
       await recordAccess(admin, {
         orgId: share.org_id,
@@ -1534,7 +1537,7 @@ evidenceShareRouter.get(
         detail: `via Verifier link — original video, ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+      res.json({ url: playable.url, expiresInSeconds: 600 });
     } catch (err) {
       next(err);
     }

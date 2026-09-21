@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
+import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
@@ -3260,10 +3261,14 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
-    const { data, error } = await admin.storage
-      .from(PROOF_BUCKET)
-      .createSignedUrl((proof as any).storage_path, 600);
-    if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+    // WebM from Chrome Field Capture is not playable in Safari. Mint a URL to
+    // an H.264 derivative when needed so Platform playback works everywhere.
+    const playable = await createSignedPlayableProofUrl({
+      admin,
+      storagePath: (proof as any).storage_path,
+      expiresInSeconds: 600,
+      bucket: PROOF_BUCKET,
+    });
 
     // Logged here rather than on playback: this is the moment the file becomes
     // watchable, and it is the only moment the server reliably hears about.
@@ -3278,7 +3283,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       ...actor,
     });
 
-    res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    res.json({ url: playable.url, expiresInSeconds: 600 });
   } catch (err) {
     next(err);
   }

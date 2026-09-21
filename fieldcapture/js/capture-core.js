@@ -436,11 +436,15 @@
     var onChunk = typeof opts.onChunk === 'function' ? opts.onChunk : null;
     var videoEl = opts.videoEl || null;
 
+    // Prefer H.264 MP4 when the browser can record it (Safari always; modern
+    // Chrome often can). WebM/VP9 is fine for Chrome playback but Safari
+    // Platform cannot decode it — office players then fall back to a still.
     var VIDEO_TYPES = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
-      'video/mp4',
     ];
 
     function pickMime() {

@@ -11,18 +11,20 @@ export interface CapturedClip {
 /**
  * Codec preference, most wanted first.
  *
- * Chrome and Firefox give us WebM/Opus and WebM/VP9; Safari only ever offers
- * MP4/AAC and MP4/H.264. Probing in order and falling back to the browser's
- * own default is what makes the recorder work on an iPhone at all.
+ * Prefer H.264 MP4 when available so Platform (especially Safari) can play
+ * the filed clip without a server derivative. Fall back to WebM/VP9 for
+ * browsers that still cannot record MP4. Probing in order and falling back
+ * to the browser's own default is what makes the recorder work on an iPhone.
  */
 const AUDIO_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
 // Prefer containers that mux video + Opus/AAC so Field / proof day film
 // always keeps the microphone track (office playback + future transcription).
 const VIDEO_TYPES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4',
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm',
-  'video/mp4',
 ];
 
 function pickMimeType(kind: 'audio' | 'video'): string | undefined {
