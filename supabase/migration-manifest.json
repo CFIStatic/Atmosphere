@@ -5547,6 +5547,18 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
+    },
+    {
+      "version": "20260921010000_job_proofs_custom_title",
+      "file": "20260921010000_job_proofs_custom_title.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proofs.custom_title"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
     }
   ]
 }
