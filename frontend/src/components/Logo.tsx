@@ -34,8 +34,8 @@ interface Props {
  *
  * Ink follows the live theme via `text-ink-900` + `currentColor`:
  * dark bars and word on light paper, light (near-white) bars and word on a
- * dark ground. The terracotta base stays brand-colored in both palettes.
- * Match the marketing site wordmark in website/assets/site.css (.lb1–.lb4, .lb-a).
+ * dark ground. The terracotta base is corporate #F2670C in both palettes.
+ * Match the corporate site wordmark in website/assets/site.css (.lb1–.lb4, .lb-a #F2670C).
  *
  * Vertical alignment: wordmark baseline sits on the orange bar's bottom edge
  * (`items-end` + `leading-none`). Explicit translateY offsets the descender on
@@ -96,7 +96,7 @@ export function AtmosphereBars({ size }: { size: number }) {
       <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
       <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
       <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
-      <rect className="fill-brand-500" y="19.2" width="22" height="2.8" />
+      <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
     </svg>
   );
 }
