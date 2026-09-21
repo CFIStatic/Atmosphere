@@ -111,8 +111,8 @@ assert.match(html, /id="daybtn"[^>]*aria-label="Start the day"/, 'Start the day 
 assert.doesNotMatch(html, /id="daybtn"[\s\S]*?<span class="lbl">Start the day<\/span>/, 'Start the day is not visible text on the CTA');
 assert.match(
   html,
-  /id="daybtn"[\s\S]*?<svg width="30" height="30" viewBox="0 0 24 24"/,
-  'Start the day camera icon is ~30px (bigger than 19, not the 40px overhaul)',
+  /id="daybtn"[\s\S]*?<svg width="60" height="60" viewBox="0 0 24 24"/,
+  'Start the day camera icon is 60px (2× the prior 30px)',
 );
 assert.doesNotMatch(html, /#daybtn\s*\{[^}]*min-height:\s*68px/, 'no #daybtn min-height overhaul');
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
