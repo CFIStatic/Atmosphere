@@ -63,7 +63,8 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
    alongside). A film that could not stream uploads whole:
    `POST …/proof/upload-url` → `PUT` → `POST …/proof`
 7. While the door is open its filing line updates live; once the office has
-   the film the door shows the **real** checks / problems from the API
+   the film the door shows a calm **Uploaded** confirmation with the job
+   name (office can open it now) — no checklist
 
 ## Stop one video, start the next
 

@@ -1941,6 +1941,39 @@
     if (sub) sub.textContent = text || '';
   }
 
+  function setDoorTitle(title, tone) {
+    var h = $('#door-title');
+    if (!h) return;
+    h.textContent = title || '';
+    h.classList.remove('is-warn', 'is-fail');
+    if (tone === 'warn') h.classList.add('is-warn');
+    else if (tone === 'fail') h.classList.add('is-fail');
+  }
+
+  function setDoorJob(name, note) {
+    var wrap = $('#door-job');
+    var n = $('#door-job-name');
+    var d = $('#door-job-note');
+    if (!wrap) return;
+    var label = (name || '').trim();
+    if (!label && !(note || '').trim()) {
+      wrap.hidden = true;
+      if (n) n.textContent = '';
+      if (d) d.textContent = '';
+      return;
+    }
+    wrap.hidden = false;
+    if (n) n.textContent = label;
+    if (d) d.textContent = note || '';
+  }
+
+  function setLedger(html) {
+    var ledger = $('#ledger');
+    if (!ledger) return;
+    ledger.innerHTML = html || '';
+    ledger.hidden = !html;
+  }
+
   function setDoneline(title, copy) {
     var t = $('#doneline-title');
     var c = $('#doneline-copy');
@@ -1964,24 +1997,18 @@
   }
 
   /**
-   * The door, the moment the recorder stops: the day is saved and the crew is
-   * done here. Filing progress runs on its own line and keeps updating while
-   * the door is open — but nothing on this screen asks anyone to wait.
+   * The door, the moment the recorder stops: calm confirmation + job name.
+   * Filing progress is a single quiet line — no checklist.
    */
   function renderDoorSaved(entry) {
     show('s-door');
-    setDoorSub('Saved. You can start the next one.');
-    var length = Core.formatClipLength(entry.durationSeconds);
-    $('#ledger').innerHTML =
-      '<div class="lrow on"><span>Filmed live — video + audio</span><em>mic track required</em><span class="ok">✓</span></div>' +
-      '<div class="lrow on"><span>Saved on this phone</span><em>' +
-      escapeHtml(length !== '—' ? length : 'day film') +
-      '</em><span class="ok">✓</span></div>' +
-      filingRowHtml('Starting…', 0);
-    $('#daytl').innerHTML =
-      '<div class="tlrow"><b>' +
-      escapeHtml(entry.jobName || 'Job') +
-      '</b><span>Filing with the office in the background.</span></div>';
+    setDoorTitle('Done.', 'warn');
+    setDoorSub('');
+    setDoorJob(
+      entry.jobName || 'Job',
+      'Filing with the office in the background — you can start the next one.',
+    );
+    setLedger(filingRowHtml('Starting…', 0));
     setDoneline(
       'Done.',
       'Safe on this phone until filed. Filing with the office on its own — You can start the next one now.',
@@ -2039,7 +2066,9 @@
     if (pctEl) pctEl.textContent = film.status === 'uploading' ? pct + '%' : '';
     if (bar) bar.style.width = film.status === 'uploading' ? pct + '%' : stuck ? '0%' : pct + '%';
     if (stuck) {
-      setDoorSub('Upload did not go through. The recording is still on this phone.');
+      setDoorTitle('Upload failed.', 'fail');
+      setDoorSub('The recording is still on this phone.');
+      setDoorJob(film.jobName || filmJobName(film.jobId), '');
       setDoneline(
         'Upload failed.',
         film.lastError
@@ -2049,13 +2078,24 @@
       $('#doneline').classList.add('on');
       showHomeAction({ retry: true });
     } else if (film.volatile) {
-      setDoorSub('Saved. Keep Field Capture open until this files — this phone could not keep a copy.');
+      setDoorTitle('Done.', 'warn');
+      setDoorSub('Keep Field Capture open until this files — this phone could not keep a copy.');
       showHomeAction({ retry: false });
     } else if (film.status === 'waiting') {
-      setDoorSub('Saved. Filing with the office — retrying on its own.');
+      setDoorTitle('Done.', 'warn');
+      setDoorSub('');
+      setDoorJob(
+        film.jobName || filmJobName(film.jobId),
+        'Filing with the office — retrying on its own.',
+      );
       showHomeAction({ retry: true });
     } else if (film.status === 'uploading') {
-      setDoorSub('Saved. You can start the next one.');
+      setDoorTitle('Done.', 'warn');
+      setDoorSub('');
+      setDoorJob(
+        film.jobName || filmJobName(film.jobId),
+        'Filing with the office in the background — you can start the next one.',
+      );
       setDoneline(
         'Done.',
         'Safe on this phone until filed. Filing with the office on its own — You can start the next one now.',
@@ -2069,12 +2109,15 @@
   function renderDoorNotSaved(err) {
     state.doorFilmId = null;
     show('s-door');
+    setDoorTitle('Not saved', 'fail');
     setDoorSub('Recording was not saved.');
-    $('#ledger').innerHTML =
+    setDoorJob('', '');
+    setLedger(
       '<div class="lrow on"><span>Not saved</span><em id="upload-step">' +
-      escapeHtml((err && err.message) || 'Record the day again.') +
-      '</em><span class="ok">!</span></div>';
-    $('#daytl').innerHTML = '';
+        escapeHtml((err && err.message) || 'Record the day again.') +
+        '</em><span class="ok">!</span></div>',
+    );
+    setDoneline('', '');
     $('#doneline').classList.remove('on');
     showHomeAction();
   }
@@ -2114,59 +2157,24 @@
     startLiveDay();
   }
 
-  /** The office has it: the real checks replace the filing line. */
+  /** The office has it: calm Uploaded + job name — no checklist. */
   function renderDoorLive(result, entry) {
     var problems = result.problems || [];
-    var checks = result.checks || [];
-    var rows = [];
-    rows.push(
-      '<div class="lrow on"><span>Filmed live — video + audio</span><em>mic track required</em><span class="ok">✓</span></div>',
-    );
-    rows.push(
-      '<div class="lrow on"><span>Uploaded</span><em>' +
-        (result.facts && Core.formatClipLength(result.facts.durationSeconds) !== '—'
-          ? Core.formatClipLength(result.facts.durationSeconds)
-          : 'filed') +
-        '</em><span class="ok">✓</span></div>',
-    );
-    if (result.facts && result.facts.lat != null) {
-      rows.push(
-        '<div class="lrow on"><span>Location</span><em>±' +
-          Math.round(result.facts.accuracyM || 0) +
-          ' m</em><span class="ok">✓</span></div>',
-      );
-    } else {
-      rows.push(
-        '<div class="lrow on"><span>Location</span><em>unknown — office will review</em><span class="ok">!</span></div>',
-      );
-    }
-    checks.slice(0, 4).forEach(function (c) {
-      rows.push(
-        '<div class="lrow on"><span>' +
-          escapeHtml(c.what || c.code || 'Check') +
-          '</span><em>' +
-          escapeHtml(c.detail || c.verdict || '') +
-          '</em><span class="ok">' +
-          (c.verdict === 'fail' || c.verdict === 'failed' ? '!' : '✓') +
-          '</span></div>',
-      );
-    });
+    var jobName = (entry && entry.jobName) || filmJobName(entry && entry.jobId);
+    setDoorTitle('Uploaded');
+    setDoorSub('');
+    setDoorJob(jobName, DONELINE_OK);
+    setLedger('');
     if (problems.length) {
-      rows.push(
+      /* Rare: office flagged something — keep one quiet problem line. */
+      setLedger(
         '<div class="lrow on"><span>Needs a person</span><em>' +
           escapeHtml(problems[0]) +
           '</em><span class="ok">!</span></div>',
       );
     }
-    $('#ledger').innerHTML = rows.join('');
-    var jobName = (entry && entry.jobName) || filmJobName(entry && entry.jobId);
-    setDoorSub('Filed with the office.');
-    $('#daytl').innerHTML =
-      '<div class="tlrow"><b>' +
-      escapeHtml(jobName) +
-      '</b><span>The office can watch it now.</span></div>';
     setDoneline('Uploaded.', DONELINE_OK);
-    $('#doneline').classList.add('on');
+    $('#doneline').classList.remove('on');
     showHomeAction();
   }
 
@@ -2479,10 +2487,10 @@
       if (timer) clearInterval(timer);
       stopDemoPreview();
       show('s-door');
-      $('#ledger').innerHTML =
-        '<div class="lrow on"><span>Demo only</span><em>nothing uploaded</em><span class="ok">✓</span></div>';
-      $('#daytl').innerHTML =
-        '<div class="tlrow"><b>Demo day</b><span>Open with ?token= to file a real day film.</span></div>';
+      setDoorTitle('Demo day.', 'warn');
+      setDoorSub('');
+      setDoorJob('Demo day', 'Open with ?token= to file a real day film.');
+      setLedger('');
       setDoneline('Demo day.', 'Nothing was uploaded.');
       $('#doneline').classList.add('on');
       showHomeAction();

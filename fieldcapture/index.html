@@ -537,16 +537,25 @@
   .sitestrip.unsure { background: rgba(217, 180, 91, .28); color: #E8C87C; }
   .sitestrip .pin { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 
-  /* ---------- the door: what the day became ---------- */
-  .tl { margin-top: 16px; border-left: 2px solid var(--line); padding-left: 14px; }
-  .tlrow { position: relative; padding: 9px 0; }
-  .tlrow::before {
-    content: ''; position: absolute; left: -20px; top: 15px;
-    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  /* ---------- the door: job name after upload ---------- */
+  .door-job {
+    margin-top: 18px;
+    padding: 0;
   }
-  .tlrow b { display: block; font-size: 13.5px; font-weight: 650; }
-  .tlrow span { display: block; font-size: 12px; color: var(--muted); }
-  .tlrow .mono { font-size: 11.5px; color: var(--faint); }
+  .door-job[hidden] { display: none; }
+  .door-job b {
+    display: block;
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  .door-job span {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.35;
+  }
 
   /* ---------- recording: live camera, like taking a video ---------- */
   body[data-screen="s-rec"] { background: #000; }
@@ -593,14 +602,21 @@
   /* ---------- the door ---------- */
   .door {
     flex: 1 1 auto; min-height: 0; overflow: auto;
-    padding: 18px 18px 8px;
+    padding: 28px 18px 8px;
   }
-  .door h2 { font-size: 18px; font-weight: 750; letter-spacing: -0.015em; }
-  .door .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .door h2 {
+    font-size: 26px; font-weight: 750; letter-spacing: -0.02em;
+    color: var(--pass);
+  }
+  .door h2.is-warn { color: var(--ink); }
+  .door h2.is-fail { color: var(--rec); }
+  .door .sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .door .sub:empty { display: none; }
   .ledger {
     margin-top: 16px; border: 1px solid var(--line); border-radius: 13px;
     background: var(--panel); overflow: hidden;
   }
+  .ledger:empty, .ledger[hidden] { display: none; }
   .lrow {
     display: flex; align-items: baseline; gap: 11px;
     padding: 12px 15px; border-bottom: 1px solid var(--line-soft);
@@ -1068,16 +1084,16 @@
   <!-- ================= THE DOOR: end of day ================= -->
   <div class="screen" id="s-door">
     <div class="door">
-      <h2>Checked at the door</h2>
-      <p class="sub" id="door-sub">Filing this day with the office.</p>
-      <div class="ledger" id="ledger">
-        <div class="lrow" id="l1"><span>Filmed on site</span><em id="l1-d"></em><span class="ok">✓</span></div>
-        <div class="lrow" id="l2"><span>Filmed live — not from your gallery</span><span class="ok">✓</span></div>
-        <div class="lrow" id="l3"><span>Sealed</span><em>SHA-256 into the record</em><span class="ok">✓</span></div>
-        <div class="lrow" id="l4"><span>Split across</span><em id="l4-d"></em><span class="ok">→</span></div>
+      <h2 id="door-title">Uploaded</h2>
+      <p class="sub" id="door-sub"></p>
+      <div class="door-job" id="door-job" hidden>
+        <b id="door-job-name"></b>
+        <span id="door-job-note"></span>
       </div>
-
-      <div class="tl" id="daytl"></div>
+      <!-- Ledger only for filing progress / errors — empty on success. -->
+      <div class="ledger" id="ledger" hidden></div>
+      <!-- Kept for paintDoorFilm / tests; success keeps it off. -->
+      <div id="daytl" hidden></div>
 
       <div class="doneline" id="doneline">
         <span id="doneline-title">Uploaded.</span>
@@ -1130,7 +1146,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=live-rtc-1"></script>
-<script src="js/app.js?v=live-rtc-1"></script>
+<script src="js/capture-core.js?v=upload-success-simple-1"></script>
+<script src="js/app.js?v=upload-success-simple-1"></script>
 </body>
 </html>
