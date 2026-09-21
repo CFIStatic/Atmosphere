@@ -70,9 +70,10 @@ export const PREFERRED_DAY_FILM = {
   },
   web: {
     mimeCandidates: [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4', // Safari + modern Chrome — H.264/AAC plays everywhere
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
-      'video/mp4', // Safari — typically AAC audio when mic tracks present
     ],
     /** Ideal constraints — mirrored in fieldcapture/js/capture-core.js. */
     getUserMedia: {

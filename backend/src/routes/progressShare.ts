@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
 import {
   PROGRESS_SHARE_COOKIE,
   readShareCookie,
@@ -410,10 +411,12 @@ progressShareRouter.get(
 
       assertGuestMayMintRawMedia((proof as any).ai_findings);
 
-      const { data, error } = await admin.storage
-        .from(PROOF_BUCKET)
-        .createSignedUrl((proof as any).storage_path, 600);
-      if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+      const playable = await createSignedPlayableProofUrl({
+        admin,
+        storagePath: (proof as any).storage_path,
+        expiresInSeconds: 600,
+        bucket: PROOF_BUCKET,
+      });
 
       await recordAccess(admin, {
         orgId: share.org_id,
@@ -425,7 +428,7 @@ progressShareRouter.get(
         detail: `via progress link — ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+      res.json({ url: playable.url, expiresInSeconds: 600 });
     } catch (err) {
       next(err);
     }
