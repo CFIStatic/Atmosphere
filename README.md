@@ -1,78 +1,129 @@
 # Atmosphere
 
-**The Work Verification Platform** for restoration and construction.
+**Work verification / Field Capture** for field and office teams on construction
+and trade jobs.
 
-Atmosphere proves that scoped, agreed work was actually done. Every day on a
-job can be filmed, checked at the door, read against the scope, and held in a
-chain of custody you can hand to an adjuster, a bank, or a subcontractor —
-without turning the product into a sales suite, a PM board, or an operations
-console.
+Crews film the day on site. The office opens a job file — Chat, Happening Now,
+videos, packet, evidence — with timed analysis of people, speech, objects, and
+moments. Atmosphere is not a sales suite, PM board, or general operations OS.
 
 ```
-  Office (Verifier)                         Field (Capture)
- ─────────────────                         ────────────────
-  Paste / approve scope                     Open invite link on phone
-  Publish brief                             Accept brief
-  Invite Field Capture / subs               Film the day (video + mic)
-  Review clips + AI dictation               Upload through job token
-  Share evidence outward                    Optional: claim → My jobs
+  Field (Capture)                         Office (Platform)
+ ─────────────────                       ──────────────────
+  Record on phone (web or iOS)            Open job file → Chat by default
+  Upload / stream parts                   Analysis auto-queues on finalize
+  Sign in or job-share token              Ask the job; review Videos / Packet
+                                          Share evidence outward
 ```
 
-## The product
+## Surfaces
 
-One path. No money in this loop — handoff and proof only.
-
-| Step | Who | What |
+| Surface | Role | Production host (typical) |
 | --- | --- | --- |
-| **1. Start a job** | Office | Paste claim/scope text → review drafted lines → approve once |
-| **2. Publish the brief** | Office | First revision of facts + in-scope / do-not lines goes live |
-| **3. Invite** | Office | Org Field Capture team (preloaded) and/or subcontractors by email |
-| **4. Capture** | Crew | Phone opens the link, accepts the brief, films video + microphone |
-| **5. Verify** | Office | Verifier watches clips, AI dictation against scope, unknown ≠ pass |
-| **6. Hold & share** | Office | Custody log; evidence shares open for a pinned Atmosphere account |
+| **Field Capture** | On-site record + upload (web PWA + iOS) | `https://app.atmosphereteam.com` |
+| **Platform** | Office console — job files, intake, settings | `https://platform.atmosphereteam.com` |
+| **Atmosphere APIs** | Express BFF (Railway) | Railway service `Atmosphere APIs` |
+| **Corporate website** | Marketing / docs site | `https://atmosphereteam.com` (`website/`) |
+| **Internal Growth Metrics** | Staff analytics (not customer-facing) | Railway service `Internal Growth Metrics` (`internal/`) |
+| **Verifier** | Evidence portal (embed + standalone) | Served with Platform (`verifier/`) |
 
-**Field Capture does not run the AI report on the phone.** Capture is record +
-upload. Judgment lives in the Verifier.
+Field Capture and Platform share one Atmosphere login. Job-share links still
+work without an office seat (invitees / subs). Production ships on **Railway**
+(see [`docs/production.md`](docs/production.md)).
 
-**Invites are sent by Atmosphere** (platform SMTP), not from the customer’s
-Gmail/Microsoft mailbox. The email names the contractor; the From line is
-Atmosphere. If the recipient already has an account, they sign in. If not, they
-are prompted to create one with that exact address.
+## How it works
+
+1. **Start a job** — Office **Start a job** (`/intake`) pastes or drafts a brief
+   and invites crew; Field Capture can also name a job on the phone. Same org +
+   normalized title **reuses** an open job — do not mint duplicate folders.
+2. **Capture** — Field Capture (web or `apps/field-ios/`) records video + mic,
+   streams parts when online, files the day through the BFF into Storage.
+3. **Analysis** — On successful upload finalize, vision + speech **auto-queue**.
+   Readings reconstruct timed people / speech / objects / moments. Stuck or
+   failed rows are reclaimed by a sweep (same queues as new uploads). A thin
+   transcript alone must not clear a still-running or failed analysis — pending
+   / failed vision outranks mic-only text.
+4. **Job file** — Office opens the file at `/job-progress` (bookmarks to
+   `/jobs/:id` redirect here). Section bar (office):
+   - **Chat** (default on open) — job-scoped Ask
+   - **Happening Now** — live progress / on-site story
+   - **Access** — who has the file (hidden for some grant viewers)
+   - **Videos** — filed film
+   - **Packet** — claim-ready packet
+   - **Evidence report** — evidence locker
+   - **Job history** — scope, crew, documents
+5. **Playback** — Safari-hostile WebM originals get a sibling `.play.mp4`
+   derivative for Platform playback.
+6. **Share** — Evidence shares and progress links open for pinned Atmosphere
+   accounts / guests as designed on those routes.
+
+**Field Capture does not run the full office analysis on the phone.** Capture is
+record + upload. Judgment and Ask live in Platform / Verifier.
+
+## Ask (Chat)
+
+Job-scoped assistant under the **Chat** tab:
+
+- Grounded in that job’s brief, film, and analysis; live web search for topical
+  outside questions when configured.
+- Professional prose formatting for the office.
+- No model-name chrome in the UI (no “Live model” labels).
+- Machine citation trailers are stripped for display — never leave raw
+  `[[web:…]]` junk in the bubble.
+
+## Connect (Settings)
+
+**Settings → Connect** (`/settings?section=connect`; legacy `/crm` redirects
+here). Users store **CRM username + password** so an Atmosphere **agent** can
+sign into:
+
+- JobNimbus
+- AccuLynx
+- Salesforce
+- ServiceTitan
+
+…to pull / push jobs, contacts, and claims.
+
+This is **not** OAuth / API-key Connect as the primary UX. Atmosphere-native job
+fields (title, address, notes, etc.) stay always-on on the job file elsewhere —
+they are **not** listed as a Connect CRM row. Details:
+[`docs/crm-agent-credentials.md`](docs/crm-agent-credentials.md).
+
+## Product principles (contributor-facing)
+
+- **No Delete** for filed evidence / videos in the customer app UI (API returns
+  gone / removed paths for those surfaces). Global Admin purge is a separate
+  staff path — do not reintroduce kebab Delete for end users.
+- **Child privacy blur is always on** for every org — no opt-out.
+- **Motion clips** are internal / staff only (Internal tooling) — not a job-file
+  section for customers.
+- **Do not auto-create duplicate jobs** — reuse open jobs with the same
+  normalized title in the org (`findOpenCrmJobByTitle`).
+- **Brand lockup** — Atmosphere wordmark + five bars (orange base `#F2670C`)
+  across Platform, Field Capture, corporate site, and Internal. Do not restore
+  retired Saturn / tile / split-Atmo marks (`frontend/src/components/Logo.tsx`).
+
+Atmosphere is **not** selling a sales platform, estimator, computer-use agent,
+or general ops OS. Those products were removed from the tree; git history keeps
+them.
 
 ## Who it is for
 
 | Audience | What they get |
 | --- | --- |
-| **Global Admin** | Pays the bill. Creates the company account, invites Employees, full access including **billing** |
-| **Employees** | Invited by Global Admin — same workspace as admin (record jobs, see other jobs) — **no billing** |
-| **Invited workers** | Job-share link only — brief, film, upload for that job (e.g. a subcontractor) |
-| **Adjusters / examiners / counsel** | Shared Verifier links pinned to their Atmosphere account |
-
-## Surfaces
-
-### Work Verification (office)
-
-- **Home:** Verifier library — one job, one file of clips and readings
-- **Overview** (`/field`) — company proof chain: what is stuck, what filmed today
-- **Start a job** (`/intake`) — paste → review → approve → invite
-- **Job files** (`/jobs`) — briefs, parties, proof days, readiness, evidence
-- **Verifier** (`/verifier/`) — standalone evidence portal (also embeddable)
-
-### Field Capture (crew)
-
-- **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
-- **Bottom bar (app only):** Field Capture (your jobs) · Platform (office, still in the phone web frame)
-- **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
-- **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
+| **Global Admin** | Company account, invites Employees, full access including **billing** |
+| **Employees** | Same workspace (record / open jobs) — **no billing** |
+| **Invited workers** | Job-share link — brief, film, upload for that job |
+| **Adjusters / examiners / counsel** | Shared Verifier / progress links pinned to an Atmosphere account |
 
 ## Architecture
 
 ```
 ┌──────────────────────┐         /api/*          ┌──────────────────────┐
-│  Frontend (React)    │ ──────────────────────▶ │  Backend (Express)   │
+│  Platform (React)    │ ──────────────────────▶ │  Backend (Express)   │
 │  Vite + Tailwind     │   httpOnly session      │  BFF + verification  │
-│  /intake · /shared   │ ◀────────────────────── │  job-share · proof   │
-│  /verifier-library   │                         │  media · geometry    │
+│  /verifier-library   │ ◀────────────────────── │  job-share · proof   │
+│  /job-progress · …   │                         │  Ask · media · CRM   │
 └──────────────────────┘                         └──────────┬───────────┘
                                                             │ service role /
                                                             │ user JWT + RLS
@@ -83,261 +134,152 @@ are prompted to create one with that exact address.
                                                  │  Storage (job-proofs)│
                                                  └──────────────────────┘
 
-  Field Capture (static) ──token──▶ /api/job-share/*/proof/* ──▶ Storage PUT
-  Verifier (static)      ──auth──▶ /api/evidence-portal · shared evidence
+  Field Capture (static + iOS) ──▶ /api/field-app · job-share proof ──▶ Storage
+  Verifier (static)            ──▶ /api/evidence-portal · shared evidence
 ```
 
-**Why this shape**
-
-- Passwords live in Supabase Auth; the app never stores plaintext.
+- Passwords live in Supabase Auth; the app never stores plaintext login
+  passwords.
 - Session tokens sit in **httpOnly** cookies — not in page JavaScript.
-- Org data is read with the caller’s JWT so **RLS**, not app code, enforces
-  tenancy. Field identity / My jobs use a separate session the sub holds, not
-  a seat in the GC’s org.
+- Org data is read with the caller’s JWT so **RLS** enforces tenancy. Field
+  identity / My jobs use a separate session the invitee holds.
+- Invites and OTPs are sent by **Atmosphere** (Resend preferred /
+  `hello@invites.atmosphereteam.com`), not the customer’s Gmail/Microsoft
+  mailbox. See [`docs/email-deliverability.md`](docs/email-deliverability.md).
 
 ## Project layout
 
 ```
 Atmosphere/
-├── frontend/                 Office console (React)
-│   ├── src/pages/
-│   │   ├── JobIntakePage.tsx      Paste → approve → invite
-│   │   ├── SharedDashboardPage.tsx  Job files
-│   │   ├── VerifierLibraryPage.tsx  Embeds the Verifier
-│   │   ├── JobSharePage.tsx       Subcontractor job record
-│   │   └── MyJobsPage.tsx         Cross-GC claimed jobs
-│   └── src/lib/platforms.ts       Visible: Verification + Field only
-├── verifier/                 Evidence portal (static HTML)
-│   ├── index.html            Clips, integrity, AI vs human, custody
-├── fieldcapture/             Crew capture app (static)
-│   ├── index.html
-│   └── js/capture-core.js    Record, hash, GPS, upload
+├── frontend/                 Platform — office console (React + Vite)
+│   ├── src/pages/            Intake, Dashboard shell, job file, Settings, …
+│   └── src/components/Logo.tsx   Brand lockup (wordmark + orange bar)
+├── fieldcapture/             Crew capture web app (static)
 ├── apps/field-ios/           Native Field Capture (Swift)
+├── verifier/                 Evidence portal (static HTML)
 ├── backend/                  Express BFF
-│   ├── src/routes/
-│   │   ├── jobIntake.ts      Propose / approve package + invites
-│   │   ├── sharedJobs.ts     Job files + job-share token API
-│   │   ├── proofOfWork.ts    Upload URLs, proof filing, narration
-│   │   ├── fieldIdentity.ts  Claim codes + My jobs
-│   │   ├── evidencePortal.ts Verifier library + shares
-│   │   ├── mediaCatalog.ts   Fleet media catalog
-│   │   ├── legal.ts          Staff legal hold, vault, user monitor
-│   │   └── geometry.ts       RoomPlan / twin writes
-│   ├── src/verifier/         Intake propose, readiness, invite email copy
-│   ├── src/lib/systemMail.ts Atmosphere-sent transactional email
-│   ├── src/media/            Catalog + storage drivers
-│   ├── src/legal/            Legal hold, video vault, user-action monitor
-│   ├── src/geometry/         Property twins
-│   └── supabase/migrations/  Jobs, proof, field identity, media, twins
-├── website/                  Marketing site (Work Verification first)
-├── internal/                 Staff site (accounts, analytics, system) — Railway
-└── docs/                     Deeper notes (media storage, CRM, etc.)
+│   ├── src/routes/           Auth, intake, shared jobs, proof, field-app, …
+│   ├── src/shared/           Ask, analysis sweep, proof helpers
+│   ├── src/verification/     Durable video work-verification pipeline
+│   └── supabase/migrations/  Schema (mirrored under supabase/migrations/)
+├── website/                  Corporate marketing site
+├── internal/                 Staff Growth Metrics site (Railway)
+├── docs/                     Production, CRM Connect, privacy, pipelines, …
+├── scripts/host-phone.sh     HTTPS tunnel for phone testing
+└── docker-compose.yml        Local production-shaped stack
 ```
 
-The console is Work Verification and Field Capture only. Sales, Manager, and
-the other later-product screens have been removed from the product.
+Office nav (Verification platform): **Start a job** (`/intake`), **Dashboard**
+(`/verifier-library`), **Settings** (`/settings`). Field platform home:
+`/field`. Job list path `/jobs` redirects to the Dashboard; open files use
+`/job-progress`.
 
-## Quick start
+## Local development
 
 ### Prerequisites
 
-- Node 18+
+- **Node 20+** (`backend` engines)
 - A Supabase project (Auth + Postgres + Storage)
-- Optional: SMTP (`SMTP_*` + from address) so Atmosphere can email invites
-- Optional: Anthropic (or configured LLM) keys for Verifier dictation
+- Optional: Resend (`RESEND_API_KEY`) or SMTP so invites / OTPs send
+- Optional: vision / transcription keys for analysis and captions (see
+  `backend/.env.example` and [`docs/video-work-verification.md`](docs/video-work-verification.md))
 
 ### Backend
 
 ```bash
 cd backend
-cp .env.example .env   # fill SUPABASE_*, FRONTEND_ORIGINS, SMTP_*, etc.
+cp .env.example .env   # SUPABASE_*, FRONTEND_ORIGIN, RESEND_* / SMTP_*, etc.
 npm install
 npm run dev            # default http://localhost:4000
 ```
 
-Apply migrations for shared jobs, proof-of-work, field identity, media catalog,
-and property twins from `backend/supabase/migrations/` (and mirrored copies under
+Apply migrations from `backend/supabase/migrations/` (and mirrored copies under
 `supabase/migrations/` where present). Create a Storage bucket for proofs
 (typically `job-proofs`) with an appropriate size cap.
 
-### Frontend (office)
+Useful scripts (from `backend/package.json`):
+
+```bash
+npm run typecheck && npm test && npm run build
+npm run check:migrations
+npm run smoke:synthetic   # when synthetic A/V path is configured
+```
+
+### Platform (office)
 
 ```bash
 cd frontend
 npm install
-npm run dev            # Vite; point API via env / proxy to :4000
+npm run dev            # Vite; proxy / API via env (see vite config)
 ```
 
-Sign in → onboarding (create or join an org) → **Start a job** or **Job files**.
+Sign in → onboarding (create or join an org) → **Start a job** or **Dashboard**.
 
 Demo mode (no backend):
 
 ```bash
 VITE_DEMO=1 npm run dev
-# then navigate to /intake (memory router: atmosphere:navigate or localStorage)
 ```
 
-### Field Capture (crew)
+### Field Capture
 
-Serve `fieldcapture/` and open with a live token:
+Serve `fieldcapture/` next to the API, or use the Platform Vite app which also
+mounts `/fieldcapture`:
 
 ```text
 /fieldcapture/index.html?token=<access_token>&api=http://localhost:4000
 ```
 
-Without `token`, live upload is refused (no invented demo day unless `demo=1`).
+Without `token`, sign in with the same email/password as Platform. Live upload
+is refused without credentials (no invented demo day unless `demo=1`).
 
-### Open on your phone
-
-The office console and Field Capture are installable on a phone (Safari → Share
-→ **Add to Home Screen**). They need HTTPS, so do not point the phone at
-`localhost`.
-
-With the API on `:4000` and the Vite app on `:5174`:
+### Phone (HTTPS)
 
 ```bash
+# Backend :4000 and Vite app :5174 already running
 bash scripts/host-phone.sh
 ```
 
-That prints two HTTPS URLs. Open **Field Capture** to film the day — sign in
-with the same email and password as the office Platform. Open **Office** for
-the desktop workspace.
-
-The native iPhone app is `apps/field-ios/` — Xcode → your Personal Team → Run
-on the device. It talks to the Atmosphere project directly (not localhost).
+Open the printed Field Capture and Office HTTPS URLs. Safari → Share → **Add to
+Home Screen**. The native iPhone app is `apps/field-ios/` (Xcode → device); it
+talks to the live BFF, not localhost.
 
 ### Verifier
 
 Open `/verifier/?embed=1` from the office shell, or serve `verifier/` standalone
 against the API.
 
-## Core APIs (verification path)
-
-| Method | Path | Role |
-| --- | --- | --- |
-| `POST` | `/api/operations/intake/propose` | Draft job package + preload Field Capture team |
-| `POST` | `/api/operations/intake/approve` | Create job, brief, scope, parties; email invites |
-| `GET` | `/api/job-share/:token` | Subcontractor job record (no office login) |
-| `POST` | `/api/job-share/:token/proof/upload-url` | Signed Storage PUT URL |
-| `POST` | `/api/job-share/:token/proof` | File the day after upload |
-| `POST` | `/api/field/claim/start` · `/verify` | OTP → field identity → My jobs |
-| `GET` | `/api/field/jobs` | Claimed jobs for a field session |
-| `GET` | `/api/evidence-portal/library` | Office clip library |
-| `POST` | `/api/evidence-portal/shares` | Share evidence to an email (account-pinned) |
-
-## Data the path depends on
-
-Org-scoped tables (RLS) include, among others:
-
-| Area | Tables (illustrative) |
-| --- | --- |
-| Jobs | `crm_jobs`, `crm_properties`, `job_intake` |
-| Brief / scope | `job_briefs`, `job_scope_items` |
-| Parties | `job_parties` (per-job `access_token`) |
-| Proof | `job_proofs` (+ Storage objects) |
-| Field identity | `field_identities`, `job_party_claims`, `field_sessions` |
-| Media / twins | `media_*`, `property_twins`, geometry sessions |
-| Evidence shares | Verifier share rows + custody / access log |
-
-CRM sync can bring titles and addresses into job files; **it does not bring
-scope**. Scope still comes from intake paste/upload or manual lines before the
-Verifier can judge against an agreed brief.
-
-## Auth & tenancy (short)
-
-1. Email/password (and optional device PIN) via Supabase Auth through the BFF.
-2. After signup: create an organization or join with a code; pick role / work type.
-3. Office routes require an org membership cookie/session.
-4. Job-share and field-claim routes are **outside** org auth by design — the
-   token or field session is the credential.
-
-## Email
-
-| Kind | Sender |
-| --- | --- |
-| Job / Field Capture / subcontractor invites | **Atmosphere** (`systemMail` + SMTP) |
-| Field claim OTP codes | **Atmosphere** |
-| Team join invites | **Atmosphere** |
-| Sales campaigns | Customer mailbox (later product; not required for verification) |
-
-Configure `CAREERS_FROM_EMAIL` (defaults to `jack@jettx.ai`) plus either SMTP
-(`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) or `RESEND_API_KEY`. Resend is the
-preferred path and sends as `hello@invites.jettx.ai`. `jettx.ai` also needs
-DMARC and Google Workspace DKIM at GoDaddy or Gmail / Outlook / Yahoo junk
-the mail — see [`docs/email-deliverability.md`](docs/email-deliverability.md).
-Invite emails include HTML + plain text and absolute app links from the live
-office origin. Without mail configured, invites still mint links; the UI
-falls back to copy-link.
-
-## Development scripts
+### Docker (production-shaped local)
 
 ```bash
-# Backend
-cd backend && npm run typecheck && npm test && npm run build
-
-# Frontend
-cd frontend && npm test && npm run build
-
-# Migration inventory (two trees — see docs/production.md)
-cd backend && npm run check:migrations
-
-# Synthetic A/V → frames → catalog → twin (when configured)
-cd backend && npm run smoke:synthetic
+cp backend/.env.example backend/.env   # fill real values
+docker compose up --build
+# App: http://localhost:8080  · Internal: http://localhost:8081  · API: :4000
 ```
-
-CI runs backend/frontend **tests**, builds, Agent typecheck, migration SQL
-suites, migration inventory, and Docker image builds (backend + office app)
-on every push.
 
 ## Production
 
-See **[`docs/production.md`](docs/production.md)** for the Work Verification
-go-live checklist, Railway hosting for the office app, required env vars,
-health probes (`/api/health`, `/api/ready`, `/healthz`), migration apply
-order, Docker Compose sketch, and **Railway auto-deploy** so backend, office
-app, and any other git-backed Railway service ship on push to `main`.
+See **[`docs/production.md`](docs/production.md)** for Railway services
+(Atmosphere APIs, Platform, Field Capture, Corporate Website, Internal Growth
+Metrics), required env, health probes (`/api/health`, `/api/ready`, `/healthz`),
+migration order, and auto-deploy on `main`.
 
-```bash
-# Production-shaped local stack (needs a filled backend/.env)
-docker compose up --build
-```
-
-Contact / careers forms default to `jack@jettx.ai`.
-
-### Internal monitoring (Atmosphere staff only)
-
-Time spent in the product is measured via feature heartbeats and shown on
-**`/analytics`**. Sign in as `jack@jettx.ai` (or any email in
-`ANALYTICS_INTERNAL_EMAILS`) and the dashboard link appears automatically —
-the BFF upserts `analytics_staff` when the service role key is configured.
-
-A/B experiments: seed/manage rows in `public.experiments`, set `status` to
-`running`, instrument with `useExperiment()` in the UI. Results appear on the
-internal analytics dashboard under **A/B tests**.
-
-The same data is also a separately hosted staff site at **`internal/`**
-(Railway service `Internal Growth Metrics`). Sign in with first name, last name,
-email, and a 6-digit Microsoft Authenticator code. See
-[`internal/README.md`](internal/README.md).
+CI runs backend/frontend tests and builds, migration checks, and Docker image
+builds on push (see `.github/workflows/`).
 
 ## Related docs
 
 | Doc | Topic |
 | --- | --- |
-| [`docs/production.md`](docs/production.md) | Production deploy + go-live checklist |
-| [`docs/stripe.md`](docs/stripe.md) | Stripe Checkout, webhooks, `npm run stripe:sync` |
-| [`fieldcapture/README.md`](fieldcapture/README.md) | Live capture + token query params |
-| [`verifier/README.md`](verifier/README.md) | Evidence portal rules and access model |
-| [`apps/field-ios/README.md`](apps/field-ios/README.md) | Native Field Capture / RoomPlan status |
-| [`docs/media-storage.md`](docs/media-storage.md) | Fleet media catalog and retention |
-| [`docs/synthetic-pipeline.md`](docs/synthetic-pipeline.md) | Synthetic A/V smoke path |
-| [`website/`](website/) | Public Work Verification site |
-| [`internal/`](internal/) | Staff accounts + analytics site (hostable) |
-
-## What this repo is not selling
-
-Atmosphere is **not** a sales platform, project-management suite, or general
-operations OS. Those products used to sit in this tree behind `ENABLE_*` flags;
-they have been removed, and the flags with them. Git history keeps them. The
-shipped story is work verification: **film the day, check it against the scope,
-keep the chain of custody.**
+| [`docs/production.md`](docs/production.md) | Deploy + go-live checklist |
+| [`docs/crm-agent-credentials.md`](docs/crm-agent-credentials.md) | Settings → Connect agent credentials |
+| [`docs/video-work-verification.md`](docs/video-work-verification.md) | Analysis / verification pipeline |
+| [`docs/child-privacy-redaction.md`](docs/child-privacy-redaction.md) | Always-on child blur |
+| [`docs/motion-clips.md`](docs/motion-clips.md) | Motion clips (staff / Internal) |
+| [`docs/stripe.md`](docs/stripe.md) | Stripe Checkout + webhooks |
+| [`docs/email-deliverability.md`](docs/email-deliverability.md) | Resend / invites domain |
+| [`fieldcapture/README.md`](fieldcapture/README.md) | Live capture + query params |
+| [`verifier/README.md`](verifier/README.md) | Evidence portal access model |
+| [`apps/field-ios/README.md`](apps/field-ios/README.md) | Native Field Capture status |
+| [`internal/README.md`](internal/README.md) | Staff Growth Metrics site |
+| [`website/`](website/) | Corporate site |
