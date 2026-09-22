@@ -2538,6 +2538,7 @@
     function applyOfficeTheme(preference) {
       if (preference !== 'light' && preference !== 'dark') return;
       document.documentElement.setAttribute('data-theme', preference);
+      /* User chose explicitly — stop following prefers-color-scheme until storage cleared */
       document.documentElement.setAttribute('data-theme-preference', preference);
       try {
         localStorage.setItem('atmosphere.theme', preference);

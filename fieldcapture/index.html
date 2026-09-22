@@ -5,27 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Atmosphere Field Capture</title>
 <meta name="description" content="One button. Start it when you get to work, finish it when you're done for the day. Everything else happens to the footage, not to you." />
+<meta name="theme-color" content="#FBFAF7" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141311" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F2670C" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Field Capture" />
-<link rel="manifest" href="manifest.webmanifest?v=bar-lockup-1" />
-<link rel="icon" href="icons/favicon.svg?v=bar-lockup-1" type="image/svg+xml" />
-<link rel="icon" href="icons/favicon-32.png?v=bar-lockup-1" type="image/png" sizes="32x32" />
-<link rel="apple-touch-icon" href="icons/atmosphere-180.png?v=bar-lockup-1" />
+<link rel="manifest" href="manifest.webmanifest?v=bar-lockup-2" />
+<link rel="icon" href="icons/favicon.svg?v=bar-lockup-2" type="image/svg+xml" />
+<link rel="icon" href="icons/favicon-32.png?v=bar-lockup-2" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="icons/atmosphere-180.png?v=bar-lockup-2" />
 <script>
   (function () {
     try {
-      var p = localStorage.getItem('atmosphere.theme');
-      if (p !== 'light' && p !== 'dark') {
-        try { p = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}').theme; } catch (e) {}
+      var stored = localStorage.getItem('atmosphere.theme');
+      if (stored !== 'light' && stored !== 'dark') {
+        try { stored = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}').theme; } catch (e) {}
       }
-      if (p !== 'light' && p !== 'dark') p = localStorage.getItem('atm-theme');
-      if (p !== 'light' && p !== 'dark') {
-        p = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
+      if (stored !== 'light' && stored !== 'dark') stored = localStorage.getItem('atm-theme');
+      var locked = (stored === 'light' || stored === 'dark');
+      var systemDark = matchMedia('(prefers-color-scheme: dark)').matches;
+      var p = locked ? stored : (systemDark ? 'dark' : 'light');
       document.documentElement.setAttribute('data-theme', p);
-      document.documentElement.setAttribute('data-theme-preference', p);
+      /* preference=system → top-bar lockup (and chrome) track the browser OS scheme live */
+      document.documentElement.setAttribute('data-theme-preference', locked ? p : 'system');
+      if (!locked && matchMedia('(prefers-color-scheme: dark)').addEventListener) {
+        matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (ev) {
+          if (document.documentElement.getAttribute('data-theme-preference') !== 'system') return;
+          document.documentElement.setAttribute('data-theme', ev.matches ? 'dark' : 'light');
+        });
+      }
     } catch (e) {}
   })();
 </script>
@@ -145,11 +154,15 @@
     background: var(--panel);
     position: sticky; top: 0; z-index: 40;
   }
-  /* Brand lockup = Platform Logo.tsx `md`: 28px bars, 21px/800 word, gap 12px.
-     Orange-bar bottom flush with Atmosphere baseline (translateY 2px). */
+  /* Brand lockup = Platform Logo.tsx `md`: 28px five-bar mark + Atmosphere word.
+     Ink bars use currentColor → var(--ink): dark bars on light paper, light bars
+     on dark paper. Orange base stays #F2670C. --ink boots from the browser
+     prefers-color-scheme (data-theme-preference=system) and follows OS changes
+     live; an in-app Appearance toggle locks light/dark. Baseline: orange-bar
+     bottom flush with word (translateY 2px). */
   .brand { display: flex; align-items: flex-end; gap: 12px; font-weight: 800; font-size: 21px; letter-spacing: -0.025em; line-height: 1; color: var(--ink); }
   .brand > .brand-word { transform: translateY(2px); }
-  .brand svg { display: block; flex: none; color: var(--ink); }
+  .brand svg { display: block; flex: none; color: currentColor; }
   /* Product subtitle retired from the lockup — Field Capture | Platform switchbar carries product name. */
   .brand .sub { display: none !important; }
   .who-wrap { margin-left: auto; position: relative; }

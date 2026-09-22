@@ -137,6 +137,27 @@ assert.doesNotMatch(
   /class="brand"[^>]*>[\s\S]{0,400}<polygon/,
   'brand mark must not be a polygon cube/box',
 );
+assert.match(
+  html,
+  /locked \? p : 'system'/,
+  'theme boots as system when browser scheme drives preference',
+);
+assert.match(
+  html,
+  /addEventListener\('change'/,
+  'live prefers-color-scheme listener keeps top-bar lockup in sync with the OS',
+);
+assert.match(
+  html,
+  /media="\(prefers-color-scheme: light\)"/,
+  'theme-color declares a light-scheme variant',
+);
+assert.match(
+  html,
+  /media="\(prefers-color-scheme: dark\)"/,
+  'theme-color declares a dark-scheme variant',
+);
+
 
 {
   const appAt = html.indexOf('<div class="app"');
