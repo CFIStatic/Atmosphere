@@ -23,6 +23,7 @@ import {
 } from './anthropic.js';
 import { googleVisionApiKey } from './visionProvider.js';
 import { logger } from './logger.js';
+import { resolveAnthropicModel } from './anthropicModel.js';
 
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
@@ -71,7 +72,7 @@ export function isAskModelConfigured(anthropicApiKey?: string | null): boolean {
 }
 
 function anthropicAskModel(): string {
-  return (process.env.ANTHROPIC_MODEL ?? process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-4-1').trim();
+  return resolveAnthropicModel(process.env.ANTHROPIC_MODEL, process.env.ANTHROPIC_DEFAULT_MODEL);
 }
 
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */

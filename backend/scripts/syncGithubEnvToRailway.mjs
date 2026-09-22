@@ -107,8 +107,8 @@ const SMART_ANALYSIS_DEFAULTS = {
   VERIFICATION_PRIMARY_MODEL: 'gemini-2.5-pro',
   ASK_ANALYSIS_MODEL: 'gemini-2.5-pro',
   ASK_ANALYSIS_THINKING_LEVEL: 'high',
-  ANTHROPIC_MODEL: 'claude-opus-4-1-20250805',
-  VERIFICATION_ESCALATION_MODEL: 'claude-opus-4-1-20250805',
+  ANTHROPIC_MODEL: 'claude-opus-5',
+  VERIFICATION_ESCALATION_MODEL: 'claude-opus-5',
 };
 const WEAK_ANALYSIS_PINS = new Set([
   'gemini-3.6-flash',
@@ -117,6 +117,9 @@ const WEAK_ANALYSIS_PINS = new Set([
   'claude-sonnet-5',
   'claude-sonnet-4-6',
   'claude-sonnet-4-20250514',
+  'claude-opus-4-1',
+  'claude-opus-4-1-20250805',
+  'claude-opus-4-20250514',
 ]);
 for (const [name, smart] of Object.entries(SMART_ANALYSIS_DEFAULTS)) {
   const current = (process.env[name] ?? '').trim();

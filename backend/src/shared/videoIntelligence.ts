@@ -268,7 +268,7 @@ export async function dictatePreparedFrames(
       : new Error('Gemini vision is not configured.');
   }
 
-  const response = await anthropicClient().messages.create({
+  const response = await anthropicClient().messages.stream({
     model: config.technician.assistant.model,
     max_tokens: 12_288,
     system,
@@ -294,7 +294,7 @@ export async function dictatePreparedFrames(
         ],
       },
     ],
-  });
+  }).finalMessage();
 
   const text = response.content
     .filter((b: { type: string }) => b.type === 'text')

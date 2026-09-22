@@ -12,6 +12,7 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
 import { claimNextProofWork, type ProofWorkKind } from './outboxClaim.js';
+import { isRetiredAnthropicModelError } from '../lib/anthropicModel.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -47,9 +48,16 @@ export function needsTranscript(status: string | null | undefined): boolean {
   );
 }
 
-/** Only work that was already asked for — do not invent day-analysis. */
-export function needsAnalysisReclaim(status: string | null | undefined): boolean {
-  return status === 'queued' || status === 'running';
+/** Reclaim in-flight day readings, plus failed rows killed by a retired model pin. */
+export function needsAnalysisReclaim(
+  status: string | null | undefined,
+  error?: string | null,
+): boolean {
+  return (
+    status === 'queued' ||
+    status === 'running' ||
+    (status === 'failed' && isRetiredAnthropicModelError(error))
+  );
 }
 
 export async function sweepUnanalyzedProofs(
@@ -69,7 +77,7 @@ export async function sweepUnanalyzedProofs(
   const { data, error } = await admin
     .from('job_proofs')
     .select(
-      'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, narration_lease_until, transcript_status, transcript_lease_until, analysis_status, analysis_lease_until, storage_path',
+      'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, narration_lease_until, transcript_status, transcript_lease_until, analysis_status, analysis_error, analysis_lease_until, storage_path',
     )
     .is('deleted_at', null)
     .not('storage_path', 'is', null)
@@ -89,6 +97,7 @@ export async function sweepUnanalyzedProofs(
         'transcript_status.eq.running',
         'analysis_status.eq.queued',
         'analysis_status.eq.running',
+        'and(analysis_status.eq.failed,analysis_error.ilike.*claude-opus-4-1*)',
       ].join(','),
     )
     .order('received_at', { ascending: true })
@@ -115,7 +124,8 @@ export async function sweepUnanalyzedProofs(
         transcript += 1;
       }
     }
-    if (needsAnalysisReclaim(row.analysis_status) && !leaseIsHeld(row.analysis_lease_until)) {
+    if (needsAnalysisReclaim(row.analysis_status, row.analysis_error) && !leaseIsHeld(row.analysis_lease_until)) {
+      if (row.analysis_status === 'failed' && !(await markRecoverableAnalysisQueued(admin, row))) continue;
       if (await claimProofKind(admin, 'analysis', row.id, owner)) {
         await enqueueAnalysis(admin, party, row.work_date, row.id);
         analysis += 1;
@@ -123,6 +133,19 @@ export async function sweepUnanalyzedProofs(
     }
   }
   return { narration, transcript, analysis };
+}
+
+async function markRecoverableAnalysisQueued(admin: any, row: any): Promise<boolean> {
+  const { data, error } = await admin
+    .from('job_proofs')
+    .update({ analysis_status: 'queued' })
+    .eq('id', row.id)
+    .eq('analysis_status', 'failed')
+    .eq('analysis_error', row.analysis_error)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data?.id);
 }
 
 async function claimProofKind(

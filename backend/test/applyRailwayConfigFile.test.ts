@@ -148,8 +148,8 @@ test('each deploy job puts its own config on the upload root', () => {
   assert.match(sync, /VERIFICATION_PRIMARY_MODEL:\s*'gemini-2\.5-pro'/);
   assert.match(sync, /ASK_ANALYSIS_MODEL:\s*'gemini-2\.5-pro'/);
   assert.match(sync, /ASK_ANALYSIS_THINKING_LEVEL:\s*'high'/);
-  assert.match(sync, /ANTHROPIC_MODEL:\s*'claude-opus-4-1/);
-  assert.match(sync, /VERIFICATION_ESCALATION_MODEL:\s*'claude-opus-4-1/);
+  assert.match(sync, /ANTHROPIC_MODEL:\s*'claude-opus-5'/);
+  assert.match(sync, /VERIFICATION_ESCALATION_MODEL:\s*'claude-opus-5'/);
   assert.match(sync, /WEAK_ANALYSIS_PINS/);
 
 
