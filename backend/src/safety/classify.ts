@@ -260,8 +260,9 @@ async function classifyWithVision(
           },
         })),
       ];
+      const { resolveAnthropicModel } = await import('../lib/anthropicModel.js');
       const response = await anthropicClient().messages.create({
-        model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514',
+        model: resolveAnthropicModel(process.env.ANTHROPIC_MODEL),
         max_tokens: 600,
         system: VISION_SYSTEM,
         messages: [{ role: 'user', content: content as any }],

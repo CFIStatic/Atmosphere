@@ -4,6 +4,8 @@
  * Environment overrides keep cost and quality knobs out of code deploys.
  */
 
+import { resolveAnthropicModel } from '../lib/anthropicModel.js';
+
 function num(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -49,7 +51,7 @@ export const verificationConfig = {
     | 'google'
     | 'anthropic'
     | 'openai',
-  escalationModel: process.env.VERIFICATION_ESCALATION_MODEL ?? 'claude-opus-4-1',
+  escalationModel: resolveAnthropicModel(process.env.VERIFICATION_ESCALATION_MODEL),
   promptVersion: process.env.VERIFICATION_PROMPT_VERSION ?? 'v1',
 
   /** Confidence / escalation. */

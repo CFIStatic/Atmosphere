@@ -367,7 +367,7 @@ export async function analyseDayFilm(input: {
         'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
       ].join(' ');
 
-  const response = await anthropicClient().messages.create({
+  const response = await anthropicClient().messages.stream({
     model: config.technician.assistant.model,
     max_tokens: 1200,
     system: DAY_FILM_SYSTEM,
@@ -386,7 +386,7 @@ export async function analyseDayFilm(input: {
         ],
       },
     ],
-  });
+  }).finalMessage();
 
   const text = response.content
     .filter((block: any) => block.type === 'text')
@@ -420,7 +420,7 @@ export async function analyseProofDay(input: {
         'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
       ].join(' ');
 
-  const response = await anthropicClient().messages.create({
+  const response = await anthropicClient().messages.stream({
     model: config.technician.assistant.model,
     max_tokens: 1200,
     system: SYSTEM,
@@ -440,7 +440,7 @@ export async function analyseProofDay(input: {
         ],
       },
     ],
-  });
+  }).finalMessage();
 
   const text = response.content
     .filter((block: any) => block.type === 'text')
