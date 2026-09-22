@@ -1201,12 +1201,16 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
     // The write the old code never made. 'failed' is retryable and visible;
     // swallowing it made "the model was down" indistinguishable from "nobody
     // asked".
+    const detail = error instanceof Error ? error.message : 'Analysis failed.';
+    console.warn(
+      `[proof-analysis] day reading gave up proof=${job.proofId} status=failed error=${detail.slice(0, 200)}`,
+    );
     const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await admin
       .from('job_proofs')
       .update({
         analysis_status: 'failed',
-        analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+        analysis_error: detail,
         analysis_lease_until: null,
       })
       .eq('id', job.proofId);
@@ -1957,12 +1961,16 @@ const narrationQueue = new RetryQueue<NarrationJob>({
     await performNarration(admin, job);
   },
   onGaveUp: async (job, error) => {
+    const detail = formatVisionFailure(error);
+    console.warn(
+      `[proof-analysis] narration gave up proof=${job.proofId} status=failed error=${detail.slice(0, 200)}`,
+    );
     const admin = writerForJob({ orgId: job.orgId, jobId: job.jobId }).raw;
     await admin
       .from('job_proofs')
       .update({
         narration_status: 'failed',
-        narration_error: formatVisionFailure(error),
+        narration_error: detail,
         narration_lease_until: null,
       })
       .eq('id', job.proofId);
@@ -2051,6 +2059,9 @@ export async function analyseUploadedProof(
   const narrate = hooks?.queueNarrationFn ?? queueNarration;
   const analyseDay = hooks?.queueDayAnalysisFn ?? queueDayAnalysis;
   const transcribe = hooks?.queueTranscriptFn ?? queueProofTranscript;
+  console.log(
+    `[proof-analysis] enqueue after upload proof=${proof.id} phase=${proof.phase} workDate=${workDate} party=${party.id}`,
+  );
   await narrate(admin, party, proof.id, proof.phase, workDate);
   await analyseDay(admin, party, workDate, proof.id);
   await transcribe(admin, proof.id);

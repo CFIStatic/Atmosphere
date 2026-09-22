@@ -102,16 +102,11 @@ export function analysisStateOf(input: {
   dayHasAfter: boolean;
   /** Per-clip AI dictation status — office reads this next to the video. */
   narrationStatus?: string | null;
-  /** Speech on the mic is enough for Ask even when frames were silent. */
+  /** Speech on the mic is enough for Ask when vision never started. */
   hasTranscript?: boolean;
 }): AnalysisState {
-  const readingDone =
-    input.analysisStatus === 'done' ||
-    input.narrationStatus === 'done' ||
-    input.hasAiSummary ||
-    Boolean(input.hasTranscript);
-  if (readingDone) return 'done';
-
+  // Pending / failed outrank a partial transcript so a provider flake cannot
+  // paint the clip "done" with only mic text and no vision reading.
   const readingQueued =
     input.analysisStatus === 'queued' ||
     input.analysisStatus === 'running' ||
@@ -122,6 +117,13 @@ export function analysisStateOf(input: {
   if (input.narrationStatus === 'failed' || input.analysisStatus === 'failed') {
     return 'failed';
   }
+
+  const readingDone =
+    input.analysisStatus === 'done' ||
+    input.narrationStatus === 'done' ||
+    input.hasAiSummary ||
+    Boolean(input.hasTranscript);
+  if (readingDone) return 'done';
 
   if (input.narrationStatus === 'skipped' || input.analysisStatus === 'skipped') {
     return 'skipped';

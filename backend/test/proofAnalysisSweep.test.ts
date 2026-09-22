@@ -25,8 +25,9 @@ test('needsNarration and needsTranscript treat idle and missing as unread', () =
     needsAnalysisReclaim('failed', '404 model: claude-opus-4-1-20250805'),
     true,
   );
-  assert.equal(needsAnalysisReclaim('failed', 'Upstream timed out'), false);
-  assert.equal(needsAnalysisReclaim(null), false);
+  assert.equal(needsAnalysisReclaim('failed', 'Upstream timed out'), true);
+  assert.equal(needsAnalysisReclaim(null), true);
+  assert.equal(needsAnalysisReclaim('idle'), true);
   assert.equal(needsAnalysisReclaim('done'), false);
 });
 
@@ -41,6 +42,7 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
       work_date: '2026-08-01',
       narration_status: 'idle',
       transcript_status: 'idle',
+      analysis_status: null,
       storage_path: 'org/job/a.mp4',
     },
     {
@@ -52,81 +54,14 @@ test('sweepUnanalyzedProofs queues idle clips and leaves finished ones alone', a
       work_date: '2026-08-02',
       narration_status: 'done',
       transcript_status: 'done',
+      analysis_status: 'done',
       storage_path: 'org/job/b.mp4',
     },
   ];
 
   const admin = {
     from() {
-      return {
-        select() {
-          return this;
-        },
-        is() {
-          return this;
-        },
-        not() {
-          return this;
-        },
-        or() {
-          return this;
-        },
-        order() {
-          return this;
-        },
-        limit: async () => ({ data: rows.filter((r) => r.narration_status === 'idle'), error: null }),
-        update() {
-          return { eq: async () => ({ error: null }) };
-        },
-      };
-    },
-  };
-
-  const queued: { narration: string[]; transcript: string[]; analysis: string[] } = {
-    narration: [],
-    transcript: [],
-    analysis: [],
-  };
-  const result = await sweepUnanalyzedProofs(admin, {
-    limit: 10,
-    queueNarrationFn: async (_admin, _party, proofId) => {
-      queued.narration.push(proofId);
-    },
-    queueTranscriptFn: async (_admin, proofId) => {
-      queued.transcript.push(proofId);
-    },
-    queueAnalysisFn: async (_admin, _party, _workDate, proofId) => {
-      if (proofId) queued.analysis.push(proofId);
-    },
-  });
-  assert.equal(result.narration, 1);
-  assert.equal(result.transcript, 1);
-  assert.equal(result.analysis, 0);
-  assert.deepEqual(queued.narration, ['old-1']);
-  assert.deepEqual(queued.transcript, ['old-1']);
-});
-
-test('sweep requeues a failed day reading killed by a retired Anthropic pin once', async () => {
-  const rows = [
-    {
-      id: 'tiffany',
-      org_id: 'org',
-      job_id: 'job',
-      party_id: 'party',
-      phase: 'after',
-      work_date: '2026-09-21',
-      narration_status: 'done',
-      transcript_status: 'done',
-      analysis_status: 'failed',
-      analysis_error:
-        '404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-opus-4-1-20250805"}}',
-      storage_path: 'org/job/tiffany.webm',
-    },
-  ];
-
-  const admin = {
-    from() {
-      const self = {
+      const self: any = {
         select() {
           return self;
         },
@@ -142,14 +77,17 @@ test('sweep requeues a failed day reading killed by a retired Anthropic pin once
         order() {
           return self;
         },
-        limit: async () => ({ data: rows, error: null }),
+        limit: async () => ({
+          data: rows.filter((r) => r.narration_status === 'idle' || r.analysis_status == null),
+          error: null,
+        }),
         update() {
           return self;
         },
         eq() {
           return self;
         },
-        maybeSingle: async () => ({ data: { id: 'tiffany' }, error: null }),
+        maybeSingle: async () => ({ data: { id: 'old-1' }, error: null }),
       };
       return self;
     },
@@ -172,8 +110,113 @@ test('sweep requeues a failed day reading killed by a retired Anthropic pin once
       if (proofId) queued.analysis.push(proofId);
     },
   });
+  assert.equal(result.narration, 1);
+  assert.equal(result.transcript, 1);
+  assert.equal(result.analysis, 1);
+  assert.deepEqual(queued.narration, ['old-1']);
+  assert.deepEqual(queued.transcript, ['old-1']);
+  assert.deepEqual(queued.analysis, ['old-1']);
+});
+
+function reclaimAdmin(rows: any[]) {
+  return {
+    from() {
+      const self: any = {
+        select() {
+          return self;
+        },
+        is() {
+          return self;
+        },
+        not() {
+          return self;
+        },
+        or() {
+          return self;
+        },
+        order() {
+          return self;
+        },
+        limit: async () => ({ data: rows, error: null }),
+        update() {
+          return self;
+        },
+        eq() {
+          return self;
+        },
+        maybeSingle: async () => ({ data: { id: rows[0]?.id }, error: null }),
+      };
+      return self;
+    },
+  };
+}
+
+test('sweep requeues a failed day reading after a provider failure once', async () => {
+  const rows = [
+    {
+      id: 'tiffany',
+      org_id: 'org',
+      job_id: 'job',
+      party_id: 'party',
+      phase: 'after',
+      work_date: '2026-09-21',
+      narration_status: 'done',
+      transcript_status: 'done',
+      analysis_status: 'failed',
+      analysis_error:
+        '404 {"type":"error","error":{"type":"not_found_error","message":"model: claude-opus-4-1-20250805"}}',
+      storage_path: 'org/job/tiffany.webm',
+    },
+  ];
+
+  const queued: { narration: string[]; transcript: string[]; analysis: string[] } = {
+    narration: [],
+    transcript: [],
+    analysis: [],
+  };
+  const result = await sweepUnanalyzedProofs(reclaimAdmin(rows), {
+    limit: 10,
+    queueNarrationFn: async (_admin, _party, proofId) => {
+      queued.narration.push(proofId);
+    },
+    queueTranscriptFn: async (_admin, proofId) => {
+      queued.transcript.push(proofId);
+    },
+    queueAnalysisFn: async (_admin, _party, _workDate, proofId) => {
+      if (proofId) queued.analysis.push(proofId);
+    },
+  });
   assert.equal(result.analysis, 1);
   assert.deepEqual(queued.analysis, ['tiffany']);
   assert.deepEqual(queued.narration, []);
   assert.deepEqual(queued.transcript, []);
+});
+
+test('sweep starts day reading for a filed clip that never left idle analysis', async () => {
+  const rows = [
+    {
+      id: 'ios-fallback',
+      org_id: 'org',
+      job_id: 'job',
+      party_id: 'party',
+      phase: 'after',
+      work_date: '2026-09-21',
+      narration_status: 'done',
+      transcript_status: 'done',
+      analysis_status: null,
+      analysis_error: null,
+      storage_path: 'org/job/ios.mp4',
+    },
+  ];
+  const queued: string[] = [];
+  const result = await sweepUnanalyzedProofs(reclaimAdmin(rows), {
+    limit: 10,
+    queueNarrationFn: async () => {},
+    queueTranscriptFn: async () => {},
+    queueAnalysisFn: async (_admin, _party, _workDate, proofId) => {
+      if (proofId) queued.push(proofId);
+    },
+  });
+  assert.equal(result.analysis, 1);
+  assert.deepEqual(queued, ['ios-fallback']);
 });
