@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
-  <rect width="22" height="2.8" fill="#A8A29E"/>
-  <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
-  <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
-  <rect y="14.4" width="22" height="2.8" fill="#292524"/>
-  <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+  <style>
+    /* Light browser chrome → dark ink bars; dark chrome → light ink bars.
+       Orange base stays corporate #F2670C either way (Platform Logo.tsx). */
+    .ink1 { fill: #A8A29E; }
+    .ink2 { fill: #78716C; }
+    .ink3 { fill: #57534E; }
+    .ink4 { fill: #292524; }
+    .base { fill: #F2670C; }
+    @media (prefers-color-scheme: dark) {
+      .ink1 { fill: #E7E5E4; }
+      .ink2 { fill: #D6D3D1; }
+      .ink3 { fill: #A8A29E; }
+      .ink4 { fill: #78716C; }
+    }
+  </style>
+  <rect class="ink1" width="22" height="2.8"/>
+  <rect class="ink2" y="4.8" width="22" height="2.8"/>
+  <rect class="ink3" y="9.6" width="22" height="2.8"/>
+  <rect class="ink4" y="14.4" width="22" height="2.8"/>
+  <rect class="base" y="19.2" width="22" height="2.8"/>
 </svg>

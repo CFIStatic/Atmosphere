@@ -119,6 +119,46 @@ assert.doesNotMatch(html, /#daybtn\s*\{[^}]*min-height:\s*68px/, 'no #daybtn min
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
 assert.match(html, /id="product-switch"[^>]*\bhidden\b/, 'Field Capture / Platform bar starts hidden until sign-in');
+
+/* Brand lockup must match Platform Logo.tsx `md` (five bars + Atmosphere). */
+assert.match(
+  html,
+  /class="brand"[\s\S]*?<svg width="28" height="28" viewBox="0 0 22 22"/,
+  'header brand uses Platform md 28px five-bar mark',
+);
+assert.match(html, /fill="#F2670C"/, 'brand orange bar is corporate #F2670C');
+assert.match(
+  html,
+  /\.brand \.sub \{ display: none !important; \}/,
+  'Field Capture subtitle stays out of the Atmosphere lockup (switchbar names the product)',
+);
+assert.doesNotMatch(
+  html,
+  /class="brand"[^>]*>[\s\S]{0,400}<polygon/,
+  'brand mark must not be a polygon cube/box',
+);
+assert.match(
+  html,
+  /locked \? p : 'system'/,
+  'theme boots as system when browser scheme drives preference',
+);
+assert.match(
+  html,
+  /addEventListener\('change'/,
+  'live prefers-color-scheme listener keeps top-bar lockup in sync with the OS',
+);
+assert.match(
+  html,
+  /media="\(prefers-color-scheme: light\)"/,
+  'theme-color declares a light-scheme variant',
+);
+assert.match(
+  html,
+  /media="\(prefers-color-scheme: dark\)"/,
+  'theme-color declares a dark-scheme variant',
+);
+
+
 {
   const appAt = html.indexOf('<div class="app"');
   const swAt = html.indexOf('id="product-switch"');
