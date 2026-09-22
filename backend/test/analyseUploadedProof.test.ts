@@ -53,3 +53,38 @@ test('recordProof stores client frames off the critical path', async () => {
   assert.match(src, /async function storeClientFrames\(/);
 });
 
+test('analyseUploadedProof can be called twice for the same proof without skipping work hooks', async () => {
+  // Duplicate finalize (bad signal retry) re-enters after the row is durable.
+  // Queue key dedupe lives in RetryQueue; this path must still attempt enqueue.
+  const counts = { narration: 0, day: 0, transcript: 0 };
+  const hooks = {
+    queueNarrationFn: async () => {
+      counts.narration += 1;
+    },
+    queueDayAnalysisFn: async () => {
+      counts.day += 1;
+      return 'queued' as const;
+    },
+    queueTranscriptFn: async () => {
+      counts.transcript += 1;
+    },
+  };
+  const party = { org_id: 'org-1', job_id: 'job-1', id: 'party-1', trade: 'water' };
+  const proof = { id: 'proof-1', phase: 'after' };
+  assert.equal(await analyseUploadedProof({}, party, proof, '2026-08-31', hooks), 'queued');
+  assert.equal(await analyseUploadedProof({}, party, proof, '2026-08-31', hooks), 'queued');
+  assert.deepEqual(counts, { narration: 2, day: 2, transcript: 2 });
+});
+
+test('recordProof is the only Field Capture finalize that starts analysis', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/routes/proofOfWork.ts', import.meta.url), 'utf8');
+  assert.match(src, /export async function completeChunkedProofUpload/);
+  const complete = src.slice(
+    src.indexOf('export async function completeChunkedProofUpload'),
+    src.indexOf('export async function recordProof'),
+  );
+  assert.doesNotMatch(complete, /analyseUploadedProof/);
+  assert.match(src, /\[proof-analysis\] enqueue after upload proof=/);
+});
+

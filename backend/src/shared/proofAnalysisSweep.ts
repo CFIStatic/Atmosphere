@@ -12,7 +12,6 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
 import { claimNextProofWork, type ProofWorkKind } from './outboxClaim.js';
-import { isRetiredAnthropicModelError } from '../lib/anthropicModel.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -48,15 +47,21 @@ export function needsTranscript(status: string | null | undefined): boolean {
   );
 }
 
-/** Reclaim in-flight day readings, plus failed rows killed by a retired model pin. */
+/**
+ * Reclaim day readings that never started, are in-flight on a lost queue, or
+ * failed a provider attempt. Matches narration/transcript reclaim so a filed
+ * clip cannot sit forever after a flake.
+ */
 export function needsAnalysisReclaim(
   status: string | null | undefined,
-  error?: string | null,
+  _error?: string | null,
 ): boolean {
   return (
+    !status ||
+    status === 'idle' ||
     status === 'queued' ||
     status === 'running' ||
-    (status === 'failed' && isRetiredAnthropicModelError(error))
+    status === 'failed'
   );
 }
 
@@ -95,9 +100,11 @@ export async function sweepUnanalyzedProofs(
         'transcript_status.eq.skipped',
         'transcript_status.eq.queued',
         'transcript_status.eq.running',
+        'analysis_status.is.null',
+        'analysis_status.eq.idle',
         'analysis_status.eq.queued',
         'analysis_status.eq.running',
-        'and(analysis_status.eq.failed,analysis_error.ilike.*claude-opus-4-1*)',
+        'analysis_status.eq.failed',
       ].join(','),
     )
     .order('received_at', { ascending: true })
@@ -125,7 +132,7 @@ export async function sweepUnanalyzedProofs(
       }
     }
     if (needsAnalysisReclaim(row.analysis_status, row.analysis_error) && !leaseIsHeld(row.analysis_lease_until)) {
-      if (row.analysis_status === 'failed' && !(await markRecoverableAnalysisQueued(admin, row))) continue;
+      if (!(await ensureAnalysisQueuedForClaim(admin, row))) continue;
       if (await claimProofKind(admin, 'analysis', row.id, owner)) {
         await enqueueAnalysis(admin, party, row.work_date, row.id);
         analysis += 1;
@@ -135,15 +142,29 @@ export async function sweepUnanalyzedProofs(
   return { narration, transcript, analysis };
 }
 
-async function markRecoverableAnalysisQueued(admin: any, row: any): Promise<boolean> {
-  const { data, error } = await admin
+/**
+ * Claim RPC only accepts analysis queued/running. Stamp never-started and
+ * failed rows to queued first (CAS) so SKIP LOCKED can take them once.
+ */
+async function ensureAnalysisQueuedForClaim(admin: any, row: any): Promise<boolean> {
+  const status = row.analysis_status ?? null;
+  if (status === 'queued' || status === 'running') return true;
+
+  let builder = admin
     .from('job_proofs')
-    .update({ analysis_status: 'queued' })
-    .eq('id', row.id)
-    .eq('analysis_status', 'failed')
-    .eq('analysis_error', row.analysis_error)
-    .select('id')
-    .maybeSingle();
+    .update({ analysis_status: 'queued', analysis_error: null })
+    .eq('id', row.id);
+
+  if (status === 'failed') {
+    builder = builder.eq('analysis_status', 'failed');
+    if (row.analysis_error != null) builder = builder.eq('analysis_error', row.analysis_error);
+  } else if (status === 'idle') {
+    builder = builder.eq('analysis_status', 'idle');
+  } else {
+    builder = builder.is('analysis_status', null);
+  }
+
+  const { data, error } = await builder.select('id').maybeSingle();
   if (error) throw new Error(error.message);
   return Boolean(data?.id);
 }

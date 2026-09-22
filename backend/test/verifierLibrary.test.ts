@@ -99,6 +99,30 @@ test('an after follows the pipeline status, with the summary as the legacy fallb
     'done',
     'speech alone is enough for Ask on a talk clip',
   );
+  assert.equal(
+    analysisStateOf({
+      phase: 'after',
+      analysisStatus: 'failed',
+      hasAiSummary: false,
+      dayHasAfter: true,
+      narrationStatus: 'failed',
+      hasTranscript: true,
+    }),
+    'failed',
+    'a partial transcript must not hide a vision/provider failure',
+  );
+  assert.equal(
+    analysisStateOf({
+      phase: 'after',
+      analysisStatus: 'queued',
+      hasAiSummary: false,
+      dayHasAfter: true,
+      narrationStatus: 'running',
+      hasTranscript: true,
+    }),
+    'queued',
+    'in-flight vision outranks an early mic transcript',
+  );
 });
 
 test('flagging: anything short of a clean pass needs a person', () => {
