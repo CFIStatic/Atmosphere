@@ -590,8 +590,8 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       {
         mode: 'subscription',
         customer: customerId,
-        success_url: onboardingReturnUrl('success', returnPath),
-        cancel_url: onboardingReturnUrl('cancelled', returnPath),
+        success_url: onboardingReturnUrl('success', returnPath, interval),
+        cancel_url: onboardingReturnUrl('cancelled', returnPath, interval),
         client_reference_id: req.orgId,
         metadata: planMeta,
         subscription_data: { metadata: planMeta },
@@ -677,11 +677,16 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
   }
 });
 
-function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
+function onboardingReturnUrl(
+  kind: 'success' | 'cancelled',
+  returnPath?: string,
+  billingInterval?: 'month' | 'year',
+) {
   return signupCheckoutReturnUrl({
     base: config.stripe.onboardingReturnBase,
     kind,
     returnPath,
+    billingInterval,
   });
 }
 

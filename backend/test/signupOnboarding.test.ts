@@ -41,6 +41,29 @@ test('cancelled checkout also returns to billing', () => {
   });
   assert.match(url, /[?&]step=2(?:&|$)/);
   assert.match(url, /[?&]checkout=cancelled(?:&|$)/);
+  assert.equal(new URL(url).searchParams.get('interval'), null);
+});
+
+test('a cancelled yearly checkout keeps interval=year on the billing step', () => {
+  const cancelled = signupCheckoutReturnUrl({
+    base: 'http://localhost:5174/signup',
+    kind: 'cancelled',
+    returnPath: '/jobs',
+    billingInterval: 'year',
+  });
+  const parsed = new URL(cancelled);
+  assert.equal(parsed.searchParams.get('step'), '2');
+  assert.equal(parsed.searchParams.get('checkout'), 'cancelled');
+  assert.equal(parsed.searchParams.get('next'), '/jobs');
+  assert.equal(parsed.searchParams.get('interval'), 'year');
+
+  const success = signupCheckoutReturnUrl({
+    base: 'https://app.example/signup',
+    kind: 'success',
+    billingInterval: 'year',
+  });
+  assert.equal(new URL(success).searchParams.get('interval'), 'year');
+  assert.equal(new URL(success).searchParams.get('checkout'), 'success');
 });
 
 test('the org creator must pay when Stripe is on, then they are done', () => {

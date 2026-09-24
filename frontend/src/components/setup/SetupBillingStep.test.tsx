@@ -121,6 +121,17 @@ describe('SetupBillingStep', () => {
     expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
   });
 
+  it('rehydrates yearly checkout from a cancelled return URL', async () => {
+    const user = userEvent.setup();
+    getBillingOnboarding.mockResolvedValue({ ...unpaid, annualAvailable: true });
+    renderBilling('/signup?step=2&checkout=cancelled&interval=year');
+
+    const intervals = await screen.findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(intervals).getByRole('radio', { name: /Yearly/i })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
+  });
+
   it('keeps checkout monthly when the yearly interval is in the URL but annual prices are not configured', async () => {
     const user = userEvent.setup();
     renderBilling('/signup?step=2&interval=year');

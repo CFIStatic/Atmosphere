@@ -514,34 +514,46 @@ export function priceSignalsOnboardingPlan(
 }
 
 /**
- * Interval of an existing subscription. Annual wins if any item (or the
- * subscription metadata) says year — Stripe rejects mixed intervals.
+ * Interval of an existing subscription. A live item `recurring.interval`
+ * wins over checkout metadata — the Stripe portal can replace a yearly price
+ * with a monthly one and leave `billing_interval` stale. Annual wins if any
+ * live item is yearly (Stripe rejects mixed intervals). Price ids and
+ * metadata are used only when no item states an interval.
  */
 export function recurringIntervalFromSubscription(sub: {
   metadata?: { billing_interval?: string; atmosphere_interval?: string } | null;
   items?: { data?: Array<{ price?: AtmospherePriceLike | string | null }> };
 }): AtmosphereBillingInterval {
-  if (
-    intervalFromMetadata(sub.metadata?.billing_interval) === 'year' ||
-    intervalFromMetadata(sub.metadata?.atmosphere_interval) === 'year'
-  ) {
-    return 'year';
+  const items = sub.items?.data ?? [];
+  let sawMonthlyItem = false;
+  for (const item of items) {
+    const price = item.price;
+    if (!price || typeof price === 'string') continue;
+    if (price.recurring?.interval === 'year') return 'year';
+    if (price.recurring?.interval === 'month') sawMonthlyItem = true;
   }
-  for (const item of sub.items?.data ?? []) {
+  if (sawMonthlyItem) return 'month';
+
+  for (const item of items) {
     const price = item.price;
     if (!price) continue;
     if (typeof price === 'string') {
       if (isAnnualConfiguredPriceId(price)) return 'year';
       continue;
     }
-    if (price.recurring?.interval === 'year') return 'year';
     if (
       intervalFromMetadata(price.metadata?.billing_interval) === 'year' ||
-      intervalFromMetadata(price.metadata?.atmosphere_interval) === 'year'
+      intervalFromMetadata(price.metadata?.atmosphere_interval) === 'year' ||
+      isAnnualConfiguredPriceId(price.id)
     ) {
       return 'year';
     }
-    if (isAnnualConfiguredPriceId(price.id)) return 'year';
+  }
+  if (
+    intervalFromMetadata(sub.metadata?.billing_interval) === 'year' ||
+    intervalFromMetadata(sub.metadata?.atmosphere_interval) === 'year'
+  ) {
+    return 'year';
   }
   return 'month';
 }

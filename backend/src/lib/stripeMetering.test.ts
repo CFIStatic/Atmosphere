@@ -199,6 +199,31 @@ describe('stripe helpers', () => {
     assert.equal(isStripePriceId("price_1'),drop table"), false);
   });
 
+  it('prefers a live monthly price over stale yearly checkout metadata', () => {
+    assert.equal(
+      recurringIntervalFromSubscription({
+        metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
+        items: {
+          data: [
+            {
+              price: {
+                id: LIVE_WORK_VERIFICATION_PRICE_ID,
+                recurring: { interval: 'month' },
+              },
+            },
+          ],
+        },
+      }),
+      'month',
+    );
+    assert.equal(
+      recurringIntervalFromSubscription({
+        metadata: { billing_interval: 'year', atmosphere_interval: 'annual' },
+      }),
+      'year',
+    );
+  });
+
   it('builds short stable idempotency keys', () => {
     assert.equal(stripeIdempotencyKey('onboarding', 'org-1', 'price_1'), 'onboarding:org-1:price_1');
   });
