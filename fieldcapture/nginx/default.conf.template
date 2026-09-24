@@ -16,8 +16,9 @@ server {
   gzip on;
   gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
-  add_header X-Content-Type-Options nosniff always;
-  add_header Referrer-Policy strict-origin-when-cross-origin always;
+  # HSTS + CSP. Repeat the include in every location that sets add_header;
+  # nginx does not inherit add_header into those blocks.
+  include /etc/nginx/security-headers.conf;
 
   # Liveness for this replica only — never proxied. A cold or misconfigured
   # BFF must not fail Railway's probe: the connect screen is static files and
@@ -26,6 +27,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -33,6 +35,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -40,6 +43,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -67,11 +71,13 @@ server {
     default_type application/json;
     add_header Cache-Control "no-store" always;
     add_header Content-Type "application/json; charset=utf-8" always;
+    include /etc/nginx/security-headers.conf;
     return 503 '{"error":"Atmosphere API is not reachable. Set API_UPSTREAM on this service to the Atmosphere APIs private HTTP URL.","code":"backend_unreachable"}';
   }
 
   location / {
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }
 }

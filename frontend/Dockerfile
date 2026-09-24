@@ -28,6 +28,7 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY frontend/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY frontend/nginx/security-headers.conf /etc/nginx/security-headers.conf
 # Normalises PORT / API_UPSTREAM and picks the resolver, before envsubst runs.
 # An upstream Railway could not resolve ("http://:") used to stop nginx from
 # starting at all, which took the login page down with the API proxy.

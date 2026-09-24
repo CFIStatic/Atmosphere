@@ -14,6 +14,7 @@ ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$
 ENV API_UPSTREAM=https://atmosphere-production.up.railway.app
 
 COPY fieldcapture/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY fieldcapture/nginx/security-headers.conf /etc/nginx/security-headers.conf
 COPY fieldcapture/nginx/15-validate-fieldcapture-env.envsh /docker-entrypoint.d/15-validate-fieldcapture-env.envsh
 
 WORKDIR /tmp/fieldcapture-src

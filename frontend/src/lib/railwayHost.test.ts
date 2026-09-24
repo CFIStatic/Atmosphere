@@ -14,6 +14,32 @@ function readRoot(rel: string) {
   return read(`../${rel}`);
 }
 
+/** nginx drops parent add_header inside a location that sets its own. */
+function locationsMissingSecurityInclude(conf: string): string[] {
+  const missing: string[] = [];
+  const serverAt = conf.search(/^server \{/m);
+  const firstLocation = conf.indexOf('\n  location ', serverAt);
+  const preamble = conf.slice(serverAt, firstLocation === -1 ? conf.length : firstLocation);
+  if (!preamble.includes('include /etc/nginx/security-headers.conf;')) missing.push('server');
+  const re = /\n {2}location\s+([^{]+)\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(conf))) {
+    const bodyStart = match.index + match[0].length;
+    let depth = 1;
+    let i = bodyStart;
+    while (i < conf.length && depth > 0) {
+      if (conf[i] === '{') depth += 1;
+      else if (conf[i] === '}') depth -= 1;
+      i += 1;
+    }
+    const body = conf.slice(bodyStart, i - 1);
+    if (body.includes('add_header') && !body.includes('include /etc/nginx/security-headers.conf;')) {
+      missing.push(match[1].trim());
+    }
+  }
+  return missing;
+}
+
 describe('Railway office-app image', () => {
   it('builds from the repo root so Verifier and Field Capture are in the image', () => {
     const dockerfile = read('Dockerfile');
@@ -42,13 +68,27 @@ describe('Railway office-app image', () => {
     expect(nginx).toMatch(/location = \/index\.html \{\s*add_header Cache-Control "no-store";/);
     expect(nginx).toContain('location /assets/');
     expect(nginx).toContain('public, max-age=31536000, immutable');
-    expect(nginx).toContain(
+    expect(nginx).toContain('include /etc/nginx/security-headers.conf;');
+    expect(nginx).not.toContain('https://*.up.railway.app');
+    const headers = read('nginx/security-headers.conf');
+    expect(headers).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains"');
+    expect(headers).toContain(
       "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app",
     );
-    expect(nginx).not.toContain('https://*.up.railway.app');
+    expect(headers).toContain("script-src 'self' 'unsafe-inline'");
+    expect(headers).toContain('https://fonts.googleapis.com');
+    expect(headers).toContain('https://fonts.gstatic.com');
+    expect(headers).toContain('https://*.supabase.co');
+    expect(headers).toContain('stun:stun.l.google.com:19302');
+    expect(headers).not.toContain('https://*.up.railway.app');
+    expect(headers).not.toContain('unsafe-eval');
+    expect(read('Dockerfile')).toContain(
+      'COPY frontend/nginx/security-headers.conf /etc/nginx/security-headers.conf',
+    );
     expect(nginx).not.toMatch(/add_header X-Frame-Options/);
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
+    expect(locationsMissingSecurityInclude(nginx)).toEqual([]);
   });
 
   /**
@@ -166,6 +206,17 @@ describe('Field Capture Railway image', () => {
     expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
     expect(nginx).not.toContain('proxy_pass ${API_UPSTREAM}');
     expect(nginx).toContain('backend_unreachable');
+    expect(locationsMissingSecurityInclude(nginx)).toEqual([]);
+    const headers = readRoot('fieldcapture/nginx/security-headers.conf');
+    expect(headers).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains"');
+    expect(headers).toContain('https://platform.atmosphereteam.com');
+    expect(headers).toContain('https://*.supabase.co');
+    expect(headers).toContain("frame-ancestors 'self'");
+    expect(headers).not.toContain('fonts.googleapis.com');
+    const dockerfile = readRoot('fieldcapture/Dockerfile');
+    expect(dockerfile).toContain(
+      'COPY fieldcapture/nginx/security-headers.conf /etc/nginx/security-headers.conf',
+    );
     const apiProxy = nginx.indexOf('location /api {');
     for (const probe of ['location = /healthz', 'location = /health', 'location = /api/health']) {
       expect(nginx.indexOf(probe)).toBeLessThan(apiProxy);
