@@ -475,7 +475,13 @@ Field Capture, Platform, and the corporate site are nginx images. Each sends
 The policies allow the hosts those pages already load (`'self'`, Google Fonts
 on Platform and the marketing site, `https://*.supabase.co` for signed proof
 media and uploads, Google's default STUN servers, and `https://platform.atmosphereteam.com`
-as the Field Capture Platform iframe). They are not hash-locked: inline theme
+as the Field Capture Platform iframe). Standalone Field Capture also
+`fetch()`es and opens Office Live signaling on that office origin, so its
+`connect-src` lists `https://platform.atmosphereteam.com` and
+`wss://platform.atmosphereteam.com`. Platform and the marketing site call
+same-origin `/api` (including their WebSocket), so their `connect-src` does
+not name the office host. No page loads a Supabase Realtime client, so
+`wss://*.supabase.co` is not listed. They are not hash-locked: inline theme
 scripts and style attributes need `'unsafe-inline'`. Ask and Gemini stay on
 same-origin `/api`. Optional `VITE_SENTRY_DSN` browser reports are blocked
 until that ingest host is added — the DSN is not in the repo. `turn:` is
