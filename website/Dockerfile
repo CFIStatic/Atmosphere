@@ -22,6 +22,7 @@ ENV SITE_ORIGIN=https://atmosphereteam.com
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$
 
 COPY website/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY website/nginx/security-headers.conf /etc/nginx/security-headers.conf
 COPY website/nginx/website-start.sh /usr/local/bin/website-start.sh
 # Normalises PORT / API_UPSTREAM before envsubst, on both boot paths. Runs
 # before 20-envsubst-on-templates.sh; see the script for why nginx must never

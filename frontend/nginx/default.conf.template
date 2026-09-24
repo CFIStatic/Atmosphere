@@ -22,12 +22,11 @@ server {
   gzip on;
   gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
-  add_header X-Content-Type-Options nosniff always;
-  add_header Referrer-Policy strict-origin-when-cross-origin always;
-  # Office HTML is iframed by Field Capture's 480px web frame. CSP
-  # frame-ancestors allows the live Field Capture host and Railway hosts,
-  # not every tenant.
-  add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+  # HSTS + CSP live in security-headers.conf. Every location that sets its
+  # own add_header must include that file again — nginx does not inherit
+  # add_header into those blocks. frame-ancestors stays limited to the
+  # Field Capture hosts that iframe this office.
+  include /etc/nginx/security-headers.conf;
 
   # Liveness for this replica only — never proxied. A cold or misconfigured
   # BFF must not fail Railway's probe: the console, /login included, is static
@@ -38,6 +37,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -45,6 +45,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -52,6 +53,7 @@ server {
     access_log off;
     default_type text/plain;
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
     return 200 'ok';
   }
 
@@ -87,11 +89,13 @@ server {
     default_type application/json;
     add_header Cache-Control "no-store" always;
     add_header Content-Type "application/json; charset=utf-8" always;
+    include /etc/nginx/security-headers.conf;
     return 503 '{"error":"Atmosphere API is not reachable. Set API_UPSTREAM on this service to the Atmosphere APIs private HTTP URL.","code":"backend_unreachable"}';
   }
 
   location /assets/ {
     add_header Cache-Control "public, max-age=31536000, immutable";
+    include /etc/nginx/security-headers.conf;
     try_files $uri =404;
   }
 
@@ -100,41 +104,41 @@ server {
   location ^~ /progress {
     add_header Cache-Control "no-store" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }
 
   location ^~ /progress-view {
     add_header Cache-Control "no-store" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }
 
   location ^~ /shared {
     add_header Cache-Control "no-store" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }
 
   location ^~ /verifier/shared {
     add_header Cache-Control "no-store" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /verifier/index.html;
   }
 
   location /verifier/ {
     add_header Cache-Control "no-store";
     add_header X-Robots-Tag $share_robots_tag always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /verifier/index.html;
   }
 
   location /fieldcapture/ {
     add_header Cache-Control "no-store";
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /fieldcapture/index.html;
   }
 
@@ -144,17 +148,18 @@ server {
   location = /index.html {
     add_header Cache-Control "no-store";
     add_header X-Robots-Tag $share_robots_tag always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
   }
 
   location = /manifest.webmanifest {
     add_header Cache-Control "no-store";
+    include /etc/nginx/security-headers.conf;
   }
 
   location / {
     add_header Cache-Control "no-store";
     add_header X-Robots-Tag $share_robots_tag always;
-    add_header Content-Security-Policy "frame-ancestors 'self' https://app.atmosphereteam.com https://www.app.atmosphereteam.com https://field-capture.up.railway.app https://field-capture-production.up.railway.app https://field-capture-staging.up.railway.app" always;
+    include /etc/nginx/security-headers.conf;
     try_files $uri $uri/ /index.html;
   }
 }

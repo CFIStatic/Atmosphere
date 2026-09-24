@@ -10,6 +10,32 @@ function read(rel: string) {
   return readFileSync(resolve(repoRoot, rel), 'utf8');
 }
 
+/** nginx drops parent add_header inside a location that sets its own. */
+function locationsMissingSecurityInclude(conf: string): string[] {
+  const missing: string[] = [];
+  const serverAt = conf.search(/^server \{/m);
+  const firstLocation = conf.indexOf('\n  location ', serverAt);
+  const preamble = conf.slice(serverAt, firstLocation === -1 ? conf.length : firstLocation);
+  if (!preamble.includes('include /etc/nginx/security-headers.conf;')) missing.push('server');
+  const re = /\n {2}location\s+([^{]+)\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(conf))) {
+    const bodyStart = match.index + match[0].length;
+    let depth = 1;
+    let i = bodyStart;
+    while (i < conf.length && depth > 0) {
+      if (conf[i] === '{') depth += 1;
+      else if (conf[i] === '}') depth -= 1;
+      i += 1;
+    }
+    const body = conf.slice(bodyStart, i - 1);
+    if (body.includes('add_header') && !body.includes('include /etc/nginx/security-headers.conf;')) {
+      missing.push(match[1].trim());
+    }
+  }
+  return missing;
+}
+
 describe('Railway corporate-website image', () => {
   it('starts nginx via the image entrypoint and never inherits node dist/index.js', () => {
     const dockerfile = read('website/Dockerfile');
@@ -42,6 +68,20 @@ describe('Railway corporate-website image', () => {
     expect(nginx).toContain('try_files $uri $uri.html $uri/ =404');
     expect(nginx).toContain('if ($host = www.atmosphereteam.com)');
     expect(nginx).toContain('return 301 https://atmosphereteam.com$request_uri');
+    expect(nginx).toContain('include /etc/nginx/security-headers.conf;');
+    expect(locationsMissingSecurityInclude(nginx)).toEqual([]);
+    const headers = read('website/nginx/security-headers.conf');
+    expect(headers).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains"');
+    expect(headers).toContain('https://fonts.googleapis.com');
+    expect(headers).toContain('https://fonts.gstatic.com');
+    expect(headers).toContain("frame-ancestors 'none'");
+    expect(headers).toContain("frame-src 'none'");
+    expect(headers).not.toContain('supabase');
+    expect(headers).not.toContain('unsafe-eval');
+    const dockerfile = read('website/Dockerfile');
+    expect(dockerfile).toContain(
+      'COPY website/nginx/security-headers.conf /etc/nginx/security-headers.conf',
+    );
   });
 
   /**
