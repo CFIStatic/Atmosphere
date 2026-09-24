@@ -172,7 +172,7 @@ describe('Railway corporate-website image', () => {
 
     const page = read('website/hardware.html');
     expect(page).toContain('Field Capture Chest Mount');
-    expect(page).toContain('Buy — $49.99');
+    expect(page).toContain('Buy — $99.99');
     expect(page).toContain('What\'s in the box');
     expect(page).toContain('4.7–6.7');
     expect(page).toContain('digital setup guide');
@@ -195,14 +195,14 @@ describe('Railway corporate-website image', () => {
     const graph = JSON.parse(ld![1] as string) as {
       '@graph': Array<{ offers?: { price?: string; availability?: string } }>;
     };
-    expect(graph['@graph'][0]?.offers?.price).toBe('49.99');
+    expect(graph['@graph'][0]?.offers?.price).toBe('99.99');
     expect(graph['@graph'][0]?.offers?.availability).toBe('https://schema.org/InStock');
     expect(page).not.toMatch(/id="hardware-buy"[^>]*href="mailto:/);
 
     const js = read('website/assets/site.js');
     expect(js).toContain('ATMOSPHERE_HARDWARE_CHECKOUT_URL');
     expect(js).toContain('Checkout coming online');
-    expect(js).toContain('Buy — $49.99');
+    expect(js).toContain('Buy — $99.99');
 
     const preview = read('website/build-preview.py');
     expect(preview).toContain("('hardware', 'hardware.html')");
@@ -214,7 +214,7 @@ describe('Railway corporate-website image', () => {
     expect(field).toContain('href="hardware.html"');
   });
 
-  it('wires Buy to the live $49.99 Payment Link and can still disable when empty', () => {
+  it('wires Buy to the live $99.99 Payment Link and can still disable when empty', () => {
     const html = read('website/hardware.html');
     const js = read('website/assets/site.js');
     const stubMatchMedia = (win: { matchMedia: (q: string) => { matches: boolean } }) => {
@@ -225,7 +225,7 @@ describe('Railway corporate-website image', () => {
     stubMatchMedia(on.window);
     on.window.eval(js);
     const onBuy = on.window.document.getElementById('hardware-buy');
-    expect(onBuy?.textContent).toBe('Buy — $49.99');
+    expect(onBuy?.textContent).toBe('Buy — $99.99');
     expect(onBuy?.getAttribute('href')).toBe('https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01');
     expect(onBuy?.getAttribute('aria-disabled')).toBeNull();
     expect(onBuy?.classList.contains('is-disabled')).toBe(false);
@@ -264,6 +264,10 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('$125/mo');
     expect(page).toContain('usage billed the day it runs');
     expect(page).toContain('Chest Mount');
+    expect(page).toContain('$99.99');
+    expect(page).toContain('/ month');
+    expect(page).not.toContain('$49.99');
+    expect(page).not.toContain('>per month<');
     expect(page).toContain('Homeowners invited to a job file pay nothing');
     expect(page).toContain('Office-only Global Admins');
     expect(page).not.toContain('10×');

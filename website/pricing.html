@@ -18,9 +18,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/site.css?v=20260921-logo" />
+  <link rel="stylesheet" href="assets/site.css?v=20260924-price" />
   <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark')p=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',p);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"Every self-serve plan includes Field Capture and the Evidence Platform. Starter is $399/mo with 1 Field Capture account. Work Verification is $849/mo with 3 accounts. Scale is $1,999/mo with 10 accounts. Extra accounts are $125/mo each. Usage is billed the day it is used."}},{"@type":"Question","name":"How is usage billed?","acceptedAnswer":{"@type":"Answer","text":"Usage (AI and token analysis) is billed the day it is used. You are not billed on a per-job dollar rate, and you are not billed directly on LLM tokens or model names."}},{"@type":"Question","name":"How many Field Capture accounts are included?","acceptedAnswer":{"@type":"Answer","text":"Starter includes 1 Field Capture account, Work Verification includes 3, and Scale includes 10. Additional accounts are $125 per month each. Office-only Global Admins do not use a seat unless they also use Field Capture. Homeowners invited to a job file pay nothing."}},{"@type":"Question","name":"What is the Field Capture Chest Mount?","acceptedAnswer":{"@type":"Answer","text":"An optional one-time hardware add-on at $49.99. It ships in 2–5 days. Field Capture software does not require the mount."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody."}},{"@type":"Question","name":"Can plans be customized?","acceptedAnswer":{"@type":"Answer","text":"Enterprise terms are arranged with sales. Self-serve plans are Starter, Work Verification, and Scale."}},{"@type":"Question","name":"Do prices increase over time?","acceptedAnswer":{"@type":"Answer","text":"Yes. Monthly plan fees, extra Field Capture seats, and usage rates increase by 10% each year on the anniversary of your paid plan start, with 30 days advance notice by email. The one-time Chest Mount hardware purchase is excluded."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"Production AI vendors we use are configured not to train on customer data. We do not use your organization's job or account data to train shared models available to other customers. Within your organization, features may use your own runs to improve how work is routed for you, behind org isolation."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"Every self-serve plan includes Field Capture and the Evidence Platform. Starter is $399/mo with 1 Field Capture account. Work Verification is $849/mo with 3 accounts. Scale is $1,999/mo with 10 accounts. Extra accounts are $125/mo each. Usage is billed the day it is used."}},{"@type":"Question","name":"How is usage billed?","acceptedAnswer":{"@type":"Answer","text":"Usage (AI and token analysis) is billed the day it is used. You are not billed on a per-job dollar rate, and you are not billed directly on LLM tokens or model names."}},{"@type":"Question","name":"How many Field Capture accounts are included?","acceptedAnswer":{"@type":"Answer","text":"Starter includes 1 Field Capture account, Work Verification includes 3, and Scale includes 10. Additional accounts are $125 per month each. Office-only Global Admins do not use a seat unless they also use Field Capture. Homeowners invited to a job file pay nothing."}},{"@type":"Question","name":"What is the Field Capture Chest Mount?","acceptedAnswer":{"@type":"Answer","text":"An optional one-time hardware add-on at $99.99. It ships in 2–5 days. Field Capture software does not require the mount."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody."}},{"@type":"Question","name":"Can plans be customized?","acceptedAnswer":{"@type":"Answer","text":"Enterprise terms are arranged with sales. Self-serve plans are Starter, Work Verification, and Scale."}},{"@type":"Question","name":"Do prices increase over time?","acceptedAnswer":{"@type":"Answer","text":"Yes. Monthly plan fees, extra Field Capture seats, and usage rates increase by 10% each year on the anniversary of your paid plan start, with 30 days advance notice by email. The one-time Chest Mount hardware purchase is excluded."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"Production AI vendors we use are configured not to train on customer data. We do not use your organization's job or account data to train shared models available to other customers. Within your organization, features may use your own runs to improve how work is routed for you, behind org isolation."}}]}</script>
 </head>
 <body>
 
@@ -108,7 +108,7 @@
       <strong>Starter</strong> $399/mo (1 seat),
       <strong>Work Verification</strong> $849/mo (3 seats),
       <strong>Scale</strong> $1,999/mo (10 seats).
-      Extra Field Capture seats $125/mo. Chest Mount $49.99 one-time.
+      Extra Field Capture seats $125/mo. Chest Mount $99.99 one-time.
       Homeowners invited to a job file pay nothing.
     </p>
   </div>
@@ -138,8 +138,7 @@
     <div class="plans plans-3">
       <div class="plan">
         <div class="plan-name mono">Starter</div>
-        <div class="price"><span class="amt">$399</span></div>
-        <p class="per">per month</p>
+        <div class="price"><span class="amt">$399</span><span class="per">/ month</span></div>
         <p class="plan-desc">1 Field Capture seat · Evidence Platform</p>
         <a class="btn-outline plan-cta" href="signup.html?plan=starter">Get started</a>
       </div>
@@ -147,23 +146,21 @@
       <div class="plan plan-featured">
         <span class="flag mono">RECOMMENDED</span>
         <div class="plan-name mono">Work Verification</div>
-        <div class="price"><span class="amt">$849</span></div>
-        <p class="per">per month</p>
+        <div class="price"><span class="amt">$849</span><span class="per">/ month</span></div>
         <p class="plan-desc">3 Field Capture seats · Evidence Platform</p>
         <a class="btn plan-cta" href="signup.html?plan=work_verification">Get started</a>
       </div>
 
       <div class="plan">
         <div class="plan-name mono">Scale</div>
-        <div class="price"><span class="amt">$1,999</span></div>
-        <p class="per">per month</p>
+        <div class="price"><span class="amt">$1,999</span><span class="per">/ month</span></div>
         <p class="plan-desc">10 Field Capture seats · Evidence Platform</p>
         <a class="btn-outline plan-cta" href="signup.html?plan=scale">Get started</a>
       </div>
     </div>
     <p class="plans-note">
       Extra Field Capture seats <strong>$125/mo</strong> · usage billed the day it runs ·
-      optional <a href="hardware.html">Chest Mount</a> <strong>$49.99</strong> one-time.
+      optional <a href="hardware.html">Chest Mount</a> <strong>$99.99</strong> one-time.
       Enterprise: <a href="contact.html">contact us</a>.
       Plan fees and seats increase <strong>10% annually</strong> (30-day notice); Chest Mount excluded.
     </p>
@@ -229,7 +226,7 @@
       <div class="sec-card">
         <span class="kbd mono">03</span>
         <h3>Usage — same day</h3>
-        <p>AI analysis charged the day it runs. Chest Mount is a separate $49.99 one-time buy.</p>
+        <p>AI analysis charged the day it runs. Chest Mount is a separate $99.99 one-time buy.</p>
       </div>
     </div>
     <div class="pricing-invoice" style="margin-top: 28px;">
@@ -312,7 +309,7 @@
       <details>
         <summary>What is the Field Capture Chest Mount?</summary>
         <p>
-          An optional one-time hardware add-on at <strong>$49.99</strong>. It ships in
+          An optional one-time hardware add-on at <strong>$99.99</strong>. It ships in
           2–5 days. Field Capture software does not require the mount.
           <a href="hardware.html">See the kit</a>.
         </p>

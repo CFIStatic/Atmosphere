@@ -690,10 +690,25 @@ a { color: inherit; }
 }
 .plan .plan-name { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
 .plan .price {
-  margin: 12px 0 0; font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.plan .per { font-size: 13px; color: var(--ink-faint); margin: 4px 0 0; }
+.plan .per {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--ink-faint);
+  margin: 0;
+  white-space: nowrap;
+}
 .plan .plan-desc { margin: 14px 0 18px; font-size: 14.5px; color: var(--ink-soft); }
 .plan ul.checks { list-style: none; margin: 0 0 28px; padding: 0; }
 .plan ul.checks li {
@@ -725,7 +740,7 @@ a { color: inherit; }
 .plans-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .plans-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .plans-6 { grid-template-columns: 1fr; } }
-.plan .price .amt { font-variant-numeric: tabular-nums; }
+.plan .price .amt { flex: 0 0 auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* The four products share this page; the strip says so without a fake switcher. */
 .prod-strip {
