@@ -40,6 +40,18 @@ function locationsMissingSecurityInclude(conf: string): string[] {
   return missing;
 }
 
+/** One CSP directive, without the trailing semicolon. */
+function cspDirective(conf: string, name: string): string {
+  const policy = conf.match(/Content-Security-Policy "([^"]+)"/);
+  if (!policy) return '';
+  return (
+    policy[1]
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part === name || part.startsWith(`${name} `)) ?? ''
+  );
+}
+
 describe('Railway office-app image', () => {
   it('builds from the repo root so Verifier and Field Capture are in the image', () => {
     const dockerfile = read('Dockerfile');
@@ -80,6 +92,12 @@ describe('Railway office-app image', () => {
     expect(headers).toContain('https://fonts.gstatic.com');
     expect(headers).toContain('https://*.supabase.co');
     expect(headers).toContain('stun:stun.l.google.com:19302');
+    // API, Office Live signaling, and computer-use sockets are same-origin.
+    // Signed Supabase URLs are HTTPS only (no Realtime client).
+    expect(cspDirective(headers, 'connect-src')).toBe(
+      "connect-src 'self' https://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com stun:stun.l.google.com:19302 stun:stun1.l.google.com:19302 turn:",
+    );
+    expect(cspDirective(headers, 'connect-src').split(/\s+/)).not.toContain('*');
     expect(headers).not.toContain('https://*.up.railway.app');
     expect(headers).not.toContain('unsafe-eval');
     expect(read('Dockerfile')).toContain(
@@ -211,6 +229,15 @@ describe('Field Capture Railway image', () => {
     expect(headers).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains"');
     expect(headers).toContain('https://platform.atmosphereteam.com');
     expect(headers).toContain('https://*.supabase.co');
+    // resolveApiBase() posts login to the office origin; liveSignalUrl()
+    // opens wss there. https:// does not cover wss://. No bare * source.
+    expect(cspDirective(headers, 'connect-src')).toBe(
+      "connect-src 'self' https://*.supabase.co https://platform.atmosphereteam.com wss://platform.atmosphereteam.com stun:stun.l.google.com:19302 stun:stun1.l.google.com:19302 turn:",
+    );
+    expect(cspDirective(headers, 'connect-src').split(/\s+/)).not.toContain('*');
+    expect(cspDirective(headers, 'frame-src')).toBe(
+      "frame-src 'self' https://platform.atmosphereteam.com",
+    );
     expect(headers).toContain("frame-ancestors 'self'");
     expect(headers).not.toContain('fonts.googleapis.com');
     const dockerfile = readRoot('fieldcapture/Dockerfile');

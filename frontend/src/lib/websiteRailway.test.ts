@@ -36,6 +36,18 @@ function locationsMissingSecurityInclude(conf: string): string[] {
   return missing;
 }
 
+/** One CSP directive, without the trailing semicolon. */
+function cspDirective(conf: string, name: string): string {
+  const policy = conf.match(/Content-Security-Policy "([^"]+)"/);
+  if (!policy) return '';
+  return (
+    policy[1]
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part === name || part.startsWith(`${name} `)) ?? ''
+  );
+}
+
 describe('Railway corporate-website image', () => {
   it('starts nginx via the image entrypoint and never inherits node dist/index.js', () => {
     const dockerfile = read('website/Dockerfile');
@@ -74,6 +86,12 @@ describe('Railway corporate-website image', () => {
     expect(headers).toContain('Strict-Transport-Security "max-age=31536000; includeSubDomains"');
     expect(headers).toContain('https://fonts.googleapis.com');
     expect(headers).toContain('https://fonts.gstatic.com');
+    // Careers and contact POST same-origin /api. Sign-in is a navigation
+    // to the office, not a fetch. Stripe checkout is a top-level link.
+    expect(cspDirective(headers, 'connect-src')).toBe(
+      "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com",
+    );
+    expect(cspDirective(headers, 'connect-src').split(/\s+/)).not.toContain('*');
     expect(headers).toContain("frame-ancestors 'none'");
     expect(headers).toContain("frame-src 'none'");
     expect(headers).not.toContain('supabase');
