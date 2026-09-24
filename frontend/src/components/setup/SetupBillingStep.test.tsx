@@ -77,7 +77,7 @@ describe('SetupBillingStep', () => {
     expect(screen.getByText('Work Verification')).toBeInTheDocument();
     expect(screen.getByText('Starter')).toBeInTheDocument();
     expect(screen.getByText('Scale')).toBeInTheDocument();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();
@@ -121,13 +121,19 @@ describe('SetupBillingStep', () => {
     expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
   });
 
-  it('rehydrates yearly checkout from a cancelled return URL', async () => {
+  it('restores the yearly toggle when a cancelled checkout returns with interval=year', async () => {
     const user = userEvent.setup();
     getBillingOnboarding.mockResolvedValue({ ...unpaid, annualAvailable: true });
-    renderBilling('/signup?step=2&checkout=cancelled&interval=year');
+    render(
+      <MemoryRouter initialEntries={['/signup?step=2&checkout=cancelled&interval=year']}>
+        <SetupBillingStep redirectTo="/jobs" checkoutOutcome="cancelled" onComplete={() => undefined} />
+      </MemoryRouter>,
+    );
 
     const intervals = await screen.findByRole('radiogroup', { name: 'Billing interval' });
     expect(within(intervals).getByRole('radio', { name: /Yearly/i })).toBeChecked();
+    expect(screen.getAllByText('Per Year')).toHaveLength(3);
+    expect(screen.getByText('Checkout cancelled. Add a payment method when you are ready.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
     expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
   });
@@ -138,7 +144,7 @@ describe('SetupBillingStep', () => {
 
     expect(await screen.findByRole('button', { name: 'Continue to Stripe' })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Yearly/i })).toBeNull();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
     expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'month');
   });
