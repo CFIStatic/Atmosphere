@@ -1,14 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { config } from '../config.js';
 import {
+  annualBillingAvailable,
   atmospherePlanCodeForPriceId,
+  atmospherePlanCodeFromPrice,
+  extraSeatPriceIdForInterval,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
+  isExtraSeatLineItem,
   isExtraSeatOnlySubscription,
   isExtraSeatPriceId,
   isStripePriceId,
   mapSubscriptionStatus,
+  normalizeAtmosphereBillingInterval,
+  recurringIntervalFromSubscription,
   resolveSelfServePriceId,
   shouldCancelOrgBillingForDeletedSubscription,
   stripeIdempotencyKey,
@@ -62,6 +69,88 @@ describe('self-serve price resolution', () => {
     assert.equal(atmospherePlanCodeForPriceId(LEGACY_SCALE_PRICE_ID), 'scale');
     assert.equal(atmospherePlanCodeForPriceId(LEGACY_WORK_VERIFICATION_PRICE_ID), 'work_verification');
     assert.equal(isExtraSeatPriceId(LEGACY_EXTRA_FC_SEAT_PRICE_ID), true);
+    assert.equal(resolveSelfServePriceId('starter', 'year'), null);
+    assert.equal(resolveSelfServePriceId('scale', 'year'), null);
+    assert.equal(resolveSelfServePriceId('work_verification', 'year'), null);
+    assert.equal(extraSeatPriceIdForInterval('year'), null);
+    assert.equal(annualBillingAvailable(), false);
+    assert.equal(normalizeAtmosphereBillingInterval('annual'), 'year');
+    assert.equal(normalizeAtmosphereBillingInterval(undefined), 'month');
+  });
+
+  it('maps configured annual price ids and keeps monthly checkout on the live prices', () => {
+    const previous = {
+      starterAnnualPriceId: config.stripe.starterAnnualPriceId,
+      onboardingAnnualPriceId: config.stripe.onboardingAnnualPriceId,
+      scaleAnnualPriceId: config.stripe.scaleAnnualPriceId,
+      extraSeatAnnualPriceId: config.stripe.extraSeatAnnualPriceId,
+    };
+    config.stripe.starterAnnualPriceId = 'price_annStarter';
+    config.stripe.onboardingAnnualPriceId = 'price_annWork';
+    config.stripe.scaleAnnualPriceId = 'price_annScale';
+    config.stripe.extraSeatAnnualPriceId = 'price_annSeat';
+    try {
+      assert.equal(annualBillingAvailable(), true);
+      assert.equal(resolveSelfServePriceId('starter', 'year'), 'price_annStarter');
+      assert.equal(resolveSelfServePriceId('work_verification', 'year'), 'price_annWork');
+      assert.equal(resolveSelfServePriceId('scale', 'year'), 'price_annScale');
+      assert.equal(resolveSelfServePriceId('starter', 'month'), LIVE_STARTER_PRICE_ID);
+      assert.equal(extraSeatPriceIdForInterval('year'), 'price_annSeat');
+      assert.equal(extraSeatPriceIdForInterval('month'), LIVE_EXTRA_FC_SEAT_PRICE_ID);
+      assert.equal(atmospherePlanCodeForPriceId('price_annStarter'), 'starter');
+      assert.equal(atmospherePlanCodeForPriceId('price_annWork'), 'work_verification');
+      assert.equal(atmospherePlanCodeForPriceId('price_annScale'), 'scale');
+      assert.equal(isConfiguredOnboardingPrice('price_annScale'), true);
+      assert.equal(isExtraSeatPriceId('price_annSeat'), true);
+      assert.equal(
+        atmospherePlanCodeFromPrice({
+          id: 'price_unknownAnnual',
+          metadata: { atmosphere_plan_code: 'scale', billing_interval: 'year', atmosphere_interval: 'year' },
+        }),
+        'scale',
+      );
+      assert.equal(
+        isExtraSeatLineItem({
+          price: { id: 'price_unknownSeat', metadata: { atmosphere_plan_code: 'extra_fc_seat' } },
+        }),
+        true,
+      );
+      assert.equal(
+        recurringIntervalFromSubscription({
+          items: {
+            data: [
+              {
+                price: {
+                  id: 'price_unknownAnnual',
+                  recurring: { interval: 'year' },
+                  metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
+                },
+              },
+            ],
+          },
+        }),
+        'year',
+      );
+      assert.equal(
+        extraSeatQuantityFromSubscription({
+          items: { data: [{ price: { id: 'price_annSeat', metadata: { atmosphere_plan_code: 'extra_fc_seat' } }, quantity: 4 }] },
+        }),
+        4,
+      );
+    } finally {
+      Object.assign(config.stripe, previous);
+    }
+  });
+
+  it('ignores annual price placeholders that are not Stripe price ids', () => {
+    const previous = config.stripe.starterAnnualPriceId;
+    config.stripe.starterAnnualPriceId = 'price_…';
+    try {
+      assert.equal(resolveSelfServePriceId('starter', 'year'), null);
+      assert.equal(annualBillingAvailable(), false);
+    } finally {
+      config.stripe.starterAnnualPriceId = previous;
+    }
   });
 });
 

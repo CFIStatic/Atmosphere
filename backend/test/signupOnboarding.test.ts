@@ -185,6 +185,10 @@ test('onboarding checkout accepts a self-serve plan and defaults when omitted', 
     'work_verification',
   );
   assert.throws(() => onboardingCheckoutSchema.parse({ planCode: 'enterprise' }));
+  assert.equal(onboardingCheckoutSchema.parse({}).billingInterval, undefined);
+  assert.equal(onboardingCheckoutSchema.parse({ billingInterval: 'year' }).billingInterval, 'year');
+  assert.equal(onboardingCheckoutSchema.parse({ billingInterval: 'annual' }).billingInterval, 'annual');
+  assert.throws(() => onboardingCheckoutSchema.parse({ billingInterval: 'weekly' }));
 });
 
 test('the website signup defaults are a valid create-org payload', () => {

@@ -4,7 +4,10 @@ import {
   DEFAULT_ONBOARDING_PLAN_CODE,
   atmospherePlan,
   fieldCaptureSeatLabel,
+  parseAtmosphereBillingInterval,
   parseAtmospherePlanCode,
+  planAnnualCents,
+  planPickerFootnote,
 } from './atmospherePlans';
 
 describe('atmosphere self-serve plans', () => {
@@ -27,6 +30,15 @@ describe('atmosphere self-serve plans', () => {
     expect(atmospherePlan('work_verification').monthlyCents).toBe(84900);
     expect(atmospherePlan('scale').includedFcSeats).toBe(10);
     expect(atmospherePlan('scale').monthlyCents).toBe(199900);
+    expect(planAnnualCents(atmospherePlan('starter'))).toBe(399000);
+    expect(planAnnualCents(atmospherePlan('work_verification'))).toBe(849000);
+    expect(planAnnualCents(atmospherePlan('scale'))).toBe(1999000);
+    expect(parseAtmosphereBillingInterval(undefined)).toBe('month');
+    expect(parseAtmosphereBillingInterval('annual')).toBe('year');
+    expect(planPickerFootnote('month')).toMatch(/\$125\/mo/);
+    expect(planPickerFootnote('year')).toMatch(/\$1,250\/yr/);
+    expect(planPickerFootnote('year')).toMatch(/non-refundable/);
+    expect(planPickerFootnote('year')).toMatch(/billed the day it is used/);
   });
 
   it('formats Field Capture seat copy without included', () => {

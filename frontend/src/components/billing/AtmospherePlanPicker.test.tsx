@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -88,5 +88,60 @@ describe('AtmospherePlanPicker', () => {
     expect(starter.closest('label')?.className).toMatch(/border-brand-500/);
     expect(work.closest('label')?.className).toMatch(/border-2/);
     expect(work.closest('label')?.className).not.toMatch(/border-brand-500/);
+  });
+
+  it('hides the yearly toggle until annual prices are configured', () => {
+    render(<Picker />);
+    expect(screen.queryByRole('radio', { name: /Monthly/i })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Yearly/i })).toBeNull();
+    expect(screen.getAllByText('/ month')).toHaveLength(3);
+  });
+
+  it('shows yearly prices, the free-months badge, and the annual seat note', async () => {
+    const user = userEvent.setup();
+    function Yearly() {
+      const [value, setValue] = useState<'starter' | 'work_verification' | 'scale'>('work_verification');
+      const [interval, setInterval] = useState<'month' | 'year'>('month');
+      return (
+        <AtmospherePlanPicker
+          plans={ATMOSPHERE_SELF_SERVE_PLANS}
+          value={value}
+          onChange={setValue}
+          interval={interval}
+          onIntervalChange={setInterval}
+          annualAvailable
+        />
+      );
+    }
+    render(<Yearly />);
+
+    const intervals = screen.getByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(intervals).getByRole('radio', { name: /^Monthly/i })).toBeChecked();
+    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getByText(/\$125\/mo/)).toBeInTheDocument();
+
+    await user.click(within(intervals).getByRole('radio', { name: /Yearly/i }));
+    expect(within(intervals).getByRole('radio', { name: /Yearly/i })).toBeChecked();
+    expect(screen.getByText('2 months free')).toBeInTheDocument();
+    expect(screen.getByText('$3,990')).toBeInTheDocument();
+    expect(screen.getByText('$8,490')).toBeInTheDocument();
+    expect(screen.getByText('$19,990')).toBeInTheDocument();
+    expect(screen.getAllByText('/ year')).toHaveLength(3);
+    expect(screen.getByText('$332.50/mo billed yearly')).toBeInTheDocument();
+    expect(screen.getByText('$707.50/mo billed yearly')).toBeInTheDocument();
+    expect(screen.getByText('$1,665.83/mo billed yearly')).toBeInTheDocument();
+    for (const amount of ['$3,990', '$8,490', '$19,990']) {
+      const price = screen.getByText(amount);
+      expect(price.className).toMatch(/whitespace-nowrap/);
+      expect(price.nextElementSibling?.textContent).toBe('/ year');
+      expect(price.nextElementSibling?.className).toMatch(/text-sm/);
+      expect(price.nextElementSibling?.className).toMatch(/text-ink-500/);
+    }
+    const note = screen.getByText(/Extra Field Capture seats are \$1,250\/yr each/);
+    expect(note.textContent).toMatch(/AI\/token usage is billed the day it is used/);
+    expect(note.textContent).toMatch(/locked for the term/);
+    expect(note.textContent).toMatch(/non-refundable/);
+    expect(note.textContent).toMatch(/cancel at the end of the term/);
+    expect(screen.queryByText(/\$125\/mo/)).toBeNull();
   });
 });

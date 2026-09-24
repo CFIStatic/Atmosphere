@@ -5,9 +5,12 @@
  * then lookup by `atmosphere_plan_code` metadata — do not mint duplicates.
  * Secret keys never live here.
  *
- * Self-serve platform plans: Starter ($399 / 1 seat), Work Verification
- * ($849 / 3 seats, default), Scale ($1,999 / 10 seats). Extra Field Capture
- * seats are $125/mo. Enterprise is contact-sales only — no fourth SKU.
+ * Self-serve platform plans: Starter ($399/mo or $3,990/yr, 1 seat), Work
+ * Verification ($849/mo or $8,490/yr, 3 seats, default), Scale ($1,999/mo or
+ * $19,990/yr, 10 seats). Extra Field Capture seats are $125/mo or $1,250/yr.
+ * Yearly is 10× the monthly price (2 months free). Enterprise is contact-sales
+ * only — no fourth SKU. Annual Stripe price ids are env-only; they are not
+ * pinned here because those prices are created separately.
  */
 
 export const STARTER_PLAN_CODE = 'starter';
@@ -28,6 +31,8 @@ export interface AtmosphereSelfServePlan {
   code: AtmosphereSelfServePlanCode;
   name: string;
   monthlyCents: number;
+  /** Prepaid annual amount (10× monthly — 2 months free). */
+  annualCents: number;
   includedFcSeats: number;
   recommended: boolean;
   /** Live product id when known. Used by stripe:sync so re-runs reuse the SKU. */
@@ -77,6 +82,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
     code: STARTER_PLAN_CODE,
     name: 'Starter',
     monthlyCents: 39_900,
+    annualCents: 399_000,
     includedFcSeats: 1,
     recommended: false,
     knownProductId: LIVE_STARTER_PRODUCT_ID,
@@ -86,6 +92,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
     code: WORK_VERIFICATION_PLAN_CODE,
     name: 'Work Verification',
     monthlyCents: 84_900,
+    annualCents: 849_000,
     includedFcSeats: 3,
     recommended: true,
     knownProductId: LIVE_WORK_VERIFICATION_PRODUCT_ID,
@@ -95,6 +102,7 @@ export const ATMOSPHERE_SELF_SERVE_PLANS: Record<
     code: SCALE_PLAN_CODE,
     name: 'Scale',
     monthlyCents: 199_900,
+    annualCents: 1_999_000,
     includedFcSeats: 10,
     recommended: false,
     knownProductId: LIVE_SCALE_PRODUCT_ID,
@@ -107,6 +115,15 @@ export const INCLUDED_FC_SEATS = ATMOSPHERE_SELF_SERVE_PLANS.work_verification.i
 export const WORK_VERIFICATION_MONTHLY_CENTS =
   ATMOSPHERE_SELF_SERVE_PLANS.work_verification.monthlyCents;
 export const EXTRA_FC_SEAT_MONTHLY_CENTS = 12_500;
+/** $1,250/yr — 10× monthly, same 2-months-free annual offer as the plans. */
+export const EXTRA_FC_SEAT_ANNUAL_CENTS = 125_000;
+
+/** Stripe metadata uses either code for the extra-seat price. */
+export const EXTRA_SEAT_PLAN_CODES = [FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE, 'extra_fc_seat'] as const;
+
+export function isExtraSeatPlanCode(value: string | null | undefined): boolean {
+  return EXTRA_SEAT_PLAN_CODES.includes(value as (typeof EXTRA_SEAT_PLAN_CODES)[number]);
+}
 export const CHEST_MOUNT_PRICE_CENTS = 4_999;
 
 export function isAtmosphereSelfServePlanCode(

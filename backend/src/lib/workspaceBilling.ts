@@ -11,7 +11,7 @@ import {
   selfServePlanList,
   type AtmosphereSelfServePlan,
 } from './stripeCatalog.js';
-import { resolveSelfServePriceId } from './stripe.js';
+import { resolveSelfServePriceId, type AtmosphereBillingInterval } from './stripe.js';
 import { isBillingExemptEmail, isBillingExemptOrg, loadOrgCreatorEmail } from './billingExempt.js';
 import { billingOnboardingGate } from './signupOnboarding.js';
 
@@ -246,8 +246,12 @@ export async function resolveOnboardingPriceId(
   supabase: SupabaseClient,
   orgId: string,
   planCode?: string | null,
+  interval: AtmosphereBillingInterval = 'month',
 ): Promise<string | null> {
-  const fromEnv = resolveSelfServePriceId(planCode);
+  // Annual prices are env-only. Never fall through to the monthly metering row.
+  if (interval === 'year') return resolveSelfServePriceId(planCode, 'year');
+
+  const fromEnv = resolveSelfServePriceId(planCode, 'month');
   if (planCode && planCode !== 'work_verification') {
     return fromEnv;
   }

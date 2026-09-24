@@ -338,6 +338,15 @@ export const config = {
     scalePriceId: process.env.STRIPE_SCALE_PRICE_ID ?? '',
     /** Extra Field Capture seat $125/mo. Defaults to the live Jettx catalog id. */
     extraSeatPriceId: process.env.STRIPE_EXTRA_SEAT_PRICE_ID ?? '',
+    /**
+     * Annual prices ($3,990 / $8,490 / $19,990 / $1,250). No live fallback —
+     * yearly checkout stays hidden until every one of these is a price id.
+     * Placeholders until the annual Stripe prices exist.
+     */
+    starterAnnualPriceId: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID ?? '',
+    onboardingAnnualPriceId: process.env.STRIPE_ONBOARDING_ANNUAL_PRICE_ID ?? '',
+    scaleAnnualPriceId: process.env.STRIPE_SCALE_ANNUAL_PRICE_ID ?? '',
+    extraSeatAnnualPriceId: process.env.STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID ?? '',
     /** Base path for signup billing return URLs (step 2 + checkout query params appended). */
     onboardingReturnBase:
       process.env.STRIPE_ONBOARDING_RETURN_URL ?? `${frontendOrigins[0]}/signup`,

@@ -23,6 +23,7 @@ const queueRedirect = vi.hoisted(() => vi.fn());
 
 const apiMocks = vi.hoisted(() => ({
   getBillingOnboarding: vi.fn().mockResolvedValue({ required: false, complete: true }),
+  getSelfServeBilling: vi.fn().mockResolvedValue({ annualAvailable: false, plans: [] }),
   startOnboardingCheckout: vi.fn(),
   updateProfile: vi.fn(),
   createOrg: vi.fn(),
@@ -73,6 +74,7 @@ describe('SignupPage', () => {
     apiMocks.getBillingOnboarding
       .mockReset()
       .mockResolvedValue({ required: false, complete: true });
+    apiMocks.getSelfServeBilling.mockReset().mockResolvedValue({ annualAvailable: false, plans: [] });
     apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -104,7 +104,32 @@ describe('SetupBillingStep', () => {
     expect(await screen.findByRole('radio', { name: /Work Verification/i })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: /Starter/i }));
     await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
-    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'starter');
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'starter', 'month');
+  });
+
+  it('checks out the yearly price when annual billing is configured', async () => {
+    const user = userEvent.setup();
+    getBillingOnboarding.mockResolvedValue({ ...unpaid, annualAvailable: true });
+    renderBilling();
+
+    const intervals = await screen.findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(intervals).getByRole('radio', { name: /^Monthly/i })).toBeChecked();
+    await user.click(within(intervals).getByRole('radio', { name: /Yearly/i }));
+    expect(screen.getByText('$8,490')).toBeInTheDocument();
+    expect(screen.getByText(/\$1,250\/yr/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
+  });
+
+  it('keeps checkout monthly when the yearly interval is in the URL but annual prices are not configured', async () => {
+    const user = userEvent.setup();
+    renderBilling('/signup?step=2&interval=year');
+
+    expect(await screen.findByRole('button', { name: 'Continue to Stripe' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /Yearly/i })).toBeNull();
+    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'month');
   });
 
   it('preselects a plan from the signup URL', async () => {

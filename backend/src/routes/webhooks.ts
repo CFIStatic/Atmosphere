@@ -5,11 +5,13 @@ import { persistExtraFcSeats } from '../lib/fieldCaptureSeats.js';
 import {
   adminClient,
   atmospherePlanCodeForPriceId,
+  atmospherePlanCodeFromPrice,
   cardDetails,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
   isConfiguredOnboardingPrice,
-  isExtraSeatPriceId,
+  isExtraSeatLineItem,
+  priceSignalsOnboardingPlan,
   mapSubscriptionStatus,
   shouldCancelOrgBillingForDeletedSubscription,
   meteringPlanForPrice,
@@ -24,6 +26,7 @@ import {
 import {
   atmospherePlan,
   includedFcSeatsFromMetadata,
+  isExtraSeatPlanCode,
   parseAtmospherePlanCode,
 } from '../lib/stripeCatalog.js';
 import {
@@ -259,7 +262,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   try {
     await syncExtraFcSeatsFromCustomer(admin, orgId, customerId);
   } catch (err) {
-    if (extraOnThisSub > 0 || items.some((row) => isExtraSeatPriceId(subscriptionItemPriceId(row)))) {
+    if (extraOnThisSub > 0 || items.some((row) => isExtraSeatLineItem(row))) {
       await persistExtraFcSeats(admin, orgId, extraOnThisSub);
     } else {
       throw err;
@@ -305,15 +308,20 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   const isOnboarding =
     sub.metadata?.onboarding === 'true' ||
     isConfiguredOnboardingPrice(meteringPriceId) ||
-    items.some((row) => isConfiguredOnboardingPrice(subscriptionItemPriceId(row)));
+    items.some(
+      (row) =>
+        priceSignalsOnboardingPlan(row.price) ||
+        isConfiguredOnboardingPrice(subscriptionItemPriceId(row)),
+    );
   if (metering || isOnboarding) {
     const fromMeta = sub.metadata?.atmosphere_plan_code;
     const fromPrice =
       atmospherePlanCodeForPriceId(meteringPriceId) ??
-      items
-        .map((row) => atmospherePlanCodeForPriceId(subscriptionItemPriceId(row)))
-        .find(Boolean) ??
-      (metering?.code && metering.code !== 'field_capture_extra_seat' ? metering.code : null);
+      atmospherePlanCodeFromPrice(
+        items.find((row) => subscriptionItemPriceId(row) === meteringPriceId)?.price,
+      ) ??
+      items.map((row) => atmospherePlanCodeFromPrice(row.price)).find(Boolean) ??
+      (metering?.code && !isExtraSeatPlanCode(metering.code) ? metering.code : null);
     const plan = atmospherePlan(parseAtmospherePlanCode(fromMeta ?? fromPrice));
     const includedFromMeta = includedFcSeatsFromMetadata(
       sub.metadata,
@@ -334,7 +342,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
     return;
   }
 
-  if (items.some((row) => isExtraSeatPriceId(subscriptionItemPriceId(row)))) {
+  if (items.some((row) => isExtraSeatLineItem(row))) {
     return;
   }
 
