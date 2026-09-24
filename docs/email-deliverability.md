@@ -46,8 +46,8 @@ npm run check:email-auth --prefix backend
    rewrites links and can break DMARC alignment).
 4. On Railway: `RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com`.
 5. **Do not** put Resend in apex SPF — **Cloudflare Email Routing** owns apex
-   SPF / MX for `hello@` / `support@` forwards to `jack@jettx.ai`. Resend
-   authenticates only on `send.invites.atmosphereteam.com`.
+   SPF / MX for `hello@` / `support@` / `billing@` forwards to `jack@jettx.ai`.
+   Resend authenticates only on `send.invites.atmosphereteam.com`.
 
 Inbox placement still needs DMARC on apex + `invites.atmosphereteam.com`.
 **Omit `rua`** so aggregate reports do not flood `hello@` / the main inbox.
