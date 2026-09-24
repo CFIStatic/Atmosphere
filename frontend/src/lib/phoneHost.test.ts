@@ -34,7 +34,7 @@ describe('phone home-screen manifests', () => {
   it('shows the Atmosphere bars and name in the hosted dashboard tab', () => {
     const html = readFileSync(resolve(repoRoot, 'frontend/index.html'), 'utf8');
     expect(html).toMatch(/<title>Atmosphere<\/title>/);
-    expect(html).toContain('rel="icon" type="image/svg+xml" href="/icons/favicon.svg?v=3"');
+    expect(html).toContain('rel="icon" type="image/svg+xml" href="/icons/favicon.svg?v=4"');
     expect(html).toContain('apple-mobile-web-app-title" content="Atmosphere"');
     expect(html).toContain('og:site_name" content="Atmosphere"');
 
@@ -42,9 +42,14 @@ describe('phone home-screen manifests', () => {
     expect(favicon).toContain('viewBox="0 0 16 16"');
     expect(favicon).toContain('fill="#FFFFFF"');
     expect(favicon.match(/<rect/g)?.length).toBe(6);
+    expect(favicon).toContain('y="3"');
+    expect(favicon).toContain('height="1"');
     expect(favicon).toContain('#D5D5D6');
     expect(favicon).toContain('#ED5F18');
     expect(favicon).not.toContain('prefers-color-scheme');
+
+    const manifest = readJson('frontend/public/manifest.webmanifest');
+    expect(manifest.icons.some((icon) => icon.src.includes('icon-192-maskable.png?v=4'))).toBe(true);
 
     for (const rel of [
       'frontend/public/favicon.ico',
@@ -52,6 +57,8 @@ describe('phone home-screen manifests', () => {
       'frontend/public/icons/apple-touch-icon.png',
       'frontend/public/icons/icon-192.png',
       'frontend/public/icons/icon-512.png',
+      'frontend/public/icons/icon-192-maskable.png',
+      'frontend/public/icons/icon-512-maskable.png',
       'brand/atmosphere-icon.png',
       'brand/atmosphere-icon.svg',
     ]) {

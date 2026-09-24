@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Atmosphere">
-  <!-- Tab favicon. Same colors and 8:1 bars as brand/atmosphere-icon.svg, scaled 1.25x so bars stay 1px at 16px. White background, no scheme switch. -->
+  <!-- 16px snap of brand/atmosphere-icon.svg. Bar and gap are 1px so all five bars stay distinct. -->
   <rect width="16" height="16" fill="#FFFFFF"/>
   <rect x="4" y="3" width="8" height="1" fill="#D5D5D6"/>
   <rect x="4" y="5" width="8" height="1" fill="#ADAEAF"/>
