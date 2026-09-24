@@ -15,7 +15,7 @@ holding/legal/billing only; Platform = office app; Field Capture = crew app.
 | `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
-| `hardware.html`   | Field Capture Chest Mount — $49.99 hands-free phone kit |
+| `hardware.html`   | Field Capture Chest Mount — $99.99 hands-free phone kit |
 | `platform.html`   | Redirect → home (legacy four-platform page) |
 | `sales.html`      | Redirect → home (legacy) |
 | `operations.html` | Redirect → home (legacy) |
@@ -50,7 +50,7 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
   per-job dollar rate, a Compute Units allowance, or internal costing as the
   customer-facing default.
 - **Enterprise** — contact sales on the pricing page only. No fourth self-serve SKU.
-- **Field Capture Chest Mount** — one-time $49.99 hardware add-on via Stripe
+- **Field Capture Chest Mount** — one-time $99.99 hardware add-on via Stripe
   Payment Link.
 
 Legacy prepaid credits (`credit_packs`, `record_usage`) remain during migration
@@ -132,9 +132,9 @@ python3 website/build-preview.py preview.html
 
 ## SEO & sharing
 
-`hardware.html` is a product page for the Field Capture Chest Mount ($49.99).
-The primary CTA is **Buy — $49.99**. It uses the live Stripe Payment Link
-`https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01` ($49.99). The older
+`hardware.html` is a product page for the Field Capture Chest Mount ($99.99).
+The primary CTA is **Buy — $99.99**. It uses the live Stripe Payment Link
+`https://buy.stripe.com/bJedR16fJ40l5G1eRJfYY01` ($99.99). The older
 `5kQ7sD47B54p7O9391fYY00` link is $49 and inactive.
 
 Support under Buy is a dark secondary button to the contact form
