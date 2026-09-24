@@ -11,7 +11,9 @@ import { getPlatform } from '../lib/usePlatform';
 import { AtmospherePlanPicker } from '../components/billing/AtmospherePlanPicker';
 import {
   ATMOSPHERE_SELF_SERVE_PLANS,
+  parseAtmosphereBillingInterval,
   parseAtmospherePlanCode,
+  type AtmosphereBillingInterval,
 } from '../lib/atmospherePlans';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
@@ -75,6 +77,10 @@ export function SignupPage() {
   const [selectedPlan, setSelectedPlan] = useState(() =>
     parseAtmospherePlanCode(searchParams.get('plan')),
   );
+  const [billingInterval, setBillingInterval] = useState<AtmosphereBillingInterval>(() =>
+    parseAtmosphereBillingInterval(searchParams.get('interval')),
+  );
+  const [annualAvailable, setAnnualAvailable] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
@@ -103,6 +109,21 @@ export function SignupPage() {
   useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getSelfServeBilling()
+      .then((catalog) => {
+        if (!cancelled) setAnnualAvailable(Boolean(catalog.annualAvailable));
+      })
+      .catch(() => {
+        if (!cancelled) setAnnualAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     // Invitees never enter Stripe / plan selection — keep them on step 1.
@@ -511,6 +532,21 @@ export function SignupPage() {
             <AtmospherePlanPicker
               plans={ATMOSPHERE_SELF_SERVE_PLANS}
               value={selectedPlan}
+              interval={annualAvailable ? billingInterval : 'month'}
+              annualAvailable={annualAvailable}
+              onIntervalChange={(next) => {
+                setBillingInterval(next);
+                setSearchParams(
+                  (prev) => {
+                    const params = new URLSearchParams(prev);
+                    params.set('step', '2');
+                    if (next === 'year') params.set('interval', 'year');
+                    else params.delete('interval');
+                    return params;
+                  },
+                  { replace: true },
+                );
+              }}
               onChange={(code) => {
                 setSelectedPlan(code);
                 setSearchParams(

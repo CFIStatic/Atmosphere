@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -77,7 +77,7 @@ describe('SetupBillingStep', () => {
     expect(screen.getByText('Work Verification')).toBeInTheDocument();
     expect(screen.getByText('Starter')).toBeInTheDocument();
     expect(screen.getByText('Scale')).toBeInTheDocument();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();
@@ -104,7 +104,49 @@ describe('SetupBillingStep', () => {
     expect(await screen.findByRole('radio', { name: /Work Verification/i })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: /Starter/i }));
     await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
-    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'starter');
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'starter', 'month');
+  });
+
+  it('checks out the yearly price when annual billing is configured', async () => {
+    const user = userEvent.setup();
+    getBillingOnboarding.mockResolvedValue({ ...unpaid, annualAvailable: true });
+    renderBilling();
+
+    const intervals = await screen.findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(intervals).getByRole('radio', { name: /^Monthly/i })).toBeChecked();
+    await user.click(within(intervals).getByRole('radio', { name: /Yearly/i }));
+    expect(screen.getByText('$8,490')).toBeInTheDocument();
+    expect(screen.getByText(/\$1,250\/yr/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
+  });
+
+  it('restores the yearly toggle when a cancelled checkout returns with interval=year', async () => {
+    const user = userEvent.setup();
+    getBillingOnboarding.mockResolvedValue({ ...unpaid, annualAvailable: true });
+    render(
+      <MemoryRouter initialEntries={['/signup?step=2&checkout=cancelled&interval=year']}>
+        <SetupBillingStep redirectTo="/jobs" checkoutOutcome="cancelled" onComplete={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    const intervals = await screen.findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(intervals).getByRole('radio', { name: /Yearly/i })).toBeChecked();
+    expect(screen.getAllByText('Per Year')).toHaveLength(3);
+    expect(screen.getByText('Checkout cancelled. Add a payment method when you are ready.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'year');
+  });
+
+  it('keeps checkout monthly when the yearly interval is in the URL but annual prices are not configured', async () => {
+    const user = userEvent.setup();
+    renderBilling('/signup?step=2&interval=year');
+
+    expect(await screen.findByRole('button', { name: 'Continue to Stripe' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /Yearly/i })).toBeNull();
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
+    await user.click(screen.getByRole('button', { name: 'Continue to Stripe' }));
+    expect(startOnboardingCheckout).toHaveBeenCalledWith('/jobs', 'work_verification', 'month');
   });
 
   it('preselects a plan from the signup URL', async () => {

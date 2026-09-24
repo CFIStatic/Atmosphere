@@ -23,6 +23,7 @@ const queueRedirect = vi.hoisted(() => vi.fn());
 
 const apiMocks = vi.hoisted(() => ({
   getBillingOnboarding: vi.fn().mockResolvedValue({ required: false, complete: true }),
+  getSelfServeBilling: vi.fn().mockResolvedValue({ annualAvailable: false, plans: [] }),
   startOnboardingCheckout: vi.fn(),
   updateProfile: vi.fn(),
   createOrg: vi.fn(),
@@ -73,6 +74,7 @@ describe('SignupPage', () => {
     apiMocks.getBillingOnboarding
       .mockReset()
       .mockResolvedValue({ required: false, complete: true });
+    apiMocks.getSelfServeBilling.mockReset().mockResolvedValue({ annualAvailable: false, plans: [] });
     apiMocks.updateProfile.mockReset().mockResolvedValue({});
     apiMocks.createOrg.mockReset().mockResolvedValue({});
     apiMocks.joinOrg.mockReset();
@@ -127,7 +129,7 @@ describe('SignupPage', () => {
     expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();

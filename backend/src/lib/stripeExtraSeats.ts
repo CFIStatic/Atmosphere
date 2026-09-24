@@ -4,14 +4,14 @@ import { paymentRequired } from './errors.js';
 import { allowedFcSeats } from './stripeCatalog.js';
 import {
   adminClient,
-  extraSeatPriceId,
+  extraSeatPriceIdForInterval,
   findActiveWorkVerificationSubscriptionId,
-  isExtraSeatPriceId,
+  isExtraSeatLineItem,
   liveStripeCustomerId,
   liveStripeSubscriptionId,
+  recurringIntervalFromSubscription,
   stripeClient,
   stripeIdempotencyKey,
-  subscriptionItemPriceId,
 } from './stripe.js';
 
 export type FieldCaptureSeatAction =
@@ -109,9 +109,19 @@ export async function addExtraFieldCaptureSeats(
   }
 
   const stripe = stripeClient();
-  const priceId = extraSeatPriceId();
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
-  const existing = sub.items.data.find((item) => isExtraSeatPriceId(subscriptionItemPriceId(item)));
+  // Match the subscription interval. Stripe rejects a monthly seat on a yearly
+  // plan (and the reverse). `create_prorations` is Stripe's default: an annual
+  // seat is charged for the remainder of the prepaid term.
+  const interval = recurringIntervalFromSubscription(sub);
+  const priceId = extraSeatPriceIdForInterval(interval);
+  if (!priceId) {
+    throw paymentRequired(
+      'Annual Field Capture seats are not configured. Set STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID.',
+      'price_not_configured',
+    );
+  }
+  const existing = sub.items.data.find((item) => isExtraSeatLineItem(item));
   if (existing) {
     await stripe.subscriptionItems.update(
       existing.id,
@@ -126,7 +136,7 @@ export async function addExtraFieldCaptureSeats(
         quantity: targetExtra,
         proration_behavior: 'create_prorations',
       },
-      { idempotencyKey: stripeIdempotencyKey('extra-seats', orgId, targetExtra, 'create') },
+      { idempotencyKey: stripeIdempotencyKey('extra-seats', orgId, targetExtra, priceId, 'create') },
     );
   }
   await persistExtraFcSeats(adminClient(), orgId, targetExtra);

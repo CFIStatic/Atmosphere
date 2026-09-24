@@ -4853,12 +4853,21 @@ export const api = {
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
 
-  startOnboardingCheckout: (returnPath?: string, planCode?: string) =>
+  /** Public plan catalog. `annualAvailable` is false until annual price ids are set. */
+  getSelfServeBilling: () =>
+    request<SelfServeBillingCatalog>('/api/billing/self-serve', { method: 'GET' }),
+
+  startOnboardingCheckout: (
+    returnPath?: string,
+    planCode?: string,
+    billingInterval?: 'month' | 'year',
+  ) =>
     request<{ checkoutUrl: string | null }>('/api/billing/checkout/onboarding', {
       method: 'POST',
       body: JSON.stringify({
         ...(returnPath ? { returnPath } : {}),
         ...(planCode ? { planCode } : {}),
+        ...(billingInterval ? { billingInterval } : {}),
       }),
     }),
 
@@ -6030,9 +6039,18 @@ export interface AtmosphereSelfServePlan {
   code: 'starter' | 'work_verification' | 'scale';
   name: string;
   monthlyCents: number;
+  /** Prepaid annual amount. 10× monthly (2 months free) when the API omits it. */
+  annualCents?: number;
   includedFcSeats: number;
   recommended: boolean;
   defaultSelected?: boolean;
+}
+
+export interface SelfServeBillingCatalog {
+  defaultPlanCode: 'starter' | 'work_verification' | 'scale';
+  defaultInterval: 'month' | 'year';
+  annualAvailable: boolean;
+  plans: AtmosphereSelfServePlan[];
 }
 
 export interface BillingOnboardingStatus {
@@ -6042,6 +6060,9 @@ export interface BillingOnboardingStatus {
   isCreator: boolean;
   hasSubscription: boolean;
   defaultPlanCode?: 'starter' | 'work_verification' | 'scale';
+  defaultInterval?: 'month' | 'year';
+  /** False when annual Stripe price ids are not configured. Hide the Yearly toggle. */
+  annualAvailable?: boolean;
   plans?: AtmosphereSelfServePlan[];
   plan: {
     code?: string;

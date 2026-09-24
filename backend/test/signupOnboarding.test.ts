@@ -41,6 +41,29 @@ test('cancelled checkout also returns to billing', () => {
   });
   assert.match(url, /[?&]step=2(?:&|$)/);
   assert.match(url, /[?&]checkout=cancelled(?:&|$)/);
+  assert.equal(new URL(url).searchParams.get('interval'), null);
+});
+
+test('yearly checkout keeps interval=year on the success and cancel return URLs', () => {
+  for (const kind of ['success', 'cancelled'] as const) {
+    const url = signupCheckoutReturnUrl({
+      base: 'https://app.example/signup',
+      kind,
+      returnPath: '/jobs',
+      billingInterval: 'year',
+    });
+    const parsed = new URL(url);
+    assert.equal(parsed.searchParams.get('step'), '2');
+    assert.equal(parsed.searchParams.get('checkout'), kind);
+    assert.equal(parsed.searchParams.get('next'), '/jobs');
+    assert.equal(parsed.searchParams.get('interval'), 'year');
+  }
+  const monthly = signupCheckoutReturnUrl({
+    base: 'https://app.example/signup',
+    kind: 'cancelled',
+    billingInterval: 'month',
+  });
+  assert.equal(new URL(monthly).searchParams.get('interval'), null);
 });
 
 test('the org creator must pay when Stripe is on, then they are done', () => {
@@ -185,6 +208,10 @@ test('onboarding checkout accepts a self-serve plan and defaults when omitted', 
     'work_verification',
   );
   assert.throws(() => onboardingCheckoutSchema.parse({ planCode: 'enterprise' }));
+  assert.equal(onboardingCheckoutSchema.parse({}).billingInterval, undefined);
+  assert.equal(onboardingCheckoutSchema.parse({ billingInterval: 'year' }).billingInterval, 'year');
+  assert.equal(onboardingCheckoutSchema.parse({ billingInterval: 'annual' }).billingInterval, 'annual');
+  assert.throws(() => onboardingCheckoutSchema.parse({ billingInterval: 'weekly' }));
 });
 
 test('the website signup defaults are a valid create-org payload', () => {

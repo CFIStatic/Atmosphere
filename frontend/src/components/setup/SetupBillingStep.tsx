@@ -5,7 +5,9 @@ import { AtmospherePlanPicker } from '../billing/AtmospherePlanPicker';
 import {
   ATMOSPHERE_SELF_SERVE_PLANS,
   DEFAULT_ONBOARDING_PLAN_CODE,
+  parseAtmosphereBillingInterval,
   parseAtmospherePlanCode,
+  type AtmosphereBillingInterval,
 } from '../../lib/atmospherePlans';
 import { SetupStepCard } from './SetupWizardShell';
 import { SpinnerIcon, CheckIcon } from '../icons';
@@ -21,7 +23,7 @@ export function SetupBillingStep({
   nextLabel?: string;
   onComplete: () => void;
 }) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<BillingOnboardingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -29,6 +31,9 @@ export function SetupBillingStep({
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState(() =>
     parseAtmospherePlanCode(searchParams.get('plan')),
+  );
+  const [billingInterval, setBillingInterval] = useState<AtmosphereBillingInterval>(() =>
+    parseAtmosphereBillingInterval(searchParams.get('interval')),
   );
   const autoEnteredRef = useRef(false);
 
@@ -98,7 +103,8 @@ export function SetupBillingStep({
     setError(null);
     setNotice(null);
     try {
-      const { checkoutUrl } = await api.startOnboardingCheckout(redirectTo, selectedPlan);
+      const interval = status?.annualAvailable ? billingInterval : 'month';
+      const { checkoutUrl } = await api.startOnboardingCheckout(redirectTo, selectedPlan, interval);
       if (checkoutUrl) {
         window.location.assign(checkoutUrl);
         return;
@@ -160,6 +166,16 @@ export function SetupBillingStep({
     catalog.find((plan) => plan.code === selectedPlan) ??
     catalog.find((plan) => plan.code === (status.defaultPlanCode ?? DEFAULT_ONBOARDING_PLAN_CODE)) ??
     catalog[1]!;
+  const annualAvailable = Boolean(status.annualAvailable);
+  const interval: AtmosphereBillingInterval = annualAvailable ? billingInterval : 'month';
+
+  function selectInterval(next: AtmosphereBillingInterval) {
+    setBillingInterval(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'year') params.set('interval', 'year');
+    else params.delete('interval');
+    setSearchParams(params, { replace: true });
+  }
 
   return (
     <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then start your first job.">
@@ -182,7 +198,14 @@ export function SetupBillingStep({
       )}
 
       <div className="mt-6">
-        <AtmospherePlanPicker plans={catalog} value={chosen.code} onChange={setSelectedPlan} />
+        <AtmospherePlanPicker
+          plans={catalog}
+          value={chosen.code}
+          onChange={setSelectedPlan}
+          interval={interval}
+          annualAvailable={annualAvailable}
+          onIntervalChange={selectInterval}
+        />
       </div>
 
       <div className="mt-7 flex justify-end">

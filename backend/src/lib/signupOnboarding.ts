@@ -16,9 +16,12 @@ export function signupCheckoutReturnUrl(input: {
   base: string;
   kind: 'success' | 'cancelled';
   returnPath?: string;
+  /** Kept on the return URL so a cancelled yearly Checkout reopens on Yearly. */
+  billingInterval?: 'month' | 'year';
 }): string {
   const params = new URLSearchParams({ step: SIGNUP_BILLING_STEP, checkout: input.kind });
   if (input.returnPath) params.set('next', input.returnPath);
+  if (input.billingInterval === 'year') params.set('interval', 'year');
   return `${input.base}?${params.toString()}`;
 }
 

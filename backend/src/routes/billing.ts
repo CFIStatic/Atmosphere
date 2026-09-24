@@ -6,9 +6,12 @@ import { config } from '../config.js';
 import { HttpError, badRequest, forbidden } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import {
+  annualBillingAvailable,
+  annualPriceEnvName,
   ensureCustomer,
   isStripeConfigured,
   liveStripeCustomerId,
+  normalizeAtmosphereBillingInterval,
   stripeClient,
   stripeIdempotencyKey,
 } from '../lib/stripe.js';
@@ -35,6 +38,21 @@ import {
 export const billingRouter = Router();
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * GET /api/billing/self-serve
+ * Public plan list plus whether yearly checkout is configured. No org data.
+ * Signup shows the Monthly/Yearly toggle only when `annualAvailable` is true.
+ */
+billingRouter.get('/self-serve', (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.json({
+    defaultPlanCode: 'work_verification',
+    defaultInterval: 'month',
+    annualAvailable: annualBillingAvailable(),
+    plans: publicSelfServePlans(),
+  });
+});
 
 /**
  * GET /api/billing/catalog
@@ -495,6 +513,8 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
       isCreator: workspace.isCreator,
       hasSubscription: workspace.subscription.hasStripeSubscription,
       defaultPlanCode: 'work_verification',
+      defaultInterval: 'month',
+      annualAvailable: annualBillingAvailable(),
       plans: publicSelfServePlans(),
       plan: {
         code: workspace.subscription.code,
@@ -522,8 +542,10 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
     }
 
-    const { returnPath, planCode: rawPlanCode } = onboardingCheckoutSchema.parse(req.body ?? {});
+    const { returnPath, planCode: rawPlanCode, billingInterval: rawInterval } =
+      onboardingCheckoutSchema.parse(req.body ?? {});
     const plan = atmospherePlan(parseAtmospherePlanCode(rawPlanCode));
+    const interval = normalizeAtmosphereBillingInterval(rawInterval);
     const supabase = createUserClient(req.accessToken!);
     const status = await loadWorkspaceBilling(supabase, req.orgId!, req.user!.id, req.user!.email);
 
@@ -534,16 +556,18 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       throw badRequest('Billing is already set up for this organization.', 'billing_already_complete');
     }
 
-    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code);
+    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code, interval);
     if (!priceId) {
       throw badRequest(
-        `No Stripe price is configured for the ${plan.name} plan. Set ${
-          plan.code === 'starter'
-            ? 'STRIPE_STARTER_PRICE_ID'
-            : plan.code === 'scale'
-              ? 'STRIPE_SCALE_PRICE_ID'
-              : 'STRIPE_ONBOARDING_PRICE_ID'
-        }.`,
+        interval === 'year'
+          ? `Annual billing is not configured for the ${plan.name} plan. Set ${annualPriceEnvName(plan.code)} and STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID.`
+          : `No Stripe price is configured for the ${plan.name} plan. Set ${
+              plan.code === 'starter'
+                ? 'STRIPE_STARTER_PRICE_ID'
+                : plan.code === 'scale'
+                  ? 'STRIPE_SCALE_PRICE_ID'
+                  : 'STRIPE_ONBOARDING_PRICE_ID'
+            }.`,
         'price_not_configured',
       );
     }
@@ -558,20 +582,22 @@ billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, n
       onboarding: 'true',
       atmosphere_plan_code: plan.code,
       atmosphere_included_fc_seats: String(plan.includedFcSeats),
+      billing_interval: interval,
+      atmosphere_interval: interval,
     };
 
     const session = await stripeClient().checkout.sessions.create(
       {
         mode: 'subscription',
         customer: customerId,
-        success_url: onboardingReturnUrl('success', returnPath),
-        cancel_url: onboardingReturnUrl('cancelled', returnPath),
+        success_url: onboardingReturnUrl('success', returnPath, interval),
+        cancel_url: onboardingReturnUrl('cancelled', returnPath, interval),
         client_reference_id: req.orgId,
         metadata: planMeta,
         subscription_data: { metadata: planMeta },
         line_items: [{ price: priceId, quantity: 1 }],
       },
-      { idempotencyKey: stripeIdempotencyKey('onboarding', req.orgId, priceId) },
+      { idempotencyKey: stripeIdempotencyKey('onboarding', req.orgId, priceId, interval) },
     );
 
     res.status(201).json({ checkoutUrl: session.url });
@@ -651,11 +677,16 @@ billingRouter.post('/checkout/extra-seats', async (req: Request, res: Response, 
   }
 });
 
-function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
+function onboardingReturnUrl(
+  kind: 'success' | 'cancelled',
+  returnPath?: string,
+  billingInterval?: 'month' | 'year',
+) {
   return signupCheckoutReturnUrl({
     base: config.stripe.onboardingReturnBase,
     kind,
     returnPath,
+    billingInterval,
   });
 }
 

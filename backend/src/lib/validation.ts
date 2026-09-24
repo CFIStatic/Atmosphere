@@ -799,6 +799,8 @@ export const onboardingCheckoutSchema = z.object({
       message: 'returnPath must be a relative path',
     }),
   planCode: z.enum(ATMOSPHERE_ONBOARDING_PLAN_CODES).optional(),
+  /** Monthly is the default. `year` / `annual` select the annual Stripe prices. */
+  billingInterval: z.enum(['month', 'year', 'monthly', 'annual']).optional(),
 });
 
 /** Extra Field Capture seats to add ($125/mo each beyond the seats included with the plan). */

@@ -12,13 +12,15 @@ import {
 } from './fieldCaptureSeats.js';
 import { addExtraFieldCaptureSeats, decideFieldCaptureSeatAction } from './stripeExtraSeats.js';
 import {
+  billingIntervalForCheckoutPrice,
   ensureCustomer,
-  extraSeatPriceId,
+  extraSeatPriceIdForInterval,
   isStripeConfigured,
   liveStripeCustomerId,
   liveStripeSubscriptionId,
   stripeClient,
   stripeIdempotencyKey,
+  type AtmosphereBillingInterval,
 } from './stripe.js';
 import { atmospherePlan } from './stripeCatalog.js';
 import { resolveOnboardingPriceId } from './workspaceBilling.js';
@@ -31,8 +33,28 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
   cancelUrl?: string;
   workVerificationPriceId: string;
   planCode?: string | null;
+  /** Defaults to the plan price's interval so seats are never a different period. */
+  interval?: AtmosphereBillingInterval;
 }): Promise<string> {
   const extra = Math.max(1, Math.floor(input.extraSeats));
+  const interval = input.interval ?? billingIntervalForCheckoutPrice(input.workVerificationPriceId);
+  const seatPriceId = extraSeatPriceIdForInterval(interval);
+  if (!seatPriceId) {
+    throw paymentRequired(
+      'Annual Field Capture seats are not configured. Set STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID.',
+      'price_not_configured',
+    );
+  }
+  const plan = atmospherePlan(input.planCode);
+  const planMeta = {
+    org_id: input.orgId,
+    extra_fc_seats: String(extra),
+    onboarding: 'true',
+    atmosphere_plan_code: plan.code,
+    atmosphere_included_fc_seats: String(plan.includedFcSeats),
+    billing_interval: interval,
+    atmosphere_interval: interval,
+  };
   const session = await stripeClient().checkout.sessions.create(
     {
       mode: 'subscription',
@@ -40,28 +62,14 @@ export async function createWorkVerificationExtraSeatCheckout(input: {
       success_url: input.successUrl ?? config.stripe.successUrl,
       cancel_url: input.cancelUrl ?? config.stripe.cancelUrl,
       client_reference_id: input.orgId,
-      metadata: {
-        org_id: input.orgId,
-        extra_fc_seats: String(extra),
-        onboarding: 'true',
-        atmosphere_plan_code: atmospherePlan(input.planCode).code,
-        atmosphere_included_fc_seats: String(atmospherePlan(input.planCode).includedFcSeats),
-      },
-      subscription_data: {
-        metadata: {
-          org_id: input.orgId,
-          extra_fc_seats: String(extra),
-          onboarding: 'true',
-          atmosphere_plan_code: atmospherePlan(input.planCode).code,
-          atmosphere_included_fc_seats: String(atmospherePlan(input.planCode).includedFcSeats),
-        },
-      },
+      metadata: planMeta,
+      subscription_data: { metadata: planMeta },
       line_items: [
         { price: input.workVerificationPriceId, quantity: 1 },
-        { price: extraSeatPriceId(), quantity: extra },
+        { price: seatPriceId, quantity: extra },
       ],
     },
-    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats', input.orgId, extra) },
+    { idempotencyKey: stripeIdempotencyKey('invite-extra-seats', input.orgId, extra, interval) },
   );
   if (!session.url) {
     throw paymentRequired(
