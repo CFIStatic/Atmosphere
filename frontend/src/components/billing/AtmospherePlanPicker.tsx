@@ -136,11 +136,6 @@ function IntervalToggle({
                 className="sr-only"
               />
               {option.label}
-              {option.value === 'year' ? (
-                <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-800">
-                  2 months free
-                </span>
-              ) : null}
             </label>
           );
         })}

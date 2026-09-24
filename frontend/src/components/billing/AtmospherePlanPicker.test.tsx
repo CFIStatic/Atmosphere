@@ -121,10 +121,7 @@ describe('AtmospherePlanPicker', () => {
     expect(monthly).toBeChecked();
     expect(monthly.closest('label')?.className).toMatch(/bg-brand-500/);
     expect(yearly.closest('label')?.className).not.toMatch(/bg-brand-500/);
-    const badge = screen.getByText('2 months free');
-    expect(badge.className).toMatch(/bg-brand-100/);
-    expect(badge.className).toMatch(/text-brand-800/);
-    expect(badge.className).not.toMatch(/text-white/);
+    expect(screen.queryByText(/2 months free/i)).toBeNull();
     expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getByText(/\$125\/mo/)).toBeInTheDocument();
 
@@ -132,8 +129,7 @@ describe('AtmospherePlanPicker', () => {
     expect(yearly).toBeChecked();
     expect(yearly.closest('label')?.className).toMatch(/bg-brand-500/);
     expect(monthly.closest('label')?.className).not.toMatch(/bg-brand-500/);
-    expect(badge.className).toMatch(/bg-brand-100/);
-    expect(badge.className).toMatch(/text-brand-800/);
+    expect(screen.queryByText(/2 months free/i)).toBeNull();
     expect(screen.getByText('$3,990')).toBeInTheDocument();
     expect(screen.getByText('$8,490')).toBeInTheDocument();
     expect(screen.getByText('$19,990')).toBeInTheDocument();
