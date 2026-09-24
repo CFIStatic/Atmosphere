@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 162,
+    "migrationCount": 163,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -176,7 +176,8 @@
     "20260918140000_settings_token_spend_accuracy.sql",
     "20260920010000_crm_agent_credentials.sql",
     "20260921010000_job_proofs_custom_title.sql",
-    "20260921120000_analytics_usage_events_compat_view.sql"
+    "20260921120000_analytics_usage_events_compat_view.sql",
+    "20260923200000_lock_down_security_definer_grants.sql"
   ],
   "migrations": [
     {
@@ -5570,6 +5571,16 @@
       "expect": [
         "view|public.usage_events"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260923200000_lock_down_security_definer_grants",
+      "file": "20260923200000_lock_down_security_definer_grants.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "grants/revokes only; creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0
