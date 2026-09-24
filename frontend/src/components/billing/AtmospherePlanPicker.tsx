@@ -54,14 +54,15 @@ export function AtmospherePlanPicker({
               <span className="mt-2 truncate text-[15px] font-semibold leading-5 tracking-tight text-ink-900 whitespace-nowrap">
                 {plan.name}
               </span>
-              <PlanPrice monthlyCents={plan.monthlyCents} stacked />
+              <PlanPrice monthlyCents={plan.monthlyCents} />
               <span className="mt-auto pt-3 text-sm leading-5 text-ink-600">{seats}</span>
             </label>
           );
         })}
       </fieldset>
       <p className="mt-3 text-xs text-ink-500">
-        Field Capture seats only — office-only Global Admins do not use a seat. Extra seats $125/mo.
+        Extra Field Capture seats are $125/mo each. Seats count Field Capture accounts only —
+        office-only Global Admins do not use a seat. AI/token usage is billed the day it is used.
         Prices increase 10% annually on your plan anniversary (30-day notice).
       </p>
     </div>
@@ -71,25 +72,16 @@ export function AtmospherePlanPicker({
 export function PlanPrice({
   monthlyCents,
   className,
-  stacked = false,
 }: {
   monthlyCents: number;
   className?: string;
-  stacked?: boolean;
 }) {
   return (
-    <span
-      className={cn(
-        stacked
-          ? 'mt-3 flex flex-col items-start'
-          : 'mt-3 flex items-baseline gap-x-1.5 whitespace-nowrap',
-        className,
-      )}
-    >
-      <span className="text-2xl font-bold tabular-nums tracking-tight text-ink-900">
+    <span className={cn('mt-3 block', className)}>
+      <span className="whitespace-nowrap text-2xl font-bold tabular-nums tracking-tight text-ink-900">
         {formatCents(monthlyCents)}
-      </span>
-      <span className={cn('text-sm font-medium text-ink-500', stacked && 'mt-0.5')}>/ month</span>
+      </span>{' '}
+      <span className="whitespace-nowrap text-sm font-medium text-ink-500">/ month</span>
     </span>
   );
 }
