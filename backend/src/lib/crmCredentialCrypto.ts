@@ -1,10 +1,9 @@
 /**
  * AES-256-GCM seal for CRM agent login passwords.
  *
- * Same construction as internal TOTP secrets: key derived from a server-only
- * secret (CRM_CREDENTIAL_KEY, else INTEGRATIONS_CREDENTIAL_KEY, else
- * DEVICE_PEPPER), random 12-byte IV, auth tag. Ciphertext columns are useless
- * without the env key. Never log plaintext passwords.
+ * Key material is only CRM_CREDENTIAL_ENCRYPTION_KEY (a documented dev
+ * placeholder outside production). Random 12-byte IV, auth tag. Ciphertext
+ * columns are useless without that key. Never log plaintext passwords.
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';

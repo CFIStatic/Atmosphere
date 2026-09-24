@@ -463,6 +463,26 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
 
+### Browser security headers
+
+Field Capture, Platform, and the corporate site are nginx images. Each sends
+`Strict-Transport-Security: max-age=31536000; includeSubDomains` and a
+`Content-Security-Policy` from that image's `nginx/security-headers.conf`
+(copied to `/etc/nginx/security-headers.conf`). Locations that set their own
+`add_header` include the file again, because nginx does not inherit
+`add_header` in that case.
+
+The policies allow the hosts those pages already load (`'self'`, Google Fonts
+on Platform and the marketing site, `https://*.supabase.co` for signed proof
+media and uploads, Google's default STUN servers, and `https://platform.atmosphereteam.com`
+as the Field Capture Platform iframe). They are not hash-locked: inline theme
+scripts and style attributes need `'unsafe-inline'`. Ask and Gemini stay on
+same-origin `/api`. Optional `VITE_SENTRY_DSN` browser reports are blocked
+until that ingest host is added — the DSN is not in the repo. `turn:` is
+allowed so operator `LIVE_TURN_URLS` keep working without naming a host here.
+The optional GitHub Pages copy of the marketing site does not use this nginx
+file.
+
 ## Host the office app on Railway
 
 The marketing site ships separately to the Railway `website` service (see `.github/workflows/deploy-website.yml`). The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
@@ -577,7 +597,8 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `FRONTEND_ORIGIN` | CORS allowlist (comma-separated) |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
-| `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB) |
+| `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB). Not used for Connect CRM passwords. |
+| `CRM_CREDENTIAL_ENCRYPTION_KEY` | AES-256-GCM material for Connect CRM passwords. Required in production — the process exits if it is missing. No fallback to `DEVICE_PEPPER`, `INTEGRATIONS_CREDENTIAL_KEY`, or `INTEGRATION_SECRETS_KEY`. Set it to the material already sealing rows before deploying that requirement. |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `hello@atmosphereteam.com` |
 | `CAREERS_FROM_EMAIL` | Reply-To for transactional mail — default `hello@atmosphereteam.com` |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com` (SMTP optional) | Atmosphere invites / OTPs / resets. From `hello@invites.atmosphereteam.com`, Reply-To `hello@atmosphereteam.com`. See [`docs/email-deliverability.md`](./email-deliverability.md). |

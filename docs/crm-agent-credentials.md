@@ -11,7 +11,7 @@ live on the job file elsewhere — they are not a row on Connect.
 
 | Asset | Handling |
 | --- | --- |
-| CRM password | AES-256-GCM sealed before insert (`password_cipher` / `iv` / `tag`). Key from `CRM_CREDENTIAL_KEY`, else `INTEGRATIONS_CREDENTIAL_KEY`, else `DEVICE_PEPPER`. |
+| CRM password | AES-256-GCM sealed before insert (`password_cipher` / `iv` / `tag`). Key is only `CRM_CREDENTIAL_ENCRYPTION_KEY`. Production refuses to start if it is unset. |
 | Username | Stored plaintext so the UI can show “Signed in as …”. |
 | Logs | Never log plaintext passwords. Connect logs org + system + username only. |
 | RLS | `crm_agent_credentials` deny-all for authenticated; service role only. |
@@ -44,11 +44,10 @@ logins is intentionally stubbed in this PR.
 ## Env
 
 ```bash
-# Optional dedicated seal key (openssl rand -base64 32)
-CRM_CREDENTIAL_KEY=
-# Fallback still accepted:
-# INTEGRATIONS_CREDENTIAL_KEY=
-# DEVICE_PEPPER=   # always required for device PIN; also seals CRM if others unset
+# Required in production. openssl rand -base64 32
+# Must match the material that sealed existing rows (no shared-key fallback).
+CRM_CREDENTIAL_ENCRYPTION_KEY=
+# DEVICE_PEPPER=   # device PIN and internal TOTP only — not CRM passwords
 
 # Optional API bases for probes
 # JOBNIMBUS_API_BASE=https://app.jobnimbus.com/api1
