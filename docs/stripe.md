@@ -183,6 +183,18 @@ keep working.
 mirror** (CI: `npm run check:migrations --prefix backend`). Apply one tree,
 once. Never apply both. See [`docs/production.md`](./production.md).
 
+## Live public details
+
+Live account `acct_1TkT041b5twUY3Ly`. The legal entity on the account is
+**Jettx LLC**. Customer-facing Stripe details:
+
+- Public name: **Atmosphere**
+- Statement descriptor: `ATMOSPHERE`
+- Support email (`business_profile.support_email`): `billing@atmosphereteam.com`
+- Support phone is hidden on customer-facing invoices and receipts
+- The public support street address is cleared on those invoices and receipts.
+  The legal Jettx LLC address stays on the Stripe account.
+
 ## Dashboard toggles
 
 Do these in the **live** Stripe Dashboard (and again in test mode while
