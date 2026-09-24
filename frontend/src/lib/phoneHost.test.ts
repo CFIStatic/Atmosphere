@@ -28,27 +28,32 @@ describe('phone home-screen manifests', () => {
     expect(manifest.name).toMatch(/Field Capture/);
     expect(manifest.start_url).toBe('./');
     expect(manifest.display).toBe('standalone');
-    expect(manifest.icons.some((icon) => icon.src.includes('atmosphere-192.png'))).toBe(true);
+    expect(manifest.icons.some((icon) => icon.src.includes('icon-192.png'))).toBe(true);
   });
 
   it('shows the Atmosphere bars and name in the hosted dashboard tab', () => {
     const html = readFileSync(resolve(repoRoot, 'frontend/index.html'), 'utf8');
     expect(html).toMatch(/<title>Atmosphere<\/title>/);
-    expect(html).toContain('rel="icon" type="image/svg+xml" href="/icons/favicon.svg"');
+    expect(html).toContain('rel="icon" type="image/svg+xml" href="/icons/favicon.svg?v=3"');
     expect(html).toContain('apple-mobile-web-app-title" content="Atmosphere"');
     expect(html).toContain('og:site_name" content="Atmosphere"');
 
     const favicon = readFileSync(resolve(repoRoot, 'frontend/public/icons/favicon.svg'), 'utf8');
-    expect(favicon).toContain('viewBox="0 0 22 22"');
-    expect(favicon.match(/<rect/g)?.length).toBe(5);
-    expect(favicon).toContain('#F2670C');
+    expect(favicon).toContain('viewBox="0 0 16 16"');
+    expect(favicon).toContain('fill="#FFFFFF"');
+    expect(favicon.match(/<rect/g)?.length).toBe(6);
+    expect(favicon).toContain('#D5D5D6');
+    expect(favicon).toContain('#ED5F18');
+    expect(favicon).not.toContain('prefers-color-scheme');
 
     for (const rel of [
       'frontend/public/favicon.ico',
       'frontend/public/icons/favicon-32.png',
-      'frontend/public/icons/atmosphere-180.png',
-      'frontend/public/icons/atmosphere-192.png',
-      'frontend/public/icons/atmosphere-512.png',
+      'frontend/public/icons/apple-touch-icon.png',
+      'frontend/public/icons/icon-192.png',
+      'frontend/public/icons/icon-512.png',
+      'brand/atmosphere-icon.png',
+      'brand/atmosphere-icon.svg',
     ]) {
       expect(existsSync(resolve(repoRoot, rel))).toBe(true);
     }
