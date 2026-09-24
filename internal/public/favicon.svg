@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Atmosphere">
-  <!-- Tab favicon. Same colors and 8:1 bars as brand/atmosphere-icon.svg, scaled 1.25x so bars stay 1px at 16px. White background, no scheme switch. -->
   <rect width="16" height="16" fill="#FFFFFF"/>
-  <rect x="4" y="3" width="8" height="1" fill="#D5D5D6"/>
-  <rect x="4" y="5" width="8" height="1" fill="#ADAEAF"/>
-  <rect x="4" y="7" width="8" height="1" fill="#7F8081"/>
-  <rect x="4" y="9" width="8" height="1" fill="#494B4C"/>
-  <rect x="4" y="11" width="8" height="1" fill="#ED5F18"/>
+  <rect x="1" y="1" width="14" height="2" fill="#D5D5D6"/>
+  <rect x="1" y="4" width="14" height="2" fill="#ADAEAF"/>
+  <rect x="1" y="7" width="14" height="2" fill="#7F8081"/>
+  <rect x="1" y="10" width="14" height="2" fill="#494B4C"/>
+  <rect x="1" y="13" width="14" height="2" fill="#ED5F18"/>
 </svg>
