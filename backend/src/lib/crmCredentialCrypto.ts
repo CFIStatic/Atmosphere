@@ -1,9 +1,9 @@
 /**
  * AES-256-GCM seal for CRM agent login passwords.
  *
- * Key material is only CRM_CREDENTIAL_ENCRYPTION_KEY (a documented dev
- * placeholder outside production). Random 12-byte IV, auth tag. Ciphertext
- * columns are useless without that key. Never log plaintext passwords.
+ * Key material is only CRM_CREDENTIAL_KEY (a documented dev placeholder
+ * outside production). Random 12-byte IV, auth tag. Ciphertext columns are
+ * useless without that key. Never log plaintext passwords.
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'node:crypto';

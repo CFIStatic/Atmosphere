@@ -598,7 +598,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
 | `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB). Not used for Connect CRM passwords. |
-| `CRM_CREDENTIAL_ENCRYPTION_KEY` | AES-256-GCM material for Connect CRM passwords. Required in production — the process exits if it is missing. No fallback to `DEVICE_PEPPER`, `INTEGRATIONS_CREDENTIAL_KEY`, or `INTEGRATION_SECRETS_KEY`. Set it to the material already sealing rows before deploying that requirement. |
+| `CRM_CREDENTIAL_KEY` | AES-256-GCM material for Connect CRM passwords. Required in production — the process exits if it is missing. No fallback to `INTEGRATIONS_CREDENTIAL_KEY` or `DEVICE_PEPPER`. On Railway this is a reference to `DEVICE_PEPPER` so existing ciphertext still opens. |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `hello@atmosphereteam.com` |
 | `CAREERS_FROM_EMAIL` | Reply-To for transactional mail — default `hello@atmosphereteam.com` |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL=hello@invites.atmosphereteam.com` (SMTP optional) | Atmosphere invites / OTPs / resets. From `hello@invites.atmosphereteam.com`, Reply-To `hello@atmosphereteam.com`. See [`docs/email-deliverability.md`](./email-deliverability.md). |

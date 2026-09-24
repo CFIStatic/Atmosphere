@@ -103,8 +103,8 @@ export const config = {
 
   /**
    * Seals CRM agent login passwords (AES-256-GCM). Production requires
-   * CRM_CREDENTIAL_ENCRYPTION_KEY and does not fall back to DEVICE_PEPPER
-   * or any other secret. Rotating the key invalidates stored CRM passwords
+   * CRM_CREDENTIAL_KEY and does not fall back to INTEGRATIONS_CREDENTIAL_KEY
+   * or DEVICE_PEPPER. Rotating the key invalidates stored CRM passwords
    * (users must reconnect).
    */
   crmCredentials: {
