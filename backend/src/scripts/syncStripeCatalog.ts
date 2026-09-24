@@ -24,8 +24,12 @@ import {
   FIELD_CAPTURE_EXTRA_SEAT_PLAN_CODE,
   LIVE_CHEST_MOUNT_PAYMENT_LINK,
   LIVE_CHEST_MOUNT_PRICE_ID,
+  LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRODUCT_ID,
+  LIVE_SCALE_ANNUAL_PRICE_ID,
+  LIVE_STARTER_ANNUAL_PRICE_ID,
+  LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID,
   WORK_VERIFICATION_PLAN_CODE,
   planDescription,
   selfServePlanList,
@@ -408,12 +412,11 @@ ${scalePriceId ? `STRIPE_SCALE_PRICE_ID=${scalePriceId}` : '# STRIPE_SCALE_PRICE
 # Live Scale is price_1UDGIb1b5twUY3LyUuZeyp75 (prod_VDZ3SMytTKoxc5).
 # Optional override for extra Field Capture seats ($125/mo):
 # STRIPE_EXTRA_SEAT_PRICE_ID=${LIVE_EXTRA_FC_SEAT_PRICE_ID}
-# Annual prices are created separately (2 months free). Yearly checkout stays
-# hidden until all four are real price ids — do not invent them here:
-# STRIPE_STARTER_ANNUAL_PRICE_ID=price_…       # Starter $3,990/yr
-# STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_…    # Work Verification $8,490/yr
-# STRIPE_SCALE_ANNUAL_PRICE_ID=price_…         # Scale $19,990/yr
-# STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_…    # Extra Field Capture seat $1,250/yr
+# Annual prices are pinned in stripeCatalog.ts (env overrides win; unset falls back):
+# STRIPE_STARTER_ANNUAL_PRICE_ID=${LIVE_STARTER_ANNUAL_PRICE_ID}       # Starter $3,990/yr
+# STRIPE_ONBOARDING_ANNUAL_PRICE_ID=${LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID}    # Work Verification $8,490/yr
+# STRIPE_SCALE_ANNUAL_PRICE_ID=${LIVE_SCALE_ANNUAL_PRICE_ID}         # Scale $19,990/yr
+# STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=${LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID}    # Extra Field Capture seat $1,250/yr
 SUPABASE_SERVICE_ROLE_KEY=…   # required — webhooks mint credits under service role
 
 Next:

@@ -10,9 +10,13 @@ import {
   LEGACY_SCALE_PRICE_ID,
   LEGACY_STARTER_PRICE_ID,
   LEGACY_WORK_VERIFICATION_PRICE_ID,
+  LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_ANNUAL_PRICE_ID,
   LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_ANNUAL_PRICE_ID,
   LIVE_STARTER_PRICE_ID,
+  LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID,
   LIVE_WORK_VERIFICATION_PRICE_ID,
   WORK_VERIFICATION_PLAN_CODE,
   atmospherePlan,
@@ -329,6 +333,9 @@ export function configuredSelfServePriceIds(): string[] {
     LIVE_STARTER_PRICE_ID,
     LIVE_WORK_VERIFICATION_PRICE_ID,
     LIVE_SCALE_PRICE_ID,
+    LIVE_STARTER_ANNUAL_PRICE_ID,
+    LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID,
+    LIVE_SCALE_ANNUAL_PRICE_ID,
     LEGACY_STARTER_PRICE_ID,
     LEGACY_WORK_VERIFICATION_PRICE_ID,
     LEGACY_SCALE_PRICE_ID,
@@ -336,16 +343,17 @@ export function configuredSelfServePriceIds(): string[] {
 }
 
 /**
- * Yearly checkout is offered only when every annual price id is set. Stripe
- * cannot mix monthly and yearly items on one subscription, so a missing seat
- * price would break the plan that was just sold.
+ * Yearly checkout needs a yearly price for every plan and the extra seat.
+ * Env overrides win; otherwise the pinned live annual ids are used, same as
+ * monthly. A non-empty override that is not a Stripe price id hides Yearly
+ * rather than mixing that id onto a subscription.
  */
 export function annualBillingAvailable(): boolean {
   return (
-    isStripePriceId(config.stripe.starterAnnualPriceId) &&
-    isStripePriceId(config.stripe.onboardingAnnualPriceId) &&
-    isStripePriceId(config.stripe.scaleAnnualPriceId) &&
-    isStripePriceId(config.stripe.extraSeatAnnualPriceId)
+    isStripePriceId(resolveSelfServePriceId('starter', 'year')) &&
+    isStripePriceId(resolveSelfServePriceId('work_verification', 'year')) &&
+    isStripePriceId(resolveSelfServePriceId('scale', 'year')) &&
+    isStripePriceId(extraSeatPriceIdForInterval('year'))
   );
 }
 
@@ -360,13 +368,9 @@ export function resolveSelfServePriceId(
 ): string | null {
   const plan = atmospherePlan(planCode);
   if (interval === 'year') {
-    const annual =
-      plan.code === 'starter'
-        ? config.stripe.starterAnnualPriceId
-        : plan.code === 'scale'
-          ? config.stripe.scaleAnnualPriceId
-          : config.stripe.onboardingAnnualPriceId;
-    return isStripePriceId(annual) ? annual : null;
+    if (plan.code === 'starter') return config.stripe.starterAnnualPriceId || LIVE_STARTER_ANNUAL_PRICE_ID;
+    if (plan.code === 'scale') return config.stripe.scaleAnnualPriceId || LIVE_SCALE_ANNUAL_PRICE_ID;
+    return config.stripe.onboardingAnnualPriceId || LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID;
   }
   if (plan.code === 'starter') return config.stripe.starterPriceId || LIVE_STARTER_PRICE_ID;
   if (plan.code === 'scale') return config.stripe.scalePriceId || LIVE_SCALE_PRICE_ID;
@@ -381,6 +385,7 @@ export function atmospherePlanCodeForPriceId(
     priceId === config.stripe.starterPriceId ||
     priceId === config.stripe.starterAnnualPriceId ||
     priceId === LIVE_STARTER_PRICE_ID ||
+    priceId === LIVE_STARTER_ANNUAL_PRICE_ID ||
     priceId === LEGACY_STARTER_PRICE_ID
   ) {
     return 'starter';
@@ -389,6 +394,7 @@ export function atmospherePlanCodeForPriceId(
     priceId === config.stripe.scalePriceId ||
     priceId === config.stripe.scaleAnnualPriceId ||
     priceId === LIVE_SCALE_PRICE_ID ||
+    priceId === LIVE_SCALE_ANNUAL_PRICE_ID ||
     priceId === LEGACY_SCALE_PRICE_ID
   ) {
     return 'scale';
@@ -401,12 +407,10 @@ export function extraSeatPriceId(): string {
   return config.stripe.extraSeatPriceId || LIVE_EXTRA_FC_SEAT_PRICE_ID;
 }
 
-/** Annual seat price, or null when `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID` is unset. */
+/** Annual seat price. Env override, otherwise the live $1,250/yr catalog id. */
 export function extraSeatPriceIdForInterval(interval: AtmosphereBillingInterval): string | null {
   if (interval === 'year') {
-    return isStripePriceId(config.stripe.extraSeatAnnualPriceId)
-      ? config.stripe.extraSeatAnnualPriceId
-      : null;
+    return config.stripe.extraSeatAnnualPriceId || LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID;
   }
   return extraSeatPriceId();
 }
@@ -417,6 +421,7 @@ export function isExtraSeatPriceId(priceId: string | null | undefined): boolean 
       (priceId === extraSeatPriceId() ||
         priceId === config.stripe.extraSeatAnnualPriceId ||
         priceId === LIVE_EXTRA_FC_SEAT_PRICE_ID ||
+        priceId === LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID ||
         priceId === LEGACY_EXTRA_FC_SEAT_PRICE_ID),
   );
 }
@@ -427,6 +432,7 @@ export function isWorkVerificationPriceId(priceId: string | null | undefined): b
       (priceId === config.stripe.onboardingPriceId ||
         priceId === config.stripe.onboardingAnnualPriceId ||
         priceId === LIVE_WORK_VERIFICATION_PRICE_ID ||
+        priceId === LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID ||
         priceId === LEGACY_WORK_VERIFICATION_PRICE_ID),
   );
 }
@@ -444,7 +450,11 @@ export function isAnnualConfiguredPriceId(priceId: string | null | undefined): b
     priceId === config.stripe.starterAnnualPriceId ||
     priceId === config.stripe.onboardingAnnualPriceId ||
     priceId === config.stripe.scaleAnnualPriceId ||
-    priceId === config.stripe.extraSeatAnnualPriceId
+    priceId === config.stripe.extraSeatAnnualPriceId ||
+    priceId === LIVE_STARTER_ANNUAL_PRICE_ID ||
+    priceId === LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID ||
+    priceId === LIVE_SCALE_ANNUAL_PRICE_ID ||
+    priceId === LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID
   );
 }
 

@@ -248,7 +248,8 @@ export async function resolveOnboardingPriceId(
   planCode?: string | null,
   interval: AtmosphereBillingInterval = 'month',
 ): Promise<string | null> {
-  // Annual prices are env-only. Never fall through to the monthly metering row.
+  // Annual prices use the env override or the pinned live annual id.
+  // Never fall through to the monthly metering row.
   if (interval === 'year') return resolveSelfServePriceId(planCode, 'year');
 
   const fromEnv = resolveSelfServePriceId(planCode, 'month');

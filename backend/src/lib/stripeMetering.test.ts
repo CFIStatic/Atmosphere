@@ -8,6 +8,7 @@ import {
   extraSeatPriceIdForInterval,
   extraSeatQuantityFromSubscription,
   invoiceChargeId,
+  isAnnualConfiguredPriceId,
   isConfiguredOnboardingPrice,
   isExtraSeatLineItem,
   isExtraSeatOnlySubscription,
@@ -25,9 +26,13 @@ import {
   LEGACY_SCALE_PRICE_ID,
   LEGACY_STARTER_PRICE_ID,
   LEGACY_WORK_VERIFICATION_PRICE_ID,
+  LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID,
   LIVE_EXTRA_FC_SEAT_PRICE_ID,
+  LIVE_SCALE_ANNUAL_PRICE_ID,
   LIVE_SCALE_PRICE_ID,
+  LIVE_STARTER_ANNUAL_PRICE_ID,
   LIVE_STARTER_PRICE_ID,
+  LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID,
   LIVE_WORK_VERIFICATION_PRICE_ID,
 } from './stripeCatalog.js';
 import { planFromMeteringRow } from './workspaceBilling.js';
@@ -59,6 +64,17 @@ describe('isConfiguredOnboardingPrice', () => {
 
 describe('self-serve price resolution', () => {
   it('defaults checkout to Work Verification and maps live catalog ids', () => {
+    const previousAnnual = {
+      starterAnnualPriceId: config.stripe.starterAnnualPriceId,
+      onboardingAnnualPriceId: config.stripe.onboardingAnnualPriceId,
+      scaleAnnualPriceId: config.stripe.scaleAnnualPriceId,
+      extraSeatAnnualPriceId: config.stripe.extraSeatAnnualPriceId,
+    };
+    config.stripe.starterAnnualPriceId = '';
+    config.stripe.onboardingAnnualPriceId = '';
+    config.stripe.scaleAnnualPriceId = '';
+    config.stripe.extraSeatAnnualPriceId = '';
+    try {
     assert.equal(resolveSelfServePriceId(undefined), LIVE_WORK_VERIFICATION_PRICE_ID);
     assert.equal(resolveSelfServePriceId('starter'), LIVE_STARTER_PRICE_ID);
     assert.equal(resolveSelfServePriceId('scale'), LIVE_SCALE_PRICE_ID);
@@ -69,13 +85,34 @@ describe('self-serve price resolution', () => {
     assert.equal(atmospherePlanCodeForPriceId(LEGACY_SCALE_PRICE_ID), 'scale');
     assert.equal(atmospherePlanCodeForPriceId(LEGACY_WORK_VERIFICATION_PRICE_ID), 'work_verification');
     assert.equal(isExtraSeatPriceId(LEGACY_EXTRA_FC_SEAT_PRICE_ID), true);
-    assert.equal(resolveSelfServePriceId('starter', 'year'), null);
-    assert.equal(resolveSelfServePriceId('scale', 'year'), null);
-    assert.equal(resolveSelfServePriceId('work_verification', 'year'), null);
-    assert.equal(extraSeatPriceIdForInterval('year'), null);
-    assert.equal(annualBillingAvailable(), false);
+    assert.equal(resolveSelfServePriceId('starter', 'year'), LIVE_STARTER_ANNUAL_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('scale', 'year'), LIVE_SCALE_ANNUAL_PRICE_ID);
+    assert.equal(resolveSelfServePriceId('work_verification', 'year'), LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID);
+    assert.equal(extraSeatPriceIdForInterval('year'), LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID);
+    assert.equal(annualBillingAvailable(), true);
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_STARTER_ANNUAL_PRICE_ID), 'starter');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_SCALE_ANNUAL_PRICE_ID), 'scale');
+    assert.equal(atmospherePlanCodeForPriceId(LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID), 'work_verification');
+    assert.equal(isConfiguredOnboardingPrice(LIVE_STARTER_ANNUAL_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID), true);
+    assert.equal(isConfiguredOnboardingPrice(LIVE_SCALE_ANNUAL_PRICE_ID), true);
+    assert.equal(isExtraSeatPriceId(LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID), true);
+    assert.equal(isAnnualConfiguredPriceId(LIVE_STARTER_ANNUAL_PRICE_ID), true);
+    assert.equal(isAnnualConfiguredPriceId(LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID), true);
+    assert.equal(isAnnualConfiguredPriceId(LIVE_SCALE_ANNUAL_PRICE_ID), true);
+    assert.equal(isAnnualConfiguredPriceId(LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID), true);
+    assert.equal(isAnnualConfiguredPriceId(LIVE_STARTER_PRICE_ID), false);
+    assert.equal(
+      recurringIntervalFromSubscription({
+        items: { data: [{ price: { id: LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID } }] },
+      }),
+      'year',
+    );
     assert.equal(normalizeAtmosphereBillingInterval('annual'), 'year');
     assert.equal(normalizeAtmosphereBillingInterval(undefined), 'month');
+    } finally {
+      Object.assign(config.stripe, previousAnnual);
+    }
   });
 
   it('maps configured annual price ids and keeps monthly checkout on the live prices', () => {
@@ -142,11 +179,12 @@ describe('self-serve price resolution', () => {
     }
   });
 
-  it('ignores annual price placeholders that are not Stripe price ids', () => {
+  it('lets a non-empty invalid annual override hide Yearly instead of falling back', () => {
     const previous = config.stripe.starterAnnualPriceId;
     config.stripe.starterAnnualPriceId = 'price_…';
     try {
-      assert.equal(resolveSelfServePriceId('starter', 'year'), null);
+      assert.equal(resolveSelfServePriceId('starter', 'year'), 'price_…');
+      assert.equal(isAnnualConfiguredPriceId('price_…'), false);
       assert.equal(annualBillingAvailable(), false);
     } finally {
       config.stripe.starterAnnualPriceId = previous;

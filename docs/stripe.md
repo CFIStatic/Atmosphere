@@ -33,10 +33,10 @@ set. `STRIPE_WEBHOOK_SECRET` stays the only webhook signing-secret name.
 | **Starter price** (`price_…`) | `STRIPE_STARTER_PRICE_ID` | Set on Railway. Live Starter is `price_1UDGIY1b5twUY3Ly7UlLMYBW` (`prod_VDZ3e7oBJWIYSE`, $399/mo, 1 seat). Checkout falls back to this id if the env is unset. |
 | **Scale price** (`price_…`) | `STRIPE_SCALE_PRICE_ID` | Set on Railway. Live Scale is `price_1UDGIb1b5twUY3LyUuZeyp75` (`prod_VDZ3SMytTKoxc5`, $1,999/mo, 10 seats). Checkout falls back to this id if the env is unset. |
 | **Extra Field Capture seat** (`price_…`) | `STRIPE_EXTRA_SEAT_PRICE_ID` | Optional. Defaults to live `price_1UDGIc1b5twUY3Ly0cEsD5Pr` ($125/mo). |
-| **Starter annual** (`price_…`) | `STRIPE_STARTER_ANNUAL_PRICE_ID` | Placeholder until created. $3,990/yr. No live fallback. |
-| **Work Verification annual** (`price_…`) | `STRIPE_ONBOARDING_ANNUAL_PRICE_ID` | Placeholder until created. $8,490/yr. No live fallback. |
-| **Scale annual** (`price_…`) | `STRIPE_SCALE_ANNUAL_PRICE_ID` | Placeholder until created. $19,990/yr. No live fallback. |
-| **Extra Field Capture seat annual** (`price_…`) | `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID` | Placeholder until created. $1,250/yr. Required together with the three plan annual ids. |
+| **Starter annual** (`price_…`) | `STRIPE_STARTER_ANNUAL_PRICE_ID` | Set on Railway Atmosphere APIs. Live Starter annual is `price_1UJL4a1b5twUY3LyozTzumYn` ($3,990/yr, same product `prod_VDZ3e7oBJWIYSE`). Checkout falls back to this id if the env is unset. |
+| **Work Verification annual** (`price_…`) | `STRIPE_ONBOARDING_ANNUAL_PRICE_ID` | Set on Railway Atmosphere APIs. Live Work Verification annual is `price_1UJL7O1b5twUY3LysyTksWMm` ($8,490/yr, `prod_VDVR9rM3g9Tkpg`). Checkout falls back to this id if the env is unset. |
+| **Scale annual** (`price_…`) | `STRIPE_SCALE_ANNUAL_PRICE_ID` | Set on Railway Atmosphere APIs. Live Scale annual is `price_1UJLA31b5twUY3LysRs2YVmw` ($19,990/yr, `prod_VDZ3SMytTKoxc5`). Checkout falls back to this id if the env is unset. |
+| **Extra Field Capture seat annual** (`price_…`) | `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID` | Set on Railway Atmosphere APIs. Live extra seat annual is `price_1UJLCg1b5twUY3Ly33CATdSo` ($1,250/yr, `prod_VDVTrP97lB98V6`). Checkout falls back to this id if the env is unset. |
 | Publishable (`pk_test_…`) | — | **Not used** — Checkout is hosted; the browser never talks to Stripe.js |
 | **Billing exempt emails** | `BILLING_EXEMPT_EMAILS` | No. Comma-separated, case-insensitive. Empty (default) = no exemptions. Example: `jack@jettx.ai`. |
 
@@ -118,17 +118,26 @@ Prior live prices (`price_1UD7vi1b5twUY3LykzUsVQVr`, `price_1UD4Sq1b5twUY3Ly6nqf
 `price_1UD7vj1b5twUY3Ly1Q4uv4kS`, `price_1UD4Sl1b5twUY3LyjD850F4V`) stay
 recognized on existing subscriptions until those items migrate.
 
-Annual prices are **not** created by `stripe:sync` and have **no** pinned live
-id. Set `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_ONBOARDING_ANNUAL_PRICE_ID`,
-`STRIPE_SCALE_ANNUAL_PRICE_ID`, and `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID` together
-after those prices exist. Until then `GET /api/billing/onboarding` and
-`GET /api/billing/self-serve` report `annualAvailable: false` and the app hides
-the Yearly toggle. Checkout with `billingInterval: "year"` returns
-`price_not_configured` instead of charging the monthly price. Signup Checkout
-writes `billing_interval` and `atmosphere_interval` (`month` or `year`) on the
-subscription. Webhooks recognize an annual price by that env id or by price
-metadata `atmosphere_plan_code` (`starter`, `work_verification`, `scale`, or
-`extra_fc_seat` / `field_capture_extra_seat`), `billing_interval=year`, and
+Annual prices are **not** created by `stripe:sync`. They are pinned in
+`backend/src/lib/stripeCatalog.ts` the same way as the monthly ids, and the
+env vars override them:
+
+- `STRIPE_STARTER_ANNUAL_PRICE_ID=price_1UJL4a1b5twUY3LyozTzumYn` ($3,990/yr)
+- `STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_1UJL7O1b5twUY3LysyTksWMm` ($8,490/yr)
+- `STRIPE_SCALE_ANNUAL_PRICE_ID=price_1UJLA31b5twUY3LysRs2YVmw` ($19,990/yr)
+- `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_1UJLCg1b5twUY3Ly33CATdSo` ($1,250/yr)
+
+Set those on Railway **Atmosphere APIs** when you want them explicit. Unset
+env already falls back to the same ids, so yearly checkout works before
+Railway is updated. A non-empty override that is not a Stripe price id hides
+the Yearly toggle (`annualAvailable: false` on `GET /api/billing/onboarding`
+and `GET /api/billing/self-serve`) instead of mixing that id onto a
+subscription. Yearly checkout never falls through to the monthly price.
+Signup Checkout writes `billing_interval` and `atmosphere_interval` (`month`
+or `year`) on the subscription. Webhooks recognize an annual price by the
+env id, the pinned live id, or by price metadata `atmosphere_plan_code`
+(`starter`, `work_verification`, `scale`, or `extra_fc_seat` /
+`field_capture_extra_seat`), `billing_interval=year`, and
 `atmosphere_interval=year`. Extra seats added later use the subscription's
 interval (Stripe default proration). Usage billing is unchanged.
 
@@ -178,15 +187,14 @@ STRIPE_ONBOARDING_PRICE_ID=price_1UDGIZ1b5twUY3LyO0culT5W   # live Work Verifica
 STRIPE_STARTER_PRICE_ID=price_1UDGIY1b5twUY3Ly7UlLMYBW     # live Starter $399/mo (1 seat)
 STRIPE_SCALE_PRICE_ID=price_1UDGIb1b5twUY3LyUuZeyp75       # live Scale $1,999/mo (10 seats)
 # STRIPE_EXTRA_SEAT_PRICE_ID=price_1UDGIc1b5twUY3Ly0cEsD5Pr  # optional; live extra FC seat $125/mo
-# Annual prices do not exist yet. Leave unset to hide the Yearly toggle.
-# Set all four after the annual Stripe prices are created (metadata:
-# atmosphere_plan_code, atmosphere_included_fc_seats, billing_interval=year,
-# atmosphere_interval=year). Yearly checkout stays off until every id is set,
-# because Stripe cannot mix monthly and yearly items on one subscription.
-# STRIPE_STARTER_ANNUAL_PRICE_ID=price_…        # Starter $3,990/yr
-# STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_…     # Work Verification $8,490/yr
-# STRIPE_SCALE_ANNUAL_PRICE_ID=price_…          # Scale $19,990/yr
-# STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_…     # Extra Field Capture seat $1,250/yr
+# Annual prices are pinned in stripeCatalog.ts. Env overrides win; unset falls
+# back to these live ids. Set on Railway Atmosphere APIs to match monthly.
+# Metadata: atmosphere_plan_code, atmosphere_included_fc_seats,
+# billing_interval=year, atmosphere_interval=year.
+STRIPE_STARTER_ANNUAL_PRICE_ID=price_1UJL4a1b5twUY3LyozTzumYn        # Starter $3,990/yr
+STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_1UJL7O1b5twUY3LysyTksWMm     # Work Verification $8,490/yr
+STRIPE_SCALE_ANNUAL_PRICE_ID=price_1UJLA31b5twUY3LysRs2YVmw          # Scale $19,990/yr
+STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_1UJLCg1b5twUY3Ly33CATdSo     # Extra Field Capture seat $1,250/yr
 SUPABASE_SERVICE_ROLE_KEY=…
 FRONTEND_ORIGIN=http://localhost:5174,http://localhost:5173
 # Optional — defaults land on Settings → Billing:

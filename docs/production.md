@@ -613,7 +613,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 Strongly recommended:
 
 - `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Verifier dictation and Ask this job (`GET /api/ready` reports `checks.ask` + `checks.vision`)
-- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID=price_1UDGIZ1b5twUY3LyO0culT5W`, `STRIPE_STARTER_PRICE_ID=price_1UDGIY1b5twUY3Ly7UlLMYBW`, `STRIPE_SCALE_PRICE_ID=price_1UDGIb1b5twUY3LyUuZeyp75`) — see [`docs/stripe.md`](./stripe.md). Optional annual prices, all required together or the Yearly toggle stays hidden: `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_ONBOARDING_ANNUAL_PRICE_ID`, `STRIPE_SCALE_ANNUAL_PRICE_ID`, `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID`.
+- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID=price_1UDGIZ1b5twUY3LyO0culT5W`, `STRIPE_STARTER_PRICE_ID=price_1UDGIY1b5twUY3Ly7UlLMYBW`, `STRIPE_SCALE_PRICE_ID=price_1UDGIb1b5twUY3LyUuZeyp75`) — see [`docs/stripe.md`](./stripe.md). Annual prices are pinned the same way (env on Railway **Atmosphere APIs** overrides; unset falls back to the live ids): `STRIPE_STARTER_ANNUAL_PRICE_ID=price_1UJL4a1b5twUY3LyozTzumYn`, `STRIPE_ONBOARDING_ANNUAL_PRICE_ID=price_1UJL7O1b5twUY3LysyTksWMm`, `STRIPE_SCALE_ANNUAL_PRICE_ID=price_1UJLA31b5twUY3LysRs2YVmw`, `STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID=price_1UJLCg1b5twUY3Ly33CATdSo`.
 - `BILLING_EXEMPT_EMAILS=jack@jettx.ai` on Railway Atmosphere APIs — founder / comped accounts skip Stripe Checkout; paying customers stay gated
 - `COOKIE_SECURE=true` (default when `NODE_ENV=production`)
 - `BACKUP_ENCRYPTION_KEY` if `BACKUP_ENABLED` is on

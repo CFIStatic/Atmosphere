@@ -9,8 +9,8 @@
  * Verification ($849/mo or $8,490/yr, 3 seats, default), Scale ($1,999/mo or
  * $19,990/yr, 10 seats). Extra Field Capture seats are $125/mo or $1,250/yr.
  * Yearly is 10× the monthly price (2 months free). Enterprise is contact-sales
- * only — no fourth SKU. Annual Stripe price ids are env-only; they are not
- * pinned here because those prices are created separately.
+ * only — no fourth SKU. Annual price ids are pinned here the same way as
+ * monthly: env vars win, these live ids are the fallback.
  */
 
 export const STARTER_PLAN_CODE = 'starter';
@@ -59,6 +59,18 @@ export const LIVE_SCALE_PRICE_ID = 'price_1UDGIb1b5twUY3LyUuZeyp75';
 /** Live extra Field Capture seat $125/mo. */
 export const LIVE_EXTRA_FC_SEAT_PRODUCT_ID = 'prod_VDVTrP97lB98V6';
 export const LIVE_EXTRA_FC_SEAT_PRICE_ID = 'price_1UDGIc1b5twUY3Ly0cEsD5Pr';
+
+/** Live Starter $3,990/yr. Same product as the monthly price. */
+export const LIVE_STARTER_ANNUAL_PRICE_ID = 'price_1UJL4a1b5twUY3LyozTzumYn';
+
+/** Live Work Verification $8,490/yr. */
+export const LIVE_WORK_VERIFICATION_ANNUAL_PRICE_ID = 'price_1UJL7O1b5twUY3LysyTksWMm';
+
+/** Live Scale $19,990/yr. */
+export const LIVE_SCALE_ANNUAL_PRICE_ID = 'price_1UJLA31b5twUY3LysRs2YVmw';
+
+/** Live extra Field Capture seat $1,250/yr. */
+export const LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID = 'price_1UJLCg1b5twUY3Ly33CATdSo';
 
 /** Prior live prices — still on existing subscriptions until they migrate. */
 export const LEGACY_STARTER_PRICE_ID = 'price_1UD7vi1b5twUY3LykzUsVQVr';
