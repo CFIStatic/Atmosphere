@@ -150,12 +150,15 @@
     var whoName = document.getElementById('who-name');
     var whoSub = document.getElementById('who-sub');
     var avatar = document.getElementById('who-avatar');
+    var menuAvatar = document.getElementById('menu-avatar');
     var menuName = document.getElementById('menu-name');
     var menuEmail = document.getElementById('menu-email');
     var menuMeta = document.getElementById('menu-meta');
+    var initials = initialsFrom(name, email);
     if (whoName) whoName.textContent = name;
     if (whoSub) whoSub.textContent = org;
-    paintAvatar(avatar, initialsFrom(name, email), opts.avatarUrl);
+    paintAvatar(avatar, initials, opts.avatarUrl);
+    paintAvatar(menuAvatar, initials, opts.avatarUrl);
     if (menuName) menuName.textContent = name;
     if (menuEmail) {
       menuEmail.textContent = email;

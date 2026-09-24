@@ -234,6 +234,11 @@ describe('Field Capture Railway image', () => {
     expect(cspDirective(headers, 'connect-src')).toBe(
       "connect-src 'self' https://*.supabase.co https://platform.atmosphereteam.com wss://platform.atmosphereteam.com stun:stun.l.google.com:19302 stun:stun1.l.google.com:19302 turn:",
     );
+    // Platform-uploaded avatars are public objects on *.supabase.co.
+    // media-src does not cover <img>; without this, the chip falls back to initials.
+    expect(cspDirective(headers, 'img-src')).toBe(
+      "img-src 'self' data: blob: https://*.supabase.co",
+    );
     expect(cspDirective(headers, 'connect-src').split(/\s+/)).not.toContain('*');
     expect(cspDirective(headers, 'frame-src')).toBe(
       "frame-src 'self' https://platform.atmosphereteam.com",

@@ -81,6 +81,8 @@ describe('Field Capture account menu', () => {
     expect(document.getElementById('who-sub')?.textContent).toBe('Jettx LLC');
     expect(document.getElementById('who-avatar')?.textContent).toBe('JC');
     expect(document.getElementById('who-avatar')?.querySelector('img')).toBeNull();
+    expect(document.getElementById('menu-avatar')?.textContent).toBe('JC');
+    expect(document.getElementById('menu-avatar')?.querySelector('img')).toBeNull();
     expect(document.getElementById('menu-name')?.textContent).toBe('Jack Cyganiak');
     expect(document.getElementById('menu-email')?.textContent).toBe('jack@jettx.ai');
     expect(document.getElementById('menu-meta')?.textContent).toBe('Jettx LLC');
@@ -139,6 +141,8 @@ describe('Field Capture account menu', () => {
     const avatar = document.getElementById('who-avatar');
     expect(avatar?.textContent).toBe('');
     expect(avatar?.querySelector('img')?.getAttribute('src')).toBe('https://img.example/jack-icon.png');
+    const menuAvatar = document.getElementById('menu-avatar');
+    expect(menuAvatar?.querySelector('img')?.getAttribute('src')).toBe('https://img.example/jack-icon.png');
   });
 
   it('opens Settings in the in-app Platform and signs out from the same menu', () => {
