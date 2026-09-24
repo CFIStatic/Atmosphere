@@ -42,10 +42,11 @@ describe('phone home-screen manifests', () => {
     expect(favicon).toContain('viewBox="0 0 16 16"');
     expect(favicon).toContain('fill="#FFFFFF"');
     expect(favicon.match(/<rect/g)?.length).toBe(6);
-    expect(favicon).toContain('y="3"');
-    expect(favicon).toContain('height="1"');
-    expect(favicon).toContain('#D5D5D6');
-    expect(favicon).toContain('#ED5F18');
+    expect(favicon).toContain('x="1" y="1" width="14" height="2" fill="#D5D5D6"');
+    expect(favicon).toContain('x="1" y="4" width="14" height="2" fill="#ADAEAF"');
+    expect(favicon).toContain('x="1" y="7" width="14" height="2" fill="#7F8081"');
+    expect(favicon).toContain('x="1" y="10" width="14" height="2" fill="#494B4C"');
+    expect(favicon).toContain('x="1" y="13" width="14" height="2" fill="#ED5F18"');
     expect(favicon).not.toContain('prefers-color-scheme');
 
     const manifest = readJson('frontend/public/manifest.webmanifest');
