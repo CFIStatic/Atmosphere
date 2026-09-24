@@ -121,8 +121,8 @@ function IntervalToggle({
             <label
               key={option.value}
               className={cn(
-                'inline-flex cursor-pointer items-center rounded-full px-3 py-1.5 text-sm font-semibold transition',
-                selected ? 'bg-brand-500 text-white' : 'text-ink-600 hover:text-ink-900',
+                'relative inline-flex cursor-pointer items-center rounded-full px-3 py-1.5 text-sm font-semibold',
+                selected ? 'bg-brand-500 text-ink-900' : 'bg-transparent text-ink-700 hover:text-ink-900',
                 disabled && 'cursor-not-allowed opacity-60',
               )}
             >
@@ -137,12 +137,7 @@ function IntervalToggle({
               />
               {option.label}
               {option.value === 'year' ? (
-                <span
-                  className={cn(
-                    'ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                    selected ? 'bg-white/20 text-white' : 'bg-brand-50 text-brand-700',
-                  )}
-                >
+                <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-800">
                   2 months free
                 </span>
               ) : null}

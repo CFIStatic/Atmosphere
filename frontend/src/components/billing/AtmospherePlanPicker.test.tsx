@@ -116,13 +116,24 @@ describe('AtmospherePlanPicker', () => {
     render(<Yearly />);
 
     const intervals = screen.getByRole('radiogroup', { name: 'Billing interval' });
-    expect(within(intervals).getByRole('radio', { name: /^Monthly/i })).toBeChecked();
+    const monthly = within(intervals).getByRole('radio', { name: /^Monthly/i });
+    const yearly = within(intervals).getByRole('radio', { name: /Yearly/i });
+    expect(monthly).toBeChecked();
+    expect(monthly.closest('label')?.className).toMatch(/bg-brand-500/);
+    expect(yearly.closest('label')?.className).not.toMatch(/bg-brand-500/);
+    const badge = screen.getByText('2 months free');
+    expect(badge.className).toMatch(/bg-brand-100/);
+    expect(badge.className).toMatch(/text-brand-800/);
+    expect(badge.className).not.toMatch(/text-white/);
     expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getByText(/\$125\/mo/)).toBeInTheDocument();
 
-    await user.click(within(intervals).getByRole('radio', { name: /Yearly/i }));
-    expect(within(intervals).getByRole('radio', { name: /Yearly/i })).toBeChecked();
-    expect(screen.getByText('2 months free')).toBeInTheDocument();
+    await user.click(yearly);
+    expect(yearly).toBeChecked();
+    expect(yearly.closest('label')?.className).toMatch(/bg-brand-500/);
+    expect(monthly.closest('label')?.className).not.toMatch(/bg-brand-500/);
+    expect(badge.className).toMatch(/bg-brand-100/);
+    expect(badge.className).toMatch(/text-brand-800/);
     expect(screen.getByText('$3,990')).toBeInTheDocument();
     expect(screen.getByText('$8,490')).toBeInTheDocument();
     expect(screen.getByText('$19,990')).toBeInTheDocument();
