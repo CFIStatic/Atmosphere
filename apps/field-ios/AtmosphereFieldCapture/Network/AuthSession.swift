@@ -17,6 +17,8 @@ final class AuthSession: ObservableObject {
     @Published private(set) var orgName: String?
     @Published private(set) var orgId: String?
     @Published private(set) var fullName: String?
+    /// Same profile photo Platform stores on `profiles.avatar_url`.
+    @Published private(set) var avatarUrl: String?
     @Published var lastError: String?
     /// Shown after signup when Atmosphere asked the user to confirm email first.
     @Published var confirmationNotice: String?
@@ -31,6 +33,7 @@ final class AuthSession: ObservableObject {
     private let orgAccount = "orgName"
     private let orgIdAccount = "orgId"
     private let nameAccount = "fullName"
+    private let avatarAccount = "avatarUrl"
     private let linkedFlagKey = "atmosphere.field.accountLinked"
     private var joiningOffice = false
 
@@ -354,6 +357,7 @@ final class AuthSession: ObservableObject {
         orgName = UserDefaults.standard.string(forKey: orgAccount)
         orgId = UserDefaults.standard.string(forKey: orgIdAccount)
         fullName = UserDefaults.standard.string(forKey: nameAccount)
+        avatarUrl = UserDefaults.standard.string(forKey: avatarAccount)
         isLinked = linked && (refresh != nil || access != nil)
         needsOfficeLink = isLinked && orgName == nil
 
@@ -366,10 +370,16 @@ final class AuthSession: ObservableObject {
     private func applyProfile(_ me: AtmosphereClient.FieldMe) {
         email = me.user.email
         fullName = me.user.fullName
+        avatarUrl = me.user.avatarUrl
         orgName = me.org.name
         orgId = me.org.id
         if let email { KeychainStore.set(email, account: emailAccount) }
         if let fullName { UserDefaults.standard.set(fullName, forKey: nameAccount) }
+        if let avatarUrl, avatarUrl.hasPrefix("http") {
+            UserDefaults.standard.set(avatarUrl, forKey: avatarAccount)
+        } else {
+            UserDefaults.standard.removeObject(forKey: avatarAccount)
+        }
         UserDefaults.standard.set(me.org.name, forKey: orgAccount)
         UserDefaults.standard.set(me.org.id, forKey: orgIdAccount)
     }
@@ -389,6 +399,7 @@ final class AuthSession: ObservableObject {
         UserDefaults.standard.removeObject(forKey: orgAccount)
         UserDefaults.standard.removeObject(forKey: orgIdAccount)
         UserDefaults.standard.removeObject(forKey: nameAccount)
+        UserDefaults.standard.removeObject(forKey: avatarAccount)
         PendingJobsStore.clear()
         UserDefaults.standard.set(false, forKey: linkedFlagKey)
         api.accessToken = nil
@@ -401,6 +412,7 @@ final class AuthSession: ObservableObject {
         orgName = nil
         orgId = nil
         fullName = nil
+        avatarUrl = nil
     }
 
     private func ensureFreshAccess(forceRefresh: Bool = false) async throws {

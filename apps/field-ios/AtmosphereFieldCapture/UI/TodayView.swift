@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TodayView: View {
     @EnvironmentObject private var session: FieldDaySession
@@ -239,9 +240,12 @@ struct TodayView: View {
                     }
                 }
             } label: {
-                Text("Account")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
+                FieldAccountChip(
+                    name: auth.fullName,
+                    email: auth.email,
+                    org: auth.orgName,
+                    avatarUrl: auth.avatarUrl
+                )
             }
         }
         .padding(.horizontal, 18)
@@ -254,4 +258,124 @@ struct TodayView: View {
 private struct IdentifiedURL: Identifiable {
     let url: URL
     var id: String { url.absoluteString }
+}
+
+/// Signed-in account chip: name, office, and the Platform profile photo.
+/// Initials when the URL is missing or the image fails to load.
+private struct FieldAccountChip: View {
+    var name: String?
+    var email: String?
+    var org: String?
+    var avatarUrl: String?
+
+    private var title: String {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        if let email, !email.hasSuffix("@field.atmosphere.app"), !email.isEmpty { return email }
+        return "Account"
+    }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(FieldTheme.ink)
+                    .lineLimit(1)
+                if let org, !org.isEmpty {
+                    Text(org)
+                        .font(.system(size: 11.5, weight: .regular))
+                        .foregroundStyle(FieldTheme.muted)
+                        .lineLimit(1)
+                }
+            }
+            FieldAccountAvatar(name: name, email: email, avatarUrl: avatarUrl)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Account menu")
+    }
+}
+
+private struct FieldAccountAvatar: View {
+    var name: String?
+    var email: String?
+    var avatarUrl: String?
+    var size: CGFloat = 28
+
+    @State private var image: UIImage?
+
+    private var initials: String {
+        let parts = (name ?? "").split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if parts.count >= 2 {
+            let first = parts[0].prefix(1)
+            let last = parts[parts.count - 1].prefix(1)
+            return (first + last).uppercased()
+        }
+        if let word = parts.first, !word.isEmpty {
+            return String(word.prefix(2)).uppercased()
+        }
+        let letters = (email ?? "").filter { $0.isLetter }
+        if letters.count >= 2 { return String(letters.prefix(2)).uppercased() }
+        return "•"
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(FieldTheme.accent)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(initials)
+                    .font(.system(size: size * 0.38, weight: .bold))
+                    .foregroundStyle(Color.white)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+        .task(id: avatarUrl) {
+            image = await FieldAvatarImage.load(avatarUrl)
+        }
+    }
+}
+
+private enum FieldAvatarImage {
+    static func load(_ raw: String?) async -> UIImage? {
+        guard let url = displayableURL(raw) else { return nil }
+        if url.scheme?.lowercased() == "data" {
+            return imageFromDataURL(url)
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let http = response as? HTTPURLResponse, !(200 ... 299).contains(http.statusCode) {
+                return nil
+            }
+            return UIImage(data: data)
+        } catch {
+            return nil
+        }
+    }
+
+    /// http(s) storage URLs and data:image pictures only.
+    private static func displayableURL(_ raw: String?) -> URL? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else { return nil }
+        if scheme == "https" || scheme == "http" { return url }
+        if scheme == "data", trimmed.hasPrefix("data:image/") { return url }
+        return nil
+    }
+
+    private static func imageFromDataURL(_ url: URL) -> UIImage? {
+        let raw = url.absoluteString
+        guard let comma = raw.firstIndex(of: ",") else { return nil }
+        let meta = raw[..<comma]
+        guard meta.contains("base64") else { return nil }
+        let payload = String(raw[raw.index(after: comma)...])
+        guard let data = Data(base64Encoded: payload, options: .ignoreUnknownCharacters) else { return nil }
+        return UIImage(data: data)
+    }
 }

@@ -313,6 +313,9 @@ final class AtmosphereClient: ObservableObject {
             let id: String
             let email: String?
             let fullName: String?
+            /// Platform profile photo. HTTPS storage URL, or a data URL when
+            /// object storage is not configured. Missing on older responses.
+            let avatarUrl: String?
         }
         struct Org: Decodable {
             let id: String
@@ -913,6 +916,7 @@ final class AtmosphereClient: ObservableObject {
 
     private struct ProfileRow: Decodable {
         let full_name: String?
+        let avatar_url: String?
     }
 
     private struct JobRow: Decodable {
@@ -1296,23 +1300,43 @@ final class AtmosphereClient: ObservableObject {
         _ = try await URLSession.shared.data(for: request)
     }
 
-    private func fieldMeViaSupabase() async throws -> FieldMe {
-        let membership = try await requireMembership()
-        let userId = jwtClaim("sub") ?? ""
-        let email = jwtClaim("email")
-        var fullName: String?
-        if !userId.isEmpty {
-            let profiles: [ProfileRow] = try await supabaseRest(
+    /// `avatar_url` shipped after `full_name`. A deployment without the column
+    /// still returns the name; the chip falls back to initials.
+    private func loadOwnProfile(userId: String) async throws -> ProfileRow? {
+        do {
+            let rows: [ProfileRow] = try await supabaseRest(
+                path: "/rest/v1/profiles",
+                query: [
+                    URLQueryItem(name: "select", value: "full_name,avatar_url"),
+                    URLQueryItem(name: "id", value: "eq.\(userId)"),
+                ]
+            )
+            return rows.first
+        } catch {
+            let rows: [ProfileRow] = try await supabaseRest(
                 path: "/rest/v1/profiles",
                 query: [
                     URLQueryItem(name: "select", value: "full_name"),
                     URLQueryItem(name: "id", value: "eq.\(userId)"),
                 ]
             )
-            fullName = profiles.first?.full_name
+            return rows.first
+        }
+    }
+
+    private func fieldMeViaSupabase() async throws -> FieldMe {
+        let membership = try await requireMembership()
+        let userId = jwtClaim("sub") ?? ""
+        let email = jwtClaim("email")
+        var fullName: String?
+        var avatarUrl: String?
+        if !userId.isEmpty {
+            let profiles = try await loadOwnProfile(userId: userId)
+            fullName = profiles?.full_name
+            avatarUrl = profiles?.avatar_url
         }
         return FieldMe(
-            user: .init(id: userId, email: email, fullName: fullName),
+            user: .init(id: userId, email: email, fullName: fullName, avatarUrl: avatarUrl),
             org: .init(
                 id: membership.org_id,
                 name: membership.org_name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
