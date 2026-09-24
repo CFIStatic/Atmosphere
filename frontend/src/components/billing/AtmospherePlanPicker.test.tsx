@@ -31,6 +31,25 @@ describe('AtmospherePlanPicker', () => {
     expect(screen.getByText('$849')).toBeInTheDocument();
     expect(screen.getByText('$1,999')).toBeInTheDocument();
     expect(screen.getAllByText('/ month')).toHaveLength(3);
+    for (const amount of ['$399', '$849', '$1,999']) {
+      const price = screen.getByText(amount);
+      expect(price.className).toMatch(/whitespace-nowrap/);
+      expect(price.parentElement?.className).not.toMatch(/flex-col/);
+      expect(price.nextElementSibling?.textContent).toBe('/ month');
+      expect(price.nextElementSibling?.className).toMatch(/text-sm/);
+      expect(price.nextElementSibling?.className).toMatch(/text-ink-500/);
+      expect(price.nextElementSibling?.className).toMatch(/whitespace-nowrap/);
+    }
+    const note = screen.getByText(/Extra Field Capture seats are \$125\/mo each/);
+    expect(note.className).toMatch(/text-xs/);
+    expect(note.className).toMatch(/text-ink-500/);
+    expect(note.textContent).toMatch(/Seats count Field Capture accounts only/);
+    expect(note.textContent).toMatch(/office-only Global Admins do not use a seat/);
+    expect(note.textContent).toMatch(/AI\/token usage is billed the day it is used/);
+    expect(note.textContent).toMatch(/Prices increase 10% annually on your plan anniversary \(30-day notice\)/);
+    expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
+    expect(screen.getAllByText(/office-only Global Admins/)).toHaveLength(1);
+    expect(screen.getAllByText(/30-day notice/)).toHaveLength(1);
     expect(screen.getByText('1 Field Capture account')).toBeInTheDocument();
     expect(screen.getByText('3 Field Capture accounts')).toBeInTheDocument();
     expect(screen.getByText('10 Field Capture accounts')).toBeInTheDocument();

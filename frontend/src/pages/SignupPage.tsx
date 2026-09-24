@@ -525,10 +525,6 @@ export function SignupPage() {
               }}
             />
           </div>
-          <p className="mt-3 text-sm text-ink-600">
-            Extra Field Capture seats are $125/mo each. Seats count Field Capture accounts only —
-            office-only Global Admins do not use a seat. AI/token usage is billed the day it is used.
-          </p>
           <div className="mt-7 flex justify-end">
             <PrimaryButton onClick={() => goToStep(1)}>Continue to company setup</PrimaryButton>
           </div>
