@@ -108,6 +108,13 @@ describe('self-serve price resolution', () => {
       }),
       'year',
     );
+    assert.equal(
+      recurringIntervalFromSubscription({
+        metadata: { billing_interval: 'year' },
+        items: { data: [{ price: { id: 'price_unexpanded' } }] },
+      }),
+      'year',
+    );
     assert.equal(normalizeAtmosphereBillingInterval('annual'), 'year');
     assert.equal(normalizeAtmosphereBillingInterval(undefined), 'month');
     } finally {
@@ -169,6 +176,25 @@ describe('self-serve price resolution', () => {
         'year',
       );
       assert.equal(
+        extraSeatPriceIdForInterval(
+          recurringIntervalFromSubscription({
+            metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
+            items: {
+              data: [
+                {
+                  price: {
+                    id: LIVE_WORK_VERIFICATION_PRICE_ID,
+                    recurring: { interval: 'month' },
+                    metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+        LIVE_EXTRA_FC_SEAT_PRICE_ID,
+      );
+      assert.equal(
         extraSeatQuantityFromSubscription({
           items: { data: [{ price: { id: 'price_annSeat', metadata: { atmosphere_plan_code: 'extra_fc_seat' } }, quantity: 4 }] },
         }),
@@ -200,21 +226,31 @@ describe('stripe helpers', () => {
   });
 
   it('prefers a live monthly price over stale yearly checkout metadata', () => {
-    assert.equal(
-      recurringIntervalFromSubscription({
-        metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
-        items: {
-          data: [
-            {
-              price: {
-                id: LIVE_WORK_VERIFICATION_PRICE_ID,
-                recurring: { interval: 'month' },
-              },
+    const switchedToMonthly = {
+      metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
+      items: {
+        data: [
+          {
+            price: {
+              id: LIVE_WORK_VERIFICATION_PRICE_ID,
+              recurring: { interval: 'month' },
+              metadata: { billing_interval: 'year', atmosphere_interval: 'year' },
             },
-          ],
-        },
-      }),
-      'month',
+          },
+          {
+            price: {
+              id: LIVE_EXTRA_FC_SEAT_ANNUAL_PRICE_ID,
+              recurring: { interval: 'year' },
+              metadata: { atmosphere_plan_code: 'extra_fc_seat' },
+            },
+          },
+        ],
+      },
+    };
+    assert.equal(recurringIntervalFromSubscription(switchedToMonthly), 'month');
+    assert.equal(
+      extraSeatPriceIdForInterval(recurringIntervalFromSubscription(switchedToMonthly)),
+      LIVE_EXTRA_FC_SEAT_PRICE_ID,
     );
     assert.equal(
       recurringIntervalFromSubscription({

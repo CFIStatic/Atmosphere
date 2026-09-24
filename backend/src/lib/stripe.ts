@@ -514,26 +514,38 @@ export function priceSignalsOnboardingPlan(
 }
 
 /**
- * Interval of an existing subscription. A live item `recurring.interval`
- * wins over checkout metadata — the Stripe portal can replace a yearly price
- * with a monthly one and leave `billing_interval` stale. Annual wins if any
- * live item is yearly (Stripe rejects mixed intervals). Price ids and
- * metadata are used only when no item states an interval.
+ * Interval of an existing subscription, taken from the licensed plan item's
+ * `price.recurring.interval`. Checkout metadata is only a fallback when no
+ * item has a recurring price: the Stripe portal can switch yearly → monthly
+ * without rewriting `billing_interval`, and a stale year must not attach the
+ * annual seat price to a monthly subscription.
  */
 export function recurringIntervalFromSubscription(sub: {
   metadata?: { billing_interval?: string; atmosphere_interval?: string } | null;
   items?: { data?: Array<{ price?: AtmospherePriceLike | string | null }> };
 }): AtmosphereBillingInterval {
   const items = sub.items?.data ?? [];
-  let sawMonthlyItem = false;
+  let planInterval: AtmosphereBillingInterval | null = null;
+  let anyRecurring: AtmosphereBillingInterval | null = null;
+
   for (const item of items) {
     const price = item.price;
     if (!price || typeof price === 'string') continue;
-    if (price.recurring?.interval === 'year') return 'year';
-    if (price.recurring?.interval === 'month') sawMonthlyItem = true;
+    const recurring = price.recurring?.interval;
+    if (!recurring) continue;
+    const interval: AtmosphereBillingInterval = recurring === 'year' ? 'year' : 'month';
+    if (!anyRecurring) anyRecurring = interval;
+    if (!isExtraSeatLineItem(item) && planInterval !== 'month') planInterval = interval;
   }
-  if (sawMonthlyItem) return 'month';
+  if (planInterval) return planInterval;
+  if (anyRecurring) return anyRecurring;
 
+  if (
+    intervalFromMetadata(sub.metadata?.billing_interval) === 'year' ||
+    intervalFromMetadata(sub.metadata?.atmosphere_interval) === 'year'
+  ) {
+    return 'year';
+  }
   for (const item of items) {
     const price = item.price;
     if (!price) continue;
@@ -548,12 +560,6 @@ export function recurringIntervalFromSubscription(sub: {
     ) {
       return 'year';
     }
-  }
-  if (
-    intervalFromMetadata(sub.metadata?.billing_interval) === 'year' ||
-    intervalFromMetadata(sub.metadata?.atmosphere_interval) === 'year'
-  ) {
-    return 'year';
   }
   return 'month';
 }
