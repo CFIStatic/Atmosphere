@@ -30,12 +30,12 @@ describe('AtmospherePlanPicker', () => {
     expect(screen.getByText('$399')).toBeInTheDocument();
     expect(screen.getByText('$849')).toBeInTheDocument();
     expect(screen.getByText('$1,999')).toBeInTheDocument();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     for (const amount of ['$399', '$849', '$1,999']) {
       const price = screen.getByText(amount);
       expect(price.className).toMatch(/whitespace-nowrap/);
       expect(price.parentElement?.className).not.toMatch(/flex-col/);
-      expect(price.nextElementSibling?.textContent).toBe('/ month');
+      expect(price.nextElementSibling?.textContent).toBe('Per Month');
       expect(price.nextElementSibling?.className).toMatch(/text-sm/);
       expect(price.nextElementSibling?.className).toMatch(/text-ink-500/);
       expect(price.nextElementSibling?.className).toMatch(/whitespace-nowrap/);
@@ -94,7 +94,7 @@ describe('AtmospherePlanPicker', () => {
     render(<Picker />);
     expect(screen.queryByRole('radio', { name: /Monthly/i })).toBeNull();
     expect(screen.queryByRole('radio', { name: /Yearly/i })).toBeNull();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
   });
 
   it('shows yearly prices, the free-months badge, and the annual seat note', async () => {
@@ -117,7 +117,7 @@ describe('AtmospherePlanPicker', () => {
 
     const intervals = screen.getByRole('radiogroup', { name: 'Billing interval' });
     expect(within(intervals).getByRole('radio', { name: /^Monthly/i })).toBeChecked();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getByText(/\$125\/mo/)).toBeInTheDocument();
 
     await user.click(within(intervals).getByRole('radio', { name: /Yearly/i }));
@@ -126,14 +126,14 @@ describe('AtmospherePlanPicker', () => {
     expect(screen.getByText('$3,990')).toBeInTheDocument();
     expect(screen.getByText('$8,490')).toBeInTheDocument();
     expect(screen.getByText('$19,990')).toBeInTheDocument();
-    expect(screen.getAllByText('/ year')).toHaveLength(3);
+    expect(screen.getAllByText('Per Year')).toHaveLength(3);
     expect(screen.getByText('$332.50/mo billed yearly')).toBeInTheDocument();
     expect(screen.getByText('$707.50/mo billed yearly')).toBeInTheDocument();
     expect(screen.getByText('$1,665.83/mo billed yearly')).toBeInTheDocument();
     for (const amount of ['$3,990', '$8,490', '$19,990']) {
       const price = screen.getByText(amount);
       expect(price.className).toMatch(/whitespace-nowrap/);
-      expect(price.nextElementSibling?.textContent).toBe('/ year');
+      expect(price.nextElementSibling?.textContent).toBe('Per Year');
       expect(price.nextElementSibling?.className).toMatch(/text-sm/);
       expect(price.nextElementSibling?.className).toMatch(/text-ink-500/);
     }

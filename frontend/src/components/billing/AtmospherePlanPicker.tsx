@@ -169,11 +169,13 @@ export function PlanPrice({
   const amount = yearly ? (annualCents ?? monthlyCents * 10) : monthlyCents;
   return (
     <span className={cn('mt-3 block', className)}>
-      <span className="whitespace-nowrap text-2xl font-bold tabular-nums tracking-tight text-ink-900">
-        {formatCents(amount)}
-      </span>{' '}
-      <span className="whitespace-nowrap text-sm font-medium text-ink-500">
-        {yearly ? '/ year' : '/ month'}
+      <span className="whitespace-nowrap">
+        <span className="whitespace-nowrap text-2xl font-bold tabular-nums tracking-tight text-ink-900">
+          {formatCents(amount)}
+        </span>{' '}
+        <span className="whitespace-nowrap text-sm font-medium text-ink-500">
+          {yearly ? 'Per Year' : 'Per Month'}
+        </span>
       </span>
       {yearly ? (
         <span className="mt-1 block text-xs font-medium text-ink-500">

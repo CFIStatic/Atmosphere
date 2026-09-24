@@ -129,7 +129,7 @@ describe('SignupPage', () => {
     expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Work Verification/i })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Scale/i })).toBeInTheDocument();
-    expect(screen.getAllByText('/ month')).toHaveLength(3);
+    expect(screen.getAllByText('Per Month')).toHaveLength(3);
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();
