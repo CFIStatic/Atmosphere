@@ -265,7 +265,7 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('usage billed the day it runs');
     expect(page).toContain('Chest Mount');
     expect(page).toContain('$99.99');
-    expect(page).toContain('/ month');
+    expect(page).toContain('Per Month');
     expect(page).not.toContain('$49.99');
     expect(page).not.toContain('>per month<');
     expect(page).toContain('Homeowners invited to a job file pay nothing');
