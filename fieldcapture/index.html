@@ -371,9 +371,10 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Field Capture | Platform — shown after sign-in (Today / office link).
+  /* Field Capture | Dashboard — shown after sign-in (Today / office link).
      Hidden on the login form and while filming so Sign in / hold-to-finish
-     stay the only control. The office console has no bar. */
+     stay the only control. Single-line labels, vertically centered.
+     The office console has no bar. */
   /* Stays inside the 480px phone column — never full-bleed on desktop. */
   .switchbar {
     display: grid; grid-template-columns: 1fr 1fr;
@@ -385,17 +386,19 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .switchbar a {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px;
-    min-height: 52px;
-    padding: 10px 8px 12px;
-    text-decoration: none; color: var(--muted);
-    font-size: 13px; font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0 12px;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
     -webkit-tap-highlight-color: transparent;
   }
-  .switchbar a small { font-size: 10.5px; font-weight: 600; color: var(--faint); }
   .switchbar a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
-  .switchbar a[aria-current="page"] small { color: var(--accent); }
   .app[data-switch="off"] .switchbar { display: none; }
 
   /* ---------- today's jobs: tap to select, no raw links ---------- */
@@ -1146,8 +1149,8 @@
   </div>
 
   <nav class="switchbar" id="product-switch" aria-label="Product" hidden>
-    <a href="#today" aria-current="page">Field Capture<small>Your jobs</small></a>
-    <a id="platform-link" href="https://platform.atmosphereteam.com/verifier-library?embed=field&amp;v=no-overview-back-2">Platform<small>The office</small></a>
+    <a href="#today" aria-current="page">Field Capture</a>
+    <a id="platform-link" href="https://platform.atmosphereteam.com/verifier-library?embed=field&amp;v=no-overview-back-2">Dashboard</a>
   </nav>
 
   <!-- Connect → Today: slam the mark, sit four seconds, dissolve into the day. -->
