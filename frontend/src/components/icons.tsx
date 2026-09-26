@@ -164,11 +164,22 @@ export function PlugIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
       <path
-        d="M9 7V3.5M15 7V3.5M8 7h8v3.5a4 4 0 01-4 4v4.5M12 14.5v6"
+        d="M9.25 8V3.75M14.75 8V3.75"
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"
+      />
+      <path
+        d="M6.25 8h11.5v4.25a4 4 0 0 1-4 4h-3.5a4 4 0 0 1-4-4V8Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
         strokeLinejoin="round"
+      />
+      <path
+        d="M12 16.25V21.25"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
       />
     </svg>
   );
