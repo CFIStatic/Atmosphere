@@ -190,8 +190,18 @@ assert.match(
 
 assert.match(html, /id="app"[^>]*data-switch="off"/, 'login hides the Field Capture / Platform bar');
 assert.match(appSrc, /switchbar\.hidden = !showSwitch/, 'show() toggles the product bar with the signed-in screens only');
-assert.match(html, /Field Capture<small>/);
-assert.match(html, /Platform<small>/);
+assert.match(
+  html,
+  /<a href="#today" aria-current="page">Field Capture<\/a>/,
+  'Field Capture tab is a single-line label with no subtitle',
+);
+assert.match(
+  html,
+  /id="platform-link"[^>]*>Dashboard<\/a>/,
+  'office tab reads Dashboard with no subtitle',
+);
+assert.doesNotMatch(html, /<small>Your jobs<\/small>/, 'Your jobs subtitle is gone from the switcher');
+assert.doesNotMatch(html, /<small>The office<\/small>/, 'The office subtitle is gone from the switcher');
 assert.match(
   appSrc,
   /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-platform'/,
