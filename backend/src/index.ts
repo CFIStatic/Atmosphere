@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
+import { schedulePlayableProofBackfill, stopPlayableProofBackfill } from './lib/backfillPlayableProofs.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
 import { startProofPurgeSweep, stopProofPurgeSweep } from './shared/proofPurgeSweep.js';
 import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
@@ -48,6 +49,8 @@ const server = app.listen(config.port, host, () => {
   // WORKER_ROLE=http skips claiming so a dedicated queue replica can drain.
   if (runSoldPathWorkers) {
     startProofAnalysisSweep();
+    // One-shot .play.mp4 backfill ~60s after listen. PROOF_PLAYABLE_BACKFILL_ON_BOOT=0 turns it off.
+    schedulePlayableProofBackfill();
     startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
@@ -62,6 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     // Subsystems that hold resources the process should not simply drop.
     stopVerificationLeaseSweep();
     stopProofAnalysisSweep();
+    stopPlayableProofBackfill();
     stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();

@@ -1545,6 +1545,7 @@ export async function ensureStillsAndDuration(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[ensureStillsAndDuration] playable build failed for ${proofId}: ${message}`);
       error = error ? `${error}; ${message}` : message;
     }
   }
