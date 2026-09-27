@@ -9,13 +9,17 @@ import {
   loginNameFromMetadata,
   mentionDisplayName,
   mentionToken,
-  noEvidenceSentence,
+  asksForPersonRecord,
+  carryPriorMention,
+  stripMentionMarks,
+  unmatchedMentionSentence,
   parseMentions,
   rankMentionItems,
   resolveMentions,
   textMentionsPerson,
   type MentionMember,
 } from '../src/shared/mentions.js';
+import { fieldCaptureEmail } from '../src/field/crewJoin.js';
 import { listJobMentionMembers, loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
 
 const ORG_A = 'org-a';
@@ -324,7 +328,12 @@ test('context retrieval stays inside the org and cites the electrical job', asyn
   assert.match(answer.answer, new RegExp(`job/${JOB_ELEC}/`));
   assert.match(answer.answer, new RegExp(`video/${JOB_ELEC}/${PROOF_ELEC}/`));
   assert.doesNotMatch(answer.answer, /\[\[web:/);
-  assert.equal(noEvidenceSentence({ name: 'John Cyganiak', handle: 'johncyganiak' }, 'did he finish the electrical job?'), 'No electrical job found for John.');
+  assert.match(answer.answer, /John Cyganiak/);
+  assert.equal(
+    unmatchedMentionSentence('John Cyganiak', ['Kitchen faucet']),
+    "John Cyganiak doesn't have that on file. What's here: Kitchen faucet.",
+  );
+  assert.doesNotMatch(unmatchedMentionSentence('John Cyganiak', []), /No .+ found for/);
 });
 
 test('tagged notes outside the recent message window still load from the mention index', async () => {
@@ -383,7 +392,9 @@ test('a person with no matching evidence is told so, and another org is invisibl
     now: new Date('2026-09-20T00:00:00.000Z'),
   });
   assert.equal(prep.mentions[0]?.userId, JANE);
-  assert.match(prep.directAnswer ?? '', /No electrical job found for Jane/);
+  assert.match(prep.directAnswer ?? '', /Jane Alvarez doesn't have that on file/);
+  assert.match(prep.directAnswer ?? '', /Kitchen faucet/);
+  assert.doesNotMatch(prep.directAnswer ?? '', /No .+ found for/);
   assert.doesNotMatch(prep.directAnswer ?? '', /\[\[web:/);
   assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel|other-org/);
 
@@ -597,4 +608,187 @@ test('share-link clip Ask does not resolve org mentions', () => {
   assert.match(verifier, /if \(rosterLoaded \|\| !ORG_MODE\) return/);
   assert.match(verifier, /if \(form && ORG_MODE\) form\.appendChild\(menu\)/);
   assert.match(verifier, /if \(SHARE_TOKEN\) \{/);
+});
+
+const EL = '55555555-5555-4555-8555-555555555555';
+const EL_SEAT = '66666666-6666-4666-8666-666666666666';
+const JOB_TIFFANY = '77777777-7777-4777-8777-777777777777';
+const CLIP_OFFICE = '88888888-8888-4888-8888-888888888881';
+const CLIP_TABLE = '88888888-8888-4888-8888-888888888882';
+const CLIP_WALK = '88888888-8888-4888-8888-888888888883';
+const CLIP_OTHER = '88888888-8888-4888-8888-888888888884';
+
+function tiffanyTables() {
+  return {
+    org_members: [
+      {
+        org_id: ORG_A,
+        user_id: EL,
+        status: 'active',
+        profiles: { email: 'el@example.com', full_name: 'El Presidente', handle: null, avatar_url: null },
+      },
+    ],
+    profiles: [{ id: EL_SEAT, email: fieldCaptureEmail(ORG_A, 'El Presidente') }],
+    job_assignments: [],
+    crm_jobs: [
+      {
+        id: JOB_TIFFANY,
+        org_id: ORG_A,
+        job_number: 12,
+        title: 'Project Tiffany & Co.',
+        status: 'scheduled',
+        work_type: 'restoration',
+        owner_id: null,
+        created_by: EL,
+        updated_at: '2026-09-21T00:00:00.000Z',
+      },
+    ],
+    job_tasks: [],
+    job_evidence_access: [
+      { org_id: ORG_A, proof_id: CLIP_OFFICE, job_id: JOB_TIFFANY, actor_id: null, action: 'uploaded', occurred_at: '2026-09-17T16:00:00.000Z' },
+      { org_id: ORG_A, proof_id: CLIP_TABLE, job_id: JOB_TIFFANY, actor_id: null, action: 'uploaded', occurred_at: '2026-09-21T22:00:00.000Z' },
+      { org_id: ORG_A, proof_id: CLIP_WALK, job_id: JOB_TIFFANY, actor_id: null, action: 'uploaded', occurred_at: '2026-09-21T23:00:00.000Z' },
+    ],
+    recording_acknowledgments: [],
+    work_logs: [],
+    content_mentions: [],
+    job_proofs: [
+      {
+        id: CLIP_OFFICE,
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        party_id: 'party-el',
+        work_date: '2026-09-17',
+        phase: 'after',
+        state: 'analysed',
+        title: 'Sep 17 office recording',
+        ai_summary: 'A single fixed webcam-style take of one seated man in a small office.',
+        transcript_text: "It's simple.",
+        narration_text: null,
+        ai_findings: { events: [{ text: 'Light-blue binder labeled RESTORE 365.' }] },
+        device_metadata: {},
+        captured_at: '2026-09-17T16:00:00.000Z',
+        received_at: '2026-09-17T16:05:00.000Z',
+        deleted_at: null,
+      },
+      {
+        id: CLIP_TABLE,
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        party_id: 'party-el',
+        work_date: '2026-09-21',
+        phase: 'after',
+        state: 'analysed',
+        title: 'Sep 21 tabletop close-up',
+        ai_summary: 'Blurry close passes over a whitewashed wood tabletop and trellis wallpaper.',
+        transcript_text: 'But I know they have their ways.',
+        narration_text: null,
+        ai_findings: null,
+        device_metadata: { userId: EL },
+        captured_at: '2026-09-21T22:00:00.000Z',
+        received_at: '2026-09-21T22:05:00.000Z',
+        deleted_at: null,
+      },
+      {
+        id: CLIP_WALK,
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        party_id: 'party-seat',
+        work_date: '2026-09-21',
+        phase: 'after',
+        state: 'analysed',
+        title: 'Sep 21 home walkthrough',
+        ai_summary: 'Handheld interior walkthrough of a furnished home, chandelier and dining wall.',
+        transcript_text: 'Her entire life.',
+        narration_text: null,
+        ai_findings: null,
+        device_metadata: {},
+        captured_at: '2026-09-21T23:00:00.000Z',
+        received_at: '2026-09-21T23:05:00.000Z',
+        deleted_at: null,
+      },
+      {
+        id: CLIP_OTHER,
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        party_id: 'party-other',
+        work_date: '2026-09-22',
+        phase: 'after',
+        state: 'analysed',
+        title: 'Someone else roof clip',
+        ai_summary: 'A different crew member filmed the roof.',
+        transcript_text: null,
+        narration_text: null,
+        ai_findings: null,
+        device_metadata: {},
+        captured_at: '2026-09-22T12:00:00.000Z',
+        received_at: '2026-09-22T12:05:00.000Z',
+        deleted_at: null,
+      },
+    ],
+    job_parties: [
+      { id: 'party-el', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: EL, company: 'Field Capture', trade: 'field_capture' },
+      { id: 'party-seat', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: EL_SEAT, company: 'Field Capture', trade: 'field_capture' },
+      { id: 'party-other', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: JANE, company: 'Other crew', trade: 'roofing' },
+    ],
+    job_messages: [],
+  };
+}
+
+test('multi-word names stay whole, and every clip that person filmed is listed', async () => {
+  const roster = [{ userId: EL, fullName: 'El Presidente', email: 'el@example.com' }];
+  const chip = `@[El Presidente](mention:${EL})`;
+  assert.equal(stripMentionMarks(`${chip} which clips did he film`, ['El Presidente']).includes('El Presidente'), false);
+  assert.match(stripMentionMarks('which clips did @El Presidente film', ['El Presidente']), /which clips did\s+film/);
+  assert.equal(asksForPersonRecord('which clips did @El Presidente film', ['El Presidente']), true);
+  assert.equal(asksForPersonRecord('what did @El Presidente take a video of', ['El Presidente']), true);
+  const resolved = resolveMentions('which clips did @El Presidente film', roster);
+  assert.equal(resolved.mentions[0]?.name, 'El Presidente');
+  const punctuated = resolveMentions("what did @Mary-Jane O'Brien film", [
+    { userId: EL, fullName: "Mary-Jane O'Brien" },
+  ]);
+  assert.equal(punctuated.mentions[0]?.name, "Mary-Jane O'Brien");
+
+  const db = fakeDb(tiffanyTables());
+  const which = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: `${chip} which clips did he film`,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const whichAnswer = which.directAnswer ?? '';
+  assert.match(whichAnswer, /El Presidente filmed 3 clips/);
+  assert.match(whichAnswer, /Sep 17 office recording/);
+  assert.match(whichAnswer, /Sep 21 tabletop close-up/);
+  assert.match(whichAnswer, /Sep 21 home walkthrough/);
+  assert.match(whichAnswer, /RESTORE 365/);
+  assert.doesNotMatch(whichAnswer, /Someone else roof/);
+  assert.doesNotMatch(whichAnswer, /No which clips/);
+  assert.doesNotMatch(whichAnswer, /found for El\./);
+
+  const took = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what did @El Presidente take a video of',
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const tookAnswer = took.directAnswer ?? '';
+  assert.match(tookAnswer, /El Presidente filmed 3 clips/);
+  assert.match(tookAnswer, /office recording/);
+  assert.match(tookAnswer, /tabletop/);
+  assert.match(tookAnswer, /walkthrough/);
+  assert.doesNotMatch(tookAnswer, /one clip/i);
+
+  const follow = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what all the videos they upload',
+    history: [{ role: 'user', text: 'what did @El Presidente take a video of' }, { role: 'assistant', text: tookAnswer }],
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(follow.mentions[0]?.userId, EL);
+  assert.match(follow.directAnswer ?? '', /office recording/);
+  assert.match(follow.directAnswer ?? '', /tabletop/);
+  assert.match(follow.directAnswer ?? '', /walkthrough/);
+  assert.equal(carryPriorMention('what about the weather', [], roster), null);
 });

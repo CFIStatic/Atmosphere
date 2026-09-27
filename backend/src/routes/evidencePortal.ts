@@ -528,7 +528,12 @@ async function settleClipQuestion(opts: {
   const record = clipRecordFromEvidenceItem(opts.item);
   const mentionPrep =
     opts.orgMentions && opts.askedBy
-      ? await prepareMentionAsk(opts.client, { orgId: opts.orgId, question: opts.question, jobId: opts.jobId }).catch(() => null)
+      ? await prepareMentionAsk(opts.client, {
+          orgId: opts.orgId,
+          question: opts.question,
+          jobId: opts.jobId,
+          history: opts.history,
+        }).catch(() => null)
       : null;
   const result = mentionPrep?.directAnswer
     ? { answer: mentionPrep.directAnswer, model: null, usage: null }

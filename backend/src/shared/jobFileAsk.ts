@@ -614,7 +614,7 @@ export async function answerFromJobFile(input: {
   const system =
     FILE_QA_SYSTEM +
     (mentionScoped
-      ? `\n\nThe question @mentions a coworker. Answer from the MENTIONED PEOPLE section. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If that section lacks the asked work, say so plainly (for example "No electrical job found for John"). Never write [[web:…]].`
+      ? `\n\nThe question @mentions a coworker, or a follow-up pronoun refers to the last person they named. Answer about that person's contributions using their full name. The MENTIONED PEOPLE list is every clip and note tied to them, not a sample — when asked which videos they filmed, name each one. Use the rest of this job file for supporting detail. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what the file does contain. Never answer "No <question words> found for <first name>", and never write [[web:…]].`
       : '') +
     `\n\n${askWebCapabilityRules()}` +
     (webHits.length

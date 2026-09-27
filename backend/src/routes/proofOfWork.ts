@@ -944,6 +944,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     jobId: party.job_id,
     proofId: (proof as any).id,
     action: 'uploaded',
+    actorId: typeof party.created_by === 'string' ? party.created_by : null,
     partyId: party.id,
     actorLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
     actorRole: party.role ?? 'subcontractor',
@@ -2947,7 +2948,7 @@ export async function runProofAsk(input: {
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
-        ? await prepareMentionAsk(supabase, { orgId, question: input.question, jobId }).catch(() => null)
+        ? await prepareMentionAsk(supabase, { orgId, question: input.question, jobId, history }).catch(() => null)
         : null;
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;

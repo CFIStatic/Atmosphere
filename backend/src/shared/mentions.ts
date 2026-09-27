@@ -264,24 +264,62 @@ export function ambiguitySentence(query: string, candidates: Array<{ name: strin
   return `Which ${shown} did you mean? ${list}.`;
 }
 
-function stripMentionMarks(question: string): string {
-  return String(question ?? '')
-    .replace(new RegExp(STRUCTURED_RE.source, 'g'), ' ')
-    .replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/g, '$1 ');
+/**
+ * Remove mention marks without cutting a multi-word name down to its first word.
+ * Structured chips and resolved display names go first; a leftover single @word
+ * is only the unmatched tail.
+ */
+export function stripMentionMarks(question: string, names: string[] = []): string {
+  let text = String(question ?? '').replace(new RegExp(STRUCTURED_RE.source, 'g'), ' ');
+  const ordered = [...names]
+    .map((name) => name.trim())
+    .filter((name) => name.length >= 2)
+    .sort((a, b) => b.length - a.length);
+  for (const name of ordered) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?=$|[\\s,.;:!?])`, 'gi'), '$1 ');
+  }
+  return text.replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,80}/g, '$1 ');
 }
 
-export function firstName(name: string, handle: string): string {
-  const part = String(name ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)[0];
-  if (part) return part;
-  return handle;
+const FOLLOW_UP_PRONOUN = /\b(they|them|their|theirs|he|him|his|she|her|hers)\b/i;
+
+/**
+ * A follow-up with no new name ("what all the videos they upload") keeps the
+ * one person named in the earlier user turns. Two people, or an ambiguous
+ * name, is not carried.
+ */
+export function carryPriorMention(
+  question: string,
+  history: Array<{ role?: string | null; text?: string | null }> | null | undefined,
+  roster: MentionMember[],
+): ResolvedMention | null {
+  if (!FOLLOW_UP_PRONOUN.test(String(question ?? ''))) return null;
+  const current = resolveMentions(question, roster);
+  if (current.mentions.length || current.ambiguous.length) return null;
+  for (const turn of [...(history ?? [])].reverse()) {
+    if (String(turn.role ?? '') !== 'user') continue;
+    const resolved = resolveMentions(String(turn.text ?? ''), roster);
+    if (resolved.ambiguous.length) return null;
+    if (resolved.mentions.length > 1) return null;
+    if (resolved.mentions.length === 1) return resolved.mentions[0]!;
+  }
+  return null;
+}
+
+/** Questions that want the person's clips, not a keyword hit inside one of them. */
+export function asksForPersonRecord(question: string, names: string[] = []): boolean {
+  const q = stripMentionMarks(question, names).toLowerCase();
+  return (
+    /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q) ||
+    /\b(film|filmed|filming|record|recorded|recording|upload|uploaded|uploading)\b/.test(q) ||
+    /\btake a video\b/.test(q)
+  );
 }
 
 /** "did he finish the electrical job?" → "electrical job". */
-export function topicFromQuestion(question: string): string {
-  const stripped = stripMentionMarks(question);
+export function topicFromQuestion(question: string, names: string[] = []): string {
+  const stripped = stripMentionMarks(question, names);
   const words = stripped
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
@@ -290,8 +328,8 @@ export function topicFromQuestion(question: string): string {
   return words.slice(0, 6).join(' ');
 }
 
-export function questionTokens(question: string): string[] {
-  const stripped = stripMentionMarks(question);
+export function questionTokens(question: string, names: string[] = []): string[] {
+  const stripped = stripMentionMarks(question, names);
   const seen = new Set<string>();
   const tokens: string[] = [];
   for (const word of stripped.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/)) {
@@ -329,14 +367,15 @@ function recencyScore(at: string | null, now: number): number {
   return Math.exp(-days / 45);
 }
 
-export function rankMentionItems(
+function scoreMentionItems(
   items: MentionItem[],
   question: string,
-  now: Date = new Date(),
+  now: Date,
+  names: string[],
 ): RankedMentionItem[] {
-  const tokens = questionTokens(question);
+  const tokens = questionTokens(question, names);
   const nowMs = now.getTime();
-  const ranked = items.map((item) => {
+  return items.map((item) => {
     const hay = `${item.title} ${item.text} ${item.status ?? ''}`.toLowerCase();
     const hits = tokens.filter((token) => hay.includes(token)).length;
     const relevance = tokens.length ? hits / tokens.length : 1;
@@ -344,9 +383,29 @@ export function rankMentionItems(
     const score = relevance * 0.72 + recencyScore(item.at, nowMs) * 0.28 + (item.captured ? 0.04 : 0);
     return { ...item, score, relevant };
   });
-  return ranked
+}
+
+export function rankMentionItems(
+  items: MentionItem[],
+  question: string,
+  now: Date = new Date(),
+  names: string[] = [],
+): RankedMentionItem[] {
+  return scoreMentionItems(items, question, now, names)
     .filter((item) => item.relevant)
     .sort((a, b) => b.score - a.score || String(b.at ?? '').localeCompare(String(a.at ?? '')));
+}
+
+/** Every row stays. Keyword hits sort first; they do not drop the rest of the file. */
+export function orderMentionItems(
+  items: MentionItem[],
+  question: string,
+  now: Date = new Date(),
+  names: string[] = [],
+): RankedMentionItem[] {
+  return scoreMentionItems(items, question, now, names).sort(
+    (a, b) => Number(b.relevant) - Number(a.relevant) || b.score - a.score || String(b.at ?? '').localeCompare(String(a.at ?? '')),
+  );
 }
 
 export function sourceSlug(label: string): string {
@@ -366,11 +425,16 @@ export function videoSourceId(jobId: string, proofId: string, label: string): st
   return `video/${jobId}/${proofId}/${sourceSlug(label)}`;
 }
 
-export function noEvidenceSentence(person: { name: string; handle: string }, question: string): string {
-  const who = firstName(person.name, person.handle);
-  const topic = topicFromQuestion(question);
-  if (topic) return `No ${topic} found for ${who}.`;
-  return `No evidence found for ${who}.`;
+/** Natural miss. Uses the full name and names what is actually on file. */
+export function unmatchedMentionSentence(name: string, contained: string[]): string {
+  const who = name.trim() || 'That person';
+  const titles = [...new Set(contained.map((item) => item.trim()).filter(Boolean))].slice(0, 8);
+  if (!titles.length) return `${who} doesn't have anything matching that on this job file.`;
+  const list =
+    titles.length === 1
+      ? titles[0]!
+      : `${titles.slice(0, -1).join('; ')}; and ${titles[titles.length - 1]}`;
+  return `${who} doesn't have that on file. What's here: ${list}.`;
 }
 
 export interface PersonMentionContext {
@@ -378,6 +442,8 @@ export interface PersonMentionContext {
   handle: string;
   name: string;
   items: RankedMentionItem[];
+  /** Other titles already on the open job, used when this person has no matching rows. */
+  fileContains?: string[];
 }
 
 const STATE_WORD: Record<string, string> = {
@@ -396,6 +462,30 @@ const STATE_WORD: Record<string, string> = {
 function stateWord(status: string | null | undefined): string {
   const key = String(status ?? '').trim().toLowerCase();
   return STATE_WORD[key] || key.replace(/_/g, ' ');
+}
+
+function describeItem(
+  item: RankedMentionItem,
+  sources: string[],
+  count: () => void,
+): string {
+  count();
+  const when = clipDate(item);
+  const status = stateWord(item.status);
+  if (item.kind === 'job' && item.jobId) {
+    sources.push(jobSourceId(item.jobId, item.title));
+    return `${item.title}${status ? ` (${status})` : ''}${when ? `, updated ${when}` : ''}`;
+  }
+  if (item.kind === 'video' && item.jobId && item.proofId) {
+    sources.push(videoSourceId(item.jobId, item.proofId, item.title));
+    if (when) sources.push(`clip:${when}`);
+    const bit = item.text ? ` ${item.text.slice(0, 280).trim()}` : '';
+    return `${when ? `${when} — ` : ''}${item.title}${status ? ` (${status})` : ''}.${bit}`.trim();
+  }
+  if (item.kind === 'note') sources.push('notes');
+  if (item.kind === 'task') sources.push('task');
+  if (item.kind === 'log') sources.push('log');
+  return `${item.title}${status ? ` (${status})` : ''}${item.text ? `: ${item.text.slice(0, 280).trim()}` : ''}`;
 }
 
 function clipDate(item: RankedMentionItem): string | null {
@@ -422,31 +512,24 @@ export function answerFromMentionContext(
   let groundedOn = 0;
 
   for (const person of named) {
-    const items = person.items.filter((item) => item.relevant).slice(0, 6);
-    if (!items.length) {
-      blocks.push(noEvidenceSentence(person, question));
+    const who = person.name.trim() || 'That person';
+    const videos = person.items.filter((item) => item.kind === 'video').slice(0, 20);
+    const inventory = asksForPersonRecord(question, [person.name]);
+    if (inventory && videos.length) {
+      const lines = videos.map((item) => describeItem(item, sources, () => { groundedOn += 1; }));
+      const noun = videos.length === 1 ? 'clip' : 'clips';
+      blocks.push(`${who} filmed ${videos.length} ${noun} on file.\n${lines.map((line) => `- ${line}`).join('\n')}`);
       continue;
     }
-    const who = firstName(person.name, person.handle);
-    const lines = items.map((item) => {
-      groundedOn += 1;
-      const when = clipDate(item);
-      const status = stateWord(item.status);
-      if (item.kind === 'job' && item.jobId) {
-        sources.push(jobSourceId(item.jobId, item.title));
-        return `${item.title}${status ? ` (${status})` : ''}${when ? `, updated ${when}` : ''}`;
-      }
-      if (item.kind === 'video' && item.jobId && item.proofId) {
-        sources.push(videoSourceId(item.jobId, item.proofId, item.title));
-        if (when) sources.push(`clip:${when}`);
-        const bit = item.text ? ` ${item.text.slice(0, 220).trim()}` : '';
-        return `${item.title}${when ? ` on ${when}` : ''}${status ? `, ${status}` : ''}.${bit}`.trim();
-      }
-      if (item.kind === 'note') sources.push('notes');
-      if (item.kind === 'task') sources.push('task');
-      if (item.kind === 'log') sources.push('log');
-      return `${item.title}${status ? ` (${status})` : ''}${item.text ? `: ${item.text.slice(0, 220).trim()}` : ''}`;
-    });
+    const topical = person.items.filter((item) => item.relevant).slice(0, 12);
+    if (!topical.length) {
+      const contained = person.items.length
+        ? person.items.map((item) => item.title)
+        : (person.fileContains ?? []);
+      blocks.push(unmatchedMentionSentence(who, contained));
+      continue;
+    }
+    const lines = topical.map((item) => describeItem(item, sources, () => { groundedOn += 1; }));
     blocks.push(`${who}: ${lines.join(' ')}`);
   }
 
@@ -463,7 +546,7 @@ export function formatMentionPrompt(people: PersonMentionContext[]): string {
     if (!person.items.length) {
       return `${header}\nNo jobs, videos, notes, or tags tied to this person in this organization.`;
     }
-    const lines = person.items.slice(0, 8).map((item) => {
+    const lines = person.items.slice(0, 24).map((item) => {
       const cite =
         item.kind === 'job' && item.jobId
           ? jobSourceId(item.jobId, item.title)
@@ -480,11 +563,14 @@ export function formatMentionPrompt(people: PersonMentionContext[]): string {
   return (
     `MENTIONED PEOPLE (only people in this organization; answer @questions from this section):\n` +
     `${sections.join('\n\n')}\n\n` +
-    `When the question @mentions someone, use only the evidence above for that person. ` +
-    `Cite the specific jobs and videos with one machine line the UI turns into links: ` +
+    `The list above is everything tied to that person on this job, not a sample. ` +
+    `Use their full name. When they ask which clips or videos that person filmed, name every clip in the list. ` +
+    `Use the rest of the job file for supporting detail. ` +
+    `Cite jobs and videos with one machine line the UI turns into links: ` +
     `⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>, clip:YYYY-MM-DD⟧. ` +
-    `If this section does not contain the asked work, say so in one plain sentence such as ` +
-    `"No electrical job found for John" and do not guess. Never write [[web:…]] or any raw web citation markup.`
+    `If the asked detail is not on file, say so in a natural sentence that uses the person's full name and list what is on file. ` +
+    `Do not answer with "No <words from the question> found for <first name>". ` +
+    `Never write [[web:…]] or any raw web citation markup.`
   );
 }
 
