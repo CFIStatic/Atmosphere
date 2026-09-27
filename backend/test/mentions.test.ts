@@ -324,6 +324,9 @@ test('context retrieval stays inside the org and cites the electrical job', asyn
   const answer = answerFromMentionContext('@johncyganiak did he finish the electrical job?', people);
   assert.match(answer.answer, /John/);
   assert.match(answer.answer, /Cedar panel electrical upgrade|Panel after/);
+  const recorded = answerFromMentionContext('@johncyganiak did he record the electrical panel?', people);
+  assert.doesNotMatch(recorded.answer, /filmed \d+ clips?/);
+  assert.match(recorded.answer, /Cedar panel electrical upgrade|Panel after/);
   assert.match(answer.answer, /⟦sources:/);
   assert.match(answer.answer, new RegExp(`job/${JOB_ELEC}/`));
   assert.match(answer.answer, new RegExp(`video/${JOB_ELEC}/${PROOF_ELEC}/`));
@@ -742,6 +745,10 @@ test('multi-word names stay whole, and every clip that person filmed is listed',
   assert.match(stripMentionMarks('which clips did @El Presidente film', ['El Presidente']), /which clips did\s+film/);
   assert.equal(asksForPersonRecord('which clips did @El Presidente film', ['El Presidente']), true);
   assert.equal(asksForPersonRecord('what did @El Presidente take a video of', ['El Presidente']), true);
+  assert.equal(asksForPersonRecord('what all the videos they upload', ['El Presidente']), true);
+  assert.equal(asksForPersonRecord('@John did he record the electrical panel?', ['John']), false);
+  assert.equal(asksForPersonRecord('@El what did they say in the videos about the leak?', ['El']), false);
+  assert.equal(asksForPersonRecord('did she upload the roof footage?'), false);
   const resolved = resolveMentions('which clips did @El Presidente film', roster);
   assert.equal(resolved.mentions[0]?.name, 'El Presidente');
   const punctuated = resolveMentions("what did @Mary-Jane O'Brien film", [

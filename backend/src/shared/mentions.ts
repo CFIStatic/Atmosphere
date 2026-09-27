@@ -310,11 +310,12 @@ export function carryPriorMention(
 /** Questions that want the person's clips, not a keyword hit inside one of them. */
 export function asksForPersonRecord(question: string, names: string[] = []): boolean {
   const q = stripMentionMarks(question, names).toLowerCase();
-  return (
-    /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q) ||
-    /\b(film|filmed|filming|record|recorded|recording|upload|uploaded|uploading)\b/.test(q) ||
-    /\btake a video\b/.test(q)
-  );
+  if (/\btake a video\b/.test(q)) return true;
+  // "in the videos about the leak" looks inside a clip. Listing them is "which clips" / "what videos".
+  if (/\b(in|from|during|on)\s+(the\s+|those\s+|these\s+)?(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q)) {
+    return false;
+  }
+  return /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q);
 }
 
 /** "did he finish the electrical job?" → "electrical job". */
