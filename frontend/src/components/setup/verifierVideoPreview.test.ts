@@ -91,7 +91,14 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('bindVideoDuration(vid, item.duration)');
     expect(verifierHtml).toContain('function playFromGesture');
     expect(verifierHtml).toContain('function bufferingAtStart');
-    expect(verifierHtml).toContain('<video playsinline preload="auto"');
+    expect(verifierHtml).toContain(
+      '<video playsinline webkit-playsinline disablepictureinpicture controlsList="nodownload noplaybackrate nofullscreen" preload="auto"',
+    );
+    expect(verifierHtml).not.toContain('<video controls');
+    expect(verifierHtml).toContain('id="d-progress-buffer"');
+    expect(verifierHtml).toContain('id="d-progress-thumb"');
+    expect(verifierHtml).toContain('id="d-full"');
+    expect(verifierHtml).toContain('video::-webkit-media-controls-enclosure');
     expect(verifierHtml).toContain("vid.play()");
     expect(verifierHtml).toContain('video.currentTime = origin');
   });

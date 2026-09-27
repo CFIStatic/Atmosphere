@@ -716,26 +716,48 @@
     position: relative;
     width: 100%;
     height: 3px;
-    background: rgba(255,255,255,.45);
+    background: rgba(255,255,255,.28);
     overflow: hidden;
     pointer-events: none;
     transition: height .12s ease;
   }
   .progress-line:hover .progress-track,
-  .progress-line:focus-visible .progress-track {
+  .progress-line:focus-visible .progress-track,
+  .progress-line.is-dragging .progress-track {
     height: 5px;
   }
+  .progress-buffer,
   .progress-fill {
     position: absolute;
     left: 0;
     top: 0;
     height: 100%;
     width: 100%;
-    background: var(--accent);
     transform: scaleX(0);
     transform-origin: left center;
     will-change: transform;
     pointer-events: none;
+  }
+  .progress-buffer { background: rgba(255,255,255,.5); }
+  .progress-fill { background: var(--accent); }
+  .progress-thumb {
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,0,0,.35);
+    transform: translateX(-50%) scale(0);
+    transform-origin: center;
+    transition: transform .12s ease;
+    pointer-events: none;
+  }
+  .progress-line:hover .progress-thumb,
+  .progress-line:focus-visible .progress-thumb,
+  .progress-line.is-dragging .progress-thumb {
+    transform: translateX(-50%) scale(1);
   }
   .preview-wait {
     position: absolute;
@@ -1595,6 +1617,37 @@
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
+  /* The browser's own bar (white line, time, fullscreen, ⋮) must never
+     sit on top of this chrome — including hover, fullscreen, and iOS. */
+  .player video::-webkit-media-controls,
+  .player video::-webkit-media-controls-enclosure,
+  .player video::-webkit-media-controls-panel,
+  .player video::-webkit-media-controls-play-button,
+  .player video::-webkit-media-controls-start-playback-button,
+  .player video::-webkit-media-controls-overlay-play-button,
+  .player video::-webkit-media-controls-timeline,
+  .player video::-webkit-media-controls-current-time-display,
+  .player video::-webkit-media-controls-time-remaining-display,
+  .player video::-webkit-media-controls-mute-button,
+  .player video::-webkit-media-controls-volume-slider,
+  .player video::-webkit-media-controls-fullscreen-button {
+    display: none !important;
+    -webkit-appearance: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  .player:fullscreen,
+  .player:-webkit-full-screen {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    background: #000;
+  }
+  .player:fullscreen .frame,
+  .player:-webkit-full-screen .frame { min-height: 0; }
 
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .side.ask-mode { display: flex; flex-direction: column; overflow: hidden; }
@@ -2039,8 +2092,10 @@
             <div class="frame" id="d-frame"></div>
             <div class="progress-line" id="d-progress" role="slider" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
               <div class="progress-track">
+                <div class="progress-buffer" id="d-progress-buffer"></div>
                 <div class="progress-fill" id="d-progress-fill"></div>
               </div>
+              <div class="progress-thumb" id="d-progress-thumb"></div>
             </div>
           </div>
           <div class="controls">
@@ -2056,6 +2111,9 @@
             <button type="button" id="d-cc" class="cc-btn" aria-label="Captions unavailable" aria-pressed="false" disabled title="Captions unavailable">CC</button>
             <span class="cc-hint" id="d-cc-hint" hidden>Captions unavailable</span>
             <span class="time" id="d-time" hidden></span>
+            <button type="button" id="d-full" aria-label="Full screen" title="Full screen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
           </div>
         </div>
       </section>
@@ -2952,8 +3010,7 @@
       // Filed clips already carry a measured length. Do not scan the file
       // on a visible player — a dummy seek flashes the last frame.
       if (knownDuration(known) != null) return;
-      // Visible player with native controls. A dummy seek during Play
-      // flashes the last frame and restarts the clip.
+      // A dummy seek during Play flashes the last frame and restarts the clip.
       if (!video.paused || (video.dataset && video.dataset.playingSoon === '1') || (video.dataset && video.dataset.atmPreload === '1')) {
         video.addEventListener('pause', onPause, { once: true });
         return;
@@ -3004,8 +3061,34 @@
     var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
     var fill = document.getElementById('d-progress-fill');
     if (fill) fill.style.transform = 'scaleX(' + clamped + ')';
+    var thumb = document.getElementById('d-progress-thumb');
+    if (thumb) thumb.style.left = (clamped * 100) + '%';
     var line = document.getElementById('d-progress');
     if (line) line.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
+  }
+
+  function setBufferRatio(ratio) {
+    var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+    var el = document.getElementById('d-progress-buffer');
+    if (el) el.style.transform = 'scaleX(' + clamped + ')';
+  }
+
+  function bufferEndRatio(vid) {
+    var duration = vid && vid.duration;
+    if (!(duration > 0) || !vid.buffered || !vid.buffered.length) return 0;
+    var end = 0;
+    var t = vid.currentTime || 0;
+    try {
+      for (var i = 0; i < vid.buffered.length; i++) {
+        var start = vid.buffered.start(i);
+        var stop = vid.buffered.end(i);
+        if (start - 0.05 <= t && t <= stop + 0.05) return Math.min(1, stop / duration);
+        if (stop > end) end = stop;
+      }
+    } catch (err) {
+      return 0;
+    }
+    return Math.min(1, end / duration);
   }
 
   function updatePlayClock(at, duration) {
@@ -3225,6 +3308,7 @@
     var at = playbackSeconds(item, vid);
     if (duration > 0 && at > duration) at = duration;
     setProgressRatio(duration > 0 ? at / duration : 0);
+    if (vid) setBufferRatio(bufferEndRatio(vid));
     if (duration > 0 && (vid || state.playStartedAt != null || frameRaf)) {
       updatePlayClock(at, duration);
     }
@@ -3295,6 +3379,7 @@
     };
     var up = function () {
       progressDragging = false;
+      el.classList.remove('is-dragging');
       window.removeEventListener('pointermove', move);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('pointerup', up);
@@ -3303,6 +3388,7 @@
     };
     var down = function (ev) {
       progressDragging = true;
+      el.classList.add('is-dragging');
       seekByRatio(progressFromPointer(el, xOf(ev)));
       window.addEventListener('pointermove', move);
       window.addEventListener('mousemove', move);
@@ -3333,6 +3419,7 @@
     state.playStartedAt = null;
     pendingSeek = null;
     setProgressRatio(0);
+    setBufferRatio(0);
     setPlayButton(false);
     setPlayerTime('');
   }
@@ -5336,7 +5423,7 @@
       : '';
     $('#d-frame').innerHTML =
       '<div class="preview-stage" data-preview-state="' + (hold ? 'poster' : 'video') + '" data-preview-id="' + esc(item.id) + '">' +
-        '<video playsinline preload="auto"' + preloadAttr + posterAttr +
+        '<video playsinline webkit-playsinline disablepictureinpicture controlsList="nodownload noplaybackrate nofullscreen" preload="auto"' + preloadAttr + posterAttr +
         ' src="' + esc(item._videoUrl) + '"></video>' +
         overlay +
         '<div class="preview-buffer" id="d-buffer" hidden role="status" aria-label="Loading video"></div>' +
@@ -5347,6 +5434,8 @@
     }
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
+    vid.controls = false;
+    vid.disablePictureInPicture = true;
     applyVolumePrefs(vid);
     attachVideoTrack(vid, item);
     if (vid.dataset) vid.dataset.playingSoon = hold ? '' : '1';
@@ -5400,6 +5489,7 @@
       setPlayButton(false);
     });
     vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
+    vid.addEventListener('progress', function () { setBufferRatio(bufferEndRatio(vid)); });
     vid.addEventListener('canplay', function () {
       if (!vid.paused) showBuffer(false);
     });
@@ -7811,6 +7901,37 @@
   $('#d-play').addEventListener('click', function () {
     togglePreviewPlayback(state.open);
   });
+
+  function playerShell() {
+    return document.querySelector('#detail .player');
+  }
+  function fullscreenIcon(on) {
+    return on
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+  }
+  function syncFullscreenButton() {
+    var btn = document.getElementById('d-full');
+    var shell = playerShell();
+    if (!btn || !shell) return;
+    var on = document.fullscreenElement === shell;
+    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+    btn.title = on ? 'Exit full screen' : 'Full screen';
+    btn.innerHTML = fullscreenIcon(on);
+  }
+  var fullBtn = document.getElementById('d-full');
+  if (fullBtn) fullBtn.addEventListener('click', function () {
+    var shell = playerShell();
+    if (!shell) return;
+    // Fullscreen the chrome, never the <video>. The video element's
+    // fullscreen UI is the native bar we just removed.
+    if (document.fullscreenElement === shell) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      return;
+    }
+    if (shell.requestFullscreen) shell.requestFullscreen();
+  });
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
 
   var muteBtn = document.getElementById('d-mute');
   if (muteBtn) muteBtn.addEventListener('click', function () {

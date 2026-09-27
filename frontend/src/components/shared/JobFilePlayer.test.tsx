@@ -9,6 +9,20 @@ describe('JobFilePlayer', () => {
     localStorage.clear();
   });
 
+  it('uses one custom scrubber and never the browser control bar', () => {
+    render(<JobFilePlayer src="https://signed.test/clip.mp4" knownDurationSeconds={32} />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    expect(video.hasAttribute('controls')).toBe(false);
+    expect(video.controls).toBe(false);
+    expect(video).toHaveAttribute('playsinline');
+    expect(video.getAttribute('controlslist')).toContain('nodownload');
+    expect(video.getAttribute('controlslist')).toContain('noplaybackrate');
+    expect(screen.getByTestId('job-file-scrub')).toHaveAttribute('role', 'slider');
+    expect(screen.getByTestId('job-file-play')).toHaveAttribute('aria-label', 'Play');
+    expect(screen.getByTestId('job-file-time')).toHaveTextContent('0:00 / 0:32');
+    expect(screen.getByTestId('job-file-fullscreen')).toHaveAttribute('aria-label', 'Full screen');
+  });
+
   it('shows mute, volume, and disabled CC when no transcript exists', () => {
     render(<JobFilePlayer src="https://signed.test/clip.mp4" className="w-full" />);
     expect(screen.getByTestId('job-file-player')).toBeInTheDocument();
