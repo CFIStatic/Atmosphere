@@ -36,6 +36,7 @@ import {
 } from '../audio/childPrivacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
+import { apiTranscriptWords } from '../lib/transcription.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle, normalizeCustomClipTitle } from './proofClipTitle.js';
@@ -370,6 +371,7 @@ export function serializeEvidence(input: {
     checks: checks.map((c) => ({ verdict: c.verdict, what: labelForCheck(c.key), detail: c.detail })),
     analysisState: analysis,
     transcriptStatus: typeof proof.transcript_status === 'string' ? proof.transcript_status : null,
+    transcriptWords: apiTranscriptWords(proof.transcript_words),
     analysisError:
       typeof proof.narration_error === 'string' && proof.narration_error.trim()
         ? proof.narration_error.trim()

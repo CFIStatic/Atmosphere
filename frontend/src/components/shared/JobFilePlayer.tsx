@@ -5,7 +5,11 @@ import type {
   TranscriptSegment,
 } from '../../lib/api';
 import { bindMeasuredDuration } from '../../lib/clipDuration';
-import { webVttFromTranscript } from '../../lib/transcriptCaptions';
+import {
+  captionCuesFromTranscript,
+  captionLinesAt,
+  type CaptionWord,
+} from '../../lib/transcriptCaptions';
 import {
   applyVideoPlayerPrefs,
   readVideoPlayerPrefs,
@@ -18,9 +22,11 @@ import { SpeakerIcon } from '../icons';
  *
  * One chrome: an orange scrubber on the picture, then play, volume, time,
  * captions, and fullscreen. The browser's native bar is not used — it
- * stacked a second progress line on top of this one. Captions come from
- * Whisper transcript segments / timestamped transcript_text via a real
- * WebVTT TextTrack — never a fake empty track when nothing was transcribed yet.
+ * stacked a second progress line on top of this one. Captions are a custom
+ * overlay. Word timings roll two lines the way YouTube auto-captions do.
+ * Untimed text falls back to a proportional split. A native TextTrack does
+ * not paint once `controls` is omitted, which is why CC used to toggle with
+ * nothing on screen. No overlay when nothing was transcribed.
  *
  * Phase 1 privacy: private-moment ranges force mute + heavy blur. Child
  * privacy ranges prefer region blur (no mute) when boxes exist; otherwise
@@ -30,6 +36,8 @@ import { SpeakerIcon } from '../icons';
 
 export type JobFilePlayerCaptions = {
   segments?: TranscriptSegment[] | null;
+  /** Word clocks. When present they win over the proportional split. */
+  words?: CaptionWord[] | null;
   transcriptText?: string | null;
   durationSeconds?: number | null;
   /** When no VTT yet: pending = mic still being read; unavailable = none. */
@@ -153,7 +161,6 @@ export function JobFilePlayer({
   // A new signed URL while the file is already playing is a new src, and
   // assigning it remounts the buffer and stops the clip.
   if (!pinSrc.current) pinnedSrc.current = src;
-  const trackRef = useRef<HTMLTrackElement>(null);
   const prefsMutedRef = useRef(readVideoPlayerPrefs().muted);
   const [volume, setVolume] = useState(() => readVideoPlayerPrefs().volume);
   const [muted, setMuted] = useState(() => readVideoPlayerPrefs().muted);
@@ -179,26 +186,27 @@ export function JobFilePlayer({
       ? privacyActive.range.regions ?? []
       : [];
 
-  const vtt = useMemo(
+  const cues = useMemo(
     () =>
-      webVttFromTranscript({
+      captionCuesFromTranscript({
         segments: captions?.segments,
         transcriptText: captions?.transcriptText,
         durationSeconds: captions?.durationSeconds,
       }),
     [captions?.segments, captions?.transcriptText, captions?.durationSeconds],
   );
-  const vttUrl = useMemo(() => {
-    if (!vtt) return null;
-    return URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
-  }, [vtt]);
-  const captionsAvailable = Boolean(vttUrl);
-
-  useEffect(() => {
-    return () => {
-      if (vttUrl) URL.revokeObjectURL(vttUrl);
-    };
-  }, [vttUrl]);
+  const captionWords = captions?.words ?? null;
+  const captionsAvailable = (captionWords?.length ?? 0) > 0 || cues.length > 0;
+  const captionLines =
+    captionsAvailable && captionsOn && !forceMute
+      ? captionLinesAt({
+          words: captionWords,
+          segments: captions?.segments,
+          transcriptText: captions?.transcriptText,
+          durationSeconds: captions?.durationSeconds,
+          timeSec: clock.at,
+        })
+      : null;
 
   useEffect(() => {
     const el = ref.current;
@@ -394,27 +402,6 @@ export function JobFilePlayer({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const applyMode = () => {
-      const tracks = el.textTracks;
-      for (let i = 0; i < tracks.length; i += 1) {
-        const track = tracks[i]!;
-        if (track.kind !== 'captions' && track.kind !== 'subtitles') continue;
-        // Hide captions while privacy-protected so on-screen speech is not leaked.
-        track.mode =
-          captionsAvailable && captionsOn && !forceMute ? 'showing' : 'hidden';
-      }
-    };
-    applyMode();
-    const trackEl = trackRef.current;
-    if (trackEl) trackEl.addEventListener('load', applyMode);
-    return () => {
-      if (trackEl) trackEl.removeEventListener('load', applyMode);
-    };
-  }, [src, vttUrl, captionsOn, captionsAvailable, forceMute]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
     const sync = () => {
       const duration = Number.isFinite(el.duration) ? el.duration : 0;
       setClock({
@@ -587,18 +574,16 @@ export function JobFilePlayer({
             (fullFrameBlur ? ' job-file-player-privacy-blur' : '')
           }
           onClick={togglePlay}
-        >
-          {vttUrl ? (
-            <track
-              ref={trackRef}
-              kind="captions"
-              srcLang="en"
-              label="Captions"
-              src={vttUrl}
-              default={captionsOn}
-            />
-          ) : null}
-        </video>
+        />
+        {captionLines?.length ? (
+          <div className="job-file-caption" data-testid="job-file-caption" aria-live="polite">
+            {captionLines.map((line, index) => (
+              <span className="job-file-caption-line" key={`${index}-${line}`}>
+                <span className="job-file-caption-text">{line}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
         {buffering ? (
           <div
             className="pointer-events-none absolute inset-0 flex items-center justify-center"
@@ -748,17 +733,19 @@ export function JobFilePlayer({
                 : 'Turn captions on'
               : captions?.status === 'pending'
                 ? 'Captions pending'
-                : 'Captions unavailable'
+                : 'No captions available'
           }
           aria-pressed={captionsAvailable ? captionsOn : undefined}
           title={
             forceMute
               ? 'Captions hidden while privacy-protected'
               : captionsAvailable
-                ? undefined
+                ? captionsOn
+                  ? 'Turn captions off'
+                  : 'Turn captions on'
                 : captions?.status === 'pending'
                   ? 'Captions pending'
-                  : 'Captions unavailable'
+                  : 'No captions available'
           }
           className={
             'inline-flex h-7 min-w-[2rem] items-center justify-center rounded-md px-1.5 text-[11px] font-bold tracking-wide ' +
@@ -774,7 +761,7 @@ export function JobFilePlayer({
         </button>
         {!captionsAvailable ? (
           <span className="text-[11px] text-ink-500" data-testid="job-file-cc-unavailable">
-            {captions?.status === 'pending' ? 'Captions pending' : 'Captions unavailable'}
+            {captions?.status === 'pending' ? 'Captions pending' : 'No captions available'}
           </span>
         ) : null}
         {ranges?.length || childRanges?.length ? (

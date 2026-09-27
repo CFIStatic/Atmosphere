@@ -39,11 +39,13 @@ describe('JobFilePlayer', () => {
     expect(screen.getByTestId('job-file-mute')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-volume')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-cc')).toBeDisabled();
-    expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('Captions unavailable');
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('title', 'No captions available');
+    expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('No captions available');
     expect(document.querySelector('track')).toBeNull();
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
   });
 
-  it('attaches a captions track from timestamped Whisper text', () => {
+  it('draws the current transcript line in a caption overlay', async () => {
     render(
       <JobFilePlayer
         src="https://signed.test/clip.mp4"
@@ -53,11 +55,55 @@ describe('JobFilePlayer', () => {
         }}
       />,
     );
-    const track = document.querySelector('track');
-    expect(track).not.toBeNull();
-    expect(track?.getAttribute('kind')).toBe('captions');
+    expect(document.querySelector('track')).toBeNull();
     expect(screen.getByTestId('job-file-cc')).not.toBeDisabled();
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('job-file-cc-unavailable')).toBeNull();
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
+
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 18 });
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(await screen.findByTestId('job-file-caption')).toHaveTextContent('Leave the cabinets');
+
+    await userEvent.setup().click(screen.getByTestId('job-file-cc'));
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('rolls word-timed captions two lines at a time', async () => {
+    render(
+      <JobFilePlayer
+        src="https://signed.test/clip.mp4"
+        captions={{
+          words: [
+            { text: 'by', startSec: 0, endSec: 0.2 },
+            { text: 'bad', startSec: 0.2, endSec: 0.4 },
+            { text: 'actors,', startSec: 0.4, endSec: 0.7 },
+            { text: 'but', startSec: 0.7, endSec: 0.9 },
+            { text: 'there', startSec: 0.9, endSec: 1.1 },
+            { text: 'are', startSec: 1.1, endSec: 1.3 },
+            { text: 'a', startSec: 1.3, endSec: 1.4 },
+            { text: 'lot', startSec: 1.4, endSec: 1.6 },
+            { text: 'more', startSec: 1.6, endSec: 1.8 },
+            { text: 'good', startSec: 1.8, endSec: 2.0 },
+            { text: 'actors', startSec: 2.0, endSec: 2.3 },
+            { text: 'than', startSec: 2.3, endSec: 2.5 },
+            { text: 'the', startSec: 2.5, endSec: 2.7 },
+            { text: 'other', startSec: 2.8, endSec: 3.1 },
+          ],
+          durationSeconds: 8,
+        }}
+      />,
+    );
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 2.9 });
+    video.dispatchEvent(new Event('timeupdate'));
+    const caption = await screen.findByTestId('job-file-caption');
+    expect(caption.querySelectorAll('.job-file-caption-line')).toHaveLength(2);
+    expect(caption).toHaveTextContent('lot more good actors than the');
+    expect(caption).toHaveTextContent('other');
+    expect(caption).not.toHaveTextContent('but there');
   });
 
   it('persists mute + volume to localStorage', async () => {

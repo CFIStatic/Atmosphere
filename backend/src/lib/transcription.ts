@@ -14,8 +14,9 @@ import { HttpError } from './errors.js';
  * of provider — and the cost — with whoever deploys this.
  *
  * Proof captions and Ask conversation answers need seek times. Whisper-family
- * models return verbose_json segments; other models (gpt-4o-transcribe) return
- * text and the caller stamps the 10-minute slice start.
+ * models are asked for verbose_json with segment and word timestamps. Other
+ * models (gpt-4o-transcribe) have no word clock; the caller stamps the
+ * 10-minute slice start and captions fall back to proportional lines.
  */
 
 export function transcriptionEnabled(): boolean {
@@ -45,8 +46,84 @@ function filenameFor(mimeType: string): string {
 
 export type TranscriptSegmentIn = {
   start?: number | null;
+  end?: number | null;
   text?: string | null;
 };
+
+export type TimedWord = { start: number; end: number; text: string };
+export type TimedSegment = { start: number; end: number; text: string };
+
+export type TimedTranscript = {
+  text: string;
+  segments: TimedSegment[];
+  words: TimedWord[];
+};
+
+export type ApiTranscriptWord = { text: string; startSec: number; endSec: number };
+
+/** What the Whisper call asks for. Non-Whisper models stay on plain text. */
+export function transcriptionRequestFields(model: string): { verbose: boolean; granularities: string[] } {
+  if (!/whisper/i.test(model)) return { verbose: false, granularities: [] };
+  return { verbose: true, granularities: ['segment', 'word'] };
+}
+
+function roundStamp(seconds: number): number {
+  return Math.round(Math.max(0, seconds) * 1000) / 1000;
+}
+
+function shiftTime(value: unknown, offset: number): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return roundStamp(n + offset);
+}
+
+type VerboseBody = {
+  text?: string | null;
+  segments?: TranscriptSegmentIn[] | null;
+  words?: Array<{ word?: string | null; text?: string | null; start?: number | null; end?: number | null }> | null;
+};
+
+/** Absolute segment and word clocks from one verbose_json body. */
+export function timedTranscriptFromVerbose(body: VerboseBody, timeOffsetSeconds = 0): TimedTranscript {
+  const offset = Number.isFinite(timeOffsetSeconds) ? Math.max(0, timeOffsetSeconds) : 0;
+  const segments: TimedSegment[] = [];
+  for (const seg of body.segments ?? []) {
+    const text = String(seg?.text || '').replace(/\s+/g, ' ').trim();
+    const start = shiftTime(seg?.start, offset);
+    if (!text || start == null) continue;
+    const endRaw = shiftTime(seg?.end, offset);
+    segments.push({ start, end: endRaw != null && endRaw > start ? endRaw : roundStamp(start + 0.2), text });
+  }
+  const words: TimedWord[] = [];
+  for (const word of body.words ?? []) {
+    const text = String(word?.word ?? word?.text ?? '').replace(/\s+/g, ' ').trim();
+    const start = shiftTime(word?.start, offset);
+    if (!text || start == null) continue;
+    const endRaw = shiftTime(word?.end, offset);
+    words.push({ start, end: endRaw != null && endRaw > start ? endRaw : roundStamp(start + 0.05), text });
+  }
+  return { text: formatVerboseTranscript(body, offset), segments, words };
+}
+
+/** JSON from the row, or null when a timed run never stored words. */
+export function apiTranscriptWords(raw: unknown): ApiTranscriptWord[] | null {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const words: ApiTranscriptWord[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const rec = row as { text?: unknown; word?: unknown; start?: unknown; end?: unknown; startSec?: unknown; endSec?: unknown };
+    const text = String(rec.text ?? rec.word ?? '').replace(/\s+/g, ' ').trim();
+    const start = Number(rec.startSec ?? rec.start);
+    const end = Number(rec.endSec ?? rec.end);
+    if (!text || !Number.isFinite(start) || start < 0) continue;
+    words.push({
+      text,
+      startSec: roundStamp(start),
+      endSec: Number.isFinite(end) && end > start ? roundStamp(end) : roundStamp(start + 0.05),
+    });
+  }
+  return words.length ? words : null;
+}
 
 export function stampClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -81,10 +158,6 @@ export function formatVerboseTranscript(
   return String(body.text || '').trim();
 }
 
-function wantsVerboseJson(model: string): boolean {
-  return /whisper/i.test(model);
-}
-
 async function postTranscription(
   url: string,
   apiKey: string,
@@ -97,11 +170,28 @@ async function postTranscription(
   });
 }
 
-export async function transcribeAudio(
+type TranscriptAttempt = { verbose: boolean; granularities: string[] };
+
+function attemptsFor(model: string): TranscriptAttempt[] {
+  const fields = transcriptionRequestFields(model);
+  const attempts: TranscriptAttempt[] = [];
+  if (fields.verbose) {
+    attempts.push({ verbose: true, granularities: ['segment', 'word'] });
+    attempts.push({ verbose: true, granularities: ['segment'] });
+  }
+  attempts.push({ verbose: false, granularities: [] });
+  return attempts;
+}
+
+/**
+ * Speech plus clocks. Whisper is asked for segment and word timestamps.
+ * A provider that rejects that shape is retried with segments, then plain text.
+ */
+export async function transcribeAudioTimed(
   audio: Buffer,
   mimeType: string,
   opts?: { timeOffsetSeconds?: number },
-): Promise<string> {
+): Promise<TimedTranscript> {
   const { url, apiKey, model } = config.technician.transcription;
   if (!url) {
     throw new HttpError(
@@ -112,41 +202,54 @@ export async function transcribeAudio(
   }
 
   const file = new Blob([new Uint8Array(audio)], { type: mimeType });
-  const buildForm = (verbose: boolean) => {
+  const attempts = attemptsFor(model);
+  let body: VerboseBody | null = null;
+  let lastStatus = 0;
+  for (let i = 0; i < attempts.length; i += 1) {
+    const attempt = attempts[i]!;
     const form = new FormData();
     form.append('file', file, filenameFor(mimeType));
     form.append('model', model);
-    if (verbose) {
+    if (attempt.verbose) {
       form.append('response_format', 'verbose_json');
-      form.append('timestamp_granularities[]', 'segment');
+      for (const grain of attempt.granularities) form.append('timestamp_granularities[]', grain);
     }
-    return form;
-  };
-
-  const tryVerbose = wantsVerboseJson(model);
-  let res: Response;
-  try {
-    res = await postTranscription(url, apiKey, buildForm(tryVerbose));
-    if (tryVerbose && (res.status === 400 || res.status === 422)) {
-      res = await postTranscription(url, apiKey, buildForm(false));
+    let res: Response;
+    try {
+      res = await postTranscription(url, apiKey, form);
+    } catch {
+      throw new HttpError(502, 'Could not reach the transcription service.', 'transcription_failed');
     }
-  } catch {
-    throw new HttpError(502, 'Could not reach the transcription service.', 'transcription_failed');
+    if (res.ok) {
+      body = (await res.json()) as VerboseBody;
+      break;
+    }
+    lastStatus = res.status;
+    const retryable = res.status === 400 || res.status === 422;
+    if (!retryable || i === attempts.length - 1) {
+      // Never surface the provider's body — it can echo the API key back.
+      throw new HttpError(
+        502,
+        `The transcription service rejected the clip (${res.status}).`,
+        'transcription_failed',
+      );
+    }
   }
-
-  if (!res.ok) {
-    // Never surface the provider's body — it can echo the API key back.
-    throw new HttpError(
-      502,
-      `The transcription service rejected the clip (${res.status}).`,
-      'transcription_failed',
-    );
+  if (!body) {
+    throw new HttpError(502, `The transcription service rejected the clip (${lastStatus}).`, 'transcription_failed');
   }
-
-  const body = (await res.json()) as { text?: string; segments?: TranscriptSegmentIn[] };
-  const text = formatVerboseTranscript(body, opts?.timeOffsetSeconds ?? 0);
-  if (!text) {
+  const timed = timedTranscriptFromVerbose(body, opts?.timeOffsetSeconds ?? 0);
+  if (!timed.text) {
     throw new HttpError(422, "That clip came back empty — I couldn't make out any speech.", 'transcription_empty');
   }
-  return text;
+  return timed;
+}
+
+export async function transcribeAudio(
+  audio: Buffer,
+  mimeType: string,
+  opts?: { timeOffsetSeconds?: number },
+): Promise<string> {
+  const timed = await transcribeAudioTimed(audio, mimeType, opts);
+  return timed.text;
 }
