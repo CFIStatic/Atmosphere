@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
-import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
+import {
+  createSignedPlayableProofUrl,
+  ensurePlayableDerivative,
+  PROOF_PLAYBACK_URL_TTL_SECONDS,
+} from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
@@ -1526,6 +1530,21 @@ export async function ensureStillsAndDuration(
       stillsAttempted.delete(proofId);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // Faststart H.264/AAC sibling so the office player can start on the first
+  // Play press. Same background job as the stills — the crew is not waiting.
+  if (storagePath) {
+    try {
+      await ensurePlayableDerivative({
+        admin,
+        storagePath: String(storagePath),
+        bucket: PROOF_BUCKET,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      error = error ? `${error}; ${message}` : message;
     }
   }
 
@@ -3277,8 +3296,9 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     const playable = await createSignedPlayableProofUrl({
       admin,
       storagePath: (proof as any).storage_path,
-      expiresInSeconds: 600,
+      expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
       bucket: PROOF_BUCKET,
+      scheduleBuild: true,
     });
 
     // Logged here rather than on playback: this is the moment the file becomes
@@ -3294,7 +3314,11 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       ...actor,
     });
 
-    res.json({ url: playable.url, expiresInSeconds: 600 });
+    res.json({
+      url: playable.url,
+      expiresInSeconds: playable.expiresInSeconds,
+      contentType: playable.contentType,
+    });
   } catch (err) {
     next(err);
   }

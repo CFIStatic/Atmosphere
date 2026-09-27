@@ -8,7 +8,10 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
-import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
+import {
+  createSignedPlayableProofUrl,
+  PROOF_PLAYBACK_URL_TTL_SECONDS,
+} from '../lib/proofPlayableUrl.js';
 import {
   ensureClipReadingOnce,
   ensureStillsAndDuration,
@@ -1523,8 +1526,9 @@ evidenceShareRouter.get(
       const playable = await createSignedPlayableProofUrl({
         admin,
         storagePath: (proof as any).storage_path,
-        expiresInSeconds: 600,
+        expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
         bucket: PROOF_BUCKET,
+        scheduleBuild: true,
       });
 
       await recordAccess(admin, {
@@ -1537,7 +1541,11 @@ evidenceShareRouter.get(
         detail: `via Verifier link — original video, ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: playable.url, expiresInSeconds: 600 });
+      res.json({
+        url: playable.url,
+        expiresInSeconds: playable.expiresInSeconds,
+        contentType: playable.contentType,
+      });
     } catch (err) {
       next(err);
     }
