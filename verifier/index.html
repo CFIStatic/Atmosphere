@@ -6800,8 +6800,11 @@
     function loadRoster() {
       if (rosterLoaded || !ORG_MODE) return;
       rosterLoaded = true;
-      var rosterUrl = item && item.jobId
-        ? '/api/operations/shared/' + encodeURIComponent(item.jobId) + '/mention-members'
+      // Mapped clips keep the job UUID on `job`. `jobId` is only set on some paths.
+      var rosterJobId = item && (item.jobId || item.job);
+      if (!rosterJobId || rosterJobId === 'shared') rosterJobId = null;
+      var rosterUrl = rosterJobId
+        ? '/api/operations/shared/' + encodeURIComponent(rosterJobId) + '/mention-members'
         : '/api/org/members';
       apiFetch(rosterUrl).then(function (r) { return r.json(); }).then(function (body) {
         roster = ((body && body.members) || []).map(function (row) {

@@ -477,3 +477,101 @@ test('job ask stays on that job, and a person from another job is named as absen
   assert.match(foreign.directAnswer ?? '', /isn't in this organization/);
   assert.doesNotMatch(foreign.directAnswer ?? '', /Other org|Secret/);
 });
+
+test('job-scoped context keeps this job when other jobs fill the fetch windows', async () => {
+  const proofFillers = Array.from({ length: 60 }, (_, index) => ({
+    id: `proof-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    party_id: 'party-plumb',
+    work_date: '2026-09-20',
+    phase: 'after',
+    state: 'accepted',
+    title: `Faucet clip ${index}`,
+    ai_summary: 'Replaced the kitchen faucet.',
+    transcript_text: null,
+    narration_text: null,
+    captured_at: '2026-09-20T15:00:00.000Z',
+    received_at: '2026-09-20T15:10:00.000Z',
+    deleted_at: null,
+  }));
+  const logFillers = Array.from({ length: 40 }, (_, index) => ({
+    id: `log-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    author_id: JOHN,
+    body: 'Logged the kitchen faucet replacement.',
+    kind: 'note',
+    occurred_at: '2026-09-20T12:00:00.000Z',
+  }));
+  const messageFillers = Array.from({ length: 120 }, (_, index) => ({
+    id: `msg-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    author_id: JANE,
+    author_label: 'Jane Alvarez',
+    body: '@johncyganiak kitchen faucet note.',
+    created_at: '2026-09-20T00:00:00.000Z',
+  }));
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    job_assignments: [
+      ...base.job_assignments,
+      {
+        org_id: ORG_A,
+        job_id: JOB_PLUMB,
+        user_id: JOHN,
+        role_on_job: 'helper',
+        released_at: null,
+        assigned_at: '2026-09-02T00:00:00.000Z',
+      },
+    ],
+    job_proofs: [...proofFillers, ...base.job_proofs],
+    work_logs: [
+      ...logFillers,
+      {
+        id: 'log-elec',
+        org_id: ORG_A,
+        job_id: JOB_ELEC,
+        author_id: JOHN,
+        body: 'Closed the electrical panel.',
+        kind: 'note',
+        occurred_at: '2026-09-12T12:00:00.000Z',
+      },
+    ],
+    content_mentions: Array.from({ length: 80 }, (_, index) => ({
+      org_id: ORG_A,
+      mentioned_user_id: JOHN,
+      source: 'job_message',
+      source_id: `msg-other-${index}`,
+      job_id: JOB_PLUMB,
+      handle: 'johncyganiak',
+      created_at: '2026-09-20T00:00:00.000Z',
+    })),
+    job_messages: [
+      ...messageFillers,
+      {
+        id: 'msg-elec',
+        org_id: ORG_A,
+        job_id: JOB_ELEC,
+        author_id: JANE,
+        author_label: 'Jane Alvarez',
+        body: '@johncyganiak the electrical panel is done.',
+        created_at: '2026-09-12T00:00:00.000Z',
+      },
+    ],
+  });
+  const people = await loadPersonContext(db as any, {
+    orgId: ORG_A,
+    people: [{ userId: JOHN, handle: 'johncyganiak', name: 'John Cyganiak' }],
+    question: '@johncyganiak electrical panel',
+    now: new Date('2026-09-21T00:00:00.000Z'),
+    jobId: JOB_ELEC,
+  });
+  const items = people[0]!.items;
+  assert.ok(items.some((item) => item.id === PROOF_ELEC));
+  assert.ok(items.some((item) => item.id === 'log-elec'));
+  assert.ok(items.some((item) => item.id === 'msg-elec'));
+  assert.equal(items.some((item) => item.jobId === JOB_PLUMB), false);
+});

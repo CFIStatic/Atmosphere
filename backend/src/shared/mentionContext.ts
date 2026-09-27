@@ -336,22 +336,24 @@ export async function loadPersonContext(
     selectRows(db, 'recording_acknowledgments', (query) =>
       query.select('job_id, actor_user_id, work_date').eq('org_id', orgId).in('actor_user_id', userIds),
     ),
-    selectRows(db, 'work_logs', (query) =>
-      query
+    selectRows(db, 'work_logs', (query) => {
+      const filtered = query
         .select('id, job_id, author_id, body, kind, occurred_at')
         .eq('org_id', orgId)
-        .in('author_id', userIds)
+        .in('author_id', userIds);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('occurred_at', { ascending: false })
-        .limit(40),
-    ),
-    selectRows(db, 'content_mentions', (query) =>
-      query
+        .limit(40);
+    }),
+    selectRows(db, 'content_mentions', (query) => {
+      const filtered = query
         .select('mentioned_user_id, source, source_id, job_id, handle, created_at')
         .eq('org_id', orgId)
-        .in('mentioned_user_id', userIds)
+        .in('mentioned_user_id', userIds);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('created_at', { ascending: false })
-        .limit(80),
-    ),
+        .limit(80);
+    }),
   ]);
 
   const liveAssignments = assignments.filter((row) => !row.released_at);
@@ -376,40 +378,47 @@ export async function loadPersonContext(
     ),
   ];
 
+  // Caps apply after this filter so newer rows on other jobs cannot evict this job.
+  const evidenceJobIds = scopeJobId ? [scopeJobId] : jobIds;
+
   const [jobs, proofs, parties, recentMessages, taggedNotes] = await Promise.all([
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
             .select('id, job_number, title, status, work_type, owner_id, created_by, updated_at')
             .eq('org_id', orgId)
-            .in('id', jobIds),
+            .in('id', evidenceJobIds),
         )
       : Promise.resolve([] as any[]),
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'job_proofs', (query) =>
           query
             .select(
               'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, captured_at, received_at',
             )
             .eq('org_id', orgId)
-            .in('job_id', jobIds)
+            .in('job_id', evidenceJobIds)
             .is('deleted_at', null)
             .order('work_date', { ascending: false })
             .limit(60),
         )
       : Promise.resolve([] as any[]),
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'job_parties', (query) =>
-          query.select('id, job_id, created_by, company, trade').eq('org_id', orgId).in('job_id', jobIds),
+          query
+            .select('id, job_id, created_by, company, trade')
+            .eq('org_id', orgId)
+            .in('job_id', evidenceJobIds),
         )
       : Promise.resolve([] as any[]),
-    selectRows(db, 'job_messages', (query) =>
-      query
+    selectRows(db, 'job_messages', (query) => {
+      const filtered = query
         .select('id, job_id, author_id, author_label, body, created_at')
-        .eq('org_id', orgId)
+        .eq('org_id', orgId);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('created_at', { ascending: false })
-        .limit(120),
-    ),
+        .limit(120);
+    }),
     taggedNoteIds.length
       ? selectRows(db, 'job_messages', (query) =>
           query
