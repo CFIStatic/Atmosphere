@@ -237,6 +237,20 @@ export function resolveMentions(text: string, roster: MentionMember[]): MentionR
   return { mentions, ambiguous };
 }
 
+/** Someone named in a job chat who is not assigned, a capturer, or tagged there. */
+export function notOnJobSentence(name: string, otherJobs: string[]): string {
+  const who = name.trim() || 'That person';
+  const titles = otherJobs.map((job) => job.trim()).filter(Boolean);
+  if (!titles.length) return `${who} isn't on this job.`;
+  const list =
+    titles.length === 1
+      ? titles[0]
+      : titles.length === 2
+        ? `${titles[0]} and ${titles[1]}`
+        : `${titles.slice(0, -1).join(', ')}, and ${titles[titles.length - 1]}`;
+  return `${who} isn't on this job. They're on ${list}.`;
+}
+
 export function ambiguitySentence(query: string, candidates: Array<{ name: string }>): string {
   const names = candidates.map((row) => row.name).filter(Boolean);
   const list =

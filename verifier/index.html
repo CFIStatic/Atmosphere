@@ -6800,7 +6800,10 @@
     function loadRoster() {
       if (rosterLoaded || !ORG_MODE) return;
       rosterLoaded = true;
-      apiFetch('/api/org/members').then(function (r) { return r.json(); }).then(function (body) {
+      var rosterUrl = item && item.jobId
+        ? '/api/operations/shared/' + encodeURIComponent(item.jobId) + '/mention-members'
+        : '/api/org/members';
+      apiFetch(rosterUrl).then(function (r) { return r.json(); }).then(function (body) {
         roster = ((body && body.members) || []).map(function (row) {
           return {
             userId: String(row.userId || ''),

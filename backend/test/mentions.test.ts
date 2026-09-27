@@ -13,7 +13,7 @@ import {
   textMentionsPerson,
   type MentionMember,
 } from '../src/shared/mentions.js';
-import { loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
+import { listJobMentionMembers, loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
 
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
@@ -417,4 +417,63 @@ test('two Johns asks which person instead of guessing', async () => {
   assert.equal(prep.mentions.length, 0);
   assert.match(prep.directAnswer ?? '', /Which John did you mean\? John Cyganiak or John Smith\./);
   assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel/);
+});
+
+test('job ask stays on that job, and a person from another job is named as absent', async () => {
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    job_assignments: [
+      ...base.job_assignments,
+      {
+        org_id: ORG_A,
+        job_id: JOB_PLUMB,
+        user_id: JOHN,
+        role_on_job: 'helper',
+        released_at: null,
+        assigned_at: '2026-09-02T00:00:00.000Z',
+      },
+    ],
+  });
+  const onElectrical = await listJobMentionMembers(db as any, ORG_A, JOB_ELEC);
+  assert.ok(onElectrical?.some((member) => member.userId === JOHN));
+  assert.equal(onElectrical?.some((member) => member.userId === JANE), false);
+
+  const scoped = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_ELEC,
+    question: '@johncyganiak what has he done?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.equal(scoped.mentions[0]?.userId, JOHN);
+  assert.match(scoped.directAnswer ?? '', /Cedar panel/);
+  assert.doesNotMatch(scoped.directAnswer ?? '', /Kitchen faucet/);
+
+  const orgWide = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    question: '@johncyganiak what has he done?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.match(orgWide.directAnswer ?? '', /Cedar panel/);
+  assert.match(orgWide.directAnswer ?? '', /Kitchen faucet/);
+
+  const absent = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_ELEC,
+    question: '@janealvarez did she finish the electrical job?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.equal(absent.mentions.length, 0);
+  assert.match(absent.directAnswer ?? '', /Jane Alvarez isn't on this job/);
+  assert.match(absent.directAnswer ?? '', /Kitchen faucet/);
+  assert.doesNotMatch(absent.directAnswer ?? '', /Cedar panel electrical/);
+
+  const foreign = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_OTHER_ORG,
+    question: '@johncyganiak status?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.match(foreign.directAnswer ?? '', /isn't in this organization/);
+  assert.doesNotMatch(foreign.directAnswer ?? '', /Other org|Secret/);
 });

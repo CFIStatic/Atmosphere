@@ -3393,6 +3393,12 @@ export const api = {
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
 
+  getJobMentionMembers: (jobId: string) =>
+    request<{ members: OrgMember[] }>(
+      `/api/operations/shared/${encodeURIComponent(jobId)}/mention-members`,
+      { method: 'GET' },
+    ),
+
   removeMember: (userId: string) =>
     request<{ ok: boolean }>(`/api/org/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
 

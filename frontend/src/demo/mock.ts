@@ -1896,7 +1896,20 @@ const DEMO_XACT_STATUS: XactimateStatus = {
 
 type HandlerResult = { status?: number; body: unknown; stream?: boolean };
 
-function demoMentionAnswer(question: string): {
+function demoPeopleOnJob(jobId: string) {
+  const ids = new Set<string>();
+  const summary = JOBS.find((job) => job.jobId === jobId);
+  if (summary?.ownerId) ids.add(summary.ownerId);
+  for (const person of summary?.crew ?? []) ids.add(person.userId);
+  for (const person of SALES_WORK_TIMELINES[jobId]?.crew ?? []) ids.add(person.userId);
+  for (const message of SHARED_RECORDS[jobId]?.messages ?? []) {
+    const body = String(message.body ?? '');
+    for (const match of body.matchAll(/mention:([A-Za-z0-9_-]+)/g)) ids.add(match[1]);
+  }
+  return MEMBERS.filter((member) => ids.has(member.userId) && member.fullName);
+}
+
+function demoMentionAnswer(question: string, jobId?: string): {
   answer: string;
   groundedOn: number;
   model: null;
@@ -1917,6 +1930,29 @@ function demoMentionAnswer(question: string): {
   const elena = compact.includes('elenacruz') || q.includes('elena cruz') || /@elena\b/.test(q);
   const electrical = q.includes('electric');
   const now = new Date().toISOString();
+  if (jobId && john && !demoPeopleOnJob(jobId).some((member) => member.fullName === 'John Cyganiak')) {
+    const elsewhere = JOBS.filter(
+      (job) => job.jobId !== jobId && demoPeopleOnJob(job.jobId).some((member) => member.fullName === 'John Cyganiak'),
+    ).map((job) => job.title);
+    const absent = elsewhere.length
+      ? `John Cyganiak isn't on this job. They're on ${elsewhere.join(' and ')}.`
+      : `John Cyganiak isn't on this job.`;
+    return {
+      answer: absent,
+      groundedOn: 0,
+      model: null,
+      threadId: 'thread-demo',
+      question: {
+        id: `q-${Date.now()}`,
+        question,
+        answer: absent,
+        model: null,
+        grounded_on: [],
+        created_at: now,
+        thread_id: 'thread-demo',
+      },
+    };
+  }
   let answer = 'Nothing on this job file answers that.';
   let grounded: string[] = [];
   if (john && electrical) {
@@ -3667,9 +3703,15 @@ const routes: Array<[string, RegExp, Handler]> = [
     },
   })],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof\/questions$/, () => ({ body: { questions: [] } })],
-  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (_m, b) => ({
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/mention-members$/, (m) => {
+    if (!JOBS.some((job) => job.jobId === m[1])) {
+      return { status: 404, body: { error: "That job isn't in this organization." } };
+    }
+    return { body: { members: demoPeopleOnJob(m[1]) } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => ({
     stream: true,
-    body: demoMentionAnswer(String(b.question ?? '')),
+    body: demoMentionAnswer(String(b.question ?? ''), m[1]),
   })],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/messages$/, (m, b) => {
     const record = SHARED_RECORDS[m[1]];
