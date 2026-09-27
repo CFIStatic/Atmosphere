@@ -30,7 +30,7 @@ describe('loadOrgMentions', () => {
     const { loadOrgMentions } = await import('./useOrgMentions');
     await expect(loadOrgMentions()).resolves.toEqual([]);
     const second = await loadOrgMentions();
-    expect(second.map((member) => member.handle)).toEqual(['johncyganiak']);
+    expect(second.map((member) => member.fullName)).toEqual(['John Cyganiak']);
     expect(getMembers).toHaveBeenCalledTimes(2);
   });
 });

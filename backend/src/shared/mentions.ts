@@ -1,30 +1,27 @@
 /**
  * @mentions for Ask.
  *
- * Handles are stable within an org. A stored profiles.handle wins; otherwise
- * one is derived from the name, then the email local part, and collisions get
- * a numeric suffix ordered by user id so the same roster always yields the
- * same handles.
- *
- * Client-supplied user ids are never trusted. Resolution only returns people
- * who are in the roster passed in — callers load that roster through the
- * caller's org-scoped client.
+ * A mention is a person's name: the profile display name, or the name from
+ * their login (OAuth full_name / name) when the profile name is empty.
+ * There is no separate username. Client-supplied user ids are never trusted
+ * unless that id is in the caller's org roster.
  */
 
 export interface MentionIdentity {
   userId: string;
   email?: string | null;
+  /** Profile display name. */
   fullName?: string | null;
-  /** Existing stored handle, when the profile already has one. */
-  handle?: string | null;
+  /** Auth user metadata name, used only when the profile name is empty. */
+  loginName?: string | null;
+  avatarUrl?: string | null;
 }
 
-export interface MentionMember extends MentionIdentity {
-  handle: string;
-}
+export type MentionMember = MentionIdentity;
 
 export interface ParsedMention {
-  handle: string;
+  /** Text the author typed after @, or the label inside a stored token. */
+  raw: string;
   /** Id the client claimed. Ignored unless that id is in the org roster. */
   claimedUserId: string | null;
   index: number;
@@ -32,13 +29,23 @@ export interface ParsedMention {
 
 export interface ResolvedMention {
   userId: string;
+  /** Compact form of the display name, stored on the tag index. Not a username. */
   handle: string;
   name: string;
 }
 
-const HANDLE_RE = /^[a-z0-9][a-z0-9_]{1,31}$/;
-const STRUCTURED_RE = /@\[([A-Za-z0-9][A-Za-z0-9_]{1,31})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
-const BARE_RE = /(^|[\s(])@([A-Za-z0-9][A-Za-z0-9_]{1,31})\b/g;
+export interface AmbiguousMention {
+  query: string;
+  candidates: Array<{ userId: string; name: string }>;
+}
+
+export interface MentionResolution {
+  mentions: ResolvedMention[];
+  ambiguous: AmbiguousMention[];
+}
+
+const STRUCTURED_RE = /@\[([^\]\n]{1,80})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
+const BARE_MARK_RE = /(^|[\s(])@/g;
 
 const TOPIC_STOP = new Set([
   'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',
@@ -50,130 +57,203 @@ const TOPIC_STOP = new Set([
 
 const RANK_STOP = new Set([...TOPIC_STOP, 'job', 'jobs', 'work', 'video', 'videos', 'clip', 'clips']);
 
-export function normalizeHandle(raw: unknown): string | null {
-  const compact = String(raw ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
-  if (!HANDLE_RE.test(compact)) return null;
-  return compact;
+/** Profile name, otherwise the login/OAuth name. Empty when neither is set. */
+export function mentionDisplayName(input: {
+  fullName?: string | null;
+  loginName?: string | null;
+}): string {
+  const profile = String(input.fullName ?? '').replace(/\s+/g, ' ').trim();
+  if (profile) return profile;
+  return String(input.loginName ?? '').replace(/\s+/g, ' ').trim();
 }
 
-/** Prefer a stored handle, then a name slug, then the email local part. */
-export function handleBase(input: MentionIdentity): string {
-  const existing = normalizeHandle(input.handle);
-  if (existing) return existing;
-  const fromName = String(input.fullName ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
-  if (fromName.length >= 2) return fromName.slice(0, 32);
-  const local = String(input.email ?? '')
-    .split('@')[0]
-    ?.toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
-  if (local && local.length >= 2) return local.slice(0, 32);
-  return 'member';
+/** full_name wins over name. Both come from auth user metadata. */
+export function loginNameFromMetadata(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const record = meta as Record<string, unknown>;
+  for (const key of ['full_name', 'name']) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.replace(/\s+/g, ' ').trim();
+  }
+  return null;
 }
 
-function withSuffix(base: string, n: number): string {
-  if (n <= 1) return base.slice(0, 32);
-  const suffix = String(n);
-  return `${base.slice(0, Math.max(1, 32 - suffix.length))}${suffix}`;
+/** Spaces and punctuation removed, for `@johncyganiak` against "John Cyganiak". */
+export function nameKey(name: string): string {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+export function mentionToken(name: string, userId: string): string {
+  return `@[${name}](mention:${userId})`;
+}
+
+function nameWords(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9]+/g, ''))
+    .filter(Boolean);
 }
 
 /**
- * Assign one handle per member. Explicit stored handles that are unique in
- * the org are kept. Everyone else is derived, and ties break by user id so
- * the result does not depend on query order.
+ * Case-insensitive prefix of the full name or of any word in it.
+ * `@jo` matches "John Cyganiak"; `@cyg` matches the last name; `@john c` matches the full name.
  */
-export function assignOrgHandles<T extends MentionIdentity>(members: T[]): Array<T & { handle: string }> {
-  const sorted = [...members].sort((a, b) => a.userId.localeCompare(b.userId));
-  const used = new Set<string>();
-  const assigned = new Map<string, string>();
+export function nameMatchesQuery(name: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q || !name.trim()) return false;
+  const full = name.trim().toLowerCase();
+  if (full.startsWith(q)) return true;
+  const qWord = q.split(/\s+/)[0] ?? q;
+  return nameWords(name).some((word) => word.startsWith(qWord) && (q === qWord || full.startsWith(q)));
+}
 
-  for (const member of sorted) {
-    const explicit = normalizeHandle(member.handle);
-    if (!explicit || used.has(explicit)) continue;
-    used.add(explicit);
-    assigned.set(member.userId, explicit);
+function boundaryAfter(text: string, length: number): boolean {
+  const next = text[length] ?? '';
+  return next === '' || /[\s,.;:!?)]/.test(next);
+}
+
+function membersMatching(query: string, roster: MentionMember[]): MentionMember[] {
+  const q = query.trim();
+  if (!q) return [];
+  const exact = roster.filter((member) => mentionDisplayName(member).toLowerCase() === q.toLowerCase());
+  if (exact.length) return exact;
+  const compact = nameKey(q);
+  if (compact.length >= 2) {
+    const compactHits = roster.filter((member) => nameKey(mentionDisplayName(member)) === compact);
+    if (compactHits.length) return compactHits;
   }
+  return roster.filter((member) => nameMatchesQuery(mentionDisplayName(member), q));
+}
 
-  for (const member of sorted) {
-    if (assigned.has(member.userId)) continue;
-    const base = handleBase({ ...member, handle: null });
-    let n = 1;
-    let handle = withSuffix(base, n);
-    while (used.has(handle)) {
-      n += 1;
-      handle = withSuffix(base, n);
-    }
-    used.add(handle);
-    assigned.set(member.userId, handle);
-  }
-
-  return members.map((member) => ({ ...member, handle: assigned.get(member.userId) ?? 'member' }));
+function toResolved(member: MentionMember): ResolvedMention {
+  const name = mentionDisplayName(member);
+  return { userId: member.userId, name, handle: nameKey(name).slice(0, 32) || 'name' };
 }
 
 export function parseMentions(text: string): ParsedMention[] {
   const source = String(text ?? '');
-  const covered: Array<[number, number]> = [];
   const found: ParsedMention[] = [];
-
-  for (const match of source.matchAll(STRUCTURED_RE)) {
+  const covered: Array<[number, number]> = [];
+  for (const match of source.matchAll(new RegExp(STRUCTURED_RE.source, 'g'))) {
     const index = match.index ?? 0;
     found.push({
-      handle: match[1].toLowerCase(),
-      claimedUserId: match[2],
+      raw: String(match[1] ?? '').trim(),
+      claimedUserId: match[2] ?? null,
       index,
     });
     covered.push([index, index + match[0].length]);
   }
-
-  for (const match of source.matchAll(BARE_RE)) {
-    const lead = match[1] ?? '';
-    const index = (match.index ?? 0) + lead.length;
+  for (const mark of source.matchAll(new RegExp(BARE_MARK_RE.source, 'g'))) {
+    const lead = mark[1] ?? '';
+    const index = (mark.index ?? 0) + lead.length;
     if (covered.some(([start, end]) => index >= start && index < end)) continue;
-    found.push({
-      handle: match[2].toLowerCase(),
-      claimedUserId: null,
-      index,
-    });
+    const rest = source.slice(index + 1);
+    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
+    if (!token) continue;
+    found.push({ raw: token[0], claimedUserId: null, index });
   }
-
   found.sort((a, b) => a.index - b.index);
-  const seen = new Set<string>();
-  return found.filter((mention) => {
-    if (seen.has(mention.handle)) return false;
-    seen.add(mention.handle);
-    return true;
-  });
-}
-
-export function mentionToken(handle: string, userId: string): string {
-  return `@[${handle}](mention:${userId})`;
+  return found;
 }
 
 /**
  * Resolve every mention against one org roster.
- * A claimed id from outside the roster is dropped. When the handle matches
- * someone in the roster, that member wins even if the client sent a different id.
+ * A claimed id outside the roster is ignored. A typed name that matches more
+ * than one person is returned as ambiguous instead of guessing.
  */
-export function resolveMentions(text: string, roster: MentionMember[]): ResolvedMention[] {
-  const byHandle = new Map(roster.map((member) => [member.handle, member]));
+export function resolveMentions(text: string, roster: MentionMember[]): MentionResolution {
+  const source = String(text ?? '');
   const byId = new Map(roster.map((member) => [member.userId, member]));
-  const resolved: ResolvedMention[] = [];
+  const mentions: ResolvedMention[] = [];
+  const ambiguous: AmbiguousMention[] = [];
   const seen = new Set<string>();
+  const covered: Array<[number, number]> = [];
 
-  for (const parsed of parseMentions(text)) {
-    const named = byHandle.get(parsed.handle) ?? null;
-    const claimed = parsed.claimedUserId ? byId.get(parsed.claimedUserId) ?? null : null;
-    const member = named ?? (claimed && claimed.handle === parsed.handle ? claimed : null);
-    if (!member || seen.has(member.userId)) continue;
+  const pushMember = (member: MentionMember) => {
+    if (seen.has(member.userId)) return;
     seen.add(member.userId);
-    const name = String(member.fullName ?? '').trim() || member.handle;
-    resolved.push({ userId: member.userId, handle: member.handle, name });
+    mentions.push(toResolved(member));
+  };
+  const pushAmbiguous = (query: string, matches: MentionMember[]) => {
+    const key = query.trim().toLowerCase();
+    if (ambiguous.some((row) => row.query.toLowerCase() === key)) return;
+    ambiguous.push({
+      query: query.trim(),
+      candidates: matches
+        .map((member) => ({ userId: member.userId, name: mentionDisplayName(member) }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  };
+
+  for (const match of source.matchAll(new RegExp(STRUCTURED_RE.source, 'g'))) {
+    const index = match.index ?? 0;
+    covered.push([index, index + match[0].length]);
+    const label = String(match[1] ?? '').trim();
+    const claimed = match[2] ? byId.get(match[2]) ?? null : null;
+    if (claimed) {
+      pushMember(claimed);
+      continue;
+    }
+    const matches = membersMatching(label, roster);
+    if (matches.length === 1) pushMember(matches[0]!);
+    else if (matches.length > 1) pushAmbiguous(label, matches);
   }
-  return resolved;
+
+  for (const mark of source.matchAll(new RegExp(BARE_MARK_RE.source, 'g'))) {
+    const lead = mark[1] ?? '';
+    const index = (mark.index ?? 0) + lead.length;
+    if (covered.some(([start, end]) => index >= start && index < end)) continue;
+    const rest = source.slice(index + 1);
+    let best: { length: number; matches: MentionMember[] } | null = null;
+    for (const member of roster) {
+      const name = mentionDisplayName(member);
+      if (name.length < 2) continue;
+      if (!rest.toLowerCase().startsWith(name.toLowerCase())) continue;
+      if (!boundaryAfter(rest, name.length)) continue;
+      if (!best || name.length > best.length) {
+        best = {
+          length: name.length,
+          matches: roster.filter(
+            (row) => mentionDisplayName(row).toLowerCase() === name.toLowerCase(),
+          ),
+        };
+      }
+    }
+    if (best) {
+      if (best.matches.length === 1) pushMember(best.matches[0]!);
+      else pushAmbiguous(mentionDisplayName(best.matches[0]!), best.matches);
+      continue;
+    }
+    const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
+    if (!token) continue;
+    const matches = membersMatching(token[0], roster);
+    if (matches.length === 1) pushMember(matches[0]!);
+    else if (matches.length > 1) pushAmbiguous(token[0], matches);
+  }
+
+  return { mentions, ambiguous };
+}
+
+export function ambiguitySentence(query: string, candidates: Array<{ name: string }>): string {
+  const names = candidates.map((row) => row.name).filter(Boolean);
+  const list =
+    names.length <= 1
+      ? names.join('')
+      : names.length === 2
+        ? `${names[0]} or ${names[1]}`
+        : `${names.slice(0, -1).join(', ')}, or ${names[names.length - 1]}`;
+  const raw = query.trim();
+  const shown = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'person';
+  return `Which ${shown} did you mean? ${list}.`;
+}
+
+function stripMentionMarks(question: string): string {
+  return String(question ?? '')
+    .replace(new RegExp(STRUCTURED_RE.source, 'g'), ' ')
+    .replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/g, '$1 ');
 }
 
 export function firstName(name: string, handle: string): string {
@@ -187,9 +267,7 @@ export function firstName(name: string, handle: string): string {
 
 /** "did he finish the electrical job?" → "electrical job". */
 export function topicFromQuestion(question: string): string {
-  const stripped = String(question ?? '')
-    .replace(STRUCTURED_RE, ' ')
-    .replace(BARE_RE, ' ');
+  const stripped = stripMentionMarks(question);
   const words = stripped
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
@@ -199,9 +277,7 @@ export function topicFromQuestion(question: string): string {
 }
 
 export function questionTokens(question: string): string[] {
-  const stripped = String(question ?? '')
-    .replace(STRUCTURED_RE, ' ')
-    .replace(BARE_RE, ' ');
+  const stripped = stripMentionMarks(question);
   const seen = new Set<string>();
   const tokens: string[] = [];
   for (const word of stripped.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/)) {
@@ -369,7 +445,7 @@ export function answerFromMentionContext(
 export function formatMentionPrompt(people: PersonMentionContext[]): string {
   if (!people.length) return '';
   const sections = people.map((person) => {
-    const header = `@${person.handle} — ${person.name} (${person.userId})`;
+    const header = `@${person.name} (${person.userId})`;
     if (!person.items.length) {
       return `${header}\nNo jobs, videos, notes, or tags tied to this person in this organization.`;
     }
@@ -398,9 +474,13 @@ export function formatMentionPrompt(people: PersonMentionContext[]): string {
   );
 }
 
-export function textMentionsHandle(body: string, handle: string): boolean {
-  const safe = handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const bare = new RegExp(`(^|[\\s(])@${safe}\\b`, 'i');
-  const structured = new RegExp(`@\\[${safe}\\]\\(mention:`, 'i');
-  return bare.test(body) || structured.test(body);
+/**
+ * True when `body` names this person. A stored mention id counts.
+ * A typed name counts only when it resolves to this one person — `@John`
+ * with two Johns tags neither of them.
+ */
+export function textMentionsPerson(body: string, userId: string, roster: MentionMember[]): boolean {
+  const id = userId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`@\\[[^\\]\\n]{1,80}\\]\\(mention:${id}\\)`).test(body)) return true;
+  return resolveMentions(body, roster).mentions.some((mention) => mention.userId === userId);
 }

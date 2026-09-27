@@ -111,7 +111,7 @@ const membership = (): Membership => ({
 
 const MEMBERS: OrgMember[] = [
   { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'global_admin', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
-  { userId: '11111111-1111-4111-8111-111111111111', email: 'john.cyganiak@ortizrestoration.com', fullName: 'John Cyganiak', handle: 'johncyganiak', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
+  { userId: '11111111-1111-4111-8111-111111111111', email: 'john.cyganiak@ortizrestoration.com', fullName: 'John Cyganiak', avatarUrl: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#e8590c"/><text x="32" y="40" text-anchor="middle" font-family="sans-serif" font-size="24" fill="white" font-weight="700">JC</text></svg>'), role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
@@ -947,7 +947,7 @@ const SHARED_RECORDS: Record<string, any> = {
     money: { approved: 0, pending: 0, unpricedApprovals: 0 },
     messages: [
       { id: 'msg-4', party_id: 'pty-4', author_label: 'Sam Ruiz, Kestrel Flooring', body: 'Accepted. Holding off on the dining room until I see a reading.', scope_item_id: null, is_decision: false, created_at: '2026-08-02T08:16:00Z' },
-      { id: 'msg-john', party_id: null, author_label: 'Dana Ortiz', body: '@[johncyganiak](mention:11111111-1111-4111-8111-111111111111) panel is closed — please confirm the label.', scope_item_id: null, is_decision: false, created_at: '2026-09-12T18:40:00Z' },
+      { id: 'msg-john', party_id: null, author_label: 'Dana Ortiz', body: '@[John Cyganiak](mention:11111111-1111-4111-8111-111111111111) panel is closed — please confirm the label.', scope_item_id: null, is_decision: false, created_at: '2026-09-12T18:40:00Z' },
     ],
     risks: [],
   },
@@ -1912,8 +1912,9 @@ function demoMentionAnswer(question: string): {
   };
 } {
   const q = question.toLowerCase();
-  const john = q.includes('johncyganiak');
-  const elena = q.includes('elenacruz') || q.includes('@elena');
+  const compact = q.replace(/[^a-z0-9@]+/g, '');
+  const john = compact.includes('johncyganiak') || q.includes('john cyganiak') || /@john\b/.test(q);
+  const elena = compact.includes('elenacruz') || q.includes('elena cruz') || /@elena\b/.test(q);
   const electrical = q.includes('electric');
   const now = new Date().toISOString();
   let answer = 'Nothing on this job file answers that.';

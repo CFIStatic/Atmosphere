@@ -4,13 +4,16 @@
  * to the existing Ask model call.
  */
 import { isAskModelConfigured } from '../lib/askModel.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
+  ambiguitySentence,
   answerFromMentionContext,
-  assignOrgHandles,
   formatMentionPrompt,
+  loginNameFromMetadata,
+  mentionDisplayName,
   rankMentionItems,
   resolveMentions,
-  textMentionsHandle,
+  textMentionsPerson,
   type MentionIdentity,
   type MentionItem,
   type MentionMember,
@@ -35,16 +38,52 @@ async function selectRows(db: Db, table: string, apply: (query: any) => any): Pr
   }
 }
 
-function asProfile(row: any): { email: string | null; fullName: string | null; handle: string | null } {
+function asProfile(row: any): { email: string | null; fullName: string | null } {
   const profile = Array.isArray(row?.profiles) ? row.profiles[0] : row?.profiles;
   return {
     email: profile?.email ?? null,
     fullName: profile?.full_name ?? null,
-    handle: profile?.handle ?? null,
   };
 }
 
-/** Members of one org, with stable handles. RLS on `db` is the real boundary. */
+/**
+ * When the profile name is empty, use the name stored on the auth login
+ * (Google/OAuth full_name, then name). No service role means those members
+ * stay unnamed and cannot be @mentioned.
+ */
+export async function fillLoginNames<
+  T extends { userId: string; fullName?: string | null; loginName?: string | null },
+>(members: T[]): Promise<T[]> {
+  const missing = members.filter((member) => !mentionDisplayName(member));
+  if (!missing.length) return members;
+  const admin = unscopedAdminOrNull();
+  if (!admin) return members;
+  const found = new Map<string, string>();
+  await Promise.all(
+    missing.map(async (member) => {
+      try {
+        const { data, error } = await admin.auth.admin.getUserById(member.userId);
+        if (error) return;
+        const login = loginNameFromMetadata(data?.user?.user_metadata);
+        if (login) found.set(member.userId, login);
+      } catch {
+        /* Auth admin is optional. */
+      }
+    }),
+  );
+  if (!found.size) return members;
+  return members.map((member) => {
+    const loginName = found.get(member.userId);
+    if (!loginName) return member;
+    return {
+      ...member,
+      loginName,
+      fullName: mentionDisplayName({ fullName: member.fullName, loginName }),
+    };
+  });
+}
+
+/** Members of one org. RLS on `db` is the real boundary. */
 export async function listOrgMentionMembers(db: Db, orgId: string): Promise<MentionMember[]> {
   const withHandle = await selectRows(db, 'org_members', (query) =>
     query
@@ -67,10 +106,9 @@ export async function listOrgMentionMembers(db: Db, orgId: string): Promise<Ment
       userId,
       email: profile.email,
       fullName: profile.fullName,
-      handle: profile.handle,
     });
   }
-  return assignOrgHandles(identities);
+  return fillLoginNames(identities);
 }
 
 function clipText(row: any): string {
@@ -102,10 +140,13 @@ export async function loadPersonContext(
     people: ResolvedMention[];
     question: string;
     now?: Date;
+    roster?: MentionMember[];
   },
 ): Promise<PersonMentionContext[]> {
   const { orgId, people } = input;
   if (!people.length) return [];
+  const roster: MentionMember[] =
+    input.roster ?? people.map((person) => ({ userId: person.userId, fullName: person.name }));
   const userIds = people.map((person) => person.userId);
   const now = input.now ?? new Date();
 
@@ -273,7 +314,7 @@ export async function loadPersonContext(
       if (!jobsById.has(jobId) && !assigned.has(`${person.userId}:${jobId}`)) continue;
       const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys);
       const onCrew = assigned.has(`${person.userId}:${jobId}`);
-      const tagged = textMentionsHandle(clipText(proof), person.handle);
+      const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
       if (!captured && !onCrew && !tagged) continue;
       const job = jobsById.get(jobId);
       const title = String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim());
@@ -308,7 +349,7 @@ export async function loadPersonContext(
     for (const message of messages) {
       const body = String(message.body ?? '');
       const tagged =
-        textMentionsHandle(body, person.handle) ||
+        textMentionsPerson(body, person.userId, roster) ||
         Boolean(taggedForUser.get(person.userId)?.has(`job_message:${message.id}`));
       if (!tagged) continue;
       push({
@@ -323,7 +364,7 @@ export async function loadPersonContext(
     }
 
     for (const log of logs) {
-      if (log.author_id !== person.userId && !textMentionsHandle(String(log.body ?? ''), person.handle)) continue;
+      if (log.author_id !== person.userId && !textMentionsPerson(String(log.body ?? ''), person.userId, roster)) continue;
       push({
         kind: 'log',
         id: String(log.id),
@@ -360,33 +401,44 @@ export async function prepareMentionAsk(
   input: { orgId: string; question: string; now?: Date },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
-  const mentions = resolveMentions(input.question, roster);
-  if (!mentions.length) {
-    return { mentions: [], supplement: '', directAnswer: null, fallbackAnswer: null, groundedOn: 0 };
+  const resolution = resolveMentions(input.question, roster);
+  const which = resolution.ambiguous
+    .map((row) => ambiguitySentence(row.query, row.candidates))
+    .join(' ');
+  if (!resolution.mentions.length) {
+    return {
+      mentions: [],
+      supplement: '',
+      directAnswer: which || null,
+      fallbackAnswer: which || null,
+      groundedOn: 0,
+    };
   }
   const people = await loadPersonContext(db, {
     orgId: input.orgId,
-    people: mentions,
+    people: resolution.mentions,
     question: input.question,
     now: input.now,
+    roster,
   });
   const grounded = answerFromMentionContext(input.question, people);
   const hasRelevant = people.some((person) => person.items.some((item) => item.relevant));
-  const supplement = formatMentionPrompt(people);
+  const supplement = [which, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
+  const withWhich = (answer: string) => (which ? `${which}\n\n${answer}` : answer);
   if (!hasRelevant || !isAskModelConfigured()) {
     return {
-      mentions,
+      mentions: resolution.mentions,
       supplement,
-      directAnswer: grounded.answer,
-      fallbackAnswer: grounded.answer,
+      directAnswer: withWhich(grounded.answer),
+      fallbackAnswer: withWhich(grounded.answer),
       groundedOn: grounded.groundedOn,
     };
   }
   return {
-    mentions,
+    mentions: resolution.mentions,
     supplement,
     directAnswer: null,
-    fallbackAnswer: grounded.answer,
+    fallbackAnswer: withWhich(grounded.answer),
     groundedOn: grounded.groundedOn,
   };
 }

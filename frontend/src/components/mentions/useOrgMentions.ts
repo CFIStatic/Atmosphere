@@ -1,24 +1,19 @@
 import { useEffect, useState } from 'react';
 import { api, type OrgMember } from '../../lib/api';
-import { assignOrgHandles, type MentionMember } from '../../lib/mentions';
+import { mentionDisplayName, type MentionMember } from '../../lib/mentions';
 
 let cached: MentionMember[] | null = null;
 let inflight: Promise<MentionMember[]> | null = null;
 
 export function membersFromOrg(rows: OrgMember[]): MentionMember[] {
-  return assignOrgHandles(
-    rows.map((row) => ({
+  return rows
+    .map((row) => ({
       userId: row.userId,
       email: row.email,
       fullName: row.fullName,
-      handle: row.handle ?? null,
-    })),
-  ).map((row) => ({
-    userId: row.userId,
-    handle: row.handle,
-    fullName: row.fullName,
-    email: row.email,
-  }));
+      avatarUrl: row.avatarUrl ?? null,
+    }))
+    .filter((row) => mentionDisplayName(row).length >= 2);
 }
 
 export function loadOrgMentions(): Promise<MentionMember[]> {

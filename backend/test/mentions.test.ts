@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ambiguitySentence,
   answerFromMentionContext,
-  assignOrgHandles,
-  handleBase,
+  loginNameFromMetadata,
+  mentionDisplayName,
   mentionToken,
   noEvidenceSentence,
   parseMentions,
   rankMentionItems,
   resolveMentions,
+  textMentionsPerson,
   type MentionMember,
 } from '../src/shared/mentions.js';
 import { loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
@@ -24,74 +26,80 @@ const JOB_OTHER_ORG = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const PROOF_ELEC = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const PROOF_OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
+const SMITH = '44444444-4444-4444-8444-444444444444';
+
 function roster(): MentionMember[] {
-  return assignOrgHandles([
-    { userId: JOHN, fullName: 'John Cyganiak', email: 'john.cyganiak@example.com', handle: null },
-    { userId: JANE, fullName: 'Jane Alvarez', email: 'jane@example.com', handle: null },
-    { userId: '44444444-4444-4444-8444-444444444444', fullName: 'John Smith', email: 'jsmith@example.com', handle: null },
-  ]);
+  return [
+    { userId: JOHN, fullName: 'John Cyganiak', email: 'john.cyganiak@example.com' },
+    { userId: JANE, fullName: 'Jane Alvarez', email: 'jane@example.com' },
+    { userId: SMITH, fullName: 'John Smith', email: 'jsmith@example.com' },
+  ];
 }
 
-test('mention parsing keeps structured ids and bare handles, including several in one message', () => {
-  const text = `${mentionToken('johncyganiak', JOHN)} did he finish, and @janealvarez too?`;
+test('mention parsing keeps structured ids and bare names, including several in one message', () => {
+  const text = `${mentionToken('John Cyganiak', JOHN)} did he finish, and @Jane too?`;
   const parsed = parseMentions(text);
   assert.deepEqual(
-    parsed.map((mention) => mention.handle),
-    ['johncyganiak', 'janealvarez'],
+    parsed.map((mention) => mention.raw),
+    ['John Cyganiak', 'Jane'],
   );
   assert.equal(parsed[0]?.claimedUserId, JOHN);
   assert.equal(parsed[1]?.claimedUserId, null);
   assert.equal(parseMentions('email john@example.com is not a mention').length, 0);
 });
 
-test('handles prefer a stored value, otherwise name then email, and dedupe stably', () => {
-  assert.equal(handleBase({ userId: '1', handle: 'Kept_Handle', fullName: 'Other', email: 'a@b.co' }), 'kepthandle');
-  assert.equal(handleBase({ userId: '1', fullName: 'John Cyganiak', email: 'nope@example.com' }), 'johncyganiak');
-  assert.equal(handleBase({ userId: '1', fullName: 'A', email: 'local.part@example.com' }), 'localpart');
+test('names come from the profile, then the login, and match without a username', () => {
+  assert.equal(mentionDisplayName({ fullName: 'John Cyganiak', loginName: 'Other' }), 'John Cyganiak');
+  assert.equal(mentionDisplayName({ fullName: '  ', loginName: 'Jane Alvarez' }), 'Jane Alvarez');
+  assert.equal(loginNameFromMetadata({ name: 'Fallback', full_name: 'From Google' }), 'From Google');
+  assert.equal(loginNameFromMetadata({ name: 'From Google' }), 'From Google');
 
-  const once = assignOrgHandles([
-    { userId: 'b', fullName: 'John Cyganiak', email: 'b@ex.com' },
-    { userId: 'a', fullName: 'John Cyganiak', email: 'a@ex.com' },
-  ]);
-  const again = assignOrgHandles([
-    { userId: 'a', fullName: 'John Cyganiak', email: 'a@ex.com' },
-    { userId: 'b', fullName: 'John Cyganiak', email: 'b@ex.com' },
-  ]);
-  const byId = Object.fromEntries(again.map((member) => [member.userId, member.handle]));
-  assert.equal(byId.a, 'johncyganiak');
-  assert.equal(byId.b, 'johncyganiak2');
-  assert.deepEqual(
-    once.map((member) => member.handle).sort(),
-    again.map((member) => member.handle).sort(),
+  const members = roster();
+  const compact = resolveMentions('@johncyganiak did he finish the electrical job?', members);
+  assert.equal(compact.mentions[0]?.userId, JOHN);
+  assert.equal(compact.mentions[0]?.name, 'John Cyganiak');
+  assert.equal(compact.ambiguous.length, 0);
+
+  const spaced = resolveMentions('@John Cyganiak did he finish?', members);
+  assert.equal(spaced.mentions[0]?.userId, JOHN);
+
+  const last = resolveMentions('@cyg status?', members);
+  assert.equal(last.mentions[0]?.userId, JOHN);
+
+  const two = resolveMentions('@John did he finish?', members);
+  assert.equal(two.mentions.length, 0);
+  assert.equal(two.ambiguous.length, 1);
+  assert.match(
+    ambiguitySentence(two.ambiguous[0]!.query, two.ambiguous[0]!.candidates),
+    /Which John did you mean\? John Cyganiak or John Smith\./,
   );
 
-  const stored = assignOrgHandles([
-    { userId: 'a', fullName: 'John Cyganiak', email: 'a@ex.com', handle: 'johnny' },
-    { userId: 'b', fullName: 'John Cyganiak', email: 'b@ex.com', handle: null },
+  const loginOnly = resolveMentions('@johncyganiak', [
+    { userId: JOHN, fullName: null, loginName: 'John Cyganiak' },
   ]);
-  assert.equal(stored.find((member) => member.userId === 'a')?.handle, 'johnny');
-  assert.equal(stored.find((member) => member.userId === 'b')?.handle, 'johncyganiak');
+  assert.equal(loginOnly.mentions[0]?.userId, JOHN);
+  assert.equal(loginOnly.mentions[0]?.name, 'John Cyganiak');
+
+  assert.equal(textMentionsPerson('@John the panel is done', JOHN, members), false);
+  assert.equal(textMentionsPerson('@John Cyganiak the panel is done', JOHN, members), true);
+  assert.equal(textMentionsPerson(`@[John Cyganiak](mention:${JOHN}) hi`, JOHN, members), true);
 });
 
 test('org isolation: a claimed id outside the roster never resolves', () => {
   const members = roster();
-  const john = members.find((member) => member.userId === JOHN)!;
-  const foreign = `@[${john.handle}](mention:${OUTSIDER}) did he finish the electrical job?`;
+  const foreign = `@[John Cyganiak](mention:${OUTSIDER}) did he finish the electrical job?`;
   const resolved = resolveMentions(foreign, members);
-  assert.equal(resolved.length, 1);
-  assert.equal(resolved[0]?.userId, JOHN);
-  assert.notEqual(resolved[0]?.userId, OUTSIDER);
+  assert.equal(resolved.mentions.length, 1);
+  assert.equal(resolved.mentions[0]?.userId, JOHN);
+  assert.notEqual(resolved.mentions[0]?.userId, OUTSIDER);
 
   const unknown = resolveMentions(`@[notaperson](mention:${OUTSIDER}) hello`, members);
-  assert.deepEqual(unknown, []);
+  assert.deepEqual(unknown.mentions, []);
+  assert.deepEqual(unknown.ambiguous, []);
 
-  const otherOrgRoster = assignOrgHandles([
-    { userId: OUTSIDER, fullName: 'John Cyganiak', email: 'john@other.test', handle: null },
-  ]);
-  const leaked = resolveMentions(`@${otherOrgRoster[0]!.handle} status?`, members);
-  // Same derived handle can exist in another org; resolution uses THIS roster only.
-  assert.equal(leaked[0]?.userId, JOHN);
-  assert.notEqual(leaked[0]?.userId, OUTSIDER);
+  const leaked = resolveMentions('@johncyganiak status?', members);
+  assert.equal(leaked.mentions[0]?.userId, JOHN);
+  assert.notEqual(leaked.mentions[0]?.userId, OUTSIDER);
 });
 
 test('context ranking prefers the question over a newer unrelated row', () => {
@@ -385,4 +393,28 @@ test('a person with no matching evidence is told so, and another org is invisibl
   assert.notEqual(outsider.mentions[0]?.userId, OUTSIDER);
   assert.match(outsider.supplement, /Cedar panel electrical upgrade/);
   assert.doesNotMatch(outsider.supplement, /Other org electrical/);
+});
+
+test('two Johns asks which person instead of guessing', async () => {
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    org_members: [
+      ...base.org_members,
+      {
+        org_id: ORG_A,
+        user_id: SMITH,
+        status: 'active',
+        profiles: { email: 'jsmith@example.com', full_name: 'John Smith', handle: null },
+      },
+    ],
+  });
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    question: '@John did he finish the electrical job?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.equal(prep.mentions.length, 0);
+  assert.match(prep.directAnswer ?? '', /Which John did you mean\? John Cyganiak or John Smith\./);
+  assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel/);
 });

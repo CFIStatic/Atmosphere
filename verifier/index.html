@@ -1814,11 +1814,16 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 220px; overflow: auto;
   }
   .mention-menu button {
-    width: 100%; display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    width: 100%; display: flex; gap: 8px; align-items: center;
     border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left;
     padding: 8px 12px; cursor: pointer;
   }
   .mention-menu button.on, .mention-menu button:hover { background: var(--accent-soft); }
+  .mention-menu .avatar {
+    width: 24px; height: 24px; border-radius: 999px; flex: none; object-fit: cover;
+    display: grid; place-items: center; background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700;
+  }
   .mention-menu button strong { font-size: 13px; }
   .mention-menu button span, .mention-menu .empty { font-size: 12px; color: var(--muted); }
   .mention-menu .empty { padding: 8px 12px; }
@@ -6623,15 +6628,33 @@
     });
   }
 
+  function mentionName(member) {
+    return String((member && member.fullName) || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function mentionNameKey(name) {
+    return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+
+  function mentionNameMatches(name, query) {
+    var q = String(query || '').trim().toLowerCase();
+    var full = String(name || '').trim().toLowerCase();
+    if (!q || !full) return false;
+    if (full.indexOf(q) === 0) return true;
+    var qWord = q.split(/\s+/)[0];
+    var words = full.split(/\s+/).map(function (word) { return word.replace(/[^a-z0-9]+/g, ''); }).filter(Boolean);
+    return words.some(function (word) { return word.indexOf(qWord) === 0 && (q === qWord || full.indexOf(q) === 0); });
+  }
+
   function renderMentionHtml(text) {
     var source = String(text || '');
-    var re = /@\[([A-Za-z0-9][A-Za-z0-9_]{1,31})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
+    var re = /@\[([^\]\n]{1,80})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
     var html = '';
     var cursor = 0;
     var match;
     while ((match = re.exec(source))) {
       html += esc(source.slice(cursor, match.index));
-      html += '<span class="mention-chip" data-handle="' + esc(match[1].toLowerCase()) + '">@' + esc(match[1].toLowerCase()) + '</span>';
+      html += '<span class="mention-chip" data-user-id="' + esc(match[2]) + '">@' + esc(String(match[1] || '').trim()) + '</span>';
       cursor = match.index + match[0].length;
     }
     html += esc(source.slice(cursor));
@@ -6639,13 +6662,61 @@
   }
 
   function expandVerifierMentions(text, roster) {
-    var byHandle = {};
-    (roster || []).forEach(function (member) { byHandle[member.handle] = member; });
-    return String(text || '').replace(/(^|[\s(])@([A-Za-z0-9][A-Za-z0-9_]{1,31})\b/g, function (full, lead, handle) {
-      var member = byHandle[String(handle).toLowerCase()];
-      if (!member) return full;
-      return lead + '@[' + member.handle + '](mention:' + member.userId + ')';
+    var source = String(text || '');
+    var people = roster || [];
+    var covered = [];
+    var structured = /@\[([^\]\n]{1,80})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
+    var match;
+    while ((match = structured.exec(source))) covered.push([match.index, match.index + match[0].length]);
+    var replacements = [];
+    var mark = /(^|[\s(])@/g;
+    var found;
+    while ((found = mark.exec(source))) {
+      var lead = found[1] || '';
+      var index = found.index + lead.length;
+      if (covered.some(function (span) { return index >= span[0] && index < span[1]; })) continue;
+      var rest = source.slice(index + 1);
+      var best = null;
+      people.forEach(function (member) {
+        var name = mentionName(member);
+        if (name.length < 2) return;
+        if (rest.toLowerCase().indexOf(name.toLowerCase()) !== 0) return;
+        var next = rest.charAt(name.length);
+        if (next && !/[\s,.;:!?\)]/.test(next)) return;
+        var same = people.filter(function (row) { return mentionName(row).toLowerCase() === name.toLowerCase(); });
+        if (!best || name.length > best.length) best = { length: name.length, matches: same };
+      });
+      if (best) {
+        if (best.matches.length === 1) {
+          replacements.push({
+            start: index,
+            end: index + 1 + best.length,
+            text: '@[' + mentionName(best.matches[0]) + '](mention:' + best.matches[0].userId + ')'
+          });
+        }
+        continue;
+      }
+      var tokenMatch = rest.match(/^[A-Za-z0-9][A-Za-z0-9'.\-]{0,60}/);
+      if (!tokenMatch) continue;
+      var token = tokenMatch[0];
+      var compact = mentionNameKey(token);
+      var hits = compact.length >= 2
+        ? people.filter(function (member) { return mentionNameKey(mentionName(member)) === compact; })
+        : [];
+      if (!hits.length) hits = people.filter(function (member) { return mentionNameMatches(mentionName(member), token); });
+      if (hits.length !== 1) continue;
+      replacements.push({
+        start: index,
+        end: index + 1 + token.length,
+        text: '@[' + mentionName(hits[0]) + '](mention:' + hits[0].userId + ')'
+      });
+    }
+    replacements.sort(function (a, b) { return b.start - a.start; });
+    var out = source;
+    replacements.forEach(function (rep) {
+      out = out.slice(0, rep.start) + rep.text + out.slice(rep.end);
     });
+    return out;
   }
 
   function renderAsk(item) {
@@ -6731,34 +6802,41 @@
       rosterLoaded = true;
       apiFetch('/api/org/members').then(function (r) { return r.json(); }).then(function (body) {
         roster = ((body && body.members) || []).map(function (row) {
-          var handle = String(row.handle || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
-          if (handle.length < 2) {
-            var fromName = String(row.fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            var local = String(row.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-            handle = (fromName.length >= 2 ? fromName : local).slice(0, 32);
-          }
-          return { userId: String(row.userId || ''), handle: handle, fullName: row.fullName || '', email: row.email || '' };
-        }).filter(function (row) { return row.userId && row.handle.length >= 2; });
+          return {
+            userId: String(row.userId || ''),
+            fullName: String(row.fullName || '').replace(/\s+/g, ' ').trim(),
+            avatarUrl: row.avatarUrl || ''
+          };
+        }).filter(function (row) { return row.userId && row.fullName.length >= 2; });
         paintMentions();
       }).catch(function () { roster = []; });
     }
 
     function mentionQuery(text, cursor) {
       var upto = String(text || '').slice(0, cursor);
-      var match = upto.match(/(^|[\s(])@([A-Za-z0-9_]{0,32})$/);
+      var match = upto.match(/(^|[\s(])@([A-Za-z0-9'.\- ]{0,80})$/);
       if (!match) return null;
-      var query = match[2] || '';
-      return { start: upto.length - query.length - 1, end: cursor, query: query };
+      var raw = match[2] || '';
+      var trimmed = raw.replace(/\s+$/, '');
+      if (/\s$/.test(raw) && roster.length) {
+        var exact = roster.some(function (member) { return mentionName(member).toLowerCase() === trimmed.toLowerCase(); });
+        var longer = roster.some(function (member) {
+          return mentionName(member).toLowerCase().indexOf(trimmed.toLowerCase() + ' ') === 0;
+        });
+        if (exact || !longer) return null;
+      }
+      if (trimmed.indexOf(' ') >= 0 && roster.length && !roster.some(function (member) {
+        return mentionName(member).toLowerCase().indexOf(trimmed.toLowerCase()) === 0;
+      })) return null;
+      return { start: upto.length - raw.length - 1, end: cursor, query: trimmed };
     }
 
     function mentionOptions() {
       if (!mentionAt) return [];
-      var q = mentionAt.query.toLowerCase();
+      var q = mentionAt.query;
       return roster.filter(function (member) {
         if (!q) return true;
-        var name = String(member.fullName || '').toLowerCase();
-        var local = String(member.email || '').split('@')[0].toLowerCase();
-        return member.handle.indexOf(q) === 0 || name.indexOf(q) === 0 || local.indexOf(q) === 0 || member.handle.indexOf(q) >= 0;
+        return mentionNameMatches(mentionName(member), q);
       }).slice(0, 8);
     }
 
@@ -6768,8 +6846,12 @@
       menu.hidden = false;
       menu.innerHTML = options.length
         ? options.map(function (member, index) {
-          return '<li><button type="button" class="' + (index === mentionActive ? 'on' : '') + '"><strong>@' +
-            esc(member.handle) + '</strong><span>' + esc(member.fullName || member.email) + '</span></button></li>';
+          var name = mentionName(member);
+          var photo = member.avatarUrl
+            ? '<img class="avatar" alt="" src="' + esc(member.avatarUrl) + '">'
+            : '<span class="avatar">' + esc(name.split(/\s+/).map(function (part) { return part.charAt(0); }).join('').slice(0, 2).toUpperCase()) + '</span>';
+          return '<li><button type="button" class="' + (index === mentionActive ? 'on' : '') + '">' +
+            photo + '<strong>' + esc(name) + '</strong></button></li>';
         }).join('')
         : '<li class="empty">No people in this company match.</li>';
       Array.prototype.forEach.call(menu.querySelectorAll('button'), function (btn, index) {
@@ -6785,7 +6867,11 @@
       var before = input.value.slice(0, mentionAt.start);
       var after = input.value.slice(mentionAt.end);
       var spacer = after.charAt(0) === ' ' ? '' : ' ';
-      input.value = before + '@' + member.handle + spacer + after;
+      var same = roster.filter(function (row) { return mentionName(row).toLowerCase() === mentionName(member).toLowerCase(); });
+      var inserted = same.length > 1
+        ? '@[' + mentionName(member) + '](mention:' + member.userId + ')'
+        : '@' + mentionName(member);
+      input.value = before + inserted + spacer + after;
       mentionAt = null;
       menu.hidden = true;
       input.focus();

@@ -7,12 +7,12 @@ export function MentionText({ text, onDark = false }: { text: string; onDark?: b
       {runs.map((run, index) =>
         run.kind === 'mention' ? (
           <span
-            key={`${run.handle}-${index}`}
+            key={`${run.userId ?? run.name}-${index}`}
             className={onDark ? 'mention-chip mention-chip-on-dark' : 'mention-chip'}
             data-testid="mention-chip"
-            data-handle={run.handle}
+            data-user-id={run.userId ?? undefined}
           >
-            @{run.handle}
+            @{run.name}
           </span>
         ) : (
           <span key={`t-${index}`}>{run.text}</span>

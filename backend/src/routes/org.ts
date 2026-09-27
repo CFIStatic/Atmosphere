@@ -7,7 +7,7 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { decideMemberRemoval } from '../org/members.js';
-import { assignOrgHandles } from '../shared/mentions.js';
+import { fillLoginNames } from '../shared/mentionContext.js';
 import { revokeAllAuthSessionsForUser } from '../auth/revokeUserSessions.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import { normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
@@ -436,16 +436,8 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
     if (result.error) throw new HttpError(500, result.error.message, 'members_failed');
 
     const serialized = (result.data ?? []).map(serializeMember);
-    const withHandles = assignOrgHandles(
-      serialized.map((member: ReturnType<typeof serializeMember> & { handle?: string | null }) => ({
-        ...member,
-        userId: member.userId,
-        email: member.email,
-        fullName: member.fullName,
-        handle: member.handle ?? null,
-      })),
-    );
-    res.json({ members: withHandles });
+    const members = await fillLoginNames(serialized);
+    res.json({ members });
   } catch (err) {
     next(err);
   }

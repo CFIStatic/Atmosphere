@@ -1,59 +1,77 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assignOrgHandles,
   expandMentionTokens,
   filterMentionMembers,
+  mentionDisplayName,
   mentionQueryAt,
+  nameMatchesQuery,
   splitMentionRuns,
   type MentionMember,
 } from './mentions';
 
 const john: MentionMember = {
   userId: '11111111-1111-4111-8111-111111111111',
-  handle: 'johncyganiak',
   fullName: 'John Cyganiak',
   email: 'john.cyganiak@ortizrestoration.com',
 };
 const elena: MentionMember = {
   userId: 'u-elena',
-  handle: 'elenacruz',
   fullName: 'Elena Cruz',
   email: 'elena@ortizrestoration.com',
 };
+const smith: MentionMember = {
+  userId: '44444444-4444-4444-8444-444444444444',
+  fullName: 'John Smith',
+  email: 'jsmith@ortizrestoration.com',
+};
 
 describe('mention parsing', () => {
-  it('derives stable handles and suffixes collisions', () => {
-    const assigned = assignOrgHandles([
-      { userId: 'b', fullName: 'Sam Ruiz', email: 'sam@example.com', handle: null },
-      { userId: 'a', fullName: 'Sam Ruiz', email: 'other@example.com', handle: null },
-      { userId: 'c', fullName: null, email: 'john.cyganiak@ortizrestoration.com', handle: 'johncyganiak' },
+  it('uses the profile name, then the login name', () => {
+    expect(mentionDisplayName({ fullName: 'John Cyganiak', loginName: 'Other Person' })).toBe('John Cyganiak');
+    expect(mentionDisplayName({ fullName: '  ', loginName: 'Jane Alvarez' })).toBe('Jane Alvarez');
+    expect(mentionDisplayName({ fullName: null, loginName: null })).toBe('');
+  });
+
+  it('matches a prefix of the first name, last name, or full name', () => {
+    expect(nameMatchesQuery('John Cyganiak', 'jo')).toBe(true);
+    expect(nameMatchesQuery('John Cyganiak', 'cyg')).toBe(true);
+    expect(nameMatchesQuery('John Cyganiak', 'john c')).toBe(true);
+    expect(nameMatchesQuery('Elena Cruz', 'jo')).toBe(false);
+    expect(filterMentionMembers([john, elena], 'jo').map((row) => row.userId)).toEqual([john.userId]);
+    expect(filterMentionMembers([john, elena], 'cyg').map((row) => row.userId)).toEqual([john.userId]);
+    expect(filterMentionMembers([john, elena, smith], 'john').map((row) => row.fullName)).toEqual([
+      'John Cyganiak',
+      'John Smith',
     ]);
-    const byId = Object.fromEntries(assigned.map((row) => [row.userId, row.handle]));
-    expect(byId.c).toBe('johncyganiak');
-    expect(byId.a).toBe('samruiz');
-    expect(byId.b).toBe('samruiz2');
+    expect(filterMentionMembers([john, elena], 'john.c')).toEqual([]);
   });
 
-  it('expands bare handles and keeps unknown ones as text', () => {
-    const text = expandMentionTokens('@johncyganiak and @notaperson did the work?', [john, elena]);
-    expect(text).toContain('@[johncyganiak](mention:11111111-1111-4111-8111-111111111111)');
-    expect(text).toContain('@notaperson');
+  it('expands a unique typed name and leaves two Johns as text', () => {
+    const compact = expandMentionTokens('@johncyganiak and @notaperson did the work?', [john, elena]);
+    expect(compact).toContain('@[John Cyganiak](mention:11111111-1111-4111-8111-111111111111)');
+    expect(compact).toContain('@notaperson');
+
+    const spaced = expandMentionTokens('@John Cyganiak finished?', [john, elena]);
+    expect(spaced).toContain('@[John Cyganiak](mention:11111111-1111-4111-8111-111111111111)');
+
+    const ambiguous = expandMentionTokens('@John finished?', [john, smith]);
+    expect(ambiguous).toBe('@John finished?');
   });
 
-  it('splits multiple mention tokens into chips', () => {
+  it('splits a name token into a chip label', () => {
     const runs = splitMentionRuns(
-      `@[johncyganiak](mention:${john.userId}) and @[elenacruz](mention:${elena.userId})?`,
+      `@[John Cyganiak](mention:${john.userId}) and @[Elena Cruz](mention:${elena.userId})?`,
     );
-    expect(runs.filter((run) => run.kind === 'mention').map((run) => run.kind === 'mention' && run.handle)).toEqual([
-      'johncyganiak',
-      'elenacruz',
+    expect(runs.filter((run) => run.kind === 'mention').map((run) => run.kind === 'mention' && run.name)).toEqual([
+      'John Cyganiak',
+      'Elena Cruz',
     ]);
   });
 
-  it('filters the open @ query by handle, name, and email prefix', () => {
+  it('keeps the menu open while the name is incomplete and closes after the full name', () => {
     expect(mentionQueryAt('did @jo', 7)?.query).toBe('jo');
-    expect(filterMentionMembers([john, elena], 'john.c').map((row) => row.handle)).toEqual(['johncyganiak']);
-    expect(filterMentionMembers([john, elena], 'elena').map((row) => row.handle)).toEqual(['elenacruz']);
-    expect(filterMentionMembers([john, elena], 'cruz').map((row) => row.handle)).toEqual(['elenacruz']);
+    expect(mentionQueryAt('@John C', 7, [john])?.query).toBe('John C');
+    expect(mentionQueryAt('@John Cyganiak ', '@John Cyganiak '.length, [john])).toBeNull();
+    expect(mentionQueryAt('@John ', 6, [john, smith])?.query).toBe('John');
   });
 });

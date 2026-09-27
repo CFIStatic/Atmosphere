@@ -47,17 +47,18 @@ describe('MentionTextarea', () => {
     });
   });
 
-  it('opens org members on @ and inserts the selected handle', async () => {
+  it('opens org members on @ and inserts the full name', async () => {
     const user = userEvent.setup();
     render(<Harness />);
     const box = screen.getByPlaceholderText('Ask what you forgot…');
     await user.click(box);
     await user.type(box, '@jo');
     const option = await screen.findByTestId('mention-option');
-    expect(option).toHaveAttribute('data-handle', 'johncyganiak');
-    expect(screen.queryByText('@elenacruz')).not.toBeInTheDocument();
+    expect(option).toHaveAttribute('data-user-id', '11111111-1111-4111-8111-111111111111');
+    expect(option).toHaveTextContent('John Cyganiak');
+    expect(screen.queryByText('Elena Cruz')).not.toBeInTheDocument();
     await user.keyboard('{Enter}');
-    expect(box).toHaveValue('@johncyganiak ');
+    expect(box).toHaveValue('@John Cyganiak ');
     expect(screen.queryByTestId('mention-menu')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject, type Ref } from 'react';
-import { filterMentionMembers, mentionQueryAt, type MentionMember } from '../../lib/mentions';
+import { PersonAvatar } from '../PersonAvatar';
+import {
+  filterMentionMembers,
+  mentionDisplayName,
+  mentionQueryAt,
+  mentionToken,
+  type MentionMember,
+} from '../../lib/mentions';
 import { useOrgMentions } from './useOrgMentions';
 
 function assignRef(ref: Ref<HTMLTextAreaElement> | undefined, node: HTMLTextAreaElement | null) {
@@ -13,7 +20,8 @@ function assignRef(ref: Ref<HTMLTextAreaElement> | undefined, node: HTMLTextArea
 
 /**
  * Textarea that opens an org-member menu at `@`.
- * Inserts a bare `@handle`; the parent expands it to a mention token on send.
+ * Inserts `@Full Name`. The parent stores the user id when the message is sent.
+ * Two people with the same name get the id token immediately.
  */
 export function MentionTextarea({
   value,
@@ -52,20 +60,25 @@ export function MentionTextarea({
   }, [value, autoGrow]);
 
   function syncQuery(text: string, cursor: number) {
-    const next = mentionQueryAt(text, cursor);
+    const next = mentionQueryAt(text, cursor, members);
     setQuery(next);
     setHighlight(0);
   }
 
   function insert(member: MentionMember) {
     if (!query) return;
+    const name = mentionDisplayName(member);
+    const sameName = members.filter(
+      (row) => mentionDisplayName(row).toLowerCase() === name.toLowerCase(),
+    );
+    const inserted = sameName.length > 1 ? mentionToken(name, member.userId) : `@${name}`;
     const before = value.slice(0, query.start);
     const after = value.slice(query.end);
     const spacer = after.startsWith(' ') || after.startsWith('\n') ? '' : ' ';
-    const next = `${before}@${member.handle}${spacer}${after}`;
+    const next = `${before}${inserted}${spacer}${after}`;
     onChange(next);
     setQuery(null);
-    const caret = before.length + member.handle.length + 1 + spacer.length;
+    const caret = before.length + inserted.length + spacer.length;
     requestAnimationFrame(() => {
       const el = localRef.current;
       if (!el) return;
@@ -137,9 +150,9 @@ export function MentionTextarea({
                   type="button"
                   role="option"
                   data-testid="mention-option"
-                  data-handle={member.handle}
+                  data-user-id={member.userId}
                   aria-selected={index === highlight}
-                  className={`flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm ${
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
                     index === highlight ? 'bg-brand-50 text-ink-900' : 'text-ink-800 hover:bg-paper-50'
                   }`}
                   onMouseDown={(event) => {
@@ -148,10 +161,13 @@ export function MentionTextarea({
                   }}
                   onMouseEnter={() => setHighlight(index)}
                 >
-                  <span className="font-semibold">@{member.handle}</span>
-                  <span className="truncate text-xs text-ink-500">
-                    {member.fullName || member.email || 'Teammate'}
-                  </span>
+                  <PersonAvatar
+                    fullName={mentionDisplayName(member)}
+                    avatarUrl={member.avatarUrl}
+                    size="xs"
+                    className="h-6 w-6 text-[10px]"
+                  />
+                  <span className="font-semibold">{mentionDisplayName(member)}</span>
                 </button>
               </li>
             ))

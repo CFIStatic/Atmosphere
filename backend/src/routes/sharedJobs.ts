@@ -1393,7 +1393,7 @@ sharedJobsRouter.post(
       if (error) throw new HttpError(400, error.message, 'message_failed');
       try {
         const roster = await listOrgMentionMembers(supabase, orgId);
-        const mentions = resolveMentions(input.body, roster);
+        const { mentions } = resolveMentions(input.body, roster);
         await recordContentMentions(supabase, {
           orgId,
           jobId: req.params.jobId,
