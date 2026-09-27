@@ -21,7 +21,9 @@ export type AskSourceId =
   | 'videos'
   | 'evidence'
   | 'crm'
-  | `clip:${string}`;
+  | `clip:${string}`
+  | `job/${string}`
+  | `video/${string}`;
 
 export type AskSourceChip = {
   id: AskSourceId;
@@ -35,6 +37,8 @@ export type AskSourceChip = {
     | 'parties'
     | 'setup'
     | 'brief';
+  /** Another job file. Mention answers link the job or video that was cited. */
+  href?: string;
   workDate?: string;
 };
 
@@ -89,6 +93,19 @@ function trim(value: unknown): string {
 
 function isClipId(raw: string): raw is `clip:${string}` {
   return /^clip:\d{4}-\d{2}-\d{2}$/i.test(raw);
+}
+
+function isLinkedSource(raw: string): raw is AskSourceId {
+  return (
+    /^job\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw) ||
+    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw)
+  );
+}
+
+function unslug(slug: string): string {
+  const text = slug.replace(/-/g, ' ').trim();
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export function mapAskSourceFragment(raw: string): AskSourceId | null {
@@ -173,6 +190,10 @@ function parseTrailerIds(raw: string): AskSourceId[] {
       pushUnique(ids, token.toLowerCase() as AskSourceId);
       continue;
     }
+    if (isLinkedSource(token)) {
+      pushUnique(ids, token as AskSourceId);
+      continue;
+    }
     const mapped =
       mapAskSourceFragment(token.replace(/_/g, ' ')) ??
       (KNOWN.has(token) ? (token as AskSourceId) : null);
@@ -192,6 +213,8 @@ function clipLabel(isoDate: string): string {
 
 export function askSourceLabel(id: AskSourceId): string {
   if (id.startsWith('clip:')) return clipLabel(id.slice(5));
+  if (id.startsWith('job/')) return unslug(id.split('/')[2] ?? '') || 'Job';
+  if (id.startsWith('video/')) return unslug(id.split('/')[3] ?? '') || 'Video';
   switch (id) {
     case 'access':
       return 'Who has access';
@@ -236,6 +259,19 @@ export function askSourceChip(id: AskSourceId): AskSourceChip {
   const label = askSourceLabel(id);
   if (id.startsWith('clip:')) {
     return { id, label, section: 'videos', workDate: id.slice(5) };
+  }
+  if (id.startsWith('job/')) {
+    const jobId = id.split('/')[1];
+    return { id, label, href: jobId ? `/job-progress?job=${encodeURIComponent(jobId)}` : undefined };
+  }
+  if (id.startsWith('video/')) {
+    const jobId = id.split('/')[1];
+    return {
+      id,
+      label,
+      section: 'videos',
+      href: jobId ? `/job-progress?job=${encodeURIComponent(jobId)}` : undefined,
+    };
   }
   switch (id) {
     case 'access':
