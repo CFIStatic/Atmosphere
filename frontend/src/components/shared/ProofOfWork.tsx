@@ -536,6 +536,9 @@ function MeasuredVideo({
   privacyRedactions,
   childPrivacyRedactions,
   onTimeUpdate,
+  onPlaybackError,
+  resumeAt,
+  resumePlaying,
 }: {
   src: string;
   className?: string;
@@ -545,6 +548,9 @@ function MeasuredVideo({
   privacyRedactions?: import('../../lib/api').PrivacyRedactionRange[] | null;
   childPrivacyRedactions?: import('../../lib/api').ChildPrivacyRedactionRange[] | null;
   onTimeUpdate?: (seconds: number) => void;
+  onPlaybackError?: (info: { currentTime: number; wasPlaying: boolean }) => void;
+  resumeAt?: number | null;
+  resumePlaying?: boolean;
 }) {
   return (
     <JobFilePlayer
@@ -557,6 +563,9 @@ function MeasuredVideo({
       privacyRedactions={privacyRedactions}
       childPrivacyRedactions={childPrivacyRedactions}
       onTimeUpdate={onTimeUpdate}
+      onPlaybackError={onPlaybackError}
+      resumeAt={resumeAt}
+      resumePlaying={resumePlaying}
     />
   );
 }
@@ -586,6 +595,9 @@ function ClipPlayer({
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [resumeAt, setResumeAt] = useState<number | null>(null);
+  const [resumePlaying, setResumePlaying] = useState(false);
+  const refreshCount = useRef(0);
 
   async function open() {
     setLoading(true);
@@ -617,6 +629,15 @@ function ClipPlayer({
         privacyRedactions={privacyRedactions}
         childPrivacyRedactions={childPrivacyRedactions}
         onTimeUpdate={onTimeUpdate}
+        resumeAt={resumeAt}
+        resumePlaying={resumePlaying}
+        onPlaybackError={(info) => {
+          if (refreshCount.current >= 1) return;
+          refreshCount.current += 1;
+          setResumeAt(info.currentTime);
+          setResumePlaying(info.wasPlaying);
+          void open();
+        }}
         className="block max-h-56 w-full rounded-lg bg-black"
       />
     );

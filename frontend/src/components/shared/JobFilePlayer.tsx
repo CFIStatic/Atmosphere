@@ -90,6 +90,10 @@ export function JobFilePlayer({
   privacyRedactions,
   childPrivacyRedactions,
   onTimeUpdate,
+  onPlaybackError,
+  poster,
+  resumeAt,
+  resumePlaying = false,
   testId = 'job-file-player',
 }: {
   src: string;
@@ -105,6 +109,13 @@ export function JobFilePlayer({
   childPrivacyRedactions?: ChildPrivacyRedactionRange[] | null;
   /** Throttled playhead seconds for analysis highlight (does not seek). */
   onTimeUpdate?: (seconds: number) => void;
+  /** Signed URL expired or the element failed. Parent remints and passes a new src. */
+  onPlaybackError?: (info: { currentTime: number; wasPlaying: boolean }) => void;
+  /** First-frame still so the player is never a blank rectangle. */
+  poster?: string | null;
+  /** After a reminted src, continue at this time. */
+  resumeAt?: number | null;
+  resumePlaying?: boolean;
   testId?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -114,6 +125,8 @@ export function JobFilePlayer({
   const [muted, setMuted] = useState(() => readVideoPlayerPrefs().muted);
   const [captionsOn, setCaptionsOn] = useState(() => readVideoPlayerPrefs().captionsOn);
   const [privacyActive, setPrivacyActive] = useState<ActivePrivacy | null>(null);
+  const [buffering, setBuffering] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
 
   const ranges = privacyRedactions ?? null;
   const childRanges = childPrivacyRedactions ?? null;
@@ -173,6 +186,70 @@ export function JobFilePlayer({
     const known = knownDurationSeconds ?? captions?.durationSeconds ?? null;
     return bindMeasuredDuration(el, known);
   }, [src, knownDurationSeconds, captions?.durationSeconds]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWaiting = () => {
+      if (!el.paused) setBuffering(true);
+    };
+    const onPlay = () => {
+      if (el.readyState < 3) setBuffering(true);
+    };
+    const onPlaying = () => {
+      setBuffering(false);
+      setPlayError(null);
+    };
+    const onPause = () => setBuffering(false);
+    const onCanPlay = () => {
+      if (!el.paused) setBuffering(false);
+    };
+    const onError = () => {
+      setBuffering(false);
+      const at = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+      const wasPlaying = !el.paused;
+      if (onPlaybackError) onPlaybackError({ currentTime: at, wasPlaying });
+      else setPlayError('Could not play this file. Tap play to try again.');
+    };
+    el.addEventListener('waiting', onWaiting);
+    el.addEventListener('stalled', onWaiting);
+    el.addEventListener('play', onPlay);
+    el.addEventListener('playing', onPlaying);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('canplay', onCanPlay);
+    el.addEventListener('error', onError);
+    return () => {
+      el.removeEventListener('waiting', onWaiting);
+      el.removeEventListener('stalled', onWaiting);
+      el.removeEventListener('play', onPlay);
+      el.removeEventListener('playing', onPlaying);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('canplay', onCanPlay);
+      el.removeEventListener('error', onError);
+    };
+  }, [src, onPlaybackError]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || resumeAt == null || !Number.isFinite(resumeAt)) return;
+    const apply = () => {
+      try {
+        el.currentTime = resumeAt;
+      } catch {
+        /* playhead waits until the browser can seek */
+      }
+      if (!resumePlaying) return;
+      const attempt = el.play();
+      if (attempt && typeof attempt.catch === 'function') {
+        attempt.catch(() => {
+          setPlayError('Tap play to start.');
+        });
+      }
+    };
+    if (el.readyState >= 1) apply();
+    else el.addEventListener('loadedmetadata', apply, { once: true });
+    return () => el.removeEventListener('loadedmetadata', apply);
+  }, [src, resumeAt, resumePlaying]);
 
   useEffect(() => {
     const el = ref.current;
@@ -297,9 +374,10 @@ export function JobFilePlayer({
         <video
           ref={ref}
           src={src}
+          poster={poster || undefined}
           controls
           playsInline
-          preload="metadata"
+          preload="auto"
           data-testid={testId}
           data-seek={seekTo == null ? undefined : String(seekTo)}
           data-privacy-active={privacyActive ? '1' : '0'}
@@ -320,6 +398,27 @@ export function JobFilePlayer({
             />
           ) : null}
         </video>
+        {buffering ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="job-file-buffer"
+            role="status"
+            aria-label="Loading video"
+          >
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-orange-500" />
+          </div>
+        ) : null}
+        {playError ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+            data-testid="job-file-play-error"
+            role="alert"
+          >
+            <span className="rounded-full bg-ink-900/80 px-2.5 py-1 text-[11px] font-medium text-paper-50">
+              {playError}
+            </span>
+          </div>
+        ) : null}
         {regionBlur.length
           ? regionBlur.map((box, i) => (
               <div
