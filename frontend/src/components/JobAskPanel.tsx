@@ -483,7 +483,7 @@ export function JobAskPanel({
   async function ask(textRaw: string) {
     const raw = textRaw.trim();
     if (!raw || asking) return;
-    const members = raw.includes('@') ? await loadOrgMentions() : [];
+    const members = raw.includes('@') ? await loadOrgMentions(jobId) : [];
     const text = expandMentionTokens(raw, members);
     if (!text || asking) return;
     setAsking(true);
@@ -696,6 +696,7 @@ export function JobAskPanel({
             onKeyDown={onKeyDown}
             autoGrow
             rows={1}
+            jobId={jobId}
             placeholder="Ask what you forgot…"
             disabled={asking}
             className="min-h-[2.5rem] w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"

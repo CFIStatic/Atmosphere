@@ -147,7 +147,7 @@ export function ProofOfWork({
     setAsking(true);
     setError(null);
     try {
-      const members = raw.includes('@') ? await loadOrgMentions() : [];
+      const members = raw.includes('@') ? await loadOrgMentions(jobId) : [];
       await api.askAboutProofs(jobId, expandMentionTokens(raw, members));
       setQuestion('');
       await load();
@@ -236,6 +236,7 @@ export function ProofOfWork({
               value={question}
               onChange={setQuestion}
               rows={1}
+              jobId={jobId}
               placeholder="Ask the video collection — e.g. when was the subfloor first visible?"
               className="min-h-[2.25rem] w-full resize-none rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />

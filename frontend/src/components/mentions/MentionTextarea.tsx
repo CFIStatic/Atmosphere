@@ -33,6 +33,7 @@ export function MentionTextarea({
   disabled,
   rows = 1,
   autoGrow = false,
+  jobId = null,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -43,12 +44,14 @@ export function MentionTextarea({
   disabled?: boolean;
   rows?: number;
   autoGrow?: boolean;
+  /** When set, the menu lists only people on this job. */
+  jobId?: string | null;
 }) {
   const localRef = useRef<HTMLTextAreaElement | null>(null);
   const [query, setQuery] = useState<{ start: number; end: number; query: string } | null>(null);
   const [highlight, setHighlight] = useState(0);
   const open = query != null;
-  const members = useOrgMentions(open);
+  const members = useOrgMentions(open, jobId);
   const options = open ? filterMentionMembers(members, query.query) : [];
 
   useEffect(() => {

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ambiguitySentence,
   answerFromMentionContext,
@@ -13,7 +16,7 @@ import {
   textMentionsPerson,
   type MentionMember,
 } from '../src/shared/mentions.js';
-import { loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
+import { listJobMentionMembers, loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
 
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
@@ -417,4 +420,181 @@ test('two Johns asks which person instead of guessing', async () => {
   assert.equal(prep.mentions.length, 0);
   assert.match(prep.directAnswer ?? '', /Which John did you mean\? John Cyganiak or John Smith\./);
   assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel/);
+});
+
+test('job ask stays on that job, and a person from another job is named as absent', async () => {
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    job_assignments: [
+      ...base.job_assignments,
+      {
+        org_id: ORG_A,
+        job_id: JOB_PLUMB,
+        user_id: JOHN,
+        role_on_job: 'helper',
+        released_at: null,
+        assigned_at: '2026-09-02T00:00:00.000Z',
+      },
+    ],
+  });
+  const onElectrical = await listJobMentionMembers(db as any, ORG_A, JOB_ELEC);
+  assert.ok(onElectrical?.some((member) => member.userId === JOHN));
+  assert.equal(onElectrical?.some((member) => member.userId === JANE), false);
+
+  const scoped = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_ELEC,
+    question: '@johncyganiak what has he done?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.equal(scoped.mentions[0]?.userId, JOHN);
+  assert.match(scoped.directAnswer ?? '', /Cedar panel/);
+  assert.doesNotMatch(scoped.directAnswer ?? '', /Kitchen faucet/);
+
+  const orgWide = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    question: '@johncyganiak what has he done?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.match(orgWide.directAnswer ?? '', /Cedar panel/);
+  assert.match(orgWide.directAnswer ?? '', /Kitchen faucet/);
+
+  const absent = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_ELEC,
+    question: '@janealvarez did she finish the electrical job?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.equal(absent.mentions.length, 0);
+  assert.match(absent.directAnswer ?? '', /Jane Alvarez isn't on this job/);
+  assert.match(absent.directAnswer ?? '', /Kitchen faucet/);
+  assert.doesNotMatch(absent.directAnswer ?? '', /Cedar panel electrical/);
+
+  const foreign = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_OTHER_ORG,
+    question: '@johncyganiak status?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  assert.match(foreign.directAnswer ?? '', /isn't in this organization/);
+  assert.doesNotMatch(foreign.directAnswer ?? '', /Other org|Secret/);
+});
+
+test('job-scoped context keeps this job when other jobs fill the fetch windows', async () => {
+  const proofFillers = Array.from({ length: 60 }, (_, index) => ({
+    id: `proof-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    party_id: 'party-plumb',
+    work_date: '2026-09-20',
+    phase: 'after',
+    state: 'accepted',
+    title: `Faucet clip ${index}`,
+    ai_summary: 'Replaced the kitchen faucet.',
+    transcript_text: null,
+    narration_text: null,
+    captured_at: '2026-09-20T15:00:00.000Z',
+    received_at: '2026-09-20T15:10:00.000Z',
+    deleted_at: null,
+  }));
+  const logFillers = Array.from({ length: 40 }, (_, index) => ({
+    id: `log-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    author_id: JOHN,
+    body: 'Logged the kitchen faucet replacement.',
+    kind: 'note',
+    occurred_at: '2026-09-20T12:00:00.000Z',
+  }));
+  const messageFillers = Array.from({ length: 120 }, (_, index) => ({
+    id: `msg-other-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    author_id: JANE,
+    author_label: 'Jane Alvarez',
+    body: '@johncyganiak kitchen faucet note.',
+    created_at: '2026-09-20T00:00:00.000Z',
+  }));
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    job_assignments: [
+      ...base.job_assignments,
+      {
+        org_id: ORG_A,
+        job_id: JOB_PLUMB,
+        user_id: JOHN,
+        role_on_job: 'helper',
+        released_at: null,
+        assigned_at: '2026-09-02T00:00:00.000Z',
+      },
+    ],
+    job_proofs: [...proofFillers, ...base.job_proofs],
+    work_logs: [
+      ...logFillers,
+      {
+        id: 'log-elec',
+        org_id: ORG_A,
+        job_id: JOB_ELEC,
+        author_id: JOHN,
+        body: 'Closed the electrical panel.',
+        kind: 'note',
+        occurred_at: '2026-09-12T12:00:00.000Z',
+      },
+    ],
+    content_mentions: Array.from({ length: 80 }, (_, index) => ({
+      org_id: ORG_A,
+      mentioned_user_id: JOHN,
+      source: 'job_message',
+      source_id: `msg-other-${index}`,
+      job_id: JOB_PLUMB,
+      handle: 'johncyganiak',
+      created_at: '2026-09-20T00:00:00.000Z',
+    })),
+    job_messages: [
+      ...messageFillers,
+      {
+        id: 'msg-elec',
+        org_id: ORG_A,
+        job_id: JOB_ELEC,
+        author_id: JANE,
+        author_label: 'Jane Alvarez',
+        body: '@johncyganiak the electrical panel is done.',
+        created_at: '2026-09-12T00:00:00.000Z',
+      },
+    ],
+  });
+  const people = await loadPersonContext(db as any, {
+    orgId: ORG_A,
+    people: [{ userId: JOHN, handle: 'johncyganiak', name: 'John Cyganiak' }],
+    question: '@johncyganiak electrical panel',
+    now: new Date('2026-09-21T00:00:00.000Z'),
+    jobId: JOB_ELEC,
+  });
+  const items = people[0]!.items;
+  assert.ok(items.some((item) => item.id === PROOF_ELEC));
+  assert.ok(items.some((item) => item.id === 'log-elec'));
+  assert.ok(items.some((item) => item.id === 'msg-elec'));
+  assert.equal(items.some((item) => item.jobId === JOB_PLUMB), false);
+});
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+test('share-link clip Ask does not resolve org mentions', () => {
+  const portal = readFileSync(join(here, '../src/routes/evidencePortal.ts'), 'utf8');
+  assert.match(portal, /opts\.orgMentions && opts\.askedBy/);
+  const shareAt = portal.indexOf('POST /api/verifier-share/:token/evidence/:proofId/ask');
+  assert.ok(shareAt > 0);
+  const share = portal.slice(shareAt, shareAt + 2200);
+  assert.match(share, /orgMentions:\s*false/);
+  assert.doesNotMatch(share, /orgMentions:\s*true/);
+  const orgAt = portal.indexOf("evidencePortalRouter.post(\n  '/evidence/:proofId/ask'");
+  assert.ok(orgAt > 0 && orgAt < shareAt);
+  assert.match(portal.slice(orgAt, shareAt), /orgMentions:\s*true/);
+
+  const verifier = readFileSync(join(here, '../../verifier/index.html'), 'utf8');
+  assert.match(verifier, /if \(rosterLoaded \|\| !ORG_MODE\) return/);
+  assert.match(verifier, /if \(form && ORG_MODE\) form\.appendChild\(menu\)/);
+  assert.match(verifier, /if \(SHARE_TOKEN\) \{/);
 });

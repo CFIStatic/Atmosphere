@@ -12,6 +12,7 @@ import {
   loginNameFromMetadata,
   mentionDisplayName,
   rankMentionItems,
+  notOnJobSentence,
   resolveMentions,
   textMentionsPerson,
   type MentionIdentity,
@@ -38,11 +39,13 @@ async function selectRows(db: Db, table: string, apply: (query: any) => any): Pr
   }
 }
 
-function asProfile(row: any): { email: string | null; fullName: string | null } {
+function asProfile(row: any): { email: string | null; fullName: string | null; avatarUrl: string | null } {
   const profile = Array.isArray(row?.profiles) ? row.profiles[0] : row?.profiles;
+  const avatar = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
   return {
     email: profile?.email ?? null,
     fullName: profile?.full_name ?? null,
+    avatarUrl: /^(https?:|data:image\/)/.test(avatar) ? avatar : null,
   };
 }
 
@@ -87,13 +90,13 @@ export async function fillLoginNames<
 export async function listOrgMentionMembers(db: Db, orgId: string): Promise<MentionMember[]> {
   const withHandle = await selectRows(db, 'org_members', (query) =>
     query
-      .select('user_id, status, profiles(email, full_name, handle)')
+      .select('user_id, status, profiles(email, full_name, avatar_url, handle)')
       .eq('org_id', orgId),
   );
   const rows = withHandle.length
     ? withHandle
     : await selectRows(db, 'org_members', (query) =>
-        query.select('user_id, status, profiles(email, full_name)').eq('org_id', orgId),
+        query.select('user_id, status, profiles(email, full_name, avatar_url)').eq('org_id', orgId),
       );
 
   const active = rows.filter((row) => !row.status || row.status === 'active');
@@ -106,9 +109,157 @@ export async function listOrgMentionMembers(db: Db, orgId: string): Promise<Ment
       userId,
       email: profile.email,
       fullName: profile.fullName,
+      avatarUrl: profile.avatarUrl,
     });
   }
   return fillLoginNames(identities);
+}
+
+async function jobInOrg(
+  db: Db,
+  orgId: string,
+  jobId: string,
+): Promise<{ id: string; title: string } | null> {
+  const rows = await selectRows(db, 'crm_jobs', (query) =>
+    query.select('id, title, job_number').eq('org_id', orgId).eq('id', jobId).limit(1),
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const title = [row.job_number ? `#${row.job_number}` : '', row.title].filter(Boolean).join(' ').trim();
+  return { id: String(row.id), title: title || 'Job' };
+}
+
+/**
+ * People on one job in this org: assigned, owner, captured a proof, or tagged
+ * in a note. A job id from another org returns null.
+ */
+export async function listJobMentionUserIds(
+  db: Db,
+  orgId: string,
+  jobId: string,
+  roster: MentionMember[],
+): Promise<Set<string> | null> {
+  const job = await jobInOrg(db, orgId, jobId);
+  if (!job) return null;
+  const [assignments, uploads, parties, acks, tags, messages, owners] = await Promise.all([
+    selectRows(db, 'job_assignments', (query) =>
+      query.select('user_id, released_at').eq('org_id', orgId).eq('job_id', jobId),
+    ),
+    selectRows(db, 'job_evidence_access', (query) =>
+      query.select('actor_id, action').eq('org_id', orgId).eq('job_id', jobId).eq('action', 'uploaded'),
+    ),
+    selectRows(db, 'job_parties', (query) =>
+      query.select('created_by').eq('org_id', orgId).eq('job_id', jobId),
+    ),
+    selectRows(db, 'recording_acknowledgments', (query) =>
+      query.select('actor_user_id').eq('org_id', orgId).eq('job_id', jobId),
+    ),
+    selectRows(db, 'content_mentions', (query) =>
+      query.select('mentioned_user_id, source').eq('org_id', orgId).eq('job_id', jobId),
+    ),
+    selectRows(db, 'job_messages', (query) =>
+      query.select('body').eq('org_id', orgId).eq('job_id', jobId).order('created_at', { ascending: false }).limit(80),
+    ),
+    selectRows(db, 'crm_jobs', (query) =>
+      query.select('owner_id, created_by').eq('org_id', orgId).eq('id', jobId),
+    ),
+  ]);
+  const ids = new Set<string>();
+  const orgIds = new Set(roster.map((member) => member.userId));
+  const add = (value: unknown) => {
+    const id = String(value ?? '');
+    if (id && orgIds.has(id)) ids.add(id);
+  };
+  for (const row of owners) {
+    add(row.owner_id);
+    add(row.created_by);
+  }
+  for (const row of assignments) {
+    if (!row.released_at) add(row.user_id);
+  }
+  for (const row of uploads) add(row.actor_id);
+  for (const row of parties) add(row.created_by);
+  for (const row of acks) add(row.actor_user_id);
+  for (const row of tags) {
+    if (!row.source || row.source === 'job_message' || row.source === 'job_proof' || row.source === 'work_log') {
+      add(row.mentioned_user_id);
+    }
+  }
+  for (const row of messages) {
+    for (const mention of resolveMentions(String(row.body ?? ''), roster).mentions) add(mention.userId);
+  }
+  return ids;
+}
+
+export async function listJobMentionMembers(
+  db: Db,
+  orgId: string,
+  jobId: string,
+): Promise<MentionMember[] | null> {
+  const roster = await listOrgMentionMembers(db, orgId);
+  const ids = await listJobMentionUserIds(db, orgId, jobId, roster);
+  if (!ids) return null;
+  return roster.filter((member) => ids.has(member.userId));
+}
+
+/** Other jobs in this org the person is on, for the "isn't on this job" reply. */
+async function otherJobsForUser(
+  db: Db,
+  orgId: string,
+  userId: string,
+  exceptJobId: string,
+): Promise<string[]> {
+  const [assignments, owned, created, uploads, parties, acks, tags] = await Promise.all([
+    selectRows(db, 'job_assignments', (query) =>
+      query.select('job_id, released_at').eq('org_id', orgId).eq('user_id', userId),
+    ),
+    selectRows(db, 'crm_jobs', (query) =>
+      query.select('id, title, job_number').eq('org_id', orgId).eq('owner_id', userId),
+    ),
+    selectRows(db, 'crm_jobs', (query) =>
+      query.select('id, title, job_number').eq('org_id', orgId).eq('created_by', userId),
+    ),
+    selectRows(db, 'job_evidence_access', (query) =>
+      query.select('job_id').eq('org_id', orgId).eq('actor_id', userId).eq('action', 'uploaded'),
+    ),
+    selectRows(db, 'job_parties', (query) =>
+      query.select('job_id').eq('org_id', orgId).eq('created_by', userId),
+    ),
+    selectRows(db, 'recording_acknowledgments', (query) =>
+      query.select('job_id').eq('org_id', orgId).eq('actor_user_id', userId),
+    ),
+    selectRows(db, 'content_mentions', (query) =>
+      query.select('job_id').eq('org_id', orgId).eq('mentioned_user_id', userId),
+    ),
+  ]);
+  const titles = new Map<string, string>();
+  const remember = (id: unknown, title?: string) => {
+    const jobId = String(id ?? '');
+    if (!jobId || jobId === exceptJobId || titles.has(jobId)) return;
+    titles.set(jobId, title?.trim() || '');
+  };
+  for (const row of [...owned, ...created]) {
+    const title = [row.job_number ? `#${row.job_number}` : '', row.title].filter(Boolean).join(' ');
+    remember(row.id, title);
+  }
+  for (const row of assignments) {
+    if (!row.released_at) remember(row.job_id);
+  }
+  for (const row of uploads) remember(row.job_id);
+  for (const row of parties) remember(row.job_id);
+  for (const row of acks) remember(row.job_id);
+  for (const row of tags) remember(row.job_id);
+  const missing = [...titles.entries()].filter(([, title]) => !title).map(([id]) => id);
+  if (missing.length) {
+    const jobs = await selectRows(db, 'crm_jobs', (query) =>
+      query.select('id, title, job_number').eq('org_id', orgId).in('id', missing),
+    );
+    for (const row of jobs) {
+      const title = [row.job_number ? `#${row.job_number}` : '', row.title].filter(Boolean).join(' ');
+      if (title) titles.set(String(row.id), title);
+    }
+  }
+  return [...titles.values()].filter(Boolean);
 }
 
 function clipText(row: any): string {
@@ -141,10 +292,13 @@ export async function loadPersonContext(
     question: string;
     now?: Date;
     roster?: MentionMember[];
+    /** When set, evidence is limited to this job. */
+    jobId?: string | null;
   },
 ): Promise<PersonMentionContext[]> {
   const { orgId, people } = input;
   if (!people.length) return [];
+  const scopeJobId = input.jobId ? String(input.jobId) : null;
   const roster: MentionMember[] =
     input.roster ?? people.map((person) => ({ userId: person.userId, fullName: person.name }));
   const userIds = people.map((person) => person.userId);
@@ -182,22 +336,24 @@ export async function loadPersonContext(
     selectRows(db, 'recording_acknowledgments', (query) =>
       query.select('job_id, actor_user_id, work_date').eq('org_id', orgId).in('actor_user_id', userIds),
     ),
-    selectRows(db, 'work_logs', (query) =>
-      query
+    selectRows(db, 'work_logs', (query) => {
+      const filtered = query
         .select('id, job_id, author_id, body, kind, occurred_at')
         .eq('org_id', orgId)
-        .in('author_id', userIds)
+        .in('author_id', userIds);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('occurred_at', { ascending: false })
-        .limit(40),
-    ),
-    selectRows(db, 'content_mentions', (query) =>
-      query
+        .limit(40);
+    }),
+    selectRows(db, 'content_mentions', (query) => {
+      const filtered = query
         .select('mentioned_user_id, source, source_id, job_id, handle, created_at')
         .eq('org_id', orgId)
-        .in('mentioned_user_id', userIds)
+        .in('mentioned_user_id', userIds);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('created_at', { ascending: false })
-        .limit(80),
-    ),
+        .limit(80);
+    }),
   ]);
 
   const liveAssignments = assignments.filter((row) => !row.released_at);
@@ -222,40 +378,47 @@ export async function loadPersonContext(
     ),
   ];
 
+  // Caps apply after this filter so newer rows on other jobs cannot evict this job.
+  const evidenceJobIds = scopeJobId ? [scopeJobId] : jobIds;
+
   const [jobs, proofs, parties, recentMessages, taggedNotes] = await Promise.all([
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
             .select('id, job_number, title, status, work_type, owner_id, created_by, updated_at')
             .eq('org_id', orgId)
-            .in('id', jobIds),
+            .in('id', evidenceJobIds),
         )
       : Promise.resolve([] as any[]),
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'job_proofs', (query) =>
           query
             .select(
               'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, captured_at, received_at',
             )
             .eq('org_id', orgId)
-            .in('job_id', jobIds)
+            .in('job_id', evidenceJobIds)
             .is('deleted_at', null)
             .order('work_date', { ascending: false })
             .limit(60),
         )
       : Promise.resolve([] as any[]),
-    jobIds.length
+    evidenceJobIds.length
       ? selectRows(db, 'job_parties', (query) =>
-          query.select('id, job_id, created_by, company, trade').eq('org_id', orgId).in('job_id', jobIds),
+          query
+            .select('id, job_id, created_by, company, trade')
+            .eq('org_id', orgId)
+            .in('job_id', evidenceJobIds),
         )
       : Promise.resolve([] as any[]),
-    selectRows(db, 'job_messages', (query) =>
-      query
+    selectRows(db, 'job_messages', (query) => {
+      const filtered = query
         .select('id, job_id, author_id, author_label, body, created_at')
-        .eq('org_id', orgId)
+        .eq('org_id', orgId);
+      return (scopeJobId ? filtered.eq('job_id', scopeJobId) : filtered)
         .order('created_at', { ascending: false })
-        .limit(120),
-    ),
+        .limit(120);
+    }),
     taggedNoteIds.length
       ? selectRows(db, 'job_messages', (query) =>
           query
@@ -285,6 +448,7 @@ export async function loadPersonContext(
     const items: MentionItem[] = [];
     const seen = new Set<string>();
     const push = (item: MentionItem) => {
+      if (scopeJobId && item.jobId !== scopeJobId && item.id !== scopeJobId) return;
       const key = `${item.kind}:${item.id}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -398,47 +562,73 @@ export interface MentionAskPrep {
 
 export async function prepareMentionAsk(
   db: Db,
-  input: { orgId: string; question: string; now?: Date },
+  input: { orgId: string; question: string; now?: Date; jobId?: string | null },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
+  const jobId = input.jobId ? String(input.jobId) : null;
+  if (jobId) {
+    const job = await jobInOrg(db, input.orgId, jobId);
+    if (!job) {
+      const missing = "That job isn't in this organization.";
+      return { mentions: [], supplement: '', directAnswer: missing, fallbackAnswer: missing, groundedOn: 0 };
+    }
+  }
   const resolution = resolveMentions(input.question, roster);
   const which = resolution.ambiguous
     .map((row) => ambiguitySentence(row.query, row.candidates))
     .join(' ');
-  if (!resolution.mentions.length) {
+  let mentions = resolution.mentions;
+  let absent = '';
+  if (jobId && mentions.length) {
+    const onJob = await listJobMentionUserIds(db, input.orgId, jobId, roster);
+    const allowed = onJob ?? new Set<string>();
+    const off = mentions.filter((person) => !allowed.has(person.userId));
+    mentions = mentions.filter((person) => allowed.has(person.userId));
+    if (off.length) {
+      const lines = await Promise.all(
+        off.map(async (person) =>
+          notOnJobSentence(person.name, await otherJobsForUser(db, input.orgId, person.userId, jobId)),
+        ),
+      );
+      absent = lines.join(' ');
+    }
+  }
+  if (!mentions.length) {
+    const direct = [which, absent].filter(Boolean).join('\n\n');
     return {
       mentions: [],
       supplement: '',
-      directAnswer: which || null,
-      fallbackAnswer: which || null,
+      directAnswer: direct || null,
+      fallbackAnswer: direct || null,
       groundedOn: 0,
     };
   }
   const people = await loadPersonContext(db, {
     orgId: input.orgId,
-    people: resolution.mentions,
+    people: mentions,
     question: input.question,
     now: input.now,
     roster,
+    jobId,
   });
   const grounded = answerFromMentionContext(input.question, people);
   const hasRelevant = people.some((person) => person.items.some((item) => item.relevant));
-  const supplement = [which, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
-  const withWhich = (answer: string) => (which ? `${which}\n\n${answer}` : answer);
+  const supplement = [which, absent, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
+  const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
   if (!hasRelevant || !isAskModelConfigured()) {
     return {
-      mentions: resolution.mentions,
+      mentions,
       supplement,
-      directAnswer: withWhich(grounded.answer),
-      fallbackAnswer: withWhich(grounded.answer),
+      directAnswer: withPrefix(grounded.answer),
+      fallbackAnswer: withPrefix(grounded.answer),
       groundedOn: grounded.groundedOn,
     };
   }
   return {
-    mentions: resolution.mentions,
+    mentions,
     supplement,
     directAnswer: null,
-    fallbackAnswer: withWhich(grounded.answer),
+    fallbackAnswer: withPrefix(grounded.answer),
     groundedOn: grounded.groundedOn,
   };
 }

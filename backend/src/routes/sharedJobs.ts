@@ -22,7 +22,7 @@ import {
   type ScopeItem,
 } from '../shared/jobRecord.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
-import { listOrgMentionMembers, recordContentMentions } from '../shared/mentionContext.js';
+import { listJobMentionMembers, listOrgMentionMembers, recordContentMentions } from '../shared/mentionContext.js';
 import { resolveMentions } from '../shared/mentions.js';
 import { jobShareActionPattern, jobSharePagePath, readJobShareToken } from '../lib/jobSharePath.js';
 import {
@@ -1352,6 +1352,27 @@ sharedJobsRouter.post(
         .single();
       if (error) throw new HttpError(400, error.message, 'decide_failed');
       res.json({ item: data });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+sharedJobsRouter.get(
+  '/shared/:jobId/mention-members',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const members = await listJobMentionMembers(supabase, orgId, req.params.jobId);
+      if (!members) throw new HttpError(404, "That job isn't in this organization.", 'job_not_found');
+      res.json({
+        members: members.map((member) => ({
+          userId: member.userId,
+          email: member.email ?? null,
+          fullName: member.fullName ?? null,
+          avatarUrl: member.avatarUrl ?? null,
+        })),
+      });
     } catch (err) {
       next(err);
     }

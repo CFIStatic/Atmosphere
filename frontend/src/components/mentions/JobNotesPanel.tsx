@@ -29,7 +29,7 @@ export function JobNotesPanel({
     setPosting(true);
     setError(null);
     try {
-      const members = raw.includes('@') ? await loadOrgMentions() : [];
+      const members = raw.includes('@') ? await loadOrgMentions(jobId) : [];
       const body = expandMentionTokens(raw, members);
       await api.postJobMessage(jobId, { body });
       setDraft('');
@@ -60,6 +60,7 @@ export function JobNotesPanel({
           onChange={setDraft}
           onKeyDown={onKeyDown}
           rows={2}
+          jobId={jobId}
           placeholder="Add a note… @someone to tag them"
           disabled={posting}
           className="w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
