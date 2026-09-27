@@ -85,8 +85,10 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain("parts.push(m === 1 ? '1 minute' : m + ' minutes')");
     expect(verifierHtml).toContain('currentTime = Number.MAX_SAFE_INTEGER');
     expect(verifierHtml).toContain(
-      "if (!video.paused || (video.dataset && video.dataset.playingSoon === '1') || (video.dataset && video.dataset.atmPreload === '1'))",
+      "if (!video.paused || (video.currentTime || 0) > 0.35 ||",
     );
+    expect(verifierHtml).toContain('video.dataset.played === \'1\'');
+    expect(verifierHtml).toContain('function mountedClipVideo');
     expect(verifierHtml).toContain('if (knownDuration(known) != null) return');
     expect(verifierHtml).toContain('bindVideoDuration(vid, item.duration)');
     expect(verifierHtml).toContain('function playFromGesture');
@@ -635,6 +637,142 @@ describe('verifier dashboard video preview screen', () => {
     Object.defineProperty(video!, 'paused', { configurable: true, get: () => true });
     document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
     expect(plays.length).toBeGreaterThanOrEqual(2);
+
+    dom.window.close();
+  });
+
+  it('does not swap the video src when clip detail arrives after Play', async () => {
+    const clipId = 'clip-late-detail';
+    let releaseDetail: (() => void) | null = null;
+    const detailGate = new Promise<void>((resolve) => {
+      releaseDetail = resolve;
+    });
+    const plays: HTMLMediaElement[] = [];
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/?embed=1',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
+        window.fetch = ((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/api/evidence-portal/library')) {
+            return Promise.resolve(
+              new globalThis.Response(
+                JSON.stringify({
+                  jobs: [{ jobId: 'job-1', jobName: 'Project Tiffany & Co.', createdAt: '2026-09-21T12:00:00Z' }],
+                  items: [
+                    {
+                      id: clipId,
+                      jobId: 'job-1',
+                      jobName: 'Project Tiffany & Co.',
+                      phase: 'during',
+                      workDate: '2026-09-21',
+                      durationSeconds: 44,
+                      posterUrl: 'https://storage.test/thumb.jpg',
+                      analysisState: 'done',
+                      analysis: {
+                        summary: 'Camera pans across the room.',
+                        dictation: 'Camera pans across the room.',
+                        evidenceLog: [{ atSeconds: 0, text: 'Camera pans.', type: 'scene' }],
+                      },
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes(`/api/evidence-portal/evidence/${clipId}/video`)) {
+            return Promise.resolve(
+              new globalThis.Response(
+                JSON.stringify({
+                  url: 'https://storage.test/tiffany.mp4?sig=first',
+                  expiresInSeconds: 3600,
+                  contentType: 'video/mp4',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes(`/api/evidence-portal/evidence/${clipId}`)) {
+            return detailGate.then(
+              () =>
+                new globalThis.Response(
+                  JSON.stringify({
+                    item: {
+                      id: clipId,
+                      durationSeconds: 44,
+                      analysisState: 'done',
+                      analysis: {
+                        summary: 'Camera pans across the room.',
+                        evidenceLog: [{ atSeconds: 1, text: 'Holds on the table.', type: 'work' }],
+                      },
+                    },
+                    frames: [],
+                    custody: [],
+                  }),
+                  { status: 200, headers: { 'Content-Type': 'application/json' } },
+                ),
+            );
+          }
+          return Promise.reject(new Error(`unexpected fetch ${url}`));
+        }) as typeof fetch;
+        window.HTMLMediaElement.prototype.play = function play() {
+          plays.push(this as HTMLMediaElement);
+          Object.defineProperty(this, 'paused', { configurable: true, get: () => false });
+          Object.defineProperty(this, 'ended', { configurable: true, get: () => false });
+          this.dispatchEvent(new Event('play'));
+          return Promise.resolve();
+        };
+        window.HTMLMediaElement.prototype.pause = function pause() {
+          Object.defineProperty(this, 'paused', { configurable: true, get: () => true });
+        };
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+      },
+    });
+
+    const { document } = dom.window;
+    for (let i = 0; i < 40; i += 1) {
+      if (document.querySelector(`tr[data-id="${clipId}"]`)) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    const row = document.querySelector(`tr[data-id="${clipId}"]`) as HTMLElement;
+    row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const posterPlay = document.getElementById('d-yt-play');
+    expect(posterPlay).not.toBeNull();
+    posterPlay!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    let video: HTMLVideoElement | null = null;
+    for (let i = 0; i < 40; i += 1) {
+      video = document.querySelector('#d-frame video');
+      if (video) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    expect(video).not.toBeNull();
+    expect(video!.getAttribute('src')).toContain('sig=first');
+    const started = video!;
+    expect(plays).toContain(started);
+
+    releaseDetail!();
+    await detailGate;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+
+    const still = document.querySelector('#d-frame video');
+    expect(still).toBe(started);
+    expect(still!.getAttribute('src')).toContain('sig=first');
+    expect(plays.filter((el) => el !== started)).toHaveLength(0);
+    expect(document.getElementById('d-play')?.getAttribute('aria-label')).toBe('Pause');
 
     dom.window.close();
   });

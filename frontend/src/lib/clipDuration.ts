@@ -69,10 +69,9 @@ export function bindMeasuredDuration(
   const measured = () =>
     Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
 
-  const onPause = () => discover();
-  // The file is only preloading. Clear this on Play so the probe can run
-  // once the viewer pauses — not while the first press is in flight.
+  let started = false;
   const onPlay = () => {
+    started = true;
     if (video.dataset) delete video.dataset.atmPreload;
   };
 
@@ -80,14 +79,14 @@ export function bindMeasuredDuration(
     if (cancelled || measured() != null) return;
     if (isKnownDuration(knownSeconds)) return;
     const dataset = video.dataset;
-    // Visible players with native controls. A dummy seek during Play
-    // flashes the last frame and restarts the clip.
+    // Once Play has started, a later pause must not seek to the end.
+    // That seek fires ended and the clip sits still until the next press.
     if (
       !video.paused ||
+      started ||
       (dataset && dataset.playingSoon === '1') ||
       (dataset && dataset.atmPreload === '1')
     ) {
-      video.addEventListener('pause', onPause, { once: true });
       return;
     }
     const origin = video.currentTime;
@@ -124,8 +123,7 @@ export function bindMeasuredDuration(
 
   return () => {
     cancelled = true;
-    video.removeEventListener('loadedmetadata', discover);
-    video.removeEventListener('pause', onPause);
     video.removeEventListener('play', onPlay);
+    video.removeEventListener('loadedmetadata', discover);
   };
 }

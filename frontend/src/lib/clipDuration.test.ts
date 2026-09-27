@@ -115,18 +115,15 @@ describe('bindMeasuredDuration', () => {
     expect(video.currentTime).toBe(2.5);
   });
 
-  it('scans after Pause when metadata arrived during Play', () => {
+  it('does not scan after Pause once playback has started', () => {
     const video = fakeVideo({ paused: false, currentTime: 1.5, readyState: 1 });
     bindMeasuredDuration(video);
+    video.dispatch('play');
     expect(video.currentTime).toBe(1.5);
 
     video.paused = true;
     video.dispatch('pause');
-    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
-
-    video.duration = 12;
-    video.currentTime = 12;
-    video.dispatch('seeked');
+    video.dispatch('loadedmetadata');
     expect(video.currentTime).toBe(1.5);
   });
 
@@ -154,7 +151,8 @@ describe('bindMeasuredDuration', () => {
     video.dispatch('play');
     video.paused = true;
     video.dispatch('pause');
-    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+    video.dispatch('loadedmetadata');
+    expect(video.currentTime).toBe(0);
   });
 
   it('puts the playhead back at the start when Play lands on the probe seek', () => {

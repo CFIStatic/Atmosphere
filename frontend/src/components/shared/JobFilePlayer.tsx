@@ -147,6 +147,12 @@ export function JobFilePlayer({
   const ref = useRef<HTMLVideoElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
+  const userPausedRef = useRef(false);
+  const pinSrc = useRef(false);
+  const pinnedSrc = useRef(src);
+  // A new signed URL while the file is already playing is a new src, and
+  // assigning it remounts the buffer and stops the clip.
+  if (!pinSrc.current) pinnedSrc.current = src;
   const trackRef = useRef<HTMLTrackElement>(null);
   const prefsMutedRef = useRef(readVideoPlayerPrefs().muted);
   const [volume, setVolume] = useState(() => readVideoPlayerPrefs().volume);
@@ -216,8 +222,8 @@ export function JobFilePlayer({
     if (!el) return;
     applyVideoPlayerPrefs(el);
     // Preload without a dummy seek-to-end. That seek races the first Play
-    // and leaves the playhead on the last frame. Once playback has started,
-    // a later pause is allowed to measure.
+    // and leaves the playhead on the last frame. After Play starts, the
+    // probe does not run on pause either.
     if (el.paused) el.dataset.atmPreload = '1';
     const known = knownDurationSeconds ?? captions?.durationSeconds ?? null;
     return bindMeasuredDuration(el, known);
@@ -227,23 +233,51 @@ export function JobFilePlayer({
     const el = ref.current;
     if (!el) return;
     const onWaiting = () => {
-      if (!el.paused) setBuffering(true);
+      if (!el.paused || pinSrc.current) setBuffering(true);
     };
     const onPlay = () => {
+      pinSrc.current = true;
+      userPausedRef.current = false;
       if (el.readyState < 3) setBuffering(true);
     };
     const onPlaying = () => {
       setBuffering(false);
       setPlayError(null);
     };
-    const onPause = () => setBuffering(false);
+    const onPause = () => {
+      if (userPausedRef.current || el.ended) {
+        pinSrc.current = false;
+        setBuffering(false);
+        return;
+      }
+      // A stall can surface as pause. Keep the same src and continue when data arrives.
+      setBuffering(true);
+      const kick = () => {
+        if (userPausedRef.current || el.ended) return;
+        if (!el.paused) {
+          setBuffering(false);
+          return;
+        }
+        const attempt = el.play();
+        if (attempt && typeof attempt.catch === 'function') {
+          attempt.catch(() => setPlayError('Tap play to start.'));
+        }
+      };
+      if (el.readyState >= 3) kick();
+      else el.addEventListener('canplay', kick, { once: true });
+    };
+    const onEnded = () => {
+      pinSrc.current = false;
+      setBuffering(false);
+    };
     const onCanPlay = () => {
       if (!el.paused) setBuffering(false);
     };
     const onError = () => {
+      const wasPlaying = !el.paused || pinSrc.current;
+      pinSrc.current = false;
       setBuffering(false);
       const at = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-      const wasPlaying = !el.paused;
       if (onPlaybackError) onPlaybackError({ currentTime: at, wasPlaying });
       else setPlayError('Could not play this file. Tap play to try again.');
     };
@@ -252,6 +286,7 @@ export function JobFilePlayer({
     el.addEventListener('play', onPlay);
     el.addEventListener('playing', onPlaying);
     el.addEventListener('pause', onPause);
+    el.addEventListener('ended', onEnded);
     el.addEventListener('canplay', onCanPlay);
     el.addEventListener('error', onError);
     return () => {
@@ -260,6 +295,7 @@ export function JobFilePlayer({
       el.removeEventListener('play', onPlay);
       el.removeEventListener('playing', onPlaying);
       el.removeEventListener('pause', onPause);
+      el.removeEventListener('ended', onEnded);
       el.removeEventListener('canplay', onCanPlay);
       el.removeEventListener('error', onError);
     };
@@ -268,6 +304,7 @@ export function JobFilePlayer({
   useEffect(() => {
     const el = ref.current;
     if (!el || resumeAt == null || !Number.isFinite(resumeAt)) return;
+    if (pinSrc.current && el.getAttribute('src') && el.getAttribute('src') !== src) return;
     const apply = () => {
       try {
         el.currentTime = resumeAt;
@@ -419,9 +456,13 @@ export function JobFilePlayer({
     if (!el) return;
     const stalledAtStart = el.readyState < 3 && (el.currentTime || 0) < 0.35;
     if (!el.paused && !el.ended && !stalledAtStart) {
+      userPausedRef.current = true;
+      pinSrc.current = false;
       el.pause();
       return;
     }
+    userPausedRef.current = false;
+    pinSrc.current = true;
     setPlayError(null);
     const attempt = el.play();
     if (attempt && typeof attempt.catch === 'function') {
@@ -529,7 +570,7 @@ export function JobFilePlayer({
       <div className="job-file-player-stage relative">
         <video
           ref={ref}
-          src={src}
+          src={pinnedSrc.current}
           poster={poster || undefined}
           controls={false}
           playsInline

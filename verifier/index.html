@@ -2930,6 +2930,8 @@
   var pendingSeek = null;
   /** User asked to play. Stays set across the signed-URL fetch. */
   var wantPlay = false;
+  /** Set only when the control bar itself calls pause(). A stall must not. */
+  var userPaused = false;
 
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
@@ -3004,15 +3006,15 @@
     var measured = function () {
       return knownDuration(video.duration);
     };
-    var onPause = function () { discover(); };
     var discover = function () {
       if (measured() != null) return;
       // Filed clips already carry a measured length. Do not scan the file
       // on a visible player — a dummy seek flashes the last frame.
       if (knownDuration(known) != null) return;
-      // A dummy seek during Play flashes the last frame and restarts the clip.
-      if (!video.paused || (video.dataset && video.dataset.playingSoon === '1') || (video.dataset && video.dataset.atmPreload === '1')) {
-        video.addEventListener('pause', onPause, { once: true });
+      // A dummy seek once playback has started jumps to the end, fires
+      // ended, and leaves the clip paused so the next press is required.
+      if (!video.paused || (video.currentTime || 0) > 0.35 ||
+          (video.dataset && (video.dataset.played === '1' || video.dataset.playingSoon === '1' || video.dataset.atmPreload === '1'))) {
         return;
       }
       var origin = video.currentTime;
@@ -5212,6 +5214,7 @@
 
   function closePreview() {
     wantPlay = false;
+    userPaused = true;
     stopPlay();
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
@@ -5317,7 +5320,7 @@
     }).catch(function (err) {
       // The node was replaced (a second mount finished). That abort belongs
       // to the old element — painting it here clears wantPlay on the new stage.
-      if (previewVideo() !== vid) return;
+      if (!vid.isConnected || previewVideo() !== vid) return;
       var name = err && err.name;
       if (name === 'AbortError') {
         var again = vid.play();
@@ -5370,6 +5373,8 @@
     if (!item || !vid || !item._videoExpiresAt || item._urlRefreshing) return;
     if (item._urlRefreshNotBefore && Date.now() < item._urlRefreshNotBefore) return;
     if (Date.now() < item._videoExpiresAt - 90000) return;
+    // A fresh signature is a different src. Assigning it mid-play aborts the element.
+    if (!vid.paused || wantPlay) return;
     item._urlRefreshing = true;
     var at = vid.currentTime || 0;
     var shouldPlay = !vid.paused || wantPlay;
@@ -5450,6 +5455,15 @@
     showPreviewScreen();
   }
 
+  function mountedClipVideo(item) {
+    var vid = previewVideo();
+    if (!vid || !vid.isConnected || !item) return null;
+    var stage = vid.closest ? vid.closest('.preview-stage') : null;
+    if (!stage || stage.getAttribute('data-preview-id') !== String(item.id)) return null;
+    if (!vid.getAttribute('src')) return null;
+    return vid;
+  }
+
   function paintPreviewVideo(item, opts) {
     opts = opts || {};
     var hold = opts.holdPoster === true;
@@ -5487,43 +5501,85 @@
       togglePreviewPlayback(item);
     });
     vid.addEventListener('timeupdate', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       if (!progressRaf) paintLiveProgress();
       maybeRefreshExpiringUrl(item, vid);
     });
     vid.addEventListener('seeked', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
     });
     vid.addEventListener('waiting', function () {
+      if (!vid.isConnected) return;
       if (!vid.paused || wantPlay) showBuffer(true);
     });
     vid.addEventListener('stalled', function () {
+      if (!vid.isConnected) return;
       if (!vid.paused || wantPlay) showBuffer(true);
     });
     vid.addEventListener('playing', function () {
+      if (!vid.isConnected) return;
       showBuffer(false);
       clearPlayFailure();
       revealVideoSurface();
-      if (vid.dataset) delete vid.dataset.playingSoon;
+      if (vid.dataset) {
+        delete vid.dataset.playingSoon;
+        delete vid.dataset.resumeTries;
+      }
     });
     vid.addEventListener('play', function () {
+      if (!vid.isConnected) return;
+      if (vid.dataset) vid.dataset.played = '1';
       syncAnalysisLog(vid.currentTime);
       setPlayButton(true);
       if (vid.readyState < 3) showBuffer(true);
       startProgressLoop();
     });
     vid.addEventListener('pause', function () {
+      // Removing the node (a late detail paint) pauses the old element.
+      // That must not flip the live control bar back to Play.
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
+      if (wantPlay && !userPaused && !vid.ended) {
+        var tries = Number(vid.dataset && vid.dataset.resumeTries || 0);
+        if (tries > 6) {
+          stopProgressLoop();
+          setPlayButton(false);
+          return;
+        }
+        if (vid.dataset) vid.dataset.resumeTries = String(tries + 1);
+        showBuffer(true);
+        var kick = function () {
+          if (!vid.isConnected || userPaused || !wantPlay || vid.ended) return;
+          if (!vid.paused) {
+            showBuffer(false);
+            return;
+          }
+          playFromGesture(vid);
+        };
+        if (vid.readyState >= 3) kick();
+        else vid.addEventListener('canplay', kick, { once: true });
+        return;
+      }
       stopProgressLoop();
       if (!wantPlay) showBuffer(false);
       setPlayButton(false);
       if (vid.dataset) delete vid.dataset.playingSoon;
     });
     vid.addEventListener('ended', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
+      var duration = clipLength(item, vid);
+      // A dummy seek or a short buffer can report ended before the file is done.
+      if (wantPlay && !userPaused && duration > 0 && (vid.currentTime || 0) + 0.75 < duration) {
+        showBuffer(true);
+        playFromGesture(vid);
+        return;
+      }
       stopProgressLoop();
       showBuffer(false);
       wantPlay = false;
@@ -5535,6 +5591,7 @@
       if (!vid.paused) showBuffer(false);
     });
     vid.addEventListener('error', function () {
+      if (!vid.isConnected) return;
       var at = vid.currentTime || 0;
       var shouldPlay = wantPlay || !vid.paused;
       if (item._videoRetrying) {
@@ -5566,10 +5623,12 @@
     if (vid && item && item._videoUrl) {
       if (!vid.paused && !vid.ended && !bufferingAtStart(vid)) {
         wantPlay = false;
+        userPaused = true;
         if (vid.dataset) delete vid.dataset.playingSoon;
         vid.pause();
         return;
       }
+      userPaused = false;
       wantPlay = true;
       item._videoRetrying = false;
       showBuffer(true);
@@ -5577,22 +5636,24 @@
       return;
     }
     if (item && item._remote && !item._videoUrl) {
+      userPaused = false;
       wantPlay = true;
       showBuffer(true);
-      // open() is already minting this URL. A second fetch paints another
-      // <video> when it lands and aborts the play() that just started.
-      if (item._detailPending) return;
+      // Detail may still be in flight. Start on the video URL from this
+      // click. openLoaded keeps this element instead of assigning a new src.
       refreshVideoUrl(item).then(function (url) {
         if (!wantPlay || !state.open || state.open.id !== item.id) return;
         if (!url) {
           showPlayFailureMessage('Could not open this file.');
           return;
         }
-        if (previewPlayInFlight()) return;
-        var live = previewVideo();
-        if (!live || live.getAttribute('src') !== url) {
-          paintPreviewVideo(item, { holdPoster: false });
+        var existing = mountedClipVideo(item);
+        if (existing) {
+          if (existing.paused && !existing.ended) playFromGesture(existing);
+          return;
         }
+        if (previewPlayInFlight()) return;
+        paintPreviewVideo(item, { holdPoster: false });
         var next = previewVideo();
         if (next) playFromGesture(next);
       });
@@ -5685,8 +5746,9 @@
     stopPlay();
     item._videoRetrying = false;
     if (item._videoUrl) {
-      paintPreviewVideo(item);
-      var vid = $('#d-frame').querySelector('video');
+      var kept = mountedClipVideo(item);
+      if (!kept) paintPreviewVideo(item);
+      var vid = kept || $('#d-frame').querySelector('video');
       if (vid) {
         if (vid.dataset) vid.dataset.playingSoon = '1';
         if (startAt != null) {
@@ -5695,6 +5757,7 @@
           if (length > 0) setProgressRatio(startAt / length);
           pendingSeek = null;
         }
+        userPaused = false;
         wantPlay = true;
         playFromGesture(vid);
       }
@@ -5753,13 +5816,19 @@
     var resumePlay = wantPlay;
     var alreadyPlaying = previewPlayInFlight();
     if (item._videoUrl) {
-      var live = previewVideo();
-      if (!alreadyPlaying && (!live || live.getAttribute('src') !== item._videoUrl)) {
+      // Detail often lands a second or two after Play already mounted the
+      // file. A new signature is a different src and aborts the clip.
+      var existing = mountedClipVideo(item);
+      if (existing || alreadyPlaying) {
+        if (resumePlay && existing && !alreadyPlaying && existing.paused && !existing.ended) {
+          playFromGesture(existing);
+        }
+      } else {
         paintPreviewVideo(item, { holdPoster: !resumePlay });
-      }
-      if (resumePlay && !alreadyPlaying) {
-        var armed = previewVideo();
-        if (armed) playFromGesture(armed);
+        if (resumePlay) {
+          var armed = previewVideo();
+          if (armed) playFromGesture(armed);
+        }
       }
     } else if (!alreadyPlaying) {
       paintPreviewPoster(item, false);
@@ -5854,6 +5923,8 @@
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
     if (frameRaf) { cancelAnimationFrame(frameRaf); frameRaf = 0; }
     state.playStartedAt = null;
+    var vid = previewVideo();
+    if (vid && vid.isConnected && !vid.paused && !vid.ended) return;
     stopProgressLoop();
     setPlayButton(false);
   }

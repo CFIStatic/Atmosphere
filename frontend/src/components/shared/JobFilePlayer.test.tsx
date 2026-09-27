@@ -23,6 +23,16 @@ describe('JobFilePlayer', () => {
     expect(screen.getByTestId('job-file-fullscreen')).toHaveAttribute('aria-label', 'Full screen');
   });
 
+  it('keeps the same src while playback is underway', () => {
+    const { rerender } = render(<JobFilePlayer src="https://signed.test/a.mp4" />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => false });
+    Object.defineProperty(video, 'ended', { configurable: true, get: () => false });
+    video.dispatchEvent(new Event('play'));
+    rerender(<JobFilePlayer src="https://signed.test/b.mp4?sig=2" />);
+    expect(video.getAttribute('src')).toBe('https://signed.test/a.mp4');
+  });
+
   it('shows mute, volume, and disabled CC when no transcript exists', () => {
     render(<JobFilePlayer src="https://signed.test/clip.mp4" className="w-full" />);
     expect(screen.getByTestId('job-file-player')).toBeInTheDocument();
