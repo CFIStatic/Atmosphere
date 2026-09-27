@@ -11,6 +11,7 @@ import {
   rankMentionItems,
   resolveMentions,
   textMentionsHandle,
+  type MentionIdentity,
   type MentionItem,
   type MentionMember,
   type PersonMentionContext,
@@ -57,21 +58,19 @@ export async function listOrgMentionMembers(db: Db, orgId: string): Promise<Ment
       );
 
   const active = rows.filter((row) => !row.status || row.status === 'active');
-  return assignOrgHandles(
-    active
-      .map((row) => {
-        const profile = asProfile(row);
-        const userId = String(row.user_id ?? '');
-        if (!userId) return null;
-        return {
-          userId,
-          email: profile.email,
-          fullName: profile.fullName,
-          handle: profile.handle,
-        };
-      })
-      .filter((row): row is MentionMember => Boolean(row)),
-  );
+  const identities: MentionIdentity[] = [];
+  for (const row of active) {
+    const profile = asProfile(row);
+    const userId = String(row.user_id ?? '');
+    if (!userId) continue;
+    identities.push({
+      userId,
+      email: profile.email,
+      fullName: profile.fullName,
+      handle: profile.handle,
+    });
+  }
+  return assignOrgHandles(identities);
 }
 
 function clipText(row: any): string {

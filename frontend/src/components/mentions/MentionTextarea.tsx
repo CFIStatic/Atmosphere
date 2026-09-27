@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject, type Ref } from 'react';
 import { filterMentionMembers, mentionQueryAt, type MentionMember } from '../../lib/mentions';
 import { useOrgMentions } from './useOrgMentions';
 
 function assignRef(ref: Ref<HTMLTextAreaElement> | undefined, node: HTMLTextAreaElement | null) {
   if (!ref) return;
-  if (typeof ref === 'function') ref(node);
-  else ref.current = node;
+  if (typeof ref === 'function') {
+    ref(node);
+    return;
+  }
+  (ref as MutableRefObject<HTMLTextAreaElement | null>).current = node;
 }
 
 /**
