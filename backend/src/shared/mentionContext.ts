@@ -288,6 +288,42 @@ function clipText(row: any): string {
     .slice(0, 1800);
 }
 
+function sentences(text: string): string[] {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const parts = clean.match(/[^.!?]+[.!?]+(?:\s|$)/g)?.map((part) => part.trim()).filter(Boolean);
+  return parts?.length ? parts : [clean.slice(0, 280).trim()];
+}
+
+function firstSentence(text: string): string {
+  const sentence = sentences(text)[0] ?? '';
+  if (sentence.length <= 420) return sentence;
+  return sentence.slice(0, 400).replace(/\s+\S*$/, '').trim();
+}
+
+/** One scene line. Opening black frames are not the detail a list should lead with. */
+function visualDetail(findings: unknown): string {
+  if (!findings || typeof findings !== 'object') return '';
+  const events = (findings as { events?: unknown }).events;
+  if (!Array.isArray(events)) return '';
+  const lines = events
+    .map((event) => {
+      if (!event || typeof event !== 'object') return '';
+      return String((event as { text?: unknown }).text ?? '').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean);
+  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
+  const picked = lines.find((line) => !opener.test(line)) ?? lines[0] ?? '';
+  return firstSentence(picked);
+}
+
+function clipListLine(row: any): string {
+  const parts = sentences(String(row.ai_summary ?? ''));
+  const summary = firstSentence(parts[0] ?? '');
+  const visual = visualDetail(row.ai_findings) || (parts[1] ? firstSentence(parts[1]) : '');
+  return [summary, visual].filter(Boolean).join(' ');
+}
+
 function metadataUserId(meta: unknown): string | null {
   if (!meta || typeof meta !== 'object') return null;
   const record = meta as Record<string, unknown>;
@@ -549,6 +585,7 @@ export async function loadPersonContext(
         proofId: String(proof.id),
         title: job?.title ? `${title} — ${job.title}` : title,
         text: clipText(proof),
+        listLine: clipListLine(proof),
         at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
         status: proof.state ?? null,
         captured,

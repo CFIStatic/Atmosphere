@@ -353,6 +353,8 @@ export interface MentionItem {
   captured?: boolean;
   proofId?: string | null;
   workDate?: string | null;
+  /** One sentence plus one visual detail. Shown in clip lists; omits raw mic quotes. */
+  listLine?: string | null;
 }
 
 export interface RankedMentionItem extends MentionItem {
@@ -480,8 +482,8 @@ function describeItem(
   if (item.kind === 'video' && item.jobId && item.proofId) {
     sources.push(videoSourceId(item.jobId, item.proofId, item.title));
     if (when) sources.push(`clip:${when}`);
-    const bit = item.text ? ` ${item.text.slice(0, 280).trim()}` : '';
-    return `${when ? `${when} — ` : ''}${item.title}${status ? ` (${status})` : ''}.${bit}`.trim();
+    const bit = String(item.listLine ?? '').replace(/\s+/g, ' ').trim();
+    return `${when ? `${when} — ` : ''}${item.title}${status ? ` (${status})` : ''}${bit ? `. ${bit}` : ''}`.trim();
   }
   if (item.kind === 'note') sources.push('notes');
   if (item.kind === 'task') sources.push('task');

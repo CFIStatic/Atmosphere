@@ -769,6 +769,10 @@ test('multi-word names stay whole, and every clip that person filmed is listed',
   assert.match(whichAnswer, /Sep 21 tabletop close-up/);
   assert.match(whichAnswer, /Sep 21 home walkthrough/);
   assert.match(whichAnswer, /RESTORE 365/);
+  assert.match(whichAnswer, /webcam-style take/);
+  assert.doesNotMatch(whichAnswer, /It's simple/);
+  assert.doesNotMatch(whichAnswer, /Her entire life/);
+  assert.doesNotMatch(whichAnswer, /But I know they have their ways/);
   assert.doesNotMatch(whichAnswer, /Someone else roof/);
   assert.doesNotMatch(whichAnswer, /No which clips/);
   assert.doesNotMatch(whichAnswer, /found for El\./);
