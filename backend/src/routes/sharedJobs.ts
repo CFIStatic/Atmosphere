@@ -22,6 +22,8 @@ import {
   type ScopeItem,
 } from '../shared/jobRecord.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
+import { listOrgMentionMembers, recordContentMentions } from '../shared/mentionContext.js';
+import { resolveMentions } from '../shared/mentions.js';
 import { jobShareActionPattern, jobSharePagePath, readJobShareToken } from '../lib/jobSharePath.js';
 import {
   actorLabelFor,
@@ -1389,6 +1391,19 @@ sharedJobsRouter.post(
         .select('id, party_id, author_label, body, scope_item_id, is_decision, created_at')
         .single();
       if (error) throw new HttpError(400, error.message, 'message_failed');
+      try {
+        const roster = await listOrgMentionMembers(supabase, orgId);
+        const mentions = resolveMentions(input.body, roster);
+        await recordContentMentions(supabase, {
+          orgId,
+          jobId: req.params.jobId,
+          source: 'job_message',
+          sourceId: (data as { id?: string } | null)?.id,
+          mentions,
+        });
+      } catch {
+        // The note is already stored. Tag rows are a search index, not the record.
+      }
       res.status(201).json({ message: data });
     } catch (err) {
       next(err);

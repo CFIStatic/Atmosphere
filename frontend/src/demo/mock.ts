@@ -111,6 +111,7 @@ const membership = (): Membership => ({
 
 const MEMBERS: OrgMember[] = [
   { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'global_admin', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
+  { userId: '11111111-1111-4111-8111-111111111111', email: 'john.cyganiak@ortizrestoration.com', fullName: 'John Cyganiak', handle: 'johncyganiak', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
@@ -946,6 +947,7 @@ const SHARED_RECORDS: Record<string, any> = {
     money: { approved: 0, pending: 0, unpricedApprovals: 0 },
     messages: [
       { id: 'msg-4', party_id: 'pty-4', author_label: 'Sam Ruiz, Kestrel Flooring', body: 'Accepted. Holding off on the dining room until I see a reading.', scope_item_id: null, is_decision: false, created_at: '2026-08-02T08:16:00Z' },
+      { id: 'msg-john', party_id: null, author_label: 'Dana Ortiz', body: '@[johncyganiak](mention:11111111-1111-4111-8111-111111111111) panel is closed — please confirm the label.', scope_item_id: null, is_decision: false, created_at: '2026-09-12T18:40:00Z' },
     ],
     risks: [],
   },
@@ -1892,7 +1894,64 @@ const DEMO_XACT_STATUS: XactimateStatus = {
 
 /* ------------------------------------------------------------ interceptor */
 
-type HandlerResult = { status?: number; body: unknown };
+type HandlerResult = { status?: number; body: unknown; stream?: boolean };
+
+function demoMentionAnswer(question: string): {
+  answer: string;
+  groundedOn: number;
+  model: null;
+  threadId: string;
+  question: {
+    id: string;
+    question: string;
+    answer: string;
+    model: null;
+    grounded_on: string[];
+    created_at: string;
+    thread_id: string;
+  };
+} {
+  const q = question.toLowerCase();
+  const john = q.includes('johncyganiak');
+  const elena = q.includes('elenacruz') || q.includes('@elena');
+  const electrical = q.includes('electric');
+  const now = new Date().toISOString();
+  let answer = 'Nothing on this job file answers that.';
+  let grounded: string[] = [];
+  if (john && electrical) {
+    answer =
+      'John finished the electrical job. The Cedar panel upgrade is marked done, and the Sep 12 after video shows the panel closed and labeled.';
+    grounded = [
+      'job/job-1041/cedar-panel-electrical-upgrade',
+      'video/job-1041/pf-elec/panel-after',
+      'clip:2026-09-12',
+    ];
+  } else if (john && (q.includes('tag') || q.includes('note'))) {
+    answer = 'Dana tagged John on the panel note: the panel is closed and the label still needs a confirm.';
+    grounded = ['notes'];
+  } else if (elena && electrical) {
+    answer = 'No electrical job found for Elena.';
+  } else if (john) {
+    answer = 'John is on the Cedar panel electrical upgrade, marked done on Sep 12.';
+    grounded = ['job/job-1041/cedar-panel-electrical-upgrade', 'clip:2026-09-12'];
+  }
+  const prose = grounded.length ? `${answer}\n\n⟦sources: ${grounded.join(', ')}⟧` : answer;
+  return {
+    answer: prose,
+    groundedOn: grounded.length,
+    model: null,
+    threadId: 'thread-demo',
+    question: {
+      id: `q-${Date.now()}`,
+      question,
+      answer: prose,
+      model: null,
+      grounded_on: grounded,
+      created_at: now,
+      thread_id: 'thread-demo',
+    },
+  };
+}
 type Handler = (
   match: RegExpMatchArray,
   body: Record<string, unknown>,
@@ -3582,6 +3641,35 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { item } };
   }],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/ask\/threads$/, (m) => ({
+    body: {
+      threads: [{
+        id: 'thread-demo',
+        title: 'Ask',
+        createdAt: '2026-09-12T15:00:00Z',
+        updatedAt: '2026-09-12T15:00:00Z',
+        lastMessageAt: null,
+      }],
+      project: { kind: 'job', jobId: m[1] },
+    },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/ask\/threads$/, () => ({
+    status: 201,
+    body: {
+      thread: {
+        id: 'thread-demo',
+        title: 'New chat',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastMessageAt: null,
+      },
+    },
+  })],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof\/questions$/, () => ({ body: { questions: [] } })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (_m, b) => ({
+    stream: true,
+    body: demoMentionAnswer(String(b.question ?? '')),
+  })],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/messages$/, (m, b) => {
     const record = SHARED_RECORDS[m[1]];
     const message = { id: `msg-${Date.now()}`, party_id: null, author_label: state.fullName || state.email, body: String(b.body ?? ''), scope_item_id: null, is_decision: false, created_at: new Date().toISOString() };
@@ -4498,6 +4586,32 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     const match = path.match(re);
     if (!match) continue;
     const result = await Promise.resolve(handler(match, body));
+    if (result.stream && url.includes('stream=1')) {
+      const payload = result.body as {
+        answer?: string;
+        groundedOn?: number;
+        model?: string | null;
+        question?: unknown;
+        threadId?: string | null;
+      };
+      const answer = String(payload.answer ?? '');
+      const ndjson = [
+        JSON.stringify({ type: 'status', phase: 'reading' }),
+        JSON.stringify({ type: 'token', text: answer }),
+        JSON.stringify({
+          type: 'done',
+          answer,
+          groundedOn: payload.groundedOn ?? 0,
+          model: payload.model ?? null,
+          question: payload.question ?? null,
+          threadId: payload.threadId ?? null,
+        }),
+      ].join('\n') + '\n';
+      return new Response(ndjson, {
+        status: result.status ?? 200,
+        headers: { 'Content-Type': 'application/x-ndjson' },
+      });
+    }
     return new Response(JSON.stringify(result.body), {
       status: result.status ?? 200,
       headers: { 'Content-Type': 'application/json' },

@@ -114,6 +114,11 @@ export interface JobFileAskContext {
   memory?: Array<{ summary?: string | null }> | null;
   documents?: JobFileAskDocument[] | null;
   clips?: CollectionClip[] | null;
+  /**
+   * Ranked, org-scoped dossier for people @mentioned in the question.
+   * When set, Ask answers from this section and does not wander into web search.
+   */
+  mentionSupplement?: string | null;
 }
 
 const FILE_QA_SYSTEM = `You are a sharp, friendly expert on this job file. Answer like a top-tier chat assistant: natural, clear, easy to scan — never a forensic dump or a thin keyword match.
@@ -367,6 +372,10 @@ export function formatJobFileRecord(file: JobFileAskContext): string {
     sections.push(`Videos and mic\n${formatCollectionRecord(clips)}`);
   }
 
+  if (trim(file.mentionSupplement)) {
+    sections.push(trim(file.mentionSupplement));
+  }
+
   return sections.join('\n\n');
 }
 
@@ -543,7 +552,8 @@ export async function answerFromJobFile(input: {
     webHits = collectWebHitsFromToolResults(toolResults);
   }
 
-  if (!jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
+  const mentionScoped = Boolean(trim(input.file.mentionSupplement));
+  if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
     input.onToken?.(grounded);
     return { ...empty, answer: grounded, groundedOn: 0, toolResults };
   }
@@ -558,12 +568,13 @@ export async function answerFromJobFile(input: {
   // asks (e.g. "search the web for tile prices", "can u search google") are never
   // swallowed by a brief-note hit from the job file.
   let webSearchAttempted = false;
-  if (!webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
+  if (!mentionScoped && !webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
     webSearchAttempted = true;
     webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
   }
 
   if (
+    !mentionScoped &&
     !toolsHandled &&
     preferJobFileGroundedFastPath(input.question, grounded) &&
     !webHits.length
@@ -602,6 +613,9 @@ export async function answerFromJobFile(input: {
 
   const system =
     FILE_QA_SYSTEM +
+    (mentionScoped
+      ? `\n\nThe question @mentions a coworker. Answer from the MENTIONED PEOPLE section. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If that section lacks the asked work, say so plainly (for example "No electrical job found for John"). Never write [[web:…]].`
+      : '') +
     `\n\n${askWebCapabilityRules()}` +
     (webHits.length
       ? `\n\n${ASK_WEB_FORMAT_RULES}`

@@ -1806,6 +1806,28 @@
     padding: 0 14px; height: 40px; font-weight: 650; cursor: pointer; flex: none;
   }
   .ask-form button[type="submit"]:disabled { opacity: .55; cursor: default; }
+  .ask-form { position: relative; }
+  .mention-menu {
+    position: absolute; left: 0; right: 52px; bottom: calc(100% + 6px); z-index: 20;
+    margin: 0; padding: 4px 0; list-style: none;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 220px; overflow: auto;
+  }
+  .mention-menu button {
+    width: 100%; display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left;
+    padding: 8px 12px; cursor: pointer;
+  }
+  .mention-menu button.on, .mention-menu button:hover { background: var(--accent-soft); }
+  .mention-menu button strong { font-size: 13px; }
+  .mention-menu button span, .mention-menu .empty { font-size: 12px; color: var(--muted); }
+  .mention-menu .empty { padding: 8px 12px; }
+  .mention-chip {
+    display: inline-flex; align-items: center; margin: 0 2px; padding: 0 6px;
+    border-radius: 999px; font-weight: 700; line-height: 1.35;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .ask-bubble.user .mention-chip { background: rgba(255,255,255,.2); color: #fff; }
 
   .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
@@ -6601,6 +6623,31 @@
     });
   }
 
+  function renderMentionHtml(text) {
+    var source = String(text || '');
+    var re = /@\[([A-Za-z0-9][A-Za-z0-9_]{1,31})\]\(mention:([A-Za-z0-9_-]{1,64})\)/g;
+    var html = '';
+    var cursor = 0;
+    var match;
+    while ((match = re.exec(source))) {
+      html += esc(source.slice(cursor, match.index));
+      html += '<span class="mention-chip" data-handle="' + esc(match[1].toLowerCase()) + '">@' + esc(match[1].toLowerCase()) + '</span>';
+      cursor = match.index + match[0].length;
+    }
+    html += esc(source.slice(cursor));
+    return html;
+  }
+
+  function expandVerifierMentions(text, roster) {
+    var byHandle = {};
+    (roster || []).forEach(function (member) { byHandle[member.handle] = member; });
+    return String(text || '').replace(/(^|[\s(])@([A-Za-z0-9][A-Za-z0-9_]{1,31})\b/g, function (full, lead, handle) {
+      var member = byHandle[String(handle).toLowerCase()];
+      if (!member) return full;
+      return lead + '@[' + member.handle + '](mention:' + member.userId + ')';
+    });
+  }
+
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="ask-pane">' +
@@ -6619,7 +6666,8 @@
         '</div>';
     } else {
       thread.forEach(function (m) {
-        html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
+        html += '<div class="ask-bubble ' + esc(m.role) + '">' +
+          (m.role === 'user' ? renderMentionHtml(m.text) : esc(m.text)) + '</div>';
       });
     }
     html += '</div>' +
@@ -6669,19 +6717,137 @@
         if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
       });
     }
+    var roster = [];
+    var rosterLoaded = false;
+    var mentionAt = null;
+    var mentionActive = 0;
+    var menu = document.createElement('ul');
+    menu.className = 'mention-menu';
+    menu.hidden = true;
+    if (form && ORG_MODE) form.appendChild(menu);
+
+    function loadRoster() {
+      if (rosterLoaded || !ORG_MODE) return;
+      rosterLoaded = true;
+      apiFetch('/api/org/members').then(function (r) { return r.json(); }).then(function (body) {
+        roster = ((body && body.members) || []).map(function (row) {
+          var handle = String(row.handle || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+          if (handle.length < 2) {
+            var fromName = String(row.fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var local = String(row.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            handle = (fromName.length >= 2 ? fromName : local).slice(0, 32);
+          }
+          return { userId: String(row.userId || ''), handle: handle, fullName: row.fullName || '', email: row.email || '' };
+        }).filter(function (row) { return row.userId && row.handle.length >= 2; });
+        paintMentions();
+      }).catch(function () { roster = []; });
+    }
+
+    function mentionQuery(text, cursor) {
+      var upto = String(text || '').slice(0, cursor);
+      var match = upto.match(/(^|[\s(])@([A-Za-z0-9_]{0,32})$/);
+      if (!match) return null;
+      var query = match[2] || '';
+      return { start: upto.length - query.length - 1, end: cursor, query: query };
+    }
+
+    function mentionOptions() {
+      if (!mentionAt) return [];
+      var q = mentionAt.query.toLowerCase();
+      return roster.filter(function (member) {
+        if (!q) return true;
+        var name = String(member.fullName || '').toLowerCase();
+        var local = String(member.email || '').split('@')[0].toLowerCase();
+        return member.handle.indexOf(q) === 0 || name.indexOf(q) === 0 || local.indexOf(q) === 0 || member.handle.indexOf(q) >= 0;
+      }).slice(0, 8);
+    }
+
+    function paintMentions() {
+      var options = mentionOptions();
+      if (!mentionAt || !ORG_MODE) { menu.hidden = true; return; }
+      menu.hidden = false;
+      menu.innerHTML = options.length
+        ? options.map(function (member, index) {
+          return '<li><button type="button" class="' + (index === mentionActive ? 'on' : '') + '"><strong>@' +
+            esc(member.handle) + '</strong><span>' + esc(member.fullName || member.email) + '</span></button></li>';
+        }).join('')
+        : '<li class="empty">No people in this company match.</li>';
+      Array.prototype.forEach.call(menu.querySelectorAll('button'), function (btn, index) {
+        btn.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          chooseMention(options[index]);
+        });
+      });
+    }
+
+    function chooseMention(member) {
+      if (!input || !mentionAt || !member) return;
+      var before = input.value.slice(0, mentionAt.start);
+      var after = input.value.slice(mentionAt.end);
+      var spacer = after.charAt(0) === ' ' ? '' : ' ';
+      input.value = before + '@' + member.handle + spacer + after;
+      mentionAt = null;
+      menu.hidden = true;
+      input.focus();
+    }
+
+    function refreshMention() {
+      if (!input || !ORG_MODE) return;
+      mentionAt = mentionQuery(input.value, input.selectionStart == null ? input.value.length : input.selectionStart);
+      mentionActive = 0;
+      if (mentionAt) loadRoster();
+      paintMentions();
+    }
+
+    function outgoing() {
+      return expandVerifierMentions(input && input.value, roster);
+    }
+
     if (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        send(input && input.value);
+        send(outgoing());
         if (input) input.value = '';
+        mentionAt = null;
+        menu.hidden = true;
       });
     }
     if (input) {
+      input.addEventListener('input', refreshMention);
+      input.addEventListener('click', refreshMention);
       input.addEventListener('keydown', function (ev) {
+        var options = mentionOptions();
+        if (mentionAt && options.length) {
+          if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            mentionActive = (mentionActive + 1) % options.length;
+            paintMentions();
+            return;
+          }
+          if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            mentionActive = (mentionActive - 1 + options.length) % options.length;
+            paintMentions();
+            return;
+          }
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            mentionAt = null;
+            menu.hidden = true;
+            return;
+          }
+          if (ev.key === 'Enter' || ev.key === 'Tab') {
+            ev.preventDefault();
+            chooseMention(options[mentionActive] || options[0]);
+            return;
+          }
+        }
         if (ev.key === 'Enter' && !ev.shiftKey) {
           ev.preventDefault();
-          send(input.value);
+          send(outgoing());
           input.value = '';
+          mentionAt = null;
+          menu.hidden = true;
         }
       });
     }

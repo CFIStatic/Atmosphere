@@ -7,6 +7,7 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { LIVE_FIELD_CAPTURE_ORIGIN, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { decideMemberRemoval } from '../org/members.js';
+import { assignOrgHandles } from '../shared/mentions.js';
 import { revokeAllAuthSessionsForUser } from '../auth/revokeUserSessions.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import { normalizeServiceRoleInput, SERVICE_ROLE_SLUGS } from '../shared/serviceRole.js';
@@ -69,6 +70,7 @@ function serializeMember(row: any) {
     userId: row.user_id,
     email: p?.email ?? null,
     fullName: p?.full_name ?? null,
+    handle: typeof p?.handle === 'string' ? p.handle : null,
     avatarUrl,
     role: row.role,
     workType: row.work_type,
@@ -411,9 +413,17 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
-      .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url)')
+      .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url, handle)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
+
+    if (result.error && /handle/i.test(result.error.message)) {
+      result = await supabase
+        .from('org_members')
+        .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url)')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
+    }
 
     if (result.error && isMissingColumnError(result.error.message)) {
       result = await supabase
@@ -425,7 +435,17 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 
     if (result.error) throw new HttpError(500, result.error.message, 'members_failed');
 
-    res.json({ members: (result.data ?? []).map(serializeMember) });
+    const serialized = (result.data ?? []).map(serializeMember);
+    const withHandles = assignOrgHandles(
+      serialized.map((member: ReturnType<typeof serializeMember> & { handle?: string | null }) => ({
+        ...member,
+        userId: member.userId,
+        email: member.email,
+        fullName: member.fullName,
+        handle: member.handle ?? null,
+      })),
+    );
+    res.json({ members: withHandles });
   } catch (err) {
     next(err);
   }

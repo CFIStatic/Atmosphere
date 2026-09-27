@@ -13,6 +13,10 @@ import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
 import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
+import { expandMentionTokens } from '../../lib/mentions';
+import { MentionText } from '../mentions/MentionText';
+import { MentionTextarea } from '../mentions/MentionTextarea';
+import { loadOrgMentions } from '../mentions/useOrgMentions';
 
 /**
  * Proof of work — light job-file Videos surface.
@@ -138,11 +142,13 @@ export function ProofOfWork({
 
   async function ask(event: FormEvent) {
     event.preventDefault();
-    if (!question.trim() || !jobId) return;
+    const raw = question.trim();
+    if (!raw || !jobId) return;
     setAsking(true);
     setError(null);
     try {
-      await api.askAboutProofs(jobId, question);
+      const members = raw.includes('@') ? await loadOrgMentions() : [];
+      await api.askAboutProofs(jobId, expandMentionTokens(raw, members));
       setQuestion('');
       await load();
     } catch (err) {
@@ -225,12 +231,13 @@ export function ProofOfWork({
 
       {!readOnly && showCollectionAsk && data && ((data.videos?.length ?? 0) > 0 || data.days.length > 0) && (
         <div className="mt-4 border-t border-line pt-3">
-          <form onSubmit={ask} className="flex gap-2">
-            <input
+          <form onSubmit={ask} className="flex items-end gap-2">
+            <MentionTextarea
               value={question}
-              onChange={(e) => setQuestion(e.target.value)}
+              onChange={setQuestion}
+              rows={1}
               placeholder="Ask the video collection — e.g. when was the subfloor first visible?"
-              className="min-w-0 flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="min-h-[2.25rem] w-full resize-none rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
               type="submit"
@@ -252,8 +259,12 @@ export function ProofOfWork({
                 const clipCount = (q.grounded_on ?? []).filter((id) => /^\d{4}-\d{2}-\d{2}/.test(id)).length;
                 return (
                   <li key={q.id} className="rounded-lg border border-line px-3 py-2">
-                    <p className="text-[11px] font-medium text-ink-700">{q.question}</p>
-                    <p className="mt-0.5 text-xs text-ink-800">{q.answer}</p>
+                    <p className="text-[11px] font-medium text-ink-700">
+                      <MentionText text={q.question} />
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-800">
+                      <MentionText text={q.answer ?? ''} />
+                    </p>
                     <p className="mt-1 text-[10.5px] text-ink-400">
                       From {clipCount} clip
                       {clipCount === 1 ? '' : 's'} on file ·{' '}
