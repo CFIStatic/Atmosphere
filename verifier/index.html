@@ -3296,9 +3296,11 @@
         var label = row.speakerLabel && String(row.speakerLabel).trim();
         var line = (label ? label + ': ' + row.text : row.text).replace(/\r?\n/g, ' ').trim();
         if (!line) continue;
+        // A lone [0:00] blob is the whole clip. Any later last turn ends with the speech.
+        var coverWholeClip = stamped.length === 1 && start === 0 && line.length > CAPTION_MAX_CHARS;
         var cueEnd = nextRow && nextRow.tSec > start
           ? nextRow.tSec
-          : (duration > 0 && duration > start && line.length > CAPTION_MAX_CHARS
+          : (duration > 0 && duration > start && coverWholeClip
             ? duration
             : start + estimateCueLength(line));
         if (duration > 0) cueEnd = Math.min(cueEnd, duration);

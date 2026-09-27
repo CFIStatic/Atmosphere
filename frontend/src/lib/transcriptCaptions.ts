@@ -158,7 +158,7 @@ export function captionCuesFromTranscript(opts: {
       .trim();
     if (!text) return [];
     const end = duration ?? Math.max(8, estimateCueLength(text));
-    return [{ startSec: 0, endSec: end, text }];
+    return spreadCue({ startSec: 0, endSec: end, text });
   }
 
   const cues: CaptionCue[] = [];
@@ -169,10 +169,12 @@ export function captionCuesFromTranscript(opts: {
     const label = row.speakerLabel?.trim();
     const text = (label ? `${label}: ${row.text}` : row.text).trim();
     if (!text) continue;
+    // A lone [0:00] blob is the whole clip. Any later last turn ends with the speech.
+    const coverWholeClip = stamped.length === 1 && start === 0 && text.length > CAPTION_MAX_CHARS;
     let end =
       next?.tSec != null && Number.isFinite(next.tSec) && next.tSec! > start
         ? roundTime(next.tSec!)
-        : duration != null && duration > start && text.length > CAPTION_MAX_CHARS
+        : duration != null && duration > start && coverWholeClip
           ? duration
           : roundTime(start + estimateCueLength(text));
     if (duration != null) end = Math.min(end, duration);
