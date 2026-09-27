@@ -28,6 +28,10 @@ import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
+import { expandMentionTokens } from '../lib/mentions';
+import { MentionText } from './mentions/MentionText';
+import { MentionTextarea } from './mentions/MentionTextarea';
+import { loadOrgMentions } from './mentions/useOrgMentions';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -240,6 +244,7 @@ export function JobAskPanel({
   loadThreads,
   createThread,
   renameThread,
+  onOpenHref,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -250,6 +255,8 @@ export function JobAskPanel({
   loadThreads?: () => Promise<{ threads: AskThread[] }>;
   createThread?: (title?: string) => Promise<{ thread: AskThread }>;
   renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
+  /** Open a cited job or video. Present when the panel sits inside the router. */
+  onOpenHref?: (href: string) => void;
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
@@ -441,6 +448,10 @@ export function JobAskPanel({
     beats: dossier,
   });
   function openAskSource(source: AskSourceChip) {
+    if (source.href && onOpenHref) {
+      onOpenHref(source.href);
+      return;
+    }
     if (source.workDate || source.section === 'videos') {
       seek({
         atSeconds: 0,
@@ -470,7 +481,10 @@ export function JobAskPanel({
   }
 
   async function ask(textRaw: string) {
-    const text = textRaw.trim();
+    const raw = textRaw.trim();
+    if (!raw || asking) return;
+    const members = raw.includes('@') ? await loadOrgMentions() : [];
+    const text = expandMentionTokens(raw, members);
     if (!text || asking) return;
     setAsking(true);
     setDraft('');
@@ -653,7 +667,9 @@ export function JobAskPanel({
                       onOpenSource={openAskSource}
                     />
                   ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed">{turn.content}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed">
+                      <MentionText text={turn.content} onDark />
+                    </p>
                   )}
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
@@ -673,20 +689,16 @@ export function JobAskPanel({
       <div className="shrink-0 border-t border-line px-5 py-3">
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
         <form onSubmit={onSubmit} className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
+          <MentionTextarea
+            inputRef={inputRef}
             value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              const el = e.currentTarget;
-              el.style.height = 'auto';
-              el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
-            }}
+            onChange={setDraft}
             onKeyDown={onKeyDown}
+            autoGrow
             rows={1}
             placeholder="Ask what you forgot…"
             disabled={asking}
-            className="min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+            className="min-h-[2.5rem] w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
           <button
             type="submit"

@@ -34,6 +34,7 @@ import {
   type JobFileSectionTab,
 } from '../components/shared/JobFileSectionBar';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
+import { JobNotesPanel } from '../components/mentions/JobNotesPanel';
 import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -437,6 +438,7 @@ export function SharedDashboardPage() {
           readinessKey={readinessKey}
           setReadinessKey={setReadinessKey}
           onOpenJob={(id) => void openJob(id)}
+          onOpenHref={(href) => navigate(href)}
           onLoadList={() => void loadList()}
           onDecide={decide}
         />
@@ -483,6 +485,7 @@ function JobFileSections({
   readinessKey,
   setReadinessKey,
   onOpenJob,
+  onOpenHref,
   onLoadList,
   onDecide,
 }: {
@@ -495,6 +498,7 @@ function JobFileSections({
   readinessKey: number;
   setReadinessKey: Dispatch<SetStateAction<number>>;
   onOpenJob: (id: string) => void;
+  onOpenHref?: (href: string) => void;
   onLoadList: () => void;
   onDecide: (item: JobScopeItem, decision: 'approved' | 'declined') => void;
 }) {
@@ -539,11 +543,19 @@ function JobFileSections({
             aria-label="Ask this job"
             data-testid="job-file-ask"
           >
-            <JobAskPanel jobId={record.job.id} fill />
+            <JobAskPanel jobId={record.job.id} fill onOpenHref={onOpenHref} />
           </div>
         ) : null}
 
         {active === 'happening' ? (
+          <div className="space-y-4">
+          {!viewerOnly ? (
+            <JobNotesPanel
+              jobId={record.job.id}
+              messages={record.messages}
+              onPosted={() => onOpenJob(record.job.id)}
+            />
+          ) : null}
           <JobProgressDashboard
             jobId={record.job.id}
             record={record}
@@ -563,6 +575,7 @@ function JobFileSections({
                 : undefined
             }
           />
+          </div>
         ) : null}
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}

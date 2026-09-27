@@ -39,6 +39,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -2943,7 +2944,24 @@ export async function runProofAsk(input: {
       });
 
     const apiKey = await resolveAskApiKey(orgId);
-    const result = await answerFromJobFile({
+    const mentionPrep =
+      askAccess === 'org'
+        ? await prepareMentionAsk(supabase, { orgId, question: input.question }).catch(() => null)
+        : null;
+    if (mentionPrep?.supplement) {
+      file.mentionSupplement = mentionPrep.supplement;
+    }
+    if (mentionPrep?.directAnswer) input.onToken?.(mentionPrep.directAnswer);
+    const result = mentionPrep?.directAnswer
+      ? {
+          answer: mentionPrep.directAnswer,
+          model: null as string | null,
+          usage: null,
+          groundedOn: mentionPrep.groundedOn,
+          webHits: [] as unknown[],
+          toolResults: [] as unknown[],
+        }
+      : await answerFromJobFile({
       question: input.question,
       file,
       history,
@@ -2962,6 +2980,15 @@ export async function runProofAsk(input: {
         jobTitle: file.job?.title ?? null,
       },
     });
+    if (
+      mentionPrep?.fallbackAnswer &&
+      mentionPrep.mentions.length &&
+      !mentionPrep.directAnswer &&
+      !result.model
+    ) {
+      result.answer = mentionPrep.fallbackAnswer;
+      input.onToken?.(mentionPrep.fallbackAnswer);
+    }
 
     recordMeasuredTokenUsage(supabase, {
       orgId,
@@ -2996,6 +3023,16 @@ export async function runProofAsk(input: {
       })
       .select('id, question, answer, model, grounded_on, created_at, thread_id')
       .single();
+
+    if (mentionPrep?.mentions.length && stored?.id) {
+      await recordContentMentions(supabase, {
+        orgId,
+        jobId,
+        source: 'ask_question',
+        sourceId: stored.id,
+        mentions: mentionPrep.mentions,
+      });
+    }
 
     if (threadId && owner) {
       try {

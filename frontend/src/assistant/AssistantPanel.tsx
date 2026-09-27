@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUp, Bot, PanelRightClose, Sparkles, TrendingUp } from 'lucide-react';
-import { Badge, Button, EmptyState, Textarea, cn } from '../design';
+import { Badge, Button, EmptyState, cn } from '../design';
+import { expandMentionTokens } from '../lib/mentions';
+import { MentionText } from '../components/mentions/MentionText';
+import { MentionTextarea } from '../components/mentions/MentionTextarea';
+import { loadOrgMentions } from '../components/mentions/useOrgMentions';
 import {
   useApprovals,
   useApproveRequest,
@@ -44,10 +48,12 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!draft.trim()) return;
-    send(draft);
+    const raw = draft.trim();
+    if (!raw) return;
+    const members = raw.includes('@') ? await loadOrgMentions() : [];
+    send(expandMentionTokens(raw, members));
     setDraft('');
   }
 
@@ -85,7 +91,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
               <div key={m.id}>
                 {m.author === 'user' ? (
                   <div className="ml-6 rounded-xl rounded-br-sm bg-brand-600/20 px-3 py-2 text-sm text-fg">
-                    {m.text}
+                    <MentionText text={m.text} />
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -199,18 +205,18 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
 
       <form onSubmit={submit} className="shrink-0 border-t border-line/10 p-3">
         <div className="relative">
-          <Textarea
+          <MentionTextarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                submit(e);
+                void submit(e);
               }
             }}
             rows={2}
             placeholder="Ask Atmosphere to do something…"
-            className="resize-none pr-10 text-sm"
+            className="w-full resize-none rounded-lg border border-line/10 bg-surface px-3 py-2 pr-10 text-sm text-fg outline-none placeholder:text-fg-4"
           />
           <Button
             type="submit"

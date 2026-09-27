@@ -789,3 +789,21 @@ html[data-field-embed] #root {
 .job-file-scrub.is-dragging .job-file-scrub-thumb {
   transform: translateX(-50%) scale(1);
 }
+
+/* @mention chips in Ask, notes, and sent messages. */
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.1rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-weight: 650;
+  line-height: 1.35;
+  background: rgb(var(--brand-100));
+  color: rgb(var(--brand-800));
+}
+
+.mention-chip-on-dark {
+  background: rgb(var(--paper-0) / 0.16);
+  color: rgb(var(--paper-0));
+}

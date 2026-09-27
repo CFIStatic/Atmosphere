@@ -26,7 +26,11 @@ export const ASK_SOURCE_IDS = [
   'crm',
 ] as const;
 
-export type AskSourceId = (typeof ASK_SOURCE_IDS)[number] | `clip:${string}`;
+export type AskSourceId =
+  | (typeof ASK_SOURCE_IDS)[number]
+  | `clip:${string}`
+  | `job/${string}`
+  | `video/${string}`;
 
 const SOURCE_TRAILER_RE = /(?:\n|^)\s*⟦sources:\s*([^⟧]+)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
@@ -47,8 +51,16 @@ function isClipId(raw: string): raw is `clip:${string}` {
   return /^clip:\d{4}-\d{2}-\d{2}$/i.test(raw);
 }
 
+function isLinkedSource(raw: string): raw is AskSourceId {
+  return (
+    /^job\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw) ||
+    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw)
+  );
+}
+
 function isKnownId(raw: string): raw is AskSourceId {
   if (isClipId(raw)) return true;
+  if (isLinkedSource(raw)) return true;
   return (ASK_SOURCE_IDS as readonly string[]).includes(raw);
 }
 
@@ -138,6 +150,10 @@ export function parseSourceTrailerIds(raw: string): AskSourceId[] {
     if (!token) continue;
     if (isClipId(token)) {
       pushUnique(ids, token.toLowerCase() as AskSourceId);
+      continue;
+    }
+    if (isLinkedSource(token)) {
+      pushUnique(ids, token as AskSourceId);
       continue;
     }
     const mapped =

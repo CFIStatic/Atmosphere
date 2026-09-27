@@ -24,6 +24,7 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
+import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import {
   clipHasReading,
   shouldKickUnreadClip,
@@ -519,15 +520,27 @@ async function settleClipQuestion(opts: {
   question: string;
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
   askedBy?: string | null;
+  /** Org members may resolve @handles. Share-token reviewers must not. */
+  orgMentions?: boolean;
   actorLabel: string;
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
   const record = clipRecordFromEvidenceItem(opts.item);
-  const result = await answerFromClip({
-    question: opts.question,
-    record,
-    history: opts.history,
-  });
+  const mentionPrep =
+    opts.orgMentions && opts.askedBy
+      ? await prepareMentionAsk(opts.client, { orgId: opts.orgId, question: opts.question }).catch(() => null)
+      : null;
+  const result = mentionPrep?.directAnswer
+    ? { answer: mentionPrep.directAnswer, model: null, usage: null }
+    : await answerFromClip({
+        question: opts.question,
+        record,
+        history: opts.history,
+        supplement: mentionPrep?.supplement,
+      });
+  if (mentionPrep?.fallbackAnswer && mentionPrep.mentions.length && !mentionPrep.directAnswer && !result.model) {
+    result.answer = mentionPrep.fallbackAnswer;
+  }
 
   recordMeasuredTokenUsage(opts.client, {
     orgId: opts.orgId,
@@ -541,15 +554,28 @@ async function settleClipQuestion(opts: {
   });
 
   try {
-    await opts.client.from('job_proof_questions').insert({
-      org_id: opts.orgId,
-      job_id: opts.jobId,
-      question: opts.question,
-      answer: result.answer,
-      model: result.model,
-      grounded_on: opts.item.workDate ? [opts.item.workDate] : [],
-      asked_by: opts.askedBy ?? null,
-    });
+    const { data: stored } = await opts.client
+      .from('job_proof_questions')
+      .insert({
+        org_id: opts.orgId,
+        job_id: opts.jobId,
+        question: opts.question,
+        answer: result.answer,
+        model: result.model,
+        grounded_on: opts.item.workDate ? [opts.item.workDate] : [],
+        asked_by: opts.askedBy ?? null,
+      })
+      .select('id')
+      .single();
+    if (mentionPrep?.mentions.length && stored?.id) {
+      await recordContentMentions(opts.client, {
+        orgId: opts.orgId,
+        jobId: opts.jobId,
+        source: 'ask_question',
+        sourceId: stored.id,
+        mentions: mentionPrep.mentions,
+      });
+    }
   } catch {
     /* see above */
   }
@@ -959,6 +985,7 @@ evidencePortalRouter.post(
         question: input.question,
         history: input.history,
         askedBy: userId,
+        orgMentions: true,
         actorLabel: await actorLabelFor(supabase, userId),
         actorRole: 'general_contractor',
       });
@@ -1587,6 +1614,7 @@ evidenceShareRouter.post(
         question: input.question,
         history: input.history,
         askedBy: viewer.userId,
+        orgMentions: false,
         actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
       });

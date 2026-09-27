@@ -84,6 +84,8 @@ export interface OrgMember {
   userId: string;
   email: string | null;
   fullName: string | null;
+  /** Stable @handle. Derived from name or email when the profile has none yet. */
+  handle?: string | null;
   avatarUrl?: string | null;
   role: MemberRole;
   workType: WorkType;

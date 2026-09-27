@@ -6,7 +6,7 @@
  * bucket. Rows that already have that sibling are skipped. Safe to re-run.
  *
  * Content-Type corrections for mislabeled WebM (`application/octet-stream`)
- * ship in migration `20260927160000_job_proofs_video_content_types.sql` and
+ * ship in migration `20260927170000_job_proofs_video_content_types.sql` and
  * apply with the normal migrate. This script does not rewrite original bytes.
  *
  *   cd backend

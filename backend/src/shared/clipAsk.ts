@@ -1027,19 +1027,22 @@ export async function answerFromClip(input: {
   record: ClipAskRecord;
   history?: ClipAskTurn[];
   onToken?: (text: string) => void;
+  /** Org-scoped dossier for people @mentioned in the question. */
+  supplement?: string | null;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  if (/still hearing the mic/i.test(grounded)) {
+  const supplement = String(input.supplement ?? '').trim();
+  if (!supplement && /still hearing the mic/i.test(grounded)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
-  if (preferClipGroundedFastPath(input.question, grounded, input.record)) {
+  if (!supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
   // Topic/explain talk questions: without a model, serve the grounded transcript.
-  if (talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
+  if (!supplement && talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
@@ -1049,7 +1052,7 @@ export async function answerFromClip(input: {
   }
 
   const reading = formatClipRecordForModel(input.record).trim();
-  if (!reading) {
+  if (!reading && !supplement) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
@@ -1061,9 +1064,14 @@ export async function answerFromClip(input: {
     .join('\n');
 
   const completed = await completeAskText({
-    system: CLIP_QA_SYSTEM,
+    system:
+      CLIP_QA_SYSTEM +
+      (supplement
+        ? `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE, cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧, and if that section lacks the asked work say so plainly. Never write [[web:…]].`
+        : ''),
     user:
       `Reading of this clip:\n\n${reading}` +
+      (supplement ? `\n\n${supplement}` : '') +
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
       `\n\nQuestion: ${input.question}`,
     mode: 'interactive',
@@ -1075,6 +1083,7 @@ export async function answerFromClip(input: {
   }
   // If the model wrongly denies on-file speech, keep the grounded transcript answer.
   if (
+    !supplement &&
     hasUsableSpeech(input.record) &&
     /does not (show that|include usable speech)/i.test(completed.text) &&
     !/does not (show that|include usable speech)/i.test(grounded)
