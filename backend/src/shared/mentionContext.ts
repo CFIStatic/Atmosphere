@@ -3,16 +3,20 @@
  * answer directly (nothing relevant, or no model) or hand a ranked dossier
  * to the existing Ask model call.
  */
+import { fieldCaptureEmail } from '../field/crewJoin.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ambiguitySentence,
   answerFromMentionContext,
+  asksForPersonRecord,
+  carryPriorMention,
   formatMentionPrompt,
   loginNameFromMetadata,
   mentionDisplayName,
-  rankMentionItems,
+  nameKey,
   notOnJobSentence,
+  orderMentionItems,
   resolveMentions,
   textMentionsPerson,
   type MentionIdentity,
@@ -262,12 +266,72 @@ async function otherJobsForUser(
   return [...titles.values()].filter(Boolean);
 }
 
+function findingsBlurbs(findings: unknown): string {
+  if (!findings || typeof findings !== 'object') return '';
+  const events = (findings as { events?: unknown }).events;
+  if (!Array.isArray(events)) return '';
+  return events
+    .map((event) => {
+      if (!event || typeof event !== 'object') return '';
+      return String((event as { text?: unknown }).text ?? '').trim();
+    })
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(' ');
+}
+
 function clipText(row: any): string {
-  return [row.ai_summary, row.narration_text, row.transcript_text]
+  return [row.ai_summary, row.narration_text, row.transcript_text, findingsBlurbs(row.ai_findings)]
     .map((part) => String(part ?? '').trim())
     .filter(Boolean)
     .join('\n')
-    .slice(0, 1200);
+    .slice(0, 1800);
+}
+
+function sentences(text: string): string[] {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const parts = clean.match(/[^.!?]+[.!?]+(?:\s|$)/g)?.map((part) => part.trim()).filter(Boolean);
+  return parts?.length ? parts : [clean.slice(0, 280).trim()];
+}
+
+function firstSentence(text: string): string {
+  const sentence = sentences(text)[0] ?? '';
+  if (sentence.length <= 420) return sentence;
+  return sentence.slice(0, 400).replace(/\s+\S*$/, '').trim();
+}
+
+/** One scene line. Opening black frames are not the detail a list should lead with. */
+function visualDetail(findings: unknown): string {
+  if (!findings || typeof findings !== 'object') return '';
+  const events = (findings as { events?: unknown }).events;
+  if (!Array.isArray(events)) return '';
+  const lines = events
+    .map((event) => {
+      if (!event || typeof event !== 'object') return '';
+      return String((event as { text?: unknown }).text ?? '').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean);
+  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
+  const picked = lines.find((line) => !opener.test(line)) ?? lines[0] ?? '';
+  return firstSentence(picked);
+}
+
+function clipListLine(row: any): string {
+  const parts = sentences(String(row.ai_summary ?? ''));
+  const summary = firstSentence(parts[0] ?? '');
+  const visual = visualDetail(row.ai_findings) || (parts[1] ? firstSentence(parts[1]) : '');
+  return [summary, visual].filter(Boolean).join(' ');
+}
+
+function metadataUserId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const record = meta as Record<string, unknown>;
+  for (const key of ['userId', 'user_id', 'actorUserId', 'actor_user_id', 'recorderUserId', 'recorder_user_id']) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
 }
 
 function proofCapturedBy(
@@ -276,12 +340,43 @@ function proofCapturedBy(
   parties: Map<string, any>,
   uploads: Set<string>,
   acks: Set<string>,
+  aliases: Set<string>,
 ): boolean {
+  const ids = new Set([userId, ...aliases]);
   const party = parties.get(String(proof.party_id ?? ''));
-  if (party?.created_by === userId) return true;
-  if (uploads.has(`${userId}:${proof.id}`)) return true;
-  if (acks.has(`${userId}:${proof.job_id}:${proof.work_date}`)) return true;
-  return false;
+  if (party?.created_by && ids.has(String(party.created_by))) return true;
+  for (const id of ids) {
+    if (uploads.has(`${id}:${proof.id}`)) return true;
+    if (acks.has(`${id}:${proof.job_id}:${proof.work_date}`)) return true;
+  }
+  const recorded = metadataUserId(proof.device_metadata);
+  return Boolean(recorded && ids.has(recorded));
+}
+
+/**
+ * Field Capture crew logins are a separate auth user whose email is the
+ * display name plus the org. Attach that seat only when one org member has
+ * the name, so two people are never collapsed together.
+ */
+async function fieldSeatAliases(
+  db: Db,
+  orgId: string,
+  people: ResolvedMention[],
+  roster: MentionMember[],
+): Promise<Map<string, Set<string>>> {
+  const aliases = new Map<string, Set<string>>();
+  for (const person of people) {
+    const sameName = roster.filter((member) => nameKey(mentionDisplayName(member)) === nameKey(person.name));
+    if (sameName.length !== 1) continue;
+    const email = fieldCaptureEmail(orgId, person.name);
+    const rows = await selectRows(db, 'profiles', (query) => query.select('id, email').eq('email', email));
+    const seatId = String(rows[0]?.id ?? '');
+    if (!seatId || seatId === person.userId) continue;
+    const set = aliases.get(person.userId) ?? new Set<string>();
+    set.add(seatId);
+    aliases.set(person.userId, set);
+  }
+  return aliases;
 }
 
 export async function loadPersonContext(
@@ -303,6 +398,7 @@ export async function loadPersonContext(
     input.roster ?? people.map((person) => ({ userId: person.userId, fullName: person.name }));
   const userIds = people.map((person) => person.userId);
   const now = input.now ?? new Date();
+  const aliasesByUser = await fieldSeatAliases(db, orgId, people, roster);
 
   const [assignments, ownedJobs, createdJobs, tasks, uploads, acks, logs, mentionRows] = await Promise.all([
     selectRows(db, 'job_assignments', (query) =>
@@ -394,13 +490,13 @@ export async function loadPersonContext(
       ? selectRows(db, 'job_proofs', (query) =>
           query
             .select(
-              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, captured_at, received_at',
+              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, ai_findings, device_metadata, captured_at, received_at',
             )
             .eq('org_id', orgId)
             .in('job_id', evidenceJobIds)
             .is('deleted_at', null)
             .order('work_date', { ascending: false })
-            .limit(60),
+            .limit(scopeJobId ? 200 : 60),
         )
       : Promise.resolve([] as any[]),
     evidenceJobIds.length
@@ -473,13 +569,13 @@ export async function loadPersonContext(
       });
     }
 
+    const aliases = aliasesByUser.get(person.userId) ?? new Set<string>();
     for (const proof of proofs) {
       const jobId = String(proof.job_id ?? '');
       if (!jobsById.has(jobId) && !assigned.has(`${person.userId}:${jobId}`)) continue;
-      const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys);
-      const onCrew = assigned.has(`${person.userId}:${jobId}`);
+      const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys, aliases);
       const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
-      if (!captured && !onCrew && !tagged) continue;
+      if (!captured && !tagged) continue;
       const job = jobsById.get(jobId);
       const title = String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim());
       push({
@@ -489,6 +585,7 @@ export async function loadPersonContext(
         proofId: String(proof.id),
         title: job?.title ? `${title} — ${job.title}` : title,
         text: clipText(proof),
+        listLine: clipListLine(proof),
         at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
         status: proof.state ?? null,
         captured,
@@ -540,12 +637,19 @@ export async function loadPersonContext(
       });
     }
 
-    const ranked = rankMentionItems(items, input.question, now).slice(0, 8);
+    const ranked = orderMentionItems(items, input.question, now, [person.name]).slice(0, 24);
+    const fileContains = scopeJobId
+      ? [
+          ...jobs.map((job) => [job.job_number ? `#${job.job_number}` : '', job.title].filter(Boolean).join(' ')),
+          ...proofs.map((proof) => String(proof.title || '').trim()),
+        ].filter(Boolean)
+      : [];
     return {
       userId: person.userId,
       handle: person.handle,
       name: person.name,
       items: ranked,
+      fileContains,
     };
   });
 }
@@ -562,7 +666,13 @@ export interface MentionAskPrep {
 
 export async function prepareMentionAsk(
   db: Db,
-  input: { orgId: string; question: string; now?: Date; jobId?: string | null },
+  input: {
+    orgId: string;
+    question: string;
+    now?: Date;
+    jobId?: string | null;
+    history?: Array<{ role?: string | null; text?: string | null }> | null;
+  },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
   const jobId = input.jobId ? String(input.jobId) : null;
@@ -573,7 +683,10 @@ export async function prepareMentionAsk(
       return { mentions: [], supplement: '', directAnswer: missing, fallbackAnswer: missing, groundedOn: 0 };
     }
   }
-  const resolution = resolveMentions(input.question, roster);
+  const carried = carryPriorMention(input.question, input.history, roster);
+  const resolution = carried
+    ? { mentions: [carried], ambiguous: [] as { query: string; candidates: Array<{ name: string }> }[] }
+    : resolveMentions(input.question, roster);
   const which = resolution.ambiguous
     .map((row) => ambiguitySentence(row.query, row.candidates))
     .join(' ');
@@ -613,9 +726,11 @@ export async function prepareMentionAsk(
   });
   const grounded = answerFromMentionContext(input.question, people);
   const hasRelevant = people.some((person) => person.items.some((item) => item.relevant));
+  const inventory = asksForPersonRecord(input.question, mentions.map((person) => person.name))
+    && people.some((person) => person.items.some((item) => item.kind === 'video'));
   const supplement = [which, absent, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
-  if (!hasRelevant || !isAskModelConfigured()) {
+  if (inventory || !hasRelevant || !isAskModelConfigured()) {
     return {
       mentions,
       supplement,

@@ -1967,7 +1967,7 @@ function demoMentionAnswer(question: string, jobId?: string): {
     answer = 'Dana tagged John on the panel note: the panel is closed and the label still needs a confirm.';
     grounded = ['notes'];
   } else if (elena && electrical) {
-    answer = 'No electrical job found for Elena.';
+    answer = "Elena Cruz doesn't have an electrical job on file. What's here is her plumbing work.";
   } else if (john) {
     answer = 'John is on the Cedar panel electrical upgrade, marked done on Sep 12.';
     grounded = ['job/job-1041/cedar-panel-electrical-upgrade', 'clip:2026-09-12'];
