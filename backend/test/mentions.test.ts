@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ambiguitySentence,
   answerFromMentionContext,
@@ -574,4 +577,24 @@ test('job-scoped context keeps this job when other jobs fill the fetch windows',
   assert.ok(items.some((item) => item.id === 'log-elec'));
   assert.ok(items.some((item) => item.id === 'msg-elec'));
   assert.equal(items.some((item) => item.jobId === JOB_PLUMB), false);
+});
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+test('share-link clip Ask does not resolve org mentions', () => {
+  const portal = readFileSync(join(here, '../src/routes/evidencePortal.ts'), 'utf8');
+  assert.match(portal, /opts\.orgMentions && opts\.askedBy/);
+  const shareAt = portal.indexOf('POST /api/verifier-share/:token/evidence/:proofId/ask');
+  assert.ok(shareAt > 0);
+  const share = portal.slice(shareAt, shareAt + 2200);
+  assert.match(share, /orgMentions:\s*false/);
+  assert.doesNotMatch(share, /orgMentions:\s*true/);
+  const orgAt = portal.indexOf("evidencePortalRouter.post(\n  '/evidence/:proofId/ask'");
+  assert.ok(orgAt > 0 && orgAt < shareAt);
+  assert.match(portal.slice(orgAt, shareAt), /orgMentions:\s*true/);
+
+  const verifier = readFileSync(join(here, '../../verifier/index.html'), 'utf8');
+  assert.match(verifier, /if \(rosterLoaded \|\| !ORG_MODE\) return/);
+  assert.match(verifier, /if \(form && ORG_MODE\) form\.appendChild\(menu\)/);
+  assert.match(verifier, /if \(SHARE_TOKEN\) \{/);
 });
