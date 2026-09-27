@@ -835,6 +835,13 @@ export interface TranscriptSegment {
   speakerLabel?: string | null;
 }
 
+/** One Whisper word, for captions that appear as they are spoken. */
+export interface TranscriptWord {
+  text: string;
+  startSec: number;
+  endSec: number;
+}
+
 export interface EvidenceLogEntry {
   atSeconds: number;
   text: string;
@@ -1115,6 +1122,8 @@ export interface ProofVideoRecord {
   transcriptText?: string | null;
   /** Timestamped verbatim segments for seek + search. */
   transcriptSegments?: TranscriptSegment[];
+  /** Word clocks for the player. Absent when the clip only has untimed text. */
+  transcriptWords?: TranscriptWord[] | null;
   /** Full transcript alias (legacy name). Prefer transcriptText. */
   heardOnMic: string | null;
   /** Structured talk when the mic captured a real conversation. */

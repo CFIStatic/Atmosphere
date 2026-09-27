@@ -495,13 +495,184 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('id="d-mute"');
     expect(verifierHtml).toContain('id="d-volume"');
     expect(verifierHtml).toContain('id="d-cc"');
-    expect(verifierHtml).toContain('function readVideoPrefs');
-    expect(verifierHtml).toContain('function buildWebVttFromTranscript');
-    expect(verifierHtml).toContain('function attachVideoTrack');
-    expect(verifierHtml).toContain("atmosphere.videoPlayer");
-    expect(verifierHtml).toContain('Captions unavailable');
+    expect(verifierHtml).toContain('id="d-caption"');
+    expect(verifierHtml).toContain('function captionCuesForItem');
+    expect(verifierHtml).toContain('function syncClipCaptions');
+    expect(verifierHtml).toContain('atmosphere.videoPlayer');
+    expect(verifierHtml).toContain('No captions available');
+    expect(verifierHtml).not.toContain('attachVideoTrack');
     expect(verifierHtml).toContain('applyVolumePrefs(vid)');
-    expect(verifierHtml).toContain('attachVideoTrack(vid, item)');
+    expect(verifierHtml).toContain('syncClipCaptions(item)');
+  });
+
+  it('draws synced transcript captions and disables CC when the clip has none', async () => {
+    const withCc = 'clip-with-cc';
+    const noCc = 'clip-no-cc';
+    const longLine =
+      'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty';
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/?embed=1',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
+        window.fetch = ((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/api/evidence-portal/library')) {
+            return Promise.resolve(
+              new globalThis.Response(
+                JSON.stringify({
+                  jobs: [{ jobId: 'job-1', jobName: 'Von mour test', createdAt: '2026-09-12T12:00:00Z' }],
+                  items: [
+                    {
+                      id: withCc,
+                      jobId: 'job-1',
+                      jobName: 'Von mour test',
+                      phase: 'during',
+                      workDate: '2026-09-12',
+                      durationSeconds: 142,
+                      analysisState: 'done',
+                      transcriptStatus: 'done',
+                      analysis: {
+                        summary: 'A filmed screen.',
+                        transcript:
+                          `[0:00] ${longLine}\n[0:20] The leak stays behind the vanity.`,
+                        transcriptSegments: [
+                          { tSec: 0, text: longLine, speakerLabel: null },
+                          { tSec: 20, text: 'The leak stays behind the vanity.', speakerLabel: null },
+                        ],
+                      },
+                    },
+                    {
+                      id: noCc,
+                      jobId: 'job-1',
+                      jobName: 'Von mour test',
+                      phase: 'during',
+                      workDate: '2026-09-12',
+                      durationSeconds: 30,
+                      analysisState: 'done',
+                      transcriptStatus: 'skipped',
+                      analysis: { summary: 'No speech on the mic.' },
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes('/video')) {
+            return Promise.resolve(
+              new globalThis.Response(
+                JSON.stringify({
+                  url: 'https://storage.test/clip.mp4?sig=1',
+                  expiresInSeconds: 3600,
+                  contentType: 'video/mp4',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes('/api/evidence-portal/evidence/')) {
+            const id = url.includes(noCc) ? noCc : withCc;
+            const analysis = id === noCc
+              ? { summary: 'No speech on the mic.' }
+              : {
+                  summary: 'A filmed screen.',
+                  transcript: `[0:00] ${longLine}\n[0:20] The leak stays behind the vanity.`,
+                  transcriptSegments: [
+                    { tSec: 0, text: longLine, speakerLabel: null },
+                    { tSec: 20, text: 'The leak stays behind the vanity.', speakerLabel: null },
+                  ],
+                };
+            return Promise.resolve(
+              new globalThis.Response(
+                JSON.stringify({
+                  item: {
+                    id,
+                    durationSeconds: id === noCc ? 30 : 142,
+                    analysisState: 'done',
+                    transcriptStatus: id === noCc ? 'skipped' : 'done',
+                    analysis,
+                  },
+                  frames: [],
+                  custody: [],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.reject(new Error(`unexpected fetch ${url}`));
+        }) as typeof fetch;
+        window.HTMLMediaElement.prototype.play = function play() {
+          return Promise.resolve();
+        };
+        window.HTMLMediaElement.prototype.pause = function pause() {};
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+      },
+    });
+
+    const { document } = dom.window;
+    for (let i = 0; i < 40; i += 1) {
+      if (document.querySelector(`tr[data-id="${withCc}"]`)) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    document.querySelector(`tr[data-id="${withCc}"]`)!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true }),
+    );
+    let video: HTMLVideoElement | null = null;
+    for (let i = 0; i < 40; i += 1) {
+      video = document.querySelector('#d-frame video');
+      if (video) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    expect(video).not.toBeNull();
+    expect(video!.hasAttribute('controls')).toBe(false);
+    expect(video!.querySelector('track')).toBeNull();
+    const cc = document.getElementById('d-cc') as HTMLButtonElement;
+    expect(cc.disabled).toBe(false);
+    expect(cc.getAttribute('aria-pressed')).toBe('true');
+
+    Object.defineProperty(video!, 'currentTime', { configurable: true, get: () => 0.4 });
+    video!.dispatchEvent(new dom.window.Event('timeupdate'));
+    const caption = document.getElementById('d-caption')!;
+    expect(caption.hidden).toBe(false);
+    expect(caption.textContent!.length).toBeLessThanOrEqual(68);
+    expect(caption.textContent).toMatch(/^one two/);
+    expect(caption.textContent).not.toMatch(/nineteen twenty/);
+
+    Object.defineProperty(video!, 'currentTime', { configurable: true, get: () => 21 });
+    video!.dispatchEvent(new dom.window.Event('timeupdate'));
+    expect(document.getElementById('d-caption')!.textContent).toMatch(/vanity/);
+
+    cc.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(cc.getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('d-caption')!.hidden).toBe(true);
+
+    document.getElementById('d-back')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    document.querySelector(`tr[data-id="${noCc}"]`)!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true }),
+    );
+    for (let i = 0; i < 40; i += 1) {
+      const next = document.querySelector('#d-frame video');
+      if (next && next !== video) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
+    const emptyCc = document.getElementById('d-cc') as HTMLButtonElement;
+    expect(emptyCc.disabled).toBe(true);
+    expect(emptyCc.title).toBe('No captions available');
+    expect(document.getElementById('d-caption')!.hidden).toBe(true);
+
+    dom.window.close();
   });
 
   it('keeps volume prefs after autoplay falls back to muted', () => {

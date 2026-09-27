@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 164,
+    "migrationCount": 165,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -179,7 +179,8 @@
     "20260921120000_analytics_usage_events_compat_view.sql",
     "20260923200000_lock_down_security_definer_grants.sql",
     "20260927160000_profile_handles_and_mentions.sql",
-    "20260927170000_job_proofs_video_content_types.sql"
+    "20260927170000_job_proofs_video_content_types.sql",
+    "20260927180000_job_proofs_timed_transcript.sql"
   ],
   "migrations": [
     {
@@ -5613,6 +5614,19 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "updates storage.objects mimetype metadata; creates no durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260927180000_job_proofs_timed_transcript",
+      "file": "20260927180000_job_proofs_timed_transcript.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proofs.transcript_segments",
+        "column|public.job_proofs.transcript_words"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

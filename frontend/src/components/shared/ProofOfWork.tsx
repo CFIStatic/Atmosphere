@@ -295,7 +295,9 @@ function captionsForVideo(video: ProofVideoRecord | undefined | null): JobFilePl
   const transcriptText =
     video.transcriptText ?? video.heardOnMic ?? video.conversation?.transcriptText ?? null;
   const segments = video.transcriptSegments ?? video.conversation?.transcriptSegments ?? null;
-  const hasText = Boolean(String(transcriptText || '').trim()) || Boolean(segments?.length);
+  const words = video.transcriptWords ?? null;
+  const hasText =
+    Boolean(String(transcriptText || '').trim()) || Boolean(segments?.length) || Boolean(words?.length);
   const pending =
     video.transcriptStatus === 'queued' || video.transcriptStatus === 'running';
   if (!hasText) {
@@ -304,6 +306,7 @@ function captionsForVideo(video: ProofVideoRecord | undefined | null): JobFilePl
   return {
     transcriptText,
     segments,
+    words,
     durationSeconds: video.durationSeconds,
   };
 }

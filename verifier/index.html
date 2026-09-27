@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=4" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
 <script>
   // Follow the same atmosphere.theme preference as the console (light|dark).
   (function () {
@@ -758,6 +758,43 @@
   .progress-line:focus-visible .progress-thumb,
   .progress-line.is-dragging .progress-thumb {
     transform: translateX(-50%) scale(1);
+  }
+  /* YouTube-style captions. Each line has its own black plate. Native
+     TextTrack cues do not paint once the browser control bar is removed. */
+  .caption-overlay {
+    position: absolute;
+    left: 50%;
+    bottom: 26px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.14em;
+    max-width: 90%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-family: Roboto, Arial, Helvetica, sans-serif;
+    font-size: clamp(14px, 3.6cqi, 22px);
+    font-weight: 400;
+    line-height: 1.28;
+    text-align: center;
+    pointer-events: none;
+  }
+  .caption-overlay[hidden] { display: none !important; }
+  .caption-line { display: block; max-width: 100%; }
+  .caption-line-text {
+    display: inline;
+    padding: 0.05em 0.32em 0.08em;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.75);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    white-space: nowrap;
+  }
+  .player:fullscreen .caption-overlay,
+  .player:-webkit-full-screen .caption-overlay {
+    bottom: 36px;
+    font-size: clamp(26px, 3.2cqi, 46px);
   }
   .preview-wait {
     position: absolute;
@@ -1580,7 +1617,7 @@
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .player .frame-stack { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player .frame-stack { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
@@ -1608,6 +1645,9 @@
   }
   .controls button.cc-btn:disabled {
     opacity: 0.45; cursor: default;
+  }
+  .controls button.cc-btn:disabled:hover {
+    background: var(--stage-2); color: var(--stage-ink);
   }
   .controls .cc-hint {
     font-size: 11px; color: var(--faint); white-space: nowrap;
@@ -2117,6 +2157,7 @@
         <div class="player">
           <div class="frame-stack">
             <div class="frame" id="d-frame"></div>
+            <div class="caption-overlay" id="d-caption" hidden aria-live="polite"></div>
             <div class="progress-line" id="d-progress" role="slider" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
               <div class="progress-track">
                 <div class="progress-buffer" id="d-progress-buffer"></div>
@@ -2135,8 +2176,8 @@
               </button>
               <input id="d-volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
             </div>
-            <button type="button" id="d-cc" class="cc-btn" aria-label="Captions unavailable" aria-pressed="false" disabled title="Captions unavailable">CC</button>
-            <span class="cc-hint" id="d-cc-hint" hidden>Captions unavailable</span>
+            <button type="button" id="d-cc" class="cc-btn" aria-label="No captions available" aria-pressed="false" disabled title="No captions available">CC</button>
+            <span class="cc-hint" id="d-cc-hint" hidden>No captions available</span>
             <span class="time" id="d-time" hidden></span>
             <button type="button" id="d-full" aria-label="Full screen" title="Full screen">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
@@ -3156,16 +3197,54 @@
     try { localStorage.setItem(VIDEO_PREFS_KEY, JSON.stringify(next)); } catch (err) {}
     return next;
   }
-  function formatVttClock(seconds) {
-    var totalMs = Math.max(0, Math.round(seconds * 1000));
-    var h = Math.floor(totalMs / 3600000);
-    var m = Math.floor((totalMs % 3600000) / 60000);
-    var s = Math.floor((totalMs % 60000) / 1000);
-    var ms = totalMs % 1000;
-    function pad(n, w) { return String(n).padStart(w || 2, '0'); }
-    return pad(h) + ':' + pad(m) + ':' + pad(s) + '.' + pad(ms, 3);
+  // About two lines in the caption box. Matches CAPTION_MAX_CHARS in transcriptCaptions.ts.
+  var CAPTION_MAX_CHARS = 68;
+  var CAPTION_LINE_CHARS = 32;
+  var CAPTION_HOLD_SEC = 0.8;
+  var liveCaptionCues = [];
+  var liveCaptionWords = [];
+  function roundCaptionTime(seconds) {
+    return Math.round(Math.max(0, seconds) * 1000) / 1000;
   }
-  function parseTranscriptCues(transcript, duration) {
+  function estimateCueLength(text) {
+    var words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+    return Math.min(12, Math.max(2.2, words * 0.42));
+  }
+  function splitCaptionText(text) {
+    var clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    if (clean.length <= CAPTION_MAX_CHARS) return [clean];
+    var words = clean.split(' ');
+    var parts = [];
+    var line = '';
+    for (var i = 0; i < words.length; i++) {
+      var next = line ? line + ' ' + words[i] : words[i];
+      if (line && next.length > CAPTION_MAX_CHARS) {
+        parts.push(line);
+        line = words[i];
+      } else {
+        line = next;
+      }
+    }
+    if (line) parts.push(line);
+    return parts;
+  }
+  function spreadCaptionCue(cue) {
+    var parts = splitCaptionText(cue.text);
+    if (parts.length <= 1) return parts.length ? [{ start: cue.start, end: cue.end, text: parts[0] }] : [];
+    var span = Math.max(0.001, cue.end - cue.start);
+    var weights = parts.map(function (part) { return Math.max(1, part.length); });
+    var total = weights.reduce(function (sum, weight) { return sum + weight; }, 0);
+    var cursor = cue.start;
+    return parts.map(function (text, index) {
+      var width = (weights[index] / total) * span;
+      var start = roundCaptionTime(cursor);
+      var end = index === parts.length - 1 ? roundCaptionTime(cue.end) : roundCaptionTime(cursor + width);
+      cursor += width;
+      return { start: start, end: end > start ? end : roundCaptionTime(start + Math.min(1.2, span)), text: text };
+    });
+  }
+  function parseTranscriptRows(transcript) {
     var src = String(transcript || '').trim();
     if (!src) return [];
     var re = /\[((?:\d+:)+\d+)\]/g;
@@ -3179,45 +3258,197 @@
       if (!(at >= 0)) continue;
       stamps.push({ at: at, index: match.index, end: match.index + match[0].length });
     }
-    var chunks = [];
-    if (!stamps.length) {
-      chunks.push({ at: 0, text: src });
-    } else {
-      for (var i = 0; i < stamps.length; i++) {
-        var stamp = stamps[i];
-        var next = stamps[i + 1];
-        var body = src.slice(stamp.end, next ? next.index : src.length).replace(/^[\s:,.\-–—]+/, '').trim();
-        if (!body) continue;
-        chunks.push({ at: stamp.at, text: body });
-      }
+    if (!stamps.length) return [{ tSec: null, text: src, speakerLabel: null }];
+    var rows = [];
+    for (var i = 0; i < stamps.length; i++) {
+      var stamp = stamps[i];
+      var next = stamps[i + 1];
+      var body = src.slice(stamp.end, next ? next.index : src.length).replace(/^[\s:,.\-–—]+/, '').trim();
+      if (!body) continue;
+      rows.push({ tSec: stamp.at, text: body, speakerLabel: null });
     }
-    var cues = [];
-    for (var c = 0; c < chunks.length; c++) {
-      var chunk = chunks[c];
-      var start = chunk.at;
-      var end = chunks[c + 1] ? chunks[c + 1].at : start + Math.min(12, Math.max(2.2, chunk.text.split(/\s+/).length * 0.42));
-      if (duration > 0) end = Math.min(end, duration);
-      if (end <= start) end = start + 1.5;
-      cues.push({ start: start, end: end, text: chunk.text.replace(/\r?\n/g, ' ') });
-    }
-    return cues;
-  }
-  function buildWebVttFromTranscript(transcript, duration) {
-    var cues = parseTranscriptCues(transcript, duration);
-    if (!cues.length) return null;
-    var lines = ['WEBVTT', ''];
-    for (var i = 0; i < cues.length; i++) {
-      lines.push(String(i + 1));
-      lines.push(formatVttClock(cues[i].start) + ' --> ' + formatVttClock(cues[i].end));
-      lines.push(cues[i].text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-      lines.push('');
-    }
-    return lines.join('\n');
+    return rows;
   }
   function transcriptForItem(item) {
     if (!item) return '';
     var a = item.analysis || {};
     return String(a.transcript || a.transcriptText || item.transcriptText || item.heardOnMic || '').trim();
+  }
+  function captionCuesForItem(item) {
+    var duration = item && Number(item.duration);
+    if (!(duration > 0)) duration = 0;
+    var a = (item && item.analysis) || {};
+    var stored = a.transcriptSegments || (item && item.transcriptSegments) || [];
+    var rows = [];
+    if (Array.isArray(stored) && stored.length) {
+      stored.forEach(function (row) {
+        if (!row || !String(row.text || '').trim()) return;
+        var t = row.tSec;
+        rows.push({
+          tSec: t == null || !isFinite(Number(t)) ? null : Number(t),
+          text: String(row.text).trim(),
+          speakerLabel: row.speakerLabel || null
+        });
+      });
+    }
+    if (!rows.length) rows = parseTranscriptRows(transcriptForItem(item));
+    if (!rows.length) return [];
+    var stamped = rows.filter(function (row) { return row.tSec != null && isFinite(row.tSec) && row.tSec >= 0; });
+    var cues = [];
+    if (!stamped.length) {
+      var text = rows.map(function (row) {
+        var label = row.speakerLabel && String(row.speakerLabel).trim();
+        return label ? label + ': ' + row.text : row.text;
+      }).join(' ').trim();
+      if (!text) return [];
+      var end = duration > 0 ? duration : Math.max(8, estimateCueLength(text));
+      cues.push({ start: 0, end: end, text: text });
+    } else {
+      for (var i = 0; i < stamped.length; i++) {
+        var row = stamped[i];
+        var start = row.tSec;
+        var nextRow = stamped[i + 1];
+        var label = row.speakerLabel && String(row.speakerLabel).trim();
+        var line = (label ? label + ': ' + row.text : row.text).replace(/\r?\n/g, ' ').trim();
+        if (!line) continue;
+        // A lone [0:00] blob is the whole clip. Any later last turn ends with the speech.
+        var coverWholeClip = stamped.length === 1 && start === 0 && line.length > CAPTION_MAX_CHARS;
+        var cueEnd = nextRow && nextRow.tSec > start
+          ? nextRow.tSec
+          : (duration > 0 && duration > start && coverWholeClip
+            ? duration
+            : start + estimateCueLength(line));
+        if (duration > 0) cueEnd = Math.min(cueEnd, duration);
+        if (cueEnd <= start) cueEnd = start + 1.5;
+        cues.push({ start: start, end: cueEnd, text: line });
+      }
+    }
+    var out = [];
+    cues.forEach(function (cue) { spreadCaptionCue(cue).forEach(function (part) { out.push(part); }); });
+    return out;
+  }
+  function wordsForItem(item) {
+    var raw = (item && item.transcriptWords) || (item && item.analysis && item.analysis.transcriptWords) || [];
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    raw.forEach(function (row) {
+      if (!row) return;
+      var text = String(row.text || row.word || '').replace(/\s+/g, ' ').trim();
+      var start = Number(row.startSec != null ? row.startSec : row.start);
+      var end = Number(row.endSec != null ? row.endSec : row.end);
+      if (!text || !isFinite(start) || start < 0) return;
+      out.push({ text: text, startSec: start, endSec: isFinite(end) && end > start ? end : start + 0.05 });
+    });
+    return out;
+  }
+  function packCaptionWordLines(words, maxChars) {
+    var lines = [];
+    var line = [];
+    var len = 0;
+    words.forEach(function (word) {
+      var text = String(word.text || '').trim();
+      if (!text) return;
+      var add = len === 0 ? text.length : text.length + 1;
+      if (line.length && len + add > maxChars) {
+        lines.push(line);
+        line = [{ text: text, startSec: word.startSec, endSec: word.endSec }];
+        len = text.length;
+      } else {
+        line.push({ text: text, startSec: word.startSec, endSec: word.endSec });
+        len += add;
+      }
+    });
+    if (line.length) lines.push(line);
+    return lines;
+  }
+  function rollingCaptionLines(words, timeSec) {
+    if (!words || !words.length || !isFinite(timeSec)) return null;
+    var lines = packCaptionWordLines(words, CAPTION_LINE_CHARS);
+    if (!lines.length) return null;
+    var activeLine = -1;
+    var activeIndex = -1;
+    for (var i = 0; i < lines.length; i++) {
+      for (var j = 0; j < lines[i].length; j++) {
+        if (lines[i][j].startSec <= timeSec) {
+          activeLine = i;
+          activeIndex = j;
+        }
+      }
+    }
+    if (activeLine < 0) return null;
+    var spoken = lines[activeLine][activeIndex];
+    var flat = [];
+    lines.forEach(function (row) { row.forEach(function (word) { flat.push(word); }); });
+    var spokenAt = flat.indexOf(spoken);
+    var next = spokenAt >= 0 ? flat[spokenAt + 1] : null;
+    if (timeSec > spoken.endSec + CAPTION_HOLD_SEC && (!next || timeSec < next.startSec)) return null;
+    var visible = [];
+    for (var n = Math.max(0, activeLine - 1); n <= activeLine; n++) {
+      var row = n === activeLine
+        ? lines[n].filter(function (word) { return word.startSec <= timeSec; })
+        : lines[n];
+      var text = row.map(function (word) { return word.text; }).join(' ').trim();
+      if (text) visible.push(text);
+    }
+    return visible.length ? visible.slice(0, 2) : null;
+  }
+  function wrapCaptionLines(text) {
+    var clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    var width = Math.max(CAPTION_LINE_CHARS, Math.ceil(clean.length / 2));
+    var words = clean.split(' ');
+    var lines = [];
+    var line = '';
+    words.forEach(function (word) {
+      var next = line ? line + ' ' + word : word;
+      if (line && next.length > width) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    });
+    if (line) lines.push(line);
+    if (lines.length <= 2) return lines;
+    return [lines[0], lines.slice(1).join(' ')];
+  }
+  function activeCaptionAt(cues, timeSec) {
+    if (!isFinite(timeSec) || !cues || !cues.length) return null;
+    for (var i = 0; i < cues.length; i++) {
+      if (timeSec >= cues[i].start && timeSec < cues[i].end) return cues[i];
+    }
+    var last = cues[cues.length - 1];
+    if (last && timeSec >= last.start && timeSec <= last.end + 0.05) return last;
+    return null;
+  }
+  function paintCaptionOverlay(at) {
+    var el = document.getElementById('d-caption');
+    if (!el) return;
+    var prefs = readVideoPrefs();
+    var lines = null;
+    if (prefs.captionsOn) {
+      if (liveCaptionWords.length) {
+        lines = rollingCaptionLines(liveCaptionWords, Number(at) || 0);
+      } else {
+        var cue = activeCaptionAt(liveCaptionCues, Number(at) || 0);
+        lines = cue ? wrapCaptionLines(cue.text) : null;
+      }
+    }
+    while (el.firstChild) el.removeChild(el.firstChild);
+    if (!lines || !lines.length) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    lines.forEach(function (line) {
+      var row = document.createElement('span');
+      row.className = 'caption-line';
+      var plate = document.createElement('span');
+      plate.className = 'caption-line-text';
+      plate.textContent = line;
+      row.appendChild(plate);
+      el.appendChild(row);
+    });
   }
   function syncVolumeControls(vid) {
     var prefs = readVideoPrefs();
@@ -3240,9 +3471,9 @@
       var pending = hint && /pending|queued|running/i.test(String(hint.getAttribute('data-status') || ''));
       btn.disabled = true;
       btn.setAttribute('aria-pressed', 'false');
-      btn.setAttribute('aria-label', pending ? 'Captions pending' : 'Captions unavailable');
-      btn.title = pending ? 'Captions pending' : 'Captions unavailable';
-      if (hint) { hint.hidden = false; hint.textContent = pending ? 'Captions pending' : 'Captions unavailable'; }
+      btn.setAttribute('aria-label', pending ? 'Captions pending' : 'No captions available');
+      btn.title = pending ? 'Captions pending' : 'No captions available';
+      if (hint) { hint.hidden = false; hint.textContent = pending ? 'Captions pending' : 'No captions available'; }
       return;
     }
     btn.disabled = false;
@@ -3251,46 +3482,20 @@
     btn.title = on ? 'Captions on' : 'Captions off';
     if (hint) hint.hidden = true;
   }
-  function applyCaptionMode(vid, on) {
-    if (!vid || !vid.textTracks) return;
-    for (var i = 0; i < vid.textTracks.length; i++) {
-      var track = vid.textTracks[i];
-      if (track.kind !== 'captions' && track.kind !== 'subtitles') continue;
-      track.mode = on ? 'showing' : 'hidden';
-    }
-  }
-  function attachVideoTrack(vid, item) {
+  function syncClipCaptions(item) {
+    var hint = document.getElementById('d-cc-hint');
+    var st = item && (item.transcriptStatus || (item.analysis && item.analysis.transcriptStatus));
+    if (hint) hint.setAttribute('data-status', st || '');
+    liveCaptionWords = wordsForItem(item);
+    liveCaptionCues = captionCuesForItem(item);
     var prefs = readVideoPrefs();
-    var vtt = buildWebVttFromTranscript(transcriptForItem(item), item && item.duration);
-    // Drop prior blob tracks
-    Array.prototype.slice.call(vid.querySelectorAll('track[data-atm-cc="1"]')).forEach(function (el) {
-      if (el.src && el.src.indexOf('blob:') === 0) {
-        try { URL.revokeObjectURL(el.src); } catch (err) {}
-      }
-      el.remove();
-    });
-    if (!vtt) {
-      var hint = document.getElementById('d-cc-hint');
-      if (hint) {
-        var st = item && (item.transcriptStatus || (item.analysis && item.analysis.transcriptStatus));
-        hint.setAttribute('data-status', st || '');
-      }
+    if (!liveCaptionCues.length && !liveCaptionWords.length) {
       syncCaptionControls(false, false);
+      paintCaptionOverlay(0);
       return;
     }
-    var url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
-    var track = document.createElement('track');
-    track.kind = 'captions';
-    track.srclang = 'en';
-    track.label = 'Captions';
-    track.src = url;
-    track.setAttribute('data-atm-cc', '1');
-    if (prefs.captionsOn) track.default = true;
-    vid.appendChild(track);
     syncCaptionControls(true, prefs.captionsOn);
-    var apply = function () { applyCaptionMode(vid, prefs.captionsOn); };
-    track.addEventListener('load', apply);
-    apply();
+    paintCaptionOverlay(playbackSeconds(item, previewVideo()));
   }
   function applyVolumePrefs(vid) {
     if (!vid) return;
@@ -3358,6 +3563,7 @@
     if (duration > 0 && (vid || state.playStartedAt != null || frameRaf)) {
       updatePlayClock(at, duration);
     }
+    paintCaptionOverlay(at);
   }
 
   function shouldKeepProgressLoop() {
@@ -5257,6 +5463,10 @@
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = false;
     state.open = null;
+    liveCaptionCues = [];
+    liveCaptionWords = [];
+    syncCaptionControls(false, false);
+    paintCaptionOverlay(0);
   }
 
   function bindYoutubePlay(item) {
@@ -5519,7 +5729,7 @@
     vid.controls = false;
     vid.disablePictureInPicture = true;
     applyVolumePrefs(vid);
-    attachVideoTrack(vid, item);
+    syncClipCaptions(item);
     if (vid.dataset) vid.dataset.playingSoon = hold ? '' : '1';
     if (hold && vid.dataset) delete vid.dataset.playingSoon;
     bindVideoDuration(vid, item.duration);
@@ -5876,6 +6086,7 @@
     renderAnalysis(item);
     setTab(tab || 'integrity');
     showPreviewScreen();
+    syncClipCaptions(item);
     var back = document.getElementById('d-back');
     if (back) back.focus();
     startNotePlayback(item);
@@ -8354,9 +8565,8 @@
     var prefs = readVideoPrefs();
     var next = !prefs.captionsOn;
     writeVideoPrefs({ captionsOn: next });
-    var vid = previewVideo();
-    applyCaptionMode(vid, next);
     syncCaptionControls(true, next);
+    paintCaptionOverlay(playbackSeconds(state.open, previewVideo()));
   });
   syncVolumeControls(null);
   syncCaptionControls(false, false);
@@ -8466,6 +8676,8 @@
             windowsTotal: reading.windowsTotal,
             windowsRead: reading.windowsRead,
             transcript: reading.transcript || '',
+            transcriptSegments: Array.isArray(reading.transcriptSegments) ? reading.transcriptSegments : [],
+            transcriptStatus: raw.transcriptStatus || null,
             conversationDetails: reading.conversationDetails || [],
             conversationAgreements: reading.conversationAgreements || [],
             conversationConcerns: reading.conversationConcerns || [],
@@ -8491,6 +8703,7 @@
               ? { state: 'skipped', reason: raw.analysisError || 'This clip could not be read.' }
               : { state: 'none' },
       custody: [],
+      transcriptStatus: raw.transcriptStatus || null,
       _loaded: false
     };
   }
@@ -8513,6 +8726,7 @@
     }
     if (state.open && state.open.id === item.id && (settled || next !== prev)) {
       fillPreviewChrome(item);
+      syncClipCaptions(item);
       var stage = $('#d-frame .preview-stage');
       if (item._videoUrl && stage && stage.getAttribute('data-preview-state') === 'video') {
         setPlayerTime('full clip · ' + durLabel(item.duration));
