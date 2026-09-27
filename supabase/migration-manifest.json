@@ -178,7 +178,8 @@
     "20260921010000_job_proofs_custom_title.sql",
     "20260921120000_analytics_usage_events_compat_view.sql",
     "20260923200000_lock_down_security_definer_grants.sql",
-    "20260927160000_profile_handles_and_mentions.sql"
+    "20260927160000_profile_handles_and_mentions.sql",
+    "20260927170000_job_proofs_video_content_types.sql"
   ],
   "migrations": [
     {
@@ -5602,6 +5603,16 @@
         "policy|public.content_mentions.content_mentions_insert",
         "rls|public.content_mentions"
       ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260927170000_job_proofs_video_content_types",
+      "file": "20260927170000_job_proofs_video_content_types.sql",
+      "structurallyVerifiable": false,
+      "indistinguishableReason": "updates storage.objects mimetype metadata; creates no durable object",
+      "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

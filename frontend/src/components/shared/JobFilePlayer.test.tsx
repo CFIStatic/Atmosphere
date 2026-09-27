@@ -1,12 +1,36 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VIDEO_PLAYER_PREFS_KEY } from '../../lib/videoPlayerPrefs';
 import { JobFilePlayer, activePrivacyRange, resolveActivePrivacy } from './JobFilePlayer';
 
 describe('JobFilePlayer', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it('uses one custom scrubber and never the browser control bar', () => {
+    render(<JobFilePlayer src="https://signed.test/clip.mp4" knownDurationSeconds={32} />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    expect(video.hasAttribute('controls')).toBe(false);
+    expect(video.controls).toBe(false);
+    expect(video).toHaveAttribute('playsinline');
+    expect(video.getAttribute('controlslist')).toContain('nodownload');
+    expect(video.getAttribute('controlslist')).toContain('noplaybackrate');
+    expect(screen.getByTestId('job-file-scrub')).toHaveAttribute('role', 'slider');
+    expect(screen.getByTestId('job-file-play')).toHaveAttribute('aria-label', 'Play');
+    expect(screen.getByTestId('job-file-time')).toHaveTextContent('0:00 / 0:32');
+    expect(screen.getByTestId('job-file-fullscreen')).toHaveAttribute('aria-label', 'Full screen');
+  });
+
+  it('keeps the same src while playback is underway', () => {
+    const { rerender } = render(<JobFilePlayer src="https://signed.test/a.mp4" />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => false });
+    Object.defineProperty(video, 'ended', { configurable: true, get: () => false });
+    video.dispatchEvent(new Event('play'));
+    rerender(<JobFilePlayer src="https://signed.test/b.mp4?sig=2" />);
+    expect(video.getAttribute('src')).toBe('https://signed.test/a.mp4');
   });
 
   it('shows mute, volume, and disabled CC when no transcript exists', () => {
@@ -138,5 +162,39 @@ describe('JobFilePlayer', () => {
       expect(screen.getByTestId('job-file-child-region-blur')).toBeInTheDocument();
     });
     expect(video.className).not.toMatch(/job-file-player-privacy-blur/);
+  });
+
+  it('preloads the file and shows a spinner as soon as play is waiting on data', async () => {
+    render(<JobFilePlayer src="https://signed.test/clip.mp4" poster="https://signed.test/thumb.jpg" />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    expect(video).toHaveAttribute('preload', 'auto');
+    expect(video).toHaveAttribute('poster', 'https://signed.test/thumb.jpg');
+    expect(screen.queryByTestId('job-file-buffer')).toBeNull();
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => false });
+    Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 });
+    video.dispatchEvent(new Event('play'));
+    expect(await screen.findByTestId('job-file-buffer')).toBeInTheDocument();
+    video.dispatchEvent(new Event('playing'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('job-file-buffer')).toBeNull();
+    });
+  });
+
+  it('asks the parent to remint when playback fails', () => {
+    const onPlaybackError = vi.fn();
+    render(<JobFilePlayer src="https://signed.test/clip.mp4" onPlaybackError={onPlaybackError} />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 4.2 });
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => false });
+    video.dispatchEvent(new Event('error'));
+    expect(onPlaybackError).toHaveBeenCalledWith({ currentTime: 4.2, wasPlaying: true });
+    expect(screen.queryByTestId('job-file-play-error')).toBeNull();
+  });
+
+  it('shows a play error when nothing will remint the URL', async () => {
+    render(<JobFilePlayer src="https://signed.test/expired.mp4" />);
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    video.dispatchEvent(new Event('error'));
+    expect(await screen.findByTestId('job-file-play-error')).toHaveTextContent('Could not play this file');
   });
 });

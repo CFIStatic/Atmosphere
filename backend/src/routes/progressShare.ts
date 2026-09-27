@@ -4,7 +4,10 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { adminForJob, requireAdmin, unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
-import { createSignedPlayableProofUrl } from '../lib/proofPlayableUrl.js';
+import {
+  createSignedPlayableProofUrl,
+  PROOF_PLAYBACK_URL_TTL_SECONDS,
+} from '../lib/proofPlayableUrl.js';
 import {
   PROGRESS_SHARE_COOKIE,
   readShareCookie,
@@ -414,8 +417,9 @@ progressShareRouter.get(
       const playable = await createSignedPlayableProofUrl({
         admin,
         storagePath: (proof as any).storage_path,
-        expiresInSeconds: 600,
+        expiresInSeconds: PROOF_PLAYBACK_URL_TTL_SECONDS,
         bucket: PROOF_BUCKET,
+        scheduleBuild: true,
       });
 
       await recordAccess(admin, {
@@ -428,7 +432,11 @@ progressShareRouter.get(
         detail: `via progress link — ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: playable.url, expiresInSeconds: 600 });
+      res.json({
+        url: playable.url,
+        expiresInSeconds: playable.expiresInSeconds,
+        contentType: playable.contentType,
+      });
     } catch (err) {
       next(err);
     }

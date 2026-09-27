@@ -16,10 +16,11 @@ import { SpeakerIcon } from '../icons';
 /**
  * Shared job-file / office video player.
  *
- * Keeps the familiar native scrubber (`controls`) and adds YouTube-like
- * mute + volume + closed captions. Captions come from Whisper transcript
- * segments / timestamped transcript_text via a real WebVTT TextTrack —
- * never a fake empty track when nothing was transcribed yet.
+ * One chrome: an orange scrubber on the picture, then play, volume, time,
+ * captions, and fullscreen. The browser's native bar is not used — it
+ * stacked a second progress line on top of this one. Captions come from
+ * Whisper transcript segments / timestamped transcript_text via a real
+ * WebVTT TextTrack — never a fake empty track when nothing was transcribed yet.
  *
  * Phase 1 privacy: private-moment ranges force mute + heavy blur. Child
  * privacy ranges prefer region blur (no mute) when boxes exist; otherwise
@@ -80,6 +81,31 @@ export function childRangeUsesRegionBlur(range: ChildPrivacyRedactionRange | nul
   return Boolean(range?.regions && range.regions.length > 0);
 }
 
+function formatClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = String(s).padStart(2, '0');
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${ss}`;
+  return `${m}:${ss}`;
+}
+
+function bufferedRatio(el: HTMLVideoElement): number {
+  const duration = el.duration;
+  if (!Number.isFinite(duration) || duration <= 0 || !el.buffered?.length) return 0;
+  let end = 0;
+  const t = el.currentTime || 0;
+  for (let i = 0; i < el.buffered.length; i += 1) {
+    const start = el.buffered.start(i);
+    const stop = el.buffered.end(i);
+    if (start - 0.05 <= t && t <= stop + 0.05) return Math.min(1, stop / duration);
+    if (stop > end) end = stop;
+  }
+  return Math.min(1, end / duration);
+}
+
 export function JobFilePlayer({
   src,
   className,
@@ -90,6 +116,10 @@ export function JobFilePlayer({
   privacyRedactions,
   childPrivacyRedactions,
   onTimeUpdate,
+  onPlaybackError,
+  poster,
+  resumeAt,
+  resumePlaying = false,
   testId = 'job-file-player',
 }: {
   src: string;
@@ -105,15 +135,36 @@ export function JobFilePlayer({
   childPrivacyRedactions?: ChildPrivacyRedactionRange[] | null;
   /** Throttled playhead seconds for analysis highlight (does not seek). */
   onTimeUpdate?: (seconds: number) => void;
+  /** Signed URL expired or the element failed. Parent remints and passes a new src. */
+  onPlaybackError?: (info: { currentTime: number; wasPlaying: boolean }) => void;
+  /** First-frame still so the player is never a blank rectangle. */
+  poster?: string | null;
+  /** After a reminted src, continue at this time. */
+  resumeAt?: number | null;
+  resumePlaying?: boolean;
   testId?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const scrubbingRef = useRef(false);
+  const userPausedRef = useRef(false);
+  const pinSrc = useRef(false);
+  const pinnedSrc = useRef(src);
+  // A new signed URL while the file is already playing is a new src, and
+  // assigning it remounts the buffer and stops the clip.
+  if (!pinSrc.current) pinnedSrc.current = src;
   const trackRef = useRef<HTMLTrackElement>(null);
   const prefsMutedRef = useRef(readVideoPlayerPrefs().muted);
   const [volume, setVolume] = useState(() => readVideoPlayerPrefs().volume);
   const [muted, setMuted] = useState(() => readVideoPlayerPrefs().muted);
   const [captionsOn, setCaptionsOn] = useState(() => readVideoPlayerPrefs().captionsOn);
   const [privacyActive, setPrivacyActive] = useState<ActivePrivacy | null>(null);
+  const [buffering, setBuffering] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [clock, setClock] = useState({ at: 0, duration: 0, buffered: 0 });
 
   const ranges = privacyRedactions ?? null;
   const childRanges = childPrivacyRedactions ?? null;
@@ -170,9 +221,108 @@ export function JobFilePlayer({
     const el = ref.current;
     if (!el) return;
     applyVideoPlayerPrefs(el);
+    // Preload without a dummy seek-to-end. That seek races the first Play
+    // and leaves the playhead on the last frame. After Play starts, the
+    // probe does not run on pause either.
+    if (el.paused) el.dataset.atmPreload = '1';
     const known = knownDurationSeconds ?? captions?.durationSeconds ?? null;
     return bindMeasuredDuration(el, known);
   }, [src, knownDurationSeconds, captions?.durationSeconds]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWaiting = () => {
+      if (!el.paused || pinSrc.current) setBuffering(true);
+    };
+    const onPlay = () => {
+      pinSrc.current = true;
+      userPausedRef.current = false;
+      if (el.readyState < 3) setBuffering(true);
+    };
+    const onPlaying = () => {
+      setBuffering(false);
+      setPlayError(null);
+    };
+    const onPause = () => {
+      if (userPausedRef.current || el.ended) {
+        pinSrc.current = false;
+        setBuffering(false);
+        return;
+      }
+      // A stall can surface as pause. Keep the same src and continue when data arrives.
+      setBuffering(true);
+      const kick = () => {
+        if (userPausedRef.current || el.ended) return;
+        if (!el.paused) {
+          setBuffering(false);
+          return;
+        }
+        const attempt = el.play();
+        if (attempt && typeof attempt.catch === 'function') {
+          attempt.catch(() => setPlayError('Tap play to start.'));
+        }
+      };
+      if (el.readyState >= 3) kick();
+      else el.addEventListener('canplay', kick, { once: true });
+    };
+    const onEnded = () => {
+      pinSrc.current = false;
+      setBuffering(false);
+    };
+    const onCanPlay = () => {
+      if (!el.paused) setBuffering(false);
+    };
+    const onError = () => {
+      const wasPlaying = !el.paused || pinSrc.current;
+      pinSrc.current = false;
+      setBuffering(false);
+      const at = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+      if (onPlaybackError) onPlaybackError({ currentTime: at, wasPlaying });
+      else setPlayError('Could not play this file. Tap play to try again.');
+    };
+    el.addEventListener('waiting', onWaiting);
+    el.addEventListener('stalled', onWaiting);
+    el.addEventListener('play', onPlay);
+    el.addEventListener('playing', onPlaying);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('canplay', onCanPlay);
+    el.addEventListener('error', onError);
+    return () => {
+      el.removeEventListener('waiting', onWaiting);
+      el.removeEventListener('stalled', onWaiting);
+      el.removeEventListener('play', onPlay);
+      el.removeEventListener('playing', onPlaying);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('canplay', onCanPlay);
+      el.removeEventListener('error', onError);
+    };
+  }, [src, onPlaybackError]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || resumeAt == null || !Number.isFinite(resumeAt)) return;
+    if (pinSrc.current && el.getAttribute('src') && el.getAttribute('src') !== src) return;
+    const apply = () => {
+      try {
+        el.currentTime = resumeAt;
+      } catch {
+        /* playhead waits until the browser can seek */
+      }
+      if (!resumePlaying) return;
+      const attempt = el.play();
+      if (attempt && typeof attempt.catch === 'function') {
+        attempt.catch(() => {
+          setPlayError('Tap play to start.');
+        });
+      }
+    };
+    if (el.readyState >= 1) apply();
+    else el.addEventListener('loadedmetadata', apply, { once: true });
+    return () => el.removeEventListener('loadedmetadata', apply);
+  }, [src, resumeAt, resumePlaying]);
 
   useEffect(() => {
     const el = ref.current;
@@ -262,6 +412,122 @@ export function JobFilePlayer({
     };
   }, [src, vttUrl, captionsOn, captionsAvailable, forceMute]);
 
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const sync = () => {
+      const duration = Number.isFinite(el.duration) ? el.duration : 0;
+      setClock({
+        at: Number.isFinite(el.currentTime) ? el.currentTime : 0,
+        duration,
+        buffered: bufferedRatio(el),
+      });
+      setPlaying(!el.paused && !el.ended);
+    };
+    el.addEventListener('timeupdate', sync);
+    el.addEventListener('progress', sync);
+    el.addEventListener('durationchange', sync);
+    el.addEventListener('loadedmetadata', sync);
+    el.addEventListener('seeked', sync);
+    el.addEventListener('play', sync);
+    el.addEventListener('pause', sync);
+    el.addEventListener('ended', sync);
+    sync();
+    return () => {
+      el.removeEventListener('timeupdate', sync);
+      el.removeEventListener('progress', sync);
+      el.removeEventListener('durationchange', sync);
+      el.removeEventListener('loadedmetadata', sync);
+      el.removeEventListener('seeked', sync);
+      el.removeEventListener('play', sync);
+      el.removeEventListener('pause', sync);
+      el.removeEventListener('ended', sync);
+    };
+  }, [src]);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement === shellRef.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  function togglePlay() {
+    const el = ref.current;
+    if (!el) return;
+    const stalledAtStart = el.readyState < 3 && (el.currentTime || 0) < 0.35;
+    if (!el.paused && !el.ended && !stalledAtStart) {
+      userPausedRef.current = true;
+      pinSrc.current = false;
+      el.pause();
+      return;
+    }
+    userPausedRef.current = false;
+    pinSrc.current = true;
+    setPlayError(null);
+    const attempt = el.play();
+    if (attempt && typeof attempt.catch === 'function') {
+      attempt.catch(() => {
+        setPlayError('Tap play to start.');
+      });
+    }
+  }
+
+  function seekToRatio(clientX: number, surface: HTMLElement) {
+    const video = ref.current;
+    const rect = surface.getBoundingClientRect();
+    if (!video || !rect.width) return;
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : clock.duration;
+    if (!(duration > 0)) return;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const at = ratio * duration;
+    try {
+      video.currentTime = at;
+    } catch {
+      /* playhead waits until the browser can seek */
+    }
+    setClock((prev) => ({ ...prev, at, duration }));
+  }
+
+  function onScrubDown(ev: React.PointerEvent<HTMLDivElement>) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    scrubbingRef.current = true;
+    setScrubbing(true);
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    seekToRatio(ev.clientX, ev.currentTarget);
+  }
+
+  function onScrubMove(ev: React.PointerEvent<HTMLDivElement>) {
+    if (!scrubbingRef.current) return;
+    seekToRatio(ev.clientX, ev.currentTarget);
+  }
+
+  function onScrubUp(ev: React.PointerEvent<HTMLDivElement>) {
+    scrubbingRef.current = false;
+    setScrubbing(false);
+    if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
+      ev.currentTarget.releasePointerCapture(ev.pointerId);
+    }
+  }
+
+  function toggleFullscreen() {
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (document.fullscreenElement === shell) {
+      void document.exitFullscreen();
+      return;
+    }
+    void shell.requestFullscreen();
+  }
+
+  function onShellKeyDown(ev: React.KeyboardEvent) {
+    if (ev.key !== ' ' && ev.code !== 'Space') return;
+    const tag = (ev.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+    ev.preventDefault();
+    togglePlay();
+  }
+
   function toggleMute() {
     if (forceMute) return; // cannot unmute through a full-frame privacy range
     const nextMuted = !muted;
@@ -291,15 +557,27 @@ export function JobFilePlayer({
     writeVideoPlayerPrefs({ captionsOn: next });
   }
 
+  const durationShown = clock.duration > 0 ? clock.duration : (knownDurationSeconds ?? 0);
+  const played = durationShown > 0 ? Math.min(1, Math.max(0, clock.at / durationShown)) : 0;
+
   return (
-    <div className="job-file-player" data-testid="job-file-player-shell">
+    <div
+      ref={shellRef}
+      className="job-file-player"
+      data-testid="job-file-player-shell"
+      onKeyDown={onShellKeyDown}
+    >
       <div className="job-file-player-stage relative">
         <video
           ref={ref}
-          src={src}
-          controls
+          src={pinnedSrc.current}
+          poster={poster || undefined}
+          controls={false}
           playsInline
-          preload="metadata"
+          disablePictureInPicture
+          controlsList="nodownload noplaybackrate nofullscreen"
+          preload="auto"
+          {...{ 'webkit-playsinline': 'true' }}
           data-testid={testId}
           data-seek={seekTo == null ? undefined : String(seekTo)}
           data-privacy-active={privacyActive ? '1' : '0'}
@@ -308,6 +586,7 @@ export function JobFilePlayer({
             (className ?? '') +
             (fullFrameBlur ? ' job-file-player-privacy-blur' : '')
           }
+          onClick={togglePlay}
         >
           {vttUrl ? (
             <track
@@ -320,6 +599,27 @@ export function JobFilePlayer({
             />
           ) : null}
         </video>
+        {buffering ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="job-file-buffer"
+            role="status"
+            aria-label="Loading video"
+          >
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-orange-500" />
+          </div>
+        ) : null}
+        {playError ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+            data-testid="job-file-play-error"
+            role="alert"
+          >
+            <span className="rounded-full bg-ink-900/80 px-2.5 py-1 text-[11px] font-medium text-paper-50">
+              {playError}
+            </span>
+          </div>
+        ) : null}
         {regionBlur.length
           ? regionBlur.map((box, i) => (
               <div
@@ -336,6 +636,39 @@ export function JobFilePlayer({
               />
             ))
           : null}
+        <div
+          className={'job-file-scrub' + (scrubbing ? ' is-dragging' : '')}
+          data-testid="job-file-scrub"
+          role="slider"
+          aria-label="Playback progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(played * 100)}
+          tabIndex={0}
+          onPointerDown={onScrubDown}
+          onPointerMove={onScrubMove}
+          onPointerUp={onScrubUp}
+          onPointerCancel={onScrubUp}
+          onKeyDown={(ev) => {
+            if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            const video = ref.current;
+            if (!video || !(durationShown > 0)) return;
+            const next = Math.min(durationShown, Math.max(0, (video.currentTime || 0) + (ev.key === 'ArrowRight' ? 5 : -5)));
+            try {
+              video.currentTime = next;
+            } catch {
+              /* playhead waits until the browser can seek */
+            }
+          }}
+        >
+          <div className="job-file-scrub-track">
+            <div className="job-file-scrub-buffer" style={{ transform: `scaleX(${clock.buffered})` }} />
+            <div className="job-file-scrub-fill" style={{ transform: `scaleX(${played})` }} />
+          </div>
+          <div className="job-file-scrub-thumb" style={{ left: `${played * 100}%` }} />
+        </div>
         {privacyActive ? (
           <div
             className="job-file-player-privacy-veil pointer-events-none absolute inset-0 flex items-end justify-start p-2"
@@ -355,6 +688,23 @@ export function JobFilePlayer({
         className="mt-1.5 flex flex-wrap items-center gap-2 rounded-lg border border-line/80 bg-paper-50/80 px-2 py-1.5"
         data-testid="job-file-player-controls"
       >
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={playing ? 'Pause' : 'Play'}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-700 hover:bg-paper-100"
+          data-testid="job-file-play"
+        >
+          {playing ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={toggleMute}
@@ -429,7 +779,7 @@ export function JobFilePlayer({
         ) : null}
         {ranges?.length || childRanges?.length ? (
           <span
-            className="ml-auto text-[10px] text-ink-400"
+            className="text-[10px] text-ink-400"
             data-testid="job-file-privacy-hint"
             title={[
               ...(ranges ?? []).map(
@@ -443,6 +793,27 @@ export function JobFilePlayer({
             Privacy-protected segments on file
           </span>
         ) : null}
+        <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-500" data-testid="job-file-time">
+          {formatClock(clock.at)} / {formatClock(durationShown)}
+        </span>
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}
+          title={fullscreen ? 'Exit full screen' : 'Full screen'}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-700 hover:bg-paper-100"
+          data-testid="job-file-fullscreen"
+        >
+          {fullscreen ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+            </svg>
+          )}
+        </button>
       </div>
     </div>
   );

@@ -716,26 +716,48 @@
     position: relative;
     width: 100%;
     height: 3px;
-    background: rgba(255,255,255,.45);
+    background: rgba(255,255,255,.28);
     overflow: hidden;
     pointer-events: none;
     transition: height .12s ease;
   }
   .progress-line:hover .progress-track,
-  .progress-line:focus-visible .progress-track {
+  .progress-line:focus-visible .progress-track,
+  .progress-line.is-dragging .progress-track {
     height: 5px;
   }
+  .progress-buffer,
   .progress-fill {
     position: absolute;
     left: 0;
     top: 0;
     height: 100%;
     width: 100%;
-    background: var(--accent);
     transform: scaleX(0);
     transform-origin: left center;
     will-change: transform;
     pointer-events: none;
+  }
+  .progress-buffer { background: rgba(255,255,255,.5); }
+  .progress-fill { background: var(--accent); }
+  .progress-thumb {
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,0,0,.35);
+    transform: translateX(-50%) scale(0);
+    transform-origin: center;
+    transition: transform .12s ease;
+    pointer-events: none;
+  }
+  .progress-line:hover .progress-thumb,
+  .progress-line:focus-visible .progress-thumb,
+  .progress-line.is-dragging .progress-thumb {
+    transform: translateX(-50%) scale(1);
   }
   .preview-wait {
     position: absolute;
@@ -750,6 +772,23 @@
     font-weight: 600;
     pointer-events: none;
   }
+  .preview-buffer {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 4;
+    width: 36px;
+    height: 36px;
+    margin: -18px 0 0 -18px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.35);
+    border-top-color: var(--accent);
+    animation: preview-spin .7s linear infinite;
+    pointer-events: none;
+  }
+  .preview-buffer[hidden] { display: none !important; }
+  .yt-play[hidden], .yt-dur[hidden] { display: none !important; }
+  @keyframes preview-spin { to { transform: rotate(360deg); } }
   .backbtn {
     display: inline-flex;
     align-items: center;
@@ -1578,6 +1617,37 @@
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
+  /* The browser's own bar (white line, time, fullscreen, ⋮) must never
+     sit on top of this chrome — including hover, fullscreen, and iOS. */
+  .player video::-webkit-media-controls,
+  .player video::-webkit-media-controls-enclosure,
+  .player video::-webkit-media-controls-panel,
+  .player video::-webkit-media-controls-play-button,
+  .player video::-webkit-media-controls-start-playback-button,
+  .player video::-webkit-media-controls-overlay-play-button,
+  .player video::-webkit-media-controls-timeline,
+  .player video::-webkit-media-controls-current-time-display,
+  .player video::-webkit-media-controls-time-remaining-display,
+  .player video::-webkit-media-controls-mute-button,
+  .player video::-webkit-media-controls-volume-slider,
+  .player video::-webkit-media-controls-fullscreen-button {
+    display: none !important;
+    -webkit-appearance: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  .player:fullscreen,
+  .player:-webkit-full-screen {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    background: #000;
+  }
+  .player:fullscreen .frame,
+  .player:-webkit-full-screen .frame { min-height: 0; }
 
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .side.ask-mode { display: flex; flex-direction: column; overflow: hidden; }
@@ -2049,8 +2119,10 @@
             <div class="frame" id="d-frame"></div>
             <div class="progress-line" id="d-progress" role="slider" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
               <div class="progress-track">
+                <div class="progress-buffer" id="d-progress-buffer"></div>
                 <div class="progress-fill" id="d-progress-fill"></div>
               </div>
+              <div class="progress-thumb" id="d-progress-thumb"></div>
             </div>
           </div>
           <div class="controls">
@@ -2066,6 +2138,9 @@
             <button type="button" id="d-cc" class="cc-btn" aria-label="Captions unavailable" aria-pressed="false" disabled title="Captions unavailable">CC</button>
             <span class="cc-hint" id="d-cc-hint" hidden>Captions unavailable</span>
             <span class="time" id="d-time" hidden></span>
+            <button type="button" id="d-full" aria-label="Full screen" title="Full screen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
           </div>
         </div>
       </section>
@@ -2880,6 +2955,10 @@
   var frameRaf = 0;
   var progressDragging = false;
   var pendingSeek = null;
+  /** User asked to play. Stays set across the signed-URL fetch. */
+  var wantPlay = false;
+  /** Set only when the control bar itself calls pause(). A stall must not. */
+  var userPaused = false;
 
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
@@ -2954,16 +3033,15 @@
     var measured = function () {
       return knownDuration(video.duration);
     };
-    var onPause = function () { discover(); };
     var discover = function () {
       if (measured() != null) return;
       // Filed clips already carry a measured length. Do not scan the file
       // on a visible player — a dummy seek flashes the last frame.
       if (knownDuration(known) != null) return;
-      // Visible player with native controls. A dummy seek during Play
-      // flashes the last frame and restarts the clip.
-      if (!video.paused || (video.dataset && video.dataset.playingSoon === '1')) {
-        video.addEventListener('pause', onPause, { once: true });
+      // A dummy seek once playback has started jumps to the end, fires
+      // ended, and leaves the clip paused so the next press is required.
+      if (!video.paused || (video.currentTime || 0) > 0.35 ||
+          (video.dataset && (video.dataset.played === '1' || video.dataset.playingSoon === '1' || video.dataset.atmPreload === '1'))) {
         return;
       }
       var origin = video.currentTime;
@@ -3012,8 +3090,34 @@
     var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
     var fill = document.getElementById('d-progress-fill');
     if (fill) fill.style.transform = 'scaleX(' + clamped + ')';
+    var thumb = document.getElementById('d-progress-thumb');
+    if (thumb) thumb.style.left = (clamped * 100) + '%';
     var line = document.getElementById('d-progress');
     if (line) line.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
+  }
+
+  function setBufferRatio(ratio) {
+    var clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+    var el = document.getElementById('d-progress-buffer');
+    if (el) el.style.transform = 'scaleX(' + clamped + ')';
+  }
+
+  function bufferEndRatio(vid) {
+    var duration = vid && vid.duration;
+    if (!(duration > 0) || !vid.buffered || !vid.buffered.length) return 0;
+    var end = 0;
+    var t = vid.currentTime || 0;
+    try {
+      for (var i = 0; i < vid.buffered.length; i++) {
+        var start = vid.buffered.start(i);
+        var stop = vid.buffered.end(i);
+        if (start - 0.05 <= t && t <= stop + 0.05) return Math.min(1, stop / duration);
+        if (stop > end) end = stop;
+      }
+    } catch (err) {
+      return 0;
+    }
+    return Math.min(1, end / duration);
   }
 
   function updatePlayClock(at, duration) {
@@ -3197,12 +3301,20 @@
     if (vid.getAttribute('data-atm-vol-bound') === '1') return;
     vid.setAttribute('data-atm-vol-bound', '1');
     vid.addEventListener('volumechange', function () {
+      // Remint mutes to satisfy autoplay, then sets this so the event does
+      // not store that mute as the preference for later clips.
+      if (vid.dataset && vid.dataset.atmHoldMutePref === '1') {
+        delete vid.dataset.atmHoldMutePref;
+        syncVolumeControls(vid);
+        return;
+      }
       writeVideoPrefs({ volume: vid.volume, muted: vid.muted });
       syncVolumeControls(vid);
     });
   }
 
   function setPlayButton(playing) {
+    if (typeof document === 'undefined' || !document.getElementById) return;
     var btn = document.getElementById('d-play');
     if (!btn) return;
     btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
@@ -3212,8 +3324,18 @@
   }
 
   function previewVideo() {
+    if (typeof document === 'undefined' || !document.getElementById) return null;
     var host = document.getElementById('d-frame');
     return host ? host.querySelector('video') : null;
+  }
+
+  // Play already called play() on this element. A later paint must not
+  // replace it — the aborted play() would mark the new stage as failed.
+  function previewPlayInFlight() {
+    var vid = previewVideo();
+    if (!vid) return false;
+    if (!vid.paused && !vid.ended) return true;
+    return Boolean(wantPlay && vid.dataset && vid.dataset.playingSoon === '1');
   }
 
   function playbackSeconds(item, video) {
@@ -3232,6 +3354,7 @@
     var at = playbackSeconds(item, vid);
     if (duration > 0 && at > duration) at = duration;
     setProgressRatio(duration > 0 ? at / duration : 0);
+    if (vid) setBufferRatio(bufferEndRatio(vid));
     if (duration > 0 && (vid || state.playStartedAt != null || frameRaf)) {
       updatePlayClock(at, duration);
     }
@@ -3302,6 +3425,7 @@
     };
     var up = function () {
       progressDragging = false;
+      el.classList.remove('is-dragging');
       window.removeEventListener('pointermove', move);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('pointerup', up);
@@ -3310,6 +3434,7 @@
     };
     var down = function (ev) {
       progressDragging = true;
+      el.classList.add('is-dragging');
       seekByRatio(progressFromPointer(el, xOf(ev)));
       window.addEventListener('pointermove', move);
       window.addEventListener('mousemove', move);
@@ -3340,6 +3465,7 @@
     state.playStartedAt = null;
     pendingSeek = null;
     setProgressRatio(0);
+    setBufferRatio(0);
     setPlayButton(false);
     setPlayerTime('');
   }
@@ -5114,6 +5240,8 @@
   }
 
   function closePreview() {
+    wantPlay = false;
+    userPaused = true;
     stopPlay();
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
@@ -5136,7 +5264,162 @@
     if (btn) btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
-      startPreviewPlayback(state.open || item);
+      togglePreviewPlayback(state.open || item);
+    });
+  }
+
+  function bufferingAtStart(vid) {
+    if (!vid) return false;
+    if (vid.readyState >= 3) return false;
+    return (vid.currentTime || 0) < 0.35;
+  }
+
+  function showBuffer(on) {
+    if (typeof document === 'undefined' || !document.querySelector) return;
+    var stage = document.querySelector('#d-frame .preview-stage');
+    var el = document.getElementById('d-buffer');
+    if (!el && on && stage) {
+      el = document.createElement('div');
+      el.className = 'preview-buffer';
+      el.id = 'd-buffer';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-label', 'Loading video');
+      stage.appendChild(el);
+    }
+    if (!el) return;
+    if (on) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
+
+  function clearPlayFailure() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    var el = document.getElementById('d-play-error');
+    if (el) el.hidden = true;
+  }
+
+  function showPlayFailureMessage(message) {
+    showBuffer(false);
+    setPlayButton(false);
+    wantPlay = false;
+    if (typeof document === 'undefined' || !document.querySelector) return;
+    var stage = document.querySelector('#d-frame .preview-stage');
+    if (!stage) return;
+    var el = document.getElementById('d-play-error');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'preview-wait';
+      el.id = 'd-play-error';
+      stage.appendChild(el);
+    }
+    el.hidden = false;
+    el.textContent = message || 'Could not play this file. Tap play to try again.';
+  }
+
+  function revealVideoSurface() {
+    var stage = document.querySelector('#d-frame .preview-stage');
+    if (stage) stage.setAttribute('data-preview-state', 'video');
+    var btn = document.getElementById('d-yt-play');
+    if (btn) btn.hidden = true;
+    var badge = document.querySelector('#d-frame .yt-dur');
+    if (badge) badge.hidden = true;
+  }
+
+  /**
+   * play() has to run inside the click. The promise is never swallowed:
+   * NotAllowedError retries muted (so a late URL still starts), anything
+   * else is shown on the frame.
+   */
+  function playFromGesture(vid, opts) {
+    if (!vid) return;
+    opts = opts || {};
+    if (vid.dataset) {
+      vid.dataset.playingSoon = '1';
+      delete vid.dataset.atmPreload;
+    }
+    clearPlayFailure();
+    showBuffer(true);
+    revealVideoSurface();
+    var attempt = vid.play();
+    if (!attempt || !attempt.then) return;
+    attempt.then(function () {
+      if (previewVideo() !== vid) return;
+      clearPlayFailure();
+    }).catch(function (err) {
+      // The node was replaced (a second mount finished). That abort belongs
+      // to the old element — painting it here clears wantPlay on the new stage.
+      if (!vid.isConnected || previewVideo() !== vid) return;
+      var name = err && err.name;
+      if (name === 'AbortError') {
+        var again = vid.play();
+        if (again && again.catch) {
+          again.catch(function () {
+            if (previewVideo() !== vid) return;
+            showPlayFailureMessage('Could not start playback. Tap play to try again.');
+          });
+        }
+        return;
+      }
+      if (!vid.muted && name === 'NotAllowedError') {
+        var priorPrefs = readVideoPrefs();
+        // A click may persist mute so the next press still starts. A remint
+        // is not a click — hold the preference across the volumechange that
+        // setting muted fires, including when that event is queued.
+        if (opts.persistMute === false && vid.dataset) vid.dataset.atmHoldMutePref = '1';
+        vid.muted = true;
+        if (opts.persistMute === false) {
+          writeVideoPrefs({ muted: priorPrefs.muted, volume: priorPrefs.volume });
+        } else {
+          writeVideoPrefs({ muted: true, volume: vid.volume });
+        }
+        syncVolumeControls(vid);
+        var retry = vid.play();
+        if (retry && retry.catch) {
+          retry.catch(function () {
+            if (previewVideo() !== vid) return;
+            showPlayFailureMessage('Tap play to start.');
+          });
+        }
+        return;
+      }
+      showPlayFailureMessage('Could not start playback. Tap play to try again.');
+    });
+  }
+
+  function resumeAtTime(vid, at, shouldPlay) {
+    var apply = function () {
+      try {
+        if (at > 0.05) vid.currentTime = at;
+      } catch (err) {}
+      if (shouldPlay) playFromGesture(vid, { persistMute: false });
+    };
+    if (vid.readyState >= 1) apply();
+    else vid.addEventListener('loadedmetadata', apply, { once: true });
+  }
+
+  function maybeRefreshExpiringUrl(item, vid) {
+    if (!item || !vid || !item._videoExpiresAt || item._urlRefreshing) return;
+    if (item._urlRefreshNotBefore && Date.now() < item._urlRefreshNotBefore) return;
+    if (Date.now() < item._videoExpiresAt - 90000) return;
+    // A fresh signature is a different src. Assigning it mid-play aborts the element.
+    if (!vid.paused || wantPlay) return;
+    item._urlRefreshing = true;
+    var at = vid.currentTime || 0;
+    var shouldPlay = !vid.paused || wantPlay;
+    refreshVideoUrl(item).then(function (url) {
+      item._urlRefreshing = false;
+      if (!url) {
+        // A miss leaves the expiry in the past. Without a pause, the next
+        // timeupdate (several times a second) would mint again.
+        item._urlRefreshNotBefore = Date.now() + 20000;
+        return;
+      }
+      item._urlRefreshNotBefore = 0;
+      if (!state.open || state.open.id !== item.id) return;
+      var live = previewVideo();
+      if (!live || live.getAttribute('src') === url) return;
+      live.src = url;
+      live.load();
+      resumeAtTime(live, at, shouldPlay);
     });
   }
 
@@ -5199,48 +5482,145 @@
     showPreviewScreen();
   }
 
-  function paintPreviewVideo(item) {
+  function mountedClipVideo(item) {
+    var vid = previewVideo();
+    if (!vid || !vid.isConnected || !item) return null;
+    var stage = vid.closest ? vid.closest('.preview-stage') : null;
+    if (!stage || stage.getAttribute('data-preview-id') !== String(item.id)) return null;
+    if (!vid.getAttribute('src')) return null;
+    return vid;
+  }
+
+  function paintPreviewVideo(item, opts) {
+    opts = opts || {};
+    var hold = opts.holdPoster === true;
     var poster = item.poster || thumbFor(item);
     var posterAttr = poster ? ' poster="' + esc(poster) + '"' : '';
+    var preloadAttr = hold ? ' data-atm-preload="1"' : '';
+    var overlay = hold
+      ? '<button type="button" class="yt-play" id="d-yt-play" aria-label="Play">' +
+          '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' +
+        '</button>' +
+        '<span class="yt-dur">' + dur(item.duration) + '</span>'
+      : '';
     $('#d-frame').innerHTML =
-      '<div class="preview-stage" data-preview-state="video">' +
-        '<video controls playsinline preload="metadata"' + posterAttr +
+      '<div class="preview-stage" data-preview-state="' + (hold ? 'poster' : 'video') + '" data-preview-id="' + esc(item.id) + '">' +
+        '<video playsinline webkit-playsinline disablepictureinpicture controlsList="nodownload noplaybackrate nofullscreen" preload="auto"' + preloadAttr + posterAttr +
         ' src="' + esc(item._videoUrl) + '"></video>' +
+        overlay +
+        '<div class="preview-buffer" id="d-buffer" hidden role="status" aria-label="Loading video"></div>' +
       '</div>';
-    setProgressRatio(0);
-    setPlayerTime('full clip · ' + durLabel(item.duration));
+    if (!hold) {
+      setProgressRatio(0);
+      setPlayerTime('full clip · ' + durLabel(item.duration));
+    }
     var vid = $('#d-frame').querySelector('video');
     if (!vid) return;
+    vid.controls = false;
+    vid.disablePictureInPicture = true;
     applyVolumePrefs(vid);
     attachVideoTrack(vid, item);
+    if (vid.dataset) vid.dataset.playingSoon = hold ? '' : '1';
+    if (hold && vid.dataset) delete vid.dataset.playingSoon;
     bindVideoDuration(vid, item.duration);
+    if (hold) bindYoutubePlay(item);
+    vid.addEventListener('click', function () {
+      togglePreviewPlayback(item);
+    });
     vid.addEventListener('timeupdate', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       if (!progressRaf) paintLiveProgress();
+      maybeRefreshExpiringUrl(item, vid);
     });
     vid.addEventListener('seeked', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
     });
+    vid.addEventListener('waiting', function () {
+      if (!vid.isConnected) return;
+      if (!vid.paused || wantPlay) showBuffer(true);
+    });
+    vid.addEventListener('stalled', function () {
+      if (!vid.isConnected) return;
+      if (!vid.paused || wantPlay) showBuffer(true);
+    });
+    vid.addEventListener('playing', function () {
+      if (!vid.isConnected) return;
+      showBuffer(false);
+      clearPlayFailure();
+      revealVideoSurface();
+      if (vid.dataset) {
+        delete vid.dataset.playingSoon;
+        delete vid.dataset.resumeTries;
+      }
+    });
     vid.addEventListener('play', function () {
+      if (!vid.isConnected) return;
+      if (vid.dataset) vid.dataset.played = '1';
       syncAnalysisLog(vid.currentTime);
       setPlayButton(true);
+      if (vid.readyState < 3) showBuffer(true);
       startProgressLoop();
     });
     vid.addEventListener('pause', function () {
+      // Removing the node (a late detail paint) pauses the old element.
+      // That must not flip the live control bar back to Play.
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
+      if (wantPlay && !userPaused && !vid.ended) {
+        var tries = Number(vid.dataset && vid.dataset.resumeTries || 0);
+        if (tries > 6) {
+          stopProgressLoop();
+          setPlayButton(false);
+          return;
+        }
+        if (vid.dataset) vid.dataset.resumeTries = String(tries + 1);
+        showBuffer(true);
+        var kick = function () {
+          if (!vid.isConnected || userPaused || !wantPlay || vid.ended) return;
+          if (!vid.paused) {
+            showBuffer(false);
+            return;
+          }
+          playFromGesture(vid);
+        };
+        if (vid.readyState >= 3) kick();
+        else vid.addEventListener('canplay', kick, { once: true });
+        return;
+      }
       stopProgressLoop();
+      if (!wantPlay) showBuffer(false);
       setPlayButton(false);
+      if (vid.dataset) delete vid.dataset.playingSoon;
     });
     vid.addEventListener('ended', function () {
+      if (!vid.isConnected) return;
       syncAnalysisLog(vid.currentTime);
       paintLiveProgress();
+      var duration = clipLength(item, vid);
+      // A dummy seek or a short buffer can report ended before the file is done.
+      if (wantPlay && !userPaused && duration > 0 && (vid.currentTime || 0) + 0.75 < duration) {
+        showBuffer(true);
+        playFromGesture(vid);
+        return;
+      }
       stopProgressLoop();
+      showBuffer(false);
+      wantPlay = false;
       setPlayButton(false);
     });
     vid.addEventListener('loadedmetadata', function () { paintLiveProgress(); });
+    vid.addEventListener('progress', function () { setBufferRatio(bufferEndRatio(vid)); });
+    vid.addEventListener('canplay', function () {
+      if (!vid.paused) showBuffer(false);
+    });
     vid.addEventListener('error', function () {
+      if (!vid.isConnected) return;
+      var at = vid.currentTime || 0;
+      var shouldPlay = wantPlay || !vid.paused;
       if (item._videoRetrying) {
         item._videoRetrying = false;
         if (state.open && state.open.id === item.id) showPreviewPlayError(item);
@@ -5257,14 +5637,63 @@
           showPreviewPlayError(item);
           return;
         }
-        paintPreviewVideo(item);
+        paintPreviewVideo(item, { holdPoster: false });
         var next = previewVideo();
-        if (next) {
-          if (next.dataset) next.dataset.playingSoon = '1';
-          next.play().catch(function () {});
-        }
+        if (next) resumeAtTime(next, at, shouldPlay);
       });
     });
+  }
+
+  function togglePreviewPlayback(item) {
+    item = item || state.open;
+    var vid = previewVideo();
+    if (vid && item && item._videoUrl) {
+      if (!vid.paused && !vid.ended && !bufferingAtStart(vid)) {
+        wantPlay = false;
+        userPaused = true;
+        if (vid.dataset) delete vid.dataset.playingSoon;
+        vid.pause();
+        return;
+      }
+      userPaused = false;
+      wantPlay = true;
+      item._videoRetrying = false;
+      showBuffer(true);
+      playFromGesture(vid);
+      return;
+    }
+    if (item && item._remote && !item._videoUrl) {
+      userPaused = false;
+      wantPlay = true;
+      showBuffer(true);
+      // Detail may still be in flight. Start on the video URL from this
+      // click. openLoaded keeps this element instead of assigning a new src.
+      refreshVideoUrl(item).then(function (url) {
+        if (!wantPlay || !state.open || state.open.id !== item.id) return;
+        if (!url) {
+          showPlayFailureMessage('Could not open this file.');
+          return;
+        }
+        var existing = mountedClipVideo(item);
+        if (existing) {
+          if (existing.paused && !existing.ended) playFromGesture(existing);
+          return;
+        }
+        if (previewPlayInFlight()) return;
+        paintPreviewVideo(item, { holdPoster: false });
+        var next = previewVideo();
+        if (next) playFromGesture(next);
+      });
+      return;
+    }
+    // The analysis ticker also uses state.playing. That is not playback —
+    // treating it as "already playing" ate the first Play press.
+    if (frameRaf) {
+      stopPlay();
+      syncAnalysisLog(currentPlayhead());
+      return;
+    }
+    startPreviewPlayback(item);
   }
 
   function showPreviewPlayError(item) {
@@ -5344,8 +5773,9 @@
     stopPlay();
     item._videoRetrying = false;
     if (item._videoUrl) {
-      paintPreviewVideo(item);
-      var vid = $('#d-frame').querySelector('video');
+      var kept = mountedClipVideo(item);
+      if (!kept) paintPreviewVideo(item);
+      var vid = kept || $('#d-frame').querySelector('video');
       if (vid) {
         if (vid.dataset) vid.dataset.playingSoon = '1';
         if (startAt != null) {
@@ -5354,15 +5784,9 @@
           if (length > 0) setProgressRatio(startAt / length);
           pendingSeek = null;
         }
-        var attempt = vid.play();
-        if (attempt && attempt.catch) {
-          attempt.catch(function () {
-            vid.muted = true;
-            writeVideoPrefs({ muted: true, volume: vid.volume });
-            syncVolumeControls(vid);
-            vid.play().catch(function () {});
-          });
-        }
+        userPaused = false;
+        wantPlay = true;
+        playFromGesture(vid);
       }
       return;
     }
@@ -5390,7 +5814,9 @@
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
     if (item._remote && (!item._loaded || !item._videoUrl)) {
+      item._detailPending = true;
       fetchRemoteDetail(item).then(function () {
+        item._detailPending = false;
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
         watchRemoteReading(item);
       });
@@ -5411,14 +5837,39 @@
       if (mid && mid.src) item.poster = mid.src;
     }
 
-    // Keep the YouTube screenshot on screen. The file plays when asked.
-    paintPreviewPoster(item, false);
+    // Mount the file as soon as the signed URL exists so Play calls
+    // video.play() inside the gesture. The poster stays up until then.
+    // A Play press that already mounted this file must keep that element.
+    var resumePlay = wantPlay;
+    var alreadyPlaying = previewPlayInFlight();
+    if (item._videoUrl) {
+      // Detail often lands a second or two after Play already mounted the
+      // file. A new signature is a different src and aborts the clip.
+      var existing = mountedClipVideo(item);
+      if (existing || alreadyPlaying) {
+        if (resumePlay && existing && !alreadyPlaying && existing.paused && !existing.ended) {
+          playFromGesture(existing);
+        }
+      } else {
+        paintPreviewVideo(item, { holdPoster: !resumePlay });
+        if (resumePlay) {
+          var armed = previewVideo();
+          if (armed) playFromGesture(armed);
+        }
+      }
+    } else if (!alreadyPlaying) {
+      paintPreviewPoster(item, false);
+    }
     // A signed still from the list is already the right frame. Recapturing
     // it from the file flashes the poster and fights CORS on signed URLs.
+    // Skip when the preview element is already fetching this URL — a second
+    // <video> downloads the file twice and stalls the first Play.
     if (item._videoUrl && (!item.poster || String(item.poster).indexOf('data:') === 0)) {
-      captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
-        if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
-      });
+      if (!previewVideo()) {
+        captureVideoScreenshot(item._videoUrl, item.duration, function (shot) {
+          if (state.open && state.open.id === item.id) applyCapturedPoster(item, shot);
+        });
+      }
     }
 
     renderDictation(item);
@@ -5499,6 +5950,8 @@
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
     if (frameRaf) { cancelAnimationFrame(frameRaf); frameRaf = 0; }
     state.playStartedAt = null;
+    var vid = previewVideo();
+    if (vid && vid.isConnected && !vid.paused && !vid.ended) return;
     stopProgressLoop();
     setPlayButton(false);
   }
@@ -7817,23 +8270,52 @@
   if (liquidGlass) liquidGlass.addEventListener('click', function () { closePreview(); });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && state.open) closePreview();
+    if ((e.key === ' ' || e.code === 'Space') && state.open) {
+      var t = e.target;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (t && t.isContentEditable) return;
+      // Space plays even when Dashboard / a tab has focus. preventDefault
+      // so the focused button does not activate as well.
+      e.preventDefault();
+      togglePreviewPlayback(state.open);
+    }
   });
 
   $('#d-play').addEventListener('click', function () {
-    var host = $('#d-frame');
-    var vid = host && host.querySelector('video');
-    if (vid) {
-      if (vid.paused) vid.play().catch(function () {});
-      else vid.pause();
-      return;
-    }
-    if (state.open && host && host.querySelector('.yt-play')) {
-      startPreviewPlayback(state.open);
-      return;
-    }
-    if (state.playing || frameRaf) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
-    startFramePlayback();
+    togglePreviewPlayback(state.open);
   });
+
+  function playerShell() {
+    return document.querySelector('#detail .player');
+  }
+  function fullscreenIcon(on) {
+    return on
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+  }
+  function syncFullscreenButton() {
+    var btn = document.getElementById('d-full');
+    var shell = playerShell();
+    if (!btn || !shell) return;
+    var on = document.fullscreenElement === shell;
+    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+    btn.title = on ? 'Exit full screen' : 'Full screen';
+    btn.innerHTML = fullscreenIcon(on);
+  }
+  var fullBtn = document.getElementById('d-full');
+  if (fullBtn) fullBtn.addEventListener('click', function () {
+    var shell = playerShell();
+    if (!shell) return;
+    // Fullscreen the chrome, never the <video>. The video element's
+    // fullscreen UI is the native bar we just removed.
+    if (document.fullscreenElement === shell) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      return;
+    }
+    if (shell.requestFullscreen) shell.requestFullscreen();
+  });
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
 
   var muteBtn = document.getElementById('d-mute');
   if (muteBtn) muteBtn.addEventListener('click', function () {
@@ -8124,8 +8606,12 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (payload) {
         var next = payload && payload.url ? payload.url : null;
-        if (next) item._videoUrl = next;
-        else item._videoRetrying = false;
+        if (next) {
+          item._videoUrl = next;
+          var ttl = Number(payload.expiresInSeconds);
+          if (!isFinite(ttl) || ttl <= 0) ttl = 3600;
+          item._videoExpiresAt = Date.now() + ttl * 1000;
+        } else item._videoRetrying = false;
         return next;
       })
       .catch(function () {
@@ -8175,6 +8661,11 @@
           return { at: f.atSeconds, src: f.url };
         });
         item._videoUrl = video && video.url ? video.url : null;
+        if (video && video.url) {
+          var videoTtl = Number(video.expiresInSeconds);
+          if (!isFinite(videoTtl) || videoTtl <= 0) videoTtl = 3600;
+          item._videoExpiresAt = Date.now() + videoTtl * 1000;
+        }
         item._loaded = true;
       })
       .catch(function () {

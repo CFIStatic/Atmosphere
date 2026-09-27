@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const jobEvidence = vi.fn();
 const evidenceCustody = vi.fn();
+const proofVideoUrl = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   api: {
     jobEvidence: (...args: unknown[]) => jobEvidence(...args),
     evidenceCustody: (...args: unknown[]) => evidenceCustody(...args),
+    proofVideoUrl: (...args: unknown[]) => proofVideoUrl(...args),
   },
 }));
 
@@ -46,6 +48,7 @@ describe('EvidenceLocker', () => {
       counts: { items: 1, onHold: 1, neverViewed: 0 },
     });
     evidenceCustody.mockResolvedValue({ entries: [] });
+    proofVideoUrl.mockResolvedValue({ url: 'https://signed.test/clip.mp4', expiresInSeconds: 3600 });
   });
 
   it('does not show legal hold controls on the job file', async () => {
@@ -61,7 +64,12 @@ describe('EvidenceLocker', () => {
     await user.click(screen.getByText('After — Aug 04 (disputed)'));
     await waitFor(() => {
       expect(evidenceCustody).toHaveBeenCalledWith('job-1038', 'pf-4');
+      expect(proofVideoUrl).toHaveBeenCalledWith('pf-4');
     });
+    expect(await screen.findByTestId('evidence-locker-player')).toHaveAttribute(
+      'src',
+      'https://signed.test/clip.mp4',
+    );
     expect(screen.queryByText('Place on legal hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Lift the hold')).not.toBeInTheDocument();
     expect(screen.queryByText('on hold — indefinite')).not.toBeInTheDocument();

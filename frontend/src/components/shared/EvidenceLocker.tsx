@@ -312,30 +312,50 @@ function EvidenceDetail({
   const [url, setUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [custody, setCustody] = useState<CustodyEntry[] | null>(null);
+  const [resumeAt, setResumeAt] = useState<number | null>(null);
+  const [resumePlaying, setResumePlaying] = useState(false);
+  const refreshCount = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
+    refreshCount.current = 0;
     setUrl(null);
+    setResumeAt(null);
+    setResumePlaying(false);
     setCustody(null);
+    setLoadingVideo(true);
+    // Mint the signed URL while the detail opens so the first press on the
+    // player is video.play(), not a round trip that loses the gesture.
+    api
+      .proofVideoUrl(item.id)
+      .then(async (res) => {
+        if (cancelled) return;
+        setUrl(res.url);
+        const fresh = await api.evidenceCustody(jobId, item.id).catch(() => null);
+        if (!cancelled && fresh) setCustody(fresh.entries);
+        if (!cancelled) onChanged();
+      })
+      .catch(() => {
+        if (!cancelled) setUrl(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingVideo(false);
+      });
     api
       .evidenceCustody(jobId, item.id)
-      .then((res) => setCustody(res.entries))
-      .catch(() => setCustody([]));
+      .then((res) => {
+        if (!cancelled) setCustody(res.entries);
+      })
+      .catch(() => {
+        if (!cancelled) setCustody([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // onChanged refreshes the list after the view is logged. Its identity
+    // changes every render; depending on it would mint a new URL in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, item.id]);
-
-  async function play() {
-    setLoadingVideo(true);
-    try {
-      const res = await api.proofVideoUrl(item.id);
-      setUrl(res.url);
-      // The view has just been written server-side; pulling the log again is
-      // what makes that visible rather than something the user has to trust.
-      const fresh = await api.evidenceCustody(jobId, item.id).catch(() => null);
-      if (fresh) setCustody(fresh.entries);
-      onChanged();
-    } finally {
-      setLoadingVideo(false);
-    }
-  }
 
   const failed = (item.checks ?? []).filter((c) => c.verdict === 'fail');
   const unknown = (item.checks ?? []).filter((c) => c.verdict === 'unknown');
@@ -352,16 +372,34 @@ function EvidenceDetail({
       <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div>
           {url ? (
-            <MeasuredEvidenceVideo src={url} />
+            <MeasuredEvidenceVideo
+              src={url}
+              knownDurationSeconds={item.durationSeconds}
+              resumeAt={resumeAt}
+              resumePlaying={resumePlaying}
+              onPlaybackError={(info) => {
+                if (refreshCount.current >= 1) return;
+                refreshCount.current += 1;
+                setResumeAt(info.currentTime);
+                setResumePlaying(info.wasPlaying);
+                setLoadingVideo(true);
+                void api
+                  .proofVideoUrl(item.id)
+                  .then((res) => setUrl(res.url))
+                  .catch(() => setUrl(null))
+                  .finally(() => setLoadingVideo(false));
+              }}
+            />
           ) : (
-            <button
-              onClick={() => void play()}
-              disabled={loadingVideo}
-              className="flex h-56 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
+            <div
+              className="flex h-56 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600"
+              role="status"
             >
               {loadingVideo && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-              {loadingVideo ? 'Opening…' : 'Play — this is recorded in the chain of custody'}
-            </button>
+              {loadingVideo
+                ? 'Opening… this is recorded in the chain of custody'
+                : 'Could not open this file'}
+            </div>
           )}
 
           {item.aiSummary && (
@@ -462,12 +500,29 @@ function EvidenceDetail({
   );
 }
 
-function MeasuredEvidenceVideo({ src }: { src: string }) {
+function MeasuredEvidenceVideo({
+  src,
+  resumeAt,
+  resumePlaying,
+  knownDurationSeconds,
+  onPlaybackError,
+}: {
+  src: string;
+  resumeAt?: number | null;
+  resumePlaying?: boolean;
+  /** Filed length. Skips the WebM seek-to-end probe when the row already knows it. */
+  knownDurationSeconds?: number | null;
+  onPlaybackError?: (info: { currentTime: number; wasPlaying: boolean }) => void;
+}) {
   return (
     <JobFilePlayer
       src={src}
       className="w-full rounded-lg bg-black"
       testId="evidence-locker-player"
+      knownDurationSeconds={knownDurationSeconds}
+      resumeAt={resumeAt}
+      resumePlaying={resumePlaying}
+      onPlaybackError={onPlaybackError}
     />
   );
 }

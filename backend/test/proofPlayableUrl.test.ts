@@ -4,20 +4,40 @@ import {
   needsPlayableDerivative,
   playableDerivativePath,
   createSignedPlayableProofUrl,
+  mp4HeaderHasFastStart,
   PROOF_PLAYABLE_SUFFIX,
+  PROOF_PLAYBACK_URL_TTL_SECONDS,
 } from '../src/lib/proofPlayableUrl.js';
+import { canonicalProofContentType, contentTypeForProofPath } from '../src/lib/proofMediaType.js';
 
-test('playableDerivativePath only rewrites .webm originals', () => {
+test('playableDerivativePath points every video at a .play.mp4 sibling', () => {
   assert.equal(
     playableDerivativePath('org/job/party/clip.webm'),
     `org/job/party/clip${PROOF_PLAYABLE_SUFFIX}`,
   );
   assert.equal(playableDerivativePath('org/job/party/clip.WEBM'), `org/job/party/clip${PROOF_PLAYABLE_SUFFIX}`);
-  assert.equal(playableDerivativePath('org/job/party/clip.mp4'), null);
-  assert.equal(playableDerivativePath('org/job/party/clip.mov'), null);
+  assert.equal(playableDerivativePath('org/job/party/clip.mp4'), `org/job/party/clip${PROOF_PLAYABLE_SUFFIX}`);
+  assert.equal(playableDerivativePath('org/job/party/clip.mov'), `org/job/party/clip${PROOF_PLAYABLE_SUFFIX}`);
+  assert.equal(playableDerivativePath(`org/job/party/clip${PROOF_PLAYABLE_SUFFIX}`), null);
   assert.equal(playableDerivativePath(''), null);
   assert.equal(needsPlayableDerivative('a/b.webm'), true);
-  assert.equal(needsPlayableDerivative('a/b.mp4'), false);
+  assert.equal(needsPlayableDerivative('a/b.mp4'), true);
+  assert.equal(needsPlayableDerivative(`a/b${PROOF_PLAYABLE_SUFFIX}`), false);
+  assert.equal(PROOF_PLAYBACK_URL_TTL_SECONDS, 3600);
+});
+
+test('mp4HeaderHasFastStart requires moov ahead of mdat', () => {
+  assert.equal(mp4HeaderHasFastStart(Buffer.from('xxxxftypisommoov')), true);
+  assert.equal(mp4HeaderHasFastStart(Buffer.from('xxxxmdatxxxxmoov')), false);
+  assert.equal(mp4HeaderHasFastStart(Buffer.from('not a video')), false);
+});
+
+test('canonicalProofContentType strips codec parameters', () => {
+  assert.equal(canonicalProofContentType('video/webm;codecs=vp9,opus'), 'video/webm');
+  assert.equal(canonicalProofContentType('video/mp4'), 'video/mp4');
+  assert.equal(canonicalProofContentType('application/octet-stream'), null);
+  assert.equal(contentTypeForProofPath('org/job/clip.webm'), 'video/webm');
+  assert.equal(contentTypeForProofPath('org/job/clip.play.mp4'), 'video/mp4');
 });
 
 test('createSignedPlayableProofUrl signs mp4 originals without building a derivative', async () => {
@@ -93,6 +113,7 @@ test('createSignedPlayableProofUrl builds and signs .play.mp4 for webm', async (
     admin,
     storagePath: 'org/job/party/day-after-clip.webm',
     expiresInSeconds: 600,
+    awaitBuild: true,
     runner,
   });
 
@@ -164,10 +185,87 @@ test('createSignedPlayableProofUrl falls back to original webm when ffmpeg fails
   const result = await createSignedPlayableProofUrl({
     admin,
     storagePath: 'org/job/clip.webm',
+    awaitBuild: true,
     runner: async () => ({ stdout: '', stderr: 'boom', code: 1 }),
   });
 
   assert.equal(result.derived, false);
   assert.equal(result.storagePath, 'org/job/clip.webm');
-  assert.equal(result.url, 'https://storage.test/org/job/clip.webm?e=600');
+  assert.equal(result.url, `https://storage.test/org/job/clip.webm?e=${PROOF_PLAYBACK_URL_TTL_SECONDS}`);
+  assert.equal(result.contentType, 'video/webm');
+});
+
+test('createSignedPlayableProofUrl prefers an existing mp4 derivative without waiting on ffmpeg', async () => {
+  let runnerCalls = 0;
+  const admin = {
+    storage: {
+      from() {
+        return {
+          async createSignedUrl(path: string, expires: number) {
+            return { data: { signedUrl: `https://storage.test/${path}?e=${expires}` }, error: null };
+          },
+          async list(_folder: string, opts: { search?: string }) {
+            const name = opts?.search ?? '';
+            return {
+              data: name.endsWith(PROOF_PLAYABLE_SUFFIX) ? [{ name }] : [],
+              error: null,
+            };
+          },
+          async upload() {
+            throw new Error('should not upload when derivative exists');
+          },
+        };
+      },
+    },
+  } as any;
+
+  const result = await createSignedPlayableProofUrl({
+    admin,
+    storagePath: 'org/job/raw.mp4',
+    runner: async () => {
+      runnerCalls += 1;
+      return { stdout: '', stderr: '', code: 1 };
+    },
+  });
+
+  assert.equal(result.derived, true);
+  assert.equal(result.storagePath, `org/job/raw${PROOF_PLAYABLE_SUFFIX}`);
+  assert.equal(result.contentType, 'video/mp4');
+  assert.equal(runnerCalls, 0);
+});
+
+test('createSignedPlayableProofUrl returns the original immediately when the derivative is missing', async () => {
+  let runnerCalls = 0;
+  const admin = {
+    storage: {
+      from() {
+        return {
+          async createSignedUrl(path: string, expires: number) {
+            return { data: { signedUrl: `https://storage.test/${path}?e=${expires}` }, error: null };
+          },
+          async list() {
+            return { data: [], error: null };
+          },
+          async upload() {
+            throw new Error('should not upload on the view path');
+          },
+        };
+      },
+    },
+  } as any;
+
+  const result = await createSignedPlayableProofUrl({
+    admin,
+    storagePath: 'org/job/clip.webm',
+    scheduleBuild: false,
+    runner: async () => {
+      runnerCalls += 1;
+      return { stdout: '', stderr: '', code: 0 };
+    },
+  });
+
+  assert.equal(result.derived, false);
+  assert.equal(result.storagePath, 'org/job/clip.webm');
+  assert.equal(result.expiresInSeconds, PROOF_PLAYBACK_URL_TTL_SECONDS);
+  assert.equal(runnerCalls, 0);
 });
