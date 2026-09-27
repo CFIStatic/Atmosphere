@@ -517,13 +517,16 @@ async function settleClipQuestion(opts: {
   question: string;
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
   askedBy?: string | null;
+  /** Org members may resolve @handles. Share-token reviewers must not. */
+  orgMentions?: boolean;
   actorLabel: string;
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
   const record = clipRecordFromEvidenceItem(opts.item);
-  const mentionPrep = opts.askedBy
-    ? await prepareMentionAsk(opts.client, { orgId: opts.orgId, question: opts.question }).catch(() => null)
-    : null;
+  const mentionPrep =
+    opts.orgMentions && opts.askedBy
+      ? await prepareMentionAsk(opts.client, { orgId: opts.orgId, question: opts.question }).catch(() => null)
+      : null;
   const result = mentionPrep?.directAnswer
     ? { answer: mentionPrep.directAnswer, model: null, usage: null }
     : await answerFromClip({
@@ -979,6 +982,7 @@ evidencePortalRouter.post(
         question: input.question,
         history: input.history,
         askedBy: userId,
+        orgMentions: true,
         actorLabel: await actorLabelFor(supabase, userId),
         actorRole: 'general_contractor',
       });
@@ -1602,6 +1606,7 @@ evidenceShareRouter.post(
         question: input.question,
         history: input.history,
         askedBy: viewer.userId,
+        orgMentions: false,
         actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
       });

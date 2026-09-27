@@ -174,7 +174,15 @@ export async function loadPersonContext(
     ),
   ];
 
-  const [jobs, proofs, parties, messages] = await Promise.all([
+  const taggedNoteIds = [
+    ...new Set(
+      mentionRows
+        .filter((row) => row.source === 'job_message' && row.source_id)
+        .map((row) => String(row.source_id)),
+    ),
+  ];
+
+  const [jobs, proofs, parties, recentMessages, taggedNotes] = await Promise.all([
     jobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
@@ -208,7 +216,16 @@ export async function loadPersonContext(
         .order('created_at', { ascending: false })
         .limit(120),
     ),
+    taggedNoteIds.length
+      ? selectRows(db, 'job_messages', (query) =>
+          query
+            .select('id, job_id, author_id, author_label, body, created_at')
+            .eq('org_id', orgId)
+            .in('id', taggedNoteIds),
+        )
+      : Promise.resolve([] as any[]),
   ]);
+  const messages = [...taggedNotes, ...recentMessages];
 
   const taggedForUser = new Map<string, Set<string>>();
   for (const row of mentionRows) {

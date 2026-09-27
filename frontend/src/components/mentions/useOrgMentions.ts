@@ -22,7 +22,7 @@ export function membersFromOrg(rows: OrgMember[]): MentionMember[] {
 }
 
 export function loadOrgMentions(): Promise<MentionMember[]> {
-  if (cached) return Promise.resolve(cached);
+  if (cached !== null) return Promise.resolve(cached);
   if (inflight) return inflight;
   inflight = Promise.resolve()
     .then(() => api.getMembers())
@@ -30,10 +30,7 @@ export function loadOrgMentions(): Promise<MentionMember[]> {
       cached = membersFromOrg(res.members ?? []);
       return cached;
     })
-    .catch(() => {
-      cached = [];
-      return cached;
-    })
+    .catch(() => [])
     .finally(() => {
       inflight = null;
     });

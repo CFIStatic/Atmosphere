@@ -316,6 +316,54 @@ test('context retrieval stays inside the org and cites the electrical job', asyn
   assert.equal(noEvidenceSentence({ name: 'John Cyganiak', handle: 'johncyganiak' }, 'did he finish the electrical job?'), 'No electrical job found for John.');
 });
 
+test('tagged notes outside the recent message window still load from the mention index', async () => {
+  const fillers = Array.from({ length: 120 }, (_, index) => ({
+    id: `filler-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_PLUMB,
+    author_id: JANE,
+    author_label: 'Jane Alvarez',
+    body: 'Unrelated site note.',
+    created_at: '2026-09-20T00:00:00.000Z',
+  }));
+  const base = orgTables();
+  const db = fakeDb({
+    ...base,
+    content_mentions: [
+      ...base.content_mentions,
+      {
+        org_id: ORG_A,
+        mentioned_user_id: JOHN,
+        source: 'job_message',
+        source_id: 'msg-old',
+        job_id: JOB_ELEC,
+        handle: 'johncyganiak',
+        created_at: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+    job_messages: [
+      ...fillers,
+      {
+        id: 'msg-old',
+        org_id: ORG_A,
+        job_id: JOB_ELEC,
+        author_id: JANE,
+        author_label: 'Jane Alvarez',
+        body: 'Confirm the breaker labels on the cedar panel.',
+        created_at: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+  });
+  const people = await loadPersonContext(db as any, {
+    orgId: ORG_A,
+    people: [{ userId: JOHN, handle: 'johncyganiak', name: 'John Cyganiak' }],
+    question: '@johncyganiak where are the breaker labels?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+  });
+  const notes = people[0]!.items.filter((item) => item.kind === 'note');
+  assert.ok(notes.some((item) => item.id === 'msg-old' && /breaker labels/.test(item.text)));
+});
+
 test('a person with no matching evidence is told so, and another org is invisible', async () => {
   const db = fakeDb(orgTables());
   const prep = await prepareMentionAsk(db as any, {
