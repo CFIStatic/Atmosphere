@@ -70,13 +70,23 @@ export function bindMeasuredDuration(
     Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
 
   const onPause = () => discover();
+  // The file is only preloading. Clear this on Play so the probe can run
+  // once the viewer pauses — not while the first press is in flight.
+  const onPlay = () => {
+    if (video.dataset) delete video.dataset.atmPreload;
+  };
 
   const discover = () => {
     if (cancelled || measured() != null) return;
     if (isKnownDuration(knownSeconds)) return;
+    const dataset = video.dataset;
     // Visible players with native controls. A dummy seek during Play
     // flashes the last frame and restarts the clip.
-    if (!video.paused) {
+    if (
+      !video.paused ||
+      (dataset && dataset.playingSoon === '1') ||
+      (dataset && dataset.atmPreload === '1')
+    ) {
       video.addEventListener('pause', onPause, { once: true });
       return;
     }
@@ -86,7 +96,13 @@ export function bindMeasuredDuration(
       video.removeEventListener('timeupdate', settle);
       if (cancelled) return;
       try {
-        if (!video.paused) return;
+        const length = measured();
+        const atProbe =
+          video.currentTime === Number.MAX_SAFE_INTEGER ||
+          (length != null && video.currentTime >= length - 0.35);
+        // Play began on top of the probe. The seek parked the head at the
+        // end; put it back. A playhead that already moved stays where it is.
+        if (!video.paused && !atProbe) return;
         video.currentTime = origin;
       } catch {
         /* the playhead is decorative until the user presses play */
@@ -102,6 +118,7 @@ export function bindMeasuredDuration(
     }
   };
 
+  video.addEventListener('play', onPlay);
   video.addEventListener('loadedmetadata', discover);
   if (video.readyState >= 1) discover();
 
@@ -109,5 +126,6 @@ export function bindMeasuredDuration(
     cancelled = true;
     video.removeEventListener('loadedmetadata', discover);
     video.removeEventListener('pause', onPause);
+    video.removeEventListener('play', onPlay);
   };
 }

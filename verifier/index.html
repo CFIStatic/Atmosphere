@@ -3272,6 +3272,13 @@
     if (vid.getAttribute('data-atm-vol-bound') === '1') return;
     vid.setAttribute('data-atm-vol-bound', '1');
     vid.addEventListener('volumechange', function () {
+      // Remint mutes to satisfy autoplay, then sets this so the event does
+      // not store that mute as the preference for later clips.
+      if (vid.dataset && vid.dataset.atmHoldMutePref === '1') {
+        delete vid.dataset.atmHoldMutePref;
+        syncVolumeControls(vid);
+        return;
+      }
       writeVideoPrefs({ volume: vid.volume, muted: vid.muted });
       syncVolumeControls(vid);
     });
@@ -3288,8 +3295,18 @@
   }
 
   function previewVideo() {
+    if (typeof document === 'undefined' || !document.getElementById) return null;
     var host = document.getElementById('d-frame');
     return host ? host.querySelector('video') : null;
+  }
+
+  // Play already called play() on this element. A later paint must not
+  // replace it — the aborted play() would mark the new stage as failed.
+  function previewPlayInFlight() {
+    var vid = previewVideo();
+    if (!vid) return false;
+    if (!vid.paused && !vid.ended) return true;
+    return Boolean(wantPlay && vid.dataset && vid.dataset.playingSoon === '1');
   }
 
   function playbackSeconds(item, video) {
@@ -5282,8 +5299,9 @@
    * NotAllowedError retries muted (so a late URL still starts), anything
    * else is shown on the frame.
    */
-  function playFromGesture(vid) {
+  function playFromGesture(vid, opts) {
     if (!vid) return;
+    opts = opts || {};
     if (vid.dataset) {
       vid.dataset.playingSoon = '1';
       delete vid.dataset.atmPreload;
@@ -5294,25 +5312,40 @@
     var attempt = vid.play();
     if (!attempt || !attempt.then) return;
     attempt.then(function () {
+      if (previewVideo() !== vid) return;
       clearPlayFailure();
     }).catch(function (err) {
+      // The node was replaced (a second mount finished). That abort belongs
+      // to the old element — painting it here clears wantPlay on the new stage.
+      if (previewVideo() !== vid) return;
       var name = err && err.name;
       if (name === 'AbortError') {
         var again = vid.play();
         if (again && again.catch) {
           again.catch(function () {
+            if (previewVideo() !== vid) return;
             showPlayFailureMessage('Could not start playback. Tap play to try again.');
           });
         }
         return;
       }
       if (!vid.muted && name === 'NotAllowedError') {
+        var priorPrefs = readVideoPrefs();
+        // A click may persist mute so the next press still starts. A remint
+        // is not a click — hold the preference across the volumechange that
+        // setting muted fires, including when that event is queued.
+        if (opts.persistMute === false && vid.dataset) vid.dataset.atmHoldMutePref = '1';
         vid.muted = true;
-        writeVideoPrefs({ muted: true, volume: vid.volume });
+        if (opts.persistMute === false) {
+          writeVideoPrefs({ muted: priorPrefs.muted, volume: priorPrefs.volume });
+        } else {
+          writeVideoPrefs({ muted: true, volume: vid.volume });
+        }
         syncVolumeControls(vid);
         var retry = vid.play();
         if (retry && retry.catch) {
           retry.catch(function () {
+            if (previewVideo() !== vid) return;
             showPlayFailureMessage('Tap play to start.');
           });
         }
@@ -5327,7 +5360,7 @@
       try {
         if (at > 0.05) vid.currentTime = at;
       } catch (err) {}
-      if (shouldPlay) playFromGesture(vid);
+      if (shouldPlay) playFromGesture(vid, { persistMute: false });
     };
     if (vid.readyState >= 1) apply();
     else vid.addEventListener('loadedmetadata', apply, { once: true });
@@ -5335,13 +5368,21 @@
 
   function maybeRefreshExpiringUrl(item, vid) {
     if (!item || !vid || !item._videoExpiresAt || item._urlRefreshing) return;
+    if (item._urlRefreshNotBefore && Date.now() < item._urlRefreshNotBefore) return;
     if (Date.now() < item._videoExpiresAt - 90000) return;
     item._urlRefreshing = true;
     var at = vid.currentTime || 0;
     var shouldPlay = !vid.paused || wantPlay;
     refreshVideoUrl(item).then(function (url) {
       item._urlRefreshing = false;
-      if (!url || !state.open || state.open.id !== item.id) return;
+      if (!url) {
+        // A miss leaves the expiry in the past. Without a pause, the next
+        // timeupdate (several times a second) would mint again.
+        item._urlRefreshNotBefore = Date.now() + 20000;
+        return;
+      }
+      item._urlRefreshNotBefore = 0;
+      if (!state.open || state.open.id !== item.id) return;
       var live = previewVideo();
       if (!live || live.getAttribute('src') === url) return;
       live.src = url;
@@ -5538,13 +5579,20 @@
     if (item && item._remote && !item._videoUrl) {
       wantPlay = true;
       showBuffer(true);
+      // open() is already minting this URL. A second fetch paints another
+      // <video> when it lands and aborts the play() that just started.
+      if (item._detailPending) return;
       refreshVideoUrl(item).then(function (url) {
         if (!wantPlay || !state.open || state.open.id !== item.id) return;
         if (!url) {
           showPlayFailureMessage('Could not open this file.');
           return;
         }
-        paintPreviewVideo(item, { holdPoster: false });
+        if (previewPlayInFlight()) return;
+        var live = previewVideo();
+        if (!live || live.getAttribute('src') !== url) {
+          paintPreviewVideo(item, { holdPoster: false });
+        }
         var next = previewVideo();
         if (next) playFromGesture(next);
       });
@@ -5676,7 +5724,9 @@
     // signed file arrive next; a blank wait reads as a missing clip.
     paintPreviewShell(item, tab);
     if (item._remote && (!item._loaded || !item._videoUrl)) {
+      item._detailPending = true;
       fetchRemoteDetail(item).then(function () {
+        item._detailPending = false;
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
         watchRemoteReading(item);
       });
@@ -5699,14 +5749,19 @@
 
     // Mount the file as soon as the signed URL exists so Play calls
     // video.play() inside the gesture. The poster stays up until then.
+    // A Play press that already mounted this file must keep that element.
     var resumePlay = wantPlay;
+    var alreadyPlaying = previewPlayInFlight();
     if (item._videoUrl) {
-      paintPreviewVideo(item, { holdPoster: !resumePlay });
-      if (resumePlay) {
+      var live = previewVideo();
+      if (!alreadyPlaying && (!live || live.getAttribute('src') !== item._videoUrl)) {
+        paintPreviewVideo(item, { holdPoster: !resumePlay });
+      }
+      if (resumePlay && !alreadyPlaying) {
         var armed = previewVideo();
         if (armed) playFromGesture(armed);
       }
-    } else {
+    } else if (!alreadyPlaying) {
       paintPreviewPoster(item, false);
     }
     // A signed still from the list is already the right frame. Recapturing

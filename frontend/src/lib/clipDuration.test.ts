@@ -62,6 +62,7 @@ function fakeVideo(init: {
   paused?: boolean;
   currentTime?: number;
   readyState?: number;
+  atmPreload?: boolean;
 }): FakeVideo {
   const listeners = new Map<string, Set<EventListener>>();
   const video = {
@@ -69,6 +70,7 @@ function fakeVideo(init: {
     paused: init.paused ?? true,
     currentTime: init.currentTime ?? 0,
     readyState: init.readyState ?? 0,
+    dataset: init.atmPreload ? { atmPreload: '1' } : {},
     addEventListener(type: string, fn: EventListener) {
       if (!listeners.has(type)) listeners.set(type, new Set());
       listeners.get(type)!.add(fn);
@@ -137,6 +139,32 @@ describe('bindMeasuredDuration', () => {
   it('skips the dummy seek when the filed clip already has a measured length', () => {
     const video = fakeVideo({ duration: Number.POSITIVE_INFINITY, readyState: 1 });
     bindMeasuredDuration(video, 33);
+    expect(video.currentTime).toBe(0);
+  });
+
+  it('does not seek while the file is only preloading for the first Play', () => {
+    const video = fakeVideo({ readyState: 1, atmPreload: true });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(0);
+
+    video.paused = true;
+    video.dispatch('pause');
+    expect(video.currentTime).toBe(0);
+
+    video.dispatch('play');
+    video.paused = true;
+    video.dispatch('pause');
+    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('puts the playhead back at the start when Play lands on the probe seek', () => {
+    const video = fakeVideo({ readyState: 1 });
+    bindMeasuredDuration(video);
+    expect(video.currentTime).toBe(Number.MAX_SAFE_INTEGER);
+    video.paused = false;
+    video.duration = 10;
+    video.currentTime = 10;
+    video.dispatch('seeked');
     expect(video.currentTime).toBe(0);
   });
 });

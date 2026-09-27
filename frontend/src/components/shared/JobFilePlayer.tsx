@@ -215,6 +215,10 @@ export function JobFilePlayer({
     const el = ref.current;
     if (!el) return;
     applyVideoPlayerPrefs(el);
+    // Preload without a dummy seek-to-end. That seek races the first Play
+    // and leaves the playhead on the last frame. Once playback has started,
+    // a later pause is allowed to measure.
+    if (el.paused) el.dataset.atmPreload = '1';
     const known = knownDurationSeconds ?? captions?.durationSeconds ?? null;
     return bindMeasuredDuration(el, known);
   }, [src, knownDurationSeconds, captions?.durationSeconds]);

@@ -374,6 +374,7 @@ function EvidenceDetail({
           {url ? (
             <MeasuredEvidenceVideo
               src={url}
+              knownDurationSeconds={item.durationSeconds}
               resumeAt={resumeAt}
               resumePlaying={resumePlaying}
               onPlaybackError={(info) => {
@@ -503,11 +504,14 @@ function MeasuredEvidenceVideo({
   src,
   resumeAt,
   resumePlaying,
+  knownDurationSeconds,
   onPlaybackError,
 }: {
   src: string;
   resumeAt?: number | null;
   resumePlaying?: boolean;
+  /** Filed length. Skips the WebM seek-to-end probe when the row already knows it. */
+  knownDurationSeconds?: number | null;
   onPlaybackError?: (info: { currentTime: number; wasPlaying: boolean }) => void;
 }) {
   return (
@@ -515,6 +519,7 @@ function MeasuredEvidenceVideo({
       src={src}
       className="w-full rounded-lg bg-black"
       testId="evidence-locker-player"
+      knownDurationSeconds={knownDurationSeconds}
       resumeAt={resumeAt}
       resumePlaying={resumePlaying}
       onPlaybackError={onPlaybackError}
