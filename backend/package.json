@@ -13,6 +13,7 @@
     "analytics:grant": "tsx src/scripts/grantAnalyticsAccess.ts",
     "analytics:seed": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:test-video": "tsx src/scripts/seedProductTestVideo.ts",
+    "backfill:playable": "tsx src/scripts/backfillPlayableProofs.ts",
     "lint": "eslint .",
     "test": "node --import tsx --test $(find src test -name '*.test.ts' | sort)",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",

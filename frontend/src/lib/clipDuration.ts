@@ -69,15 +69,24 @@ export function bindMeasuredDuration(
   const measured = () =>
     Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
 
-  const onPause = () => discover();
+  let started = false;
+  const onPlay = () => {
+    started = true;
+    if (video.dataset) delete video.dataset.atmPreload;
+  };
 
   const discover = () => {
     if (cancelled || measured() != null) return;
     if (isKnownDuration(knownSeconds)) return;
-    // Visible players with native controls. A dummy seek during Play
-    // flashes the last frame and restarts the clip.
-    if (!video.paused) {
-      video.addEventListener('pause', onPause, { once: true });
+    const dataset = video.dataset;
+    // Once Play has started, a later pause must not seek to the end.
+    // That seek fires ended and the clip sits still until the next press.
+    if (
+      !video.paused ||
+      started ||
+      (dataset && dataset.playingSoon === '1') ||
+      (dataset && dataset.atmPreload === '1')
+    ) {
       return;
     }
     const origin = video.currentTime;
@@ -86,7 +95,13 @@ export function bindMeasuredDuration(
       video.removeEventListener('timeupdate', settle);
       if (cancelled) return;
       try {
-        if (!video.paused) return;
+        const length = measured();
+        const atProbe =
+          video.currentTime === Number.MAX_SAFE_INTEGER ||
+          (length != null && video.currentTime >= length - 0.35);
+        // Play began on top of the probe. The seek parked the head at the
+        // end; put it back. A playhead that already moved stays where it is.
+        if (!video.paused && !atProbe) return;
         video.currentTime = origin;
       } catch {
         /* the playhead is decorative until the user presses play */
@@ -102,12 +117,13 @@ export function bindMeasuredDuration(
     }
   };
 
+  video.addEventListener('play', onPlay);
   video.addEventListener('loadedmetadata', discover);
   if (video.readyState >= 1) discover();
 
   return () => {
     cancelled = true;
+    video.removeEventListener('play', onPlay);
     video.removeEventListener('loadedmetadata', discover);
-    video.removeEventListener('pause', onPause);
   };
 }

@@ -115,6 +115,29 @@ export function assertProofBytesMatchExtension(
   return sniffed;
 }
 
+/**
+ * Content-Type stored on the object. Codec parameters (`video/webm;codecs=vp9,opus`)
+ * are not a storage type — Supabase has stored those uploads as
+ * `application/octet-stream`, which Safari will not decode.
+ */
+export function canonicalProofContentType(value: string | null | undefined): AllowedProofMimeType | null {
+  const base = String(value ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if ((ALLOWED_PROOF_MIME_TYPES as readonly string[]).includes(base)) {
+    return base as AllowedProofMimeType;
+  }
+  return null;
+}
+
+/** Content-Type implied by a proof object path, or null for non-video keys. */
+export function contentTypeForProofPath(storagePath: string): AllowedProofMimeType | null {
+  const ext = extensionOfProofStoragePath(storagePath);
+  if (!ext || !isAllowedProofExtension(ext)) return null;
+  return mimeTypeForProofExtension(ext);
+}
+
 /** Extension from a proof storage path (`…/day-phase-clip.webm`). */
 export function extensionOfProofStoragePath(storagePath: string): string | null {
   const base = String(storagePath ?? '')

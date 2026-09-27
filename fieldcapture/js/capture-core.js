@@ -1645,6 +1645,21 @@
     return once(putUrl);
   }
 
+  /**
+   * Storage Content-Type. Codec parameters (`video/webm;codecs=vp9,opus`)
+   * are not a bucket type — those PUTs have landed as application/octet-stream,
+   * which Safari will not play.
+   */
+  function storageUploadContentType(mimeType) {
+    var base = String(mimeType || '').split(';')[0].trim().toLowerCase();
+    if (base === 'video/webm' || base === 'video/mp4' || base === 'video/quicktime' || base === 'video/x-msvideo') {
+      return base;
+    }
+    if (/webm/i.test(String(mimeType || ''))) return 'video/webm';
+    if (/mp4|avc1/i.test(String(mimeType || ''))) return 'video/mp4';
+    return 'video/mp4';
+  }
+
   function putBytesOnce(putUrl, file, mimeType, onProgress, control) {
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
@@ -1658,7 +1673,7 @@
         };
       }
       xhr.open('PUT', putUrl);
-      xhr.setRequestHeader('Content-Type', mimeType);
+      xhr.setRequestHeader('Content-Type', storageUploadContentType(mimeType));
       xhr.upload.onprogress = function (event) {
         if (!event.lengthComputable || !file.size) return;
         onProgress(Math.max(0, Math.min(1, event.loaded / file.size)));

@@ -670,6 +670,18 @@ final class AtmosphereClient: ObservableObject {
         )
     }
 
+    /// Bucket Content-Type for a proof object. Multipart slices used to be
+    /// `application/octet-stream`, which is how WebM files became unplayable.
+    private func proofUploadContentType(_ storagePath: String) -> String {
+        let ext = (storagePath as NSString).pathExtension.lowercased()
+        switch ext {
+        case "webm": return "video/webm"
+        case "mov": return "video/quicktime"
+        case "avi": return "video/x-msvideo"
+        default: return "video/mp4"
+        }
+    }
+
     /// PUT to a BFF signed URL, or POST straight into the Atmosphere storage bucket.
     /// When `begin.parts` has 2+ slices (long film), uploads parts then stitches
     /// via `upload-complete` — same contract as web Field Capture.
@@ -696,7 +708,7 @@ final class AtmosphereClient: ObservableObject {
                     localURL: localURL,
                     range: start ..< endExclusive,
                     uploadURL: partURL,
-                    headers: ["Content-Type": "application/octet-stream"]
+                    headers: ["Content-Type": proofUploadContentType(begin.path)]
                 )
             }
             // Caller must know jobId to stitch — return path; stitch is separate.
@@ -712,7 +724,7 @@ final class AtmosphereClient: ObservableObject {
         let isDirectStoragePost =
             begin.uploadUrl.contains("/storage/v1/object/job-proofs/")
             && !begin.uploadUrl.contains("/upload/sign/")
-        var headers: [String: String] = ["Content-Type": "video/mp4"]
+        var headers: [String: String] = ["Content-Type": proofUploadContentType(begin.path)]
         if isDirectStoragePost {
             headers["apikey"] = supabaseAnonKey
             if let accessToken {
