@@ -772,6 +772,29 @@ html[data-field-embed] #root {
 }
 .job-file-scrub-buffer { background: rgba(255, 255, 255, 0.5); }
 .job-file-scrub-fill { background: #f26e22; }
+.job-file-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 4;
+  max-width: min(92%, 36rem);
+  transform: translateX(-50%);
+  padding: 5px 12px 6px;
+  border-radius: 4px;
+  background: rgba(8, 8, 8, 0.75);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+}
+.job-file-player:fullscreen .job-file-caption,
+.job-file-player:-webkit-full-screen .job-file-caption {
+  bottom: 28px;
+  font-size: 22px;
+}
 .job-file-scrub-thumb {
   position: absolute;
   bottom: -4px;

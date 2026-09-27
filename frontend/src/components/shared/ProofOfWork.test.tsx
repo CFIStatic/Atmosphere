@@ -203,7 +203,11 @@ describe('ProofOfWork video collection', () => {
     expect(await screen.findByTestId('job-file-mute')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-volume')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-cc')).not.toBeDisabled();
-    expect(document.querySelector('track[kind="captions"]')).not.toBeNull();
+    const video = document.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 8 });
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(await screen.findByTestId('job-file-caption')).toHaveTextContent(/subfloor/i);
+    expect(document.querySelector('track')).toBeNull();
   });
 
   it('polls for new videos while the job file is open', async () => {

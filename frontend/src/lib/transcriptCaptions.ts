@@ -2,8 +2,9 @@
  * Build WebVTT cues from Whisper transcript_text / transcriptSegments.
  *
  * Timestamped [m:ss] / [h:mm:ss] lines become seek-synced captions.
- * Unstamped text becomes a single cue covering the clip when possible.
- * Empty input → no track (CC stays unavailable — never a fake empty track).
+ * Unstamped text becomes cues covering the clip when possible.
+ * A long turn is split into about two lines, timed across that turn.
+ * Empty input → no cues (CC stays unavailable — never a fake empty track).
  */
 
 import type { TranscriptSegment } from './api';
@@ -30,6 +31,61 @@ function roundTime(seconds: number): number {
 function estimateCueLength(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   return Math.min(12, Math.max(2.2, words * 0.42));
+}
+
+/** About two lines in the player caption box. Longer Whisper turns are split. */
+export const CAPTION_MAX_CHARS = 68;
+
+function splitCaptionText(text: string): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  if (clean.length <= CAPTION_MAX_CHARS) return [clean];
+  const words = clean.split(' ');
+  const parts: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && next.length > CAPTION_MAX_CHARS) {
+      parts.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) parts.push(line);
+  return parts;
+}
+
+/** Spread a coarse segment across its own window, weighted by how much text each chunk holds. */
+function spreadCue(cue: CaptionCue): CaptionCue[] {
+  const parts = splitCaptionText(cue.text);
+  if (parts.length <= 1) return parts.length ? [{ ...cue, text: parts[0]! }] : [];
+  const span = Math.max(0.001, cue.endSec - cue.startSec);
+  const weights = parts.map((part) => Math.max(1, part.length));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = cue.startSec;
+  return parts.map((text, index) => {
+    const width = (weights[index]! / total) * span;
+    const startSec = roundTime(cursor);
+    const endSec = index === parts.length - 1 ? roundTime(cue.endSec) : roundTime(cursor + width);
+    cursor += width;
+    return {
+      startSec,
+      endSec: endSec > startSec ? endSec : roundTime(startSec + Math.min(1.2, span)),
+      text,
+    };
+  });
+}
+
+/** The cue on screen at this playhead, or null between lines. */
+export function activeCaptionAt(cues: CaptionCue[], timeSec: number): CaptionCue | null {
+  if (!Number.isFinite(timeSec) || !cues.length) return null;
+  for (const cue of cues) {
+    if (timeSec >= cue.startSec && timeSec < cue.endSec) return cue;
+  }
+  const last = cues[cues.length - 1];
+  if (last && timeSec >= last.startSec && timeSec <= last.endSec + 0.05) return last;
+  return null;
 }
 
 /** Parse Whisper-style [m:ss] lines into segments (frontend mirror of backend). */
@@ -116,12 +172,14 @@ export function captionCuesFromTranscript(opts: {
     let end =
       next?.tSec != null && Number.isFinite(next.tSec) && next.tSec! > start
         ? roundTime(next.tSec!)
-        : roundTime(start + estimateCueLength(text));
+        : duration != null && duration > start && text.length > CAPTION_MAX_CHARS
+          ? duration
+          : roundTime(start + estimateCueLength(text));
     if (duration != null) end = Math.min(end, duration);
     if (end <= start) end = roundTime(start + 1.5);
     cues.push({ startSec: start, endSec: end, text });
   }
-  return cues;
+  return cues.flatMap(spreadCue);
 }
 
 function formatVttClock(seconds: number): string {

@@ -39,11 +39,13 @@ describe('JobFilePlayer', () => {
     expect(screen.getByTestId('job-file-mute')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-volume')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-cc')).toBeDisabled();
-    expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('Captions unavailable');
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('title', 'No captions available');
+    expect(screen.getByTestId('job-file-cc-unavailable')).toHaveTextContent('No captions available');
     expect(document.querySelector('track')).toBeNull();
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
   });
 
-  it('attaches a captions track from timestamped Whisper text', () => {
+  it('draws the current transcript line in a caption overlay', async () => {
     render(
       <JobFilePlayer
         src="https://signed.test/clip.mp4"
@@ -53,11 +55,20 @@ describe('JobFilePlayer', () => {
         }}
       />,
     );
-    const track = document.querySelector('track');
-    expect(track).not.toBeNull();
-    expect(track?.getAttribute('kind')).toBe('captions');
+    expect(document.querySelector('track')).toBeNull();
     expect(screen.getByTestId('job-file-cc')).not.toBeDisabled();
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('job-file-cc-unavailable')).toBeNull();
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
+
+    const video = screen.getByTestId('job-file-player') as HTMLVideoElement;
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 18 });
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(await screen.findByTestId('job-file-caption')).toHaveTextContent('Leave the cabinets');
+
+    await userEvent.setup().click(screen.getByTestId('job-file-cc'));
+    expect(screen.queryByTestId('job-file-caption')).toBeNull();
+    expect(screen.getByTestId('job-file-cc')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('persists mute + volume to localStorage', async () => {
