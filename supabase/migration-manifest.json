@@ -5636,7 +5636,7 @@
       "version": "20260927203000_backfill_proof_upload_actor",
       "file": "20260927203000_backfill_proof_upload_actor.sql",
       "structurallyVerifiable": false,
-      "indistinguishableReason": "backfills job_evidence_access.actor_id from the proof party; creates no durable object",
+      "indistinguishableReason": "intentionally a no-op: the upload-actor backfill was dropped because custody is append-only; creates no durable object",
       "expect": [],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
