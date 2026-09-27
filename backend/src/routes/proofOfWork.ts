@@ -77,7 +77,7 @@ import {
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
-import { transcriptionEnabled } from '../lib/transcription.js';
+import { apiTranscriptWords, transcriptionEnabled } from '../lib/transcription.js';
 import { enrichProofConversation } from '../audio/proofConversation.js';
 import {
   conversationFromStored,
@@ -191,7 +191,7 @@ const PROOF_SELECT =
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, actions, ' +
-  'transcript_status, transcript_text, transcript_error, transcribed_at, ' +
+  'transcript_status, transcript_text, transcript_segments, transcript_words, transcript_error, transcribed_at, ' +
   'decided_at, decided_note, created_at, device_metadata';
 
 /**
@@ -2470,6 +2470,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       transcriptSegments: parseVerbatimTranscript(
         typeof row.transcript_text === 'string' ? row.transcript_text : null,
       ),
+      transcriptWords: apiTranscriptWords(row.transcript_words),
       /** @deprecated Prefer transcriptText — kept as full alias for older clients. */
       heardOnMic: typeof row.transcript_text === 'string' ? row.transcript_text : null,
       conversation: conversationPayloadFromRow(row),

@@ -35,6 +35,16 @@ function estimateCueLength(text: string): number {
 
 /** About two lines in the player caption box. Longer Whisper turns are split. */
 export const CAPTION_MAX_CHARS = 68;
+/** YouTube packs a caption line to about this many characters. */
+export const CAPTION_LINE_CHARS = 32;
+/** Keep a finished line up briefly across a pause, then clear it. */
+const CAPTION_HOLD_SEC = 0.8;
+
+export type CaptionWord = {
+  text: string;
+  startSec: number;
+  endSec: number;
+};
 
 function splitCaptionText(text: string): string[] {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -75,6 +85,94 @@ function spreadCue(cue: CaptionCue): CaptionCue[] {
       text,
     };
   });
+}
+
+function cleanCaptionWord(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Pack timed words into lines the way a caption file breaks a phrase. */
+export function packCaptionLines(words: CaptionWord[], maxChars = CAPTION_LINE_CHARS): CaptionWord[][] {
+  const lines: CaptionWord[][] = [];
+  let line: CaptionWord[] = [];
+  let len = 0;
+  for (const word of words) {
+    const text = cleanCaptionWord(word.text);
+    if (!text) continue;
+    const add = len === 0 ? text.length : text.length + 1;
+    if (line.length && len + add > maxChars) {
+      lines.push(line);
+      line = [{ ...word, text }];
+      len = text.length;
+    } else {
+      line.push({ ...word, text });
+      len += add;
+    }
+  }
+  if (line.length) lines.push(line);
+  return lines;
+}
+
+/**
+ * Words spoken so far, at most two lines. A new line rolls the oldest line off.
+ * Words whose start is still ahead stay hidden.
+ */
+export function rollingCaptionAt(
+  words: CaptionWord[] | null | undefined,
+  timeSec: number,
+  maxChars = CAPTION_LINE_CHARS,
+): string[] | null {
+  if (!words?.length || !Number.isFinite(timeSec)) return null;
+  const lines = packCaptionLines(words, maxChars);
+  if (!lines.length) return null;
+  let activeLine = -1;
+  let activeIndex = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const row = lines[i]!;
+    for (let j = 0; j < row.length; j += 1) {
+      if (row[j]!.startSec <= timeSec) {
+        activeLine = i;
+        activeIndex = j;
+      }
+    }
+  }
+  if (activeLine < 0) return null;
+  const spoken = lines[activeLine]![activeIndex]!;
+  const flat = lines.flat();
+  const spokenAt = flat.indexOf(spoken);
+  const next = spokenAt >= 0 ? flat[spokenAt + 1] : undefined;
+  if (timeSec > spoken.endSec + CAPTION_HOLD_SEC && (!next || timeSec < next.startSec)) return null;
+
+  const visible: string[] = [];
+  for (let i = Math.max(0, activeLine - 1); i <= activeLine; i += 1) {
+    const row =
+      i === activeLine ? lines[i]!.filter((word) => word.startSec <= timeSec) : lines[i]!;
+    const text = row.map((word) => word.text).join(' ').trim();
+    if (text) visible.push(text);
+  }
+  return visible.length ? visible.slice(0, 2) : null;
+}
+
+/** Untimed cue text, at most two lines, each with its own background. */
+export function wrapCaptionLines(text: string, maxChars = CAPTION_LINE_CHARS): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const width = Math.max(maxChars, Math.ceil(clean.length / 2));
+  const words = clean.split(' ');
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && next.length > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length <= 2) return lines;
+  return [lines[0]!, lines.slice(1).join(' ')];
 }
 
 /** The cue on screen at this playhead, or null between lines. */
@@ -182,6 +280,21 @@ export function captionCuesFromTranscript(opts: {
     cues.push({ startSec: start, endSec: end, text });
   }
   return cues.flatMap(spreadCue);
+}
+
+/** Word-timed rolling lines, or the proportional cue when the clip has no word clock. */
+export function captionLinesAt(opts: {
+  words?: CaptionWord[] | null;
+  segments?: TranscriptSegment[] | null;
+  transcriptText?: string | null;
+  durationSeconds?: number | null;
+  timeSec: number;
+}): string[] | null {
+  if (opts.words?.length) return rollingCaptionAt(opts.words, opts.timeSec);
+  const cue = activeCaptionAt(captionCuesFromTranscript(opts), opts.timeSec);
+  if (!cue) return null;
+  const lines = wrapCaptionLines(cue.text);
+  return lines.length ? lines : null;
 }
 
 function formatVttClock(seconds: number): string {

@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=4" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
 <script>
   // Follow the same atmosphere.theme preference as the console (light|dark).
   (function () {
@@ -759,30 +759,42 @@
   .progress-line.is-dragging .progress-thumb {
     transform: translateX(-50%) scale(1);
   }
-  /* Custom caption box. Native TextTrack cues do not paint once the
-     browser control bar is removed, so the transcript is drawn here. */
+  /* YouTube-style captions. Each line has its own black plate. Native
+     TextTrack cues do not paint once the browser control bar is removed. */
   .caption-overlay {
     position: absolute;
     left: 50%;
-    bottom: 22px;
+    bottom: 26px;
     z-index: 5;
-    max-width: min(92%, 36rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.14em;
+    max-width: 90%;
     transform: translateX(-50%);
-    padding: 5px 12px 6px;
-    border-radius: 4px;
-    background: rgba(8, 8, 8, 0.75);
     color: #fff;
-    font-size: 15.5px;
-    font-weight: 500;
-    line-height: 1.35;
+    font-family: Roboto, Arial, Helvetica, sans-serif;
+    font-size: clamp(14px, 3.6cqi, 22px);
+    font-weight: 400;
+    line-height: 1.28;
     text-align: center;
-    text-wrap: balance;
     pointer-events: none;
+  }
+  .caption-overlay[hidden] { display: none !important; }
+  .caption-line { display: block; max-width: 100%; }
+  .caption-line-text {
+    display: inline;
+    padding: 0.05em 0.32em 0.08em;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.75);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    white-space: nowrap;
   }
   .player:fullscreen .caption-overlay,
   .player:-webkit-full-screen .caption-overlay {
     bottom: 36px;
-    font-size: 22px;
+    font-size: clamp(26px, 3.2cqi, 46px);
   }
   .preview-wait {
     position: absolute;
@@ -1605,7 +1617,7 @@
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .player .frame-stack { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player .frame-stack { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
@@ -3187,7 +3199,10 @@
   }
   // About two lines in the caption box. Matches CAPTION_MAX_CHARS in transcriptCaptions.ts.
   var CAPTION_MAX_CHARS = 68;
+  var CAPTION_LINE_CHARS = 32;
+  var CAPTION_HOLD_SEC = 0.8;
   var liveCaptionCues = [];
+  var liveCaptionWords = [];
   function roundCaptionTime(seconds) {
     return Math.round(Math.max(0, seconds) * 1000) / 1000;
   }
@@ -3312,6 +3327,91 @@
     cues.forEach(function (cue) { spreadCaptionCue(cue).forEach(function (part) { out.push(part); }); });
     return out;
   }
+  function wordsForItem(item) {
+    var raw = (item && item.transcriptWords) || (item && item.analysis && item.analysis.transcriptWords) || [];
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    raw.forEach(function (row) {
+      if (!row) return;
+      var text = String(row.text || row.word || '').replace(/\s+/g, ' ').trim();
+      var start = Number(row.startSec != null ? row.startSec : row.start);
+      var end = Number(row.endSec != null ? row.endSec : row.end);
+      if (!text || !isFinite(start) || start < 0) return;
+      out.push({ text: text, startSec: start, endSec: isFinite(end) && end > start ? end : start + 0.05 });
+    });
+    return out;
+  }
+  function packCaptionWordLines(words, maxChars) {
+    var lines = [];
+    var line = [];
+    var len = 0;
+    words.forEach(function (word) {
+      var text = String(word.text || '').trim();
+      if (!text) return;
+      var add = len === 0 ? text.length : text.length + 1;
+      if (line.length && len + add > maxChars) {
+        lines.push(line);
+        line = [{ text: text, startSec: word.startSec, endSec: word.endSec }];
+        len = text.length;
+      } else {
+        line.push({ text: text, startSec: word.startSec, endSec: word.endSec });
+        len += add;
+      }
+    });
+    if (line.length) lines.push(line);
+    return lines;
+  }
+  function rollingCaptionLines(words, timeSec) {
+    if (!words || !words.length || !isFinite(timeSec)) return null;
+    var lines = packCaptionWordLines(words, CAPTION_LINE_CHARS);
+    if (!lines.length) return null;
+    var activeLine = -1;
+    var activeIndex = -1;
+    for (var i = 0; i < lines.length; i++) {
+      for (var j = 0; j < lines[i].length; j++) {
+        if (lines[i][j].startSec <= timeSec) {
+          activeLine = i;
+          activeIndex = j;
+        }
+      }
+    }
+    if (activeLine < 0) return null;
+    var spoken = lines[activeLine][activeIndex];
+    var flat = [];
+    lines.forEach(function (row) { row.forEach(function (word) { flat.push(word); }); });
+    var spokenAt = flat.indexOf(spoken);
+    var next = spokenAt >= 0 ? flat[spokenAt + 1] : null;
+    if (timeSec > spoken.endSec + CAPTION_HOLD_SEC && (!next || timeSec < next.startSec)) return null;
+    var visible = [];
+    for (var n = Math.max(0, activeLine - 1); n <= activeLine; n++) {
+      var row = n === activeLine
+        ? lines[n].filter(function (word) { return word.startSec <= timeSec; })
+        : lines[n];
+      var text = row.map(function (word) { return word.text; }).join(' ').trim();
+      if (text) visible.push(text);
+    }
+    return visible.length ? visible.slice(0, 2) : null;
+  }
+  function wrapCaptionLines(text) {
+    var clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    var width = Math.max(CAPTION_LINE_CHARS, Math.ceil(clean.length / 2));
+    var words = clean.split(' ');
+    var lines = [];
+    var line = '';
+    words.forEach(function (word) {
+      var next = line ? line + ' ' + word : word;
+      if (line && next.length > width) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    });
+    if (line) lines.push(line);
+    if (lines.length <= 2) return lines;
+    return [lines[0], lines.slice(1).join(' ')];
+  }
   function activeCaptionAt(cues, timeSec) {
     if (!isFinite(timeSec) || !cues || !cues.length) return null;
     for (var i = 0; i < cues.length; i++) {
@@ -3325,14 +3425,30 @@
     var el = document.getElementById('d-caption');
     if (!el) return;
     var prefs = readVideoPrefs();
-    var cue = prefs.captionsOn ? activeCaptionAt(liveCaptionCues, Number(at) || 0) : null;
-    if (!cue) {
+    var lines = null;
+    if (prefs.captionsOn) {
+      if (liveCaptionWords.length) {
+        lines = rollingCaptionLines(liveCaptionWords, Number(at) || 0);
+      } else {
+        var cue = activeCaptionAt(liveCaptionCues, Number(at) || 0);
+        lines = cue ? wrapCaptionLines(cue.text) : null;
+      }
+    }
+    while (el.firstChild) el.removeChild(el.firstChild);
+    if (!lines || !lines.length) {
       el.hidden = true;
-      el.textContent = '';
       return;
     }
     el.hidden = false;
-    el.textContent = cue.text;
+    lines.forEach(function (line) {
+      var row = document.createElement('span');
+      row.className = 'caption-line';
+      var plate = document.createElement('span');
+      plate.className = 'caption-line-text';
+      plate.textContent = line;
+      row.appendChild(plate);
+      el.appendChild(row);
+    });
   }
   function syncVolumeControls(vid) {
     var prefs = readVideoPrefs();
@@ -3370,9 +3486,10 @@
     var hint = document.getElementById('d-cc-hint');
     var st = item && (item.transcriptStatus || (item.analysis && item.analysis.transcriptStatus));
     if (hint) hint.setAttribute('data-status', st || '');
+    liveCaptionWords = wordsForItem(item);
     liveCaptionCues = captionCuesForItem(item);
     var prefs = readVideoPrefs();
-    if (!liveCaptionCues.length) {
+    if (!liveCaptionCues.length && !liveCaptionWords.length) {
       syncCaptionControls(false, false);
       paintCaptionOverlay(0);
       return;
@@ -5347,6 +5464,7 @@
     if (dash) dash.hidden = false;
     state.open = null;
     liveCaptionCues = [];
+    liveCaptionWords = [];
     syncCaptionControls(false, false);
     paintCaptionOverlay(0);
   }

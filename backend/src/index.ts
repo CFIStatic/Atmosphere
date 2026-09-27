@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
 import { schedulePlayableProofBackfill, stopPlayableProofBackfill } from './lib/backfillPlayableProofs.js';
+import { scheduleTimedTranscriptBackfill, stopTimedTranscriptBackfill } from './lib/backfillTimedTranscripts.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
 import { startProofPurgeSweep, stopProofPurgeSweep } from './shared/proofPurgeSweep.js';
 import { startSoldPathOutboxWorkers, stopSoldPathOutboxWorkers } from './shared/soldPathOutbox.js';
@@ -51,6 +52,8 @@ const server = app.listen(config.port, host, () => {
     startProofAnalysisSweep();
     // One-shot .play.mp4 backfill ~60s after listen. PROOF_PLAYABLE_BACKFILL_ON_BOOT=0 turns it off.
     schedulePlayableProofBackfill();
+    // One-shot word-timing re-transcription ~60s after listen. PROOF_TIMED_TRANSCRIPT_BACKFILL_ON_BOOT=0 turns it off.
+    scheduleTimedTranscriptBackfill();
     startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
@@ -66,6 +69,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopVerificationLeaseSweep();
     stopProofAnalysisSweep();
     stopPlayableProofBackfill();
+    stopTimedTranscriptBackfill();
     stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();

@@ -5,7 +5,11 @@ import type {
   TranscriptSegment,
 } from '../../lib/api';
 import { bindMeasuredDuration } from '../../lib/clipDuration';
-import { activeCaptionAt, captionCuesFromTranscript } from '../../lib/transcriptCaptions';
+import {
+  captionCuesFromTranscript,
+  captionLinesAt,
+  type CaptionWord,
+} from '../../lib/transcriptCaptions';
 import {
   applyVideoPlayerPrefs,
   readVideoPlayerPrefs,
@@ -19,9 +23,10 @@ import { SpeakerIcon } from '../icons';
  * One chrome: an orange scrubber on the picture, then play, volume, time,
  * captions, and fullscreen. The browser's native bar is not used — it
  * stacked a second progress line on top of this one. Captions are a custom
- * overlay from Whisper segments / timestamped transcript_text. A native
- * TextTrack does not paint once `controls` is omitted, which is why CC used
- * to toggle with nothing on screen. No overlay when nothing was transcribed.
+ * overlay. Word timings roll two lines the way YouTube auto-captions do.
+ * Untimed text falls back to a proportional split. A native TextTrack does
+ * not paint once `controls` is omitted, which is why CC used to toggle with
+ * nothing on screen. No overlay when nothing was transcribed.
  *
  * Phase 1 privacy: private-moment ranges force mute + heavy blur. Child
  * privacy ranges prefer region blur (no mute) when boxes exist; otherwise
@@ -31,6 +36,8 @@ import { SpeakerIcon } from '../icons';
 
 export type JobFilePlayerCaptions = {
   segments?: TranscriptSegment[] | null;
+  /** Word clocks. When present they win over the proportional split. */
+  words?: CaptionWord[] | null;
   transcriptText?: string | null;
   durationSeconds?: number | null;
   /** When no VTT yet: pending = mic still being read; unavailable = none. */
@@ -188,9 +195,18 @@ export function JobFilePlayer({
       }),
     [captions?.segments, captions?.transcriptText, captions?.durationSeconds],
   );
-  const captionsAvailable = cues.length > 0;
-  const activeCaption =
-    captionsAvailable && captionsOn && !forceMute ? activeCaptionAt(cues, clock.at) : null;
+  const captionWords = captions?.words ?? null;
+  const captionsAvailable = (captionWords?.length ?? 0) > 0 || cues.length > 0;
+  const captionLines =
+    captionsAvailable && captionsOn && !forceMute
+      ? captionLinesAt({
+          words: captionWords,
+          segments: captions?.segments,
+          transcriptText: captions?.transcriptText,
+          durationSeconds: captions?.durationSeconds,
+          timeSec: clock.at,
+        })
+      : null;
 
   useEffect(() => {
     const el = ref.current;
@@ -559,9 +575,13 @@ export function JobFilePlayer({
           }
           onClick={togglePlay}
         />
-        {activeCaption ? (
+        {captionLines?.length ? (
           <div className="job-file-caption" data-testid="job-file-caption" aria-live="polite">
-            {activeCaption.text}
+            {captionLines.map((line, index) => (
+              <span className="job-file-caption-line" key={`${index}-${line}`}>
+                <span className="job-file-caption-text">{line}</span>
+              </span>
+            ))}
           </div>
         ) : null}
         {buffering ? (

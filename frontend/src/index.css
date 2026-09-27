@@ -693,6 +693,7 @@ html[data-field-embed] #root {
 }
 .job-file-player-stage {
   isolation: isolate;
+  container-type: inline-size;
 }
 .job-file-player-privacy-veil {
   background: rgba(15, 18, 22, 0.18);
@@ -775,25 +776,39 @@ html[data-field-embed] #root {
 .job-file-caption {
   position: absolute;
   left: 50%;
-  bottom: 22px;
+  bottom: 26px;
   z-index: 4;
-  max-width: min(92%, 36rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.14em;
+  max-width: 90%;
   transform: translateX(-50%);
-  padding: 5px 12px 6px;
-  border-radius: 4px;
-  background: rgba(8, 8, 8, 0.75);
   color: #fff;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.35;
+  font-family: Roboto, Arial, Helvetica, sans-serif;
+  font-size: clamp(14px, 3.6cqi, 22px);
+  font-weight: 400;
+  line-height: 1.28;
   text-align: center;
-  text-wrap: balance;
   pointer-events: none;
+}
+.job-file-caption-line {
+  display: block;
+  max-width: 100%;
+}
+.job-file-caption-text {
+  display: inline;
+  padding: 0.05em 0.32em 0.08em;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.75);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  white-space: nowrap;
 }
 .job-file-player:fullscreen .job-file-caption,
 .job-file-player:-webkit-full-screen .job-file-caption {
-  bottom: 28px;
-  font-size: 22px;
+  bottom: 36px;
+  font-size: clamp(26px, 3.2cqi, 46px);
 }
 .job-file-scrub-thumb {
   position: absolute;

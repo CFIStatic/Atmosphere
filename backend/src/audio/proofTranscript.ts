@@ -13,7 +13,13 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
-import { transcriptionEnabled, transcribeAudio, transcriptAlreadyStamped } from '../lib/transcription.js';
+import {
+  transcriptionEnabled,
+  transcribeAudioTimed,
+  transcriptAlreadyStamped,
+  type TimedSegment,
+  type TimedWord,
+} from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
@@ -158,7 +164,24 @@ export async function signedProofVideoUrl(admin: any, storagePath: string): Prom
   return signed.signedUrl as string;
 }
 
-export async function transcribeProofVideo(admin: any, proofId: string): Promise<void> {
+const MAX_STORED_SEGMENTS = 20_000;
+const MAX_STORED_WORDS = 80_000;
+
+export type TranscribeProofOptions = {
+  /** Conversation enrich and the safety scan. Off for the timing backfill. */
+  enrich?: boolean;
+  /**
+   * A re-run that hears nothing must not wipe a transcript the office already
+   * has. The row stays `done` with its text, and the caller can retry.
+   */
+  preserveExistingOnEmpty?: boolean;
+};
+
+export async function transcribeProofVideo(
+  admin: any,
+  proofId: string,
+  opts?: TranscribeProofOptions,
+): Promise<void> {
   if (!transcriptionEnabled()) {
     await admin
       .from('job_proofs')
@@ -201,19 +224,27 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
 
   const knownStarts = planAudioChunks(duration);
   const parts: string[] = [];
+  const segments: TimedSegment[] = [];
+  const words: TimedWord[] = [];
   const stamp = (start: number, many: boolean, body: string) => {
     if (transcriptAlreadyStamped(body)) return body;
     return many || start > 0 ? `[${stampChunk(start)}] ${body}` : body;
   };
+  const takeSlice = async (start: number, many: boolean) => {
+    const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
+    if (wav.length < 1000) return false;
+    const slice = await transcribeAudioTimed(wav, 'audio/wav', { timeOffsetSeconds: start });
+    const body = slice.text.trim();
+    if (!body && !slice.words.length) return true;
+    if (body) parts.push(stamp(start, many, body));
+    segments.push(...slice.segments);
+    words.push(...slice.words);
+    return true;
+  };
 
   if (knownStarts.length) {
     for (const start of knownStarts) {
-      const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
-      if (wav.length < 1000) continue;
-      const slice = await transcribeAudio(wav, 'audio/wav', { timeOffsetSeconds: start });
-      const body = slice.trim();
-      if (!body) continue;
-      parts.push(stamp(start, knownStarts.length > 1, body));
+      await takeSlice(start, knownStarts.length > 1);
     }
   } else {
     // No clock on the row and ffprobe could not read one. Walk 10-minute
@@ -222,19 +253,31 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     for (let start = 0; start < MAX_TRANSCRIPT_SECONDS; start += TRANSCRIPT_CHUNK_SECONDS) {
       const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
       if (wav.length < 1000) break;
-      const slice = await transcribeAudio(wav, 'audio/wav', { timeOffsetSeconds: start });
-      const body = slice.trim();
+      const slice = await transcribeAudioTimed(wav, 'audio/wav', { timeOffsetSeconds: start });
+      const body = slice.text.trim();
+      if (!body && !slice.words.length) continue;
       if (body) parts.push(stamp(start, true, body));
+      segments.push(...slice.segments);
+      words.push(...slice.words);
     }
   }
 
   if (!parts.length) {
+    if (opts?.preserveExistingOnEmpty) {
+      await admin
+        .from('job_proofs')
+        .update({ transcript_status: 'done', transcript_lease_until: null })
+        .eq('id', proofId);
+      throw new Error('No usable audio track on this clip.');
+    }
     await admin
       .from('job_proofs')
       .update({
         transcript_status: 'skipped',
         transcript_error: 'No usable audio track on this clip.',
         transcript_text: null,
+        transcript_segments: null,
+        transcript_words: null,
         transcript_lease_until: null,
       })
       .eq('id', proofId);
@@ -252,11 +295,15 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     .update({
       transcript_status: 'done',
       transcript_text: transcriptText,
+      transcript_segments: segments.slice(0, MAX_STORED_SEGMENTS),
+      transcript_words: words.slice(0, MAX_STORED_WORDS),
       transcript_error: null,
       transcribed_at: new Date().toISOString(),
       transcript_lease_until: null,
     })
     .eq('id', proofId);
+
+  if (opts?.enrich === false) return;
 
   // Structured conversation for Office Analysis — never fail the Whisper write.
   try {
