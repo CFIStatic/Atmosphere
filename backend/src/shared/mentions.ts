@@ -97,12 +97,17 @@ function nameWords(name: string): string[] {
     .filter(Boolean);
 }
 
+/** `@Jane's` is the name Jane, not a different token. */
+function withoutPossessive(query: string): string {
+  return query.replace(/['’]s$/i, '');
+}
+
 /**
  * Case-insensitive prefix of the full name or of any word in it.
  * `@jo` matches "John Cyganiak"; `@cyg` matches the last name; `@john c` matches the full name.
  */
 export function nameMatchesQuery(name: string, query: string): boolean {
-  const q = query.trim().toLowerCase();
+  const q = withoutPossessive(query.trim().toLowerCase());
   if (!q || !name.trim()) return false;
   const full = name.trim().toLowerCase();
   if (full.startsWith(q)) return true;
@@ -231,7 +236,8 @@ export function resolveMentions(text: string, roster: MentionMember[]): MentionR
     }
     const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
     if (!token) continue;
-    const query = token[0].replace(/['’]s$/i, '');
+    const query = withoutPossessive(token[0]);
+    if (!query) continue;
     const matches = membersMatching(query, roster);
     if (matches.length === 1) pushMember(matches[0]!);
     else if (matches.length > 1) pushAmbiguous(query, matches);

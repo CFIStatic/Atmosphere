@@ -414,6 +414,19 @@ function clipDetail(row: any): string {
   return said ? `Said: ${said}` : '';
 }
 
+/**
+ * Activity rundowns name the clips this person filmed. Keyword leftovers such
+ * as "file" must not let shares and memory fill the cap and drop those clips.
+ */
+function keepFilmedClips<T extends { kind: string; captured?: boolean }>(
+  ranked: T[],
+  limit = 40,
+): T[] {
+  const filmed = ranked.filter((item) => item.kind === 'video' && item.captured);
+  const rest = ranked.filter((item) => !(item.kind === 'video' && item.captured));
+  return [...filmed, ...rest.slice(0, limit)];
+}
+
 function metadataUserId(meta: unknown): string | null {
   if (!meta || typeof meta !== 'object') return null;
   const record = meta as Record<string, unknown>;
@@ -878,10 +891,7 @@ export async function loadPersonContext(
       });
     }
 
-    const rankedAll = orderMentionItems(items, input.question, now, [person.name]);
-    const filmed = rankedAll.filter((item) => item.kind === 'video' && item.captured);
-    const others = rankedAll.filter((item) => !(item.kind === 'video' && item.captured));
-    const ranked = [...filmed, ...others.slice(0, 40)];
+    const ranked = keepFilmedClips(orderMentionItems(items, input.question, now, [person.name]));
     const fileContains = scopeJobId
       ? [
           ...jobs.map((job) => [job.job_number ? `#${job.job_number}` : '', job.title].filter(Boolean).join(' ')),
@@ -990,8 +1000,8 @@ export async function prepareMentionAsk(
     : formatMentionPrompt(people);
   const supplement = [which, absent, dossier].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
-  // A person with real activity is never answered by the canned miss or the
-  // clip-list template while a model is configured. The dossier goes to the model.
+  // An activity question with real work goes to the model as a dossier.
+  // A topical or yes/no mention keeps the grounded answer.
   if (!hasActivity || !isAskModelConfigured(input.anthropicApiKey)) {
     return {
       mentions,
