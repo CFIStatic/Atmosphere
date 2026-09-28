@@ -16,12 +16,12 @@ import { cn } from '../../design/cn';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { PersonAvatar } from '../PersonAvatar';
 import { JobFilePlayer } from './JobFilePlayer';
+import { formatViewerTime } from '../../lib/viewerTime';
 import { loadJobTimelineSource } from './jobTimelineLoad';
 import {
   TIMELINE_FILTERS,
   buildJobTimeline,
   filterTimeline,
-  formatCtTime,
   groupTimelineDays,
   orderTimeline,
   timelinePeople,
@@ -343,7 +343,7 @@ function TimelineRow({
   onOpen: () => void;
 }) {
   const Icon = KIND_ICON[event.kind];
-  const when = formatCtTime(event.at);
+  const when = formatViewerTime(event.at);
   return (
     <li className="flex items-start gap-3 px-3 py-3" data-testid={`timeline-event-${event.id}`}>
       <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-paper-200 text-brand-500">

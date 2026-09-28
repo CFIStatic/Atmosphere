@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { formatViewerTime, setViewerTimeZoneForTests, viewerDayKey } from '../../lib/viewerTime';
 import {
   TIFFANY_JOB_ID,
   tiffanyAccess,
@@ -14,9 +15,7 @@ import {
 } from './tiffanyJobFixture';
 import {
   buildJobTimeline,
-  ctDayKey,
   filterTimeline,
-  formatCtTime,
   groupTimelineDays,
   initialJobFileSection,
   orderTimeline,
@@ -51,9 +50,12 @@ function joined(source: TimelineSource = tiffanySource()): string {
 }
 
 describe('job timeline', () => {
+  beforeAll(() => setViewerTimeZoneForTests('America/Chicago'));
+  afterAll(() => setViewerTimeZoneForTests(null));
+
   it('prints Central Time and the dining-room clip in plain English', () => {
-    expect(formatCtTime('2026-09-17T16:37:28.774Z')).toBe('11:37 AM CT');
-    expect(ctDayKey('2026-09-17T16:37:28.774Z')).toBe('2026-09-17');
+    expect(formatViewerTime('2026-09-17T16:37:28.774Z')).toBe('11:37 AM CT');
+    expect(viewerDayKey('2026-09-17T16:37:28.774Z')).toBe('2026-09-17');
     const text = joined();
     expect(text).toContain('El Presidente recorded a clip lasting 34 seconds in the dining room.');
     expect(text).toContain('El Presidente opened job #12 — Project Tiffany & Co.');
