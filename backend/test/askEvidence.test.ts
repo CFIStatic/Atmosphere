@@ -205,3 +205,21 @@ test('on/off question answers from the stated state, not from a mention', async 
   assert.match(r.answer, /^No\./);
   assert.match(r.answer, /off/);
 });
+
+test('on/off: "on" as a preposition is not the device being on', async () => {
+  const record: ClipAskRecord = {
+    analysisState: 'done',
+    transcriptStatus: 'done',
+    dictation: 'A pendant light on the ceiling above the table; a clock on the wall.',
+    actions: [{ atSeconds: 3, description: 'Camera holds on the pendant light on the ceiling.' }],
+    transcript: '[0:01] Look at this.',
+  };
+  const r = await answerFromClip({ question: 'Is the light on?', record });
+  assert.doesNotMatch(r.answer, /^Yes/);
+});
+
+test('yes/no terms found only in different lines is not a yes', async () => {
+  const r = await answerFromClip({ question: 'Did they talk about paper and LedgerApp?', record: accounting });
+  assert.doesNotMatch(r.answer, /^Yes/);
+  assert.match(r.answer, /Not established in any single line/);
+});

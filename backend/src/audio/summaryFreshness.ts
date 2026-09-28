@@ -62,27 +62,28 @@ export function summarySourceHash(row: FreshnessRow): string | null {
  * - `none`: nothing is stored, the UI derives everything live from the transcript.
  * - `updating`: the status column says a rebuild is pending, or the stamped
  *   hash no longer matches the transcript.
- * - `failed`: every retry failed; the old summary is still shown.
+ * - `failed`: every retry failed; the old summary is still shown. A matching
+ *   stamp is not freshness — quarantine writes provenance, and often an
+ *   evidence log, before the row is marked failed.
  * - `untracked`: a summary from before provenance was recorded. The backfill
  *   decides whether it is older than the transcript.
- * - `fresh`: built from this exact transcript.
+ * - `fresh`: built from this exact transcript and not a failed rebuild.
  */
 export function summaryStateOf(row: FreshnessRow): SummaryState {
   const status = typeof row.summary_status === 'string' ? row.summary_status : null;
   if (status === 'stale' || status === 'queued' || status === 'running') return 'updating';
-  if (!hasStoredSummary(row.ai_findings)) return status === 'failed' ? 'failed' : 'none';
+  // Failed is its own state even when the stamp still matches the transcript.
+  if (status === 'failed') return 'failed';
+  if (!hasStoredSummary(row.ai_findings)) return 'none';
   const source = summarySourceHash(row);
   if (source) {
-    if (source !== transcriptSha256(row.transcript_text ?? null)) {
-      return status === 'failed' ? 'failed' : 'updating';
-    }
+    if (source !== transcriptSha256(row.transcript_text ?? null)) return 'updating';
     return 'fresh';
   }
-  if (status === 'failed') return 'failed';
   return 'untracked';
 }
 
-/** True when a stored summary is known not to match the live transcript. */
+/** True when the office should not treat the stored summary as current. */
 export function summaryIsStale(row: FreshnessRow): boolean {
   const state = summaryStateOf(row);
   return state === 'updating' || state === 'failed';
