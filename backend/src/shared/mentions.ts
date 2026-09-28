@@ -97,12 +97,17 @@ function nameWords(name: string): string[] {
     .filter(Boolean);
 }
 
+/** `@Jane's` is the name Jane, not a different token. */
+function withoutPossessive(query: string): string {
+  return query.replace(/['’]s$/i, '');
+}
+
 /**
  * Case-insensitive prefix of the full name or of any word in it.
  * `@jo` matches "John Cyganiak"; `@cyg` matches the last name; `@john c` matches the full name.
  */
 export function nameMatchesQuery(name: string, query: string): boolean {
-  const q = query.trim().toLowerCase();
+  const q = withoutPossessive(query.trim().toLowerCase());
   if (!q || !name.trim()) return false;
   const full = name.trim().toLowerCase();
   if (full.startsWith(q)) return true;
@@ -112,7 +117,9 @@ export function nameMatchesQuery(name: string, query: string): boolean {
 
 function boundaryAfter(text: string, length: number): boolean {
   const next = text[length] ?? '';
-  return next === '' || /[\s,.;:!?)]/.test(next);
+  if (next === '' || /[\s,.;:!?)]/.test(next)) return true;
+  // `@Jane Alvarez's work` — the possessive is a boundary, not part of the name.
+  return /['’]s(?:$|[\s,.;:!?])/i.test(text.slice(length));
 }
 
 function membersMatching(query: string, roster: MentionMember[]): MentionMember[] {
@@ -229,9 +236,11 @@ export function resolveMentions(text: string, roster: MentionMember[]): MentionR
     }
     const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
     if (!token) continue;
-    const matches = membersMatching(token[0], roster);
+    const query = withoutPossessive(token[0]);
+    if (!query) continue;
+    const matches = membersMatching(query, roster);
     if (matches.length === 1) pushMember(matches[0]!);
-    else if (matches.length > 1) pushAmbiguous(token[0], matches);
+    else if (matches.length > 1) pushAmbiguous(query, matches);
   }
 
   return { mentions, ambiguous };
@@ -318,33 +327,46 @@ export function asksForPersonRecord(question: string, names: string[] = []): boo
   return /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q);
 }
 
+const IN_CLIP_RE =
+  /\b(in|from|during|on)\s+(the\s+|those\s+|these\s+)?(clips?|videos?|films?|footage|proofs?|uploads?)\b/;
+
+/** Words that are the activity question itself, not a subject to look up. */
+const ACTIVITY_FILLER = new Set([
+  ...TOPIC_STOP,
+  'job', 'jobs', 'work', 'video', 'videos', 'clip', 'clips', 'file', 'files',
+  'film', 'filmed', 'films', 'upload', 'uploaded', 'uploads', 'say', 'said',
+  'find', 'found', 'record', 'recorded', 'recording', 'recordings', 'doing',
+  'activity', 'activities', 'someone', 'person', 'all', 'everything', 'anything',
+  'footage', 'proof', 'proofs',
+]);
+
+function hasActivitySubject(question: string): boolean {
+  return question
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .some((word) => word.length > 2 && !ACTIVITY_FILLER.has(word));
+}
+
 /**
  * Questions that want the person's work on the file, not a keyword hit.
  * "what had @El Presidente done in this file", "summarize @Name's work",
  * and "what did they find" all count. A yes/no like "did he finish the
- * electrical job?" does not — that still looks for the topic.
+ * electrical job?" does not — that still looks for the topic. So does an
+ * in-clip ask such as "what did they say in the videos about the leak".
  */
 export function asksForPersonActivity(question: string, names: string[] = []): boolean {
   const q = stripMentionMarks(question, names).toLowerCase();
   if (asksForPersonRecord(question, names)) return true;
+  if (IN_CLIP_RE.test(q)) return false;
   if (/\b(activity|activities)\b/.test(q)) return true;
   if (/\bsummar/.test(q) && /\bwork\b/.test(q)) return true;
-  if (/\b(what|which)\b[\s\S]{0,80}\b(do|did|done|doing)\b/.test(q)) return true;
-  if (/\b(what|which)\b[\s\S]{0,80}\b(film|filmed|upload|uploaded|say|said|find|found|record|recorded)\b/.test(q)) {
-    return true;
-  }
-  if (
-    /\b(what|which)\b[\s\S]{0,40}\b(they|he|she)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b/.test(
-      q,
-    )
-  ) {
-    return true;
-  }
-  return (
-    /\b(what|which)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b[\s\S]{0,24}\b(they|he|she)\b/.test(
-      q,
-    )
-  );
+  // "what did they do" — not the auxiliary in "what did they say about the leak".
+  if (!/\b(what|which)\b/.test(q)) return false;
+  const asksDeed =
+    /\b(do|done|doing)\b/.test(q) ||
+    /\b(film|filmed|upload|uploaded|record|recorded|find|found|say|said)\b/.test(q);
+  if (!asksDeed) return false;
+  return !hasActivitySubject(q);
 }
 
 /** "what did they find" wants findings and issues, not the activity rundown. */
@@ -355,9 +377,7 @@ export function asksForFindings(question: string, names: string[] = []): boolean
 
 /** True when this person filmed, wrote, or opened something — not merely a name on a roster. */
 export function personHasActivity(person: { items: Array<{ kind: string; captured?: boolean }> }): boolean {
-  return person.items.some(
-    (item) => item.captured || item.kind === 'video' || item.kind === 'note' || item.kind === 'log' || item.kind === 'task',
-  );
+  return person.items.some((item) => item.captured);
 }
 
 /** "did he finish the electrical job?" → "electrical job". */
@@ -675,7 +695,7 @@ export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson:
   const name = person.name.trim() || 'That person';
   const who = askerIsPerson ? 'you' : name;
   const zone = activityZone(person);
-  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
   const jobs = person.items.filter((item) => item.kind === 'job');
   const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
   const scope = String(person.jobTitle ?? '').trim();
@@ -737,7 +757,7 @@ export function writeFindingsAnswer(person: PersonMentionContext, askerIsPerson:
   const who = askerIsPerson ? 'you' : name;
   const zone = activityZone(person);
   const scope = String(person.jobTitle ?? '').trim();
-  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
   const overview = scope
     ? `On ${scope}, here is what turned up in the clips ${who} recorded.`
     : `Here is what turned up in the clips ${who} recorded.`;
@@ -933,7 +953,7 @@ export function formatActivityDossier(
       return `${header}\nNothing on this job is attributed to this person.`;
     }
     const zone = activityZone(person);
-    const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+    const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
     const jobs = person.items.filter((item) => item.kind === 'job');
     const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
     const subject = asker ? 'You' : person.name;
