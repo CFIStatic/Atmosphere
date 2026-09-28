@@ -11,6 +11,7 @@
  * - a progress-share viewer never leaves the open job
  * - another org's rows are dropped even if they were passed in
  */
+import { transcriptLineCount } from './speechCount.js';
 import {
   CHILD_PRIVACY_REDACTED_LABEL,
   childPrivacyRedactionsFromStored,
@@ -1105,15 +1106,23 @@ export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null |
  */
 export const ASK_CONTEXT_BUDGET = 14_000;
 
+function rawTranscriptLine(clip: AskLookupClip, preview: string): string {
+  if (!preview) return '  Raw transcript (authoritative): none';
+  const count = transcriptLineCount(redactClipTranscriptForAsk(clip));
+  return `  Raw transcript (authoritative, ${count} line${count === 1 ? '' : 's'}): ${preview}`;
+}
+
 function renderClipCard(clip: AskLookupClip, catalog: AskLookupCatalog, withTranscript: boolean): string {
   const when = clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated';
   const preview = clipAskPreview(clip);
   const summary = trim(preview.summary);
+  // The raw transcript is the authority on what was said and how much; the AI
+  // summary can be older than the transcript. Transcript first, labeled so.
   return [
     `- ${when} — ${clip.title}`,
-    summary ? `  Summary: ${summary}` : '',
+    withTranscript ? rawTranscriptLine(clip, preview.transcript) : '',
+    summary ? `  AI summary (may be stale; not a source for what was said): ${summary}` : '',
     preview.findings ? `  Findings: ${preview.findings}` : '',
-    withTranscript ? (preview.transcript ? `  Transcript: ${preview.transcript}` : '  Transcript: none') : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -1150,7 +1159,8 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
   for (const clip of clips) {
     const transcript = clipAskPreview(clip).transcript;
     if (!transcript) continue;
-    const line = `\n  Transcript (${clip.title}): ${transcript}`;
+    const count = transcriptLineCount(redactClipTranscriptForAsk(clip));
+    const line = `\n  Raw transcript, authoritative (${clip.title}, ${count} line${count === 1 ? '' : 's'}): ${transcript}`;
     if (packed.length + line.length > ASK_CONTEXT_BUDGET) break;
     packed += line;
   }

@@ -75,7 +75,9 @@ test('a specific question cites the timestamped beat it was drawn from', () => {
 
 test('something the camera never showed is refused rather than inferred', () => {
   const answer = groundedAnswerFromClip('Did they replace the water heater?', cedarAfter);
-  assert.equal(answer, 'No. The footage on file does not show that.');
+  // Said plainly, and names what the evidence never mentions.
+  assert.match(answer, /^No\. The footage on file does not show that\./);
+  assert.match(answer, /water/);
 });
 
 test('a room question does not match a different room that only shares the word room', () => {
@@ -211,7 +213,8 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
     conversationRooms: ['bathroom'],
   };
   const answer = groundedAnswerFromClip('What did the homeowner say?', talk);
-  assert.match(answer, /^Yes/);
+  // Straight from the raw transcript; no generic "Yes — they are talking about this" lead.
+  assert.match(answer, /^Exact words from the raw transcript \(2 lines\)/);
   assert.match(answer, /vanity/i);
   assert.match(answer, /insurance/i);
 

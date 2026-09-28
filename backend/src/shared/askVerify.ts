@@ -26,6 +26,7 @@ import {
 } from './askLookup.js';
 import { formatQuoteTrailer, parseMomentSource, parseQuoteTrailer, momentSourceId, type AskMomentQuote } from './askMoments.js';
 import { prettyMentionStamp, sourceSlug } from './mentions.js';
+import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
 
 export type AskVerifyFailureKind =
   | 'quote'
@@ -37,7 +38,14 @@ export type AskVerifyFailureKind =
   | 'clock'
   | 'name'
   | 'role'
-  | 'record_ref';
+  | 'record_ref'
+  | 'speech_count'
+  | 'yes_no'
+  | 'count_missing'
+  | 'timestamp_missing'
+  | 'irrelevant'
+  | 'transcript_dump'
+  | 'unsupported_claim';
 
 export type AskVerifyFailure = {
   kind: AskVerifyFailureKind;
@@ -57,6 +65,12 @@ export type AskVerifyResult = {
   open: AskVerifyFailure[];
   quotesChecked: number;
   quotesFailed: number;
+  /**
+   * Answer-shape problems (no number for a count, no time for a "when", off
+   * topic, whole-transcript dump). Not strippable by sentence; logged and
+   * passed to the repair step.
+   */
+  quality: AskVerifyFailure[];
 };
 
 export type AskVerifySource = {
@@ -228,6 +242,8 @@ export type AskGroundingIndex = {
   times: Set<string>;
   clocks: number[];
   people: Array<{ name: string; norm: string; onThisJob: boolean }>;
+  /** The question this turn, for the answer-shape checks. */
+  question?: string | null;
 };
 
 export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex {
@@ -281,7 +297,7 @@ export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex 
     const bits = match[1]!.split(':').map(Number);
     clocks.push(bits.length === 3 ? bits[0]! * 3600 + bits[1]! * 60 + bits[2]! : bits[0]! * 60 + bits[1]!);
   }
-  return { catalog, clips, raw, norm: normalizeForMatch(raw), dates, times, clocks, people };
+  return { catalog, clips, raw, norm: normalizeForMatch(raw), dates, times, clocks, people, question: source.question ?? null };
 }
 
 function splitTrailers(answer: string): { prose: string; trailers: string[] } {
@@ -529,6 +545,167 @@ function checkRoles(index: AskGroundingIndex, prose: string): AskVerifyFailure[]
   return out;
 }
 
+/** Transcript lines on a clip: segments when stored, else stamped transcript lines. Null when no transcript. */
+function clipLineCount(clip: AskLookupClip): number | null {
+  const segments = Array.isArray(clip.segments) ? clip.segments.filter((row) => row && trim(row.text)) : [];
+  if (segments.length) return segments.length;
+  const transcript = trim(clip.transcript);
+  return transcript ? transcriptLineCount(transcript) : null;
+}
+
+/**
+ * Statements about how much was said ("the only speech is a single fragment",
+ * "three lines") that no clip's raw transcript bears out. A sentence naming a
+ * clip is checked against that clip; otherwise against every clip in scope
+ * that has a transcript. The raw transcript wins over any AI summary.
+ */
+export function checkSpeechCounts(index: AskGroundingIndex, prose: string): AskVerifyFailure[] {
+  const withCounts = index.clips
+    .map((text) => ({ clip: text.clip, count: clipLineCount(text.clip) }))
+    .filter((row): row is { clip: AskLookupClip; count: number } => row.count != null);
+  if (!withCounts.length) return [];
+  const out: AskVerifyFailure[] = [];
+  for (const sentence of sentences(prose)) {
+    const norm = normalizeForMatch(sentence);
+    const named = withCounts.filter((row) => {
+      const title = normalizeForMatch(row.clip.title);
+      return title.length >= 4 && containsNorm(norm, title);
+    });
+    const candidates = named.length ? named : withCounts;
+    for (const hit of speechCountContradictions(sentence, candidates.map((row) => row.count))) {
+      const actual = hit.actual.length === 1 ? `${hit.actual[0]}` : hit.actual.join(' or ');
+      out.push({
+        kind: 'speech_count',
+        text: hit.text,
+        detail: `the raw transcript has ${actual} line${hit.actual.length === 1 && hit.actual[0] === 1 ? '' : 's'}; count speech from the transcript, not the AI summary`,
+      });
+    }
+  }
+  return out;
+}
+
+const QUALITY_STOP = new Set(
+  (
+    'the a an and or but of to in on at by for from with about into over is are was were be been being do does did has have had ' +
+    'what when where who whom which why how any anything something someone anyone this that these those it its they them their there here ' +
+    'clip clips video videos footage recording file job said say says talk talked mention mentioned tell told me you your i we our can could ' +
+    'would should will just exactly exact quote quotes time times timestamp timestamps second seconds minute point moment happen happened ' +
+    'show shows shown see seen visible please each every all many much some there'
+  ).split(/\s+/),
+);
+const ABSTAIN_RE =
+  /\b(not shown|not established|not on file|not in the (?:evidence|file|footage|transcript)|does(?:n['’]t| not) (?:show|mention|include|say)|never (?:mentions?|shows?|says?)|no (?:evidence|record|mention)|isn['’]t (?:shown|mentioned|on file)|can(?:no|['’])t (?:tell|confirm|give)|not (?:visible|mentioned|stated|confirmed))\b/i;
+const NEGATION_RE = /\b(no|not|never|n['’]t|none|without|unclear|cannot|can['’]t|unconfirmed)\b/i;
+
+function contentTokens(text: string): string[] {
+  return normalizeForMatch(text)
+    .split(' ')
+    .filter((word) => word.length > 2 && !QUALITY_STOP.has(word) && !/^\d+$/.test(word));
+}
+
+function firstSentence(text: string): string {
+  const body = splitTrailers(text).prose.replace(/⟦\/?artifact⟧/g, ' ').trim();
+  return (body.split(/(?<=[.!?])\s+|\n/)[0] ?? '').trim();
+}
+
+function stemIn(norm: string, word: string): boolean {
+  const w = normalizeForMatch(word);
+  if (!w) return true;
+  if (containsNorm(norm, w)) return true;
+  const stem = w.length > 5 ? w.slice(0, Math.max(4, w.length - 3)) : w;
+  return ` ${norm}`.includes(` ${stem}`);
+}
+
+export type AnswerQualityInput = {
+  question: string;
+  answer: string;
+  /** One entry per clip in scope: its raw transcript lines. */
+  transcripts: string[][];
+  /** Normalized text of everything the answer may rely on (normalizeForMatch). */
+  evidenceNorm: string;
+};
+
+/**
+ * Post-generation checks on the answer as a whole: a yes/no answer that
+ * contradicts itself, a count question with no number up front, a "when"
+ * question with no time, an answer that does not address the question, a
+ * whole-transcript dump for a narrow question, and work-completed / price /
+ * commitment claims the evidence does not support. Pure; used by Ask and by
+ * the eval harness.
+ */
+export function answerQualityFailures(input: AnswerQualityInput): AskVerifyFailure[] {
+  const question = trim(input.question);
+  const answer = trim(input.answer);
+  if (!question || !answer) return [];
+  const out: AskVerifyFailure[] = [];
+  const lead = firstSentence(answer);
+  const abstains = ABSTAIN_RE.test(answer);
+  const q = question.toLowerCase();
+
+  if (/^(did|does|do|is|are|was|were|has|have|had|can|could|will|would)\b/.test(q)) {
+    // "Yes." / "No." is often its own sentence; judge it with the sentence after it.
+    const body = splitTrailers(answer).prose.trim();
+    const opening = (body.split('\n')[0] ?? '').split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+    const yes = /^\**yes\b/i.test(opening);
+    const no = /^\**no\b/i.test(opening);
+    if (yes && ABSTAIN_RE.test(opening)) {
+      out.push({ kind: 'yes_no', text: opening, detail: 'the answer says Yes and then says it is not shown' });
+    } else if (no && /\b(yes|does show|is shown|is visible|clearly shows)\b/i.test(opening.replace(/^\**no\b/i, ''))) {
+      out.push({ kind: 'yes_no', text: opening, detail: 'the answer says No and then says it is shown' });
+    }
+  }
+
+  if (isSpeechCountQuestion(question) && !/\b(\d+|zero|no|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(lead)) {
+    out.push({ kind: 'count_missing', text: lead || answer.slice(0, 80), detail: 'a count question must give the number in the first sentence' });
+  }
+
+  if (/\b(when|what time|timestamp|at what point|how far in|what second|what minute)\b/.test(q) && !/\b\d{1,2}:\d{2}\b/.test(answer) && !abstains) {
+    out.push({ kind: 'timestamp_missing', text: lead || answer.slice(0, 80), detail: 'the question asks when; give the [m:ss] time from the evidence or say it is not shown' });
+  }
+
+  const asked = [...new Set(contentTokens(question))];
+  if (asked.length >= 2 && !abstains) {
+    const said = normalizeForMatch(answer);
+    if (!asked.some((word) => stemIn(said, word))) {
+      out.push({ kind: 'irrelevant', text: lead || answer.slice(0, 80), detail: `the answer does not address ${asked.slice(0, 3).join(', ')}` });
+    }
+  }
+
+  const wantsAll = /\b(full|whole|entire|every|each|all|list|everything|transcri(?:be|pt) (?:it|the clip))\b/.test(q) || isSpeechCountQuestion(question);
+  if (!wantsAll && asked.length) {
+    const said = normalizeForMatch(answer);
+    for (const lines of input.transcripts) {
+      const norms = lines.map((line) => normalizeForMatch(line.replace(/^\[[^\]]+\]\s*/, ''))).filter((line) => line.split(' ').length >= 2);
+      if (norms.length < 4) continue;
+      const shown = norms.filter((line) => containsNorm(said, line)).length;
+      if (shown / norms.length >= 0.8) {
+        out.push({ kind: 'transcript_dump', text: `${shown} of ${norms.length} transcript lines`, detail: 'a narrow question gets only the lines that answer it, not the whole transcript' });
+        break;
+      }
+    }
+  }
+
+  const evidence = input.evidenceNorm;
+  for (const sentence of sentences(splitTrailers(answer).prose)) {
+    if (NEGATION_RE.test(sentence) || ABSTAIN_RE.test(sentence)) continue;
+    for (const match of sentence.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)|\b(\d[\d,]*(?:\.\d+)?)\s?(?:dollars|bucks)\b/gi)) {
+      const amount = (match[1] ?? match[2] ?? '').replace(/,/g, '');
+      if (amount && !containsNorm(evidence, amount) && !containsNorm(evidence, normalizeForMatch(match[1] ?? match[2] ?? ''))) {
+        out.push({ kind: 'unsupported_claim', text: match[0], detail: 'no such price or amount is on file' });
+      }
+    }
+    const work = sentence.match(/\b(finished|completed|installed|replaced|repaired|fixed|patched|painted|removed)\s+(?:the\s+|a\s+|an\s+|all\s+)?([a-z][a-z-]+)/i);
+    if (work && !(stemIn(evidence, work[1]!) && stemIn(evidence, work[2]!))) {
+      out.push({ kind: 'unsupported_claim', text: work[0], detail: 'the evidence does not show this work being done' });
+    }
+    const promise = sentence.match(/\b(agreed to|promised to|committed to|will)\s+(come back|return|replace|fix|install|finish|pay|cover|repair|send)\b/i);
+    if (promise && !stemIn(evidence, promise[2]!.split(' ')[0]!)) {
+      out.push({ kind: 'unsupported_claim', text: promise[0], detail: 'no such commitment is on file' });
+    }
+  }
+  return out;
+}
+
 function dedupeFailures(failures: AskVerifyFailure[]): AskVerifyFailure[] {
   const seen = new Set<string>();
   return failures.filter((failure) => {
@@ -580,11 +757,28 @@ export function verifyAskAnswer(answer: string, index: AskGroundingIndex): AskVe
     ...checkRecordRefs(index, unquoted),
     ...checkNames(index, unquoted),
     ...checkRoles(index, unquoted),
+    ...checkSpeechCounts(index, unquoted),
+    ...(index.question
+      ? answerQualityFailures({
+          question: index.question,
+          answer: prose,
+          transcripts: index.clips.map((text) => transcriptLines(redactClipTranscriptForAsk(text.clip))),
+          evidenceNorm: index.norm,
+        }).filter((failure) => failure.kind === 'unsupported_claim' || failure.kind === 'yes_no')
+      : []),
   );
   const openDeduped = dedupeFailures(open);
   failures.push(...openDeduped);
+  const quality = index.question
+    ? answerQualityFailures({
+        question: index.question,
+        answer: prose,
+        transcripts: index.clips.map((text) => transcriptLines(redactClipTranscriptForAsk(text.clip))),
+        evidenceNorm: index.norm,
+      }).filter((failure) => failure.kind !== 'unsupported_claim' && failure.kind !== 'yes_no')
+    : [];
   const rebuilt = [prose, ...outTrailers].filter(Boolean).join('\n\n').trim();
-  return { answer: rebuilt, failures, open: openDeduped, quotesChecked, quotesFailed };
+  return { answer: rebuilt, failures, open: openDeduped, quotesChecked, quotesFailed, quality };
 }
 
 export const ASK_REPAIR_SYSTEM = `You correct a draft answer so every fact in it is supported by the source data.
@@ -593,9 +787,10 @@ Rules:
 1. Use only the source data in this message. Do not use outside knowledge and do not guess.
 2. Fix each listed failure. A quote must be the exact words from a transcript line, or be removed. A time, date, clip clock, job number, or name must be one that appears in the source data, or be removed.
 3. When a fact is not in the source data, remove it and say plainly that it is not on file.
-4. Do not invent speaker roles such as homeowner, adjuster, or contractor. Use the name or label the source data gives.
-5. Keep everything else as written, including the lines that start with ⟦ and end with ⟧.
-6. Return only the corrected answer, with no preface.`;
+4. How much was said (how many lines, "only one fragment", "no speech") comes from the raw transcript lines, never from an AI summary. Fix any count that disagrees with the transcript.
+5. Do not invent speaker roles such as homeowner, adjuster, or contractor. Use the name or label the source data gives.
+6. Keep everything else as written, including the lines that start with ⟦ and end with ⟧.
+7. Return only the corrected answer, with no preface.`;
 
 export function formatRepairPrompt(input: { answer: string; failures: AskVerifyFailure[]; source: string }): string {
   const list = input.failures.map((failure) => `- ${failure.kind}: ${failure.text} — ${failure.detail}`).join('\n');
@@ -615,6 +810,10 @@ function failureLabel(failure: AskVerifyFailure): string {
       return failure.detail.includes("isn't on this job") ? `${failure.text} (not on this job)` : `the name ${failure.text}`;
     case 'role':
       return `who said it (${failure.text.split(/\s+/)[0]})`;
+    case 'unsupported_claim':
+      return `"${failure.text}" (${failure.detail})`;
+    case 'speech_count':
+      return `"${failure.text}" (${failure.detail.split(';')[0]})`;
     default:
       return failure.text;
   }
