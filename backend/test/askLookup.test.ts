@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   anthropicReasoningRequest,
   anthropicUsesBudgetTokens,
@@ -17,13 +20,14 @@ import {
   groundedLookupProse,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
+  personNameForClip,
   planAskLookup,
   redactClipTranscriptForAsk,
   scrubStoredAskText,
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
-import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview } from '../src/shared/askPolish.js';
+import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview, polishAskProse } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -126,7 +130,7 @@ test('every transcript tool redacts privacy and child ranges', () => {
   assert.equal(hit.atSeconds, 4.2);
   assert.equal(parseMomentSource(hit.cite)?.atSeconds, 4.2);
   assert.match(hit.excerpt, /tarp came off/);
-  assert.equal(hit.speaker, 'Seated man');
+  assert.equal(hit.speaker, 'El Presidente');
   assert.doesNotMatch(hit.excerpt, /4412/);
 });
 
@@ -374,12 +378,26 @@ test('people on the job are available without an @mention', () => {
   });
   const onJob = people.filter((person) => person.onThisJob).map((person) => person.name);
   assert.ok(onJob.includes('El Presidente'));
-  assert.ok(onJob.includes('Seated man'));
+  assert.equal(onJob.includes('Seated man'), false);
   assert.ok(onJob.includes('Tiffany Buyer'));
   assert.deepEqual(people.find((person) => person.name === 'El Presidente')?.recordedProofIds, [OFFICE]);
   const off = people.find((person) => person.name === 'Off Site');
   assert.equal(off?.onThisJob, false);
   assert.deepEqual(off?.recordedProofIds, []);
+});
+
+test('a contact on the same clip does not hide the person who recorded it', () => {
+  const file = catalog({
+    clips: [office],
+    people: [
+      { userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] },
+      { userId: 'contact:tiffany', name: 'Tiffany Buyer', onThisJob: true, recordedProofIds: [OFFICE] },
+    ],
+  });
+  assert.equal(personNameForClip(file, office, 'Seated man'), 'El Presidente');
+  const spoken = composeGroundedAsk('what was said about the tarp', [], file);
+  assert.match(spoken, /El Presidente/);
+  assert.doesNotMatch(spoken, /seated man/i);
 });
 
 test('a clip summary and an untimed transcript do not keep a redacted secret', () => {
@@ -447,7 +465,8 @@ test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups'
   assert.match(result.answer, /@4\.2/);
   const quotes = parseQuoteTrailer(result.answer);
   assert.match(quotes[0]?.text ?? '', /tarp came off/);
-  assert.equal(quotes[0]?.speaker, 'Seated man');
+  assert.equal(quotes[0]?.speaker, 'El Presidente');
+  assert.doesNotMatch(result.answer, /seated man/i);
   assert.doesNotMatch(result.answer, /invented quote/);
   assert.doesNotMatch(result.answer, /dumpster/i);
   const follows = parseFollowupTrailer(result.answer);
@@ -942,4 +961,93 @@ test('an email and an estimate do not invent a price or quote a redacted code', 
     if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = prev;
   }
+});
+
+test('drafts are distinct documents, corrections are polite, and the footer is gone', async () => {
+  const file = catalog({
+    jobTitle: 'Project Tiffany & Co.',
+    clientName: 'Tiffany & Co.',
+    timeZone: 'America/Chicago',
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE, TABLE] }],
+    history: [{ id: 'mem', jobId: JOB, orgId: ORG, summary: 'opened job #12 — Project Tiffany & Co.', actorId: EL, at: '2026-09-17T16:37:28.774Z' }],
+    clips: [
+      office,
+      clip({
+        proofId: TABLE,
+        title: 'Short Handheld Phone Clip Surveys a Light Whitewashed',
+        workDate: '2026-09-21',
+        summary: 'A phone video of a whitewashed dining table.',
+        speakers: ['Seated man'],
+        recordedByUserIds: [EL],
+        segments: [{ start: 1, end: 3, text: 'You guys do this on spreadsheets.' }],
+      }),
+    ],
+  });
+  const prev = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const email = await answerFromAskLookup({ question: 'draft an email to the homeowner', catalog: file, step: async () => null });
+    const summary = await answerFromAskLookup({ question: 'write a homeowner summary', catalog: file, step: async () => null });
+    const punch = await answerFromAskLookup({ question: 'draft a punch list', catalog: file, step: async () => null });
+    const estimate = await answerFromAskLookup({ question: 'draft an estimate', catalog: file, step: async () => null });
+    const bodies = [email, summary, punch, estimate].map((result) => result.answer);
+    for (const answer of bodies) {
+      assert.doesNotMatch(answer, /I checked the clips/i);
+      assert.doesNotMatch(answer, /Short Handheld|Light Whitewashed/i);
+      assert.doesNotMatch(answer, /Seated man/i);
+      assert.doesNotMatch(answer, /4412/);
+    }
+    assert.match(email.answer, /Hi Tiffany & Co,/);
+    assert.match(email.answer, /Thanks,\s*\nProject Tiffany & Co/);
+    assert.match(email.answer, /follow-up visit/i);
+    assert.match(summary.answer, /Homeowner summary/);
+    assert.doesNotMatch(summary.answer, /^Hi /m);
+    assert.match(summary.answer, /is the work on this file/i);
+    assert.doesNotMatch(summary.answer, /one El Presidente/i);
+    assert.match(punch.answer, /Punch list/);
+    assert.match(punch.answer, /not logged as a defect/i);
+    assert.doesNotMatch(punch.answer, /Hi Tiffany/);
+    assert.match(estimate.answer, /no price on file/i);
+    assert.doesNotMatch(estimate.answer, /\$\d/);
+    assert.notEqual(email.answer, summary.answer);
+    assert.notEqual(summary.answer, punch.answer);
+    assert.notEqual(punch.answer, estimate.answer);
+
+    const correction = composeGroundedAsk(
+      'You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.',
+      [],
+      file,
+      [{ role: 'assistant', text: 'On Sep 21 he said “You guys do this on spreadsheets.”' }],
+    );
+    assert.match(correction, /That line is actually from Sep 21 — here's the clip\./);
+    assert.match(correction, /spreadsheets/i);
+    assert.doesNotMatch(correction, /The file does have that/i);
+    assert.doesNotMatch(correction, /Short Handheld|Light Whitewashed|Seated man/i);
+    const planned = planAskLookup(
+      'You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.',
+      file,
+      [{ role: 'assistant', text: 'On Sep 21 he said “You guys do this on spreadsheets.”' }],
+    );
+    assert.ok(planned.some((step) => step.name === 'get_clip'));
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev;
+  }
+
+  const polished = polishAskProse(
+    'The file does have that. The seated man said it.\n\nI checked the clips and the job history.',
+    { speakerName: 'El Presidente' },
+  );
+  assert.equal(polished, 'El Presidente said it.');
+
+  const prompt = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/shared/askReasoning.ts'),
+    'utf8',
+  );
+  assert.match(prompt, /A homeowner summary is prose/);
+  assert.match(prompt, /Never write "The file does have that\."/);
+  assert.match(prompt, /Never write "Seated man"/);
+  assert.match(prompt, /Do not end with "I checked the clips"/);
 });

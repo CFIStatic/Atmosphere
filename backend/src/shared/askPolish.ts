@@ -59,7 +59,7 @@ export function localStamp(value: string | null | undefined, timeZone?: string |
 /** Strip filler, ids, raw clip ids, and UTC timestamps from text the reader sees. */
 export function polishAskProse(
   input: string,
-  opts?: { timeZone?: string | null; jobTitle?: string | null },
+  opts?: { timeZone?: string | null; jobTitle?: string | null; speakerName?: string | null },
 ): string {
   let text = String(input ?? '');
   text = text.replace(FILLER_RE, '');
@@ -71,6 +71,18 @@ export function polishAskProse(
   if (title.length > 2) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     text = text.replace(new RegExp(`(${escaped})(?:\\s*[—,:\\-]\\s*\\1)+`, 'gi'), '$1');
+  }
+  text = text.replace(/\bThe file does have that\.\s*/gi, '');
+  text = text.replace(
+    /\bI checked the (?:transcripts, the clips, and the job history|clips and the job history|transcripts and the clips)\.?\s*/gi,
+    '',
+  );
+  text = text.replace(/(?:^|\n)\s*I checked\b[^\n]*\.?\s*$/i, '');
+  const speaker = String(opts?.speakerName ?? '').trim();
+  if (speaker) {
+    const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(/\b(?:the |a )?(?:seated|standing|walking)\s+(?:man|woman)\b/gi, speaker);
+    text = text.replace(new RegExp(`\\b(?:one|a|the)\\s+${escaped}\\b`, 'gi'), speaker);
   }
   return text
     .replace(/[ \t]{2,}/g, ' ')
@@ -169,17 +181,29 @@ function dateLabel(workDate: string | null, timeZone?: string | null): string {
   return localStamp(workDate, timeZone) || workDate;
 }
 
+/** A long auto-generated caption, not a name a person gave the clip. */
+function isVisionCaption(title: string): boolean {
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 6) return false;
+  return /\b(clip|handheld|frames|surveys|whitewashed|sideways|noisy|phone)\b/i.test(title);
+}
+
+/** What happened, from the summary. A vision caption is not the description. */
+function visitSeen(clip: ClipFact): string {
+  const summary = clip.summary.trim().replace(/\.$/, '');
+  if (summary) return summary;
+  if (clip.title && !isVisionCaption(clip.title)) return clip.title.trim();
+  return 'a recorded visit';
+}
+
 function bullet(clip: ClipFact, timeZone?: string | null, openJobId?: string | null): string {
   const when = dateLabel(clip.workDate, timeZone);
-  const title = clip.title.toLowerCase().startsWith(when.toLowerCase())
-    ? clip.title.slice(when.length).replace(/^[\s—-]+/, '')
-    : clip.title;
-  const detail = clip.summary ? `. ${clip.summary}` : '';
+  const seen = visitSeen(clip);
   const elsewhere =
     clip.jobId && openJobId && clip.jobId !== openJobId && String(clip.jobTitle ?? '').trim()
       ? ` (${String(clip.jobTitle).trim()})`
       : '';
-  return `- **${when} — ${title}**${elsewhere}${detail}`;
+  return `- **${when}.** ${seen}${elsewhere}.`;
 }
 
 function clipCountLead(count: number): string {
@@ -239,7 +263,9 @@ export function composeJobOverview(catalog: AskLookupCatalog): string {
   const client = String(catalog.clientName ?? '').trim();
   const address = String(catalog.jobAddress ?? '').trim();
   const description = String(catalog.jobDescription ?? '').trim();
-  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  const people = (catalog.people ?? [])
+    .filter((person) => person.onThisJob !== false && person.name && !isGenericSpeakerName(person.name))
+    .map((person) => person.name);
   const sentence = (label: string, value: string) => {
     const text = `${label}: ${value.trim()}`;
     return /[.!?]$/.test(text) ? text : `${text}.`;
@@ -252,12 +278,16 @@ export function composeJobOverview(catalog: AskLookupCatalog): string {
   const clips = catalogClips(catalog).slice().sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')));
   const visits = clips.map((clip) => {
     const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
-    const title = cleanMentionTitle(clip.title) || 'Clip';
     const preview = clipAskPreview(clip);
-    const summary = preview.summary.trim();
+    const seen = visitSeen({
+      title: cleanMentionTitle(clip.title) || 'Clip',
+      workDate: clip.workDate ?? null,
+      summary: oneLine(preview.summary),
+      cite: clip.proofId,
+    });
     const speech = clearestLine(preview.transcript);
-    const detail = [summary, speech ? `Said: “${speech}”` : ''].filter(Boolean).join(' ');
-    return `- **${when} — ${title}**.${detail ? ` ${detail}` : ''}`;
+    const detail = speech ? ` Said: “${speech}”` : '';
+    return `- **${when}.** ${seen}.${detail}`;
   });
   const history = (catalog.history ?? []).slice(0, 4).map((event) => {
     const when = localStamp(event.at, catalog.timeZone);
@@ -498,12 +528,20 @@ function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): st
   if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n');
   const events = historyFromTrace(trace, catalog.timeZone);
   if (events[0]) return `Job history shows ${events[0].summary.replace(/\.$/, '')}${events[0].at ? ` on ${events[0].at}` : ''}.`;
-  const titles = (catalog.clips ?? [])
-    .filter((clip) => clip.orgId === catalog.orgId && (!catalog.jobId || clip.jobId === catalog.jobId))
-    .map((clip) => cleanMentionTitle(clip.title))
+  const described = catalogClips(catalog)
+    .map((clip) => {
+      const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+      const seen = visitSeen({
+        title: cleanMentionTitle(clip.title) || '',
+        workDate: clip.workDate ?? null,
+        summary: oneLine(clipAskPreview(clip).summary),
+        cite: clip.proofId,
+      });
+      return seen && seen !== 'a recorded visit' ? `${when}: ${seen}` : when;
+    })
     .filter(Boolean)
     .slice(0, 4);
-  if (titles.length) return `On file: ${titles.join('; ')}.`;
+  if (described.length) return `On file: ${described.join('; ')}.`;
   return 'Nothing else is recorded on this file.';
 }
 
@@ -511,31 +549,6 @@ function missingLine(question: string, trace: AskLookupTraceStep[], catalog: Ask
   if (/\bpermit\b/i.test(question)) return 'This file does not include a permit number.';
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
   return `Nothing on this file matches that.\n\n${fileContext(trace, catalog)}`;
-}
-
-/** One sentence naming the lookups that actually ran. */
-export function whatWasChecked(trace: AskLookupTraceStep[]): string {
-  const tools = new Set(trace.map((step) => step.tool));
-  const bits: string[] = [];
-  if (tools.has('search_transcripts')) bits.push('the transcripts');
-  if (tools.has('get_clip')) bits.push('the clips');
-  if (tools.has('list_person_activity')) bits.push('who is on the job');
-  if (tools.has('read_job_history')) bits.push('the job history');
-  if (tools.has('search_other_jobs')) bits.push('other jobs in this organization');
-  if (!bits.length) return '';
-  const list =
-    bits.length === 1
-      ? bits[0]!
-      : bits.length === 2
-        ? `${bits[0]} and ${bits[1]}`
-        : `${bits.slice(0, -1).join(', ')}, and ${bits[bits.length - 1]}`;
-  return `I checked ${list}.`;
-}
-
-function withChecked(text: string, trace: AskLookupTraceStep[]): string {
-  const line = whatWasChecked(trace);
-  if (!line || /\bi checked\b/i.test(text)) return text;
-  return `${text.trim()}\n\n${line}`;
 }
 
 type DatedMoment = SpeechMomentPick & { speaker: string; title: string; workDate: string | null };
@@ -578,7 +591,7 @@ function spokenClips(trace: AskLookupTraceStep[]): Array<{
 
 function quoteBullet(moment: DatedMoment, showTitle: boolean): string {
   const when = moment.atSeconds == null ? '' : `At ${clock(moment.atSeconds)}, `;
-  const where = showTitle ? ` (${moment.title})` : '';
+  const where = showTitle && moment.title && !isVisionCaption(moment.title) ? ` (${moment.title})` : '';
   return `- ${when}${moment.speaker} said “${moment.excerpt}”${where}`;
 }
 
@@ -731,7 +744,7 @@ function visitRows(clips: ClipFact[], timeZone?: string | null): string {
   for (const clip of clips) {
     const key = dateLabel(clip.workDate, timeZone);
     const notes = grouped.get(key) ?? [];
-    notes.push(clip.summary || clip.title);
+    notes.push(visitSeen(clip));
     grouped.set(key, notes);
   }
   const rows = [...grouped.entries()].map(([date, notes]) => `| ${date} | ${notes.join(' · ')} |`);
@@ -776,29 +789,63 @@ function composeTask(
   if (task === 'issues' || task === 'punch') {
     const title = task === 'punch' ? 'Punch list' : 'Open issues';
     const lead = `Nothing on this file is logged as ${task === 'punch' ? 'a punch item' : 'an open issue'}.`;
-    const observed = clips.length
-      ? `Recorded visits, not logged as defects:\n\n${lines.join('\n')}`
-      : 'No clips are on this file to review.';
-    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\nNo open items are written down.\n\n${observed}`)}\n\nI can draft a homeowner note from the visits if that is more useful.`;
+    const items = clips.length
+      ? clips
+          .map((clip) => `- ${dateLabel(clip.workDate, catalog.timeZone)} — seen, not logged as a defect: ${visitSeen(clip)}.`)
+          .join('\n')
+      : '- Nothing recorded is on this file yet.';
+    const doc =
+      task === 'punch'
+        ? `No punch items are written down for ${name}.\n\n${items}\n\nI would not add a punch item until you name it.`
+        : `No open issues are written down for ${name}.\n\n${items}`;
+    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\n${doc}`)}\n\nTell me the item and I will add it.`;
   }
 
   if (task === 'email') {
-    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
-    return `Here is a draft you can send.\n\n${artifact(`**Email to the homeowner — ${name}**\n\nHi ${client},\n\n${body}\n\n${gap}`)}\n\nI can shorten it if you want it briefer.`;
+    const body = clips.length
+      ? clips
+          .map((clip) => {
+            const seen = visitSeen(clip);
+            const sentence = seen.charAt(0).toLowerCase() + seen.slice(1);
+            return `On ${dateLabel(clip.workDate, catalog.timeZone)}, the visit shows ${sentence}.`;
+          })
+          .join(' ')
+      : 'Nothing recorded is on this file yet.';
+    const letter = [
+      `Hi ${client},`,
+      '',
+      body,
+      '',
+      'The next step is a follow-up visit once you tell us which of these you want us to come back for.',
+      '',
+      'Thanks,',
+      name,
+    ].join('\n');
+    return `Here is a draft you can send.\n\n${artifact(`**Email to the homeowner — ${name}**\n\n${letter}`)}`;
   }
 
   if (task === 'estimate') {
-    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
-    return `This file has no prices, so this draft does not invent any.\n\n${artifact(`**Estimate draft — ${name}**\n\nNo prices are on this file.\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}\n\nI can turn the recorded visits into line items once prices are on the file.`;
+    const priced = clips.length
+      ? clips
+          .map((clip) => `- ${dateLabel(clip.workDate, catalog.timeZone)} — ${visitSeen(clip)} (no price on file).`)
+          .join('\n')
+      : '- No visits are on this file to price.';
+    const draft = `This file has no prices, so this draft does not invent any.\n\nUnpriced lines, from what was seen:\n\n${priced}`;
+    return `This file has no prices, so this draft does not invent any.\n\n${artifact(`**Estimate draft — ${name}**\n\n${draft}`)}\n\nI can fill in prices once they are on the file.`;
   }
 
-  const who = person ? `**${person.name}** recorded ${clips.length} clip${clips.length === 1 ? '' : 's'} on this file.` : '';
-  const lead = who || (clips.length ? clipCountLead(clips.length) : 'This file does not have clips to summarize.');
-  const withOpen = `${lead}${openedLine(events)}`;
-  if (!clips.length) return withOpen;
+  const sentences = clips.map((clip) => {
+    const seen = visitSeen(clip);
+    const sentence = seen.charAt(0).toLowerCase() + seen.slice(1);
+    return `${dateLabel(clip.workDate, catalog.timeZone)} covers ${sentence}`;
+  });
+  const opened = openedLine(events).trim();
+  const prose = clips.length
+    ? `${name} is the work on this file. ${sentences.join('. ')}.${opened ? ` ${opened}` : ''}`
+    : `${name} does not have visits to summarize yet.`;
   const heading = task === 'summary' ? 'Homeowner summary' : 'Note';
   const next = task === 'summary' ? 'I can shorten this if you want it briefer.' : 'I can turn this into an email if you want it sent.';
-  return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}\n\n${next}`;
+  return `Here is a ${heading.toLowerCase()} in prose.\n\n${artifact(`**${heading} — ${name}**\n\n${prose}`)}\n\n${next}`;
 }
 
 export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
@@ -822,6 +869,25 @@ function speechLines(catalog: AskLookupCatalog): SpeechLine[] {
   return lines;
 }
 
+function isGenericSpeakerName(name: string): boolean {
+  const text = name.trim();
+  return /^(?:(?:seated|standing|walking)\s+)?(?:man|woman|person|guy|girl)$/i.test(text)
+    || /^(?:person|speaker)\s*[a-d0-9]+$/i.test(text)
+    || /^(?:speaker|unknown)$/i.test(text);
+}
+
+/** The one person who filmed these clips, when the file names them. */
+export function namedSpeaker(catalog: AskLookupCatalog): string | null {
+  const eligible = (catalog.people ?? []).filter(
+    (person) => person.onThisJob !== false && person.name && !isGenericSpeakerName(person.name),
+  );
+  const recorderIds = new Set(catalogClips(catalog).flatMap((clip) => clip.recordedByUserIds ?? []));
+  const filmed = eligible.filter((person) => recorderIds.has(person.userId));
+  if (filmed.length === 1) return filmed[0]!.name;
+  if (recorderIds.size > 0) return null;
+  return eligible.length === 1 ? eligible[0]!.name : null;
+}
+
 function quoteSpoken(text: string): string {
   const clean = text.trim();
   return /[.!?]$/.test(clean) ? `“${clean}”` : `“${clean}.”`;
@@ -838,7 +904,9 @@ function lastAssistant(history: AskMemoryTurn[] | null | undefined): string {
 
 function jobOffer(catalog: AskLookupCatalog): string {
   const name = jobName(catalog);
-  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  const people = (catalog.people ?? [])
+    .filter((person) => person.onThisJob !== false && person.name && !isGenericSpeakerName(person.name))
+    .map((person) => person.name);
   const clips = catalogClips(catalog);
   const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate ?? null, catalog.timeZone)).filter((date) => date !== 'Undated'))];
   const client = String(catalog.clientName ?? '').trim().replace(/\.$/, '');
@@ -977,7 +1045,7 @@ function composeCorrection(question: string, catalog: AskLookupCatalog, history:
     const needle = denied[1].trim();
     const found = all.find((line) => line.text.toLowerCase().includes(needle.toLowerCase()));
     if (found) {
-      parts.push(`The file does have that. On ${found.when}, in ${found.title}, the line is ${quoteSpoken(found.text)}`);
+      parts.push(`That line is actually from ${found.when} — here's the clip. ${quoteSpoken(found.text)}`);
     } else {
       parts.push(`I do not see “${needle}” in the transcripts.`);
     }
@@ -1065,22 +1133,21 @@ export function composeGroundedAsk(
     });
   }
   if (chat) {
-    return polishAskProse(composeChat(chat, question, catalog, history), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
-  }
-  if (isJobOverview(question)) {
-    return polishAskProse(withChecked(composeJobOverview(catalog), trace), {
+    return polishAskProse(composeChat(chat, question, catalog, history), {
       timeZone: catalog.timeZone,
       jobTitle: catalog.jobTitle,
+      speakerName: namedSpeaker(catalog),
     });
+  }
+  const voice = { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle, speakerName: namedSpeaker(catalog) };
+  if (isJobOverview(question)) {
+    return polishAskProse(composeJobOverview(catalog), voice);
   }
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);
-  const polished = polishAskProse(withChecked(text, trace), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  const polished = polishAskProse(text, voice);
   if (/^this file does not have that\.?$/i.test(polished)) {
-    return polishAskProse(
-      withChecked(`${polished}\n\n${fileContext(trace, catalog)}`, trace),
-      { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle },
-    );
+    return polishAskProse(`${polished}\n\n${fileContext(trace, catalog)}`, voice);
   }
   return polished;
 }
