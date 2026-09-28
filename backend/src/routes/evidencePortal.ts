@@ -533,6 +533,7 @@ async function settleClipQuestion(opts: {
           question: opts.question,
           jobId: opts.jobId,
           history: opts.history,
+          askerUserId: opts.askedBy ?? null,
         }).catch(() => null)
       : null;
   const result = mentionPrep?.directAnswer

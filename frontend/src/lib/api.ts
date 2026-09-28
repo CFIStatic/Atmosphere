@@ -3266,6 +3266,16 @@ export type OfficeLiveSessionDetail = {
   iceServers?: OfficeLiveIceServer[];
 };
 
+/** The browser's IANA zone, so Ask can print local clocks instead of UTC. */
+function browserTimeZone(): string | undefined {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && zone.length <= 64 ? zone : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -4092,7 +4102,11 @@ export const api = {
       threadId?: string | null;
     }>(`/api/operations/shared/${jobId}/proof/ask`, {
       method: 'POST',
-      body: JSON.stringify({ question, threadId: opts?.threadId ?? undefined }),
+      body: JSON.stringify({
+        question,
+        threadId: opts?.threadId ?? undefined,
+        timeZone: browserTimeZone(),
+      }),
     }),
 
   /**
@@ -4125,7 +4139,11 @@ export const api = {
           Accept: 'application/x-ndjson',
           ...(embedToken ? { Authorization: `Bearer ${embedToken}` } : {}),
         },
-        body: JSON.stringify({ question, threadId: opts?.threadId ?? undefined }),
+        body: JSON.stringify({
+          question,
+          threadId: opts?.threadId ?? undefined,
+          timeZone: browserTimeZone(),
+        }),
       });
     } catch {
       throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');

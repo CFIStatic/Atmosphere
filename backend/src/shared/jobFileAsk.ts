@@ -10,6 +10,7 @@
  * otherwise a grounded lookup still answers from the same text.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
@@ -367,9 +368,18 @@ export function formatJobFileRecord(file: JobFileAskContext): string {
     );
   }
 
-  const clips = file.clips ?? [];
+  const supplement = trim(file.mentionSupplement);
+  const priority = new Set(
+    [...supplement.matchAll(/priority-clip:([0-9a-z-]{8,})/gi)].map((match) => match[1]!.toLowerCase()),
+  );
+  const clips = [...(file.clips ?? [])].sort((a, b) => {
+    const rank = (clip: CollectionClip) => (priority.has(String(clip.proofId ?? '').toLowerCase()) ? 0 : 1);
+    return rank(a) - rank(b);
+  });
   if (clips.length) {
-    sections.push(`Videos and mic\n${formatCollectionRecord(clips)}`);
+    sections.push(
+      `Videos and mic\n${formatCollectionRecord(clips, supplement ? { transcriptCap: 700 } : undefined)}`,
+    );
   }
 
   if (trim(file.mentionSupplement)) {
@@ -477,6 +487,39 @@ export function preferJobFileGroundedFastPath(question: string, grounded: string
     return true;
   }
   return false;
+}
+
+/**
+ * The exact system and user text a mention question sends to the model:
+ * job file (their clips first, transcripts trimmed), attribution dossier,
+ * and recent turns. Web and tool blocks are empty unless a caller has them.
+ */
+export function assembleMentionModelPrompt(input: {
+  question: string;
+  file: JobFileAskContext;
+  history?: Array<{ role?: string | null; text?: string | null }> | null;
+  webBlock?: string;
+  toolBlock?: string;
+  extraSystem?: string;
+}): { system: string; user: string } {
+  const supplement = trim(input.file.mentionSupplement);
+  const history = (input.history ?? [])
+    .filter((turn) => trim(turn.text))
+    .slice(-12)
+    .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
+    .join('\n');
+  const record = formatJobFileRecord(input.file).trim();
+  const addendum =
+    activitySystemAddendum(supplement) ??
+    `\n\nThe question @mentions a coworker, or a follow-up pronoun refers to the last person they named. Answer that question from the attribution dossier and the job file. Stay strictly grounded. If it is not in the file, say so. Cite clips and dates with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>, clip:YYYY-MM-DD⟧ and do not put raw tags in the sentences. Never write [[web:…]].`;
+  const system = FILE_QA_SYSTEM + addendum + (input.extraSystem ?? '');
+  const user =
+    `Job file record:\n\n${record || '(empty record)'}` +
+    (input.webBlock ?? '') +
+    (input.toolBlock ?? '') +
+    (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
+    `\n\nQuestion: ${input.question}`;
+  return { system, user };
 }
 
 export async function answerFromJobFile(input: {
@@ -611,11 +654,7 @@ export async function answerFromJobFile(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
     .join('\n');
 
-  const system =
-    FILE_QA_SYSTEM +
-    (mentionScoped
-      ? `\n\nThe question @mentions a coworker, or a follow-up pronoun refers to the last person they named. Answer about that person's contributions using their full name. The MENTIONED PEOPLE list is every clip and note tied to them, not a sample — when asked which videos they filmed, name each one. Use the rest of this job file for supporting detail. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what the file does contain. Never answer "No <question words> found for <first name>", and never write [[web:…]].`
-      : '') +
+  const extraSystem =
     `\n\n${askWebCapabilityRules()}` +
     (webHits.length
       ? `\n\n${ASK_WEB_FORMAT_RULES}`
@@ -635,14 +674,28 @@ export async function answerFromJobFile(input: {
     ? `\n\nTOOL RESULTS (already executed):\n${formatAskToolResultsForModel(toolResults)}`
     : '';
 
-  const completed = await completeAskText({
-    system,
-    user:
-      `Job file record:\n\n${record || '(empty record)'}` +
+  const mentionPrompt = mentionScoped
+    ? assembleMentionModelPrompt({
+        question: input.question,
+        file: input.file,
+        history: input.history,
+        webBlock,
+        toolBlock,
+        extraSystem,
+      })
+    : null;
+  const system = mentionPrompt ? mentionPrompt.system : FILE_QA_SYSTEM + extraSystem;
+  const user = mentionPrompt
+    ? mentionPrompt.user
+    : `Job file record:\n\n${record || '(empty record)'}` +
       webBlock +
       toolBlock +
       (history ? `\n\nEarlier questions on this file:\n${history}` : '') +
-      `\n\nQuestion: ${input.question}`,
+      `\n\nQuestion: ${input.question}`;
+
+  const completed = await completeAskText({
+    system,
+    user,
     anthropicApiKey: apiKey || null,
     mode: 'interactive',
     onToken: input.onToken,

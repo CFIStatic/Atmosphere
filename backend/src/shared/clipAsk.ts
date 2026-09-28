@@ -12,6 +12,7 @@
  * tab works in demo and in environments without a provider.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
@@ -1067,7 +1068,8 @@ export async function answerFromClip(input: {
     system:
       CLIP_QA_SYSTEM +
       (supplement
-        ? `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
+        ? activitySystemAddendum(supplement) ??
+          `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
         : ''),
     user:
       `Reading of this clip:\n\n${reading}` +

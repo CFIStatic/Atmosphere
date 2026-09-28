@@ -2678,6 +2678,8 @@ export async function runProofAsk(input: {
   userId?: string | null;
   shareId?: string | null;
   threadId?: string | null;
+  /** IANA zone of the person asking, when the client sends one. */
+  timeZone?: string | null;
   requestId: string;
   onToken?: (text: string) => void;
   /** org = office member; viewer = progress-share homeowner. */
@@ -2731,7 +2733,7 @@ export async function runProofAsk(input: {
     ] = await Promise.all([
       supabase
         .from('job_proofs')
-        .select('party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
+        .select('id, party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
         .eq('org_id', orgId)
         .eq('job_id', jobId)
         .is('deleted_at', null)
@@ -2949,7 +2951,14 @@ export async function runProofAsk(input: {
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
-        ? await prepareMentionAsk(supabase, { orgId, question: input.question, jobId, history }).catch(() => null)
+        ? await prepareMentionAsk(supabase, {
+            orgId,
+            question: input.question,
+            jobId,
+            history,
+            askerUserId: userId ?? null,
+            timeZone: input.timeZone ?? null,
+          }).catch(() => null)
         : null;
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;
@@ -3079,6 +3088,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       .object({
         question: z.string().trim().min(3).max(1000),
         threadId: z.string().uuid().optional().nullable(),
+        timeZone: z.string().trim().min(1).max(64).optional(),
       })
       .parse(req.body ?? {});
     const wantsStream =
@@ -3101,6 +3111,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         question: input.question,
         userId,
         threadId: input.threadId ?? null,
+        timeZone: input.timeZone ?? null,
         requestId: `ask:${req.params.jobId}:${randomUUID()}`,
         access: access === 'org' ? 'org' : 'viewer',
         onToken: (text) => writeEvent({ type: 'token', text }),
@@ -3124,6 +3135,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       question: input.question,
       userId,
       threadId: input.threadId ?? null,
+      timeZone: input.timeZone ?? null,
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
       access: access === 'org' ? 'org' : 'viewer',
     });

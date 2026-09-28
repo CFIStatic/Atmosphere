@@ -1,17 +1,23 @@
 /**
- * Load org-scoped evidence for people named with @mentions, then either
- * answer directly (nothing relevant, or no model) or hand a ranked dossier
- * to the existing Ask model call.
+ * Load org-scoped evidence for people named with @mentions.
+ * A resolved person goes to the Ask model with the job file, their
+ * attribution dossier, and recent turns. A grounded briefing is used only
+ * when no model is configured or the model call fails. Job scoping,
+ * ambiguity, and share-link rules stay deterministic.
  */
 import { fieldCaptureEmail } from '../field/crewJoin.js';
+import { privacySafeMentionProof } from './mentionPrivacy.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ambiguitySentence,
   answerFromMentionContext,
-  asksForPersonRecord,
   carryPriorMention,
-  formatMentionPrompt,
+  cleanMentionTitle,
+  formatMentionJobFile,
+  formatMentionModelContext,
+  mentionSpeakerLine,
+  mentionTimeZone,
   loginNameFromMetadata,
   mentionDisplayName,
   nameKey,
@@ -295,33 +301,131 @@ function sentences(text: string): string[] {
   return parts?.length ? parts : [clean.slice(0, 280).trim()];
 }
 
-function firstSentence(text: string): string {
-  const sentence = sentences(text)[0] ?? '';
-  if (sentence.length <= 420) return sentence;
-  return sentence.slice(0, 400).replace(/\s+\S*$/, '').trim();
+const OPENER = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
-/** One scene line. Opening black frames are not the detail a list should lead with. */
-function visualDetail(findings: unknown): string {
-  if (!findings || typeof findings !== 'object') return '';
+/** About 25 words, ending on a comma when the cut would land mid-list. */
+function capWords(text: string, max: number): string {
+  const stripped = String(text ?? '')
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = stripped.split(' ').filter(Boolean);
+  if (words.length <= max) return stripped;
+  const joined = words.slice(0, max).join(' ');
+  const comma = joined.lastIndexOf(',');
+  if (comma > 40) return joined.slice(0, comma).replace(/[,:;]+$/g, '').trim();
+  return joined.replace(/[,:;]+$/g, '').trim();
+}
+
+function asSentence(text: string, maxWords: number): string {
+  const clean = capWords(text, maxWords).replace(/^(and|then)\s+/i, '').trim();
+  if (!clean) return '';
+  const headed = clean.charAt(0).toUpperCase() + clean.slice(1);
+  return /[.!?]$/.test(headed) ? headed : `${headed}.`;
+}
+
+function findingEvents(findings: unknown): string[] {
+  if (!findings || typeof findings !== 'object') return [];
   const events = (findings as { events?: unknown }).events;
-  if (!Array.isArray(events)) return '';
-  const lines = events
+  if (!Array.isArray(events)) return [];
+  return events
     .map((event) => {
       if (!event || typeof event !== 'object') return '';
       return String((event as { text?: unknown }).text ?? '').replace(/\s+/g, ' ').trim();
     })
-    .filter(Boolean);
-  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
-  const picked = lines.find((line) => !opener.test(line)) ?? lines[0] ?? '';
-  return firstSentence(picked);
+    .filter((line) => line && !OPENER.test(line));
+}
+
+function clausesOf(text: string): string[] {
+  return text
+    .split(/[.;]+/)
+    .flatMap((part) => (wordCount(part) > 18 ? part.split(',') : [part]))
+    .map((part) => part.replace(/\s+/g, ' ').trim())
+    .filter((part) => wordCount(part) >= 3);
+}
+
+function scoreClause(text: string): number {
+  let score = 0;
+  if (/['"][^'"]+['"]/.test(text) || /\b[A-Z]{2,}\b/.test(text)) score += 5;
+  if (/\b(person|bent over|labeled|binder|no tools|construction|damage|leak|missing|issue)\b/i.test(text)) {
+    score += 4;
+  }
+  if (/\b(no|not|none|without)\b/i.test(text)) score += 2;
+  if (wordCount(text) <= 16) score += 1;
+  if (/^(camera|frame|pan|image resolves)/i.test(text)) score -= 2;
+  return score;
+}
+
+/** One key detail: a short finding, or one notable line from the summary. */
+function oneKeyDetail(row: any): string {
+  const events = findingEvents(row.ai_findings);
+  let best = '';
+  let bestScore = 0;
+  for (const line of events) {
+    for (const clause of clausesOf(line)) {
+      const score = scoreClause(clause);
+      if (score > bestScore) {
+        bestScore = score;
+        best = clause;
+      }
+    }
+  }
+  if (best && bestScore >= 4) return asSentence(tightenDetail(best), 14);
+  const later = sentences(String(row.ai_summary ?? '')).slice(1);
+  for (const line of later) {
+    const score = scoreClause(line);
+    if (score >= 4 && wordCount(line) <= 22) return asSentence(line, 18);
+  }
+  if (best && bestScore >= 1) return asSentence(tightenDetail(best), 14);
+  return '';
+}
+
+/** Keep the labeled object or the person, and drop a verb the word cap would slice. */
+function tightenDetail(clause: string): string {
+  const labeled = clause.match(/(?:a|the|an)\s+['"][^'"]+['"](?:\s+\w+){0,3}/i);
+  if (labeled) return labeled[0];
+  return clause.replace(/\s+(are|is|was|were)\b[\s\S]*$/i, '');
 }
 
 function clipListLine(row: any): string {
-  const parts = sentences(String(row.ai_summary ?? ''));
-  const summary = firstSentence(parts[0] ?? '');
-  const visual = visualDetail(row.ai_findings) || (parts[1] ? firstSentence(parts[1]) : '');
-  return [summary, visual].filter(Boolean).join(' ');
+  const scene = asSentence(sentences(String(row.ai_summary ?? ''))[0] ?? '', 25);
+  const detail = oneKeyDetail(row);
+  if (!detail) return scene;
+  if (scene.toLowerCase().includes(detail.replace(/[.!?]+$/g, '').toLowerCase())) return scene;
+  return `${scene} ${detail}`.trim();
+}
+
+function clipFindingLine(row: any): string {
+  return oneKeyDetail(row);
+}
+
+/** A couple of real sentences from the mic. Fragments stay out of the dossier. */
+function speechHighlight(transcript: unknown): string {
+  const clean = String(transcript ?? '').replace(/\[[0-9:]+\]\s*/g, ' ');
+  const spoken = sentences(clean).filter((line) => line.split(/\s+/).filter(Boolean).length >= 8);
+  return spoken.slice(0, 2).join(' ');
+}
+
+function clipDetail(row: any): string {
+  const said = speechHighlight(row.transcript_text);
+  return said ? `Said: ${said}` : '';
+}
+
+/**
+ * Activity rundowns name the clips this person filmed. Keyword leftovers such
+ * as "file" must not let shares and memory fill the cap and drop those clips.
+ */
+function keepFilmedClips<T extends { kind: string; captured?: boolean }>(
+  ranked: T[],
+  limit = 40,
+): T[] {
+  const filmed = ranked.filter((item) => item.kind === 'video' && item.captured);
+  const rest = ranked.filter((item) => !(item.kind === 'video' && item.captured));
+  return [...filmed, ...rest.slice(0, limit)];
 }
 
 function metadataUserId(meta: unknown): string | null {
@@ -389,11 +493,17 @@ export async function loadPersonContext(
     roster?: MentionMember[];
     /** When set, evidence is limited to this job. */
     jobId?: string | null;
+    /** Asker's IANA zone. Wins over the org's report timezone. */
+    timeZone?: string | null;
   },
 ): Promise<PersonMentionContext[]> {
   const { orgId, people } = input;
   if (!people.length) return [];
   const scopeJobId = input.jobId ? String(input.jobId) : null;
+  const orgRows = await selectRows(db, 'orgs', (query) =>
+    query.select('id, daily_job_report_timezone').eq('id', orgId).limit(1),
+  );
+  const timeZone = mentionTimeZone(input.timeZone, orgRows[0]?.daily_job_report_timezone);
   const roster: MentionMember[] =
     input.roster ?? people.map((person) => ({ userId: person.userId, fullName: person.name }));
   const userIds = people.map((person) => person.userId);
@@ -477,11 +587,15 @@ export async function loadPersonContext(
   // Caps apply after this filter so newer rows on other jobs cannot evict this job.
   const evidenceJobIds = scopeJobId ? [scopeJobId] : jobIds;
 
-  const [jobs, proofs, parties, recentMessages, taggedNotes] = await Promise.all([
+  const aliasIds = [...aliasesByUser.values()].flatMap((ids) => [...ids]);
+  const actorIds = [...new Set([...userIds, ...aliasIds])];
+  const onJob = (query: any) => (scopeJobId ? query.eq('job_id', scopeJobId) : query);
+
+  const [jobs, proofs, parties, recentMessages, taggedNotes, custody, shares, memory, scopeDocs] = await Promise.all([
     evidenceJobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
-            .select('id, job_number, title, status, work_type, owner_id, created_by, updated_at')
+            .select('id, job_number, title, status, work_type, owner_id, created_by, created_at, updated_at')
             .eq('org_id', orgId)
             .in('id', evidenceJobIds),
         )
@@ -490,7 +604,7 @@ export async function loadPersonContext(
       ? selectRows(db, 'job_proofs', (query) =>
           query
             .select(
-              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, ai_findings, device_metadata, captured_at, received_at',
+              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, ai_findings, device_metadata, duration_seconds, captured_at, received_at',
             )
             .eq('org_id', orgId)
             .in('job_id', evidenceJobIds)
@@ -502,7 +616,7 @@ export async function loadPersonContext(
     evidenceJobIds.length
       ? selectRows(db, 'job_parties', (query) =>
           query
-            .select('id, job_id, created_by, company, trade')
+            .select('id, job_id, created_by, company, trade, created_at')
             .eq('org_id', orgId)
             .in('job_id', evidenceJobIds),
         )
@@ -523,6 +637,54 @@ export async function loadPersonContext(
             .in('id', taggedNoteIds),
         )
       : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'job_evidence_access', (query) =>
+          onJob(
+            query
+              .select('id, proof_id, job_id, actor_id, action, detail, occurred_at')
+              .eq('org_id', orgId)
+              .in('actor_id', actorIds),
+          )
+            .order('occurred_at', { ascending: false })
+            .limit(80),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'verifier_shares', (query) =>
+          onJob(
+            query
+              .select('id, job_id, label, created_by, created_at, revoked_at')
+              .eq('org_id', orgId)
+              .in('created_by', actorIds),
+          )
+            .order('created_at', { ascending: false })
+            .limit(20),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'memory_events', (query) =>
+          onJob(
+            query
+              .select('id, job_id, actor_id, event_type, summary, occurred_at')
+              .eq('org_id', orgId)
+              .in('actor_id', actorIds),
+          )
+            .order('occurred_at', { ascending: false })
+            .limit(40),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'scope_documents', (query) =>
+          onJob(
+            query
+              .select('id, job_id, filename, uploaded_by, created_at')
+              .eq('org_id', orgId)
+              .in('uploaded_by', actorIds),
+          )
+            .order('created_at', { ascending: false })
+            .limit(20),
+        )
+      : Promise.resolve([] as any[]),
   ]);
   const messages = [...taggedNotes, ...recentMessages];
 
@@ -540,11 +702,17 @@ export async function loadPersonContext(
   const jobsById = new Map(jobs.map((row) => [String(row.id), row]));
   const assigned = new Set(liveAssignments.map((row) => `${row.user_id}:${row.job_id}`));
 
-  return people.map((person) => {
+  const contexts = people.map((person) => {
     const items: MentionItem[] = [];
     const seen = new Set<string>();
     const push = (item: MentionItem) => {
       if (scopeJobId && item.jobId !== scopeJobId && item.id !== scopeJobId) return;
+      if (
+        item.title === 'job.created' &&
+        items.some((existing) => existing.title === 'job.created' && existing.jobId === item.jobId)
+      ) {
+        return;
+      }
       const key = `${item.kind}:${item.id}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -567,29 +735,48 @@ export async function loadPersonContext(
         status: job.status ?? null,
         captured: owns,
       });
+      if (String(job.created_by ?? '') === person.userId && job.created_at) {
+        push({
+          kind: 'log',
+          id: `opened:${id}`,
+          jobId: id,
+          title: 'job.created',
+          text: '',
+          at: job.created_at,
+          captured: true,
+        });
+      }
     }
 
     const aliases = aliasesByUser.get(person.userId) ?? new Set<string>();
     for (const proof of proofs) {
       const jobId = String(proof.job_id ?? '');
       if (!jobsById.has(jobId) && !assigned.has(`${person.userId}:${jobId}`)) continue;
-      const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys, aliases);
-      const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
+      const safe = privacySafeMentionProof(proof as Record<string, unknown>);
+      const captured = proofCapturedBy(safe, person.userId, partiesById, uploadKeys, ackKeys, aliases);
+      const tagged = textMentionsPerson(clipText(safe), person.userId, roster);
       if (!captured && !tagged) continue;
-      const job = jobsById.get(jobId);
-      const title = String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim());
+      const title = cleanMentionTitle(
+        String(safe.title || `${safe.phase ?? 'clip'} ${safe.work_date ?? ''}`.trim()),
+      );
+      const duration = Number(safe.duration_seconds);
       push({
         kind: 'video',
-        id: String(proof.id),
+        id: String(safe.id),
         jobId,
-        proofId: String(proof.id),
-        title: job?.title ? `${title} — ${job.title}` : title,
-        text: clipText(proof),
-        listLine: clipListLine(proof),
-        at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
-        status: proof.state ?? null,
+        proofId: String(safe.id),
+        title,
+        text: clipText(safe),
+        listLine: clipListLine(safe),
+        finding: clipFindingLine(safe),
+        detail: clipDetail(safe),
+        transcript: String(safe.transcript_text ?? ''),
+        speakers: mentionSpeakerLine(safe.ai_findings) || null,
+        durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
+        at: (safe.captured_at ?? safe.received_at ?? safe.work_date ?? null) as string | null,
+        status: (safe.state ?? null) as string | null,
         captured,
-        workDate: proof.work_date ?? null,
+        workDate: (safe.work_date ?? null) as string | null,
       });
     }
 
@@ -609,18 +796,19 @@ export async function loadPersonContext(
 
     for (const message of messages) {
       const body = String(message.body ?? '');
+      const authored = message.author_id === person.userId;
       const tagged =
         textMentionsPerson(body, person.userId, roster) ||
         Boolean(taggedForUser.get(person.userId)?.has(`job_message:${message.id}`));
-      if (!tagged) continue;
+      if (!authored && !tagged) continue;
       push({
         kind: 'note',
         id: String(message.id),
         jobId: message.job_id ?? null,
-        title: String(message.author_label ?? 'Note'),
+        title: authored ? 'Comment' : String(message.author_label ?? 'Note'),
         text: body,
         at: message.created_at ?? null,
-        captured: false,
+        captured: authored,
       });
     }
 
@@ -637,21 +825,104 @@ export async function loadPersonContext(
       });
     }
 
-    const ranked = orderMentionItems(items, input.question, now, [person.name]).slice(0, 24);
+    const ids = new Set([person.userId, ...(aliasesByUser.get(person.userId) ?? [])]);
+    for (const party of parties) {
+      if (!ids.has(String(party.created_by ?? ''))) continue;
+      const at = String(party.created_at ?? '').trim();
+      if (!at) continue;
+      const company = String(party.company ?? 'party').trim();
+      push({
+        kind: 'log',
+        id: `party:${party.job_id}:${company}`,
+        jobId: party.job_id ?? null,
+        title: `Created the ${company} party`,
+        text: '',
+        at,
+        captured: true,
+      });
+    }
+    for (const row of custody) {
+      if (!ids.has(String(row.actor_id ?? ''))) continue;
+      const action = String(row.action ?? '');
+      if (action === 'uploaded' || action === 'viewed' || action === 'analysed') continue;
+      push({
+        kind: 'log',
+        id: `custody:${row.id ?? `${row.proof_id}:${action}:${row.occurred_at}`}`,
+        jobId: row.job_id ?? null,
+        title: `${action} evidence`,
+        text: String(row.detail ?? ''),
+        at: row.occurred_at ?? null,
+        captured: true,
+      });
+    }
+    for (const share of shares) {
+      if (!ids.has(String(share.created_by ?? ''))) continue;
+      push({
+        kind: 'log',
+        id: `share:${share.id}`,
+        jobId: share.job_id ?? null,
+        title: `Shared the file with ${String(share.label ?? 'someone')}`,
+        text: share.revoked_at ? 'Revoked' : 'Open',
+        at: share.created_at ?? null,
+        captured: true,
+      });
+    }
+    for (const event of memory) {
+      if (!ids.has(String(event.actor_id ?? ''))) continue;
+      const summary = String(event.summary ?? '').trim();
+      if (!summary) continue;
+      push({
+        kind: 'log',
+        id: `memory:${event.id}`,
+        jobId: event.job_id ?? null,
+        title: String(event.event_type ?? 'Job history'),
+        text: summary,
+        at: event.occurred_at ?? null,
+        captured: true,
+      });
+    }
+    for (const doc of scopeDocs) {
+      if (!ids.has(String(doc.uploaded_by ?? ''))) continue;
+      push({
+        kind: 'log',
+        id: `scope:${doc.id}`,
+        jobId: doc.job_id ?? null,
+        title: `Uploaded ${String(doc.filename ?? 'a scope document')}`,
+        text: '',
+        at: doc.created_at ?? null,
+        captured: true,
+      });
+    }
+
+    const ranked = keepFilmedClips(orderMentionItems(items, input.question, now, [person.name]));
     const fileContains = scopeJobId
       ? [
           ...jobs.map((job) => [job.job_number ? `#${job.job_number}` : '', job.title].filter(Boolean).join(' ')),
           ...proofs.map((proof) => String(proof.title || '').trim()),
         ].filter(Boolean)
       : [];
+    const scopedJob = scopeJobId ? jobsById.get(scopeJobId) : null;
     return {
       userId: person.userId,
       handle: person.handle,
       name: person.name,
       items: ranked,
       fileContains,
+      jobTitle: scopedJob?.title ? String(scopedJob.title) : null,
+      timeZone,
     };
   });
+  const jobFile = formatMentionJobFile({
+    timeZone,
+    jobs,
+    proofs,
+    parties,
+    messages,
+    shares,
+    memory,
+    people: contexts,
+  });
+  return contexts.map((person) => ({ ...person, jobFile }));
 }
 
 export interface MentionAskPrep {
@@ -672,6 +943,12 @@ export async function prepareMentionAsk(
     now?: Date;
     jobId?: string | null;
     history?: Array<{ role?: string | null; text?: string | null }> | null;
+    /** When this is the mentioned person, the answer may say "you". */
+    askerUserId?: string | null;
+    /** Asker's IANA zone. Wins over the org report timezone. */
+    timeZone?: string | null;
+    /** When set, decides the model path without reading the process environment. */
+    anthropicApiKey?: string | null;
   },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
@@ -723,14 +1000,20 @@ export async function prepareMentionAsk(
     now: input.now,
     roster,
     jobId,
+    timeZone: input.timeZone,
   });
-  const grounded = answerFromMentionContext(input.question, people);
-  const hasRelevant = people.some((person) => person.items.some((item) => item.relevant));
-  const inventory = asksForPersonRecord(input.question, mentions.map((person) => person.name))
-    && people.some((person) => person.items.some((item) => item.kind === 'video'));
-  const supplement = [which, absent, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
+  const askerUserId = input.askerUserId ?? null;
+  const grounded = answerFromMentionContext(input.question, people, { askerUserId });
+  const dossier = formatMentionModelContext({
+    people,
+    history: input.history,
+    askerUserId,
+  });
+  const supplement = [which, absent, dossier].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
-  if (inventory || !hasRelevant || !isAskModelConfigured()) {
+  // A resolved mention always goes to the model when one is configured.
+  // The briefing is only for a missing key or a failed model call.
+  if (!isAskModelConfigured(input.anthropicApiKey)) {
     return {
       mentions,
       supplement,
