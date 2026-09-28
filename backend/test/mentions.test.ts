@@ -22,6 +22,9 @@ import {
 import { fieldCaptureEmail } from '../src/field/crewJoin.js';
 import { listJobMentionMembers, loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
 import { assembleMentionModelPrompt } from '../src/shared/jobFileAsk.js';
+import { collectionClipsFromRows } from '../src/shared/proofAnalyst.js';
+import { PRIVACY_REDACTED_LABEL } from '../src/audio/privacyRedactions.js';
+import { CHILD_PRIVACY_REDACTED_LABEL } from '../src/audio/childPrivacyRedactions.js';
 
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
@@ -786,8 +789,19 @@ test('multi-word names stay whole, and the fallback lists every clip that person
   const jane = resolveMentions("summarize @Jane's work", [{ userId: JANE, fullName: 'Jane Alvarez' }]);
   assert.equal(jane.mentions[0]?.userId, JANE);
   assert.equal(jane.mentions[0]?.name, 'Jane Alvarez');
+  const janeEnd = resolveMentions("summarize @Jane's", [{ userId: JANE, fullName: 'Jane Alvarez' }]);
+  assert.equal(janeEnd.mentions[0]?.userId, JANE);
+  const janeCurly = resolveMentions('summarize @Jane’s work', [{ userId: JANE, fullName: 'Jane Alvarez' }]);
+  assert.equal(janeCurly.mentions[0]?.userId, JANE);
   const possessive = resolveMentions("what did @El Presidente's crew film", roster);
   assert.equal(possessive.mentions[0]?.userId, EL);
+  const wrapped = resolveMentions("summarize (@El Presidente's) work", [
+    { userId: EL, fullName: 'El Presidente' },
+    { userId: JANE, fullName: 'El Other' },
+  ]);
+  assert.equal(wrapped.ambiguous.length, 0);
+  assert.equal(wrapped.mentions[0]?.userId, EL);
+  assert.equal(wrapped.mentions.length, 1);
 
   const db = fakeDb(tiffanyTables());
   const which = await prepareMentionAsk(db as any, {
@@ -1054,4 +1068,99 @@ test('party and job events keep a date without a memory row', async () => {
   });
   assert.match(prep.directAnswer ?? '', /Sep 17: You opened this job file and created the Field Capture party/);
   assert.match(prep.supplement, /Job history:\nnone/);
+  assert.match(prep.supplement, /Sep 17, 11:37 AM CT — Field Capture/);
+  assert.doesNotMatch(prep.directAnswer ?? '', /Undated/);
+});
+
+test('redacted and child-privacy speech never reach the mention prompt or fallback', async () => {
+  const secret = 'zephyrprivacyphrase9f3a';
+  const child = 'zephyrchildphrase9f3a';
+  const safeLine = 'attic panel looks fine today';
+  const tables = tiffanyTables();
+  tables.job_proofs.push({
+    id: '88888888-8888-4888-8888-888888888885',
+    org_id: ORG_A,
+    job_id: JOB_TIFFANY,
+    party_id: 'party-el',
+    work_date: '2026-09-18',
+    phase: 'after',
+    state: 'analysed',
+    title: 'Privacy leak clip',
+    ai_summary: `The speaker said ${secret} during the take and later ${child} was audible.`,
+    transcript_text: `[0:04] ${safeLine}\n[0:10] ${secret} was spoken here\n[0:20] ${child} was spoken here`,
+    narration_text: `Narration repeats ${secret} and then ${child}.`,
+    transcript_segments: [
+      { start: 4, text: safeLine },
+      { start: 10, text: `${secret} was spoken here` },
+      { start: 20, text: `${child} was spoken here` },
+    ],
+    transcript_words: [
+      { start: 4, word: 'attic' },
+      { start: 10, word: secret },
+      { start: 20, word: child },
+    ],
+    ai_findings: {
+      privacyRedactions: {
+        ranges: [{ startSec: 8, endSec: 15, reason: 'bathroom', confidence: 0.9, source: 'manual' }],
+      },
+      childPrivacyRedactions: {
+        ranges: [{ startSec: 18, endSec: 26, reason: 'child present', confidence: 0.9, source: 'manual' }],
+      },
+      events: [
+        { atSeconds: 10, type: 'said', text: `${secret} was spoken here`, quote: `${secret} was spoken here` },
+        { atSeconds: 4, type: 'said', text: safeLine },
+      ],
+      highlights: [
+        { tSec: 10, text: `${secret} was spoken here` },
+        { tSec: 20, text: `${child} was spoken here` },
+      ],
+      people: { speakers: [{ displayName: 'Seated man', quote: `${secret} was spoken here`, tSec: 10 }] },
+    },
+    device_metadata: {},
+    captured_at: '2026-09-18T15:00:00.000Z',
+    received_at: '2026-09-18T15:05:00.000Z',
+    deleted_at: null,
+  });
+  const db = fakeDb(tables);
+  const question = 'what had @El Presidente done in this file';
+  const offline = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question,
+    askerUserId: EL,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const online = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question,
+    askerUserId: EL,
+    anthropicApiKey: 'test-key-not-a-real-secret',
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const clips = collectionClipsFromRows(tables.job_proofs);
+  const prompt = assembleMentionModelPrompt({
+    question,
+    file: { mentionSupplement: online.supplement, clips },
+  });
+  const blobs = [
+    offline.directAnswer ?? '',
+    offline.fallbackAnswer ?? '',
+    online.supplement,
+    online.fallbackAnswer ?? '',
+    prompt.system,
+    prompt.user,
+  ];
+  for (const blob of blobs) {
+    assert.equal(blob.includes(secret), false);
+    assert.equal(blob.includes(child), false);
+  }
+  assert.match(online.supplement, /attic panel looks fine today/);
+  assert.match(online.supplement, new RegExp(PRIVACY_REDACTED_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(online.supplement, new RegExp(CHILD_PRIVACY_REDACTED_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(online.supplement, /Timed segments:/);
+  assert.match(online.supplement, /Word list:/);
+  assert.match(prompt.user, /attic panel looks fine today/);
+  assert.doesNotMatch(offline.directAnswer ?? '', new RegExp(secret));
+  assert.doesNotMatch(offline.fallbackAnswer ?? '', new RegExp(child));
 });

@@ -1,14 +1,7 @@
 import { anthropicClient, isModelProviderConfigured, type MeasuredUsage } from '../lib/anthropic.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { config } from '../config.js';
-import {
-  privacyRedactionsFromStored,
-  redactTranscriptForAsk,
-} from '../audio/privacyRedactions.js';
-import {
-  childPrivacyRedactionsFromStored,
-  redactTranscriptForChildPrivacy,
-} from '../audio/childPrivacyRedactions.js';
+import { privacySafeMentionProof } from './mentionPrivacy.js';
 
 /**
  * Reading the proof videos, and answering questions about them.
@@ -531,24 +524,16 @@ export function collectionClipsFromRows(
       : [];
 
   return rows.map((row) => {
-    const findings = row.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
-    const ranges = privacyRedactionsFromStored(
-      (findings as { privacyRedactions?: unknown }).privacyRedactions,
-    );
-    const childRanges = childPrivacyRedactionsFromStored(
-      (findings as { childPrivacyRedactions?: unknown }).childPrivacyRedactions,
-    );
+    const safe = privacySafeMentionProof(row as Record<string, unknown>);
+    const findings = safe.ai_findings && typeof safe.ai_findings === 'object' ? safe.ai_findings : {};
     return {
-      proofId: row.id ?? null,
-      workDate: String(row.work_date ?? row.workDate ?? ''),
-      phase: row.phase ?? null,
-      company: row.company ?? null,
-      summary: row.ai_summary ?? row.narration_text ?? null,
-      narration: row.narration_text ?? null,
-      transcript: redactTranscriptForChildPrivacy(
-        redactTranscriptForAsk(row.transcript_text ?? null, ranges),
-        childRanges,
-      ),
+      proofId: (safe.id as string | undefined) ?? row.id ?? null,
+      workDate: String(safe.work_date ?? safe.workDate ?? ''),
+      phase: (safe.phase as string | null | undefined) ?? null,
+      company: (safe.company as string | null | undefined) ?? null,
+      summary: (safe.ai_summary as string | null | undefined) ?? (safe.narration_text as string | null | undefined) ?? null,
+      narration: (safe.narration_text as string | null | undefined) ?? null,
+      transcript: (safe.transcript_text as string | null | undefined) ?? null,
       changes: asStrings(
         (findings as { changes?: unknown; workPerformed?: unknown }).changes ??
           (findings as { workPerformed?: unknown }).workPerformed,

@@ -6,6 +6,7 @@
  * ambiguity, and share-link rules stay deterministic.
  */
 import { fieldCaptureEmail } from '../field/crewJoin.js';
+import { privacySafeMentionProof } from './mentionPrivacy.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
@@ -751,30 +752,31 @@ export async function loadPersonContext(
     for (const proof of proofs) {
       const jobId = String(proof.job_id ?? '');
       if (!jobsById.has(jobId) && !assigned.has(`${person.userId}:${jobId}`)) continue;
-      const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys, aliases);
-      const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
+      const safe = privacySafeMentionProof(proof as Record<string, unknown>);
+      const captured = proofCapturedBy(safe, person.userId, partiesById, uploadKeys, ackKeys, aliases);
+      const tagged = textMentionsPerson(clipText(safe), person.userId, roster);
       if (!captured && !tagged) continue;
       const title = cleanMentionTitle(
-        String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim()),
+        String(safe.title || `${safe.phase ?? 'clip'} ${safe.work_date ?? ''}`.trim()),
       );
-      const duration = Number(proof.duration_seconds);
+      const duration = Number(safe.duration_seconds);
       push({
         kind: 'video',
-        id: String(proof.id),
+        id: String(safe.id),
         jobId,
-        proofId: String(proof.id),
+        proofId: String(safe.id),
         title,
-        text: clipText(proof),
-        listLine: clipListLine(proof),
-        finding: clipFindingLine(proof),
-        detail: clipDetail(proof),
-        transcript: String(proof.transcript_text ?? ''),
-        speakers: mentionSpeakerLine(proof.ai_findings) || null,
+        text: clipText(safe),
+        listLine: clipListLine(safe),
+        finding: clipFindingLine(safe),
+        detail: clipDetail(safe),
+        transcript: String(safe.transcript_text ?? ''),
+        speakers: mentionSpeakerLine(safe.ai_findings) || null,
         durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
-        at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
-        status: proof.state ?? null,
+        at: (safe.captured_at ?? safe.received_at ?? safe.work_date ?? null) as string | null,
+        status: (safe.state ?? null) as string | null,
         captured,
-        workDate: proof.work_date ?? null,
+        workDate: (safe.work_date ?? null) as string | null,
       });
     }
 
@@ -826,6 +828,8 @@ export async function loadPersonContext(
     const ids = new Set([person.userId, ...(aliasesByUser.get(person.userId) ?? [])]);
     for (const party of parties) {
       if (!ids.has(String(party.created_by ?? ''))) continue;
+      const at = String(party.created_at ?? '').trim();
+      if (!at) continue;
       const company = String(party.company ?? 'party').trim();
       push({
         kind: 'log',
@@ -833,7 +837,7 @@ export async function loadPersonContext(
         jobId: party.job_id ?? null,
         title: `Created the ${company} party`,
         text: '',
-        at: party.created_at ?? null,
+        at,
         captured: true,
       });
     }

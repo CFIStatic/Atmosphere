@@ -1,3 +1,5 @@
+import { mentionTimedLines, privacySafeMentionProof, redactMentionSpeech } from './mentionPrivacy.js';
+
 /**
  * @mentions for Ask.
  *
@@ -117,13 +119,14 @@ export function nameMatchesQuery(name: string, query: string): boolean {
 
 function boundaryAfter(text: string, length: number): boolean {
   const next = text[length] ?? '';
-  if (next === '' || /[\s,.;:!?)]/.test(next)) return true;
-  // `@Jane's` and `@El Presidente's` end the name. An apostrophe inside the name does not.
-  return /^['’]s(?=$|[\s,.;:!?])/i.test(text.slice(length));
+  if (next === '' || /[\s,.;:!?)\]"“”]/.test(next)) return true;
+  // `@Jane's` and `@El Presidente's` end the name, including before ) " ].
+  // An apostrophe inside the name does not.
+  return /^['’]s(?=$|[\s,.;:!?)\]"“”])/i.test(text.slice(length));
 }
 
 function membersMatching(query: string, roster: MentionMember[]): MentionMember[] {
-  const q = query.trim();
+  const q = withoutPossessive(query.trim());
   if (!q) return [];
   const exact = roster.filter((member) => mentionDisplayName(member).toLowerCase() === q.toLowerCase());
   if (exact.length) return exact;
@@ -286,7 +289,7 @@ export function stripMentionMarks(question: string, names: string[] = []): strin
     .sort((a, b) => b.length - a.length);
   for (const name of ordered) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?:['’]s)?(?=$|[\\s,.;:!?])`, 'gi'), '$1 ');
+    text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?:['’]s)?(?=$|[\\s,.;:!?)"“”\\]])`, 'gi'), '$1 ');
   }
   return text.replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,80}/g, '$1 ');
 }
@@ -831,20 +834,51 @@ export function mentionSpeakerLine(findings: unknown): string {
   return [...new Set(labels)].join(', ');
 }
 
+function pushSpeechBit(lines: string[], value: unknown): void {
+  if (typeof value === 'string') {
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (text) lines.push(text);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const row = value as Record<string, unknown>;
+  for (const key of ['text', 'quote', 'highlight', 'caption']) pushSpeechBit(lines, row[key]);
+}
+
+function pushSpeechList(lines: string[], value: unknown): void {
+  if (!Array.isArray(value)) return;
+  for (const item of value) pushSpeechBit(lines, item);
+}
+
+/** Findings, quotes, and highlights. Caller has already redacted timed speech. */
 function proofFindingText(findings: unknown): string {
   if (!findings || typeof findings !== 'object') return '';
-  const events = (findings as { events?: unknown }).events;
-  const lines = Array.isArray(events)
-    ? events
-        .map((event) => {
-          if (!event || typeof event !== 'object') return '';
-          return String((event as { text?: unknown }).text ?? '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        })
-        .filter(Boolean)
-    : [];
-  return trimMentionTranscript(lines.join(' '), 1600);
+  const root = findings as Record<string, unknown>;
+  const lines: string[] = [];
+  pushSpeechList(lines, root.events);
+  pushSpeechList(lines, root.highlights);
+  pushSpeechList(lines, root.quotes);
+  pushSpeechList(lines, root.keyMoments);
+  const people =
+    root.people && typeof root.people === 'object' ? (root.people as Record<string, unknown>) : root;
+  if (Array.isArray(people.speakers)) {
+    for (const speaker of people.speakers) {
+      if (!speaker || typeof speaker !== 'object') continue;
+      const row = speaker as Record<string, unknown>;
+      pushSpeechBit(lines, row.quote);
+      pushSpeechBit(lines, row.text);
+    }
+  }
+  const conversation =
+    root.conversation && typeof root.conversation === 'object'
+      ? (root.conversation as Record<string, unknown>)
+      : null;
+  if (conversation) {
+    for (const key of ['conversationTurns', 'conversationKeyMoments', 'keyMoments', 'highlights']) {
+      pushSpeechList(lines, conversation[key]);
+    }
+  }
+  return trimMentionTranscript([...new Set(lines)].join(' '), 1600);
 }
 
 function clipPriority(
@@ -964,7 +998,9 @@ export function formatMentionJobFile(input: MentionJobFileInput): string {
       const company = String(party.company ?? '').trim();
       if (!company) return '';
       const trade = String(party.trade ?? '').trim();
-      return `- ${[company, trade].filter(Boolean).join(' · ')}`;
+      const when = prettyMentionStamp(String(party.created_at ?? ''), zone).stamp;
+      const who = [company, trade].filter(Boolean).join(' · ');
+      return `- ${when ? `${when} — ` : ''}${who}`;
     })
     .filter(Boolean);
   sections.push(parties.length ? `Parties:\n${parties.join('\n')}` : 'Parties:\nnone');
@@ -980,7 +1016,7 @@ export function formatMentionJobFile(input: MentionJobFileInput): string {
   let budget = TRANSCRIPT_BUDGET;
   const clipLines: string[] = [];
   for (const row of ranked) {
-    const proof = row.proof;
+    const proof = privacySafeMentionProof(row.proof);
     const title = cleanMentionTitle(String(proof.title ?? 'Clip'));
     const when = prettyMentionStamp(String(proof.captured_at ?? proof.work_date ?? ''), zone).stamp;
     const summary = String(proof.ai_summary ?? proof.narration_text ?? '')
@@ -989,8 +1025,15 @@ export function formatMentionJobFile(input: MentionJobFileInput): string {
     const finding = proofFindingText(proof.ai_findings);
     const speakers = mentionSpeakerLine(proof.ai_findings);
     const cap = row.rank === 0 ? PERSON_TRANSCRIPT_CAP : row.rank === 1 ? TAGGED_TRANSCRIPT_CAP : OTHER_TRANSCRIPT_CAP;
-    const transcript = trimMentionTranscript(proof.transcript_text, Math.min(cap, budget));
-    budget -= transcript.length;
+    const takeSpeech = (text: unknown) => {
+      const redacted = redactMentionSpeech(text, proof.ai_findings) ?? '';
+      const trimmed = trimMentionTranscript(redacted, Math.min(cap, Math.max(budget, 0)));
+      budget -= trimmed.length;
+      return trimmed;
+    };
+    const transcript = takeSpeech(proof.transcript_text);
+    const segments = takeSpeech(mentionTimedLines(proof.transcript_segments));
+    const words = takeSpeech(mentionTimedLines(proof.transcript_words));
     const jobId = String(proof.job_id ?? '');
     const proofId = String(proof.id ?? '');
     const cite = jobId && proofId ? videoSourceId(jobId, proofId, title) : '';
@@ -1002,6 +1045,8 @@ export function formatMentionJobFile(input: MentionJobFileInput): string {
       finding ? `  Findings: ${finding}` : '  Findings: none on file',
       speakers ? `  Speakers: ${speakers}` : '  Speakers: not identified on this clip',
       transcript ? `  Timed transcript: ${transcript}` : '  Timed transcript: none on file',
+      segments ? `  Timed segments: ${segments}` : '',
+      words ? `  Word list: ${words}` : '',
     ].filter(Boolean);
     clipLines.push(bits.join('\n'));
   }
