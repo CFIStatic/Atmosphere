@@ -3723,8 +3723,14 @@
     var time = timeLabel(iso);
     return time ? day + ' · ' + time : day;
   }
+  /**
+   * Date on top, clock underneath — both read from the same instant in the
+   * viewer's timezone. A date-only field (workDate) is only the fallback when
+   * there is no instant; mixing a UTC calendar day with a local clock put
+   * late-evening CT times on the next day.
+   */
   function whenCell(dayIso, instantIso) {
-    var day = dayLabel(dayIso || instantIso);
+    var day = dayLabel(instantIso || dayIso);
     var time = timeLabel(instantIso);
     var dt = instantIso || dayIso || '';
     var title = stamp(instantIso || dayIso);
@@ -4165,7 +4171,7 @@
     var status = clipStatus(e);
     var phase = clipKind(e.phase);
     var clipName = clipListLabel(e, underJob);
-    var clipDay = dayLabel(e.workDate);
+    var clipDay = dayLabel(e.capturedAt || e.uploadedAt || e.workDate);
     var sub = storedTitleSubtitle(e, phase, underJob);
     return '' +
       '<tr class="cliprow' + (underJob ? ' cliprow-nested' : '') + '" tabindex="0" data-id="' + e.id + '">' +
@@ -4226,14 +4232,14 @@
     return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
   }
 
-  function jobRecordingStatus(items, job) {
+  /**
+   * Job folder status. Zero clips is always Waiting for first clip — never
+   * Recorded, never a red dead-folder state. Recording / Recorded need at
+   * least one clip.
+   */
+  function jobRecordingStatus(items) {
     if (!items.length) {
-      /* captureStatus in_progress (and any empty folder) is waiting —
-         never a red dead-folder state. */
-      return {
-        cls: 'yellow',
-        text: job && job.captureStatus === 'recorded' ? 'Recorded' : 'Waiting for first clip',
-      };
+      return { cls: 'yellow', text: 'Waiting for first clip' };
     }
     if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Recording' };
     return { cls: 'green', text: 'Recorded' };
@@ -4488,24 +4494,20 @@
    */
   function jobRow(key, items, collapsed) {
     var job = JOBS[key] || { name: (items[0] && items[0].jobName) || 'Job', number: null };
-    var status = jobRecordingStatus(items, job);
-    var latestRecorded = latestClip(items, ['capturedAt', 'workDate', 'uploadedAt']);
-    var latestUpload = latestClip(items, ['uploadedAt', 'capturedAt']);
+    /* A search can match the job name while hiding its clips — status and
+       the Recorded column still come from the clips the job really has. */
+    var jobClips = items.length ? items : EVIDENCE.filter(function (e) { return e.job === key; });
+    var status = jobRecordingStatus(jobClips);
+    var latestRecorded = latestClip(jobClips, ['capturedAt', 'workDate', 'uploadedAt']);
+    var latestUpload = latestClip(jobClips, ['uploadedAt', 'capturedAt']);
+    /* No clip, nothing in the Recorded column — job creation is not a recording. */
     var recordedDay = '—';
     var recordedInstant = '';
     var daySrc = '';
-    if (!latestRecorded && job.createdAt) {
-      daySrc = String(job.createdAt).slice(0, 10);
-      recordedDay = daySrc ? dayLabel(daySrc) : '—';
-      recordedInstant = job.createdAt;
-    }
     if (latestRecorded) {
-      daySrc = latestRecorded.workDate ||
-        (latestRecorded.capturedAt && String(latestRecorded.capturedAt).slice(0, 10)) ||
-        (latestRecorded.uploadedAt && String(latestRecorded.uploadedAt).slice(0, 10)) ||
-        '';
-      recordedDay = daySrc ? dayLabel(daySrc) : '—';
+      daySrc = latestRecorded.workDate || '';
       recordedInstant = latestRecorded.capturedAt || latestRecorded.uploadedAt || '';
+      recordedDay = dayLabel(recordedInstant || daySrc);
     }
     var uploader = latestUpload
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
