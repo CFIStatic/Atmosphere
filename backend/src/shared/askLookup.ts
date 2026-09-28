@@ -26,6 +26,7 @@ import {
 import { cleanMentionTitle, mentionSpeakerLine, sourceSlug } from './mentions.js';
 import {
   classifyAskIntent,
+  classifyChatTurn,
   composeGroundedAsk,
   isJobOverview,
   localStamp,
@@ -1048,6 +1049,7 @@ export function planAskLookup(
   history?: Array<{ role?: string | null; text?: string | null }> | null,
 ): Array<{ name: AskLookupToolName; input: Record<string, unknown> }> {
   const resolved = resolveAskQuestion(question, history, catalog);
+  if (classifyChatTurn(resolved, history, catalog)) return [];
   if (isJobOverview(resolved)) {
     const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [
       { name: 'read_job_history', input: {} },

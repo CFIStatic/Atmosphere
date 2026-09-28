@@ -68,7 +68,8 @@ Rules:
 9. Then append two or three follow-up questions the tool results can answer:
    ⟦followups: question one? ;; question two?⟧
 10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
-11. On a tool-call turn, do not write the answer yet.`;
+11. On a tool-call turn, do not write the answer yet.
+12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user says an answer was wrong, check the file and either correct yourself or quote the line that supports the earlier answer. Answer first. No canned filler. Never stop at one line that only says the file does not have it.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -480,7 +481,7 @@ export async function answerFromAskLookup(input: {
       usage = completed.usage;
       streamed = true;
     } else {
-      prose = composeGroundedAsk(resolved, trace, input.catalog);
+      prose = composeGroundedAsk(resolved, trace, input.catalog, input.history);
       model = null;
       streamed = false;
     }
