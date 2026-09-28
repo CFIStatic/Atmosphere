@@ -15,7 +15,19 @@ export type AskInline =
 
 export type AskProseBlock =
   | { kind: 'paragraph'; children: AskInline[] }
-  | { kind: 'list'; ordered: boolean; items: AskInline[][] };
+  | { kind: 'heading'; level: 2 | 3; children: AskInline[] }
+  | { kind: 'list'; ordered: boolean; items: AskInline[][] }
+  | { kind: 'table'; headers: AskInline[][]; rows: AskInline[][][] };
+
+export function splitAskArtifact(input: string): { prose: string; artifact: string | null } {
+  const text = String(input ?? '');
+  const match = text.match(/⟦artifact⟧\s*([\s\S]*?)\s*⟦\/artifact⟧/);
+  if (!match) return { prose: text.trim(), artifact: null };
+  return {
+    prose: text.replace(match[0], '').trim(),
+    artifact: (match[1] ?? '').trim() || null,
+  };
+}
 
 /**
  * Drop unpaired / decorative asterisks so the chat bubble never shows
@@ -192,12 +204,45 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
     listItems = [];
     listOrdered = false;
   };
+  const flushAll = () => {
+    flushList();
+    flushParagraph();
+  };
 
-  for (const raw of text.split('\n')) {
-    const line = raw.trimEnd();
+  const lines = text.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!.trimEnd();
     if (!line.trim()) {
-      flushList();
-      flushParagraph();
+      flushAll();
+      continue;
+    }
+    const heading = line.match(/^\s*(#{1,3})\s+(.*)$/);
+    if (heading) {
+      flushAll();
+      const level = (heading[1] ?? '').length >= 3 ? 3 : 2;
+      blocks.push({ kind: 'heading', level, children: parseInline((heading[2] ?? '').trim()) });
+      continue;
+    }
+    if (/^\s*\|.+\|\s*$/.test(line)) {
+      const tableLines: string[] = [];
+      while (index < lines.length && /^\s*\|.+\|\s*$/.test(lines[index] ?? '')) {
+        tableLines.push((lines[index] ?? '').trim());
+        index += 1;
+      }
+      index -= 1;
+      flushAll();
+      const parsed = tableLines
+        .filter((row) => !/^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(row))
+        .map((row) =>
+          row
+            .replace(/^\|/, '')
+            .replace(/\|$/, '')
+            .split('|')
+            .map((cell) => parseInline(cell.trim())),
+        );
+      if (parsed.length) {
+        blocks.push({ kind: 'table', headers: parsed[0] ?? [], rows: parsed.slice(1) });
+      }
       continue;
     }
     const unordered = line.match(/^\s*[-*•–—]\s+(.*)$/);

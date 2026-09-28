@@ -21,7 +21,6 @@ import {
   buildLookupUserPrompt,
   collectMomentSourceIds,
   executeAskLookup,
-  groundedLookupProse,
   planAskLookup,
   quotesFromTrace,
   suggestFollowUps,
@@ -35,22 +34,30 @@ import {
   parseMomentSource,
   stripMomentTrailers,
 } from './askMoments.js';
+import { classifyAskIntent, composeGroundedAsk, polishAskProse, wrapTaskArtifact } from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 
-const LOOKUP_SYSTEM = `You answer from this job file by looking things up. You have tools. Use them.
+const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
 Rules:
-1. Call a tool when the question depends on what was said, who filmed a clip, or what the job history records. Do not guess.
-2. Stay strictly grounded in tool results. Never invent clips, quotes, times, people, rooms, or events.
-3. If the tools do not contain the answer, say plainly that it is not in the file.
-4. Cite a spoken moment as video/<jobId>/<proofId>/<slug>@<seconds> using the cite and atSeconds from the tool. Use the cite without @seconds only when the tool has no timing.
-5. After the prose, append exactly one sources line and, when a tool returned an excerpt, one quotes line:
-   ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>, clip:YYYY-MM-DD⟧
+1. Call a tool when the answer depends on what was said, who filmed a clip, what the visits show, or what job history records. Gather what you need over several steps. Do not guess.
+2. Stay strictly grounded in tool results. Never invent clips, quotes, times, people, rooms, defects, or scope.
+3. If the file lacks something, say that in one short sentence, then give the best answer the file does support.
+4. The first sentence is the answer. Then only the detail the reader needs. No "Certainly", "Great question", or other filler.
+5. Write clean markdown: short paragraphs, bullets only for parallel items, **bold** for the key fact, a table when comparing visits. No raw ids, no UTC (use the timestamps the tools already localized), no duplicated job names, no stray transcript fragments in the prose.
+6. A request to produce something (homeowner summary, scope note, visit comparison, open issues, punch list) is a task. Deliver the finished note, wrapped as:
+   ⟦artifact⟧
+   the copyable note
+   ⟦/artifact⟧
+   The sentence before that wrapper is the answer, not a preamble.
+7. Cite a spoken moment as video/<jobId>/<proofId>/<slug>@<seconds> using cite and atSeconds from the tool. Omit @seconds when the tool has no timing.
+8. After the prose, append exactly one sources line and, only when a tool returned a spoken excerpt the question asked for, one quotes line:
+   ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>⟧
    ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker|verbatim excerpt⟧
-6. Then append two or three follow-up questions that the tool results can actually answer:
+9. Then append two or three follow-up questions the tool results can answer:
    ⟦followups: question one? ;; question two?⟧
-7. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
-8. On a tool-call turn, do not write the answer yet.`;
+10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
+11. On a tool-call turn, do not write the answer yet.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -109,7 +116,13 @@ export function finalizeLookupAnswer(
   });
   const kept = cited.length ? cited : [...allowed].slice(0, 4);
   text = text.replace(/(?:\n|^)\s*⟦sources:\s*[^⟧]*⟧\s*/i, '').trim();
-  const quotes = quotesFromTrace(trace).filter((quote) => {
+  text = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  if (classifyAskIntent(question).kind === 'task') text = wrapTaskArtifact(text);
+  const spoken = /\b(say|said|quote|transcript|tell|mention)\b/i.test(question);
+  const quoteTrace = trace.filter(
+    (step) => step.tool === 'search_transcripts' || (spoken && step.tool === 'get_clip'),
+  );
+  const quotes = quotesFromTrace(quoteTrace).filter((quote) => {
     const moment = parseMomentSource(quote.sourceId);
     if (!moment) return false;
     return kept.some((id) => {
@@ -411,7 +424,7 @@ export async function answerFromAskLookup(input: {
       usage = completed.usage;
       streamed = true;
     } else {
-      prose = groundedLookupProse(input.question, trace);
+      prose = composeGroundedAsk(input.question, trace, input.catalog);
       model = null;
       streamed = false;
     }

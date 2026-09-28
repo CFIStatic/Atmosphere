@@ -23,7 +23,8 @@ import {
   redactTranscriptForAsk,
   secondsInPrivacyRange,
 } from '../audio/privacyRedactions.js';
-import { mentionSpeakerLine, sourceSlug } from './mentions.js';
+import { cleanMentionTitle, mentionSpeakerLine, sourceSlug } from './mentions.js';
+import { classifyAskIntent, composeGroundedAsk, localStamp } from './askPolish.js';
 import {
   formatAskClock,
   momentSourceId,
@@ -82,6 +83,9 @@ export type AskLookupCatalog = {
   clips: AskLookupClip[];
   history?: AskLookupHistoryEvent[] | null;
   people?: AskLookupPerson[] | null;
+  jobTitle?: string | null;
+  /** Asker's IANA zone. History stamps use this, never UTC. */
+  timeZone?: string | null;
 };
 
 export type AskLookupToolName =
@@ -154,6 +158,11 @@ export const ASK_LOOKUP_TOOLS: ToolDef[] = [
 ];
 
 const ACTIVITY_VERBS = new Set(['done', 'filmed', 'recorded', 'opened', 'created', 'activity']);
+const TASK_QUERY = new Set([
+  'write', 'draft', 'summary', 'summarize', 'homeowner', 'client', 'customer', 'scope', 'note',
+  'punch', 'punchlist', 'issues', 'issue', 'compare', 'visits', 'visit', 'prepare', 'compose',
+  'list', 'open', 'make', 'two', 'both', 'three', 'these', 'those', 'each', 'between',
+]);
 
 const STOP = new Set([
   'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',
@@ -359,12 +368,15 @@ export function askLookupCatalogFromJob(input: {
   history?: Array<Record<string, unknown>> | null;
   jobTitle?: string | null;
   people?: AskLookupPerson[] | null;
+  timeZone?: string | null;
 }): AskLookupCatalog {
   const partyById = new Map((input.parties ?? []).map((party) => [String(party.id ?? ''), party.created_by ?? null]));
   return {
     orgId: input.orgId,
     jobId: input.access === 'viewer' || input.jobId ? input.jobId : null,
     access: input.access,
+    jobTitle: input.jobTitle ?? null,
+    timeZone: input.timeZone ?? null,
     people: input.people ?? [],
     clips: input.proofs
       .filter((row) => !row.deleted_at)
@@ -585,7 +597,7 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
     });
   const actions = historyInScope(catalog)
     .filter((event) => event.actorId === person.userId)
-    .map((event) => ({ at: event.at ?? null, summary: event.summary }));
+    .map((event) => ({ at: localStamp(event.at, catalog.timeZone) || null, summary: event.summary }));
   return {
     ok: true,
     tool: 'list_person_activity',
@@ -598,7 +610,7 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
 
 export function readJobHistory(catalog: AskLookupCatalog): AskLookupResult {
   const events = historyInScope(catalog).map((event) => ({
-    at: event.at ?? null,
+    at: localStamp(event.at, catalog.timeZone) || null,
     summary: event.summary,
     jobId: event.jobId,
   }));
@@ -691,7 +703,7 @@ export function planAskLookup(
   if (person) steps.push({ name: 'list_person_activity', input: { name: person.name } });
   const query = tokens(question)
     .filter((token) => !person || !person.name.toLowerCase().includes(token))
-    .filter((token) => !ACTIVITY_VERBS.has(token))
+    .filter((token) => !ACTIVITY_VERBS.has(token) && !TASK_QUERY.has(token) && !/^\d+$/.test(token))
     .slice(0, 6)
     .join(' ');
   if (query) steps.push({ name: 'search_transcripts', input: { query } });
@@ -700,8 +712,13 @@ export function planAskLookup(
     return words.some((word) => q.includes(word));
   });
   if (titled) steps.push({ name: 'get_clip', input: { proofId: titled.proofId } });
-  if (/\b(done|history|file|activity|opened|created)\b/.test(q)) {
+  if (/\b(done|history|file|activity|opened|created)\b/.test(q) || classifyAskIntent(question).kind === 'task') {
     steps.push({ name: 'read_job_history', input: {} });
+  }
+  if (classifyAskIntent(question).kind === 'task' && !person) {
+    for (const row of clipsInScope(catalog).slice(0, 3)) {
+      steps.push({ name: 'get_clip', input: { proofId: row.proofId } });
+    }
   }
   const seen = new Set<string>();
   return steps.filter((step) => {
@@ -777,11 +794,13 @@ export function suggestFollowUps(question: string, trace: AskLookupTraceStep[], 
   const person = (catalog.people ?? []).find((row) => question.toLowerCase().includes(row.name.toLowerCase()));
   for (const clip of clipsInScope(catalog)) {
     if (!evidence.includes(clip.proofId) && !evidence.includes(clip.title.toLowerCase())) continue;
-    const title = clip.title.replace(/[,]+$/g, '').trim();
+    const title = cleanMentionTitle(clip.title);
+    const short = title.length > 32 && clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : title;
+    const dated = /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.test(short);
     if (person && (person.recordedProofIds ?? []).includes(clip.proofId)) {
-      suggestions.push(`What did ${person.name} say in ${title}?`);
-    } else if (title) {
-      suggestions.push(`What was said in ${title}?`);
+      suggestions.push(dated ? `What did ${person.name} say on ${short}?` : `What did ${person.name} say in ${short}?`);
+    } else if (short) {
+      suggestions.push(dated ? `What was said on ${short}?` : `What was said in ${short}?`);
     }
     if (suggestions.length >= 3) break;
   }
@@ -799,10 +818,25 @@ export function suggestFollowUps(question: string, trace: AskLookupTraceStep[], 
   return unique;
 }
 
+function momentBase(id: string): { base: string; at: string | null } {
+  const match = id.match(/^(.*)@(\d+(?:\.\d+)?)$/);
+  return match ? { base: match[1]!, at: match[2]! } : { base: id, at: null };
+}
+
 export function collectMomentSourceIds(trace: AskLookupTraceStep[]): string[] {
   const ids: string[] = [];
   const push = (id: string) => {
-    if (id && !ids.includes(id)) ids.push(id);
+    const clean = trim(id);
+    if (!clean) return;
+    const next = momentBase(clean);
+    const index = ids.findIndex((existing) => momentBase(existing).base === next.base);
+    if (index === -1) {
+      ids.push(clean);
+      return;
+    }
+    const current = momentBase(ids[index]!);
+    if (current.at == null && next.at != null) ids[index] = clean;
+    else if (current.at != null && next.at != null && current.at !== next.at && !ids.includes(clean)) ids.push(clean);
   };
   for (const quote of quotesFromTrace(trace)) push(quote.sourceId);
   for (const step of trace) {
@@ -827,82 +861,14 @@ export function transcriptSecondIsRedacted(clip: AskLookupClip, atSeconds: numbe
   return Boolean(secondsInPrivacyRange(atSeconds, privacy) || secondsInChildPrivacyRange(atSeconds, child));
 }
 
-export function groundedLookupProse(question: string, trace: AskLookupTraceStep[]): string {
-  const bits: string[] = [];
-  for (const step of trace) {
-    if (!step.result.ok) continue;
-    const data = dataOf(step.result);
-    if (step.tool === 'list_person_activity') {
-      if (data.onThisJob === false) {
-        bits.push(step.result.summary);
-        continue;
-      }
-      const clips = Array.isArray(data.clips) ? data.clips : [];
-      if (!clips.length) {
-        bits.push(step.result.summary);
-        continue;
-      }
-      const name = trim(data.name) || 'They';
-      const lines = clips.map((row) => {
-        const clip = row as { title?: unknown; summary?: unknown; excerpt?: unknown };
-        const title = trim(clip.title) || 'a clip';
-        const detail = trim(clip.summary) || trim(clip.excerpt);
-        return detail ? `${title}: ${detail}` : title;
-      });
-      bits.push(`On file for ${name}: ${lines.join(' ')}`);
-    } else if (step.tool === 'read_job_history') {
-      const events = Array.isArray(data.events) ? data.events : [];
-      if (!events.length) bits.push('Job history has nothing else on this question.');
-      else {
-        bits.push(
-          `Job history: ${events
-            .map((event) => trim((event as { summary?: unknown }).summary))
-            .filter(Boolean)
-            .join(' ')}`,
-        );
-      }
-    } else if (step.tool === 'search_transcripts') {
-      const hits = Array.isArray(data.hits) ? data.hits : [];
-      if (!hits.length) {
-        bits.push('The transcripts in scope do not contain that.');
-        continue;
-      }
-      const lines = hits.map((row) => {
-        if (!row || typeof row !== 'object') return '';
-        const hit = row as { title?: unknown; speaker?: unknown; excerpt?: unknown };
-        const said = trim(hit.excerpt);
-        const title = trim(hit.title) || 'a clip';
-        const speaker = trim(hit.speaker);
-        if (!said) return title;
-        return speaker ? `${speaker} in ${title}: ${said}` : `${title}: ${said}`;
-      }).filter(Boolean);
-      bits.push(lines.length ? `Transcript moments: ${lines.join(' ')}` : step.result.summary);
-    } else if (step.tool === 'get_clip') {
-      const title = trim(data.title) || 'a clip';
-      const transcript = trim(data.transcript);
-      const spoken = transcript
-        ? redactedLines(transcript)
-            .map((line) => line.text.replace(/^[^:]{1,40}:\s+/, '').trim())
-            .filter(
-              (text) =>
-                text &&
-                text !== PRIVACY_REDACTED_LABEL &&
-                !text.endsWith(PRIVACY_REDACTED_LABEL) &&
-                !text.includes(CHILD_PRIVACY_REDACTED_LABEL),
-            )
-            .slice(0, 6)
-            .map((text) => excerpt(text))
-        : [];
-      const detail = spoken.join(' ') || trim(data.summary) || trim(data.findings);
-      bits.push(detail ? `${title}: ${detail}` : step.result.summary);
-    }
-  }
-  if (!bits.length) {
-    return 'This job file does not have that. Nothing in the clips, activity, or job history answers it.';
-  }
-  const asked = trim(question);
-  const missing = /\b(say|said|quote|leak|attic)\b/i.test(asked)
-    ? ' If a specific quote or topic is not in the lines above, it is not in the file.'
-    : '';
-  return `${bits.join(' ')}${missing}`.replace(/\s+/g, ' ').trim();
+export function groundedLookupProse(
+  question: string,
+  trace: AskLookupTraceStep[],
+  catalog?: AskLookupCatalog | null,
+): string {
+  return composeGroundedAsk(
+    question,
+    trace,
+    catalog ?? { orgId: '', jobId: null, access: 'org', clips: [] },
+  );
 }

@@ -23,7 +23,7 @@ import {
   seekTargetFromAnswer,
   splitAnswerCites,
 } from '../lib/askSeek';
-import { parseAskProseBlocks, type AskInline } from '../lib/askProse';
+import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -210,6 +210,116 @@ function AskInlineNodes({
   );
 }
 
+function AskBlocks({
+  blocks,
+  events,
+  onSeek,
+}: {
+  blocks: AskProseBlock[];
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  return (
+    <>
+      {blocks.map((block, bi) => {
+        if (block.kind === 'heading') {
+          const Tag = block.level === 3 ? 'h3' : 'h2';
+          return (
+            <Tag key={`h-${bi}`} className="text-[15px] font-semibold tracking-tight text-ink-900">
+              <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
+            </Tag>
+          );
+        }
+        if (block.kind === 'table') {
+          return (
+            <div key={`tbl-${bi}`} className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-[13px]">
+                <thead>
+                  <tr>
+                    {block.headers.map((cell, ci) => (
+                      <th key={`th-${ci}`} className="border-b border-line px-2 py-1.5 font-semibold text-ink-500">
+                        <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, ri) => (
+                    <tr key={`tr-${ri}`}>
+                      {row.map((cell, ci) => (
+                        <td key={`td-${ri}-${ci}`} className="border-b border-line px-2 py-1.5 text-ink-800">
+                          <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        if (block.kind === 'list') {
+          return block.ordered ? (
+            <ol key={`l-${bi}`} className="list-decimal space-y-1.5 pl-5 marker:text-ink-500">
+              {block.items.map((item, ii) => (
+                <li key={`i-${bi}-${ii}`} className="pl-0.5">
+                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <ul key={`l-${bi}`} className="list-disc space-y-1.5 pl-5 marker:text-ink-500">
+              {block.items.map((item, ii) => (
+                <li key={`i-${bi}-${ii}`} className="pl-0.5">
+                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={`p-${bi}`} className="whitespace-pre-wrap">
+            <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
+function AskArtifact({
+  markdown,
+  events,
+  onSeek,
+}: {
+  markdown: string;
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="rounded-xl border border-line bg-paper-50 px-3 py-2.5" data-testid="ask-artifact">
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          data-testid="ask-copy"
+          onClick={() => {
+            void navigator.clipboard?.writeText(markdown).then(() => {
+              setCopied(true);
+            });
+          }}
+          className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div className="space-y-2">
+        <AskBlocks blocks={parseAskProseBlocks(markdown)} events={events} onSeek={onSeek} />
+      </div>
+    </div>
+  );
+}
+
 function AskAnswerBody({
   text,
   events,
@@ -226,45 +336,17 @@ function AskAnswerBody({
   onAskFollowUp?: (question: string) => void;
 }) {
   const extracted = extractAskSources(text);
-  const { body, quotes, followUps } = extracted;
-  const blocks = parseAskProseBlocks(body);
-  if (!blocks.length) {
-    return (
-      <>
-        <p className="leading-relaxed">{body || text}</p>
-        <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
-        <AskSourceChips sources={sources} onOpen={onOpenSource} />
-        {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
-      </>
-    );
-  }
+  const { quotes, followUps } = extracted;
+  const { prose, artifact } = splitAskArtifact(extracted.body);
+  const blocks = parseAskProseBlocks(prose);
   return (
-    <div className="space-y-2.5 text-[15px] leading-relaxed" data-testid="ask-answer-body">
-      {blocks.map((block, bi) =>
-        block.kind === 'list' ? (
-          block.ordered ? (
-            <ol key={`l-${bi}`} className="list-decimal space-y-1.5 pl-5 marker:text-ink-500">
-              {block.items.map((item, ii) => (
-                <li key={`i-${bi}-${ii}`} className="pl-0.5">
-                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <ul key={`l-${bi}`} className="list-disc space-y-1.5 pl-5 marker:text-ink-500">
-              {block.items.map((item, ii) => (
-                <li key={`i-${bi}-${ii}`} className="pl-0.5">
-                  <AskInlineNodes nodes={item} events={events} onSeek={onSeek} />
-                </li>
-              ))}
-            </ul>
-          )
-        ) : (
-          <p key={`p-${bi}`} className="whitespace-pre-wrap">
-            <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
-          </p>
-        ),
-      )}
+    <div className="space-y-2.5 text-[15px] leading-relaxed text-ink-800" data-testid="ask-answer-body">
+      {blocks.length ? (
+        <AskBlocks blocks={blocks} events={events} onSeek={onSeek} />
+      ) : prose ? (
+        <p className="whitespace-pre-wrap">{prose}</p>
+      ) : null}
+      {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />
       {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}

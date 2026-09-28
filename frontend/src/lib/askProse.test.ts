@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askInlineText, normalizeAskProse, parseAskProseBlocks, stripOrphanEmphasis } from './askProse';
+import { askInlineText, normalizeAskProse, parseAskProseBlocks, splitAskArtifact, stripOrphanEmphasis } from './askProse';
 
 describe('normalizeAskProse', () => {
   it('keeps bold markdown and normalizes list markers', () => {
@@ -66,6 +66,25 @@ describe('parseAskProseBlocks', () => {
     expect(blocks[0]?.kind).toBe('paragraph');
     if (blocks[0]?.kind !== 'paragraph') throw new Error('expected paragraph');
     expect(askInlineText(blocks[0].children)).toContain('<script>alert(1)</script>');
+  });
+
+  it('parses a heading and a comparison table', () => {
+    const blocks = parseAskProseBlocks(
+      '## Visit comparison\n\n| Visit | What the file shows |\n| --- | --- |\n| Sep 17 | Office recording |\n| Sep 21 | Two interior clips |',
+    );
+    expect(blocks[0]).toMatchObject({ kind: 'heading', level: 2 });
+    const table = blocks.find((block) => block.kind === 'table');
+    expect(table?.kind).toBe('table');
+    if (table?.kind !== 'table') throw new Error('expected table');
+    expect(askInlineText(table.headers[0]!)).toBe('Visit');
+    expect(table.rows).toHaveLength(2);
+    expect(askInlineText(table.rows[1]![0]!)).toBe('Sep 21');
+  });
+
+  it('splits a copyable artifact out of the prose', () => {
+    const split = splitAskArtifact('Three clips are on file.\n\n⟦artifact⟧\n**Homeowner summary**\n⟦/artifact⟧');
+    expect(split.prose).toBe('Three clips are on file.');
+    expect(split.artifact).toBe('**Homeowner summary**');
   });
 
   it('never renders unmatched stars as literal text', () => {

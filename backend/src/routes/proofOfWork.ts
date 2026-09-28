@@ -2976,6 +2976,7 @@ export async function runProofAsk(input: {
       parties: partyRows,
       history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
       jobTitle: file.job?.title ?? null,
+      timeZone: input.timeZone ?? null,
       people: lookupPeopleFromContexts([
         ...(mentionPrep?.people ?? []),
         ...(mentionPrep?.offJobPeople ?? []).map((person) => ({

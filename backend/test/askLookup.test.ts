@@ -328,7 +328,7 @@ test('a failed model falls back to tool results and does not invent', async () =
     });
     assert.equal(result.model, null);
     assert.match(result.answer, /office/i);
-    assert.match(result.answer, /not in the file|Job history|On file/i);
+    assert.match(result.answer, /recorded|on this file|does not have/i);
     assert.match(result.answer, new RegExp(`video/${JOB}/${OFFICE}/`));
     assert.doesNotMatch(result.answer, /4412/);
     assert.doesNotMatch(result.answer, /purple dumpster/i);

@@ -493,4 +493,32 @@ describe('JobAskPanel', () => {
     expect(await screen.findByText(/does not mention skylights/i)).toBeInTheDocument();
   });
 
+  it('renders a comparison table and copies the finished note', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    const note = '## Homeowner summary\n\n- **Sep 17 — Office.** A seated conversation.';
+    const answer = `Three clips are on this file.\n\n⟦artifact⟧\n${note}\n⟦/artifact⟧\n\n| Visit | What the file shows |\n| --- | --- |\n| Sep 17 | Office |\n\n⟦sources: video/job-1038/proof-tarp/north-slope@18⟧`;
+    askAboutProofsStream.mockResolvedValue({
+      answer,
+      groundedOn: 1,
+      model: 'claude-opus',
+      question: { id: 'q-note', question: 'write a summary', answer, grounded_on: ['proof-tarp'], created_at: '2026-08-06T12:00:00Z' },
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'write a summary for the homeowner');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByRole('heading', { name: /homeowner summary/i })).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveTextContent('Sep 17');
+    await user.click(screen.getByTestId('ask-copy'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(note);
+    });
+    expect(screen.getByTestId('ask-copy')).toHaveTextContent('Copied');
+  });
+
 });
