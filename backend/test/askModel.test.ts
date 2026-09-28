@@ -60,7 +60,7 @@ test('interactive Ask defaults to flash-lite without high thinking or 20k tokens
     assert.equal(GEMINI_ASK_THINKING_LEVEL, 'minimal');
     assert.ok(GEMINI_ASK_MAX_TOKENS < 10_000);
 
-    const calls: Array<{ url: string; key: string | null; body: any }> = [];
+    const calls: Array<{ url: string; key: string | null; body: Record<string, unknown> }> = [];
     const fetchFn: typeof fetch = async (input, init) => {
       const url = String(input);
       const headers = new Headers(init?.headers);
@@ -260,7 +260,7 @@ test('answerFromJobFile uses Gemini when only a Google key is wired', async () =
   }
 });
 
-test('analysis mode defaults to gemini-2.5-pro with high thinking headroom', async () => {
+test('analysis mode defaults to gemini-3.1-pro-preview with high thinkingLevel', async () => {
   const prevAnthropic = process.env.ANTHROPIC_API_KEY;
   const prevGemini = process.env.GEMINI_API_KEY;
   const prevGoogle = process.env.GOOGLE_API_KEY;
@@ -276,18 +276,24 @@ test('analysis mode defaults to gemini-2.5-pro with high thinking headroom', asy
   delete process.env.VERIFICATION_PRIMARY_MODEL;
   process.env.GEMINI_API_KEY = 'live-gemini';
   try {
-    assert.equal(geminiAskModel('analysis'), 'gemini-2.5-pro');
+    assert.equal(geminiAskModel('analysis'), 'gemini-3.1-pro-preview');
     assert.equal(geminiAskModel('interactive'), 'gemini-2.5-flash-lite');
 
-    const bodies: any[] = [];
+    const bodies: Array<{
+      generationConfig?: {
+        maxOutputTokens?: number;
+        temperature?: number;
+        thinkingConfig?: { thinkingLevel?: string; thinkingBudget?: number };
+      };
+    }> = [];
     const fetchFn: typeof fetch = async (input, init) => {
-      assert.match(String(input), /gemini-2\.5-pro:generateContent/);
+      assert.match(String(input), /gemini-3\.1-pro-preview:generateContent/);
       bodies.push(JSON.parse(String(init?.body ?? '{}')));
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Dense reconstruction.' }] } }],
           usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 20 },
-          modelVersion: 'gemini-2.5-pro',
+          modelVersion: 'gemini-3.1-pro-preview',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -301,8 +307,10 @@ test('analysis mode defaults to gemini-2.5-pro with high thinking headroom', asy
       mode: 'analysis',
     });
     assert.ok(result);
-    assert.equal(result.model, 'gemini-2.5-pro');
-    assert.equal(bodies[0]?.generationConfig?.thinkingConfig?.thinkingBudget, 8192);
+    assert.equal(result.model, 'gemini-3.1-pro-preview');
+    assert.equal(bodies[0]?.generationConfig?.thinkingConfig?.thinkingLevel, 'high');
+    assert.equal(bodies[0]?.generationConfig?.thinkingConfig?.thinkingBudget, undefined);
+    assert.equal(bodies[0]?.generationConfig?.temperature, undefined);
     assert.ok((bodies[0]?.generationConfig?.maxOutputTokens ?? 0) >= 8192);
   } finally {
     restoreEnv('ANTHROPIC_API_KEY', prevAnthropic);

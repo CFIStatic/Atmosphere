@@ -5,22 +5,25 @@
  * or hits the latency cap, Gemini (ASK_ANALYSIS_MODEL / ASK_ANALYSIS_THINKING_LEVEL)
  * answers from the same tools. If both fail, the reply is only what the tools returned.
  */
+import Anthropic from '@anthropic-ai/sdk';
 import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import {
   anthropicAskApiKey,
+  anthropicReasoningRequest,
   askReasoningConfig,
-  askReasoningThinkingBudget,
   askReasoningTimeoutMs,
   completeAskText,
   geminiAskModel,
+  logAskFailure,
+  requestGemini,
 } from '../lib/askModel.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
-import { logger } from '../lib/logger.js';
 import {
   ASK_LOOKUP_TOOLS,
   buildLookupUserPrompt,
   collectMomentSourceIds,
   executeAskLookup,
+  followUpAnswerable,
   planAskLookup,
   quotesFromTrace,
   suggestFollowUps,
@@ -34,7 +37,13 @@ import {
   parseMomentSource,
   stripMomentTrailers,
 } from './askMoments.js';
-import { classifyAskIntent, composeGroundedAsk, polishAskProse, wrapTaskArtifact } from './askPolish.js';
+import {
+  classifyAskIntent,
+  composeGroundedAsk,
+  polishAskProse,
+  speechQuotesForQuestion,
+  wrapTaskArtifact,
+} from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
@@ -114,7 +123,12 @@ export function finalizeLookupAnswer(
     if (!allowed.size) return false;
     return [...allowed].some((cite) => cite === id || cite.startsWith(`video/${moment.jobId}/${moment.proofId}/`));
   });
-  const kept = cited.length ? cited : [...allowed].slice(0, 4);
+  const datedQuotes = speechQuotesForQuestion(question, trace, catalog);
+  const kept = cited.length
+    ? cited
+    : datedQuotes?.length
+      ? datedQuotes.map((quote) => quote.sourceId)
+      : [...allowed].slice(0, 6);
   text = text.replace(/(?:\n|^)\s*⟦sources:\s*[^⟧]*⟧\s*/i, '').trim();
   text = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
   if (classifyAskIntent(question).kind === 'task') text = wrapTaskArtifact(text);
@@ -122,7 +136,7 @@ export function finalizeLookupAnswer(
   const quoteTrace = trace.filter(
     (step) => step.tool === 'search_transcripts' || (spoken && step.tool === 'get_clip'),
   );
-  const quotes = quotesFromTrace(quoteTrace).filter((quote) => {
+  const quotes = (datedQuotes ?? quotesFromTrace(quoteTrace)).filter((quote) => {
     const moment = parseMomentSource(quote.sourceId);
     if (!moment) return false;
     return kept.some((id) => {
@@ -136,7 +150,7 @@ export function finalizeLookupAnswer(
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter((word) => word.length > 4 && !['about', 'there', 'would', 'could', 'their'].includes(word));
-    return words.length > 0 && words.some((word) => hay.includes(word));
+    return words.length > 0 && words.some((word) => hay.includes(word)) && followUpAnswerable(item, catalog);
   });
   const followUps = [...modelFollows];
   for (const suggestion of suggestFollowUps(question, trace, catalog)) {
@@ -145,7 +159,7 @@ export function finalizeLookupAnswer(
   }
   const blocks = [text.trim()];
   if (kept.length) blocks.push(`⟦sources: ${kept.join(', ')}⟧`);
-  const quoteLine = formatQuoteTrailer(quotes.slice(0, 3));
+  const quoteLine = formatQuoteTrailer(quotes.slice(0, 4));
   if (quoteLine) blocks.push(quoteLine);
   const followLine = formatFollowupTrailer(followUps);
   if (followLine) blocks.push(followLine);
@@ -155,70 +169,111 @@ export function finalizeLookupAnswer(
   };
 }
 
-function errorDetail(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').slice(0, 280);
+const LOOKUP_TOOLS = ASK_LOOKUP_TOOLS.map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  input_schema: tool.input_schema as { type: 'object'; properties?: unknown },
+}));
+
+type LookupCall = { id: string; name: string; input: Record<string, unknown> };
+
+function toolUses(blocks: Anthropic.ContentBlock[]): LookupCall[] {
+  const calls: LookupCall[] = [];
+  for (const block of blocks) {
+    if (block.type !== 'tool_use') continue;
+    calls.push({
+      id: block.id,
+      name: block.name,
+      input: block.input && typeof block.input === 'object' ? (block.input as Record<string, unknown>) : {},
+    });
+  }
+  return calls.filter((call) => call.name);
 }
 
-async function anthropicLookupTurn(input: {
+function textFromBlocks(blocks: Anthropic.ContentBlock[]): string {
+  return blocks
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('\n')
+    .trim();
+}
+
+/**
+ * One Anthropic tool loop. Assistant turns, including thinking blocks, are
+ * sent back unmodified. Text and tool calls are chosen by block type.
+ */
+function anthropicLookupSession(input: {
   apiKey: string;
-  system: string;
-  user: string;
-  signal?: AbortSignal;
   onToken?: (text: string) => void;
-}): Promise<LookupModelTurn> {
-  const config = askReasoningConfig();
-  const budget = askReasoningThinkingBudget();
-  const maxTokens = Math.max(2048, (budget ?? 0) + 1024);
-  const stream = anthropicClientForKey(input.apiKey).messages.stream(
-    {
-      model: config.anthropicModel,
-      max_tokens: maxTokens,
-      system: input.system,
-      messages: [{ role: 'user', content: input.user }],
-      tools: ASK_LOOKUP_TOOLS.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.input_schema as { type: 'object'; properties?: unknown },
-      })),
-      ...(budget ? { thinking: { type: 'enabled' as const, budget_tokens: budget } } : {}),
-    },
-    input.signal ? { signal: input.signal } : undefined,
-  );
-  let streamed = false;
-  const deltas: string[] = [];
-  // Hold text until the turn is finished. A tool_use turn often starts with a
-  // short preface; forwarding it would paint text the caller then discards.
-  stream.on('text', (delta: string) => {
-    if (!delta) return;
-    deltas.push(delta);
-  });
-  const response = await stream.finalMessage();
-  const calls = response.content
-    .filter((block: { type: string }) => block.type === 'tool_use')
-    .map((block: { type: string; name?: string; input?: unknown }) => ({
-      name: String(block.name ?? ''),
-      input: block.input && typeof block.input === 'object' ? (block.input as Record<string, unknown>) : {},
-    }))
-    .filter((call) => call.name);
-  const text =
-    deltas.join('').trim() ||
-    response.content
-      .filter((block: { type: string }) => block.type === 'text')
-      .map((block: { type: string; text?: string }) => block.text ?? '')
-      .join('\n')
-      .trim();
-  if (!calls.length) {
-    for (const delta of deltas) {
-      streamed = true;
-      input.onToken?.(delta);
+}): (state: { system: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
+  const messages: Anthropic.MessageParam[] = [];
+  let traced = 0;
+  let pending: { blocks: Anthropic.ContentBlock[]; tools: LookupCall[] } | null = null;
+  return async (state) => {
+    if (!messages.length) {
+      messages.push({ role: 'user', content: state.user });
     }
-  }
-  return {
-    model: response.model,
-    text: calls.length ? '' : text,
-    calls,
-    usage: tryExtractUsage(response.usage),
-    streamed: calls.length ? false : streamed,
+    if (pending) {
+      const fresh = state.trace.slice(traced);
+      messages.push({ role: 'assistant', content: pending.blocks });
+      messages.push({
+        role: 'user',
+        content: pending.tools.map((tool, index) => {
+          const step = fresh[index];
+          const payload = step
+            ? { ok: step.result.ok, summary: step.result.summary, data: step.result.data ?? null }
+            : { ok: false, summary: 'Not run.' };
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: tool.id,
+            content: JSON.stringify(payload).slice(0, 8000),
+            is_error: !step?.result.ok,
+          };
+        }),
+      });
+      pending = null;
+    }
+    traced = state.trace.length;
+    const shaped = anthropicReasoningRequest(askReasoningConfig().anthropicModel);
+    const stream = anthropicClientForKey(input.apiKey).messages.stream(
+      {
+        model: askReasoningConfig().anthropicModel,
+        max_tokens: shaped.max_tokens,
+        system: state.system,
+        messages,
+        tools: LOOKUP_TOOLS,
+        ...(shaped.thinking ? { thinking: shaped.thinking } : {}),
+        ...(shaped.output_config ? { output_config: shaped.output_config } : {}),
+      },
+      state.signal ? { signal: state.signal } : undefined,
+    );
+    const deltas: string[] = [];
+    stream.on('text', (delta: string) => {
+      if (delta) deltas.push(delta);
+    });
+    const response = await stream.finalMessage();
+    const blocks = response.content;
+    const calls = toolUses(blocks);
+    const text = deltas.join('').trim() || textFromBlocks(blocks);
+    if (calls.length) {
+      // Keep the provider blocks, thinking included, for the next turn.
+      pending = { blocks, tools: calls };
+      return {
+        model: response.model,
+        text: '',
+        calls: calls.map((call) => ({ name: call.name, input: call.input })),
+        usage: tryExtractUsage(response.usage),
+        streamed: false,
+      };
+    }
+    for (const delta of deltas) input.onToken?.(delta);
+    return {
+      model: response.model,
+      text,
+      calls: [],
+      usage: tryExtractUsage(response.usage),
+      streamed: deltas.length > 0,
+    };
   };
 }
 
@@ -229,15 +284,15 @@ async function geminiLookupTurn(input: {
   fetchFn?: typeof fetch;
   signal?: AbortSignal;
 }): Promise<LookupModelTurn> {
-  const model = geminiAskModel('reasoning');
-  const fetchFn = input.fetchFn ?? fetch;
-  const base = (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await fetchFn(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
+  const requested = geminiAskModel('reasoning');
+  const posted = await requestGemini({
+    apiKey: input.apiKey,
+    model: requested,
+    mode: 'reasoning',
+    maxTokens: 8192,
+    fetchFn: input.fetchFn,
     signal: input.signal,
-    body: JSON.stringify({
+    body: {
       system_instruction: { parts: [{ text: input.system }] },
       contents: [{ role: 'user', parts: [{ text: input.user }] }],
       tools: [
@@ -249,19 +304,14 @@ async function geminiLookupTurn(input: {
           })),
         },
       ],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 4096,
-        thinkingConfig: { thinkingBudget: askReasoningThinkingBudget() ?? 0 },
-      },
-    }),
+    },
   });
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini lookup error ${response.status}: ${errText.slice(0, 300)}`);
-  }
-  const payload = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name?: string; args?: Record<string, unknown> } }> } }>;
+  const payload = (await posted.response.json()) as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } }>;
+      };
+    }>;
     modelVersion?: string;
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
   };
@@ -270,11 +320,15 @@ async function geminiLookupTurn(input: {
     .map((part) => part.functionCall)
     .filter((call): call is { name?: string; args?: Record<string, unknown> } => Boolean(call?.name))
     .map((call) => ({ name: String(call.name), input: call.args ?? {} }));
-  const text = parts.map((part) => part.text ?? '').join('').trim();
+  const text = parts
+    .filter((part) => !part.thought)
+    .map((part) => part.text ?? '')
+    .join('')
+    .trim();
   const inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
   const outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
   return {
-    model: payload.modelVersion || model,
+    model: payload.modelVersion || posted.model,
     text: calls.length ? '' : text,
     calls,
     usage: {
@@ -294,11 +348,15 @@ export function providerLookupStep(input: {
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
 }): LookupModelStep {
-  let provider: 'anthropic' | 'google' | 'none' = (input.anthropicApiKey ?? anthropicAskApiKey()).trim()
+  const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
+  let provider: 'anthropic' | 'google' | 'none' = anthropicKey
     ? 'anthropic'
     : googleVisionApiKey()
       ? 'google'
       : 'none';
+  const anthropic = anthropicKey
+    ? anthropicLookupSession({ apiKey: anthropicKey, onToken: input.onToken })
+    : null;
   const deadline = Date.now() + askReasoningTimeoutMs();
   return async (state) => {
     const left = deadline - Date.now();
@@ -308,17 +366,11 @@ export function providerLookupStep(input: {
     const user = prior
       ? `${state.user}\n\nTool results so far:\n${prior}\n\nUse another tool if you still need a fact. Otherwise answer from these results only.`
       : `${state.user}\n\nLook up what you need before you answer.`;
-    if (provider === 'anthropic') {
+    if (provider === 'anthropic' && anthropic) {
       try {
-        return await anthropicLookupTurn({
-          apiKey: (input.anthropicApiKey ?? anthropicAskApiKey()).trim(),
-          system: state.system,
-          user,
-          signal,
-          onToken: input.onToken,
-        });
+        return await anthropic({ system: state.system, user: state.user, trace: state.trace, signal });
       } catch (err) {
-        logger.warn('ask_lookup_anthropic_failed', { detail: errorDetail(err) });
+        logAskFailure('ask_lookup_anthropic_failed', err);
         provider = googleVisionApiKey() ? 'google' : 'none';
       }
     }
@@ -332,7 +384,7 @@ export function providerLookupStep(input: {
           signal,
         });
       } catch (err) {
-        logger.warn('ask_lookup_gemini_failed', { detail: errorDetail(err) });
+        logAskFailure('ask_lookup_gemini_failed', err);
         provider = 'none';
       }
     }
@@ -384,7 +436,7 @@ export async function answerFromAskLookup(input: {
     if (turn.usage) usage = turn.usage;
     if (turn.calls.length) {
       streamed = false;
-      for (const call of turn.calls.slice(0, 3)) {
+      for (const call of turn.calls.slice(0, 6)) {
         input.onStatus?.(askLookupStatus(call.name));
         trace.push({
           tool: call.name,

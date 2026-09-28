@@ -7,6 +7,12 @@
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
 import type { AskLookupCatalog, AskLookupTraceStep } from './askLookup.js';
+import {
+  clipMatchesAskDate,
+  formatAskDate,
+  parseAskDate,
+  type AskMomentQuote,
+} from './askMoments.js';
 
 export type AskTaskKind = 'summary' | 'scope' | 'compare' | 'issues' | 'punch' | 'note';
 
@@ -236,10 +242,187 @@ function clock(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function missingLine(question: string): string {
+export type SpeechMomentPick = {
+  excerpt: string;
+  atSeconds: number | null;
+  proofId?: string;
+  speaker?: string;
+  cite?: string;
+  title?: string;
+};
+
+/** A few substantive lines, spread across clips, including a later timestamp when one exists. */
+export function selectSpeechMoments<T extends SpeechMomentPick>(moments: T[], limit = 4): T[] {
+  const clear = moments.filter((moment) => moment.excerpt && !/\[privacy redacted\]/i.test(moment.excerpt));
+  const score = (moment: T) => moment.excerpt.split(/\s+/).filter(Boolean).length;
+  const picked: T[] = [];
+  const byClip = new Map<string, T[]>();
+  for (const moment of clear) {
+    const key = moment.proofId || 'clip';
+    const rows = byClip.get(key) ?? [];
+    rows.push(moment);
+    byClip.set(key, rows);
+  }
+  for (const rows of byClip.values()) {
+    const best = [...rows].sort((a, b) => score(b) - score(a) || (a.atSeconds ?? 0) - (b.atSeconds ?? 0))[0];
+    if (best) picked.push(best);
+  }
+  const ranked = [...clear].sort((a, b) => score(b) - score(a) || (a.atSeconds ?? 0) - (b.atSeconds ?? 0));
+  for (const moment of ranked) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(moment)) picked.push(moment);
+  }
+  const later = [...clear]
+    .filter((moment) => (moment.atSeconds ?? 0) >= 10)
+    .sort((a, b) => score(b) - score(a))[0];
+  if (later && !picked.includes(later)) {
+    if (picked.length >= limit) picked[picked.length - 1] = later;
+    else picked.push(later);
+  }
+  return picked
+    .slice(0, limit)
+    .sort((a, b) => (a.atSeconds ?? -1) - (b.atSeconds ?? -1) || a.excerpt.localeCompare(b.excerpt));
+}
+
+function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
+  const clips = clipsFromTrace(trace);
+  if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n');
+  const events = historyFromTrace(trace, catalog.timeZone);
+  if (events[0]) return `Job history shows ${events[0].summary.replace(/\.$/, '')}${events[0].at ? ` on ${events[0].at}` : ''}.`;
+  const titles = (catalog.clips ?? [])
+    .filter((clip) => clip.orgId === catalog.orgId && (!catalog.jobId || clip.jobId === catalog.jobId))
+    .map((clip) => cleanMentionTitle(clip.title))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (titles.length) return `On file: ${titles.join('; ')}.`;
+  return 'Nothing else is recorded on this file.';
+}
+
+function missingLine(question: string, trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   if (/\bpermit\b/i.test(question)) return 'This file does not include a permit number.';
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
-  return 'This file does not have that.';
+  return `This file does not have that.\n\n${fileContext(trace, catalog)}`;
+}
+
+type DatedMoment = SpeechMomentPick & { speaker: string; title: string; workDate: string | null };
+
+function spokenClips(trace: AskLookupTraceStep[]): Array<{
+  proofId: string;
+  title: string;
+  workDate: string | null;
+  moments: DatedMoment[];
+}> {
+  const clips: Array<{ proofId: string; title: string; workDate: string | null; moments: DatedMoment[] }> = [];
+  for (const step of trace) {
+    if (step.tool !== 'get_clip' || !step.result.ok) continue;
+    const data = dataOf(step);
+    const proofId = String(data.proofId ?? '');
+    const title = cleanMentionTitle(String(data.title ?? '')) || 'Clip';
+    const workDate = data.workDate ? String(data.workDate) : null;
+    const raw = Array.isArray(data.moments) ? data.moments : [];
+    const moments: DatedMoment[] = [];
+    for (const row of raw) {
+      if (!row || typeof row !== 'object') continue;
+      const rec = row as Record<string, unknown>;
+      const excerpt = String(rec.excerpt ?? '').trim();
+      if (!excerpt || /\[privacy redacted\]/i.test(excerpt)) continue;
+      const at = rec.atSeconds == null || Number.isNaN(Number(rec.atSeconds)) ? null : Number(rec.atSeconds);
+      moments.push({
+        excerpt,
+        speaker: String(rec.speaker ?? '').trim() || 'Speaker',
+        atSeconds: at,
+        cite: String(rec.cite ?? ''),
+        proofId,
+        title,
+        workDate,
+      });
+    }
+    clips.push({ proofId, title, workDate, moments });
+  }
+  return clips;
+}
+
+function quoteBullet(moment: DatedMoment, showTitle: boolean): string {
+  const when = moment.atSeconds == null ? '' : `At ${clock(moment.atSeconds)}, `;
+  const where = showTitle ? ` (${moment.title})` : '';
+  return `- ${when}${moment.speaker} said “${moment.excerpt}”${where}`;
+}
+
+function composeDatedSpeech(
+  question: string,
+  trace: AskLookupTraceStep[],
+  catalog: AskLookupCatalog,
+): string | null {
+  if (!/\b(say|said|quote|tell|mention)\b/i.test(question)) return null;
+  const asked = parseAskDate(question);
+  if (!asked) return null;
+  const person = personBlock(trace);
+  if (person?.offJob) return person.offJob;
+  const clips = spokenClips(trace);
+  if (!clips.length) return null;
+  const onDate = clips.filter((clip) => clipMatchesAskDate(clip.workDate, asked, catalog.timeZone));
+  const others = clips.filter((clip) => !onDate.includes(clip));
+  const label = formatAskDate(asked);
+  const who = person?.name ? `**${person.name}**` : 'The recording';
+  const datedMoments = onDate.flatMap((clip) => clip.moments);
+  const timed = datedMoments.filter((moment) => moment.atSeconds != null);
+  if (timed.length) {
+    const key = selectSpeechMoments(timed);
+    const showTitle = onDate.length > 1;
+    const lines = key.map((moment) => quoteBullet(moment, showTitle));
+    return `${who} on ${label} said:\n\n${lines.join('\n')}`;
+  }
+  const untimed = datedMoments.filter((moment) => moment.atSeconds == null && moment.excerpt);
+  if (onDate.length) {
+    const only = untimed.length === 1 ? untimed[0] : null;
+    const lead = only
+      ? `The ${label} clip has only one short untimed line (“${only.excerpt}”) and no timed speech.`
+      : untimed.length
+        ? `The ${label} clip has untimed text (“${untimed.map((moment) => moment.excerpt).join(' ')}”) and no timed speech.`
+        : `The ${label} clip has no transcript text and no timed speech.`;
+    const otherMoments = others.flatMap((clip) => clip.moments).filter((moment) => moment.atSeconds != null);
+    const key = selectSpeechMoments(otherMoments);
+    if (!key.length) return `${lead}\n\nNothing else on this file has timed speech to quote.`;
+    const otherDay = key[0]?.workDate ? localStamp(key[0].workDate, catalog.timeZone) || 'another day' : 'another day';
+    const lines = key.map((moment) => quoteBullet(moment, new Set(key.map((item) => item.proofId)).size > 1));
+    return `${lead}\n\nOn ${otherDay}, ${who} said:\n\n${lines.join('\n')}`;
+  }
+  const known = clips
+    .map((clip) => (clip.workDate ? localStamp(clip.workDate, catalog.timeZone) : ''))
+    .filter(Boolean);
+  const listed = known.length ? `Clips on file are from ${[...new Set(known)].join(' and ')}.` : fileContext(trace, catalog);
+  return `Nothing on this file was recorded on ${label}.\n\n${listed}`;
+}
+
+/** Key lines a dated speech question may quote. Timed lines on that day win over other days. */
+export function speechQuotesForQuestion(
+  question: string,
+  trace: AskLookupTraceStep[],
+  catalog: AskLookupCatalog,
+): AskMomentQuote[] | null {
+  if (!/\b(say|said|quote|tell|mention)\b/i.test(question)) return null;
+  const asked = parseAskDate(question);
+  if (!asked) return null;
+  const clips = spokenClips(trace);
+  if (!clips.length) return null;
+  const onDate = clips.filter((clip) => clipMatchesAskDate(clip.workDate, asked, catalog.timeZone));
+  const others = clips.filter((clip) => !onDate.includes(clip));
+  const timedOnDate = onDate.flatMap((clip) => clip.moments).filter((moment) => moment.atSeconds != null && moment.cite);
+  const picked = timedOnDate.length
+    ? selectSpeechMoments(timedOnDate)
+    : [
+        ...onDate.flatMap((clip) => clip.moments).filter((moment) => moment.atSeconds == null && moment.cite).slice(0, 1),
+        ...selectSpeechMoments(
+          others.flatMap((clip) => clip.moments).filter((moment) => moment.atSeconds != null && moment.cite),
+        ),
+      ];
+  if (!picked.length) return null;
+  return picked.map((moment) => ({
+    sourceId: moment.cite!,
+    speaker: moment.speaker,
+    text: moment.excerpt,
+    atSeconds: moment.atSeconds,
+  }));
 }
 
 function composeQuestion(
@@ -249,10 +432,12 @@ function composeQuestion(
 ): string {
   const person = personBlock(trace);
   if (person?.offJob) return person.offJob;
+  const dated = composeDatedSpeech(question, trace, catalog);
+  if (dated) return dated;
   const hits = searchHits(trace).concat(speechFromClip(trace));
   const searched = trace.some((step) => step.tool === 'search_transcripts' || step.tool === 'get_clip');
   if (searched && !hits.length && (!person || /\b(say|said|quote|permit|lock)\b/i.test(question))) {
-    return missingLine(question);
+    return missingLine(question, trace, catalog);
   }
   if (hits.length && /\b(say|said|quote|tell|mention)\b/i.test(question)) {
     const hit = hits[0]!;
@@ -261,7 +446,7 @@ function composeQuestion(
   }
   const clips = clipsFromTrace(trace);
   const events = historyFromTrace(trace, catalog.timeZone);
-  if (!clips.length && !events.length) return missingLine(question);
+  if (!clips.length && !events.length) return missingLine(question, trace, catalog);
   if (person && clips.length) {
     const count = `${clips.length} clip${clips.length === 1 ? '' : 's'}`;
     const lead = `**${person.name}** recorded ${count} on this file.${openedLine(events)}`;
@@ -345,5 +530,12 @@ export function composeGroundedAsk(
 ): string {
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);
-  return polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  const polished = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  if (/^this file does not have that\.?$/i.test(polished)) {
+    return polishAskProse(
+      `${polished}\n\n${fileContext(trace, catalog)}`,
+      { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle },
+    );
+  }
+  return polished;
 }
