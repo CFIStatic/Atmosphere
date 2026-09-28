@@ -201,7 +201,7 @@ function catalogVisitFacts(catalog: AskLookupCatalog): ClipFact[] {
     .map((clip) => ({
       title: cleanMentionTitle(clip.title) || 'Clip',
       workDate: clip.workDate ?? null,
-      summary: oneLine(String(clip.summary ?? '').trim()),
+      summary: oneLine(clipAskPreview(clip).summary),
       cite: clip.proofId,
     }));
 }
@@ -234,8 +234,9 @@ export function composeJobOverview(catalog: AskLookupCatalog): string {
   const visits = clips.map((clip) => {
     const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
     const title = cleanMentionTitle(clip.title) || 'Clip';
-    const summary = String(clip.summary ?? '').trim();
-    const speech = clearestLine(clipAskPreview(clip).transcript);
+    const preview = clipAskPreview(clip);
+    const summary = preview.summary.trim();
+    const speech = clearestLine(preview.transcript);
     const detail = [summary, speech ? `Said: “${speech}”` : ''].filter(Boolean).join(' ');
     return `- **${when} — ${title}**.${detail ? ` ${detail}` : ''}`;
   });

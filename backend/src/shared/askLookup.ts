@@ -379,6 +379,88 @@ function clipVisible(catalog: AskLookupCatalog, clip: AskLookupClip): boolean {
   return true;
 }
 
+function proofIdsForPerson(clips: AskLookupClip[], userId: string, name: string): string[] {
+  const needle = name.toLowerCase();
+  return clips
+    .filter((clip) => {
+      if (userId && (clip.recordedByUserIds ?? []).includes(userId)) return true;
+      return (clip.speakers ?? []).some((speaker) => trim(speaker).toLowerCase() === needle);
+    })
+    .map((clip) => clip.proofId);
+}
+
+/**
+ * People for every Ask turn: @mentions when the question has them, plus crew,
+ * party contacts, and clip speakers already on the job.
+ * An off-job mention stays off this job and does not pick up its clips.
+ */
+export function mergeJobAskPeople(input: {
+  mentioned?: AskLookupPerson[] | null;
+  crew?: Array<{ userId?: string | null; name?: string | null }> | null;
+  contacts?: Array<{ userId?: string | null; name?: string | null; proofIds?: string[] | null }> | null;
+  clips?: AskLookupClip[] | null;
+}): AskLookupPerson[] {
+  const clips = input.clips ?? [];
+  const people: AskLookupPerson[] = (input.mentioned ?? []).map((person) => ({ ...person }));
+  const known = (name: string, userId?: string | null) =>
+    people.some(
+      (person) =>
+        (userId && person.userId === userId) ||
+        (name && person.name.toLowerCase() === name.toLowerCase()),
+    );
+  const add = (person: AskLookupPerson) => {
+    if (!trim(person.name) || !trim(person.userId) || known(person.name, person.userId)) return;
+    people.push(person);
+  };
+
+  for (const row of input.crew ?? []) {
+    const name = trim(row.name);
+    const userId = trim(row.userId);
+    if (!name || !userId) continue;
+    add({
+      userId,
+      name,
+      onThisJob: true,
+      recordedProofIds: proofIdsForPerson(clips, userId, name),
+      taggedProofIds: [],
+    });
+  }
+  for (const row of input.contacts ?? []) {
+    const name = trim(row.name);
+    if (!name) continue;
+    const userId = trim(row.userId) || `contact:${name.toLowerCase()}`;
+    const listed = (row.proofIds ?? []).map((id) => trim(id)).filter(Boolean);
+    add({
+      userId,
+      name,
+      onThisJob: true,
+      recordedProofIds: listed.length ? listed : proofIdsForPerson(clips, userId, name),
+      taggedProofIds: [],
+    });
+  }
+  for (const clip of clips) {
+    for (const speaker of clip.speakers ?? []) {
+      const name = trim(speaker);
+      if (!name) continue;
+      add({
+        userId: `speaker:${name.toLowerCase()}`,
+        name,
+        onThisJob: true,
+        recordedProofIds: proofIdsForPerson(clips, '', name),
+        taggedProofIds: [],
+      });
+    }
+  }
+
+  return people.map((person) => {
+    if (person.onThisJob === false) return person;
+    const recorded = (person.recordedProofIds ?? []).map((id) => trim(id)).filter(Boolean);
+    if (recorded.length) return { ...person, recordedProofIds: recorded };
+    const filled = proofIdsForPerson(clips, person.userId, person.name);
+    return filled.length ? { ...person, recordedProofIds: filled } : person;
+  });
+}
+
 export function lookupPeopleFromContexts(
   people: Array<{
     userId: string;
@@ -675,7 +757,7 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
       jobTitle: clip.jobTitle ?? null,
       title: clip.title,
       workDate: clip.workDate ?? null,
-      summary: redactAskText(trim(clip.summary), clip) || null,
+      summary: redactedClipSummary(clip) || null,
       speakers: (clip.speakers ?? []).filter(Boolean),
       cite: citeFor(clip, atSeconds),
       atSeconds,
@@ -739,7 +821,7 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
         title: clip.title,
         workDate: clip.workDate ?? null,
         recorded: recorded.has(clip.proofId) || (clip.recordedByUserIds ?? []).includes(person.userId),
-        summary: redactAskText(trim(clip.summary), clip) || null,
+        summary: redactedClipSummary(clip) || null,
         cite: spoken?.cite ?? citeFor(clip, atSeconds),
         atSeconds: spoken?.atSeconds ?? atSeconds,
         speaker: spoken?.speaker ?? null,
@@ -818,24 +900,42 @@ export function clipIndex(catalog: AskLookupCatalog): string {
   return lines.length ? lines.join('\n') : '- none';
 }
 
-/** Redacted transcript and findings for one clip. Safe to put in a prompt or a stored answer. */
-export function clipAskPreview(clip: AskLookupClip): { transcript: string; findings: string } {
+/** Redacted transcript, findings, and summary for one clip. Safe to put in a prompt or a stored answer. */
+export function clipAskPreview(clip: AskLookupClip): { transcript: string; findings: string; summary: string } {
   return {
     transcript: redactClipTranscriptForAsk(clip).slice(0, 900),
     findings: findingsText(clip.findings, clip).slice(0, 400),
+    summary: redactedClipSummary(clip).slice(0, 400),
   };
+}
+
+function keepRedactedPhrase(text: string): boolean {
+  return text.length >= 12 || (text.length >= 4 && /\d{3,}/.test(text));
 }
 
 /** Phrases that overlap a privacy or child-privacy range. These must not be stored or replayed. */
 export function redactedSourcePhrases(clip: AskLookupClip): string[] {
   const phrases: string[] = [];
-  for (const row of [...asTimed(clip.segments), ...asTimed(clip.words)]) {
+  const push = (text: string) => {
+    const clean = trim(text).replace(/^\[[^\]]+\]\s*/, '');
+    if (keepRedactedPhrase(clean)) phrases.push(clean);
+  };
+  const timed = [...asTimed(clip.segments), ...asTimed(clip.words)];
+  for (const row of timed) {
     if (!spanIsRedacted(clip, row.start, row.end)) continue;
-    const text = trim(row.text);
-    const keep = text.length >= 12 || (text.length >= 4 && /\d{3,}/.test(text));
-    if (keep) phrases.push(text);
+    push(row.text);
+  }
+  const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
+  const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
+  if (!timed.length && (privacy.length || child.length)) {
+    for (const piece of trim(clip.transcript).split(/\n+|(?<=[.!?])\s+/)) push(piece);
   }
   return phrases;
+}
+
+/** Summary safe to put in a prompt, an overview, or a stored answer. */
+export function redactedClipSummary(clip: AskLookupClip): string {
+  return scrubStoredAskText(redactAskText(trim(clip.summary), clip), [clip]);
 }
 
 /** Replace redacted transcript phrases before an answer is stored or sent back as memory. */
@@ -875,7 +975,7 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
     const rendered = clips.map((clip) => {
       const when = clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated';
       const preview = clipAskPreview(clip);
-      const summary = trim(clip.summary);
+      const summary = trim(preview.summary);
       return [
         `- ${when} — ${clip.title}`,
         summary ? `  Summary: ${summary}` : '',
