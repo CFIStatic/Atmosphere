@@ -6549,10 +6549,13 @@
     function add(at, text, kind, type) {
       var t = String(text || '').trim();
       if (!t || isSceneViewNote(t)) return;
+      // An untimed row is not a moment. Never stamp it 0:00; the whole-clip
+      // description lives in the untimed Clip overview above the events.
+      if (at == null || at === '' || !isFinite(Number(at))) return;
       var key = at + '|' + t;
       if (seen[key]) return;
       seen[key] = true;
-      rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note', type: type || null });
+      rows.push({ at: Math.max(0, Number(at)), text: t, kind: kind || 'note', type: type || null });
     }
     (a.evidenceLog || []).forEach(function (e) {
       add(e.atSeconds, e.text, e.kind || 'read', e.type);
@@ -6568,7 +6571,7 @@
       add(act.atSeconds, (room && body.toLowerCase().indexOf(room.toLowerCase()) === -1 ? room + ': ' : '') + body, 'action', 'work');
     });
     (a.timeline || []).forEach(function (t) {
-      add(t.startSeconds, t.summary, 'window');
+      add(t.startSeconds != null ? t.startSeconds : t.atSeconds, t.summary, 'window');
     });
     addSpeechMoments(item, add);
     if (!rows.length) {
@@ -6577,7 +6580,48 @@
       });
     }
     rows.sort(function (x, y) { return x.at - y.at; });
-    return displayEvents(rows, a.summary || clipOverviewText(item));
+    return displayEvents(dedupeNearEvents(rows), a.summary || clipOverviewText(item));
+  }
+
+  /**
+   * The same beat often arrives from two sources (the dictation entry, the
+   * evidence log, an action, a speech line) a fraction of a second apart.
+   * Keep one row per beat: same time within 1.5s and the same words.
+   * Speech rows win over visual copies of the same line.
+   */
+  function eventKey(text) {
+    return String(text || '').toLowerCase().replace(/^person \d+ \([^)]*\):\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  function dedupeNearEvents(rows) {
+    var kept = [];
+    rows.forEach(function (row) {
+      var key = eventKey(row.text);
+      var dup = -1;
+      for (var i = kept.length - 1; i >= 0; i--) {
+        if (row.at - kept[i].at > 1.5) break;
+        var other = eventKey(kept[i].text);
+        // An action row restating the visual beat beside it (same second, most
+        // of the same words) is the same moment told twice.
+        var visualPair = !isSpeechEvent(row) && !isSpeechEvent(kept[i]) && (row.kind === 'action') !== (kept[i].kind === 'action');
+        var overlap = textOverlap(key, other);
+        if (key === other || (key.length >= 24 && other.slice(0, 24) === key.slice(0, 24)) || overlap >= 0.8 || (visualPair && overlap >= 0.34)) {
+          dup = i;
+          break;
+        }
+      }
+      if (dup < 0) { kept.push(row); return; }
+      if (isSpeechEvent(row) && !isSpeechEvent(kept[dup])) kept[dup] = row;
+      else if (kept[dup].kind === 'action' && row.kind !== 'action') kept[dup] = row;
+    });
+    return kept;
+  }
+
+  /** The untimed description of the whole clip, shown once above the timed events. */
+  function clipOverviewFor(item) {
+    var a = (item && item.analysis) || {};
+    var text = polishEventCopy(String(a.summary || '').trim(), 3);
+    if (!text) text = clipOverviewText(item);
+    return text || '';
   }
 
   function currentPlayhead() {
@@ -7002,9 +7046,26 @@
       return m + ':' + String(r).padStart(2, '0');
     }
     var html = '<div class="detail-section" data-section="conversation" style="margin-top:12px">';
-    html += '<p class="saw-k">Conversation</p>';
+    var summaryState = a.summaryState || null;
+    var updating = summaryState === 'updating' || summaryState === 'quarantined';
     var brief = a.conversationExecutiveSummary || summary;
-    if (brief) html += '<p class="footnote" style="margin-top:4px">' + esc(brief) + '</p>';
+    // "AI summary" is the model's reading of the talk; "Transcript (raw)" below
+    // is what the mic heard. While the summary is being rebuilt from a newer
+    // transcript, say so quietly instead of presenting it as current.
+    var statePill = updating
+      ? ' <span class="pill summary-updating" id="summary-updating" style="margin-left:6px;text-transform:none;letter-spacing:0;font-weight:500" title="' +
+          esc(summaryState === 'quarantined'
+            ? 'The previous summary disagreed with the transcript and is hidden while it is rebuilt.'
+            : 'The transcript changed after this summary was written. A new summary is on its way.') +
+          '">Updating…</span>'
+      : summaryState === 'failed'
+        ? ' <span class="pill" style="margin-left:6px;text-transform:none;letter-spacing:0" title="The summary could not be rebuilt from the latest transcript. The raw transcript below is current.">Couldn\'t refresh</span>'
+        : '';
+    if (brief || updating || turns.length || agreements.length || concerns.length) {
+      html += '<p class="saw-k">AI summary' + statePill + '</p>';
+    }
+    if (brief) html += '<p class="footnote' + (updating ? ' summary-stale' : '') + '" style="margin-top:4px' + (updating ? ';opacity:.6' : '') + '">' + esc(brief) + '</p>';
+    else if (updating) html += '<p class="footnote" style="margin-top:4px;opacity:.7">Rebuilding from the latest transcript.</p>';
     var moments = a.conversationKeyMoments || [];
     if (moments.length) {
       html += '<p class="saw-k">Key moments</p><ul class="alog">';
@@ -7046,7 +7107,7 @@
       html += '</ul>';
     }
     if (transcript) {
-      html += '<p class="saw-k">Exact transcript</p>';
+      html += '<p class="saw-k">Transcript (raw)</p>';
       var segs = (a.transcriptSegments || item.transcriptSegments || []);
       if (segs.length) {
         html += '<ul class="exact-transcript" id="exact-transcript">';
@@ -7100,6 +7161,12 @@
     if (pending && !rows.length) {
       html += renderAnalysisStatus(item, a);
       return html;
+    }
+    var overview = clipOverviewFor(item);
+    if (overview) {
+      html += '<div class="detail-section" data-section="clip-overview">' +
+        '<p class="saw-k">Clip overview <span class="pill" style="margin-left:6px;text-transform:none;letter-spacing:0;font-weight:500" title="Describes the whole clip; not tied to a moment">untimed</span></p>' +
+        '<p class="footnote clip-overview" id="clip-overview">' + esc(overview) + '</p></div>';
     }
     if (rows.length) {
       html += '<div class="alog-head"><h4>Events</h4>' +
@@ -8721,7 +8788,10 @@
             conversationActionItems: reading.conversationActionItems || [],
             conversationAgreementFacts: reading.conversationAgreementFacts || [],
             conversationConcernFacts: reading.conversationConcernFacts || [],
-            conversationSource: reading.conversationSource || null
+            conversationSource: reading.conversationSource || null,
+            // fresh | updating | failed | quarantined | untracked | none — drives the "Updating…" pill.
+            summaryState: reading.summaryState || null,
+            summaryGeneratedAt: reading.summaryGeneratedAt || null
           }
         : raw.analysisState === 'queued'
           ? { state: 'queued', reason: 'This clip is being read now.' }

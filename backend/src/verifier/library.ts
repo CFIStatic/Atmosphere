@@ -35,6 +35,9 @@ import {
   redactTranscriptForChildPrivacy,
 } from '../audio/childPrivacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
+import { summaryStateOf } from '../audio/summaryFreshness.js';
+import { summaryClaimContradictions } from '../audio/summaryValidation.js';
+import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { apiTranscriptWords } from '../lib/transcription.js';
 import { resolveDictationEntries } from '../shared/dictationEvents.js';
@@ -277,6 +280,13 @@ export function serializeEvidence(input: {
   const proof = input.proof;
   const checks: StoredCheck[] = Array.isArray(proof.checks) ? proof.checks : [];
   const findings = proof.ai_findings ?? {};
+  // A stored AI summary that contradicts the transcript on speech amount is
+  // quarantined: never shown, never fed to Ask, until the queue rebuilds it.
+  const summaryQuarantined =
+    typeof proof.transcript_text === 'string' &&
+    Boolean(findings.conversation) &&
+    summaryClaimContradictions(findings.conversation, proof.transcript_text).length > 0;
+  const shownConversation = summaryQuarantined ? null : findings.conversation;
   const analysis = analysisStateOf({
     phase: proof.phase,
     analysisStatus: proof.analysis_status ?? null,
@@ -398,7 +408,7 @@ export function serializeEvidence(input: {
               actions,
               durationSeconds: Number(proof.duration_seconds) || undefined,
               transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-              conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+              conversation: conversationFromStored(proof.transcript_text, shownConversation),
             }),
             actions,
             materialChange,
@@ -419,10 +429,26 @@ export function serializeEvidence(input: {
             // The workday shape: a recording read in windows carries its
             // hour-by-hour timeline, and the counts coverage is computed from.
             longForm: Boolean(findings.longForm),
-            timeline: Array.isArray(findings.timeline) ? findings.timeline : null,
+            // Windows only, each with its own startSeconds. Legacy rows that
+            // repeated the dictation beats without a time are dropped here.
+            timeline: Array.isArray(findings.timeline)
+              ? normalizeAnalysisTimeline(findings.timeline, clipBeats({ narration: proof.narration, findings }))
+              : null,
             windowsTotal: findings.windowsTotal ?? null,
             windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? proof.narration?.model ?? null,
+            /**
+             * Is the AI summary (conversation / evidence log) built from the
+             * transcript on file now: fresh | updating | failed | untracked | none.
+             * The player shows "Updating…" beside the AI summary while updating.
+             */
+            // quarantined: the stored summary states a different amount of
+            // speech than the transcript; it is not shown until rebuilt.
+            summaryState: summaryQuarantined ? 'quarantined' : summaryStateOf(proof),
+            summaryGeneratedAt:
+              (typeof proof.summary_generated_at === 'string' ? proof.summary_generated_at : null) ??
+              (typeof findings.conversation?.generatedAt === 'string' ? findings.conversation.generatedAt : null),
+            transcribedAt: typeof proof.transcribed_at === 'string' ? proof.transcribed_at : null,
             transcript: (() => {
               const raw = typeof proof.transcript_text === 'string' ? proof.transcript_text : null;
               const ranges = privacyRedactionsFromStored(findings.privacyRedactions);
@@ -442,7 +468,7 @@ export function serializeEvidence(input: {
               const peopleResolved = resolvePeoplePresent({
                 stored: findings.people,
                 transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
-                conversationStored: findings.conversation,
+                conversationStored: shownConversation,
                 narrationText: dictation,
                 summary: proof.ai_summary ?? findings.summary ?? null,
                 visionPeople: findings.visionPeople,
@@ -450,7 +476,7 @@ export function serializeEvidence(input: {
               });
               let evidence = applyPrivacyToEvidenceEntries(
                 buildEvidenceLog({
-                  storedLog: findings.evidenceLog,
+                  storedLog: summaryQuarantined ? null : findings.evidenceLog,
                   storedEntries: proof.narration?.entries,
                   narrationText: dictation,
                   summary: proof.ai_summary ?? findings.summary ?? null,
@@ -459,7 +485,7 @@ export function serializeEvidence(input: {
                   transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
                   people: findings.people,
                   visionPeople: findings.visionPeople,
-                  conversation: conversationFromStored(proof.transcript_text, findings.conversation),
+                  conversation: conversationFromStored(proof.transcript_text, shownConversation),
                 }),
                 privacyRedactionsFromStored(findings.privacyRedactions),
               );
@@ -468,7 +494,7 @@ export function serializeEvidence(input: {
                 childPrivacyRedactionsFromStored(findings.childPrivacyRedactions),
               );
               return {
-                ...conversationFields(proof.transcript_text, findings.conversation, peopleResolved),
+                ...conversationFields(proof.transcript_text, shownConversation, peopleResolved),
                 ...publicPeopleFields(peopleResolved),
                 evidenceLog: overlaySpeakerLabels(evidence, peopleResolved),
               };

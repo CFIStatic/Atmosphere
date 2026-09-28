@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 169,
+    "migrationCount": 170,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3577
+    "finalObjects": 3583
   },
   "outOfOrder": [
     {
@@ -183,7 +183,8 @@
     "20260927180000_job_proofs_timed_transcript.sql",
     "20260927203000_backfill_proof_upload_actor.sql",
     "20260928120000_ask_thread_memory.sql",
-    "20260928143000_ask_job_notes_insert_scope.sql"
+    "20260928143000_ask_job_notes_insert_scope.sql",
+    "20260928190000_job_proofs_summary_provenance.sql"
   ],
   "migrations": [
     {
@@ -5677,6 +5678,23 @@
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 1
+    },
+    {
+      "version": "20260928190000_job_proofs_summary_provenance",
+      "file": "20260928190000_job_proofs_summary_provenance.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proofs.summary_status",
+        "column|public.job_proofs.summary_transcript_sha256",
+        "column|public.job_proofs.summary_generated_at",
+        "column|public.job_proofs.summary_error",
+        "column|public.job_proofs.summary_lease_until",
+        "index|public.job_proofs.job_proofs_summary_pending_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
     }
   ]
 }

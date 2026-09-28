@@ -9,6 +9,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { staleSummaryPatch } from '../audio/summaryFreshness.js';
 import { normaliseAction, type WorkAction } from '../episodes/actions.js';
 import { rescoreEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
@@ -263,7 +264,8 @@ export async function persistProofActions(
 ): Promise<void> {
   const actions = storedProofActions(input.actions, input.model);
   try {
-    await admin.from('job_proofs').update({ actions }).eq('id', input.proofId);
+    // New events: the AI summary built from the old ones is stale until rebuilt.
+    await admin.from('job_proofs').update({ actions, ...staleSummaryPatch() }).eq('id', input.proofId);
   } catch {
     return;
   }

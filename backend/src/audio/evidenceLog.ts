@@ -22,8 +22,14 @@ import {
   type DictationEvent,
   resolveDictationEntries,
 } from '../shared/dictationEvents.js';
+import { findVerbatimQuote } from './verbatimTranscript.js';
 
-export const EVIDENCE_LOG_VERSION = 1;
+/**
+ * 2: a fact or turn with no time of its own is timed from the transcript line
+ * it quotes, or left off the timed log (it stays in the AI summary), instead
+ * of being stamped 0:00.
+ */
+export const EVIDENCE_LOG_VERSION = 2;
 /** Safety ceiling only — a full workday can still be dense. */
 export const MAX_EVIDENCE_LOG_ENTRIES = 2_000;
 
@@ -96,7 +102,22 @@ export function dedupeEvidenceLog(entries: EvidenceLogEntry[]): EvidenceLogEntry
   return out;
 }
 
-function decisionEntries(details: ConversationDetails): EvidenceLogEntry[] {
+/**
+ * The real seek time for a row: its own time, else the transcript line its
+ * quote came from. Null means the row describes the clip, not a moment.
+ */
+export function momentTime(
+  tSec: number | null | undefined,
+  quote: string | null | undefined,
+  transcript: string | null | undefined,
+): number | null {
+  if (tSec != null && Number.isFinite(tSec) && tSec >= 0) return roundTime(tSec);
+  const found = quote ? findVerbatimQuote(transcript, quote) : null;
+  if (found?.tSec != null && Number.isFinite(found.tSec)) return roundTime(found.tSec);
+  return null;
+}
+
+function decisionEntries(details: ConversationDetails, transcript?: string | null): EvidenceLogEntry[] {
   const push = (
     facts: ConversationQuotedFact[],
     label: string,
@@ -104,15 +125,21 @@ function decisionEntries(details: ConversationDetails): EvidenceLogEntry[] {
   ): EvidenceLogEntry[] =>
     facts
       .filter((f) => f.text?.trim())
-      .map((f) => ({
-        atSeconds: f.tSec != null && Number.isFinite(f.tSec) ? roundTime(f.tSec) : 0,
-        text: `${label}: ${f.text}`.slice(0, 500),
-        type: 'decision',
-        quote: f.quote ?? f.text,
-        confidence: f.confidence ?? null,
-        owner: f.owner ?? null,
-        kind,
-      }));
+      .flatMap((f) => {
+        const at = momentTime(f.tSec, f.quote, transcript);
+        // No time and no quoted line to time it by: a clip-level point. It is in
+        // the AI summary; a fake 0:00 row on the moment log would misplace it.
+        if (at == null) return [];
+        return [{
+          atSeconds: at,
+          text: `${label}: ${f.text}`.slice(0, 500),
+          type: 'decision',
+          quote: f.quote ?? f.text,
+          confidence: f.confidence ?? null,
+          owner: f.owner ?? null,
+          kind,
+        }];
+      });
 
   return [
     ...push(details.agreementFacts, 'Agreement', 'agreement'),
@@ -156,15 +183,36 @@ function peopleEntries(people: PeoplePresent): EvidenceLogEntry[] {
   return out;
 }
 
-function turnEntries(details: ConversationDetails): EvidenceLogEntry[] {
+function turnEntries(details: ConversationDetails, transcript?: string | null): EvidenceLogEntry[] {
   return details.turns
     .filter((t) => t.text?.trim())
-    .map((t) => ({
-      atSeconds: t.tSec != null && Number.isFinite(t.tSec) ? roundTime(t.tSec) : 0,
-      text: t.text.slice(0, 500),
-      type: 'said',
-      speakerLabel: t.speakerLabel,
-    }));
+    .flatMap((t) => {
+      const at = momentTime(t.tSec, t.text, transcript);
+      if (at == null) return [];
+      return [{
+        atSeconds: at,
+        text: t.text.slice(0, 500),
+        type: 'said',
+        speakerLabel: t.speakerLabel,
+      }];
+    });
+}
+
+/**
+ * Version-1 logs stamped untimed facts and turns at 0. Re-time a 0:00 row
+ * from the transcript line it quotes; drop decision rows at 0:00 (clip-level
+ * points, still in the AI summary) and quoted rows whose line is no longer in
+ * the transcript (built from an older transcript).
+ */
+function retimeLegacyEntry(entry: EvidenceLogEntry, transcript: string | null | undefined): EvidenceLogEntry | null {
+  if (entry.atSeconds !== 0) return entry;
+  const quoted = entry.quote ?? (entry.type === 'said' && !entry.kind ? entry.text : null);
+  if (entry.type === 'decision') return null;
+  if (!quoted) return entry;
+  if (!String(transcript || '').trim()) return entry;
+  const at = momentTime(null, quoted, transcript);
+  if (at == null) return null;
+  return { ...entry, atSeconds: at };
 }
 
 /**
@@ -186,11 +234,13 @@ export function buildEvidenceLog(input: {
   if (input.storedLog && typeof input.storedLog === 'object') {
     const row = input.storedLog as StoredEvidenceLog;
     if (Array.isArray(row.entries) && row.entries.length) {
+      const legacy = !(Number(row.version) >= 2);
       return dedupeEvidenceLog(
         row.entries
           .filter((e) => e && typeof e.text === 'string' && e.text.trim())
+          .filter((e) => e.atSeconds != null && Number.isFinite(Number(e.atSeconds)))
           .map((e) => ({
-            atSeconds: Number.isFinite(Number(e.atSeconds)) ? roundTime(Number(e.atSeconds)) : 0,
+            atSeconds: roundTime(Number(e.atSeconds)),
             text: String(e.text).trim().slice(0, 500),
             type: String(e.type || 'other').toLowerCase(),
             speakerLabel: e.speakerLabel ?? null,
@@ -198,7 +248,12 @@ export function buildEvidenceLog(input: {
             confidence: e.confidence ?? null,
             owner: e.owner ?? null,
             kind: e.kind ?? null,
-          })),
+          }))
+          .flatMap((e) => {
+            if (!legacy) return [e];
+            const kept = retimeLegacyEntry(e, input.transcript);
+            return kept ? [kept] : [];
+          }),
       );
     }
   }
@@ -223,8 +278,8 @@ export function buildEvidenceLog(input: {
     type: (event.type || 'other').toLowerCase(),
   }));
 
-  const fromTurns = hasConversation(conversation) ? turnEntries(conversation) : [];
-  const fromDecisions = hasConversation(conversation) ? decisionEntries(conversation) : [];
+  const fromTurns = hasConversation(conversation) ? turnEntries(conversation, input.transcript) : [];
+  const fromDecisions = hasConversation(conversation) ? decisionEntries(conversation, input.transcript) : [];
 
   let people = resolvePeoplePresent({
     stored: input.people,
