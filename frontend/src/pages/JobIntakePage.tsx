@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
-import {
-  api,
-  type CaptureTeamMember,
-  type CreateEvidenceShareResult,
-  type IntakeApproveResult,
-  type IntakeProposal,
-} from '../lib/api';
+import { api, type CaptureTeamMember, type IntakeProposal } from '../lib/api';
 import { jobFilePath } from '../lib/jobFileAsk';
-import { fieldCaptureOpenUrl } from '../lib/firstRun';
 import {
   INTAKE_SAMPLE,
   isInviteEmail,
@@ -62,11 +55,8 @@ export function JobIntakePage() {
   const [extCompany, setExtCompany] = useState('');
   const [extEmail, setExtEmail] = useState('');
   const [homeownerEmail, setHomeownerEmail] = useState('');
-  const [result, setResult] = useState<IntakeApproveResult | null>(null);
-  const [homeownerShare, setHomeownerShare] = useState<CreateEvidenceShareResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,22 +176,18 @@ export function JobIntakePage() {
       const ownerEmail = homeownerEmail.trim().toLowerCase();
       if (ownerEmail && isInviteEmail(ownerEmail)) {
         try {
-          const share = await api.createProgressShare({
+          await api.createProgressShare({
             jobId: res.job.id,
             label: ownerEmail,
             recipientEmail: ownerEmail,
           });
-          setHomeownerShare(share);
         } catch {
-          setHomeownerShare(null);
+          // Homeowner link is best-effort; the job file still opens.
         }
-      } else {
-        setHomeownerShare(null);
       }
-      setResult(res);
-      // Stay on this page so the invite copy buttons actually render. The
-      // previous navigate() to /jobs/:id dropped that handoff — JobDetailPage
-      // never reads location.state.
+      // Invite emails already went out from approveIntake — go straight to
+      // the new job file instead of a confirmation screen.
+      navigate(jobFilePath(res.job.id, { title: res.job.title, number: res.job.jobNumber }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not approve that package.');
     } finally {
@@ -225,250 +211,6 @@ export function JobIntakePage() {
   }
 
   const invitedCount = selectedCount + externals.length;
-
-  async function copyText(url: string, id: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      window.setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      setError('Could not copy — select the link and copy it yourself.');
-    }
-  }
-
-  async function copyLink(path: string, id: string) {
-    await copyText(`${window.location.origin}${path}`, id);
-  }
-
-  const invites = result?.invites ?? [];
-
-  if (result) {
-    return (
-      <div
-        data-testid="start-job"
-        className={phone ? 'flex min-h-0 min-w-0 flex-1 flex-col' : undefined}
-      >
-        {phone ? (
-          <div className="min-w-0 shrink-0">
-            <h1 className="text-xl font-bold tracking-tight text-ink-900">Start a job</h1>
-            <p className="mt-1 text-[13px] leading-snug text-ink-600">Next: film the first day in Field Capture.</p>
-          </div>
-        ) : (
-          <PageHeader title="Start a job" description="Next: film the first day in Field Capture." />
-        )}
-        <div
-          className={cn(
-            'animate-fade-in-up',
-            phone
-              ? 'mt-3 flex min-h-0 min-w-0 flex-1 flex-col'
-              : 'mx-auto max-w-3xl space-y-4',
-          )}
-        >
-          <div
-            className={
-              phone
-                ? 'min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
-                : 'contents'
-            }
-          >
-          <div
-            className={cn(
-              'rounded-xl border border-success-200/80 bg-success-50/40 glass-card',
-              phone ? 'p-3.5' : 'p-5',
-            )}
-          >
-            <h2 className={cn('font-semibold text-ink-900', phone ? 'text-[15px]' : 'text-base')}>
-              {invites.length ? 'Job created — capture invited' : 'Job created'}
-            </h2>
-            <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
-              <span className="font-medium text-ink-800">{result.job.title}</span>
-              {result.job.jobNumber != null ? ` · Job #${result.job.jobNumber}` : ''} ·{' '}
-              {result.scopeSaved} scope lines · brief r{result.briefRevision} · {invites.length}{' '}
-              invite{invites.length === 1 ? '' : 's'}
-              {invites.some((i) => i.emailed)
-                ? ` · ${invites.filter((i) => i.emailed).length} emailed`
-                : ''}
-              {homeownerShare?.emailed
-                ? ' · homeowner emailed the job file'
-                : homeownerShare
-                  ? ' · homeowner job-file link created'
-                  : ''}
-              {phone ? '.' : '. Open Field Capture on the phone to film it.'}
-            </p>
-          </div>
-
-          <div className={cn('rounded-xl glass-card', phone ? 'p-3.5' : 'p-5')}>
-            <h3 className="text-sm font-semibold text-ink-900">Film in Field Capture</h3>
-            <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
-              {phone
-                ? 'Same login as Platform. Open Field Capture, pick this job, and record.'
-                : 'Use the same email and password on the phone. Open Field Capture, pick this job, and record the first film.'}
-            </p>
-            <div className={cn('flex min-w-0 items-center gap-2', phone ? 'mt-3' : 'mt-4')}>
-              <a
-                href={fieldCaptureOpenUrl(
-                  invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
-                    result.fieldCapturePath ||
-                    null,
-                )}
-                target="_blank"
-                rel="noreferrer"
-                className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-brand-700 underline-offset-2 hover:underline"
-              >
-                {fieldCaptureOpenUrl(
-                  invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
-                    result.fieldCapturePath ||
-                    null,
-                )}
-              </a>
-              <button
-                type="button"
-                onClick={() =>
-                  void copyText(
-                    fieldCaptureOpenUrl(
-                      invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
-                        result.fieldCapturePath ||
-                        null,
-                    ),
-                    'fc-open',
-                  )
-                }
-                className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
-              >
-                {copiedId === 'fc-open' ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-          </div>
-
-          {invites.length > 0 && (
-          <div className={cn('rounded-xl glass-card', phone ? 'p-3.5' : 'p-5')}>
-            <h3 className="text-sm font-semibold text-ink-900">Invites</h3>
-            <p className={cn('mt-1 text-ink-600', phone ? 'text-[13px] leading-snug' : 'text-sm')}>
-              {phone
-                ? 'Each person gets a Field Capture link for this job.'
-                : 'Each person gets a Field Capture link. Outside workers also get an Atmosphere email when mail is configured.'}
-            </p>
-            <ul className={cn('space-y-3', phone ? 'mt-3' : 'mt-4')}>
-              {invites.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="rounded-lg border border-line/60 bg-paper-50/40 px-3 py-3"
-                >
-                  <div
-                    className={cn(
-                      'min-w-0',
-                      phone ? 'space-y-0.5' : 'flex flex-wrap items-baseline justify-between gap-2',
-                    )}
-                  >
-                    <p className="min-w-0 truncate text-sm font-medium text-ink-900">{inv.name}</p>
-                    {inv.email && (
-                      <p className="min-w-0 truncate text-xs text-ink-500">{inv.email}</p>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs leading-snug text-ink-500">
-                    {inv.emailed
-                      ? inv.recipientHasAccount
-                        ? phone
-                          ? 'Emailed — they already have an account.'
-                          : 'Atmosphere emailed them — they already have an account; the job will show when they sign in.'
-                        : phone
-                          ? 'Emailed — the note walks them through creating an account.'
-                          : 'Atmosphere emailed them — no account yet; the email walks them through creating one with this address.'
-                      : inv.email
-                        ? phone
-                          ? 'Invite created — copy the link; mail did not send.'
-                          : 'Invite created, but Atmosphere mail did not send — copy the link below.'
-                        : 'Copy their capture link below.'}
-                    {inv.attachedToAccount ? ' Already on their My jobs list.' : ''}
-                  </p>
-                  <div className="mt-2 flex min-w-0 items-center gap-2">
-                    <a
-                      href={
-                        inv.fieldCapturePath
-                          ? fieldCaptureOpenUrl(inv.fieldCapturePath)
-                          : inv.sharePath
-                      }
-                      target={inv.fieldCapturePath ? '_blank' : undefined}
-                      rel={inv.fieldCapturePath ? 'noreferrer' : undefined}
-                      className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-brand-700 underline-offset-2 hover:underline"
-                    >
-                      {inv.fieldCapturePath
-                        ? fieldCaptureOpenUrl(inv.fieldCapturePath)
-                        : `${window.location.origin}${inv.sharePath}`}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void (inv.fieldCapturePath
-                          ? copyText(fieldCaptureOpenUrl(inv.fieldCapturePath), inv.id)
-                          : copyLink(inv.sharePath, inv.id))
-                      }
-                      className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
-                    >
-                      {copiedId === inv.id ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-          )}
-          </div>
-
-          <div
-            className={cn(
-              phone
-                ? 'sticky bottom-0 z-10 -mx-3 mt-2 grid shrink-0 gap-1.5 border-t border-line bg-paper-100/95 px-3 pt-2 pb-[max(6px,env(safe-area-inset-bottom))] backdrop-blur-sm'
-                : 'flex flex-wrap gap-3 pb-8',
-            )}
-          >
-            <a
-              href={fieldCaptureOpenUrl(
-                invites.find((i) => i.fieldCapturePath)?.fieldCapturePath ||
-                  result.fieldCapturePath ||
-                  null,
-              )}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(
-                'inline-flex items-center justify-center rounded-lg bg-brand-600 text-sm font-semibold text-ink-900',
-                phone ? 'w-full px-4 py-3' : 'px-4 py-2',
-              )}
-            >
-              Open Field Capture
-            </a>
-            <button
-              type="button"
-              className={cn(
-                'rounded-lg text-sm font-medium text-ink-700',
-                phone ? 'w-full px-4 py-2.5' : 'px-4 py-2',
-              )}
-              onClick={() =>
-                navigate(jobFilePath(result.job.id, { title: result.job.title, number: result.job.jobNumber }))
-              }
-            >
-              Open this job file
-            </button>
-            <button
-              type="button"
-              className={cn(
-                'rounded-lg text-sm font-medium text-ink-600',
-                phone ? 'w-full px-4 py-2.5' : 'px-4 py-2',
-              )}
-              onClick={() => {
-                setResult(null);
-                setName('');
-                setSituation('');
-                setExternals([]);
-              }}
-            >
-              Start another
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const cardPad = phone ? 'p-3.5' : 'p-5';
   const sectionTitle = phone ? 'text-[15px] font-semibold text-ink-900' : 'text-base font-semibold text-ink-900';
