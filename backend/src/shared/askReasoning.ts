@@ -26,6 +26,7 @@ import {
   followUpAnswerable,
   planAskLookup,
   quotesFromTrace,
+  scrubStoredAskText,
   suggestFollowUps,
   type AskLookupCatalog,
   type AskLookupTraceStep,
@@ -41,6 +42,7 @@ import {
   classifyAskIntent,
   composeGroundedAsk,
   polishAskProse,
+  resolveAskQuestion,
   speechQuotesForQuestion,
   wrapTaskArtifact,
 } from './askPolish.js';
@@ -49,7 +51,7 @@ import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
 Rules:
-1. Call a tool when the answer depends on what was said, who filmed a clip, what the visits show, or what job history records. Gather what you need over several steps. Do not guess.
+1. The user message already includes the job context (project, address, client, clips, redacted transcripts, history, people) and earlier turns of this chat. Use that context for a broad question such as what the job is about. Call a tool when you need a cited spoken moment, one person's clips, or a detail the context does not already settle. Do not guess.
 2. Stay strictly grounded in tool results. Never invent clips, quotes, times, people, rooms, defects, or scope.
 3. If the file lacks something, say that in one short sentence, then give the best answer the file does support.
 4. The first sentence is the answer. Then only the detail the reader needs. No "Certainly", "Great question", or other filler.
@@ -412,8 +414,10 @@ export async function answerFromAskLookup(input: {
   answeredFromLookup: true;
 }> {
   const system = LOOKUP_SYSTEM;
+  const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const user = buildLookupUserPrompt({
     question: input.question,
+    resolved,
     catalog: input.catalog,
     history: input.history,
     extra: input.extra,
@@ -453,7 +457,7 @@ export async function answerFromAskLookup(input: {
 
   if (!prose) {
     if (!trace.length) {
-      for (const call of planAskLookup(input.question, input.catalog)) {
+      for (const call of planAskLookup(resolved, input.catalog, input.history)) {
         input.onStatus?.(askLookupStatus(call.name));
         trace.push({
           tool: call.name,
@@ -464,7 +468,7 @@ export async function answerFromAskLookup(input: {
     }
     const completed = await completeAskText({
       system,
-      user: `${user}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer only from those results. If they do not contain it, say it is not in the file.`,
+      user: `${user}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
       mode: 'reasoning',
@@ -476,16 +480,17 @@ export async function answerFromAskLookup(input: {
       usage = completed.usage;
       streamed = true;
     } else {
-      prose = composeGroundedAsk(input.question, trace, input.catalog);
+      prose = composeGroundedAsk(resolved, trace, input.catalog);
       model = null;
       streamed = false;
     }
   }
 
-  const finalized = finalizeLookupAnswer(prose, trace, input.catalog, input.question);
-  if (!streamed) input.onToken?.(finalized.answer);
+  const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);
+  const answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
+  if (!streamed) input.onToken?.(answer);
   return {
-    answer: finalized.answer,
+    answer,
     model,
     usage,
     trace,

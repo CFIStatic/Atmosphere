@@ -6,7 +6,7 @@
  * note the chat can copy. Visible prose never carries ids, UTC, or filler.
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
-import type { AskLookupCatalog, AskLookupTraceStep } from './askLookup.js';
+import { clipAskPreview, type AskLookupCatalog, type AskLookupClip, type AskLookupTraceStep } from './askLookup.js';
 import {
   clipMatchesAskDate,
   formatAskDate,
@@ -179,6 +179,130 @@ function artifact(body: string): string {
 
 function jobName(catalog: AskLookupCatalog): string {
   return cleanMentionTitle(catalog.jobTitle ?? '') || 'this job';
+}
+
+/** A broad "what is this job" question, not a search for one missing fact. */
+export function isJobOverview(question: string): boolean {
+  return /\b(?:what was this (?:job|file|project) about|what(?:'s| is| was) this (?:job|file) about|summar(?:y|ize|ise) this (?:job|file|project)|what was this about|tell me about this (?:job|file|project)|overview of this (?:job|file))\b/i.test(
+    question,
+  );
+}
+
+function catalogClips(catalog: AskLookupCatalog): AskLookupClip[] {
+  return (catalog.clips ?? []).filter(
+    (clip) => clip.orgId === catalog.orgId && (!catalog.jobId || clip.jobId === catalog.jobId),
+  );
+}
+
+function clearestLine(transcript: string): string {
+  const lines = transcript
+    .split('\n')
+    .map((line) => line.replace(/^\[[^\]]+\]\s*/, '').trim())
+    .filter((line) => line && !/\[privacy redacted\]/i.test(line));
+  return [...lines].sort((a, b) => b.length - a.length)[0]?.slice(0, 160) ?? '';
+}
+
+/** Overview written from the whole job, not from a failed keyword search. */
+export function composeJobOverview(catalog: AskLookupCatalog): string {
+  const name = jobName(catalog);
+  const client = String(catalog.clientName ?? '').trim();
+  const address = String(catalog.jobAddress ?? '').trim();
+  const description = String(catalog.jobDescription ?? '').trim();
+  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  const sentence = (label: string, value: string) => {
+    const text = `${label}: ${value.trim()}`;
+    return /[.!?]$/.test(text) ? text : `${text}.`;
+  };
+  const intro = [`**${name}** is the job on this file.`];
+  if (client) intro.push(sentence('Client', client));
+  if (address) intro.push(sentence('Address', address));
+  if (description) intro.push(/[.!?]$/.test(description) ? description : `${description}.`);
+  if (people.length) intro.push(`People on the job: ${people.join(', ')}.`);
+  const clips = catalogClips(catalog).slice().sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')));
+  const visits = clips.map((clip) => {
+    const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+    const title = cleanMentionTitle(clip.title) || 'Clip';
+    const summary = String(clip.summary ?? '').trim();
+    const speech = clearestLine(clipAskPreview(clip).transcript);
+    const detail = [summary, speech ? `Said: “${speech}”` : ''].filter(Boolean).join(' ');
+    return `- **${when} — ${title}**.${detail ? ` ${detail}` : ''}`;
+  });
+  const history = (catalog.history ?? []).slice(0, 4).map((event) => {
+    const when = localStamp(event.at, catalog.timeZone);
+    return `- ${when || 'Recorded'}: ${event.summary}`;
+  });
+  return [
+    intro.join(' '),
+    visits.length ? visits.join('\n') : 'No clips are on this file yet.',
+    history.length ? `Job history:\n${history.join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+type AskMemoryTurn = { role?: string | null; text?: string | null };
+
+function recentPerson(turns: AskMemoryTurn[], catalog: AskLookupCatalog): string | null {
+  const people = [...(catalog.people ?? [])].filter((person) => person.name).sort((a, b) => b.name.length - a.name.length);
+  for (const turn of [...turns].reverse()) {
+    const hay = String(turn.text ?? '').toLowerCase();
+    const found = people.find((person) => hay.includes(person.name.toLowerCase()));
+    if (found) return found.name;
+  }
+  return null;
+}
+
+function recentDate(turns: AskMemoryTurn[]) {
+  for (const turn of [...turns].reverse()) {
+    const parsed = parseAskDate(String(turn.text ?? ''));
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+/**
+ * Rewrite a short follow-up so pronouns, "and on Sep 21?", and "the first visit"
+ * point at the person, date, and clips from earlier in the thread.
+ */
+export function resolveAskQuestion(
+  question: string,
+  history: AskMemoryTurn[] | null | undefined,
+  catalog: AskLookupCatalog,
+): string {
+  const turns = (history ?? []).filter((turn) => String(turn.text ?? '').trim()).slice(-8);
+  if (!turns.length) return question;
+  const q = question.trim();
+  const person = recentPerson(turns, catalog);
+  const namedHere = (catalog.people ?? []).some((row) => row.name && q.toLowerCase().includes(row.name.toLowerCase()));
+  const asked = parseAskDate(q);
+  const prevDate = recentDate(turns);
+  const prevUser = [...turns].reverse().find((turn) => turn.role !== 'assistant');
+  const prevSpeech = /\b(say|said|quote|tell|mention)\b/i.test(String(prevUser?.text ?? ''));
+
+  if (/^(?:and\b|what about\b)\s+/i.test(q) && asked && person && !namedHere && prevSpeech) {
+    return `What did ${person} say on ${formatAskDate(asked)}?`;
+  }
+  if (/\bcompare\b/i.test(q) && /\bfirst visit\b/i.test(q) && /\b(that|this|it|there)\b/i.test(q)) {
+    const dates = [
+      ...new Set(
+        catalogClips(catalog)
+          .map((clip) => clip.workDate)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ].sort();
+    const firstParsed = dates[0] ? parseAskDate(dates[0]) : null;
+    const firstLabel = firstParsed ? formatAskDate(firstParsed) : dates[0] || 'the first visit';
+    const subject = prevDate ? formatAskDate(prevDate) : 'the visit just discussed';
+    return `compare ${subject} to the first visit on ${firstLabel}`;
+  }
+  if (!namedHere && person && /\b(he|she|him|her|they)\b/i.test(q)) {
+    let next = q.replace(/\b(he|she|him|her|they)\b/gi, person);
+    if (/\bthere\b/i.test(next) && prevDate && !asked) {
+      next = next.replace(/\bthere\b/gi, `on ${formatAskDate(prevDate)}`);
+    }
+    return next;
+  }
+  return question;
 }
 
 function personBlock(trace: AskLookupTraceStep[]): { name: string; offJob: string | null } | null {
@@ -528,6 +652,9 @@ export function composeGroundedAsk(
   trace: AskLookupTraceStep[],
   catalog: AskLookupCatalog,
 ): string {
+  if (isJobOverview(question)) {
+    return polishAskProse(composeJobOverview(catalog), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  }
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);
   const polished = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
