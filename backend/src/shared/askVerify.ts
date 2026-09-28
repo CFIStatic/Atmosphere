@@ -590,7 +590,8 @@ const QUALITY_STOP = new Set(
     'what when where who whom which why how any anything something someone anyone this that these those it its they them their there here ' +
     'clip clips video videos footage recording file job said say says talk talked mention mentioned tell told me you your i we our can could ' +
     'would should will just exactly exact quote quotes time times timestamp timestamps second seconds minute point moment happen happened ' +
-    'show shows shown see seen visible please each every all many much some there'
+    'show shows shown see seen visible please each every all many much some there ' +
+    'list everything order first last give line lines spoken speak spoke words transcript whole entire full thing things'
   ).split(/\s+/),
 );
 const ABSTAIN_RE =

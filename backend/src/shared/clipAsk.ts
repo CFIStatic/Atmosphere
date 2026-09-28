@@ -623,7 +623,10 @@ const QUESTION_FRAME = new Set([
   'timestamp', 'timestamps', 'time', 'times', 'exactly', 'exact', 'point', 'moment', 'second', 'seconds', 'minute',
   'happen', 'happens', 'happened', 'does', 'doing', 'did', 'tell', 'know', 'which', 'many', 'much', 'there',
   'recording', 'camera', 'frame', 'filmed', 'film', 'see', 'can', 'you', 'your', 'describe', 'visible',
+  'before', 'after', 'first', 'last', 'order', 'earlier', 'later', 'give', 'site', 'onsite', 'clip', 'video', 'shown', 'show',
 ]);
+const WORK_DONE = /^(install|installs|installed|installing|replace|replaced|replaces|replacing|repair|repaired|repairing|fix|fixed|fixing|finish|finished|finishing|complete|completed|completing|paint|painted|painting|patch|patched|remove|removed)$/;
+const DAMAGE_WORD = /^(damage|damaged|leak|leaks|leaking|mold|mould|crack|cracked|cracks|stain|stains|rot|rotted|broken)$/;
 /** Specific details that need a literal hit in the reading; never inferred. */
 const LITERAL_DETAIL = /^(brand|brands|make|model|manufacturer|maker|serial|sku|part|price|prices|cost|costs|dollars?|warranty|license|plate|address|phone|model number)$/;
 
@@ -636,7 +639,8 @@ export function missingFromEvidence(question: string, record: ClipAskRecord): { 
   const hay = clipCorpus(record).flatMap((row) => tokens(row.text));
   const asked = tokens(question).filter((token) => !QUESTION_FRAME.has(token));
   const missing = asked.filter((token) => !hay.some((h) => tokensOverlap(token, h) || h.startsWith(token.slice(0, 5)) && token.length >= 6));
-  return { missing, literal: missing.filter((token) => LITERAL_DETAIL.test(token)) };
+  // Work done (install, replace, repair, finish…) is never inferred from a nearby mention.
+  return { missing, literal: missing.filter((token) => LITERAL_DETAIL.test(token) || WORK_DONE.test(token) || DAMAGE_WORD.test(token)) };
 }
 
 function notInEvidenceAnswer(missing: string[], yesNo: boolean, record: ClipAskRecord): string {
@@ -678,6 +682,7 @@ const TALK_FRAME = new Set([
   // Who spoke is not what was said about: role words frame the question.
   'homeowner', 'homeowners', 'owner', 'owners', 'contractor', 'contractors', 'client', 'customer', 'adjuster',
   'inspector', 'tenant', 'guy', 'lady', 'man', 'woman', 'speaker', 'speakers', 'voice', 'voices', 'she', 'he', 'her', 'him',
+  'crew', 'tech', 'technician', 'worker', 'workers', 'someone', 'anybody', 'nobody',
 ]);
 
 function askedTerm(question: string, token: string): string {
@@ -1009,6 +1014,46 @@ function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
   });
 }
 
+/** The whole transcript in order is what was asked for. */
+function wantsWholeTranscript(q: string): boolean {
+  return (
+    /\b(list|give me|show me|read me|tell me)\b[^?]*\b(every|all|each|everything)\b[^?]*\b(said|line|lines|quote|quotes|thing)/i.test(q) ||
+    /\b(every|each|all( the)?) (line|lines|quote|quotes|thing said)\b/i.test(q) ||
+    /\beverything (that was |they )?(said|say)\b/i.test(q) ||
+    /\bin order\b[^?]*\b(said|line|lines|transcript)|\b(said|line|lines|transcript)\b[^?]*\bin order\b/i.test(q)
+  );
+}
+
+/** "What was said first and last?": just those two lines, with times. */
+function firstLastAnswer(q: string, rows: Array<{ at: number | null; text: string }>): string | null {
+  const first = /\bfirst\b/i.test(q);
+  const last = /\blast\b/i.test(q);
+  if (!rows.length || !(first || last) || !/\b(said|say|line|spoken|heard)\b/i.test(q)) return null;
+  const line = (row: { at: number | null; text: string }) => `${formatClipTime(row.at) ? `[${formatClipTime(row.at)}] ` : ''}“${row.text}”`;
+  const parts: string[] = [];
+  if (first) parts.push(`First: ${line(rows[0]!)}`);
+  if (last) parts.push(`Last: ${line(rows[rows.length - 1]!)}`);
+  return `${parts.join('\n')}\n\n(${rows.length} ${rows.length === 1 ? 'line' : 'lines'} in the raw transcript.)`;
+}
+
+/**
+ * A question about the conversation on site ("is this the crew talking to the
+ * homeowner?") when the speech came from a TV/laptop in frame.
+ */
+function mediaSourceAnswer(q: string, record: ClipAskRecord, rows: Array<{ at: number | null; text: string }>): string | null {
+  if (!rows.length) return null;
+  if (!/\b(conversation|talking|speaking|discussion|crew|homeowner|contractor|customer|on site|people on)\b/i.test(q)) return null;
+  if (!/^(is|are|was|were|did|does|do)\b|\bwho\b/i.test(q.trim())) return null;
+  const tags = mediaTags(record, rows);
+  const media = tags.filter(Boolean).length;
+  const screen = record.mediaWindows?.[0]?.device ?? (record.mediaUntimed?.match(/\b(tv|television|laptop|monitor|tablet|phone|radio)\b/i)?.[1]?.toLowerCase() ?? null);
+  if (media === rows.length || (!media && record.mediaUntimed && !(record.mediaWindows ?? []).length)) {
+    const where = screen ? `a ${screen} playing in frame` : 'a screen playing in frame';
+    return `No. Not established as field conversation: the speech in this clip comes from ${where} (media), and who is speaking is unknown.${record.mediaUntimed ? ` The reading says: “${record.mediaUntimed.replace(/[.;]+$/, '')}”.` : ''}`;
+  }
+  return null;
+}
+
 /**
  * Deterministic answer from the clip's reading. Used when no model is
  * configured, and as a fallback if the model call fails.
@@ -1017,6 +1062,24 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   record = withAuthoritativeTranscript(speechSafeClipRecord(record));
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
+  const heardRows = splitTranscript(record.transcript);
+  // "Who is talking?" with nothing transcribed: nobody is heard.
+  if (/\b(talking|speaking|said|says|saying|voice|voices)\b/i.test(q) && !heardRows.length && !isTranscriptPending(record.transcriptStatus)) {
+    return 'No one is heard in this clip: no speech was transcribed, so who is talking is not established.';
+  }
+  // Speech from a screen in frame is not the people on site talking.
+  const media = mediaSourceAnswer(q, record, heardRows);
+  if (media) return media;
+  // "List everything said, in order" / "every line with timestamps" / "first and last".
+  if (heardRows.length && wantsWholeTranscript(q)) return speechCountAnswer(record);
+  const firstLast = firstLastAnswer(q, heardRows);
+  if (firstLast) return firstLast;
+  // A question that assumes work was done (installed, replaced, completed…)
+  // or damage the reading never mentions is answered as not shown.
+  const earlyGap = missingFromEvidence(q, record);
+  if (earlyGap.literal.some((token) => WORK_DONE.test(token) || DAMAGE_WORD.test(token))) {
+    return notInEvidenceAnswer(earlyGap.missing, isYesNoQuestion(q), record);
+  }
   if (isWhoQuestion(q)) {
     const people = peopleFromRecord(record);
     const answer = formatPeopleAnswer(people);

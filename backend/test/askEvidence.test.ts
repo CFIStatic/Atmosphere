@@ -195,7 +195,8 @@ test('topic question returns only the matching timed line, not the whole transcr
 
 test('yes/no with only a partial word match is not a yes', async () => {
   const r = await answerFromClip({ question: 'Did they agree on a price for the table repair?', record: accounting });
-  assert.match(r.answer, /^No\. Not established/);
+  assert.match(r.answer, /^No\./);
+  assert.match(r.answer, /not show|Not established/);
   assert.doesNotMatch(r.answer, /^Yes/);
 });
 
