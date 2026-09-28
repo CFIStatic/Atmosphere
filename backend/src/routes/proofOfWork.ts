@@ -2949,7 +2949,13 @@ export async function runProofAsk(input: {
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
-        ? await prepareMentionAsk(supabase, { orgId, question: input.question, jobId, history }).catch(() => null)
+        ? await prepareMentionAsk(supabase, {
+            orgId,
+            question: input.question,
+            jobId,
+            history,
+            askerUserId: userId ?? null,
+          }).catch(() => null)
         : null;
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;

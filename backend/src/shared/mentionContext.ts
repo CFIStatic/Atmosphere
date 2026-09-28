@@ -9,9 +9,11 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ambiguitySentence,
   answerFromMentionContext,
-  asksForPersonRecord,
+  asksForPersonActivity,
   carryPriorMention,
+  formatActivityDossier,
   formatMentionPrompt,
+  personHasActivity,
   loginNameFromMetadata,
   mentionDisplayName,
   nameKey,
@@ -324,6 +326,40 @@ function clipListLine(row: any): string {
   return [summary, visual].filter(Boolean).join(' ');
 }
 
+/** A couple of real sentences from the mic. Fragments stay out of the dossier. */
+function speechHighlight(transcript: unknown): string {
+  const clean = String(transcript ?? '').replace(/\[[0-9:]+\]\s*/g, ' ');
+  const spoken = sentences(clean).filter((line) => line.split(/\s+/).filter(Boolean).length >= 8);
+  return spoken.slice(0, 2).join(' ');
+}
+
+function keyFindings(findings: unknown): string {
+  if (!findings || typeof findings !== 'object') return '';
+  const events = (findings as { events?: unknown }).events;
+  if (!Array.isArray(events)) return '';
+  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
+  const lines = events
+    .map((event) => {
+      if (!event || typeof event !== 'object') return '';
+      return firstSentence(String((event as { text?: unknown }).text ?? ''));
+    })
+    .filter((line) => line && !opener.test(line));
+  return lines.slice(0, 3).join(' ');
+}
+
+function clipDetail(row: any): string {
+  const summary = sentences(String(row.ai_summary ?? '')).slice(0, 2).join(' ');
+  const shown = keyFindings(row.ai_findings);
+  const said = speechHighlight(row.transcript_text);
+  return [
+    summary ? `Summary: ${summary}` : '',
+    shown ? `Shown: ${shown}` : '',
+    said ? `Speech (weave into a sentence only if it explains what they did or said): ${said}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 function metadataUserId(meta: unknown): string | null {
   if (!meta || typeof meta !== 'object') return null;
   const record = meta as Record<string, unknown>;
@@ -477,7 +513,11 @@ export async function loadPersonContext(
   // Caps apply after this filter so newer rows on other jobs cannot evict this job.
   const evidenceJobIds = scopeJobId ? [scopeJobId] : jobIds;
 
-  const [jobs, proofs, parties, recentMessages, taggedNotes] = await Promise.all([
+  const aliasIds = [...aliasesByUser.values()].flatMap((ids) => [...ids]);
+  const actorIds = [...new Set([...userIds, ...aliasIds])];
+  const onJob = (query: any) => (scopeJobId ? query.eq('job_id', scopeJobId) : query);
+
+  const [jobs, proofs, parties, recentMessages, taggedNotes, custody, shares, memory, scopeDocs] = await Promise.all([
     evidenceJobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
@@ -490,7 +530,7 @@ export async function loadPersonContext(
       ? selectRows(db, 'job_proofs', (query) =>
           query
             .select(
-              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, ai_findings, device_metadata, captured_at, received_at',
+              'id, job_id, party_id, work_date, phase, state, title, ai_summary, transcript_text, narration_text, ai_findings, device_metadata, duration_seconds, captured_at, received_at',
             )
             .eq('org_id', orgId)
             .in('job_id', evidenceJobIds)
@@ -521,6 +561,54 @@ export async function loadPersonContext(
             .select('id, job_id, author_id, author_label, body, created_at')
             .eq('org_id', orgId)
             .in('id', taggedNoteIds),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'job_evidence_access', (query) =>
+          onJob(
+            query
+              .select('id, proof_id, job_id, actor_id, action, detail, occurred_at')
+              .eq('org_id', orgId)
+              .in('actor_id', actorIds),
+          )
+            .order('occurred_at', { ascending: false })
+            .limit(80),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'verifier_shares', (query) =>
+          onJob(
+            query
+              .select('id, job_id, label, created_by, created_at, revoked_at')
+              .eq('org_id', orgId)
+              .in('created_by', actorIds),
+          )
+            .order('created_at', { ascending: false })
+            .limit(20),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'memory_events', (query) =>
+          onJob(
+            query
+              .select('id, job_id, actor_id, event_type, summary, occurred_at')
+              .eq('org_id', orgId)
+              .in('actor_id', actorIds),
+          )
+            .order('occurred_at', { ascending: false })
+            .limit(40),
+        )
+      : Promise.resolve([] as any[]),
+    actorIds.length
+      ? selectRows(db, 'scope_documents', (query) =>
+          onJob(
+            query
+              .select('id, job_id, filename, uploaded_by, created_at')
+              .eq('org_id', orgId)
+              .in('uploaded_by', actorIds),
+          )
+            .order('created_at', { ascending: false })
+            .limit(20),
         )
       : Promise.resolve([] as any[]),
   ]);
@@ -576,16 +664,18 @@ export async function loadPersonContext(
       const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys, aliases);
       const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
       if (!captured && !tagged) continue;
-      const job = jobsById.get(jobId);
       const title = String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim());
+      const duration = Number(proof.duration_seconds);
       push({
         kind: 'video',
         id: String(proof.id),
         jobId,
         proofId: String(proof.id),
-        title: job?.title ? `${title} — ${job.title}` : title,
+        title,
         text: clipText(proof),
         listLine: clipListLine(proof),
+        detail: clipDetail(proof),
+        durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
         at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
         status: proof.state ?? null,
         captured,
@@ -609,18 +699,22 @@ export async function loadPersonContext(
 
     for (const message of messages) {
       const body = String(message.body ?? '');
+      const authored = message.author_id === person.userId;
       const tagged =
         textMentionsPerson(body, person.userId, roster) ||
         Boolean(taggedForUser.get(person.userId)?.has(`job_message:${message.id}`));
-      if (!tagged) continue;
+      // A comment they wrote belongs in an activity rundown. It does not, by
+      // itself, answer a narrower question such as "did she finish the electrical job?"
+      if (authored && !tagged && !asksForPersonActivity(input.question, [person.name])) continue;
+      if (!authored && !tagged) continue;
       push({
         kind: 'note',
         id: String(message.id),
         jobId: message.job_id ?? null,
-        title: String(message.author_label ?? 'Note'),
+        title: authored ? 'Comment' : String(message.author_label ?? 'Note'),
         text: body,
         at: message.created_at ?? null,
-        captured: false,
+        captured: authored,
       });
     }
 
@@ -637,19 +731,88 @@ export async function loadPersonContext(
       });
     }
 
-    const ranked = orderMentionItems(items, input.question, now, [person.name]).slice(0, 24);
+    const ids = new Set([person.userId, ...(aliasesByUser.get(person.userId) ?? [])]);
+    for (const party of parties) {
+      if (!ids.has(String(party.created_by ?? ''))) continue;
+      const company = String(party.company ?? 'party').trim();
+      push({
+        kind: 'log',
+        id: `party:${party.job_id}:${company}`,
+        jobId: party.job_id ?? null,
+        title: `Created the ${company} party`,
+        text: '',
+        at: null,
+        captured: true,
+      });
+    }
+    for (const row of custody) {
+      if (!ids.has(String(row.actor_id ?? ''))) continue;
+      const action = String(row.action ?? '');
+      if (action === 'uploaded' || action === 'viewed' || action === 'analysed') continue;
+      push({
+        kind: 'log',
+        id: `custody:${row.id ?? `${row.proof_id}:${action}:${row.occurred_at}`}`,
+        jobId: row.job_id ?? null,
+        title: `${action} evidence`,
+        text: String(row.detail ?? ''),
+        at: row.occurred_at ?? null,
+        captured: true,
+      });
+    }
+    for (const share of shares) {
+      if (!ids.has(String(share.created_by ?? ''))) continue;
+      push({
+        kind: 'log',
+        id: `share:${share.id}`,
+        jobId: share.job_id ?? null,
+        title: `Shared the file with ${String(share.label ?? 'someone')}`,
+        text: share.revoked_at ? 'Revoked' : 'Open',
+        at: share.created_at ?? null,
+        captured: true,
+      });
+    }
+    for (const event of memory) {
+      if (!ids.has(String(event.actor_id ?? ''))) continue;
+      const summary = String(event.summary ?? '').trim();
+      if (!summary) continue;
+      push({
+        kind: 'log',
+        id: `memory:${event.id}`,
+        jobId: event.job_id ?? null,
+        title: String(event.event_type ?? 'Job history'),
+        text: summary,
+        at: event.occurred_at ?? null,
+        captured: true,
+      });
+    }
+    for (const doc of scopeDocs) {
+      if (!ids.has(String(doc.uploaded_by ?? ''))) continue;
+      push({
+        kind: 'log',
+        id: `scope:${doc.id}`,
+        jobId: doc.job_id ?? null,
+        title: `Uploaded ${String(doc.filename ?? 'a scope document')}`,
+        text: '',
+        at: doc.created_at ?? null,
+        captured: true,
+      });
+    }
+
+    const ranked = orderMentionItems(items, input.question, now, [person.name]).slice(0, 40);
     const fileContains = scopeJobId
       ? [
           ...jobs.map((job) => [job.job_number ? `#${job.job_number}` : '', job.title].filter(Boolean).join(' ')),
           ...proofs.map((proof) => String(proof.title || '').trim()),
         ].filter(Boolean)
       : [];
+    const scopedJob = scopeJobId ? jobsById.get(scopeJobId) : null;
     return {
       userId: person.userId,
       handle: person.handle,
       name: person.name,
       items: ranked,
       fileContains,
+      jobTitle: scopedJob?.title ? String(scopedJob.title) : null,
     };
   });
 }
@@ -672,6 +835,8 @@ export async function prepareMentionAsk(
     now?: Date;
     jobId?: string | null;
     history?: Array<{ role?: string | null; text?: string | null }> | null;
+    /** When this is the mentioned person, the answer may say "you". */
+    askerUserId?: string | null;
   },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
@@ -724,13 +889,17 @@ export async function prepareMentionAsk(
     roster,
     jobId,
   });
-  const grounded = answerFromMentionContext(input.question, people);
-  const hasRelevant = people.some((person) => person.items.some((item) => item.relevant));
-  const inventory = asksForPersonRecord(input.question, mentions.map((person) => person.name))
-    && people.some((person) => person.items.some((item) => item.kind === 'video'));
-  const supplement = [which, absent, formatMentionPrompt(people)].filter(Boolean).join('\n\n');
+  const askerUserId = input.askerUserId ?? null;
+  const grounded = answerFromMentionContext(input.question, people, { askerUserId });
+  const hasActivity = people.some((person) => personHasActivity(person));
+  const dossier = hasActivity
+    ? formatActivityDossier(people, { askerUserId })
+    : formatMentionPrompt(people);
+  const supplement = [which, absent, dossier].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
-  if (inventory || !hasRelevant || !isAskModelConfigured()) {
+  // A person with real activity is never answered by the canned miss or the
+  // clip-list template while a model is configured. The dossier goes to the model.
+  if (!hasActivity || !isAskModelConfigured()) {
     return {
       mentions,
       supplement,

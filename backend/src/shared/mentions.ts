@@ -277,7 +277,7 @@ export function stripMentionMarks(question: string, names: string[] = []): strin
     .sort((a, b) => b.length - a.length);
   for (const name of ordered) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?=$|[\\s,.;:!?])`, 'gi'), '$1 ');
+    text = text.replace(new RegExp(`(^|[\\s(])@${escaped}(?:['’]s)?(?=$|[\\s,.;:!?])`, 'gi'), '$1 ');
   }
   return text.replace(/(^|[\s(])@[A-Za-z0-9][A-Za-z0-9'’.\-]{0,80}/g, '$1 ');
 }
@@ -318,6 +318,42 @@ export function asksForPersonRecord(question: string, names: string[] = []): boo
   return /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q);
 }
 
+/**
+ * Questions that want the person's work on the file, not a keyword hit.
+ * "what had @El Presidente done in this file", "summarize @Name's work",
+ * and "what did they find" all count. A yes/no like "did he finish the
+ * electrical job?" does not — that still looks for the topic.
+ */
+export function asksForPersonActivity(question: string, names: string[] = []): boolean {
+  const q = stripMentionMarks(question, names).toLowerCase();
+  if (asksForPersonRecord(question, names)) return true;
+  if (/\b(activity|activities)\b/.test(q)) return true;
+  if (/\bsummar/.test(q) && /\bwork\b/.test(q)) return true;
+  if (/\b(what|which)\b[\s\S]{0,80}\b(do|did|done|doing)\b/.test(q)) return true;
+  if (/\b(what|which)\b[\s\S]{0,80}\b(film|filmed|upload|uploaded|say|said|find|found|record|recorded)\b/.test(q)) {
+    return true;
+  }
+  if (
+    /\b(what|which)\b[\s\S]{0,40}\b(they|he|she)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b/.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  return (
+    /\b(what|which)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b[\s\S]{0,24}\b(they|he|she)\b/.test(
+      q,
+    )
+  );
+}
+
+/** True when this person filmed, wrote, or opened something — not merely a name on a roster. */
+export function personHasActivity(person: { items: Array<{ kind: string; captured?: boolean }> }): boolean {
+  return person.items.some(
+    (item) => item.captured || item.kind === 'video' || item.kind === 'note' || item.kind === 'log' || item.kind === 'task',
+  );
+}
+
 /** "did he finish the electrical job?" → "electrical job". */
 export function topicFromQuestion(question: string, names: string[] = []): string {
   const stripped = stripMentionMarks(question, names);
@@ -355,6 +391,9 @@ export interface MentionItem {
   workDate?: string | null;
   /** One sentence plus one visual detail. Shown in clip lists; omits raw mic quotes. */
   listLine?: string | null;
+  durationSeconds?: number | null;
+  /** Model-facing clip detail: summary, what was shown, and a short speech highlight. */
+  detail?: string | null;
 }
 
 export interface RankedMentionItem extends MentionItem {
@@ -428,6 +467,122 @@ export function videoSourceId(jobId: string, proofId: string, label: string): st
   return `video/${jobId}/${proofId}/${sourceSlug(label)}`;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function prettyMentionDate(value: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''));
+  if (!match) return '';
+  const month = MONTHS[Number(match[2]) - 1];
+  if (!month) return '';
+  return `${month} ${Number(match[3])}`;
+}
+
+function prettyMentionTime(value: string | null | undefined): string {
+  const match = /[T ](\d{2}):(\d{2})/.exec(String(value ?? ''));
+  if (!match) return '';
+  let hour = Number(match[1]);
+  const minute = match[2];
+  const suffix = hour >= 12 ? 'pm' : 'am';
+  hour = hour % 12 || 12;
+  return `${hour}:${minute}${suffix} UTC`;
+}
+
+export function prettyDuration(seconds: number | null | undefined): string {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const rounded = Math.round(value);
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+}
+
+function displayJobTitle(title: string): string {
+  return title.replace(/^#\d+\s+/, '').trim();
+}
+
+function chrono(a: { at?: string | null; workDate?: string | null }, b: { at?: string | null; workDate?: string | null }): number {
+  const left = a.at || a.workDate || '';
+  const right = b.at || b.workDate || '';
+  return left.localeCompare(right);
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names.join('');
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
+/**
+ * One overview sentence, then a chronological rundown. No source trailer,
+ * no #job-number item, and no raw transcript lines.
+ */
+export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson: boolean): string {
+  const name = person.name.trim() || 'That person';
+  const who = askerIsPerson ? 'you' : name;
+  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const jobs = person.items.filter((item) => item.kind === 'job');
+  const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job').sort(chrono);
+  const scope = String(person.jobTitle ?? '').trim();
+  const jobLabels = [...new Set(jobs.map((item) => displayJobTitle(item.title)).filter(Boolean))];
+  const extraJobs = scope
+    ? jobLabels.filter((title) => title.toLowerCase() !== scope.toLowerCase())
+    : jobLabels;
+  const dates = videos
+    .map((item) => item.workDate || (item.at ? item.at.slice(0, 10) : ''))
+    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    .sort();
+  const span =
+    dates.length === 0
+      ? ''
+      : dates[0] === dates[dates.length - 1]
+        ? `on ${prettyMentionDate(dates[0])}`
+        : `between ${prettyMentionDate(dates[0])} and ${prettyMentionDate(dates[dates.length - 1])}`;
+  const noun = videos.length === 1 ? 'video' : 'videos';
+  let overview: string;
+  if (scope && videos.length) {
+    overview = `On ${scope}, ${who} recorded ${videos.length} ${noun}${span ? ` ${span}` : ''}.`;
+  } else if (videos.length && jobLabels.length) {
+    const subject = askerIsPerson ? 'You' : name;
+    overview = `${subject} recorded ${videos.length} ${noun}${span ? ` ${span}` : ''} on ${joinNames(jobLabels)}.`;
+  } else if (videos.length) {
+    const subject = askerIsPerson ? 'You' : name;
+    overview = `${subject} recorded ${videos.length} ${noun}${span ? ` ${span}` : ''}.`;
+  } else if (jobLabels.length) {
+    overview = askerIsPerson
+      ? `You are on ${joinNames(jobLabels)}.`
+      : `${name} is on ${joinNames(jobLabels)}.`;
+  } else {
+    overview = askerIsPerson ? 'You have activity on this file.' : `${name} has activity on this file.`;
+  }
+
+  const lines: string[] = [];
+  for (const video of videos) {
+    const day = prettyMentionDate(video.workDate || video.at);
+    const clock = prettyMentionTime(video.at);
+    const when = [day, clock].filter(Boolean).join(' ');
+    const duration = prettyDuration(video.durationSeconds);
+    const bit = String(video.listLine ?? '').replace(/\s+/g, ' ').trim();
+    const head = `${when ? `${when} — ` : ''}${video.title}${duration ? ` (${duration})` : ''}`;
+    lines.push(`- ${head}${bit ? `. ${bit}` : ''}`);
+  }
+  for (const title of extraJobs) lines.push(`- Also on ${title}.`);
+  for (const item of rest) {
+    const day = prettyMentionDate(item.workDate || item.at);
+    if (item.title === 'job.created') {
+      lines.push(`- ${day ? `${day} — ` : ''}Opened this job file.`);
+      continue;
+    }
+    const text = String(item.text ?? '')
+      .replace(/#\d+\b\s*[—-]?\s*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 220);
+    lines.push(`- ${day ? `${day} — ` : ''}${item.title}${text ? `. ${text}` : ''}`);
+  }
+  return [overview, ...lines].join('\n');
+}
+
 /** Natural miss. Uses the full name and names what is actually on file. */
 export function unmatchedMentionSentence(name: string, contained: string[]): string {
   const who = name.trim() || 'That person';
@@ -447,6 +602,8 @@ export interface PersonMentionContext {
   items: RankedMentionItem[];
   /** Other titles already on the open job, used when this person has no matching rows. */
   fileContains?: string[];
+  /** Job title without the #number, when Ask is scoped to one job. */
+  jobTitle?: string | null;
 }
 
 const STATE_WORD: Record<string, string> = {
@@ -504,6 +661,7 @@ function clipDate(item: RankedMentionItem): string | null {
 export function answerFromMentionContext(
   question: string,
   people: PersonMentionContext[],
+  options?: { askerUserId?: string | null },
 ): { answer: string; groundedOn: number } {
   const named = people.filter((person) => person.userId);
   if (!named.length) {
@@ -518,6 +676,15 @@ export function answerFromMentionContext(
     const who = person.name.trim() || 'That person';
     const videos = person.items.filter((item) => item.kind === 'video').slice(0, 20);
     const inventory = asksForPersonRecord(question, [person.name]);
+    if (
+      asksForPersonActivity(question, [person.name]) &&
+      !inventory &&
+      personHasActivity(person)
+    ) {
+      blocks.push(writeActivityAnswer(person, options?.askerUserId === person.userId));
+      groundedOn += videos.length;
+      continue;
+    }
     if (inventory && videos.length) {
       const lines = videos.map((item) => describeItem(item, sources, () => { groundedOn += 1; }));
       const noun = videos.length === 1 ? 'clip' : 'clips';
@@ -540,6 +707,73 @@ export function answerFromMentionContext(
   const prose = blocks.join('\n\n').replace(/\[\[\s*web:[\s\S]*?\]\]/gi, '').trim();
   const trailer = uniqueSources.length ? `\n\n⟦sources: ${uniqueSources.join(', ')}⟧` : '';
   return { answer: `${prose}${trailer}`.trim(), groundedOn };
+}
+
+export const ACTIVITY_DOSSIER_MARK = 'ACTIVITY DOSSIER';
+
+/**
+ * Everything attributable to the person, for the model to write from.
+ * The grounded fallback never prints this speech block as its own lines.
+ */
+export function formatActivityDossier(
+  people: PersonMentionContext[],
+  options?: { askerUserId?: string | null },
+): string {
+  if (!people.length) return '';
+  const sections = people.map((person) => {
+    const asker = options?.askerUserId === person.userId;
+    const header = [
+      `${ACTIVITY_DOSSIER_MARK} for ${person.name} (${person.userId})`,
+      person.jobTitle ? `Job: ${person.jobTitle}` : '',
+      asker
+        ? 'The asker is this person. Address them as "you".'
+        : `Address them as ${person.name}. Do not switch to "you".`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    if (!person.items.length) {
+      return `${header}\nNothing on this job is attributed to this person.`;
+    }
+    const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+    const jobs = person.items.filter((item) => item.kind === 'job');
+    const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job').sort(chrono);
+    const lines: string[] = [];
+    for (const video of videos) {
+      const day = prettyMentionDate(video.workDate || video.at) || 'undated';
+      const clock = prettyMentionTime(video.at);
+      const duration = prettyDuration(video.durationSeconds);
+      lines.push(
+        `- Video ${[day, clock].filter(Boolean).join(' ')}${duration ? ` (${duration})` : ''}: ${video.title}. ${String(video.detail || video.listLine || '').replace(/\s+/g, ' ').trim()}`,
+      );
+    }
+    const scope = String(person.jobTitle ?? '').trim().toLowerCase();
+    for (const job of jobs) {
+      const title = displayJobTitle(job.title);
+      if (scope && title.toLowerCase() === scope) continue;
+      lines.push(`- Job record: ${title}${job.status ? ` (${stateWord(job.status)})` : ''}. ${job.text}`.trim());
+    }
+    for (const item of rest) {
+      const when = item.at ? item.at.slice(0, 16).replace('T', ' ') : '';
+      if (item.title === 'job.created') {
+        lines.push(`- ${when}: Opened this job file.`);
+        continue;
+      }
+      const text = String(item.text ?? '')
+        .replace(/#\d+\b\s*[—-]?\s*/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 400);
+      lines.push(`- ${item.kind} ${when}: ${item.title}. ${text}`.trim());
+    }
+    return `${header}\n${lines.join('\n')}`;
+  });
+  return (
+    `${sections.join('\n\n')}\n\n` +
+    `Write one opening sentence (on this job, what they did, and the date span), then a short chronological rundown in plain sentences. ` +
+    `Use the useful specifics: what the video showed, findings, and speech only when it explains what they did or said. ` +
+    `Do not print transcript fragments as their own lines. Do not repeat the job title after every clip. ` +
+    `Do not list a #job-number row. Do not emit ⟦sources: …⟧, [[web:…]], or any other source tag.`
+  );
 }
 
 export function formatMentionPrompt(people: PersonMentionContext[]): string {

@@ -1067,7 +1067,9 @@ export async function answerFromClip(input: {
     system:
       CLIP_QA_SYSTEM +
       (supplement
-        ? `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
+        ? /\bACTIVITY DOSSIER\b/.test(supplement)
+          ? `\n\nThe question is about one person's activity. Answer from the ACTIVITY DOSSIER: one opening sentence, then a short chronological rundown. If it says to address them as "you", do that. Do not print transcript fragments as their own lines, do not list a #job-number row, and do not emit ⟦sources: …⟧ or [[web:…]].`
+          : `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
         : ''),
     user:
       `Reading of this clip:\n\n${reading}` +

@@ -9,6 +9,7 @@ import {
   loginNameFromMetadata,
   mentionDisplayName,
   mentionToken,
+  asksForPersonActivity,
   asksForPersonRecord,
   carryPriorMention,
   stripMentionMarks,
@@ -802,4 +803,66 @@ test('multi-word names stay whole, and every clip that person filmed is listed',
   assert.match(follow.directAnswer ?? '', /tabletop/);
   assert.match(follow.directAnswer ?? '', /walkthrough/);
   assert.equal(carryPriorMention('what about the weather', [], roster), null);
+});
+
+test('what someone had done is a dossier, not a canned miss', async () => {
+  assert.equal(asksForPersonActivity('what had @El Presidente done in this file', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('what did @El Presidente do', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity("summarize @El Presidente's work", ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('what did they find', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('did he record the electrical panel?', ['El Presidente']), false);
+
+  const db = fakeDb(tiffanyTables());
+  const historyQuestion = 'what did @El Presidente take a video of';
+  const questions = [
+    'what had @[El Presidente](mention:' + EL + ') done in this file',
+    'what did @El Presidente do',
+    "summarize @El Presidente's work",
+  ];
+  for (const question of questions) {
+    const prep = await prepareMentionAsk(db as any, {
+      orgId: ORG_A,
+      jobId: JOB_TIFFANY,
+      question,
+      askerUserId: EL,
+      now: new Date('2026-09-22T00:00:00.000Z'),
+    });
+    const answer = prep.directAnswer ?? '';
+    assert.match(answer, /On Project Tiffany & Co\., you recorded 3 videos between Sep 17 and Sep 21/);
+    assert.match(answer, /Sep 17 office recording/);
+    assert.match(answer, /Sep 21 tabletop close-up/);
+    assert.match(answer, /Sep 21 home walkthrough/);
+    assert.match(answer, /RESTORE 365/);
+    assert.match(answer, /webcam-style take/);
+    assert.match(prep.supplement, /ACTIVITY DOSSIER/);
+    assert.match(prep.supplement, /Address them as "you"/);
+    assert.doesNotMatch(answer, /doesn't have that on file/);
+    assert.doesNotMatch(answer, /#12/);
+    assert.doesNotMatch(answer, /It's simple/);
+    assert.doesNotMatch(answer, /Her entire life/);
+    assert.doesNotMatch(answer, /But I know they have their ways/);
+    assert.doesNotMatch(answer, /Someone else roof/);
+    assert.doesNotMatch(answer, /⟦sources:/);
+    assert.doesNotMatch(answer, /\[\[web:/);
+  }
+
+  const follow = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what did they find',
+    askerUserId: EL,
+    history: [
+      { role: 'user', text: historyQuestion },
+      { role: 'assistant', text: 'El Presidente recorded 3 videos.' },
+    ],
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(follow.mentions[0]?.userId, EL);
+  const found = follow.directAnswer ?? '';
+  assert.match(found, /RESTORE 365/);
+  assert.match(found, /tabletop/);
+  assert.match(found, /walkthrough/);
+  assert.doesNotMatch(found, /doesn't have that on file/);
+  assert.doesNotMatch(found, /#12/);
+  assert.doesNotMatch(found, /It's simple|Her entire life|But I know they have their ways/);
 });
