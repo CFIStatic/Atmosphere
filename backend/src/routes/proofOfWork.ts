@@ -2833,15 +2833,13 @@ export async function runProofAsk(input: {
             .limit(8);
           return { rows: (data ?? []) as Array<Record<string, unknown>>, memory: null, notes: [] as DurableJobNote[] };
         }
-        const [earlyRes, lateRes, memory, notes] = await Promise.all([
+        const [countRes, lateRes, memory, notes] = await Promise.all([
           supabase
             .from('job_proof_questions')
-            .select(shape)
+            .select('id', { count: 'exact', head: true })
             .eq('org_id', orgId)
             .eq('job_id', jobId)
-            .eq('thread_id', threadId)
-            .order('created_at', { ascending: true })
-            .limit(12),
+            .eq('thread_id', threadId),
           supabase
             .from('job_proof_questions')
             .select(shape)
@@ -2849,19 +2847,13 @@ export async function runProofAsk(input: {
             .eq('job_id', jobId)
             .eq('thread_id', threadId)
             .order('created_at', { ascending: false })
-            .limit(60),
+            .limit(200),
           loadAskThreadMemory(writeDb, threadId),
           owner ? loadAskJobNotes(writeDb, { orgId, jobId, owner }) : Promise.resolve([] as DurableJobNote[]),
         ]);
-        const seen = new Set<string>();
-        const rows = [...((earlyRes.data ?? []) as Array<Record<string, unknown>>), ...((lateRes.data ?? []) as Array<Record<string, unknown>>)]
-          .filter((row) => {
-            const id = String(row.id ?? '');
-            if (!id || seen.has(id)) return false;
-            seen.add(id);
-            return true;
-          });
-        return { rows, memory, notes };
+        const rows = [...((lateRes.data ?? []) as Array<Record<string, unknown>>)].reverse();
+        const total = typeof countRes.count === 'number' ? countRes.count : rows.length;
+        return { rows, memory, notes, incomplete: total > rows.length };
       })(),
     ]);
 
@@ -3026,6 +3018,7 @@ export async function runProofAsk(input: {
       previousSummary: recentRes.memory?.summary ?? null,
       summarizedThroughId: recentRes.memory?.throughId ?? null,
       timeZone: askTimeZone,
+      incomplete: recentRes.incomplete === true,
     });
     const scrubbedFold = scrubLongMemory(folded, scrubAsk);
     const storedNotes = (recentRes.notes ?? []).flatMap((note) => {
@@ -3268,6 +3261,7 @@ export async function runProofAsk(input: {
             previousSummary: recentRes.memory?.summary ?? null,
             summarizedThroughId: recentRes.memory?.throughId ?? null,
             timeZone: askTimeZone,
+            incomplete: recentRes.incomplete === true,
           });
           const againScrub = scrubLongMemory(again, (text) => scrubStoredAskText(text, lookup.clips));
           await persistAskThreadMemory(writeDb, {

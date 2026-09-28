@@ -38,7 +38,9 @@ export function classifyAskIntent(question: string): AskIntent {
   if (/\bopen issues?\b|\boutstanding\b|\bstill open\b/.test(q)) return { kind: 'task', task: 'issues' };
   if (/\bcompare\b|\bversus\b|\bvs\.?\b|\bdifference between\b|\btwo visits\b/.test(q)) return { kind: 'task', task: 'compare' };
   if (/\bscope\b/.test(q) && /\b(draft|write|note|make|prepare)\b/.test(q)) return { kind: 'task', task: 'scope' };
-  if (/\b(email|e-mail)\b/.test(q)) return { kind: 'task', task: 'email' };
+  if (/\b(e-?mail)\b/.test(q) && /\b(draft|write|compose|prepare|send)\b/.test(q)) {
+    return { kind: 'task', task: 'email' };
+  }
   if (/\bestimate\b|\bbid draft\b|\bdraft (?:an |a )?bid\b/.test(q)) return { kind: 'task', task: 'estimate' };
   if (/\b(summary|summarize)\b/.test(q) || /\b(write|draft)\b[\s\S]{0,40}\b(homeowner|client|customer)\b/.test(q)) {
     return { kind: 'task', task: 'summary' };
@@ -865,6 +867,15 @@ function isThanks(question: string): boolean {
   return /^(?:thanks|thank you|thx|ty|appreciate(?:d| it)?)[!.\s]*$/i.test(question.trim());
 }
 
+/** A thanks or greeting prefix in front of a real question is not the whole turn. */
+function isFollowOnQuestion(body: string): boolean {
+  const text = body.trim();
+  if (!text || isThanks(text) || isGreeting(text)) return false;
+  if (/\?/.test(text)) return true;
+  if (/\b(what|when|where|who|why|how|did|does|which|show|find|quote)\b/i.test(text)) return true;
+  return text.split(/\s+/).length >= 6;
+}
+
 function isOpinion(question: string, history: AskMemoryTurn[] | null | undefined): boolean {
   if (/\b(?:what do you think|why do you think|what(?:'s| is) your take|how come|do you think)\b/i.test(question)) return true;
   if (/^(?:why|how come)(?:\s+though)?[?.!\s]*$/i.test(question.trim()) && (history ?? []).some((turn) => String(turn.text ?? '').trim())) {
@@ -904,6 +915,7 @@ export function classifyChatTurn(
   if (isOpinion(body, history)) return 'opinion';
   if (isRestateRequest(body)) return 'restate';
   if (isAmbiguousAsk(body, history, catalog)) return 'clarify';
+  if ((prefix === 'thanks' || prefix === 'greeting') && isFollowOnQuestion(body)) return null;
   if (prefix === 'thanks' || isThanks(q)) return 'thanks';
   if (isGreeting(q)) return 'greeting';
   return null;
@@ -939,10 +951,11 @@ function composeOpinion(question: string, catalog: AskLookupCatalog, history: As
   if (!lines.length) return `${jobOffer(catalog)} The transcripts do not give me more than that to go on.`;
   const when = lines[0]!.when;
   const spoken = lines.map((line) => `“${line.text}”`).join(', then ');
-  const paperwork = lines.some((line) => /paper|spreadsheet|quickbooks/i.test(line.text));
-  const read = paperwork
-    ? 'He is talking about getting the work off paper and onto QuickBooks.'
-    : 'I would not add a motive past those words.';
+  const blob = lines.map((line) => line.text).join(' ');
+  const read =
+    /paper|spreadsheet/i.test(blob) && /quickbooks/i.test(blob)
+      ? 'He is talking about getting the work off paper and onto QuickBooks.'
+      : 'I would not add a motive past those words.';
   return `On ${when}, the lines run ${spoken}. ${read}`;
 }
 

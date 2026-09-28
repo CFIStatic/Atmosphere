@@ -323,6 +323,8 @@ export function foldThreadMemory(input: {
   previousSummary?: string | null;
   summarizedThroughId?: string | null;
   timeZone?: string | null;
+  /** The pair list is a tail, not the whole thread. Do not rebuild the summary from that hole. */
+  incomplete?: boolean;
 }): ThreadMemoryFold {
   const chronological = [...input.pairs].sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
@@ -332,13 +334,34 @@ export function foldThreadMemory(input: {
   const summaryThroughId = olderPairs.length ? olderPairs[olderPairs.length - 1]!.id : null;
   const freshSummary = packSummary(olderPairs, olderPairs.length, input.timeZone);
   const previous = String(input.previousSummary ?? '').trim();
-  const regenerate = Boolean(freshSummary) && (!previous || input.summarizedThroughId !== summaryThroughId);
   const notes = capDurableNotes(chronological.flatMap(pairNotes));
+  const recent = recentPairs.flatMap(pairToTurns);
+  if (input.incomplete && previous) {
+    const cursorIndex = input.summarizedThroughId
+      ? chronological.findIndex((pair) => pair.id === input.summarizedThroughId)
+      : -1;
+    const recentIds = new Set(recentPairs.map((pair) => pair.id));
+    const newlyOlder =
+      cursorIndex >= 0
+        ? chronological.slice(cursorIndex + 1).filter((pair) => !recentIds.has(pair.id))
+        : [];
+    const extra = packSummary(newlyOlder, newlyOlder.length, input.timeZone).replace(/^Earlier turns[^\n]*\n/, '');
+    const summary = extra ? `${previous}\n${extra}`.slice(0, 2200) : previous;
+    return {
+      summary,
+      summaryThroughId: newlyOlder.length ? newlyOlder[newlyOlder.length - 1]!.id : (input.summarizedThroughId ?? null),
+      coveredCount: olderPairs.length + newlyOlder.length,
+      recent,
+      notes,
+      regenerate: newlyOlder.length > 0,
+    };
+  }
+  const regenerate = Boolean(freshSummary) && (!previous || input.summarizedThroughId !== summaryThroughId);
   return {
     summary: regenerate || !previous ? freshSummary : previous,
     summaryThroughId,
     coveredCount: olderPairs.length,
-    recent: recentPairs.flatMap(pairToTurns),
+    recent,
     notes,
     regenerate,
   };

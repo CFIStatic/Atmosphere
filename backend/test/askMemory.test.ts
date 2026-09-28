@@ -108,6 +108,17 @@ test('older turns fold into a bounded summary and the early decision stays a not
   assert.match(recalled, /from the turn on Sep 21/);
   assert.doesNotMatch(recalled, /This file does not have that/i);
 
+  const tail = pairs.slice(-20);
+  const gapped = foldThreadMemory({
+    pairs: tail,
+    previousSummary: folded.summary,
+    summarizedThroughId: pairs[0]!.id,
+    incomplete: true,
+    timeZone: 'America/Chicago',
+  });
+  assert.match(gapped.summary, /walnut/i);
+  assert.equal(gapped.regenerate, false);
+
   const fresh = foldThreadMemory({ pairs: [] });
   assert.equal(fresh.summary, '');
   assert.equal(fresh.recent.length, 0);

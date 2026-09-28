@@ -23,7 +23,7 @@ import {
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
-import { classifyAskIntent, composeJobOverview } from '../src/shared/askPolish.js';
+import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -892,12 +892,34 @@ test('continueAskLookup opens a search hit and searches other jobs only when ask
 
 test('an email and an estimate do not invent a price or quote a redacted code', async () => {
   const email = classifyAskIntent('draft an email to the homeowner');
+  const mentioned = classifyAskIntent('did he mention an email about the tarp');
   const summary = classifyAskIntent('write a homeowner summary');
   const estimate = classifyAskIntent('draft an estimate');
+  assert.equal(mentioned.kind, 'question');
   assert.equal(email.kind, 'task');
   assert.equal(email.kind === 'task' && email.task, 'email');
   assert.equal(summary.kind === 'task' && summary.task, 'summary');
   assert.equal(estimate.kind === 'task' && estimate.task, 'estimate');
+  const paper = catalog({
+    jobTitle: 'Paper job',
+    clips: [
+      clip({
+        proofId: 'paper-1',
+        title: 'Notes',
+        workDate: '2026-09-21',
+        segments: [{ start: 1, end: 2, text: 'It is all on paper.' }],
+      }),
+    ],
+  });
+  assert.equal(classifyChatTurn('Thanks. What did El Presidente say about the tarp?', [], paper), null);
+  const opinion = composeGroundedAsk(
+    'Thanks. What do you think he was getting at?',
+    [],
+    paper,
+    [{ role: 'assistant', text: 'On Sep 21 he said “It is all on paper.”' }],
+  );
+  assert.doesNotMatch(opinion, /QuickBooks/i);
+  assert.match(opinion, /motive past those words/i);
   const prev = process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.GEMINI_API_KEY;
