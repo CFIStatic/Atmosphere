@@ -1117,12 +1117,18 @@ test('an email signs with the asker and org, and groups a same-day pair', async 
     else process.env.ANTHROPIC_API_KEY = prev;
   }
 
+  const sender = catalog({ jobTitle: 'Project Tiffany & Co.', askerName: 'Elena Ortiz', orgName: 'Stand-in Restoration' });
   const signed = stampEmailSignOff(
-    'Hi Tiffany & Co,\n\nWe looked at the rooms.\n\nThanks,\nProject Tiffany & Co.',
-    catalog({ jobTitle: 'Project Tiffany & Co.', askerName: 'Elena Ortiz', orgName: 'Stand-in Restoration' }),
+    'Hi Tiffany & Co,\n\nWe looked at the rooms.\n\nThanks,\nProject Tiffany & Co.\n⟦/artifact⟧',
+    sender,
   );
-  assert.match(signed, /Thanks,\nElena Ortiz\nStand-in Restoration/);
+  assert.match(signed, /Thanks,\nElena Ortiz\nStand-in Restoration\n⟦\/artifact⟧/);
   assert.doesNotMatch(signed, /Thanks,\s*\nProject Tiffany/);
+  const blank = stampEmailSignOff('Hi Tiffany & Co,\n\nWe looked at the rooms.\n\nThanks,\n⟦/artifact⟧', sender);
+  assert.match(blank, /Thanks,\nElena Ortiz\nStand-in Restoration\n⟦\/artifact⟧/);
+  const other = stampEmailSignOff('Thanks,\nSomeone Else\n⟦/artifact⟧', sender);
+  assert.match(other, /Thanks,\nElena Ortiz\nStand-in Restoration\n⟦\/artifact⟧/);
+  assert.doesNotMatch(other, /Someone Else/);
   const prompt = buildLookupUserPrompt({
     question: 'draft an email',
     catalog: catalog({ askerName: 'Elena Ortiz', orgName: 'Stand-in Restoration', jobTitle: 'Project Tiffany & Co.' }),

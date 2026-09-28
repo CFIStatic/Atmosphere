@@ -243,22 +243,28 @@ function emailVisitSentences(clips: ClipFact[], timeZone?: string | null): strin
     .join(' ');
 }
 
-/** Replace a job-title signature with the asker's name and organization. */
+/** Put the asker's name and organization after the last sign-off, including inside an artifact. */
 export function stampEmailSignOff(text: string, catalog: AskLookupCatalog): string {
-  const signature = emailSignature(catalog);
-  const job = plainName(catalog.jobTitle);
-  let next = text;
-  if (job) {
-    const escaped = job.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    next = next.replace(new RegExp(`(Thanks,\\s*\\n)${escaped}\\.?`, 'gi'), signature.length ? `$1${signature.join('\n')}` : '$1');
+  const block = emailSignature(catalog).join('\n');
+  const thanksAt = text.toLowerCase().lastIndexOf('thanks,');
+  if (thanksAt < 0) {
+    if (!block) return text;
+    if (/⟦\/artifact⟧/.test(text)) return text.replace(/⟦\/artifact⟧/, `Thanks,\n${block}\n⟦/artifact⟧`);
+    return `${text.trim()}\n\nThanks,\n${block}`;
   }
-  if (!signature.length) return next;
-  const block = signature.join('\n');
-  const signed = new RegExp(`Thanks,\\s*\\n${signature.map((line) => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*\\n')}`, 'i');
-  if (signed.test(next)) return next;
-  if (/Thanks,/i.test(next)) return next.replace(/Thanks,\s*$/i, `Thanks,\n${block}`);
-  if (/⟦\/artifact⟧/.test(next)) return next.replace(/⟦\/artifact⟧/, `Thanks,\n${block}\n⟦/artifact⟧`);
-  return `${next.trim()}\n\nThanks,\n${block}`;
+  const before = text.slice(0, thanksAt);
+  const after = text.slice(thanksAt);
+  const closerAt = after.search(/⟦\/artifact⟧/);
+  const closer = closerAt >= 0 ? after.slice(closerAt) : '';
+  if (!block) {
+    const job = plainName(catalog.jobTitle);
+    const between = closerAt >= 0 ? after.slice(0, closerAt) : after;
+    const kept = job
+      ? between.replace(new RegExp(`(Thanks,\\s*\\n)${job.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.?\\s*`, 'i'), '$1')
+      : between;
+    return `${before}${kept.trimEnd()}${closer ? `\n${closer}` : ''}`;
+  }
+  return `${before}Thanks,\n${block}${closer ? `\n${closer}` : ''}`;
 }
 
 function clipCountLead(count: number): string {
