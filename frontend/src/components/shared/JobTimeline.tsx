@@ -75,6 +75,18 @@ export function JobTimeline({
   } | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [scopedJobId, setScopedJobId] = useState(jobId);
+  if (scopedJobId !== jobId) {
+    setScopedJobId(jobId);
+    setFilter('all');
+    setPerson('all');
+    setOldestFirst(false);
+    setPlayer(null);
+    setOpeningId(null);
+    setOpenError(null);
+    setSource(null);
+    setLoadedKey(null);
+  }
   const recordRef = useRef(record);
   useEffect(() => {
     recordRef.current = record;

@@ -54,7 +54,7 @@ describe('job timeline', () => {
     expect(formatCtTime('2026-09-17T16:37:28.774Z')).toBe('11:37 AM CT');
     expect(ctDayKey('2026-09-17T16:37:28.774Z')).toBe('2026-09-17');
     const text = joined();
-    expect(text).toContain('El Presidente recorded a 34s clip in the dining room.');
+    expect(text).toContain('El Presidente recorded a clip lasting 34 seconds in the dining room.');
     expect(text).toContain('El Presidente opened job #12 — Project Tiffany & Co.');
     expect(text).toContain(
       'El Presidente renamed the job from Tiffany walkthrough to Project Tiffany & Co.',

@@ -485,7 +485,7 @@ function JobFileSections({
         ) : null}
 
         {active === 'timeline' ? (
-          <JobTimeline jobId={record.job.id} record={record} office={office} />
+          <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
         ) : null}
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}

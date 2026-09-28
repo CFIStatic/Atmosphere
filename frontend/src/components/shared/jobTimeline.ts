@@ -18,6 +18,7 @@ import type {
   ScopeDocument,
   SharedJobRecord,
 } from '../../lib/api';
+import { formatClipLength } from '../../lib/clipDuration';
 import { scrubHomeownerText } from '../../lib/privacyText';
 import { dayIsOnSite } from './jobProgressStory';
 
@@ -208,14 +209,10 @@ function actorFromMember(member: OrgMember | null, email: string | null): {
   };
 }
 
-function compactDuration(seconds: number | null | undefined): string | null {
-  const n = Number(seconds);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const rounded = Math.round(n);
-  if (rounded < 60) return `${rounded}s`;
-  const minutes = Math.floor(rounded / 60);
-  const rest = rounded % 60;
-  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+function clipLengthPhrase(seconds: number | null | undefined): string | null {
+  const spoken = formatClipLength(seconds);
+  if (!spoken || spoken === '—') return null;
+  return spoken;
 }
 
 function childClip(video: ProofVideoRecord | undefined): boolean {
@@ -351,10 +348,10 @@ function clipEvents(source: TimelineSource, out: TimelineEvent[]) {
     const at = captured ?? received;
     if (!at) continue;
     const who = clipWho(video);
-    const length = compactDuration(video.durationSeconds);
+    const length = clipLengthPhrase(video.durationSeconds);
     const where = roomPhrase(video);
     const verb = captured ? 'recorded' : 'uploaded';
-    const clip = length ? `a ${length} clip` : 'a clip';
+    const clip = length ? `a clip lasting ${length}` : 'a clip';
     const member = source.members.find(
       (row) => text(row.fullName).toLowerCase() === who.toLowerCase(),
     );

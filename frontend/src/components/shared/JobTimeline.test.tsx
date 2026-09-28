@@ -80,11 +80,13 @@ describe('JobTimeline', () => {
   it('renders the Tiffany stand-in newest first, with live rows pinned', async () => {
     const user = userEvent.setup();
     const events = buildJobTimeline(source);
-    render(<JobTimeline jobId={TIFFANY_JOB_ID} record={tiffanyRecord} office events={events} />);
+    const { rerender } = render(
+      <JobTimeline jobId={TIFFANY_JOB_ID} record={tiffanyRecord} office events={events} />,
+    );
 
     expect(screen.getByRole('heading', { name: 'Timeline' })).toBeInTheDocument();
     expect(screen.getByText('Now')).toBeInTheDocument();
-    expect(screen.getByText('El Presidente recorded a 34s clip in the dining room.')).toBeInTheDocument();
+    expect(screen.getByText('El Presidente recorded a clip lasting 34 seconds in the dining room.')).toBeInTheDocument();
     expect(screen.getByText('11:37 AM CT')).toBeInTheDocument();
     expect(screen.getByText(/Monday, September 21, 2026/)).toBeInTheDocument();
     expect(screen.queryByText(/4412/)).not.toBeInTheDocument();
@@ -94,7 +96,7 @@ describe('JobTimeline', () => {
     expect(proofVideoUrl).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Clips' }));
-    expect(screen.getByText('El Presidente recorded a 34s clip in the dining room.')).toBeInTheDocument();
+    expect(screen.getByText('El Presidente recorded a clip lasting 34 seconds in the dining room.')).toBeInTheDocument();
     expect(screen.queryByText(/renamed the job/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'All' }));
@@ -109,5 +111,10 @@ describe('JobTimeline', () => {
     await waitFor(() => expect(proofVideoUrl).toHaveBeenCalledTimes(1));
     expect(proofVideoUrl).toHaveBeenCalledWith(TABLE_CLIP_ID);
     expect(await screen.findByTestId('timeline-player')).toBeInTheDocument();
+
+    rerender(<JobTimeline jobId="job-other" record={null} office events={[]} />);
+    expect(screen.queryByTestId('timeline-player')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Person')).toHaveValue('all');
+    expect(screen.getByTestId('job-timeline-empty')).toBeInTheDocument();
   });
 });
