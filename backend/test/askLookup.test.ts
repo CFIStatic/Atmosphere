@@ -258,6 +258,28 @@ test('list_person_activity does not treat unattributed history as that person', 
   );
 });
 
+test('list_person_activity cites the same line it quotes', () => {
+  const file = catalog({
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [TABLE] }],
+    clips: [
+      clip({
+        proofId: TABLE,
+        title: 'Sep 21 table',
+        speakers: ['El Presidente'],
+        segments: [
+          { start: 0, end: 3, text: "It's all on paper." },
+          { start: 14.6, end: 16.5, text: "We've just got to go to QuickBooks online." },
+        ],
+      }),
+    ],
+  });
+  const result = executeAskLookup('list_person_activity', { name: 'El Presidente' }, file);
+  const row = (result.data as { clips: Array<{ excerpt: string; atSeconds: number; cite: string }> }).clips[0];
+  assert.equal(row?.excerpt, "We've just got to go to QuickBooks online.");
+  assert.equal(row?.atSeconds, 14.6);
+  assert.equal(parseMomentSource(row?.cite ?? '')?.atSeconds, 14.6);
+});
+
 test('lookup people keep an off-job record and its other jobs', () => {
   const people = lookupPeopleFromContexts([
     {

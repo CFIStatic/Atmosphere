@@ -712,8 +712,8 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
   const clips = clipsForPerson(catalog, person)
     .map((clip) => {
       const moments = clipMoments(clip);
-      const first = moments[0];
       const atSeconds = representativeAt(clip);
+      const spoken = moments.find((moment) => moment.atSeconds === atSeconds) ?? moments[0];
       return {
         proofId: clip.proofId,
         jobId: clip.jobId,
@@ -722,10 +722,10 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
         workDate: clip.workDate ?? null,
         recorded: recorded.has(clip.proofId) || (clip.recordedByUserIds ?? []).includes(person.userId),
         summary: redactAskText(trim(clip.summary), clip) || null,
-        cite: citeFor(clip, atSeconds),
-        atSeconds,
-        speaker: first?.speaker ?? null,
-        excerpt: first?.excerpt ?? null,
+        cite: spoken?.cite ?? citeFor(clip, atSeconds),
+        atSeconds: spoken?.atSeconds ?? atSeconds,
+        speaker: spoken?.speaker ?? null,
+        excerpt: spoken?.excerpt ?? null,
       };
     });
   const actions = historyInScope(catalog)
