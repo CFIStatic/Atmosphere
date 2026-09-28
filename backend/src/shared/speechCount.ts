@@ -31,18 +31,25 @@ export type SpeechCountClaim = { count: number; text: string };
 const UNIT =
   '(?:lines?|fragments?|utterances?|sentences?|phrases?|remarks?|quotes?|snippets?|spoken lines?|transcript lines?|lines? of (?:speech|dialogue)|things? (?:was |were )?said|bits? of speech)';
 const FILLER = '(?:(?:short|brief|stray|spoken|audible|transcribed|captured|context[- ]free|out[- ]of[- ]context|isolated|lone|distinct|separate|single|verbal)[\\s,-]+){0,4}';
+// "only one line about QuickBooks", "the only speech mentioning the table":
+// a claim about one topic, not about how much was said on the clip.
+const TOPIC_SCOPED =
+  '(?!\\s+(?:about|on|regarding|concerning|mentioning|mentions?|refers?|referring|related to|relating to|involving|from|by)\\b)';
 const NUMBER = '(\\d{1,3}|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)';
 
 const CLAIMS: Array<{ re: RegExp; count: (m: RegExpMatchArray) => number | null }> = [
   // "only one line", "just a single fragment", "only one stray spoken fragment"
-  { re: new RegExp(`\\b(?:only|just)\\s+(?:one|1|a single|a lone|a)\\s+${FILLER}${UNIT}(?!\\w)`, 'gi'), count: () => 1 },
+  { re: new RegExp(`\\b(?:only|just)\\s+(?:one|1|a single|a lone|a)\\s+${FILLER}${UNIT}(?!\\w)${TOPIC_SCOPED}`, 'gi'), count: () => 1 },
   // "a single context-free fragment", "one single line"
-  { re: new RegExp(`\\b(?:a|one)\\s+(?:single|lone)\\s+${FILLER}${UNIT}(?!\\w)`, 'gi'), count: () => 1 },
+  { re: new RegExp(`\\b(?:a|one)\\s+(?:single|lone)\\s+${FILLER}${UNIT}(?!\\w)${TOPIC_SCOPED}`, 'gi'), count: () => 1 },
   // "the only speech ... is one ..." / "the only thing said"
-  { re: /\bthe only (?:speech|audible speech|thing (?:that was |anyone )?said|spoken (?:words?|line))\b/gi, count: () => 1 },
+  {
+    re: new RegExp(`\\bthe only (?:speech|audible speech|thing (?:that was |anyone )?said|spoken (?:words?|line))\\b${TOPIC_SCOPED}`, 'gi'),
+    count: () => 1,
+  },
   // "five transcript lines", "3 distinct utterances"
   {
-    re: new RegExp(`(?<!\\bin )\\b${NUMBER}\\s+${FILLER}${UNIT}(?!\\w)`, 'gi'),
+    re: new RegExp(`(?<!\\bin )\\b${NUMBER}\\s+${FILLER}${UNIT}(?!\\w)${TOPIC_SCOPED}`, 'gi'),
     count: (m) => {
       const raw = (m[1] ?? '').toLowerCase();
       const n = /^\d+$/.test(raw) ? Number(raw) : WORD_NUMBERS[raw];

@@ -222,3 +222,12 @@ test('yes/no terms found only in different lines is not a yes', async () => {
   assert.doesNotMatch(r.answer, /^Yes/);
   assert.match(r.answer, /Not established in any single line/);
 });
+
+test('topic-scoped "only" phrases are not whole-clip speech counts', () => {
+  assert.deepEqual(speechCountContradictions('The only speech about QuickBooks is at 0:15.', [5]), []);
+  assert.deepEqual(speechCountContradictions('Only one line mentions the table.', [5]), []);
+  assert.deepEqual(speechCountContradictions('There are two lines about the TV.', [15]), []);
+  // Whole-clip claims are still caught.
+  assert.ok(speechCountContradictions('The only speech is a single fragment.', [5]).length >= 1);
+  assert.equal(speechCountContradictions('There is only one line in the clip.', [5]).length, 1);
+});
