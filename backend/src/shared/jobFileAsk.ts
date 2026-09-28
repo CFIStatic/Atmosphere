@@ -10,6 +10,8 @@
  * otherwise a grounded lookup still answers from the same text.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { answerFromAskLookup } from './askReasoning.js';
+import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
@@ -528,8 +530,15 @@ export async function answerFromJobFile(input: {
   history?: JobFileAskTurn[];
   apiKey?: string | null;
   onToken?: (text: string) => void;
+  /** Lookup status while tools run ("Searching transcripts"). */
+  onStatus?: (phase: string) => void;
   /** Optional fetch override for tests. */
   fetchFn?: typeof fetch;
+  /**
+   * When set, mention and job-file questions look facts up with tools on the
+   * reasoning model instead of one transcript dump.
+   */
+  lookup?: AskLookupCatalog | null;
   /**
    * When set, Ask may run safe in-product tools (web search, job field
    * get/update, punch list, drafts). Updates are office-only.
@@ -542,6 +551,8 @@ export async function answerFromJobFile(input: {
   usage: MeasuredUsage | null;
   webHits: AskWebHit[];
   toolResults: AskToolResult[];
+  /** True when the reply came from the lookup tools, including a failed-model grounding. */
+  answeredFromLookup?: boolean;
 }> {
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
@@ -643,7 +654,7 @@ export async function answerFromJobFile(input: {
   }
 
   const record = formatJobFileRecord(input.file).trim();
-  if (!record && !toolResults.length && !webHits.length) {
+  if (!input.lookup && !record && !toolResults.length && !webHits.length) {
     input.onToken?.(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
@@ -673,6 +684,37 @@ export async function answerFromJobFile(input: {
   const toolBlock = toolResults.length
     ? `\n\nTOOL RESULTS (already executed):\n${formatAskToolResultsForModel(toolResults)}`
     : '';
+
+  if (input.lookup) {
+    const looked = await answerFromAskLookup({
+      question: input.question,
+      catalog: input.lookup,
+      history: input.history,
+      extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
+      anthropicApiKey: apiKey || null,
+      fetchFn: input.fetchFn,
+      onToken: input.onToken,
+      onStatus: input.onStatus,
+    });
+    let answer = normalizeAskProse(looked.answer);
+    answer = normalizeAskWebCitations(answer, webHits, {
+      question: input.question,
+      attachIfMissing: webHits.length > 0,
+    });
+    const actions = formatActionsTrailer(toolResults);
+    if (actions && !/⟦actions:/i.test(answer)) {
+      answer = `${answer.trimEnd()}\n\n${actions}`;
+    }
+    return {
+      answer,
+      model: looked.model,
+      groundedOn,
+      usage: looked.usage,
+      webHits,
+      toolResults,
+      answeredFromLookup: true,
+    };
+  }
 
   const mentionPrompt = mentionScoped
     ? assembleMentionModelPrompt({

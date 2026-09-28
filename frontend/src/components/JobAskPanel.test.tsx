@@ -307,6 +307,46 @@ describe('JobAskPanel', () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
+  it('drops a tool-turn preface when status resumes', async () => {
+    let release: () => void = () => {};
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    askAboutProofsStream.mockImplementation(
+      async (
+        _jobId: string,
+        _q: string,
+        handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void },
+      ) => {
+        handlers.onToken?.("I'll look that up. ");
+        handlers.onStatus?.('Searching transcripts');
+        await paused;
+        handlers.onToken?.('The tarp came off.');
+        return {
+          answer: 'The tarp came off.',
+          groundedOn: 1,
+          model: 'claude-opus',
+          question: null,
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider><VideoSeekProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider></JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText('Searching transcripts')).toBeInTheDocument();
+    expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+    release();
+    await pending;
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+  });
+
   it('streams tokens into the thread when the stream API is available', async () => {
     askAboutProofsStream.mockImplementation(
       async (
@@ -392,6 +432,93 @@ describe('JobAskPanel', () => {
     await waitFor(() => {
       expect(focused).toContain('scope');
     });
+  });
+
+  it('streams text, seeks a moment chip, and asks a follow-up', async () => {
+    const job = 'job-1038';
+    const proof = 'proof-tarp';
+    const cite = `video/${job}/${proof}/north-slope@18`;
+    const answer = `The tarp came off.\n\n⟦sources: ${cite}⟧\n⟦quotes: ${cite}|Homeowner|The tarp came off the north slope.⟧\n⟦followups: What was said about the skylights? ;; What does the job history say?⟧`;
+    askAboutProofsStream.mockImplementation(
+      async (_jobId: string, question: string, handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void }) => {
+        if (/skylights/i.test(question)) {
+          handlers.onToken?.('The file does not mention skylights.');
+          return {
+            answer: 'The file does not mention skylights.',
+            groundedOn: 0,
+            model: 'claude-opus',
+            question: null,
+          };
+        }
+        handlers.onStatus?.('Searching transcripts');
+        handlers.onToken?.('The tarp ');
+        handlers.onToken?.('came off.');
+        return {
+          answer,
+          groundedOn: 1,
+          model: 'claude-opus',
+          question: {
+            id: 'q-moment',
+            question,
+            answer,
+            grounded_on: [proof],
+            created_at: '2026-08-06T12:00:00Z',
+          },
+        };
+      },
+    );
+    const seeks: AskSeekTarget[] = [];
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <SeekProbe onSeek={(target) => seeks.push(target)} />
+          <JobAskPanel jobId={job} file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'What happened to the tarp?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByTestId('ask-answer-body')).toHaveTextContent(/the tarp came off/i);
+    expect(screen.getByTestId('ask-quote').textContent).toMatch(/Homeowner/);
+    expect(screen.getByTestId('ask-quote').textContent).toMatch(/north slope/);
+    const chip = await screen.findByTestId('ask-source-chip');
+    expect(chip.textContent).toMatch(/0:18/);
+    await user.click(chip);
+    await waitFor(() => {
+      expect(seeks.at(-1)).toMatchObject({ atSeconds: 18, proofId: proof });
+    });
+    await user.click(screen.getByRole('button', { name: /skylights/i }));
+    expect(await screen.findByText(/does not mention skylights/i)).toBeInTheDocument();
+  });
+
+  it('renders a comparison table and copies the finished note', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    const note = '## Homeowner summary\n\n- **Sep 17 — Office.** A seated conversation.';
+    const answer = `Three clips are on this file.\n\n⟦artifact⟧\n${note}\n⟦/artifact⟧\n\n| Visit | What the file shows |\n| --- | --- |\n| Sep 17 | Office |\n\n⟦sources: video/job-1038/proof-tarp/north-slope@18⟧`;
+    askAboutProofsStream.mockResolvedValue({
+      answer,
+      groundedOn: 1,
+      model: 'claude-opus',
+      question: { id: 'q-note', question: 'write a summary', answer, grounded_on: ['proof-tarp'], created_at: '2026-08-06T12:00:00Z' },
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'write a summary for the homeowner');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByRole('heading', { name: /homeowner summary/i })).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveTextContent('Sep 17');
+    await user.click(screen.getByTestId('ask-copy'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(note);
+    });
+    expect(screen.getByTestId('ask-copy')).toHaveTextContent('Copied');
   });
 
 });

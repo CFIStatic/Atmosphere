@@ -40,6 +40,19 @@ export type AskSourceChip = {
   /** Another job file. Mention answers link the job or video that was cited. */
   href?: string;
   workDate?: string;
+  /** Seek target for a moment citation (`video/…@seconds`). */
+  jobId?: string;
+  proofId?: string;
+  atSeconds?: number;
+};
+
+export type AskMomentQuote = {
+  sourceId: string;
+  speaker: string;
+  text: string;
+  atSeconds: number | null;
+  proofId?: string;
+  jobId?: string;
 };
 
 /** Public-web citation chip — opens in a new tab. */
@@ -65,6 +78,8 @@ const WEB_TRAILER_RE =
   /(?:⟦\s*web:\s*([^⟧]*)\s*⟧|\[\[\s*web:\s*((?:(?!\]\]).)*)\s*\]\]|\[\s*web:\s*([^\[\]]*)\s*\])/gi;
 const WEB_PAIR_RE = /([^|,][^|]*?)\|(https?:\/\/[^\s,⟧\]]+)/g;
 const ACTIONS_TRAILER_RE = /\s*⟦actions:\s*([^⟧]+)⟧\s*/i;
+const QUOTES_TRAILER_RE = /\s*⟦quotes:\s*([^⟧]*)⟧\s*/i;
+const FOLLOWUPS_TRAILER_RE = /\s*⟦followups:\s*([^⟧]*)⟧\s*/i;
 const LEGACY_SOURCE_RE = /\(\s*Sources?:\s*([^)]+)\)\.?/gi;
 
 const KNOWN = new Set<string>([
@@ -98,8 +113,32 @@ function isClipId(raw: string): raw is `clip:${string}` {
 function isLinkedSource(raw: string): raw is AskSourceId {
   return (
     /^job\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw) ||
-    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw)
+    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+(?:@\d+(?:\.\d+)?)?$/.test(raw)
   );
+}
+
+function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function parseVideoMoment(id: string): { base: string; jobId?: string; proofId?: string; slug: string; atSeconds?: number } | null {
+  const match = id.match(
+    /^(video\/([0-9a-z][0-9a-z-]{0,63})\/([0-9a-z][0-9a-z-]{0,63})\/([a-z0-9-]+))(?:@(\d+(?:\.\d+)?))?$/i,
+  );
+  if (!match) return null;
+  const at = match[5] == null ? undefined : Number(match[5]);
+  return {
+    base: match[1]!,
+    jobId: match[2],
+    proofId: match[3],
+    slug: match[4]!,
+    atSeconds: at != null && Number.isFinite(at) ? at : undefined,
+  };
 }
 
 function unslug(slug: string): string {
@@ -214,7 +253,11 @@ function clipLabel(isoDate: string): string {
 export function askSourceLabel(id: AskSourceId): string {
   if (id.startsWith('clip:')) return clipLabel(id.slice(5));
   if (id.startsWith('job/')) return unslug(id.split('/')[2] ?? '') || 'Job';
-  if (id.startsWith('video/')) return unslug(id.split('/')[3] ?? '') || 'Video';
+  if (id.startsWith('video/')) {
+    const moment = parseVideoMoment(id);
+    const label = unslug(moment?.slug ?? id.split('/')[3]?.split('@')[0] ?? '') || 'Video';
+    return moment?.atSeconds != null ? `${label} · ${formatClock(moment.atSeconds)}` : label;
+  }
   switch (id) {
     case 'access':
       return 'Who has access';
@@ -265,11 +308,15 @@ export function askSourceChip(id: AskSourceId): AskSourceChip {
     return { id, label, href: jobId ? `/job-progress?job=${encodeURIComponent(jobId)}` : undefined };
   }
   if (id.startsWith('video/')) {
-    const jobId = id.split('/')[1];
+    const moment = parseVideoMoment(id);
+    const jobId = moment?.jobId ?? id.split('/')[1];
     return {
       id,
       label,
       section: 'videos',
+      jobId,
+      proofId: moment?.proofId,
+      atSeconds: moment?.atSeconds,
       href: jobId ? `/job-progress?job=${encodeURIComponent(jobId)}` : undefined,
     };
   }
@@ -414,21 +461,63 @@ export function parseAskActionsTrailer(raw: string): AskActionChip[] {
  * answer for chip rendering. Body text no longer contains "(Source: …)" or
  * the machine trailers.
  */
+export function parseAskQuoteTrailer(raw: string): AskMomentQuote[] {
+  const match = String(raw ?? '').match(QUOTES_TRAILER_RE);
+  if (!match) return [];
+  const out: AskMomentQuote[] = [];
+  for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
+    const [sourceId, speaker, ...rest] = part.split('|');
+    const text = rest.join('|').replace(/\s+/g, ' ').trim();
+    const id = trim(sourceId);
+    if (!id || !text) continue;
+    const moment = parseVideoMoment(id);
+    out.push({
+      sourceId: id,
+      speaker: trim(speaker) || 'Speaker',
+      text: text.slice(0, 180),
+      atSeconds: moment?.atSeconds ?? null,
+      proofId: moment?.proofId,
+      jobId: moment?.jobId,
+    });
+  }
+  return out;
+}
+
+export function parseAskFollowups(raw: string): string[] {
+  const match = String(raw ?? '').match(FOLLOWUPS_TRAILER_RE);
+  if (!match) return [];
+  const out: string[] = [];
+  for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
+    const text = part.replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    out.push(text.endsWith('?') ? text : `${text}?`);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 export function extractAskSources(answer: string): {
   body: string;
   sources: AskSourceChip[];
   webSources: AskWebCitation[];
   actions: AskActionChip[];
+  quotes: AskMomentQuote[];
+  followUps: string[];
 } {
   let text = String(answer ?? '');
   const ids: AskSourceId[] = [];
   const webSources = parseAskWebTrailer(text);
   const actions = parseAskActionsTrailer(text);
+  const quotes = parseAskQuoteTrailer(text);
+  const followUps = parseAskFollowups(text);
 
   for (const id of parseTrailerIds(text)) pushUnique(ids, id);
   text = text.replace(SOURCE_TRAILER_RE, '').trimEnd();
   text = stripAskWebTrailer(text);
   text = text.replace(ACTIONS_TRAILER_RE, '').trimEnd();
+  text = text.replace(QUOTES_TRAILER_RE, '').trimEnd();
+  text = text.replace(FOLLOWUPS_TRAILER_RE, '').trimEnd();
+  text = text.replace(/\n*⟦[^⟧]*$/g, '').trimEnd();
 
   text = text.replace(LEGACY_SOURCE_RE, (_full, blob: string) => {
     for (const id of parseLegacySourceBlob(blob)) pushUnique(ids, id);
@@ -441,5 +530,5 @@ export function extractAskSources(answer: string): {
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 
-  return { body: text, sources: ids.map(askSourceChip), webSources, actions };
+  return { body: text, sources: ids.map(askSourceChip), webSources, actions, quotes, followUps };
 }

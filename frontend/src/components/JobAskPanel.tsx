@@ -23,7 +23,7 @@ import {
   seekTargetFromAnswer,
   splitAnswerCites,
 } from '../lib/askSeek';
-import { parseAskProseBlocks, type AskInline } from '../lib/askProse';
+import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -79,6 +79,78 @@ function AskCiteSpans({
   );
 }
 
+
+function AskQuoteList({
+  quotes,
+  onOpen,
+}: {
+  quotes: ReturnType<typeof extractAskSources>['quotes'];
+  onOpen: (source: AskSourceChip) => void;
+}) {
+  if (!quotes.length) return null;
+  return (
+    <div className="mt-2 space-y-1.5" data-testid="ask-quotes">
+      {quotes.map((quote) => (
+        <button
+          key={`${quote.sourceId}-${quote.text}`}
+          type="button"
+          data-testid="ask-quote"
+          data-at={quote.atSeconds == null ? '' : String(quote.atSeconds)}
+          data-proof-id={quote.proofId ?? ''}
+          onClick={() =>
+            onOpen({
+              id: quote.sourceId as AskSourceChip['id'],
+              label: quote.speaker,
+              section: 'videos',
+              proofId: quote.proofId,
+              jobId: quote.jobId,
+              atSeconds: quote.atSeconds ?? undefined,
+            })
+          }
+          className="block w-full rounded-lg border border-line bg-paper-50 px-2.5 py-1.5 text-left"
+        >
+          <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
+          <span className="mt-0.5 block text-[11px] text-ink-500">
+            {quote.speaker}
+            {quote.atSeconds != null ? ` · ${formatMomentClock(quote.atSeconds)}` : ''}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatMomentClock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function AskFollowUps({
+  questions,
+  onAsk,
+}: {
+  questions: string[];
+  onAsk: (question: string) => void;
+}) {
+  if (questions.length < 2) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-followups">
+      {questions.slice(0, 3).map((question) => (
+        <button
+          key={question}
+          type="button"
+          data-testid="ask-followup"
+          onClick={() => onAsk(question)}
+          className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-left text-[12px] text-ink-700 transition hover:border-brand-200 hover:bg-brand-50"
+        >
+          {question}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function AskSourceChips({
   sources,
@@ -138,34 +210,56 @@ function AskInlineNodes({
   );
 }
 
-function AskAnswerBody({
-  text,
+function AskBlocks({
+  blocks,
   events,
   onSeek,
-  sources,
-  onOpenSource,
 }: {
-  text: string;
+  blocks: AskProseBlock[];
   events: number[];
   onSeek: (atSeconds: number) => void;
-  sources: AskSourceChip[];
-  onOpenSource: (source: AskSourceChip) => void;
 }) {
-  const { body } = extractAskSources(text);
-  const blocks = parseAskProseBlocks(body);
-  if (!blocks.length) {
-    return (
-      <>
-        <p className="leading-relaxed">{body || text}</p>
-        <AskSourceChips sources={sources} onOpen={onOpenSource} />
-      </>
-    );
-  }
   return (
-    <div className="space-y-2.5 text-[15px] leading-relaxed" data-testid="ask-answer-body">
-      {blocks.map((block, bi) =>
-        block.kind === 'list' ? (
-          block.ordered ? (
+    <>
+      {blocks.map((block, bi) => {
+        if (block.kind === 'heading') {
+          const Tag = block.level === 3 ? 'h3' : 'h2';
+          return (
+            <Tag key={`h-${bi}`} className="text-[15px] font-semibold tracking-tight text-ink-900">
+              <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
+            </Tag>
+          );
+        }
+        if (block.kind === 'table') {
+          return (
+            <div key={`tbl-${bi}`} className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-[13px]">
+                <thead>
+                  <tr>
+                    {block.headers.map((cell, ci) => (
+                      <th key={`th-${ci}`} className="border-b border-line px-2 py-1.5 font-semibold text-ink-500">
+                        <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, ri) => (
+                    <tr key={`tr-${ri}`}>
+                      {row.map((cell, ci) => (
+                        <td key={`td-${ri}-${ci}`} className="border-b border-line px-2 py-1.5 text-ink-800">
+                          <AskInlineNodes nodes={cell} events={events} onSeek={onSeek} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        if (block.kind === 'list') {
+          return block.ordered ? (
             <ol key={`l-${bi}`} className="list-decimal space-y-1.5 pl-5 marker:text-ink-500">
               {block.items.map((item, ii) => (
                 <li key={`i-${bi}-${ii}`} className="pl-0.5">
@@ -181,14 +275,81 @@ function AskAnswerBody({
                 </li>
               ))}
             </ul>
-          )
-        ) : (
+          );
+        }
+        return (
           <p key={`p-${bi}`} className="whitespace-pre-wrap">
             <AskInlineNodes nodes={block.children} events={events} onSeek={onSeek} />
           </p>
-        ),
-      )}
+        );
+      })}
+    </>
+  );
+}
+
+function AskArtifact({
+  markdown,
+  events,
+  onSeek,
+}: {
+  markdown: string;
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="rounded-xl border border-line bg-paper-50 px-3 py-2.5" data-testid="ask-artifact">
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          data-testid="ask-copy"
+          onClick={() => {
+            void navigator.clipboard?.writeText(markdown).then(() => {
+              setCopied(true);
+            });
+          }}
+          className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div className="space-y-2">
+        <AskBlocks blocks={parseAskProseBlocks(markdown)} events={events} onSeek={onSeek} />
+      </div>
+    </div>
+  );
+}
+
+function AskAnswerBody({
+  text,
+  events,
+  onSeek,
+  sources,
+  onOpenSource,
+  onAskFollowUp,
+}: {
+  text: string;
+  events: number[];
+  onSeek: (atSeconds: number) => void;
+  sources: AskSourceChip[];
+  onOpenSource: (source: AskSourceChip) => void;
+  onAskFollowUp?: (question: string) => void;
+}) {
+  const extracted = extractAskSources(text);
+  const { quotes, followUps } = extracted;
+  const { prose, artifact } = splitAskArtifact(extracted.body);
+  const blocks = parseAskProseBlocks(prose);
+  return (
+    <div className="space-y-2.5 text-[15px] leading-relaxed text-ink-800" data-testid="ask-answer-body">
+      {blocks.length ? (
+        <AskBlocks blocks={blocks} events={events} onSeek={onSeek} />
+      ) : prose ? (
+        <p className="whitespace-pre-wrap">{prose}</p>
+      ) : null}
+      {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
+      <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />
+      {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
     </div>
   );
 }
@@ -266,6 +427,7 @@ export function JobAskPanel({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
+  const [askStatus, setAskStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -448,13 +610,15 @@ export function JobAskPanel({
     beats: dossier,
   });
   function openAskSource(source: AskSourceChip) {
-    if (source.href && onOpenHref) {
+    const sameJob = !source.jobId || source.jobId === jobId;
+    if (source.href && onOpenHref && source.jobId && !sameJob) {
       onOpenHref(source.href);
       return;
     }
-    if (source.workDate || source.section === 'videos') {
+    if (source.proofId || source.atSeconds != null || source.workDate || source.section === 'videos') {
       seek({
-        atSeconds: 0,
+        atSeconds: source.atSeconds ?? 0,
+        proofId: source.proofId,
         workDate: source.workDate,
       });
     }
@@ -487,6 +651,7 @@ export function JobAskPanel({
     const text = expandMentionTokens(raw, members);
     if (!text || asking) return;
     setAsking(true);
+    setAskStatus('Reading the file');
     setDraft('');
     setError(null);
     const now = new Date().toISOString();
@@ -511,10 +676,19 @@ export function JobAskPanel({
             jobId,
             text,
             {
+              onStatus: (phase) => {
+                setAskStatus(phase);
+                if (!sawFirstToken) return;
+                // Tokens before this status were a tool-turn preface, not the answer.
+                sawFirstToken = false;
+                setAsking(true);
+                setTurns((prev) => prev.filter((turn) => turn.id !== streamId));
+              },
               onToken: (delta) => {
                 if (!sawFirstToken) {
                   sawFirstToken = true;
                   setAsking(false);
+                  setAskStatus(null);
                 }
                 // Accumulate from the last assistant stream bubble.
                 setTurns((prev) => {
@@ -574,6 +748,7 @@ export function JobAskPanel({
       setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
     } finally {
       setAsking(false);
+      setAskStatus(null);
       inputRef.current?.focus();
     }
   }
@@ -665,6 +840,7 @@ export function JobAskPanel({
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
                       sources={extractAskSources(turn.content).sources}
                       onOpenSource={openAskSource}
+                      onAskFollowUp={(question) => void ask(question)}
                     />
                   ) : (
                     <p className="whitespace-pre-wrap leading-relaxed">
@@ -678,8 +854,9 @@ export function JobAskPanel({
               </li>
             ))}
             {asking && (
-              <li className="flex items-start gap-2.5">
+              <li className="flex items-start gap-2.5" data-testid="ask-status">
                 <TypingDots />
+                {askStatus ? <span className="pt-2 text-xs text-ink-500">{askStatus}</span> : null}
               </li>
             )}
           </ul>

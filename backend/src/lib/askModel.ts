@@ -45,7 +45,42 @@ export const GEMINI_ASK_THINKING_LEVEL = 'minimal';
 /** Offline Analysis: strong thinking for dense reconstruction (never invent). */
 export const GEMINI_ASK_ANALYSIS_THINKING_LEVEL = 'high';
 
-export type AskCompletionMode = 'interactive' | 'analysis';
+export type AskCompletionMode = 'interactive' | 'analysis' | 'reasoning';
+
+/** Per-provider cap for extended-thinking Ask. A hung call falls through to Gemini. */
+export const ASK_REASONING_TIMEOUT_MS_DEFAULT = 32_000;
+
+export function askReasoningTimeoutMs(): number {
+  const raw = Number(process.env.ASK_REASONING_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return ASK_REASONING_TIMEOUT_MS_DEFAULT;
+  return Math.min(120_000, Math.max(8_000, Math.round(raw)));
+}
+
+/** Extended-thinking budget from ASK_ANALYSIS_THINKING_LEVEL. Off disables it. */
+export function askReasoningThinkingBudget(): number | null {
+  const level = (process.env.ASK_ANALYSIS_THINKING_LEVEL ?? 'high').trim().toLowerCase();
+  if (level === 'off' || level === 'none' || level === 'minimal') return null;
+  if (level === 'low') return 1024;
+  if (level === 'medium') return 4096;
+  if (level === 'xhigh') return 12_000;
+  return 8000;
+}
+
+export function askReasoningConfig(): {
+  anthropicModel: string;
+  geminiModel: string;
+  thinkingLevel: string;
+  thinkingBudget: number | null;
+  timeoutMs: number;
+} {
+  return {
+    anthropicModel: anthropicAskModel(),
+    geminiModel: geminiAskModel('analysis'),
+    thinkingLevel: (process.env.ASK_ANALYSIS_THINKING_LEVEL ?? 'high').trim() || 'high',
+    thinkingBudget: askReasoningThinkingBudget(),
+    timeoutMs: askReasoningTimeoutMs(),
+  };
+}
 
 export type AskModelResult = {
   text: string;
@@ -77,7 +112,7 @@ function anthropicAskModel(): string {
 
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */
 export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string {
-  if (mode === 'analysis') {
+  if (mode === 'analysis' || mode === 'reasoning') {
     return (
       process.env.ASK_ANALYSIS_MODEL ??
       process.env.VERIFICATION_PRIMARY_MODEL ??
@@ -93,12 +128,12 @@ export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string 
 }
 
 function geminiThinkingLevel(mode: AskCompletionMode): string {
-  const fromEnv =
-    mode === 'analysis'
-      ? (process.env.ASK_ANALYSIS_THINKING_LEVEL ?? '').trim()
-      : (process.env.ASK_THINKING_LEVEL ?? '').trim();
+  const deep = mode === 'analysis' || mode === 'reasoning';
+  const fromEnv = deep
+    ? (process.env.ASK_ANALYSIS_THINKING_LEVEL ?? '').trim()
+    : (process.env.ASK_THINKING_LEVEL ?? '').trim();
   if (fromEnv) return fromEnv;
-  return mode === 'analysis' ? GEMINI_ASK_ANALYSIS_THINKING_LEVEL : GEMINI_ASK_THINKING_LEVEL;
+  return deep ? GEMINI_ASK_ANALYSIS_THINKING_LEVEL : GEMINI_ASK_THINKING_LEVEL;
 }
 
 function geminiBaseUrl(): string {
@@ -114,9 +149,10 @@ function resolveMaxTokens(input: { maxTokens?: number; mode?: AskCompletionMode 
   geminiMax: number;
 } {
   const mode = input.mode ?? 'interactive';
-  const fallback = mode === 'analysis' ? GEMINI_ASK_ANALYSIS_MAX_TOKENS : ANTHROPIC_ASK_MAX_TOKENS;
+  const fallback =
+    mode === 'interactive' ? ANTHROPIC_ASK_MAX_TOKENS : GEMINI_ASK_ANALYSIS_MAX_TOKENS;
   const anthropicMax = input.maxTokens ?? fallback;
-  const geminiFloor = mode === 'analysis' ? GEMINI_ASK_ANALYSIS_MAX_TOKENS : GEMINI_ASK_MAX_TOKENS;
+  const geminiFloor = mode === 'interactive' ? GEMINI_ASK_MAX_TOKENS : GEMINI_ASK_ANALYSIS_MAX_TOKENS;
   // Honour an explicit higher maxTokens (e.g. conversation brief) without
   // forcing the old 20k interactive ceiling onto every call.
   const geminiMax = Math.max(anthropicMax, input.maxTokens != null ? anthropicMax : geminiFloor);
@@ -162,14 +198,26 @@ async function completeWithAnthropic(input: {
   user: string;
   maxTokens: number;
   onToken?: (text: string) => void;
+  thinkingBudget?: number | null;
+  signal?: AbortSignal;
 }): Promise<AskModelResult> {
+  const budget = input.thinkingBudget ?? null;
+  const maxTokens = budget ? Math.max(input.maxTokens, budget + 1024) : input.maxTokens;
+  const thinking =
+    budget && budget >= 1024
+      ? { thinking: { type: 'enabled' as const, budget_tokens: budget } }
+      : {};
   if (input.onToken) {
-    const stream = anthropicClientForKey(input.apiKey).messages.stream({
-      model: anthropicAskModel(),
-      max_tokens: input.maxTokens,
-      system: input.system,
-      messages: [{ role: 'user', content: input.user }],
-    });
+    const stream = anthropicClientForKey(input.apiKey).messages.stream(
+      {
+        model: anthropicAskModel(),
+        max_tokens: maxTokens,
+        system: input.system,
+        messages: [{ role: 'user', content: input.user }],
+        ...thinking,
+      },
+      input.signal ? { signal: input.signal } : undefined,
+    );
     let text = '';
     stream.on('text', (delta: string) => {
       if (!delta) return;
@@ -187,12 +235,16 @@ async function completeWithAnthropic(input: {
     return { text, model: response.model, usage: tryExtractUsage(response.usage) };
   }
 
-  const response = await anthropicClientForKey(input.apiKey).messages.create({
-    model: anthropicAskModel(),
-    max_tokens: input.maxTokens,
-    system: input.system,
-    messages: [{ role: 'user', content: input.user }],
-  });
+  const response = await anthropicClientForKey(input.apiKey).messages.create(
+    {
+      model: anthropicAskModel(),
+      max_tokens: maxTokens,
+      system: input.system,
+      messages: [{ role: 'user', content: input.user }],
+      ...thinking,
+    },
+    input.signal ? { signal: input.signal } : undefined,
+  );
   const text = response.content
     .filter((block: { type: string }) => block.type === 'text')
     .map((block: { type: string; text?: string }) => block.text ?? '')
@@ -220,6 +272,7 @@ async function completeWithGemini(input: {
   model?: string;
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
+  signal?: AbortSignal;
 }): Promise<AskModelResult> {
   const model = input.model || geminiAskModel(input.mode);
   const fetchFn = input.fetchFn ?? fetch;
@@ -240,6 +293,7 @@ async function completeWithGemini(input: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
       body,
+      signal: input.signal,
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -316,6 +370,7 @@ async function completeWithGemini(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
     body,
+    signal: input.signal,
   });
   if (!response.ok) {
     const errText = await response.text();
@@ -365,10 +420,19 @@ export async function completeAskText(input: {
   fetchFn?: typeof fetch;
   mode?: AskCompletionMode;
   onToken?: (text: string) => void;
+  signal?: AbortSignal;
 }): Promise<AskModelResult | null> {
   const mode = input.mode ?? 'interactive';
+  const reasoning = mode === 'reasoning';
   const { anthropicMax, geminiMax } = resolveMaxTokens({ maxTokens: input.maxTokens, mode });
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
+  const deadline = reasoning ? Date.now() + askReasoningTimeoutMs() : 0;
+  const signalFor = (): AbortSignal | undefined => {
+    if (!reasoning) return input.signal;
+    const left = deadline - Date.now();
+    if (left < 1500) throw new Error('ask_reasoning_timeout');
+    return AbortSignal.timeout(left);
+  };
 
   if (anthropicKey) {
     try {
@@ -378,6 +442,8 @@ export async function completeAskText(input: {
         user: input.user,
         maxTokens: anthropicMax,
         onToken: input.onToken,
+        thinkingBudget: reasoning ? askReasoningThinkingBudget() : null,
+        signal: signalFor(),
       });
     } catch (err) {
       logger.warn('ask_anthropic_failed', { detail: errorDetail(err) });
@@ -392,9 +458,10 @@ export async function completeAskText(input: {
         system: input.system,
         user: input.user,
         maxTokens: geminiMax,
-        mode,
+        mode: reasoning ? 'analysis' : mode,
         fetchFn: input.fetchFn,
         onToken: input.onToken,
+        signal: reasoning ? signalFor() : input.signal,
       });
     } catch (err) {
       logger.warn('ask_gemini_failed', { detail: errorDetail(err) });

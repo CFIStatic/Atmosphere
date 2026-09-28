@@ -925,6 +925,12 @@ export async function loadPersonContext(
   return contexts.map((person) => ({ ...person, jobFile }));
 }
 
+export interface MentionOffJobPerson {
+  userId: string;
+  name: string;
+  otherJobTitles: string[];
+}
+
 export interface MentionAskPrep {
   mentions: ResolvedMention[];
   supplement: string;
@@ -933,6 +939,10 @@ export interface MentionAskPrep {
   /** Grounded person answer, used when the model is skipped or unavailable. */
   fallbackAnswer: string | null;
   groundedOn: number;
+  /** On-job people the model may ask list_person_activity about. Empty when Ask skips the model. */
+  people: PersonMentionContext[];
+  /** @mentioned people who are not on the open job. Lookup must not treat them as unknown. */
+  offJobPeople: MentionOffJobPerson[];
 }
 
 export async function prepareMentionAsk(
@@ -957,7 +967,15 @@ export async function prepareMentionAsk(
     const job = await jobInOrg(db, input.orgId, jobId);
     if (!job) {
       const missing = "That job isn't in this organization.";
-      return { mentions: [], supplement: '', directAnswer: missing, fallbackAnswer: missing, groundedOn: 0 };
+      return {
+        mentions: [],
+        supplement: '',
+        directAnswer: missing,
+        fallbackAnswer: missing,
+        groundedOn: 0,
+        people: [],
+        offJobPeople: [],
+      };
     }
   }
   const carried = carryPriorMention(input.question, input.history, roster);
@@ -969,18 +987,21 @@ export async function prepareMentionAsk(
     .join(' ');
   let mentions = resolution.mentions;
   let absent = '';
+  let offJobPeople: MentionOffJobPerson[] = [];
   if (jobId && mentions.length) {
     const onJob = await listJobMentionUserIds(db, input.orgId, jobId, roster);
     const allowed = onJob ?? new Set<string>();
     const off = mentions.filter((person) => !allowed.has(person.userId));
     mentions = mentions.filter((person) => allowed.has(person.userId));
     if (off.length) {
-      const lines = await Promise.all(
-        off.map(async (person) =>
-          notOnJobSentence(person.name, await otherJobsForUser(db, input.orgId, person.userId, jobId)),
-        ),
+      offJobPeople = await Promise.all(
+        off.map(async (person) => ({
+          userId: person.userId,
+          name: person.name,
+          otherJobTitles: await otherJobsForUser(db, input.orgId, person.userId, jobId),
+        })),
       );
-      absent = lines.join(' ');
+      absent = offJobPeople.map((person) => notOnJobSentence(person.name, person.otherJobTitles)).join(' ');
     }
   }
   if (!mentions.length) {
@@ -991,6 +1012,8 @@ export async function prepareMentionAsk(
       directAnswer: direct || null,
       fallbackAnswer: direct || null,
       groundedOn: 0,
+      people: [],
+      offJobPeople,
     };
   }
   const people = await loadPersonContext(db, {
@@ -1020,6 +1043,8 @@ export async function prepareMentionAsk(
       directAnswer: withPrefix(grounded.answer),
       fallbackAnswer: withPrefix(grounded.answer),
       groundedOn: grounded.groundedOn,
+      people,
+      offJobPeople,
     };
   }
   return {
@@ -1028,6 +1053,8 @@ export async function prepareMentionAsk(
     directAnswer: null,
     fallbackAnswer: withPrefix(grounded.answer),
     groundedOn: grounded.groundedOn,
+    people,
+    offJobPeople,
   };
 }
 
