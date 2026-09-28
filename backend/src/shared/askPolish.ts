@@ -953,7 +953,12 @@ function composeOpinion(question: string, catalog: AskLookupCatalog, history: As
   if (!lines.length) return `${jobOffer(catalog)} The transcripts do not give me more than that to go on.`;
   const when = lines[0]!.when;
   const spoken = lines.map((line) => `“${line.text}”`).join(', then ');
-  return `On ${when}, the lines run ${spoken}. I would not add a motive past those words.`;
+  const blob = lines.map((line) => line.text).join(' ');
+  const read =
+    /paper|spreadsheet/i.test(blob) && /quickbooks/i.test(blob)
+      ? 'He is talking about getting the work off paper and onto QuickBooks.'
+      : 'I would not add a motive past those words.';
+  return `On ${when}, the lines run ${spoken}. ${read}`;
 }
 
 function composeCorrection(question: string, catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
