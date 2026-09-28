@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../hooks/useFeatureTimer', () => ({
@@ -44,6 +44,69 @@ vi.mock('../lib/api', () => ({
 
 import { api } from '../lib/api';
 import { JobIntakePage } from './JobIntakePage';
+
+function JobFileStub() {
+  const location = useLocation();
+  return (
+    <>
+      <h1>Job file</h1>
+      <p data-testid="job-file-search">{location.search}</p>
+    </>
+  );
+}
+
+function renderIntakeWithJobFile() {
+  return render(
+    <MemoryRouter initialEntries={['/intake']}>
+      <Routes>
+        <Route path="/intake" element={<JobIntakePage />} />
+        <Route path="/jobs/:id" element={<h1>Left intake</h1>} />
+        <Route path="/job-progress" element={<JobFileStub />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function approveResult(invites: Awaited<ReturnType<typeof api.approveIntake>>['invites']) {
+  return {
+    job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
+    briefRevision: 1,
+    scopeSaved: 0,
+    invites,
+    party: { id: 'pty-1', company: 'Field Capture' },
+    sharePath: '/shared/tok-1',
+    fieldCapturePath: '/fieldcapture/?token=tok-1',
+    readiness: {
+      level: 'limited' as const,
+      ceiling: 'work_only' as const,
+      headline: 'Invite sent',
+      gaps: [],
+      strengths: [],
+      source: null,
+    },
+  };
+}
+
+const MARCUS_INVITE = {
+  id: 'inv-1',
+  name: 'Marcus Webb',
+  email: 'marcus@example.com',
+  sharePath: '/shared/tok-1',
+  fieldCapturePath: '/fieldcapture/?token=tok-1',
+  token: 'tok-1',
+  emailed: true,
+  recipientHasAccount: true,
+};
+
+async function expectOnNewJobFile() {
+  expect(await screen.findByRole('heading', { name: 'Job file' })).toBeInTheDocument();
+  expect(screen.getByTestId('job-file-search').textContent).toBe(
+    '?job=job-new&title=East+Racine&number=12',
+  );
+  expect(screen.queryByText(/Job created/)).toBeNull();
+  expect(screen.queryByText('Film in Field Capture')).toBeNull();
+  expect(screen.queryByText('Left intake')).toBeNull();
+}
 
 describe('JobIntakePage', () => {
   beforeEach(() => {
@@ -93,66 +156,26 @@ describe('JobIntakePage', () => {
     expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeInTheDocument();
   });
 
-  it('stays on intake after approve so the invite link can be copied', async () => {
-    vi.mocked(api.approveIntake).mockResolvedValue({
-      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
-      briefRevision: 1,
-      scopeSaved: 0,
-      invites: [
-        {
-          id: 'inv-1',
-          name: 'Marcus Webb',
-          email: 'marcus@example.com',
-          sharePath: '/shared/tok-1',
-          fieldCapturePath: '/fieldcapture/?token=tok-1',
-          token: 'tok-1',
-          emailed: false,
-        },
-      ],
-      party: { id: 'pty-1', company: 'Field Capture' },
-      sharePath: '/shared/tok-1',
-      fieldCapturePath: '/fieldcapture/?token=tok-1',
-      readiness: {
-        level: 'limited',
-        ceiling: 'work_only',
-        headline: 'Invite sent',
-        gaps: [],
-        strengths: [],
-        source: null,
-      },
-    });
+  it('goes straight to the new job file after approve — no confirmation screen', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([MARCUS_INVITE]));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter initialEntries={['/intake']}>
-        <Routes>
-          <Route path="/intake" element={<JobIntakePage />} />
-          <Route path="/jobs/:id" element={<h1>Left intake</h1>} />
-          <Route path="/job-progress" element={<h1>Job file</h1>} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderIntakeWithJobFile();
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(
-      await screen.findByRole('heading', { name: 'Job created — capture invited' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Film in Field Capture' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /app\.atmosphereteam\.com/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
-    expect(screen.queryByText('Left intake')).toBeNull();
+    await expectOnNewJobFile();
     expect(api.approveIntake).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'East Racine',
+        invitees: [
+          expect.objectContaining({ userId: 'u-marcus', email: 'marcus@example.com' }),
+        ],
       }),
     );
     expect(vi.mocked(api.approveIntake).mock.calls[0]?.[0]).not.toHaveProperty('address');
-
-    await user.click(screen.getByRole('button', { name: 'Open this job file' }));
-    expect(await screen.findByText('Job file')).toBeInTheDocument();
   });
 
   it('fits Start a job to the phone frame instead of four desktop cards', async () => {
@@ -194,82 +217,30 @@ describe('JobIntakePage', () => {
     expect(approve.className).toMatch(/rounded-xl/);
   });
 
-  it('keeps Open this job file and Start another on the phone after approve', async () => {
+  it('goes straight to the new job file after approve on the phone too', async () => {
     usePhoneShell.mockReturnValue(true);
-    vi.mocked(api.approveIntake).mockResolvedValue({
-      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
-      briefRevision: 1,
-      scopeSaved: 0,
-      invites: [
-        {
-          id: 'inv-1',
-          name: 'Marcus Webb',
-          email: 'marcus@example.com',
-          sharePath: '/shared/tok-1',
-          fieldCapturePath: '/fieldcapture/?token=tok-1',
-          token: 'tok-1',
-          emailed: true,
-          recipientHasAccount: true,
-        },
-      ],
-      party: { id: 'pty-1', company: 'Field Capture' },
-      sharePath: '/shared/tok-1',
-      fieldCapturePath: '/fieldcapture/?token=tok-1',
-      readiness: {
-        level: 'limited',
-        ceiling: 'work_only',
-        headline: 'Invite sent',
-        gaps: [],
-        strengths: [],
-        source: null,
-      },
-    });
+    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([MARCUS_INVITE]));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <JobIntakePage />
-      </MemoryRouter>,
-    );
+    renderIntakeWithJobFile();
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(
-      await screen.findByRole('heading', { name: 'Job created — capture invited' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Emailed — they already have an account.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Field Capture' }).className).toMatch(/w-full/);
-    expect(screen.getByRole('button', { name: 'Open this job file' }).className).toMatch(/w-full/);
-    expect(screen.getByRole('button', { name: 'Start another' }).className).toMatch(/w-full/);
+    await expectOnNewJobFile();
   });
 
   it('creates the job file when the name is filled and nobody is invited', async () => {
     vi.mocked(api.approveIntake).mockResolvedValue({
-      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
-      briefRevision: 1,
+      ...approveResult([]),
       scopeSaved: 1,
-      invites: [],
-      party: { id: 'job-new', company: 'East Racine' },
       sharePath: '',
       fieldCapturePath: '',
-      readiness: {
-        level: 'limited',
-        ceiling: 'work_only',
-        headline: 'Job created',
-        gaps: [],
-        strengths: [],
-        source: null,
-      },
     });
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <JobIntakePage />
-      </MemoryRouter>,
-    );
+    renderIntakeWithJobFile();
 
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear' }));
@@ -280,11 +251,7 @@ describe('JobIntakePage', () => {
     );
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(await screen.findByRole('heading', { name: 'Job created' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Invites' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Film in Field Capture' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Field Capture' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open this job file' })).toBeInTheDocument();
+    await expectOnNewJobFile();
     expect(api.approveIntake).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'East Racine',
@@ -313,41 +280,50 @@ describe('JobIntakePage', () => {
     expect(screen.getAllByRole('list')).toHaveLength(1);
   });
 
-  it('emails the homeowner the job file after approve, account or not', async () => {
-    vi.mocked(api.approveIntake).mockResolvedValue({
-      job: { id: 'job-new', title: 'East Racine', jobNumber: 12 },
-      briefRevision: 1,
-      scopeSaved: 0,
-      invites: [],
-      party: { id: 'pty-1', company: 'Field Capture' },
-      sharePath: '/shared/tok-1',
-      fieldCapturePath: '/fieldcapture/?token=tok-1',
-      readiness: {
-        level: 'limited',
-        ceiling: 'work_only',
-        headline: 'Invite sent',
-        gaps: [],
-        strengths: [],
-        source: null,
-      },
-    });
+  it('emails the homeowner the job file after approve, then opens the job file', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([]));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <JobIntakePage />
-      </MemoryRouter>,
-    );
+    renderIntakeWithJobFile();
 
     await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
     await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
 
-    expect(await screen.findByText(/homeowner emailed the job file/i)).toBeInTheDocument();
+    await expectOnNewJobFile();
     expect(api.createProgressShare).toHaveBeenCalledWith({
       jobId: 'job-new',
       label: 'jordan@example.com',
       recipientEmail: 'jordan@example.com',
     });
+  });
+
+  it('still opens the job file when the homeowner link fails', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([]));
+    vi.mocked(api.createProgressShare).mockRejectedValue(new Error('mail down'));
+
+    const user = userEvent.setup();
+    renderIntakeWithJobFile();
+
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    await expectOnNewJobFile();
+  });
+
+  it('stays on Start a job and shows the error when approve fails', async () => {
+    vi.mocked(api.approveIntake).mockRejectedValue(new Error('Could not create the job.'));
+
+    const user = userEvent.setup();
+    renderIntakeWithJobFile();
+
+    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not create the job.');
+    expect(screen.queryByRole('heading', { name: 'Job file' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Start a job' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeEnabled();
   });
 });
