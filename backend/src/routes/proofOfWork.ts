@@ -20,9 +20,11 @@ import {
   persistAskThreadMemory,
   presentAskThread,
   renameAskThread,
+  modelAskThreadTitle,
   touchAskThreadAfterMessage,
   type AskThreadOwner,
 } from '../shared/askThreads.js';
+import { createAskTurnClock, logAskTurnTiming } from '../shared/askTiming.js';
 import { displayMentionText } from '../shared/mentions.js';
 import {
   foldThreadMemory,
@@ -2713,36 +2715,58 @@ export async function runProofAsk(input: {
   threadId: string | null;
 }> {
     const { supabase, orgId, jobId, userId } = input;
+    const clock = createAskTurnClock();
+    const onToken = (text: string) => {
+      if (text) clock.markFirstToken();
+      input.onToken?.(text);
+    };
     const writeDb = askWriteClient(supabase);
     let threadId: string | null = input.threadId ?? null;
+    const askAccess: 'org' | 'viewer' = input.access === 'org' ? 'org' : 'viewer';
     const owner: AskThreadOwner | null = userId
       ? { kind: 'user', userId }
       : input.shareId
         ? { kind: 'share', shareId: input.shareId }
         : null;
-    if (!owner) {
-      // No principal to check. A caller-supplied thread id is not bound.
-      threadId = null;
-    } else {
+    const threadPromise = (async () => {
+      if (!owner) {
+        // No principal to check. A caller-supplied thread id is not bound.
+        threadId = null;
+        return null;
+      }
       try {
         if (threadId) {
           await getAskThreadForOwner(writeDb, { orgId, jobId, threadId, owner });
-        } else {
-          const threads = await ensureAskThreads(writeDb, { orgId, jobId, owner });
-          threadId = threads[0]?.id ?? null;
-          if (!threadId) {
-            const created = await createAskThread(writeDb, { orgId, jobId, owner });
-            threadId = created.id;
-          }
+          return threadId;
         }
+        const threads = await ensureAskThreads(writeDb, { orgId, jobId, owner });
+        const existing = threads[0]?.id ?? null;
+        if (existing) return existing;
+        const created = await createAskThread(writeDb, { orgId, jobId, owner });
+        return created.id;
       } catch (err) {
         const unavailable =
           err instanceof HttpError && (err.status === 503 || err.code === 'ask_threads_unavailable');
         if (!unavailable) throw err;
         // Threads table may be mid-migrate — Ask still answers, with no thread bound.
         threadId = null;
+        return null;
       }
-    }
+    })();
+
+    const otherJobsPromise =
+      askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted
+        ? supabase
+            .from('job_proofs')
+            .select(
+              'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+            )
+            .eq('org_id', orgId)
+            .neq('job_id', jobId)
+            .is('deleted_at', null)
+            .order('work_date', { ascending: false })
+            .limit(24)
+        : Promise.resolve({ data: null as Array<Record<string, unknown>> | null });
 
     const [
       proofsRes,
@@ -2757,6 +2781,8 @@ export async function runProofAsk(input: {
       memoryRes,
       docRes,
       recentRes,
+      otherJobsRes,
+      threadIdResolved,
     ] = await Promise.all([
       supabase
         .from('job_proofs')
@@ -2828,7 +2854,16 @@ export async function runProofAsk(input: {
         .order('created_at', { ascending: false })
         .limit(5),
       (async () => {
+        const memoryStarted = Date.now();
+        const threadId = await threadPromise;
         const shape = 'id, question, answer, created_at';
+        const empty = {
+          rows: [] as Array<Record<string, unknown>>,
+          memory: null as { summary: string | null; throughId: string | null } | null,
+          notes: [] as DurableJobNote[],
+          incomplete: false,
+          total: 0,
+        };
         if (!threadId) {
           const { data } = await supabase
             .from('job_proof_questions')
@@ -2837,7 +2872,9 @@ export async function runProofAsk(input: {
             .eq('job_id', jobId)
             .order('created_at', { ascending: false })
             .limit(8);
-          return { rows: (data ?? []) as Array<Record<string, unknown>>, memory: null, notes: [] as DurableJobNote[] };
+          const rows = (data ?? []) as Array<Record<string, unknown>>;
+          clock.memoryLoadMs = Date.now() - memoryStarted;
+          return { ...empty, rows, total: rows.length };
         }
         const [countRes, lateRes, memory, notes] = await Promise.all([
           supabase
@@ -2853,7 +2890,7 @@ export async function runProofAsk(input: {
             .eq('job_id', jobId)
             .eq('thread_id', threadId)
             .order('created_at', { ascending: false })
-            .limit(200),
+            .limit(8),
           owner
             ? loadAskThreadMemory(writeDb, { orgId, jobId, threadId, owner })
             : Promise.resolve({ summary: null, throughId: null }),
@@ -2861,9 +2898,13 @@ export async function runProofAsk(input: {
         ]);
         const rows = [...((lateRes.data ?? []) as Array<Record<string, unknown>>)].reverse();
         const total = typeof countRes.count === 'number' ? countRes.count : rows.length;
-        return { rows, memory, notes, incomplete: total > rows.length };
+        clock.memoryLoadMs = Date.now() - memoryStarted;
+        return { rows, memory, notes, incomplete: total > rows.length, total };
       })(),
+      otherJobsPromise,
+      threadPromise,
     ]);
+    threadId = threadIdResolved;
 
     const partyRows = (partyRes.data ?? []) as any[];
     const company = new Map(partyRows.map((p) => [p.id, p.company]));
@@ -2886,11 +2927,30 @@ export async function runProofAsk(input: {
       const party = partyRows.find((item) => item.id === row.party_id);
       return [device, party?.created_by];
     });
-    const people = await loadPeople(supabase, [
-      ...taskRows.map((row) => row.assigned_to),
-      ...crewRows.map((row) => row.user_id),
-      ...logRows.map((row) => row.author_id),
-      ...recorderIds,
+    const propertyIdEarly = ((jobRes.data as { property_id?: string | null } | null)?.property_id ?? null) as
+      | string
+      | null;
+    const propertyPromise = propertyIdEarly
+      ? supabase
+          .from('crm_properties')
+          .select('address_line1, address_line2, city, region, postal_code')
+          .eq('org_id', orgId)
+          .eq('id', propertyIdEarly)
+          .maybeSingle()
+      : Promise.resolve({ data: null });
+    const profilePromise =
+      userId && askAccess === 'org'
+        ? supabase.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()
+        : Promise.resolve({ data: null });
+    const [people, propRes, profileRes] = await Promise.all([
+      loadPeople(supabase, [
+        ...taskRows.map((row) => row.assigned_to),
+        ...crewRows.map((row) => row.user_id),
+        ...logRows.map((row) => row.author_id),
+        ...recorderIds,
+      ]),
+      propertyPromise,
+      profilePromise.catch(() => ({ data: null })),
     ]);
     const personName = (id: string | null | undefined) => {
       if (!id) return null;
@@ -2966,37 +3026,22 @@ export async function runProofAsk(input: {
       clips,
     };
 
-    const propertyId = (jobRow?.property_id as string | null | undefined) ?? null;
-    let siteAddress: string | null = null;
-    if (propertyId) {
-      const { data: prop } = await supabase
-        .from('crm_properties')
-        .select('address_line1, address_line2, city, region, postal_code')
-        .eq('org_id', orgId)
-        .eq('id', propertyId)
-        .maybeSingle();
-      if (prop) {
-        siteAddress = [prop.address_line1, prop.address_line2, prop.city, prop.region, prop.postal_code]
-          .map((p: unknown) => String(p ?? '').trim())
+    const propertyId = propertyIdEarly;
+    const prop = propRes.data as {
+      address_line1?: string | null;
+      address_line2?: string | null;
+      city?: string | null;
+      region?: string | null;
+      postal_code?: string | null;
+    } | null;
+    const siteAddress = prop
+      ? [prop.address_line1, prop.address_line2, prop.city, prop.region, prop.postal_code]
+          .map((part) => String(part ?? '').trim())
           .filter(Boolean)
-          .join(', ');
-      }
-    }
-
-    const askAccess: 'org' | 'viewer' = input.access === 'org' ? 'org' : 'viewer';
-    let authorLabel: string | null = null;
-    if (userId && askAccess === 'org') {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', userId)
-          .maybeSingle();
-        authorLabel = (profile as any)?.full_name ?? (profile as any)?.email ?? null;
-      } catch {
-        authorLabel = null;
-      }
-    }
+          .join(', ')
+      : null;
+    const profile = profileRes.data as { full_name?: string | null; email?: string | null } | null;
+    const authorLabel = profile?.full_name ?? profile?.email ?? null;
 
     const memoryClips = proofRows.map((row) => {
         const party = partyRows.find((item) => item.id === row.party_id);
@@ -3027,6 +3072,7 @@ export async function runProofAsk(input: {
       summarizedThroughId: recentRes.memory?.throughId ?? null,
       timeZone: askTimeZone,
       incomplete: recentRes.incomplete === true,
+      reuseSummary: true,
     });
     const scrubbedFold = scrubLongMemory(folded, scrubAsk);
     const storedNotes = (recentRes.notes ?? []).flatMap((note) => {
@@ -3060,7 +3106,7 @@ export async function runProofAsk(input: {
     if (mentionPrep?.supplement) {
       file.mentionSupplement = mentionPrep.supplement;
     }
-    if (mentionPrep?.directAnswer) input.onToken?.(mentionPrep.directAnswer);
+    if (mentionPrep?.directAnswer) onToken(mentionPrep.directAnswer);
     const clientName = partyRows
       .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
       .filter(Boolean)
@@ -3098,17 +3144,7 @@ export async function runProofAsk(input: {
       }),
     });
     if (askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted) {
-      const { data: otherRows } = await supabase
-        .from('job_proofs')
-        .select(
-          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
-        )
-        .eq('org_id', orgId)
-        .neq('job_id', jobId)
-        .is('deleted_at', null)
-        .order('work_date', { ascending: false })
-        .limit(24);
-      const rows = ((otherRows ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const rows = ((otherJobsRes?.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
       const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
       const titles = new Map<string, string>();
       if (jobIds.length) {
@@ -3127,6 +3163,12 @@ export async function runProofAsk(input: {
         )
         .filter((clip) => clip.proofId && clip.jobId !== jobId);
     }
+    clock.contextBuildMs = Date.now() - clock.startedAt;
+    const priorCount = recentRes.total ?? priorPairs.length;
+    const titleAhead =
+      threadId && owner && priorCount === 0
+        ? modelAskThreadTitle({ question: scrubStoredAskText(input.question, memoryClips) }).catch(() => null)
+        : Promise.resolve(null);
     const result = mentionPrep?.directAnswer
       ? {
           answer: mentionPrep.directAnswer,
@@ -3154,9 +3196,10 @@ export async function runProofAsk(input: {
         now: longMemory.now,
       },
       apiKey,
-      onToken: input.onToken,
+      onToken,
       onStatus: input.onStatus,
       signal: input.signal,
+      timing: clock,
       lookup,
       toolContext: {
         orgId,
@@ -3179,7 +3222,7 @@ export async function runProofAsk(input: {
       !result.answeredFromLookup
     ) {
       result.answer = mentionPrep.fallbackAnswer;
-      input.onToken?.(mentionPrep.fallbackAnswer);
+      onToken(mentionPrep.fallbackAnswer);
     }
 
     recordMeasuredTokenUsage(supabase, {
@@ -3205,6 +3248,8 @@ export async function runProofAsk(input: {
     const storedAnswer = scrubStoredAskText(result.answer, lookup.clips);
     result.answer = storedAnswer;
     if (input.signal?.aborted) {
+      if (clock.routeReason === 'pending') clock.noteRoute('grounded', 'stopped');
+      logAskTurnTiming(clock.snapshot());
       return {
         answer: storedAnswer,
         model: result.model,
@@ -3240,10 +3285,7 @@ export async function runProofAsk(input: {
 
     if (threadId && owner) {
       try {
-        const { count } = await writeDb
-          .from('job_proof_questions')
-          .select('id', { count: 'exact', head: true })
-          .eq('thread_id', threadId);
+        const ahead = await titleAhead;
         await touchAskThreadAfterMessage(writeDb, {
           orgId,
           jobId,
@@ -3251,28 +3293,60 @@ export async function runProofAsk(input: {
           owner,
           question: storedQuestion,
           answer: storedAnswer,
-          isFirstMessage: (count ?? 0) <= 1,
+          isFirstMessage: priorCount === 0,
+          complete: async () => (ahead ? { text: ahead } : null),
         });
       } catch {
         // Non-fatal — answer already stored.
       }
-      if (stored?.id) {
-        try {
-          const withTurn = [
-            ...priorPairs,
-            {
-              id: String(stored.id),
-              question: storedQuestion,
-              answer: storedAnswer,
-              createdAt: String(stored.created_at ?? new Date().toISOString()),
-            },
-          ];
+    }
+
+    const summarizeStarted = Date.now();
+    void (async () => {
+      try {
+        if (threadId && owner && stored?.id) {
+          let pairs = priorPairs;
+          let incomplete = recentRes.incomplete === true;
+          if (incomplete) {
+            const { data } = await supabase
+              .from('job_proof_questions')
+              .select('id, question, answer, created_at')
+              .eq('org_id', orgId)
+              .eq('job_id', jobId)
+              .eq('thread_id', threadId)
+              .order('created_at', { ascending: false })
+              .limit(200);
+            pairs = [...((data ?? []) as Array<Record<string, unknown>>)].reverse().flatMap((row) => {
+              const question = scrubStoredAskText(String(row.question ?? ''), lookup.clips);
+              if (!question.trim()) return [];
+              return [
+                {
+                  id: String(row.id ?? ''),
+                  question,
+                  answer: scrubStoredAskText(String(row.answer ?? ''), lookup.clips),
+                  createdAt: String(row.created_at ?? ''),
+                },
+              ];
+            });
+            incomplete = pairs.length >= 200;
+          }
+          const withTurn = pairs.some((pair) => pair.id === String(stored.id))
+            ? pairs
+            : [
+                ...pairs,
+                {
+                  id: String(stored.id),
+                  question: storedQuestion,
+                  answer: storedAnswer,
+                  createdAt: String(stored.created_at ?? new Date().toISOString()),
+                },
+              ];
           const again = foldThreadMemory({
             pairs: withTurn,
             previousSummary: recentRes.memory?.summary ?? null,
             summarizedThroughId: recentRes.memory?.throughId ?? null,
             timeZone: askTimeZone,
-            incomplete: recentRes.incomplete === true,
+            incomplete,
           });
           const againScrub = scrubLongMemory(again, (text) => scrubStoredAskText(text, lookup.clips));
           await persistAskThreadMemory(writeDb, {
@@ -3288,11 +3362,16 @@ export async function runProofAsk(input: {
             notes: againScrub.notes,
             existingNotes: storedNotes,
           });
-        } catch {
-          // The custody row is already stored. Summary and notes can catch up next turn.
         }
+      } catch {
+        // The custody row is already stored. Summary and notes can catch up next turn.
+      } finally {
+        clock.memorySummarizeMs = Date.now() - summarizeStarted;
+        if (!clock.model && result.model) clock.noteModel(result.model);
+        if (clock.routeReason === 'pending') clock.noteRoute(result.model ? 'deep' : 'grounded', 'answer');
+        logAskTurnTiming(clock.snapshot());
       }
-    }
+    })();
 
     return {
       answer: result.answer,
@@ -3343,6 +3422,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       res.on('close', onClose);
       try {
         writeEvent({ type: 'status', phase: 'Looking through clips…' });
+        if (typeof res.flushHeaders === 'function') res.flushHeaders();
         const result = await runProofAsk({
           supabase,
           orgId,

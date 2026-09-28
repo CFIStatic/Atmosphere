@@ -325,10 +325,26 @@ export function foldThreadMemory(input: {
   timeZone?: string | null;
   /** The pair list is a tail, not the whole thread. Do not rebuild the summary from that hole. */
   incomplete?: boolean;
+  /**
+   * Use the stored summary as-is for this turn. Recent pairs stay verbatim.
+   * The caller regenerates the summary after the reply has streamed.
+   */
+  reuseSummary?: boolean;
 }): ThreadMemoryFold {
   const chronological = [...input.pairs].sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
   );
+  if (input.reuseSummary) {
+    const recentPairs = chronological.slice(-RECENT_PAIRS);
+    return {
+      summary: String(input.previousSummary ?? '').trim(),
+      summaryThroughId: input.summarizedThroughId ?? null,
+      coveredCount: 0,
+      recent: recentPairs.flatMap(pairToTurns),
+      notes: capDurableNotes(chronological.flatMap(pairNotes)),
+      regenerate: false,
+    };
+  }
   const recentPairs = chronological.slice(-RECENT_PAIRS);
   const olderPairs = chronological.slice(0, Math.max(0, chronological.length - recentPairs.length));
   const summaryThroughId = olderPairs.length ? olderPairs[olderPairs.length - 1]!.id : null;

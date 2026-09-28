@@ -1,15 +1,26 @@
 /**
- * Multi-step Ask over lookup tools, on the strongest configured model.
+ * Multi-step Ask over lookup tools.
  *
- * Anthropic (ANTHROPIC_MODEL) runs with extended thinking. If that call fails
- * or hits the latency cap, Gemini (ASK_ANALYSIS_MODEL / ASK_ANALYSIS_THINKING_LEVEL)
- * answers from the same tools. If both fail, the reply is only what the tools returned.
+ * Simple lookups, quotes, greetings, and follow-ups use a fast model with
+ * thinking off (ASK_FAST_ANTHROPIC_MODEL, otherwise Gemini Flash). Drafts,
+ * comparisons, and multi-step questions stay on ANTHROPIC_MODEL with adaptive
+ * thinking. If the fast model fails or returns nothing grounded, the deep
+ * model answers from the same tools. If that also fails, Gemini
+ * (ASK_ANALYSIS_MODEL) is the last model, then the reply is only what the
+ * tools returned.
+ *
+ * The system prompt and the job context are a cached prefix. Text tokens are
+ * forwarded as they arrive. Network Ask tools in one turn run together.
+ * In-memory lookup tools are timed as one batch; they do not wait on a model.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { anthropicClientForKey, tryExtractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import {
   anthropicAskApiKey,
+  anthropicFastRequest,
   anthropicReasoningRequest,
+  askFastAnthropicModel,
+  askFastGeminiModel,
   askReasoningConfig,
   askReasoningTimeoutMs,
   completeAskText,
@@ -29,6 +40,7 @@ import {
   planAskLookup,
   quotesFromTrace,
   scrubStoredAskText,
+  splitLookupPrompt,
   suggestFollowUps,
   type AskLookupCatalog,
   type AskLookupTraceStep,
@@ -51,6 +63,14 @@ import {
 } from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
+import { fastAnswerNeedsDeepFallback, routeAskQuestion, type AskModelRoute } from './askRoute.js';
+import {
+  anthropicCachedSystem,
+  asAnthropicSystem,
+  geminiCachedContentName,
+  geminiSystemPrefix,
+} from './askPromptCache.js';
+import type { AskTurnClock } from './askTiming.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
@@ -90,6 +110,8 @@ export type LookupModelTurn = {
 
 export type LookupModelStep = (input: {
   system: string;
+  /** Stable job context. Cached with the system prompt; omitted from the volatile user text. */
+  stable?: string;
   user: string;
   trace: AskLookupTraceStep[];
 }) => Promise<LookupModelTurn | null>;
@@ -215,11 +237,17 @@ function textFromBlocks(blocks: Anthropic.ContentBlock[]): string {
 /**
  * One Anthropic tool loop. Assistant turns, including thinking blocks, are
  * sent back unmodified. Text and tool calls are chosen by block type.
+ * Visible text is forwarded as it arrives. A tool call later in the same
+ * turn is not the answer; the caller clears that preface with a status.
  */
 function anthropicLookupSession(input: {
   apiKey: string;
+  model: string;
+  maxTokens: number;
+  thinking?: { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number };
+  outputConfig?: { effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   onToken?: (text: string) => void;
-}): (state: { system: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
+}): (state: { system: string; stable?: string; user: string; trace: AskLookupTraceStep[]; signal?: AbortSignal }) => Promise<LookupModelTurn> {
   const messages: Anthropic.MessageParam[] = [];
   let traced = 0;
   let pending: { blocks: Anthropic.ContentBlock[]; tools: LookupCall[] } | null = null;
@@ -248,22 +276,29 @@ function anthropicLookupSession(input: {
       pending = null;
     }
     traced = state.trace.length;
-    const shaped = anthropicReasoningRequest(askReasoningConfig().anthropicModel);
     const stream = anthropicClientForKey(input.apiKey).messages.stream(
       {
-        model: askReasoningConfig().anthropicModel,
-        max_tokens: shaped.max_tokens,
-        system: state.system,
+        model: input.model,
+        max_tokens: input.maxTokens,
+        system: asAnthropicSystem(anthropicCachedSystem(state.system, state.stable ?? '')),
         messages,
         tools: LOOKUP_TOOLS,
-        ...(shaped.thinking ? { thinking: shaped.thinking } : {}),
-        ...(shaped.output_config ? { output_config: shaped.output_config } : {}),
+        ...(input.thinking ? { thinking: input.thinking } : {}),
+        ...(input.outputConfig ? { output_config: input.outputConfig } : {}),
       },
       state.signal ? { signal: state.signal } : undefined,
     );
     const deltas: string[] = [];
+    let sawTool = false;
     stream.on('text', (delta: string) => {
-      if (delta) deltas.push(delta);
+      if (!delta || sawTool) return;
+      deltas.push(delta);
+      input.onToken?.(delta);
+    });
+    stream.on('streamEvent', (event: { type?: string; content_block?: { type?: string } }) => {
+      if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+        sawTool = true;
+      }
     });
     const response = await stream.finalMessage();
     const blocks = response.content;
@@ -280,7 +315,6 @@ function anthropicLookupSession(input: {
         streamed: false,
       };
     }
-    for (const delta of deltas) input.onToken?.(delta);
     return {
       model: response.model,
       text,
@@ -291,45 +325,26 @@ function anthropicLookupSession(input: {
   };
 }
 
-async function geminiLookupTurn(input: {
-  apiKey: string;
-  system: string;
-  user: string;
-  fetchFn?: typeof fetch;
-  signal?: AbortSignal;
-}): Promise<LookupModelTurn> {
-  const requested = geminiAskModel('reasoning');
-  const posted = await requestGemini({
-    apiKey: input.apiKey,
-    model: requested,
-    mode: 'reasoning',
-    maxTokens: 8192,
-    fetchFn: input.fetchFn,
-    signal: input.signal,
-    body: {
-      system_instruction: { parts: [{ text: input.system }] },
-      contents: [{ role: 'user', parts: [{ text: input.user }] }],
-      tools: [
-        {
-          functionDeclarations: ASK_LOOKUP_TOOLS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.input_schema,
-          })),
-        },
-      ],
+type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } };
+
+function geminiLookupTools() {
+  return [
+    {
+      functionDeclarations: ASK_LOOKUP_TOOLS.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.input_schema,
+      })),
     },
-  });
-  const payload = (await posted.response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } }>;
-      };
-    }>;
-    modelVersion?: string;
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-  };
-  const parts = payload.candidates?.[0]?.content?.parts ?? [];
+  ];
+}
+
+function turnFromGeminiParts(
+  parts: GeminiPart[],
+  model: string,
+  usage: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number },
+  streamed: boolean,
+): LookupModelTurn {
   const calls = parts
     .map((part) => part.functionCall)
     .filter((call): call is { name?: string; args?: Record<string, unknown> } => Boolean(call?.name))
@@ -339,10 +354,11 @@ async function geminiLookupTurn(input: {
     .map((part) => part.text ?? '')
     .join('')
     .trim();
-  const inputTokens = payload.usageMetadata?.promptTokenCount ?? 0;
-  const outputTokens = payload.usageMetadata?.candidatesTokenCount ?? 0;
+  const inputTokens = usage.inputTokens ?? 0;
+  const outputTokens = usage.outputTokens ?? 0;
+  const cacheReadTokens = usage.cacheReadTokens ?? 0;
   return {
-    model: payload.modelVersion || posted.model,
+    model,
     text: calls.length ? '' : text,
     calls,
     usage: {
@@ -350,28 +366,170 @@ async function geminiLookupTurn(input: {
       outputTokens,
       cacheWrite5mTokens: 0,
       cacheWrite1hTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: inputTokens + outputTokens,
+      cacheReadTokens,
+      totalTokens: inputTokens + outputTokens + cacheReadTokens,
     },
-    streamed: false,
+    streamed: streamed && !calls.length,
   };
+}
+
+async function readGeminiLookupStream(
+  response: Response,
+  onToken: ((text: string) => void) | undefined,
+  model: string,
+): Promise<LookupModelTurn> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Gemini Ask stream returned no body');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const parts: GeminiPart[] = [];
+  let streamed = false;
+  let modelVersion = model;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let sawCall = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n');
+    buffer = chunks.pop() ?? '';
+    for (const line of chunks) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const raw = trimmed.slice(5).trim();
+      if (!raw || raw === '[DONE]') continue;
+      let payload: {
+        candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
+        modelVersion?: string;
+      };
+      try {
+        payload = JSON.parse(raw) as typeof payload;
+      } catch {
+        continue;
+      }
+      if (payload.modelVersion) modelVersion = payload.modelVersion;
+      if (payload.usageMetadata?.promptTokenCount != null) inputTokens = payload.usageMetadata.promptTokenCount;
+      if (payload.usageMetadata?.candidatesTokenCount != null) outputTokens = payload.usageMetadata.candidatesTokenCount;
+      if (payload.usageMetadata?.cachedContentTokenCount != null) {
+        cacheReadTokens = payload.usageMetadata.cachedContentTokenCount;
+      }
+      for (const part of payload.candidates?.[0]?.content?.parts ?? []) {
+        parts.push(part);
+        if (part.functionCall?.name) sawCall = true;
+        const delta = part.thought ? '' : (part.text ?? '');
+        if (delta && !sawCall) {
+          streamed = true;
+          onToken?.(delta);
+        }
+      }
+    }
+  }
+  return turnFromGeminiParts(parts, modelVersion || model, { inputTokens, outputTokens, cacheReadTokens }, streamed);
+}
+
+async function geminiLookupTurn(input: {
+  apiKey: string;
+  system: string;
+  stable?: string;
+  user: string;
+  route: AskModelRoute;
+  fetchFn?: typeof fetch;
+  signal?: AbortSignal;
+  onToken?: (text: string) => void;
+  onCache?: (state: 'hit' | 'miss' | 'skip') => void;
+}): Promise<LookupModelTurn> {
+  const fast = input.route === 'fast';
+  const requested = fast ? askFastGeminiModel() : geminiAskModel('reasoning');
+  const tools = geminiLookupTools();
+  const stable = input.stable ?? '';
+  const cacheName = geminiCachedContentName({
+    apiKey: input.apiKey,
+    model: requested,
+    system: input.system,
+    stable,
+    tools,
+    fetchFn: input.fetchFn,
+  });
+  input.onCache?.(cacheName ? 'hit' : stable.trim().length >= 800 ? 'miss' : 'skip');
+  const body = cacheName
+    ? {
+        cachedContent: cacheName,
+        contents: [{ role: 'user', parts: [{ text: input.user }] }],
+      }
+    : {
+        system_instruction: { parts: [{ text: geminiSystemPrefix(input.system, stable) }] },
+        contents: [{ role: 'user', parts: [{ text: input.user }] }],
+        tools,
+      };
+  const posted = await requestGemini({
+    apiKey: input.apiKey,
+    model: requested,
+    mode: fast ? 'interactive' : 'reasoning',
+    maxTokens: fast ? 4096 : 8192,
+    fetchFn: input.fetchFn,
+    signal: input.signal,
+    stream: Boolean(input.onToken),
+    body,
+  });
+  if (input.onToken && posted.response.body) {
+    return readGeminiLookupStream(posted.response, input.onToken, posted.model);
+  }
+  const payload = (await posted.response.json()) as {
+    candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+    modelVersion?: string;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
+  };
+  const parts = payload.candidates?.[0]?.content?.parts ?? [];
+  const turn = turnFromGeminiParts(
+    parts,
+    payload.modelVersion || posted.model,
+    {
+      inputTokens: payload.usageMetadata?.promptTokenCount,
+      outputTokens: payload.usageMetadata?.candidatesTokenCount,
+      cacheReadTokens: payload.usageMetadata?.cachedContentTokenCount,
+    },
+    false,
+  );
+  if (!turn.calls.length && turn.text && input.onToken) {
+    input.onToken(turn.text);
+    turn.streamed = true;
+  }
+  return turn;
 }
 
 export function providerLookupStep(input: {
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
+  /** Fast turns skip thinking. Deep turns keep adaptive thinking, then Gemini. */
+  route?: AskModelRoute;
+  onCache?: (state: 'hit' | 'miss' | 'skip') => void;
 }): LookupModelStep {
+  const route = input.route ?? 'deep';
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
-  let provider: 'anthropic' | 'google' | 'none' = anthropicKey
+  const fastModel = askFastAnthropicModel();
+  const deepModel = askReasoningConfig().anthropicModel;
+  const shaped = route === 'fast' ? null : anthropicReasoningRequest(deepModel);
+  const anthropic =
+    anthropicKey
+      ? anthropicLookupSession({
+          apiKey: anthropicKey,
+          model: route === 'fast' ? fastModel : deepModel,
+          maxTokens: shaped?.max_tokens ?? anthropicFastRequest().max_tokens,
+          thinking: shaped?.thinking,
+          outputConfig: shaped?.output_config,
+          onToken: input.onToken,
+        })
+      : null;
+  let provider: 'anthropic' | 'google' | 'none' = anthropic
     ? 'anthropic'
     : googleVisionApiKey()
       ? 'google'
       : 'none';
-  const anthropic = anthropicKey
-    ? anthropicLookupSession({ apiKey: anthropicKey, onToken: input.onToken })
-    : null;
-  const deadline = Date.now() + askReasoningTimeoutMs();
+  const deadline = Date.now() + (route === 'fast' ? Math.min(askReasoningTimeoutMs(), 18_000) : askReasoningTimeoutMs());
   return async (state) => {
     const left = deadline - Date.now();
     if (left < 1500) return null;
@@ -382,23 +540,35 @@ export function providerLookupStep(input: {
       : `${state.user}\n\nLook up what you need before you answer.`;
     if (provider === 'anthropic' && anthropic) {
       try {
-        return await anthropic({ system: state.system, user: state.user, trace: state.trace, signal });
+        return await anthropic({
+          system: state.system,
+          stable: state.stable,
+          user: state.user,
+          trace: state.trace,
+          signal,
+        });
       } catch (err) {
-        logAskFailure('ask_lookup_anthropic_failed', err);
+        logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_anthropic_failed', err);
+        if (route === 'fast') return null;
         provider = googleVisionApiKey() ? 'google' : 'none';
       }
     }
-    if (provider === 'google') {
+    if (route === 'fast' && provider === 'anthropic') return null;
+    if (provider === 'google' || (route === 'fast' && googleVisionApiKey() && !anthropic)) {
       try {
         return await geminiLookupTurn({
           apiKey: googleVisionApiKey(),
           system: state.system,
+          stable: state.stable,
           user,
+          route,
           fetchFn: input.fetchFn,
           signal,
+          onToken: input.onToken,
+          onCache: input.onCache,
         });
       } catch (err) {
-        logAskFailure('ask_lookup_gemini_failed', err);
+        logAskFailure(route === 'fast' ? 'ask_lookup_fast_failed' : 'ask_lookup_gemini_failed', err);
         provider = 'none';
       }
     }
@@ -419,8 +589,10 @@ export async function answerFromAskLookup(input: {
   onStatus?: (phase: string) => void;
   /** Set when the reader stops the answer. A stopped turn is not stored. */
   signal?: AbortSignal;
-  /** Test double. Production uses the configured Anthropic model, then Gemini. */
+  /** Test double. Production routes by difficulty, then falls back to the deep model. */
   step?: LookupModelStep;
+  /** Filled with model, route, tool durations, and cache reads. No transcript text. */
+  timing?: AskTurnClock | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -432,83 +604,137 @@ export async function answerFromAskLookup(input: {
   const system = LOOKUP_SYSTEM;
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
-  const user = buildLookupUserPrompt({
+  const promptInput = {
     question: input.question,
     resolved,
     catalog: input.catalog,
     history: input.history,
     extra: [memoryBlock, input.extra?.trim()].filter(Boolean).join('\n\n'),
-  });
-  const step = input.step ?? providerLookupStep({
-    anthropicApiKey: input.anthropicApiKey,
-    fetchFn: input.fetchFn,
-    onToken: input.onToken,
-  });
+  };
+  const fullUser = buildLookupUserPrompt(promptInput);
+  const parts = splitLookupPrompt(promptInput);
+  const onToken = (text: string) => {
+    if (text) input.timing?.markFirstToken();
+    input.onToken?.(text);
+  };
   const trace: AskLookupTraceStep[] = [];
   let model: string | null = null;
   let usage: MeasuredUsage | null = null;
   let prose = '';
   let streamed = false;
   const stopped = () => input.signal?.aborted === true;
-  const runCall = (call: { name: string; input: Record<string, unknown> }) => {
-    if (stopped()) return;
-    input.onStatus?.(askLookupStatus(call.name));
-    trace.push({
-      tool: call.name,
-      input: call.input,
-      result: executeAskLookup(call.name, call.input, input.catalog),
+  const runCalls = (calls: Array<{ name: string; input: Record<string, unknown> }>) => {
+    if (stopped() || !calls.length) return;
+    const batch = calls.slice(0, 6);
+    input.onStatus?.(askLookupStatus(batch[0]!.name));
+    const rows = batch.map((call) => {
+      const started = performance.now();
+      const result = executeAskLookup(call.name, call.input, input.catalog);
+      input.timing?.addTool(call.name, performance.now() - started);
+      return { tool: call.name, input: call.input, result };
     });
+    trace.push(...rows);
   };
   input.onStatus?.('Looking through clips…');
   let forcedOther = false;
-  for (let i = 0; i < 6 && !stopped(); i += 1) {
-    const turn = await step({ system, user, trace });
-    if (!turn || stopped()) break;
-    model = turn.model || model;
-    if (turn.usage) usage = turn.usage;
-    if (turn.calls.length) {
-      streamed = false;
-      for (const call of turn.calls.slice(0, 6)) runCall(call);
-      continue;
+  const consume = async (active: LookupModelStep, userText: string, limit: number) => {
+    for (let i = 0; i < limit && !stopped(); i += 1) {
+      const turn = await active({ system, stable: parts.stable, user: userText, trace });
+      if (!turn || stopped()) break;
+      model = turn.model || model;
+      input.timing?.noteModel(model);
+      if (turn.usage) {
+        usage = turn.usage;
+        input.timing?.addCacheRead(turn.usage.cacheReadTokens);
+      }
+      if (turn.calls.length) {
+        streamed = false;
+        runCalls(turn.calls);
+        continue;
+      }
+      if (
+        !forcedOther &&
+        asksAboutOtherJobs(resolved) &&
+        !trace.some((row) => row.tool === 'search_other_jobs')
+      ) {
+        forcedOther = true;
+        streamed = false;
+        runCalls(continueAskLookup(resolved, input.catalog, trace));
+        continue;
+      }
+      prose = turn.text;
+      streamed = Boolean(turn.streamed);
+      break;
     }
-    if (
-      !forcedOther &&
-      asksAboutOtherJobs(resolved) &&
-      !trace.some((row) => row.tool === 'search_other_jobs')
-    ) {
-      forcedOther = true;
-      streamed = false;
-      for (const call of continueAskLookup(resolved, input.catalog, trace)) runCall(call);
-      continue;
+  };
+
+  if (input.step) {
+    input.timing?.noteRoute('deep', 'provided_step');
+    await consume(input.step, fullUser, 6);
+  } else {
+    const decision = routeAskQuestion({
+      question: input.question,
+      resolved,
+      history: input.history,
+      catalog: input.catalog,
+    });
+    input.timing?.noteRoute(decision.route, decision.reason);
+    if (input.timing) {
+      input.timing.promptCache = Boolean((input.anthropicApiKey ?? anthropicAskApiKey()).trim());
     }
-    prose = turn.text;
-    streamed = Boolean(turn.streamed);
-    break;
+    const stepFor = (route: AskModelRoute) =>
+      providerLookupStep({
+        route,
+        anthropicApiKey: input.anthropicApiKey,
+        fetchFn: input.fetchFn,
+        onToken,
+        onCache: (state) => input.timing?.noteGeminiCache(state),
+      });
+    if (decision.route === 'fast') {
+      await consume(stepFor('fast'), parts.volatile, 3);
+      const traceHasHit = trace.some(
+        (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
+      );
+      if (!stopped() && fastAnswerNeedsDeepFallback(resolved, prose, traceHasHit)) {
+        input.timing?.noteRoute('deep', decision.reason, true);
+        prose = '';
+        streamed = false;
+        input.onStatus?.('Looking through clips…');
+        const deepUser = trace.length
+          ? `${parts.volatile}\n\nTool results so far:\n${formatTrace(trace)}\n\nAnswer from these results. Use another tool only if a fact is still missing.`
+          : parts.volatile;
+        await consume(stepFor('deep'), deepUser, 4);
+      }
+    } else {
+      await consume(stepFor('deep'), parts.volatile, 6);
+    }
   }
 
   if (!prose && !stopped()) {
     if (!trace.length) {
-      for (const call of planAskLookup(resolved, input.catalog, input.history)) runCall(call);
+      runCalls(planAskLookup(resolved, input.catalog, input.history));
     }
     for (let round = 0; round < 2 && !stopped(); round += 1) {
       const more = continueAskLookup(resolved, input.catalog, trace);
       if (!more.length) break;
-      for (const call of more) runCall(call);
+      runCalls(more);
     }
     const completed = stopped()
       ? null
       : await completeAskText({
       system,
-      user: `${user}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
+      user: `${fullUser}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
       mode: 'reasoning',
-      onToken: input.onToken,
+      onToken,
     });
     if (completed?.text) {
       prose = completed.text;
       model = completed.model;
+      input.timing?.noteModel(model);
       usage = completed.usage;
+      if (completed.usage) input.timing?.addCacheRead(completed.usage.cacheReadTokens);
       streamed = true;
     } else {
       prose = composeGroundedAsk(resolved, trace, input.catalog, input.history, input.memory);
@@ -530,7 +756,7 @@ export async function answerFromAskLookup(input: {
 
   const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);
   const answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
-  if (!streamed) input.onToken?.(answer);
+  if (!streamed) onToken(answer);
   return {
     answer,
     model,

@@ -23,7 +23,7 @@ import {
 } from './anthropic.js';
 import { googleVisionApiKey } from './visionProvider.js';
 import { logger } from './logger.js';
-import { resolveAnthropicModel } from './anthropicModel.js';
+import { isRetiredAnthropicModel, resolveAnthropicModel } from './anthropicModel.js';
 
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
@@ -194,6 +194,30 @@ export function anthropicReasoningRequest(model: string): {
   };
 }
 
+/**
+ * Sonnet-class model for simple Ask turns. Same Anthropic key as Opus.
+ * Override with ASK_FAST_ANTHROPIC_MODEL (a Haiku id is fine when that key serves it).
+ */
+export const ASK_FAST_ANTHROPIC_DEFAULT = 'claude-sonnet-5';
+
+export function askFastAnthropicModel(): string {
+  const configured = (process.env.ASK_FAST_ANTHROPIC_MODEL ?? '').trim();
+  if (!configured || isRetiredAnthropicModel(configured)) return ASK_FAST_ANTHROPIC_DEFAULT;
+  return configured;
+}
+
+/** Gemini Flash for a fast Ask turn when Anthropic is unset. */
+export function askFastGeminiModel(): string {
+  return (process.env.ASK_FAST_MODEL ?? process.env.GOOGLE_MODEL_FAST ?? 'gemini-2.5-flash').trim();
+}
+
+/** Fast Ask turns do not spend the output budget on thinking. */
+export const ANTHROPIC_FAST_MAX_TOKENS = 4096;
+
+export function anthropicFastRequest(): { max_tokens: number } {
+  return { max_tokens: ANTHROPIC_FAST_MAX_TOKENS };
+}
+
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */
 export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string {
   if (mode === 'analysis' || mode === 'reasoning') {
@@ -342,8 +366,10 @@ async function completeWithAnthropic(input: {
   onToken?: (text: string) => void;
   reasoning?: boolean;
   signal?: AbortSignal;
+  model?: string;
 }): Promise<AskModelResult> {
-  const shaped = input.reasoning ? anthropicReasoningRequest(anthropicAskModel()) : null;
+  const model = (input.model ?? '').trim() || anthropicAskModel();
+  const shaped = input.reasoning ? anthropicReasoningRequest(model) : null;
   const maxTokens = shaped?.max_tokens ?? input.maxTokens;
   const extra = shaped
     ? {
@@ -354,7 +380,7 @@ async function completeWithAnthropic(input: {
   if (input.onToken) {
     const stream = anthropicClientForKey(input.apiKey).messages.stream(
       {
-        model: anthropicAskModel(),
+        model,
         max_tokens: maxTokens,
         system: input.system,
         messages: [{ role: 'user', content: input.user }],
@@ -381,7 +407,7 @@ async function completeWithAnthropic(input: {
 
   const response = await anthropicClientForKey(input.apiKey).messages.create(
     {
-      model: anthropicAskModel(),
+      model,
       max_tokens: maxTokens,
       system: input.system,
       messages: [{ role: 'user', content: input.user }],
@@ -603,6 +629,8 @@ export async function completeAskText(input: {
   mode?: AskCompletionMode;
   onToken?: (text: string) => void;
   signal?: AbortSignal;
+  /** Overrides ANTHROPIC_MODEL for this call. Titles use the fast model. */
+  anthropicModel?: string | null;
 }): Promise<AskModelResult | null> {
   const mode = input.mode ?? 'interactive';
   const reasoning = mode === 'reasoning';
@@ -626,6 +654,7 @@ export async function completeAskText(input: {
         onToken: input.onToken,
         reasoning,
         signal: signalFor(),
+        model: input.anthropicModel ?? undefined,
       });
     } catch (err) {
       logAskFailure('ask_anthropic_failed', err);

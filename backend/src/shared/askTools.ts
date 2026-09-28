@@ -402,6 +402,19 @@ async function loadAccessRoster(ctx: AskToolContext): Promise<JobAccessPerson[]>
   });
 }
 
+const ASK_MUTATING_TOOLS = new Set<AskToolName>(['update_job_fields', 'propose_revoke_access']);
+
+/** Writes run first, one at a time. Reads in one turn run together. */
+export function partitionAskTools(names: AskToolName[]): { sequential: AskToolName[]; parallel: AskToolName[] } {
+  const sequential: AskToolName[] = [];
+  const parallel: AskToolName[] = [];
+  for (const name of names) {
+    if (ASK_MUTATING_TOOLS.has(name)) sequential.push(name);
+    else parallel.push(name);
+  }
+  return { sequential, parallel };
+}
+
 export async function executeAskTool(
   name: string,
   rawInput: Record<string, unknown> | undefined,
