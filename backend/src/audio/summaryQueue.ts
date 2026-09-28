@@ -62,10 +62,20 @@ export async function refreshProofSummary(admin: any, proofId: string, deps?: Su
   const live = transcriptSha256(data?.transcript_text ?? null);
   if (!data || data.summary_transcript_sha256 !== live) throw new TranscriptMovedError();
 
-  await admin
+  // Compare-and-set on the status this rebuild set. A transcript write in the
+  // window after the read above sets stale (then queued) in the same update as
+  // the new text; the hash column is left behind, so matching it would not
+  // notice. Stamping done over that row hides it from the sweep, which never
+  // lists done. A miss throws so this in-flight job retries the newer text —
+  // the enqueue for it was dropped while this key was still running.
+  const { data: stamped, error: stampError } = await admin
     .from('job_proofs')
     .update({ summary_status: 'done', summary_error: null, summary_lease_until: null })
-    .eq('id', proofId);
+    .eq('id', proofId)
+    .eq('summary_status', 'running')
+    .select('id')
+    .maybeSingle();
+  if (stampError || !stamped?.id) throw new TranscriptMovedError();
 }
 
 async function adminForProof(proofId: string) {
@@ -98,10 +108,14 @@ export function createSummaryQueue(opts?: {
       console.warn(`[summary] rebuild gave up proof=${job.proofId} error=${detail.slice(0, 200)}`);
       const admin = await getAdmin(job.proofId);
       if (!admin) return;
+      // Same race as the done write: only fail a row this rebuild still owns.
+      // A newer transcript has already set stale or queued, and the sweep
+      // reclaims those. Overwriting them with failed would strand the clip.
       await admin
         .from('job_proofs')
         .update({ summary_status: 'failed', summary_error: detail, summary_lease_until: null })
-        .eq('id', job.proofId);
+        .eq('id', job.proofId)
+        .eq('summary_status', 'running');
     },
     delaysMs: opts?.delaysMs,
     sleep: opts?.sleep,

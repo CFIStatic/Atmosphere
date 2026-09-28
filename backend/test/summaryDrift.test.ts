@@ -7,7 +7,13 @@ import {
   transcriptSha256,
 } from '../src/audio/summaryFreshness.ts';
 import { summaryClaimContradictions } from '../src/audio/summaryValidation.ts';
-import { refreshProofSummary, queueSummaryRefresh, sweepStaleSummaries, TranscriptMovedError } from '../src/audio/summaryQueue.ts';
+import {
+  createSummaryQueue,
+  refreshProofSummary,
+  queueSummaryRefresh,
+  sweepStaleSummaries,
+  TranscriptMovedError,
+} from '../src/audio/summaryQueue.ts';
 import { backfillStaleSummaries, staleSummaryReason } from '../src/lib/backfillStaleSummaries.ts';
 import { normalizeAnalysisTimeline } from '../src/shared/analysisTimeline.ts';
 
@@ -124,6 +130,13 @@ test('summary state: hash mismatch and pending statuses read as updating', () =>
   assert.equal(summaryStateOf({ ...fresh, summary_transcript_sha256: transcriptSha256('[0:00] old line.') }), 'updating');
   assert.equal(summaryStateOf({ ...fresh, summary_status: 'stale' }), 'updating');
   assert.equal(summaryStateOf({ ...fresh, summary_status: 'queued' }), 'updating');
+  // Quarantine stamps a matching hash (and usually an evidence log) before give-up.
+  assert.equal(summaryStateOf({ ...fresh, summary_status: 'failed' }), 'failed');
+  assert.equal(
+    summaryStateOf({ ...fresh, summary_status: 'failed', ai_findings: { evidenceLog: [{ text: 'kept' }] } }),
+    'failed',
+  );
+  assert.equal(summaryStateOf({ transcript_text: FIVE_LINES, summary_status: 'failed', ai_findings: {} }), 'failed');
   assert.equal(summaryStateOf({ transcript_text: FIVE_LINES, ai_findings: {} }), 'none');
   assert.deepEqual(staleSummaryPatch(), { summary_status: 'stale', summary_error: null });
 });
@@ -147,6 +160,97 @@ test('refreshProofSummary marks done only when the summary read the live transcr
     TranscriptMovedError,
   );
   assert.equal(moved.rows[0]!.summary_status, 'running');
+});
+
+test('refreshProofSummary does not stamp done over a transcript that moved after the hash check', async () => {
+  const row: Record<string, unknown> = {
+    id: 'p3',
+    transcript_text: FIVE_LINES,
+    summary_transcript_sha256: null,
+    summary_status: 'stale',
+  };
+  const admin = fakeAdmin([row]);
+  const realFrom = admin.from;
+  let reads = 0;
+  admin.from = () => {
+    const query = realFrom();
+    const realSelect = query.select;
+    query.select = (...args: unknown[]) => {
+      const selected = realSelect(...args);
+      const realMaybe = selected.maybeSingle.bind(selected);
+      selected.maybeSingle = async () => {
+        const result = await realMaybe();
+        reads += 1;
+        if (reads === 1 && result.data) {
+          const snapshot = { ...result.data };
+          row.summary_status = 'stale';
+          row.transcript_text = `${FIVE_LINES}\n[0:40] a newer line.`;
+          return { ...result, data: snapshot };
+        }
+        return result;
+      };
+      return selected;
+    };
+    return query;
+  };
+
+  await assert.rejects(
+    refreshProofSummary(admin, 'p3', {
+      enrich: async () => {
+        row.summary_transcript_sha256 = transcriptSha256(FIVE_LINES);
+      },
+    }),
+    TranscriptMovedError,
+  );
+  assert.equal(row.summary_status, 'stale');
+  assert.notEqual(row.summary_transcript_sha256, transcriptSha256(String(row.transcript_text)));
+});
+
+async function settle(queue: { pending: number }): Promise<void> {
+  for (let i = 0; i < 50 && queue.pending; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+test('giving up marks failed only while this rebuild still owns the row', async () => {
+  const owned = {
+    id: 'p5',
+    summary_status: 'queued' as string | null,
+    summary_error: null as string | null,
+    summary_lease_until: 'lease' as string | null,
+  };
+  const ownedAdmin = fakeAdmin([owned]);
+  const ownedQueue = createSummaryQueue({
+    getAdmin: async () => ownedAdmin,
+    deps: { enrich: async () => { throw new Error('model down'); } },
+    delaysMs: [],
+    sleep: async () => {},
+  });
+  ownedQueue.enqueue({ key: 'summary:p5', proofId: 'p5' });
+  await settle(ownedQueue);
+  assert.equal(ownedQueue.pending, 0);
+  assert.equal(owned.summary_status, 'failed');
+  assert.equal(owned.summary_error, 'model down');
+  assert.equal(owned.summary_lease_until, null);
+
+  const moved = { id: 'p4', summary_status: 'queued' as string | null, summary_error: null as string | null };
+  const movedAdmin = fakeAdmin([moved]);
+  const movedQueue = createSummaryQueue({
+    getAdmin: async () => movedAdmin,
+    deps: {
+      enrich: async () => {
+        moved.summary_status = 'queued';
+        throw new Error('model down');
+      },
+    },
+    delaysMs: [],
+    sleep: async () => {},
+  });
+  movedQueue.enqueue({ key: 'summary:p4', proofId: 'p4' });
+  await settle(movedQueue);
+  assert.equal(movedQueue.pending, 0);
+  assert.equal(moved.summary_status, 'queued');
+  assert.equal(moved.summary_error, null);
 });
 
 test('queueSummaryRefresh enqueues only where workers run and never throws', async () => {
