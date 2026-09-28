@@ -477,6 +477,55 @@ test('a follow-up uses the prior turn for the person and the date', async () => 
   assert.notEqual(comparison, 'This file does not have that.');
 });
 
+test('a conversation mixes a greeting, a clarification, a job question, an opinion, and a correction', async () => {
+  const turns: Array<{ role: 'user' | 'assistant'; text: string }> = [];
+  const say = async (question: string) => {
+    const result = await askLive(question, turns);
+    turns.push({ role: 'user', text: question });
+    turns.push({ role: 'assistant', text: result.answer });
+    return visible(result.answer);
+  };
+
+  const hello = await say('Hey');
+  assert.match(hello, /Project Tiffany/);
+  assert.match(hello, /El Presidente/);
+  assert.match(hello, /Sep 17/);
+  assert.match(hello, /Sep 21/);
+  assert.doesNotMatch(hello, /Certainly|Great question|This file does not have that/i);
+  assert.ok(hello.length > 80);
+
+  const unclear = await say('What did he say?');
+  assert.match(unclear, /Which day/i);
+  assert.match(unclear, /Sep 17/);
+  assert.match(unclear, /Sep 21/);
+  assert.match(unclear, /\?/);
+  assert.doesNotMatch(unclear, /QuickBooks|Sample the intervals/);
+
+  const sep21 = await say('Sep 21');
+  assert.match(sep21, /Sep 21/);
+  assert.match(sep21, /QuickBooks online/);
+  assert.match(sep21, /love that girl/i);
+  assert.doesNotMatch(sep21, /Sample the intervals/);
+  assert.notEqual(sep21, 'This file does not have that.');
+
+  const opinion = await say('Thanks. What do you think he was getting at?');
+  assert.match(opinion, /Sep 21/);
+  assert.match(opinion, /paper/i);
+  assert.match(opinion, /spreadsheets/i);
+  assert.match(opinion, /QuickBooks/);
+  assert.doesNotMatch(opinion, /^(?:thanks|you(?:'|’)re welcome|certainly|great question)\b/i);
+  assert.doesNotMatch(opinion, /This file does not have that/i);
+
+  const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.');
+  assert.match(correction, /Sep 21/);
+  assert.match(correction, /not Sep 17/);
+  assert.match(correction, /Sample the intervals/);
+  assert.match(correction, /spreadsheets/i);
+  assert.doesNotMatch(correction, /^(?:sorry|you(?:'|’)re right)\b/i);
+  assert.doesNotMatch(correction, /This file does not have that/i);
+  assert.doesNotMatch(correction, /\.\./);
+});
+
 test('a privacy-redacted line is never quoted or chipped', async () => {
   const secret = 'The lockbox code is 4412.';
   const result = await ask('What did El Presidente say on Sep 17?');
