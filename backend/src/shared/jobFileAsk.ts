@@ -533,8 +533,10 @@ export async function answerFromJobFile(input: {
   memory?: LongThreadMemory | null;
   apiKey?: string | null;
   onToken?: (text: string) => void;
-  /** Lookup status while tools run ("Searching transcripts"). */
+  /** Lookup status while tools run ("Looking through clips…"). */
   onStatus?: (phase: string) => void;
+  /** Set when the reader stops the answer. A stopped turn is not stored. */
+  signal?: AbortSignal;
   /** Optional fetch override for tests. */
   fetchFn?: typeof fetch;
   /**
@@ -700,6 +702,7 @@ export async function answerFromJobFile(input: {
       fetchFn: input.fetchFn,
       onToken: input.onToken,
       onStatus: input.onStatus,
+      signal: input.signal,
     });
     let answer = normalizeAskProse(looked.answer);
     answer = normalizeAskWebCitations(answer, webHits, {

@@ -20,8 +20,10 @@ import {
 import { googleVisionApiKey } from '../lib/visionProvider.js';
 import {
   ASK_LOOKUP_TOOLS,
+  asksAboutOtherJobs,
   buildLookupUserPrompt,
   collectMomentSourceIds,
+  continueAskLookup,
   executeAskLookup,
   followUpAnswerable,
   planAskLookup,
@@ -71,7 +73,10 @@ Rules:
 10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
 11. On a tool-call turn, do not write the answer yet.
 12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user says an answer was wrong, check the file and either correct yourself or quote the line that supports the earlier answer. Answer first. No canned filler. Never stop at one line that only says the file does not have it.
-13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.`;
+13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.
+14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
+15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Say what you checked when it helps them trust the answer.
+16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that and draft only from recorded visits. Say exactly what is on the file and what is missing, then offer one next step.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -90,16 +95,15 @@ export type LookupModelStep = (input: {
 
 export function askLookupStatus(tool: string): string {
   switch (tool) {
-    case 'search_transcripts':
-      return 'Searching transcripts';
-    case 'get_clip':
-      return 'Reading a clip';
-    case 'list_person_activity':
-      return 'Checking who did what';
     case 'read_job_history':
-      return 'Reading job history';
+      return 'Reading the job history…';
+    case 'search_transcripts':
+    case 'search_other_jobs':
+    case 'get_clip':
+    case 'list_person_activity':
+      return 'Looking through clips…';
     default:
-      return 'Looking through the file';
+      return 'Looking through clips…';
   }
 }
 
@@ -408,6 +412,8 @@ export async function answerFromAskLookup(input: {
   fetchFn?: typeof fetch;
   onToken?: (text: string) => void;
   onStatus?: (phase: string) => void;
+  /** Set when the reader stops the answer. A stopped turn is not stored. */
+  signal?: AbortSignal;
   /** Test double. Production uses the configured Anthropic model, then Gemini. */
   step?: LookupModelStep;
 }): Promise<{
@@ -438,22 +444,36 @@ export async function answerFromAskLookup(input: {
   let usage: MeasuredUsage | null = null;
   let prose = '';
   let streamed = false;
-  input.onStatus?.('thinking');
-  for (let i = 0; i < 4; i += 1) {
+  const stopped = () => input.signal?.aborted === true;
+  const runCall = (call: { name: string; input: Record<string, unknown> }) => {
+    if (stopped()) return;
+    input.onStatus?.(askLookupStatus(call.name));
+    trace.push({
+      tool: call.name,
+      input: call.input,
+      result: executeAskLookup(call.name, call.input, input.catalog),
+    });
+  };
+  input.onStatus?.('Looking through clips…');
+  let forcedOther = false;
+  for (let i = 0; i < 6 && !stopped(); i += 1) {
     const turn = await step({ system, user, trace });
-    if (!turn) break;
+    if (!turn || stopped()) break;
     model = turn.model || model;
     if (turn.usage) usage = turn.usage;
     if (turn.calls.length) {
       streamed = false;
-      for (const call of turn.calls.slice(0, 6)) {
-        input.onStatus?.(askLookupStatus(call.name));
-        trace.push({
-          tool: call.name,
-          input: call.input,
-          result: executeAskLookup(call.name, call.input, input.catalog),
-        });
-      }
+      for (const call of turn.calls.slice(0, 6)) runCall(call);
+      continue;
+    }
+    if (
+      !forcedOther &&
+      asksAboutOtherJobs(resolved) &&
+      !trace.some((row) => row.tool === 'search_other_jobs')
+    ) {
+      forcedOther = true;
+      streamed = false;
+      for (const call of continueAskLookup(resolved, input.catalog, trace)) runCall(call);
       continue;
     }
     prose = turn.text;
@@ -461,18 +481,18 @@ export async function answerFromAskLookup(input: {
     break;
   }
 
-  if (!prose) {
+  if (!prose && !stopped()) {
     if (!trace.length) {
-      for (const call of planAskLookup(resolved, input.catalog, input.history)) {
-        input.onStatus?.(askLookupStatus(call.name));
-        trace.push({
-          tool: call.name,
-          input: call.input,
-          result: executeAskLookup(call.name, call.input, input.catalog),
-        });
-      }
+      for (const call of planAskLookup(resolved, input.catalog, input.history)) runCall(call);
     }
-    const completed = await completeAskText({
+    for (let round = 0; round < 2 && !stopped(); round += 1) {
+      const more = continueAskLookup(resolved, input.catalog, trace);
+      if (!more.length) break;
+      for (const call of more) runCall(call);
+    }
+    const completed = stopped()
+      ? null
+      : await completeAskText({
       system,
       user: `${user}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
       anthropicApiKey: input.anthropicApiKey,
@@ -490,6 +510,17 @@ export async function answerFromAskLookup(input: {
       model = null;
       streamed = false;
     }
+  }
+
+  if (stopped()) {
+    return {
+      answer: scrubStoredAskText(prose, input.catalog.clips),
+      model,
+      usage,
+      trace,
+      followUps: [],
+      answeredFromLookup: true,
+    };
   }
 
   const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);

@@ -354,6 +354,16 @@ function AskAnswerBody({
   );
 }
 
+function copyableAskText(text: string): string {
+  const extracted = extractAskSources(text);
+  const { prose, artifact } = splitAskArtifact(extracted.body);
+  return [prose.trim(), artifact?.trim()].filter(Boolean).join('\n\n');
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
 function SendIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -364,6 +374,14 @@ function SendIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
     </svg>
   );
 }
@@ -427,9 +445,14 @@ export function JobAskPanel({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
+  const [inFlight, setInFlight] = useState(false);
   const [askStatus, setAskStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
   const activeThreadIdRef = useRef<string | null>(null);
@@ -646,17 +669,25 @@ export function JobAskPanel({
 
   async function ask(textRaw: string) {
     const raw = textRaw.trim();
-    if (!raw || asking) return;
+    if (!raw || inFlightRef.current) return;
+    inFlightRef.current = true;
     const members = raw.includes('@') ? await loadOrgMentions(jobId) : [];
     const text = expandMentionTokens(raw, members);
-    if (!text || asking) return;
+    if (!text) {
+      inFlightRef.current = false;
+      return;
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setInFlight(true);
     setAsking(true);
-    setAskStatus('Reading the file');
+    setAskStatus('Looking through clips…');
     setDraft('');
     setError(null);
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
     const streamId = `${pendingId}-a`;
+    setStreamingId(streamId);
     setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
     let sawFirstToken = false;
     try {
@@ -702,13 +733,15 @@ export function JobAskPanel({
                 });
               },
             },
-            threadOpts,
+            { ...threadOpts, signal: controller.signal },
           );
-        } catch {
+        } catch (err) {
+          if (controller.signal.aborted || isAbortError(err)) throw err;
           // Stream unavailable — fall back to the classic JSON Ask.
           res = await api.askAboutProofs(jobId, text, threadOpts);
         }
       }
+      if (controller.signal.aborted) return;
       if (res.threadId && res.threadId !== activeThreadIdRef.current) {
         setActiveThreadId(res.threadId);
       }
@@ -744,12 +777,32 @@ export function JobAskPanel({
       });
       if (target) seek(target);
     } catch (err) {
+      if (controller.signal.aborted || isAbortError(err)) return;
       setTurns((prev) => prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId));
       setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      inFlightRef.current = false;
+      setStreamingId(null);
+      setInFlight(false);
       setAsking(false);
       setAskStatus(null);
       inputRef.current?.focus();
+    }
+  }
+
+  function stopAsk() {
+    abortRef.current?.abort();
+  }
+
+  function retryTurn(turnId: string) {
+    const index = turns.findIndex((turn) => turn.id === turnId);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const prior = turns[i];
+      if (prior?.role === 'user' && prior.content.trim()) {
+        void ask(prior.content);
+        return;
+      }
     }
   }
 
@@ -810,7 +863,12 @@ export function JobAskPanel({
           </div>
         ) : (
           <ul className="space-y-4">
-            {turns.map((turn) => (
+            {turns.map((turn) => {
+              const lastAssistantId = [...turns]
+                .reverse()
+                .find((row) => row.role === 'assistant' && row.id !== streamingId)?.id;
+              const showActions = turn.role === 'assistant' && turn.id !== streamingId && turn.content.trim();
+              return (
               <li
                 key={turn.id}
                 className={turn.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2.5'}
@@ -850,9 +908,36 @@ export function JobAskPanel({
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
+                  {showActions ? (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        data-testid="ask-message-copy"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(copyableAskText(turn.content)).then(() => {
+                            setCopiedTurnId(turn.id);
+                          });
+                        }}
+                        className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+                      >
+                        {copiedTurnId === turn.id ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="ask-retry"
+                        aria-label={turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
+                        disabled={inFlight}
+                        onClick={() => retryTurn(turn.id)}
+                        className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900 disabled:opacity-35"
+                      >
+                        {turn.id === lastAssistantId ? 'Regenerate' : 'Retry'}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </li>
-            ))}
+              );
+            })}
             {asking && (
               <li className="flex items-start gap-2.5" data-testid="ask-status">
                 <TypingDots />
@@ -878,14 +963,26 @@ export function JobAskPanel({
             disabled={asking}
             className="min-h-[2.5rem] w-full resize-none rounded-xl border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
           />
-          <button
-            type="submit"
-            disabled={asking || !draft.trim()}
-            aria-label="Ask this job"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-white transition hover:bg-brand-500 disabled:opacity-35"
-          >
-            <SendIcon />
-          </button>
+          {inFlight ? (
+            <button
+              type="button"
+              data-testid="ask-stop"
+              aria-label="Stop"
+              onClick={stopAsk}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-900 text-white transition hover:bg-ink-800"
+            >
+              <StopIcon />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!draft.trim()}
+              aria-label="Ask this job"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-white transition hover:bg-brand-500 disabled:opacity-35"
+            >
+              <SendIcon />
+            </button>
+          )}
         </form>
       </div>
     </section>

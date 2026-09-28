@@ -10,7 +10,9 @@ import {
   scrubProviderDetail,
 } from '../src/lib/askModel.js';
 import {
+  asksAboutOtherJobs,
   buildLookupUserPrompt,
+  continueAskLookup,
   executeAskLookup,
   groundedLookupProse,
   lookupPeopleFromContexts,
@@ -21,7 +23,7 @@ import {
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
-import { composeJobOverview } from '../src/shared/askPolish.js';
+import { classifyAskIntent, composeJobOverview } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -822,5 +824,100 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  }
+});
+
+test('other jobs are searched only by search_other_jobs, and a viewer cannot', () => {
+  const elsewhere = clip({
+    proofId: 'other-proof',
+    jobId: OTHER_JOB,
+    jobTitle: 'Riverside roof',
+    title: 'North slope',
+    segments: [{ start: 2, end: 4, text: 'The tarp came off the north slope again.' }],
+  });
+  const foreign = clip({
+    proofId: 'foreign-proof',
+    orgId: OTHER_ORG,
+    jobId: 'foreign-job',
+    jobTitle: 'Foreign',
+    title: 'Foreign tarp',
+    segments: [{ start: 1, end: 2, text: 'The tarp came off somewhere else.' }],
+  });
+  const file = catalog({ clips: [office], orgClips: [elsewhere, foreign] });
+  const open = executeAskLookup('search_transcripts', { query: 'tarp' }, file);
+  assert.equal(((open.data as { hits: unknown[] }).hits).length, 1);
+  assert.equal(((open.data as { hits: Array<{ proofId: string }> }).hits)[0]?.proofId, OFFICE);
+
+  const other = executeAskLookup('search_other_jobs', { query: 'tarp on other jobs' }, file);
+  const hits = (other.data as { hits: Array<{ proofId: string; jobId: string }> }).hits;
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.proofId, 'other-proof');
+  assert.equal(hits[0]?.jobId, OTHER_JOB);
+  assert.doesNotMatch(JSON.stringify(other.data), /somewhere else/);
+
+  const opened = executeAskLookup('get_clip', { proofId: 'other-proof' }, file);
+  assert.equal(opened.ok, true);
+  assert.match(opened.summary, /Riverside roof/);
+
+  const viewerCatalog = catalog({ access: 'viewer', clips: [office], orgClips: [elsewhere] });
+  const viewer = executeAskLookup('search_other_jobs', { query: 'tarp' }, viewerCatalog);
+  assert.equal(viewer.ok, false);
+  assert.match(viewer.summary, /open job/);
+  assert.equal(executeAskLookup('get_clip', { proofId: 'other-proof' }, viewerCatalog).ok, false);
+});
+
+test('continueAskLookup opens a search hit and searches other jobs only when asked', () => {
+  const file = catalog({
+    clips: [office],
+    orgClips: [
+      clip({
+        proofId: 'other-proof',
+        jobId: OTHER_JOB,
+        title: 'North slope',
+        segments: [{ start: 2, end: 3, text: 'The tarp came off again.' }],
+      }),
+    ],
+  });
+  const searched = executeAskLookup('search_transcripts', { query: 'tarp' }, file);
+  const trace = [{ tool: 'search_transcripts', input: { query: 'tarp' }, result: searched }];
+  const next = continueAskLookup('what did he say about the tarp', file, trace);
+  assert.ok(next.some((step) => step.name === 'get_clip' && step.input.proofId === OFFICE));
+  assert.equal(next.some((step) => step.name === 'search_other_jobs'), false);
+
+  const asked = continueAskLookup('have we seen a tarp on other jobs', file, trace);
+  assert.ok(asked.some((step) => step.name === 'search_other_jobs'));
+  assert.equal(asksAboutOtherJobs('what did El Presidente say about the tarp'), false);
+  assert.equal(asksAboutOtherJobs('have we seen a tarp on other jobs'), true);
+});
+
+test('an email and an estimate do not invent a price or quote a redacted code', async () => {
+  const email = classifyAskIntent('draft an email to the homeowner');
+  const summary = classifyAskIntent('write a homeowner summary');
+  const estimate = classifyAskIntent('draft an estimate');
+  assert.equal(email.kind, 'task');
+  assert.equal(email.kind === 'task' && email.task, 'email');
+  assert.equal(summary.kind === 'task' && summary.task, 'summary');
+  assert.equal(estimate.kind === 'task' && estimate.task, 'estimate');
+  const prev = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const file = catalog({
+      clips: [office],
+      jobTitle: 'Project Tiffany & Co.',
+      clientName: 'Tiffany & Co.',
+      timeZone: 'America/Chicago',
+    });
+    for (const question of ['draft an email to the homeowner', 'draft an estimate']) {
+      const result = await answerFromAskLookup({ question, catalog: file, step: async () => null });
+      assert.match(result.answer, /⟦artifact⟧/);
+      assert.doesNotMatch(result.answer, /4412/);
+      assert.doesNotMatch(result.answer, /\$\d/);
+      assert.match(result.answer, question.includes('estimate') ? /no prices/i : /draft you can send/i);
+    }
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev;
   }
 });

@@ -91,6 +91,11 @@ export type AskLookupCatalog = {
   jobId: string | null;
   access: AskLookupAccess;
   clips: AskLookupClip[];
+  /**
+   * Other jobs in this organization. Loaded only when the user asks, and never
+   * searched by the open-job tools. Viewers do not receive these.
+   */
+  orgClips?: AskLookupClip[] | null;
   history?: AskLookupHistoryEvent[] | null;
   people?: AskLookupPerson[] | null;
   jobTitle?: string | null;
@@ -105,6 +110,7 @@ export type AskLookupCatalog = {
 
 export type AskLookupToolName =
   | 'search_transcripts'
+  | 'search_other_jobs'
   | 'get_clip'
   | 'list_person_activity'
   | 'read_job_history';
@@ -137,6 +143,18 @@ export const ASK_LOOKUP_TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Words to find in what was said.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'search_other_jobs',
+    description:
+      'Search redacted transcripts on other jobs in this organization. Use only when the user asks about other jobs, other files, or whether something was seen elsewhere. Does not search the open job and does not return another organization. Then call get_clip on a hit before you quote it.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Words to find on other jobs in this organization.' },
       },
       required: ['query'],
     },
@@ -177,6 +195,7 @@ const TASK_QUERY = new Set([
   'write', 'draft', 'summary', 'summarize', 'homeowner', 'client', 'customer', 'scope', 'note',
   'punch', 'punchlist', 'issues', 'issue', 'compare', 'visits', 'visit', 'prepare', 'compose',
   'list', 'open', 'make', 'two', 'both', 'three', 'these', 'those', 'each', 'between',
+  'email', 'estimate', 'price', 'prices', 'bid',
 ]);
 
 const STOP = new Set([
@@ -541,6 +560,7 @@ export function askLookupCatalogFromJob(input: {
   jobDescription?: string | null;
   people?: AskLookupPerson[] | null;
   timeZone?: string | null;
+  orgClips?: AskLookupClip[] | null;
 }): AskLookupCatalog {
   const partyById = new Map((input.parties ?? []).map((party) => [String(party.id ?? ''), party.created_by ?? null]));
   return {
@@ -553,6 +573,7 @@ export function askLookupCatalogFromJob(input: {
     jobDescription: trim(input.jobDescription) || null,
     timeZone: input.timeZone ?? null,
     people: input.people ?? [],
+    orgClips: input.orgClips ?? undefined,
     clips: input.proofs
       .filter((row) => !row.deleted_at)
       .map((row) =>
@@ -579,6 +600,29 @@ export function askLookupCatalogFromJob(input: {
 
 export function clipsInScope(catalog: AskLookupCatalog): AskLookupClip[] {
   return catalog.clips.filter((clip) => clipVisible(catalog, clip));
+}
+
+const OTHER_JOB_NOISE = new Set([
+  'other', 'jobs', 'job', 'seen', 'done', 'elsewhere', 'across', 'organization',
+  'company', 'files', 'file', 'have', 'rest', 'this', 'that',
+]);
+
+/** True when the user asked to look past the open job. Office only. */
+export function asksAboutOtherJobs(question: string): boolean {
+  return /\b(other jobs?|another job|across (?:the |our )?(?:org|organization|company)|elsewhere|rest of (?:the )?(?:org|jobs)|have we (?:seen|done)|on other files)\b/i.test(
+    question,
+  );
+}
+
+function orgClipsVisible(catalog: AskLookupCatalog): AskLookupClip[] {
+  if (catalog.access === 'viewer') return [];
+  return (catalog.orgClips ?? []).filter(
+    (clip) => clip.orgId === catalog.orgId && Boolean(clip.jobId) && clip.jobId !== catalog.jobId,
+  );
+}
+
+function otherJobNeedles(query: string): string[] {
+  return tokens(query).filter((word) => !OTHER_JOB_NOISE.has(word) && word.length > 3);
 }
 
 function historyInScope(catalog: AskLookupCatalog): AskLookupHistoryEvent[] {
@@ -732,9 +776,72 @@ export function searchTranscripts(catalog: AskLookupCatalog, query: string): Ask
   };
 }
 
+export function searchOtherJobs(catalog: AskLookupCatalog, query: string): AskLookupResult {
+  if (catalog.access === 'viewer') {
+    return { ok: false, tool: 'search_other_jobs', summary: 'This share can only read the open job.' };
+  }
+  const needle = trim(query).slice(0, 300);
+  const pool = orgClipsVisible(catalog);
+  if (!pool.length) {
+    return {
+      ok: true,
+      tool: 'search_other_jobs',
+      summary: 'No other jobs in this organization are loaded.',
+      data: { query: needle, hits: [] },
+    };
+  }
+  const needles = otherJobNeedles(needle);
+  const hits: Array<Record<string, unknown>> = [];
+  for (const clip of pool) {
+    const transcript = redactClipTranscriptForAsk(clip);
+    const summary = redactedClipSummary(clip);
+    const lines = redactedLines(transcript).filter((line) => {
+      if (!line.text || isRedactedSpeech(line.text) || line.text.endsWith(PRIVACY_REDACTED_LABEL)) return false;
+      if (needle && lineMatches(needle, line.text)) return true;
+      const hay = line.text.toLowerCase();
+      return needles.some((word) => hay.includes(word));
+    });
+    const blob = `${clip.title}\n${summary}`.toLowerCase();
+    const titleHit = needles.some((word) => blob.includes(word));
+    const rows = lines.length
+      ? lines
+      : titleHit
+        ? [{ atSeconds: null, text: summary || clip.title, speaker: null }]
+        : [];
+    for (const line of rows) {
+      if (!line.text || isRedactedSpeech(line.text)) continue;
+      const speaker = speakerFor(clip, line);
+      const atSeconds = preciseMoment(clip, line.atSeconds);
+      hits.push({
+        proofId: clip.proofId,
+        jobId: clip.jobId,
+        jobTitle: clip.jobTitle ?? null,
+        title: clip.title,
+        workDate: clip.workDate ?? null,
+        atSeconds,
+        speaker,
+        excerpt: excerpt(line.text.replace(/^[^:]{1,40}:\s+/, '')),
+        cite: citeFor(clip, atSeconds),
+      });
+      if (hits.length >= 8) break;
+    }
+    if (hits.length >= 8) break;
+  }
+  return {
+    ok: true,
+    tool: 'search_other_jobs',
+    summary: hits.length
+      ? `Found ${hits.length} moment(s) on other jobs in this organization.`
+      : 'Nothing on the other jobs in this organization matches that.',
+    data: { query: needle, hits },
+  };
+}
+
 export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupResult {
   const id = trim(proofId);
-  const clip = clipsInScope(catalog).find((row) => row.proofId === id);
+  const inScope = clipsInScope(catalog).find((row) => row.proofId === id);
+  const elsewhere = !inScope ? orgClipsVisible(catalog).find((row) => row.proofId === id) : null;
+  const clip = inScope ?? elsewhere ?? null;
   if (!clip) {
     return {
       ok: false,
@@ -748,10 +855,11 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
   const findings = findingsText(clip.findings, clip);
   const moments = clipMoments(clip);
   const atSeconds = representativeAt(clip);
+  const where = elsewhere ? ` from ${trim(clip.jobTitle) || 'another job'}` : '';
   return {
     ok: true,
     tool: 'get_clip',
-    summary: `Loaded ${clip.title}.`,
+    summary: `Loaded ${clip.title}${where}.`,
     data: {
       proofId: clip.proofId,
       jobId: clip.jobId,
@@ -882,6 +990,8 @@ export function executeAskLookup(
   switch (name as AskLookupToolName) {
     case 'search_transcripts':
       return searchTranscripts(catalog, trim(input.query) || trim(input.q));
+    case 'search_other_jobs':
+      return searchOtherJobs(catalog, trim(input.query) || trim(input.q));
     case 'get_clip':
       return getClip(catalog, trim(input.proofId) || trim(input.id));
     case 'list_person_activity':
@@ -1009,10 +1119,13 @@ export function buildLookupUserPrompt(input: {
       return `${who}: ${text}`;
     })
     .join('\n');
-  const scope = input.catalog.jobId
-    ? `Open job ${input.catalog.jobId}. Do not ask for other jobs.`
-    : 'Org-wide office Ask. Stay inside this organization.';
   const resolved = trim(input.resolved);
+  const askedElsewhere = asksAboutOtherJobs(input.question) || asksAboutOtherJobs(resolved);
+  const scope = input.catalog.jobId
+    ? askedElsewhere
+      ? `Open job ${input.catalog.jobId}. The user asked about other jobs in this organization. Call search_other_jobs, then get_clip on those clips. Do not invent other jobs.`
+      : `Open job ${input.catalog.jobId}. Do not search other jobs unless the user asks.`
+    : 'Org-wide office Ask. Stay inside this organization.';
   const follow =
     resolved && resolved.toLowerCase() !== input.question.trim().toLowerCase()
       ? `This follow-up refers to: ${resolved}`
@@ -1094,6 +1207,53 @@ export function planAskLookup(
     }
   }
   return dedupePlan(steps);
+}
+
+function resultHits(result: AskLookupResult): Array<Record<string, unknown>> {
+  const data = result.data;
+  if (!data || typeof data !== 'object') return [];
+  const hits = (data as { hits?: unknown }).hits;
+  if (!Array.isArray(hits)) return [];
+  return hits.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object');
+}
+
+/**
+ * The next lookups a plan still owes: open search hits that were not read,
+ * and search other jobs when the user asked and that tool has not run.
+ * This does not cap an overview plan. Call it again after the new steps run.
+ */
+export function continueAskLookup(
+  question: string,
+  catalog: AskLookupCatalog,
+  trace: AskLookupTraceStep[],
+): Array<{ name: AskLookupToolName; input: Record<string, unknown> }> {
+  const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [];
+  const opened = new Set(
+    trace.filter((step) => step.tool === 'get_clip').map((step) => trim(step.input.proofId)),
+  );
+  const pending: string[] = [];
+  for (const step of trace) {
+    if (step.tool !== 'search_transcripts' && step.tool !== 'search_other_jobs') continue;
+    for (const hit of resultHits(step.result)) {
+      const id = trim(hit.proofId);
+      if (!id || opened.has(id) || pending.includes(id)) continue;
+      pending.push(id);
+    }
+  }
+  for (const proofId of pending.slice(0, 3)) {
+    steps.push({ name: 'get_clip', input: { proofId } });
+  }
+  if (
+    asksAboutOtherJobs(question) &&
+    catalog.access !== 'viewer' &&
+    catalog.jobId &&
+    !trace.some((step) => step.tool === 'search_other_jobs')
+  ) {
+    const words = tokens(question).filter((word) => !OTHER_JOB_NOISE.has(word));
+    const query = (words.length ? words : tokens(question)).slice(0, 6).join(' ') || trim(question).slice(0, 120);
+    steps.push({ name: 'search_other_jobs', input: { query } });
+  }
+  return steps;
 }
 
 export function followUpAnswerable(question: string, catalog: AskLookupCatalog): boolean {
