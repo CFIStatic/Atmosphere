@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 167,
+    "migrationCount": 168,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -181,7 +181,8 @@
     "20260927160000_profile_handles_and_mentions.sql",
     "20260927170000_job_proofs_video_content_types.sql",
     "20260927180000_job_proofs_timed_transcript.sql",
-    "20260927203000_backfill_proof_upload_actor.sql"
+    "20260927203000_backfill_proof_upload_actor.sql",
+    "20260928120000_ask_thread_memory.sql"
   ],
   "migrations": [
     {
@@ -5638,6 +5639,29 @@
       "structurallyVerifiable": false,
       "indistinguishableReason": "intentionally a no-op: the upload-actor backfill was dropped because custody is append-only; creates no durable object",
       "expect": [],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260928120000_ask_thread_memory",
+      "file": "20260928120000_ask_thread_memory.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.ask_job_notes",
+        "index|public.ask_job_notes.ask_job_notes_pkey",
+        "index|public.ask_job_notes.ask_job_notes_owner_note_idx",
+        "index|public.ask_job_notes.ask_job_notes_share_note_idx",
+        "index|public.ask_job_notes.ask_job_notes_thread_idx",
+        "column|public.ask_threads.rolling_summary",
+        "column|public.ask_threads.summary_through_question_id",
+        "column|public.ask_threads.summary_turn_count",
+        "column|public.ask_threads.summarized_at",
+        "policy|public.ask_job_notes.ask_job_notes_select",
+        "policy|public.ask_job_notes.ask_job_notes_insert",
+        "rls|public.ask_job_notes"
+      ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
       "dropsCount": 0

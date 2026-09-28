@@ -113,6 +113,8 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain('id="ask-history-nav"');
     expect(verifierHtml).toContain('data-i18n-chrome="chatHistory"');
     expect(verifierHtml).toContain('data-i18n-chrome="newChat"');
+    expect(verifierHtml).toContain('data-i18n-chrome-aria="newChatHint"');
+    expect(verifierHtml).toContain('Older chats stay in this list.');
     expect(verifierHtml).toContain("d.atmosphere === 'ask-history'");
     expect(verifierHtml).toContain("atmosphere: 'ask-history-action'");
     expect(verifierHtml).toContain('startAskHistoryRename');

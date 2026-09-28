@@ -47,6 +47,7 @@ import {
   wrapTaskArtifact,
 } from './askPolish.js';
 import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
+import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
@@ -69,7 +70,8 @@ Rules:
    ⟦followups: question one? ;; question two?⟧
 10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
 11. On a tool-call turn, do not write the answer yet.
-12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user says an answer was wrong, check the file and either correct yourself or quote the line that supports the earlier answer. Answer first. No canned filler. Never stop at one line that only says the file does not have it.`;
+12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user says an answer was wrong, check the file and either correct yourself or quote the line that supports the earlier answer. Answer first. No canned filler. Never stop at one line that only says the file does not have it.
+13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -399,6 +401,8 @@ export async function answerFromAskLookup(input: {
   question: string;
   catalog: AskLookupCatalog;
   history?: Array<{ role?: string | null; text?: string | null }> | null;
+  /** Rolling summary and durable notes for turns older than the verbatim window. */
+  memory?: LongThreadMemory | null;
   extra?: string | null;
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
@@ -416,12 +420,13 @@ export async function answerFromAskLookup(input: {
 }> {
   const system = LOOKUP_SYSTEM;
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
+  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
   const user = buildLookupUserPrompt({
     question: input.question,
     resolved,
     catalog: input.catalog,
     history: input.history,
-    extra: input.extra,
+    extra: [memoryBlock, input.extra?.trim()].filter(Boolean).join('\n\n'),
   });
   const step = input.step ?? providerLookupStep({
     anthropicApiKey: input.anthropicApiKey,
@@ -481,7 +486,7 @@ export async function answerFromAskLookup(input: {
       usage = completed.usage;
       streamed = true;
     } else {
-      prose = composeGroundedAsk(resolved, trace, input.catalog, input.history);
+      prose = composeGroundedAsk(resolved, trace, input.catalog, input.history, input.memory);
       model = null;
       streamed = false;
     }

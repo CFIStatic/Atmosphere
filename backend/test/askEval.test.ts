@@ -6,6 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { planAskLookup, type AskLookupCatalog, type AskLookupClip } from '../src/shared/askLookup.js';
+import { foldThreadMemory, type StoredAskPair } from '../src/shared/askMemory.js';
+import fs from 'node:fs';
 import { parseFollowupTrailer, parseQuoteTrailer, stripMomentTrailers } from '../src/shared/askMoments.js';
 
 const ORG = '8b2cc105-1eec-4123-90db-fdcbc5565252';
@@ -571,4 +573,58 @@ test('a clip with no transcript is not offered as a follow-up', async () => {
   assert.doesNotMatch(follows, /Sep 22|Silent hallway/i);
   assert.match(follows, /Sep 21/);
   assert.match(follows, /Sep 17/);
+});
+
+test('a thread of 50 turns over a week still recalls an early decision', async () => {
+  const start = Date.parse('2026-09-21T15:00:00.000Z');
+  const pairs: StoredAskPair[] = [
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      question: 'Please keep the homeowner summaries brief. We decided to redo the tabletop in walnut.',
+      answer: 'Noted. Homeowner summaries stay brief, and the tabletop will be redone in walnut.',
+      createdAt: new Date(start).toISOString(),
+    },
+  ];
+  for (let i = 1; i <= 52; i += 1) {
+    pairs.push({
+      id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+      question: `What is on the clip from visit ${i}?`,
+      answer: `Visit ${i} is on the file. Nothing new was decided.`,
+      createdAt: new Date(start + i * 3 * 60 * 60 * 1000).toISOString(),
+    });
+  }
+  assert.ok(pairs.length >= 51);
+  const now = '2026-09-28T16:00:00.000Z';
+  const folded = foldThreadMemory({ pairs, timeZone: 'America/Chicago' });
+  assert.ok(folded.recent.length <= 8);
+  assert.doesNotMatch(folded.recent.map((turn) => turn.text).join('\n'), /walnut/i);
+  assert.match(folded.summary, /walnut/i);
+
+  const result = await answerFromAskLookup({
+    question: 'Last week you said something about the tabletop. What did we decide?',
+    catalog: tiffanyLive,
+    history: folded.recent,
+    memory: { summary: folded.summary, notes: folded.notes, now },
+    step: async () => null,
+  });
+  const said = visible(result.answer);
+  assert.match(said, /Last week you decided to redo the tabletop in walnut/);
+  assert.match(said, /Sep 21/);
+  assert.match(said, /walnut/i);
+  assert.doesNotMatch(said, /QuickBooks|Sample the intervals|This file does not have that/i);
+  assert.equal(result.model, null);
+
+  const excerpt = [
+    `Turns: ${pairs.length} from Sep 21 through Sep 28. Recent verbatim window does not include walnut.`,
+    '',
+    'User (Sep 21): Please keep the homeowner summaries brief. We decided to redo the tabletop in walnut.',
+    '',
+    '…52 later turns…',
+    '',
+    'User (Sep 28): Last week you said something about the tabletop. What did we decide?',
+    '',
+    `Ask: ${said}`,
+  ].join('\n');
+  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
+  fs.writeFileSync('/opt/cursor/artifacts/ask-long-memory-excerpt.txt', excerpt);
 });

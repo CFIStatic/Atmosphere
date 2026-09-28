@@ -11,6 +11,7 @@
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { answerFromAskLookup } from './askReasoning.js';
+import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
@@ -528,6 +529,8 @@ export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
   history?: JobFileAskTurn[];
+  /** Summary of older turns and durable notes. Recent history stays verbatim. */
+  memory?: LongThreadMemory | null;
   apiKey?: string | null;
   onToken?: (text: string) => void;
   /** Lookup status while tools run ("Searching transcripts"). */
@@ -630,13 +633,14 @@ export async function answerFromJobFile(input: {
   if (
     !mentionScoped &&
     !toolsHandled &&
+    !isLongMemoryQuestion(input.question) &&
     preferJobFileGroundedFastPath(input.question, grounded) &&
     !webHits.length
   ) {
     input.onToken?.(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
-  if (!isAskModelConfigured(apiKey || null)) {
+  if (!isAskModelConfigured(apiKey || null) && !(input.lookup && isLongMemoryQuestion(input.question))) {
     const toolOnly = toolResults.filter((r) => r.ok);
     if (toolOnly.length) {
       const prose =
@@ -690,6 +694,7 @@ export async function answerFromJobFile(input: {
       question: input.question,
       catalog: input.lookup,
       history: input.history,
+      memory: input.memory,
       extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,
