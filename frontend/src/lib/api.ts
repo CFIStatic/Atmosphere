@@ -4316,6 +4316,24 @@ export const api = {
       body: JSON.stringify({ reason }),
     }),
 
+  /**
+   * Org evidence library. Pass the open job id as `q` so the response is
+   * limited to that job, then still drop any row whose jobId does not match.
+   * A poster URL is a still, not an opening.
+   */
+  evidenceLibrary: (jobId?: string) =>
+    request<{
+      items: Array<{
+        id: string;
+        jobId?: string | null;
+        posterUrl?: string | null;
+        title?: string | null;
+      }>;
+    }>(
+      `/api/evidence-portal/library${jobId ? `?q=${encodeURIComponent(jobId)}` : ''}`,
+      { method: 'GET' },
+    ),
+
   evidenceShares: (jobId?: string, kind?: 'evidence' | 'progress') =>
     request<{ shares: EvidenceShare[] }>(
       `/api/evidence-portal/shares${jobId || kind ? `?${new URLSearchParams({
