@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setViewerTimeZoneForTests } from '../../lib/viewerTime';
 import { TABLE_CLIP_ID } from './tiffanyJobFixture';
 import { buildJobTimeline, type TimelineSource } from './jobTimeline';
 import {
@@ -53,6 +54,9 @@ const source: TimelineSource = {
 };
 
 describe('JobTimeline', () => {
+  beforeAll(() => setViewerTimeZoneForTests('America/Chicago'));
+  afterAll(() => setViewerTimeZoneForTests(null));
+
   beforeEach(() => {
     proofVideoUrl.mockReset();
     proofVideoUrl.mockResolvedValue({ url: 'https://signed.test/clip.mp4', expiresInSeconds: 60 });

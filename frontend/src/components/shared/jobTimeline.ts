@@ -19,10 +19,9 @@ import type {
   SharedJobRecord,
 } from '../../lib/api';
 import { formatClipLength } from '../../lib/clipDuration';
+import { formatViewerDay, viewerDayKey } from '../../lib/viewerTime';
 import { scrubHomeownerText } from '../../lib/privacyText';
 import { dayIsOnSite } from './jobProgressStory';
-
-export const TIMELINE_ZONE = 'America/Chicago';
 
 export type TimelineKind =
   | 'job'
@@ -141,40 +140,6 @@ export function packetTimelineLocation(
   const rewritten = timelineRedirectSearch(`?${params.toString()}`, hash);
   if (!rewritten) return null;
   return `/job-progress${rewritten}`;
-}
-
-export function formatCtTime(iso: string): string {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return '';
-  const clock = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMELINE_ZONE,
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-  return `${clock} CT`;
-}
-
-export function formatCtDay(iso: string): string {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMELINE_ZONE,
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
-
-export function ctDayKey(iso: string): string {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMELINE_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
 }
 
 function stamp(value: unknown): string | null {
@@ -793,13 +758,13 @@ export function groupTimelineDays(events: TimelineEvent[]): Array<{
 }> {
   const groups: Array<{ key: string; label: string; events: TimelineEvent[] }> = [];
   for (const event of events) {
-    const key = ctDayKey(event.at);
+    const key = viewerDayKey(event.at);
     const last = groups[groups.length - 1];
     if (last && last.key === key) {
       last.events.push(event);
       continue;
     }
-    groups.push({ key, label: formatCtDay(event.at), events: [event] });
+    groups.push({ key, label: formatViewerDay(event.at), events: [event] });
   }
   return groups;
 }
