@@ -4,6 +4,7 @@ import { answerFromAskLookup, groundLookupAnswer } from '../src/shared/askReason
 import { askTurnLogFields, createAskTurnClock } from '../src/shared/askTiming.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
 import { buildGroundingIndex, normalizeForMatch, verifyAskAnswer } from '../src/shared/askVerify.js';
+import { toStoredPrivacyRedactions } from '../src/audio/privacyRedactions.js';
 
 const JOB = 'job-1';
 const CLIP_A = 'proof-a';
@@ -281,4 +282,21 @@ test('a clean model answer skips the repair model entirely', async () => {
   });
   assert.equal(repairs, 0);
   assert.match(result.answer, /north slope/);
+});
+
+test('a segment that overlaps a privacy redaction is never a match, even if it starts in the clear', () => {
+  const redacted: AskLookupCatalog = {
+    ...catalog,
+    clips: [
+      {
+        ...catalog.clips[0]!,
+        privacyRedactions: toStoredPrivacyRedactions([
+          { startSec: 12, endSec: 14, reason: 'personal', confidence: 0.9, source: 'vision' },
+        ]),
+      },
+      catalog.clips[1]!,
+    ],
+  };
+  const result = verifyAskAnswer('Someone says "You know I love that girl."', buildGroundingIndex({ catalog: redacted, now }));
+  assert.equal(result.quotesFailed, 1);
 });

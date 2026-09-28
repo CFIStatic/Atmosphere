@@ -20,7 +20,7 @@ import {
   redactClipTranscriptForAsk,
   redactedLines,
   redactedClipSummary,
-  transcriptSecondIsRedacted,
+  spanIsRedacted,
   type AskLookupCatalog,
   type AskLookupClip,
 } from './askLookup.js';
@@ -128,8 +128,10 @@ function clipText(clip: AskLookupClip): ClipText {
   if (segments.length) {
     for (const row of segments) {
       if (!row || !Number.isFinite(row.start)) continue;
-      if (transcriptSecondIsRedacted(clip, row.start)) continue;
-      lines.push({ start: row.start, end: Number.isFinite(row.end) ? row.end : row.start, norm: normalizeForMatch(row.text) });
+      const end = Number.isFinite(row.end) ? row.end : row.start;
+      // Same span-overlap rule as the rest of Ask: redacted speech is never a match.
+      if (spanIsRedacted(clip, row.start, end)) continue;
+      lines.push({ start: row.start, end, norm: normalizeForMatch(row.text) });
     }
   } else {
     const rows = redactedLines(redactClipTranscriptForAsk(clip));
