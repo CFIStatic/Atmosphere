@@ -64,6 +64,8 @@ export type AskLookupClip = {
   /** Display names already on the clip, when the file identified them. */
   speakers?: string[] | null;
   recordedByUserIds?: string[] | null;
+  /** When the clip was filmed. Ask's grounding check allows its local time. */
+  capturedAt?: string | null;
 };
 
 export type AskLookupHistoryEvent = {
@@ -571,6 +573,7 @@ export function clipFromProofRow(
     childPrivacyRedactions: findings.childPrivacyRedactions,
     speakers,
     recordedByUserIds: [...new Set(recorded)],
+    capturedAt: row.captured_at ? String(row.captured_at) : null,
   };
 }
 

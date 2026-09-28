@@ -33,12 +33,15 @@ import {
   ASK_LOOKUP_TOOLS,
   asksAboutOtherJobs,
   buildLookupUserPrompt,
+  clipsInScope,
   collectMomentSourceIds,
   continueAskLookup,
   executeAskLookup,
   followUpAnswerable,
+  formatAskJobContext,
   planAskLookup,
   quotesFromTrace,
+  redactClipTranscriptForAsk,
   scrubStoredAskText,
   splitLookupPrompt,
   suggestFollowUps,
@@ -55,6 +58,7 @@ import {
 import {
   classifyAskIntent,
   composeGroundedAsk,
+  localStamp,
   namedSpeaker,
   polishAskProse,
   resolveAskQuestion,
@@ -71,6 +75,15 @@ import {
   geminiSystemPrefix,
 } from './askPromptCache.js';
 import type { AskTurnClock } from './askTiming.js';
+import {
+  ASK_REPAIR_SYSTEM,
+  buildGroundingIndex,
+  formatRepairPrompt,
+  normalizeForMatch,
+  stripUnsupported,
+  supportedProse,
+  verifyAskAnswer,
+} from './askVerify.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
@@ -97,7 +110,11 @@ Rules:
 13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.
 14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
-16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.`;
+16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.
+17. Use only the job context, the tool results, and the earlier turns in this request. No guessing and no outside knowledge about this job. When a fact is missing, write that it is not on file.
+18. Quote only words that appear in a transcript line, exactly as written there, and cite that clip at the time the line was said. Times, dates, clip clocks, job numbers, and names must be ones that appear in the context or tool results.
+19. Never invent a speaker role. Do not call someone the homeowner, adjuster, contractor, or client unless the file says so; use the name or label the file gives, or say the file does not say who spoke.
+20. Your answer is checked against the file before anyone sees it. Unsupported quotes, times, and names are removed.`;
 
 /**
  * Fast turns already have the job file in the cached prefix. Answer from it
@@ -116,7 +133,10 @@ Rules:
    ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker|verbatim excerpt⟧
 6. Then two or three follow-ups the file can answer:
    ⟦followups: question one? ;; question two?⟧
-7. Do not put those machine lines inside the sentences. Use the person's name. Never write a visual label when the file names who spoke.`;
+7. Do not put those machine lines inside the sentences. Use the person's name. Never write a visual label when the file names who spoke.
+8. Use only this context and tool results. No guessing. When a fact is missing, write that it is not on file.
+9. Quote only exact words from a transcript line and cite that clip at the time the line was said. Times, dates, and names must appear in the context.
+10. Never invent a speaker role such as homeowner, adjuster, or contractor. Use the name or label the file gives, or say the file does not say who spoke.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -597,6 +617,132 @@ export function providerLookupStep(input: {
   };
 }
 
+function groundingSourceText(
+  catalog: AskLookupCatalog,
+  trace: AskLookupTraceStep[],
+  extra: string | null,
+): string {
+  const clips = clipsInScope(catalog)
+    .map((clip) => {
+      const when = clip.capturedAt || clip.workDate;
+      const stamp = when ? localStamp(when, catalog.timeZone) || when : 'Undated';
+      const transcript = redactClipTranscriptForAsk(clip);
+      return `Clip ${clip.title} (${stamp}) cite video/${clip.jobId}/${clip.proofId}\n${transcript || '(no transcript)'}`;
+    })
+    .join('\n\n');
+  return [formatAskJobContext(catalog), clips, extra?.trim() ?? '', formatTrace(trace)].filter(Boolean).join('\n\n');
+}
+
+function groundingFallback(
+  resolved: string,
+  trace: AskLookupTraceStep[],
+  catalog: AskLookupCatalog,
+  history: Array<{ role?: string | null; text?: string | null }> | null | undefined,
+  memory: LongThreadMemory | null | undefined,
+): string {
+  const composed = stripMomentTrailers(composeGroundedAsk(resolved, trace, catalog, history, memory))
+    .replace(/(?:\n|^)\s*⟦sources:[^⟧]*⟧\s*/gi, '')
+    .trim();
+  if (composed) return composed;
+  const clips = clipsInScope(catalog);
+  if (!clips.length) return 'This job file has no clips yet. Ask about the job details, the notes, or the history instead.';
+  const list = clips
+    .slice(0, 6)
+    .map((clip) => `${clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated'} — ${clip.title}`)
+    .join('; ');
+  return `Here is what is on this file: ${clips.length} clip${clips.length === 1 ? '' : 's'} (${list}). Ask about one of them and I can pull what was said.`;
+}
+
+/**
+ * Verify a model answer against the job data. Trailer quotes and links are
+ * fixed or dropped locally. Prose failures get one repair pass; anything still
+ * unsupported is removed and named as not on file.
+ */
+export async function groundLookupAnswer(input: {
+  answer: string;
+  catalog: AskLookupCatalog;
+  trace: AskLookupTraceStep[];
+  extra: string | null;
+  question: string;
+  resolved: string;
+  history?: Array<{ role?: string | null; text?: string | null }> | null;
+  memory?: LongThreadMemory | null;
+  anthropicApiKey?: string | null;
+  fetchFn?: typeof fetch;
+  signal?: AbortSignal;
+  repair?: (input: { system: string; user: string }) => Promise<string | null>;
+  now?: Date;
+}): Promise<{
+  answer: string;
+  failures: ReturnType<typeof verifyAskAnswer>['failures'];
+  verify: { quotesChecked: number; quotesFailed: number; claimsFailed: number; repaired: boolean; stripped: boolean };
+}> {
+  const index = buildGroundingIndex({
+    catalog: input.catalog,
+    extra: [input.extra, formatTrace(input.trace)].filter(Boolean).join('\n\n'),
+    question: input.question,
+    now: input.now,
+  });
+  const first = verifyAskAnswer(input.answer, index);
+  const verify = {
+    quotesChecked: first.quotesChecked,
+    quotesFailed: first.quotesFailed,
+    claimsFailed: first.open.filter((failure) => failure.kind !== 'quote').length,
+    repaired: false,
+    stripped: false,
+  };
+  if (!first.open.length) return { answer: first.answer, failures: first.failures, verify };
+
+  const system = ASK_REPAIR_SYSTEM;
+  const user = formatRepairPrompt({
+    answer: first.answer,
+    failures: first.open,
+    source: groundingSourceText(input.catalog, input.trace, input.extra),
+  });
+  let repairedText: string | null = null;
+  if (!input.signal?.aborted) {
+    try {
+      repairedText = input.repair
+        ? await input.repair({ system, user })
+        : (
+            await completeAskText({
+              system,
+              user,
+              anthropicApiKey: input.anthropicApiKey,
+              fetchFn: input.fetchFn,
+              mode: 'interactive',
+              maxTokens: 1600,
+              signal: input.signal,
+            })
+          )?.text ?? null;
+    } catch (err) {
+      logAskFailure('ask_grounding_repair_failed', err);
+    }
+  }
+  let current = first;
+  if (repairedText?.trim()) {
+    // Keep the checked trailers; take only the repaired prose.
+    const trailers = first.answer.match(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi) ?? [];
+    const prose = repairedText.replace(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi, '').trim();
+    const second = verifyAskAnswer([prose, ...trailers].filter(Boolean).join('\n\n'), index);
+    if (!second.open.length) {
+      verify.repaired = true;
+      return { answer: second.answer, failures: [...first.failures, ...second.failures], verify };
+    }
+    // Strip whichever draft keeps more supported prose: a repair that made
+    // things worse should not throw away sentences the first draft had right.
+    const words = (draft: typeof first) => normalizeForMatch(supportedProse(draft.answer, draft.open)).split(' ').filter(Boolean).length;
+    if (words(second) >= words(first)) current = second;
+  }
+  verify.stripped = true;
+  const fallback = groundingFallback(input.resolved, input.trace, input.catalog, input.history, input.memory);
+  return {
+    answer: stripUnsupported(current.answer, current.open, fallback),
+    failures: [...first.failures, ...(current === first ? [] : current.failures)],
+    verify,
+  };
+}
+
 export async function answerFromAskLookup(input: {
   question: string;
   catalog: AskLookupCatalog;
@@ -614,6 +760,8 @@ export async function answerFromAskLookup(input: {
   step?: LookupModelStep;
   /** Filled with model, route, tool durations, and cache reads. No transcript text. */
   timing?: AskTurnClock | null;
+  /** Test double for the one grounding repair pass. Production uses the Ask model. */
+  repair?: (input: { system: string; user: string }) => Promise<string | null>;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -775,7 +923,26 @@ export async function answerFromAskLookup(input: {
   }
 
   const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);
-  const answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
+  let answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
+  if (model) {
+    // A model wrote this. Check it against the file before it is stored or sent.
+    const grounded = await groundLookupAnswer({
+      answer,
+      catalog: input.catalog,
+      trace,
+      extra: input.extra ?? null,
+      question: input.question,
+      resolved,
+      history: input.history,
+      memory: input.memory,
+      anthropicApiKey: input.anthropicApiKey,
+      fetchFn: input.fetchFn,
+      signal: input.signal,
+      repair: input.repair,
+    });
+    answer = scrubStoredAskText(grounded.answer, input.catalog.clips);
+    input.timing?.noteVerify(grounded.verify);
+  }
   if (!streamed) onToken(answer);
   return {
     answer,
