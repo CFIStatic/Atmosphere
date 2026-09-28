@@ -115,3 +115,19 @@ test('a letter label written in the transcript itself is kept', () => {
   assert.equal(provenSpeakerLabel('Speaker B', '[0:05] Speaker A: Welcome back.'), 'unknown');
   assert.equal(provenSpeakerLabel('Speaker A', [{ speakerLabel: 'Speaker A' }]), 'Speaker A');
 });
+
+test('a screen merely present, or "anchor"/"commercial" gear, is not playback', () => {
+  assert.equal(describesPlayingMedia('A TV is on the wall above the fireplace.'), null);
+  assert.equal(describesPlayingMedia('A laptop is on the counter next to the sink.'), null);
+  assert.equal(describesPlayingMedia('Roof anchor installed near the ridge; a TV antenna beside it.'), null);
+  assert.equal(describesPlayingMedia('A commercial dehumidifier sits by the TV stand.'), null);
+  assert.ok(describesPlayingMedia('The TV is showing a news broadcast with an anchor at the desk.'));
+});
+
+test('Ask tags broadcast phrasing as media even with no screen described', async () => {
+  const r = await answerFromClip({
+    question: 'How many lines are in the transcript?',
+    record: { analysisState: 'done', transcriptStatus: 'done', dictation: 'Parked car interior.', transcript: "[0:16] Don't forget to like and subscribe to the channel." },
+  });
+  assert.match(r.answer, /media/);
+});

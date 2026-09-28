@@ -29,7 +29,7 @@ export type MediaAudioReading = {
 const DEVICE =
   /\b(tv|television|flat[- ]?screen|smart ?tv|monitor|laptop|computer screen|desktop screen|tablet|ipad|phone screen|smartphone screen|screen|radio|speaker ?phone|bluetooth speaker)\b/i;
 const PLAYING =
-  /\b(playing|plays|played|is on\b|turned on|broadcast(?:ing)?|streaming|showing (?:a |an )?(?:video|show|program|programme|movie|film|news|game|cartoon|commercial|ad|clip|youtube)|tv show|news(?:cast)?|commercial|sitcom|cartoon|movie|sports (?:game|broadcast)|youtube|video call|zoom call|facetime|audio (?:from|playing)|sound (?:from|of)|voices? (?:from|on)|talk show|podcast|music video|narrator|anchor|presenter)\b/i;
+  /\b(playing|plays|played|turned on and (?:showing|playing)|broadcast(?:ing)?|streaming|showing (?:a |an )?(?:video|show|program|programme|movie|film|news|game|cartoon|commercial|ad|clip|youtube)|tv show|news(?:cast| broadcast| program| anchor)|(?:tv|television) commercial|commercial break|sitcom|cartoon|movie|sports (?:game|broadcast)|youtube|video call|zoom call|facetime|audio (?:from|playing)|sound (?:from|of) the (?:tv|television|laptop|speaker|radio)|voices? (?:from|on) the (?:tv|television|laptop|screen|speaker|radio)|talk show|podcast|music video|narrator|presenter)\b/i;
 const NEGATED =
   /\b(off|powered (?:down|off)|turned off|blank|black(?:\/off)?|not (?:on|playing|in use)|no (?:on-screen|broadcast|picture|image|video|sound|programme|program)|nothing (?:on|playing)|screen (?:is )?dark)\b/i;
 

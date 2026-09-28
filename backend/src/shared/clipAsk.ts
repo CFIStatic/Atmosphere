@@ -583,7 +583,8 @@ function conversationTopic(record: ClipAskRecord): string | null {
 /** Which transcript lines were heard from a screen in frame. */
 function mediaTags(record: ClipAskRecord, rows: Array<{ at: number | null; text: string }>): boolean[] {
   const windows = record.mediaWindows ?? [];
-  if (!windows.length && !record.mediaUntimed) return rows.map(() => false);
+  // Always tag: broadcast phrasing ("like and subscribe") is media even when
+  // no screen was described, same as the library payload.
   return tagSegmentSources(
     rows.map((row) => ({ tSec: row.at, text: row.text })),
     { audioSource: 'mixed', mediaWindows: windows, mediaUntimed: record.mediaUntimed ?? null },
@@ -740,6 +741,19 @@ export function topicalSpeechAnswer(question: string, record: ClipAskRecord): st
       ? `No, not by anyone on site. ${subject} only comes up${when} in audio from a screen playing in frame (media), not field conversation.`
       : `${subject[0]?.toUpperCase() ?? ''}${subject.slice(1)} only comes up${when} in audio from a screen playing in frame (media), not field conversation.`;
     return `${lead}\n\n${quotesOf(hits).join('\n')}`;
+  }
+  // Every term is there, but in different lines: not a yes to a question about
+  // them together. Say where each one comes up instead.
+  if (yesNo && !unmatched.length && best < asked.length) {
+    const where = asked
+      .slice(0, 3)
+      .map((token) => {
+        const first = hits.find((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h)));
+        const at = first ? formatClipTime(first.row.at) : null;
+        return `“${askedTerm(question, token)}”${at ? ` at ${at}` : ''}`;
+      })
+      .join('; ');
+    return `Not established in any single line: ${where}.\n\n${quotesOf(hits).join('\n')}`;
   }
   const missingNote = unmatched.length ? ` ${unmatched.join(' and ')} ${unmatched.length === 1 ? 'is' : 'are'} never mentioned.` : '';
   const lead = yesNo ? `Yes. ${subject} comes up${when}.` : `${subject[0]?.toUpperCase() ?? ''}${subject.slice(1)} comes up${when}.${missingNote}`;
@@ -1141,8 +1155,12 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
 /** On/off style states: a row that names the thing is not a yes unless it states the asked state. */
 const STATE_PAIRS: Array<[RegExp, RegExp]> = [
-  [/\bon\b|\bturned on\b|\bplaying\b|\brunning\b/i, /\boff\b|\bblack\/off\b|\bnot (on|playing|running)\b|\bscreen (is )?(black|dark)\b/i],
-  [/\bopen\b|\bopened\b/i, /\bclosed\b|\bshut\b/i],
+  // "On" as a state (is on / turned on / "on," at a clause end), never the preposition ("on the ceiling").
+  [
+    /\b(?:is|was|are|were|turned|switched|left|stays?|remains?|powered|comes?|came) on\b|\bon\s*(?:[),.;?!]|$)|\bplaying\b|\brunning\b|\b(?:screen|display) (?:is )?(?:lit|showing)\b/i,
+    /\boff\b|\bblack\/off\b|\bnot (on|playing|running)\b|\bscreen (is )?(black|dark)\b/i,
+  ],
+  [/\b(?:is|was|are|were|left|stands?|swung|propped) open\b|\bopen\s*(?:[),.;?!]|$)|\bopened\b/i, /\bclosed\b|\bshut\b/i],
 ];
 
 function stateAnswer(question: string, rows: CorpusRow[], qTokens: string[]): string | null {
@@ -1162,7 +1180,7 @@ function stateAnswer(question: string, rows: CorpusRow[], qTokens: string[]): st
       return `${entry.text.replace(/[.;,:]+$/, '')}${clock ? ` (${clock})` : ''}.`;
     };
     const negative = sentences.find((entry) => no.test(entry.text));
-    const positive = sentences.find((entry) => yes.test(entry.text.replace(/\b(mounted|sits|stands|lies) on\b/gi, '')));
+    const positive = sentences.find((entry) => yes.test(entry.text));
     if (askYes && negative) return `No. ${said(negative)}`;
     if (askYes && positive) return `Yes. ${said(positive)}`;
     if (askNo && negative) return `Yes. ${said(negative)}`;
