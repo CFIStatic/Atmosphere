@@ -7,6 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
+import type { DurableJobNote } from './askMemory.js';
 
 export type AskThreadOwner =
   | { kind: 'user'; userId: string }
@@ -35,6 +36,16 @@ function missingAskThreadsTable(error: { message?: string; code?: string } | nul
   if (!error) return false;
   const blob = `${error.message ?? ''} ${error.code ?? ''}`;
   return /ask_threads|does not exist|schema cache/i.test(blob);
+}
+
+function missingMemorySchema(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const blob = `${error.message ?? ''} ${error.code ?? ''}`;
+  return /ask_job_notes|rolling_summary|summary_through|does not exist|schema cache/i.test(blob);
+}
+
+function noteKey(note: string): string {
+  return note.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function ownerFilter(query: any, owner: AskThreadOwner) {
@@ -241,6 +252,116 @@ export async function touchAskThreadAfterMessage(
     }
   }
   await supabase.from('ask_threads').update(patch).eq('id', input.threadId);
+}
+
+export type AskThreadMemoryState = {
+  summary: string | null;
+  throughId: string | null;
+};
+
+/** Rolling summary stored on the thread. Missing columns mean the migration is not applied yet. */
+export async function loadAskThreadMemory(
+  supabase: SupabaseClient,
+  threadId: string,
+): Promise<AskThreadMemoryState> {
+  const { data, error } = await supabase
+    .from('ask_threads')
+    .select('rolling_summary, summary_through_question_id')
+    .eq('id', threadId)
+    .maybeSingle();
+  if (error || !data) return { summary: null, throughId: null };
+  const row = data as { rolling_summary?: string | null; summary_through_question_id?: string | null };
+  return {
+    summary: row.rolling_summary ?? null,
+    throughId: row.summary_through_question_id ?? null,
+  };
+}
+
+/** Notes for this job and owner, including notes from older threads on the same job. */
+export async function loadAskJobNotes(
+  supabase: SupabaseClient,
+  input: { orgId: string; jobId: string; owner: AskThreadOwner },
+): Promise<DurableJobNote[]> {
+  let q = supabase
+    .from('ask_job_notes')
+    .select('note, source_question_id, created_at')
+    .eq('org_id', input.orgId)
+    .eq('job_id', input.jobId);
+  q = input.owner.kind === 'user' ? q.eq('owner_user_id', input.owner.userId) : q.eq('share_id', input.owner.shareId);
+  const { data, error } = await q.order('created_at', { ascending: true }).limit(24);
+  if (error || !data) return [];
+  return (data as Array<{ note?: string; source_question_id?: string | null; created_at?: string | null }>).flatMap(
+    (row) => {
+      const note = (row.note ?? '').trim();
+      if (!note) return [];
+      return [
+        {
+          note,
+          sourceQuestionId: row.source_question_id ?? null,
+          at: row.created_at ?? null,
+        },
+      ];
+    },
+  );
+}
+
+/**
+ * Save a regenerated summary and any new notes. Updates ask_threads metadata
+ * and inserts notes. Does not update job_proof_questions.
+ */
+export async function persistAskThreadMemory(
+  supabase: SupabaseClient,
+  input: {
+    orgId: string;
+    jobId: string;
+    threadId: string;
+    owner: AskThreadOwner;
+    summary: string;
+    summaryThroughId: string | null;
+    coveredCount: number;
+    previousSummary: string | null;
+    previousThroughId: string | null;
+    notes: DurableJobNote[];
+    existingNotes: DurableJobNote[];
+  },
+): Promise<void> {
+  try {
+    const next = input.summary.trim();
+    const prev = (input.previousSummary ?? '').trim();
+    const throughChanged = (input.summaryThroughId ?? null) !== (input.previousThroughId ?? null);
+    if (next && (next !== prev || throughChanged)) {
+      const { error } = await supabase
+        .from('ask_threads')
+        .update({
+          rolling_summary: next,
+          summary_through_question_id: input.summaryThroughId,
+          summary_turn_count: input.coveredCount,
+          summarized_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.threadId);
+      if (error && !missingMemorySchema(error)) return;
+    }
+    const have = new Set(input.existingNotes.map((note) => noteKey(note.note)));
+    for (const note of input.notes) {
+      const key = noteKey(note.note);
+      if (!key || have.has(key)) continue;
+      have.add(key);
+      const { error } = await supabase.from('ask_job_notes').insert({
+        org_id: input.orgId,
+        job_id: input.jobId,
+        thread_id: input.threadId,
+        owner_user_id: input.owner.kind === 'user' ? input.owner.userId : null,
+        share_id: input.owner.kind === 'share' ? input.owner.shareId : null,
+        note: note.note.slice(0, 400),
+        source_question_id: note.sourceQuestionId,
+        ...(note.at ? { created_at: note.at } : {}),
+      });
+      if (error && error.code !== '23505' && !missingMemorySchema(error)) return;
+    }
+  } catch {
+    // Memory is an aid. The custody row is already stored.
+  }
 }
 
 export function presentAskThread(row: AskThreadRow) {

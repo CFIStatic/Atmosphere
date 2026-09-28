@@ -34,6 +34,7 @@ export const EN = {
   'nav.renameChat': 'Rename chat',
   'nav.rename': 'Rename',
   'nav.newChat': 'New chat',
+  'nav.newChatHint': 'Start a fresh chat. Older chats stay in this list.',
 
   'crm.title': 'Connect',
   'crm.subtitle': 'An Atmosphere agent signs in with your CRM username and password to pull and update jobs, contacts, and claims.',

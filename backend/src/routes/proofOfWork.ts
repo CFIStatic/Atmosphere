@@ -15,11 +15,21 @@ import {
   createAskThread,
   ensureAskThreads,
   getAskThreadForOwner,
+  loadAskJobNotes,
+  loadAskThreadMemory,
+  persistAskThreadMemory,
   presentAskThread,
   renameAskThread,
   touchAskThreadAfterMessage,
   type AskThreadOwner,
 } from '../shared/askThreads.js';
+import {
+  foldThreadMemory,
+  mergeDurableNotes,
+  scrubLongMemory,
+  type DurableJobNote,
+  type StoredAskPair,
+} from '../shared/askMemory.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
@@ -2807,22 +2817,48 @@ export async function runProofAsk(input: {
         .eq('job_id', jobId)
         .order('created_at', { ascending: false })
         .limit(5),
-      (threadId
-        ? supabase
+      (async () => {
+        const shape = 'id, question, answer, created_at';
+        if (!threadId) {
+          const { data } = await supabase
             .from('job_proof_questions')
-            .select('question, answer')
+            .select(shape)
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .order('created_at', { ascending: false })
+            .limit(8);
+          return { rows: (data ?? []) as Array<Record<string, unknown>>, memory: null, notes: [] as DurableJobNote[] };
+        }
+        const [earlyRes, lateRes, memory, notes] = await Promise.all([
+          supabase
+            .from('job_proof_questions')
+            .select(shape)
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .eq('thread_id', threadId)
+            .order('created_at', { ascending: true })
+            .limit(12),
+          supabase
+            .from('job_proof_questions')
+            .select(shape)
             .eq('org_id', orgId)
             .eq('job_id', jobId)
             .eq('thread_id', threadId)
             .order('created_at', { ascending: false })
-            .limit(8)
-        : supabase
-            .from('job_proof_questions')
-            .select('question, answer')
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
-            .order('created_at', { ascending: false })
-            .limit(8)),
+            .limit(60),
+          loadAskThreadMemory(writeDb, threadId),
+          owner ? loadAskJobNotes(writeDb, { orgId, jobId, owner }) : Promise.resolve([] as DurableJobNote[]),
+        ]);
+        const seen = new Set<string>();
+        const rows = [...((earlyRes.data ?? []) as Array<Record<string, unknown>>), ...((lateRes.data ?? []) as Array<Record<string, unknown>>)]
+          .filter((row) => {
+            const id = String(row.id ?? '');
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        return { rows, memory, notes };
+      })(),
     ]);
 
     const partyRows = (partyRes.data ?? []) as any[];
@@ -2967,14 +3003,42 @@ export async function runProofAsk(input: {
           partyCreatedBy: party?.created_by ?? null,
         });
       });
-    const history: JobFileAskTurn[] = ((recentRes.data ?? []) as any[])
-      .reverse()
-      .flatMap((row) => {
-        const turns: JobFileAskTurn[] = [];
-        if (row.question) turns.push({ role: 'user', text: scrubStoredAskText(String(row.question), memoryClips) });
-        if (row.answer) turns.push({ role: 'assistant', text: scrubStoredAskText(String(row.answer), memoryClips) });
-        return turns;
-      });
+    const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
+    const priorPairs: StoredAskPair[] = (recentRes.rows ?? []).flatMap((row) => {
+      const question = scrubAsk(String(row.question ?? ''));
+      if (!question.trim()) return [];
+      return [
+        {
+          id: String(row.id ?? ''),
+          question,
+          answer: scrubAsk(String(row.answer ?? '')),
+          createdAt: String(row.created_at ?? ''),
+        },
+      ];
+    });
+    const askTimeZone = input.timeZone ?? 'America/Chicago';
+    const folded = foldThreadMemory({
+      pairs: priorPairs,
+      previousSummary: recentRes.memory?.summary ?? null,
+      summarizedThroughId: recentRes.memory?.throughId ?? null,
+      timeZone: askTimeZone,
+    });
+    const scrubbedFold = scrubLongMemory(folded, scrubAsk);
+    const storedNotes = (recentRes.notes ?? []).flatMap((note) => {
+      const text = scrubAsk(note.note).trim();
+      if (!text || /\[privacy redacted\]/i.test(text)) return [];
+      return [{ ...note, note: text }];
+    });
+    const durableNotes = mergeDurableNotes(storedNotes, scrubbedFold.notes);
+    const history: JobFileAskTurn[] = folded.recent.map((turn) => ({
+      role: turn.role === 'assistant' ? 'assistant' : 'user',
+      text: scrubAsk(turn.text),
+    }));
+    const longMemory = {
+      summary: scrubbedFold.summary,
+      notes: durableNotes,
+      now: new Date().toISOString(),
+    };
 
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
@@ -3045,6 +3109,15 @@ export async function runProofAsk(input: {
         ...turn,
         text: scrubStoredAskText(turn.text, lookup.clips),
       })),
+      memory: {
+        summary: scrubStoredAskText(longMemory.summary, lookup.clips),
+        notes: longMemory.notes.flatMap((note) => {
+          const text = scrubStoredAskText(note.note, lookup.clips).trim();
+          if (!text || /\[privacy redacted\]/i.test(text)) return [];
+          return [{ ...note, note: text }];
+        }),
+        now: longMemory.now,
+      },
       apiKey,
       onToken: input.onToken,
       onStatus: input.onStatus,
@@ -3133,6 +3206,41 @@ export async function runProofAsk(input: {
         });
       } catch {
         // Non-fatal — answer already stored.
+      }
+      if (stored?.id) {
+        try {
+          const withTurn = [
+            ...priorPairs,
+            {
+              id: String(stored.id),
+              question: storedQuestion,
+              answer: storedAnswer,
+              createdAt: String(stored.created_at ?? new Date().toISOString()),
+            },
+          ];
+          const again = foldThreadMemory({
+            pairs: withTurn,
+            previousSummary: recentRes.memory?.summary ?? null,
+            summarizedThroughId: recentRes.memory?.throughId ?? null,
+            timeZone: askTimeZone,
+          });
+          const againScrub = scrubLongMemory(again, (text) => scrubStoredAskText(text, lookup.clips));
+          await persistAskThreadMemory(writeDb, {
+            orgId,
+            jobId,
+            threadId,
+            owner,
+            summary: againScrub.summary,
+            summaryThroughId: again.summaryThroughId,
+            coveredCount: again.coveredCount,
+            previousSummary: recentRes.memory?.summary ?? null,
+            previousThroughId: recentRes.memory?.throughId ?? null,
+            notes: againScrub.notes,
+            existingNotes: storedNotes,
+          });
+        } catch {
+          // The custody row is already stored. Summary and notes can catch up next turn.
+        }
       }
     }
 

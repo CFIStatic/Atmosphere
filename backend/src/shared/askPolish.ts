@@ -6,6 +6,7 @@
  * note the chat can copy. Visible prose never carries ids, UTC, or filler.
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
+import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
 import { clipAskPreview, type AskLookupCatalog, type AskLookupClip, type AskLookupTraceStep } from './askLookup.js';
 import {
   clipMatchesAskDate,
@@ -319,9 +320,10 @@ export function resolveAskQuestion(
   history: AskMemoryTurn[] | null | undefined,
   catalog: AskLookupCatalog,
 ): string {
+  const q = question.trim();
+  if (isLongMemoryQuestion(q)) return q;
   const turns = (history ?? []).filter((turn) => String(turn.text ?? '').trim()).slice(-8);
   if (!turns.length) return question;
-  const q = question.trim();
   if (isCorrection(q)) return q;
   const person = recentPerson(turns, catalog) || soleOnJobPerson(catalog);
   const namedHere = (catalog.people ?? []).some((row) => row.name && q.toLowerCase().includes(row.name.toLowerCase()));
@@ -711,7 +713,7 @@ function composeTask(
   return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}`;
 }
 
-export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate';
+export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
 
 type SpeechLine = { text: string; title: string; when: string; workDate: string | null; clipId: string };
 
@@ -809,6 +811,7 @@ export function classifyChatTurn(
 ): ChatKind | null {
   const q = question.trim();
   if (!q || isJobOverview(q)) return null;
+  if (isLongMemoryQuestion(q)) return 'recall';
   if (isCorrection(q)) return 'correction';
   const { body, prefix } = splitSocial(q);
   if (isJobOverview(body)) return null;
@@ -940,6 +943,8 @@ function composeChat(
       return composeClarify(catalog);
     case 'restate':
       return composeRestate(catalog, history);
+    case 'recall':
+      return jobOffer(catalog);
     default:
       return jobOffer(catalog);
   }
@@ -951,8 +956,15 @@ export function composeGroundedAsk(
   trace: AskLookupTraceStep[],
   catalog: AskLookupCatalog,
   history?: AskMemoryTurn[] | null,
+  memory?: LongThreadMemory | null,
 ): string {
   const chat = classifyChatTurn(question, history, catalog);
+  if (chat === 'recall') {
+    return polishAskProse(recallLongMemory(question, memory, { timeZone: catalog.timeZone }), {
+      timeZone: catalog.timeZone,
+      jobTitle: catalog.jobTitle,
+    });
+  }
   if (chat) {
     return polishAskProse(composeChat(chat, question, catalog, history), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
   }

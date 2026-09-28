@@ -116,6 +116,7 @@ describe('catalog fallback', () => {
     const chrome = verifierChromeStrings('es', 'light');
     expect(chrome.chatHistory).toBe('Historial de chats');
     expect(chrome.newChat).toBe('Nuevo chat');
+    expect(chrome.newChatHint).toBe('Empieza un chat nuevo. Los chats anteriores siguen en esta lista.');
     expect(chrome.settings).toBe('Ajustes');
     expect(chrome.support).toBe('Soporte');
   });
