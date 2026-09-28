@@ -27,7 +27,7 @@ import {
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
-import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview, polishAskProse } from '../src/shared/askPolish.js';
+import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview, polishAskProse, stampEmailSignOff } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -967,6 +967,8 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
   const file = catalog({
     jobTitle: 'Project Tiffany & Co.',
     clientName: 'Tiffany & Co.',
+    askerName: 'El Presidente',
+    orgName: 'Stand-in Restoration',
     timeZone: 'America/Chicago',
     people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE, TABLE] }],
     history: [{ id: 'mem', jobId: JOB, orgId: ORG, summary: 'opened job #12 — Project Tiffany & Co.', actorId: EL, at: '2026-09-17T16:37:28.774Z' }],
@@ -1000,8 +1002,12 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
       assert.doesNotMatch(answer, /4412/);
     }
     assert.match(email.answer, /Hi Tiffany & Co,/);
-    assert.match(email.answer, /Thanks,\s*\nProject Tiffany & Co/);
-    assert.match(email.answer, /follow-up visit/i);
+    assert.match(email.answer, /Thanks,\s*\nEl Presidente\nStand-in Restoration/);
+    assert.doesNotMatch(email.answer, /Thanks,\s*\nProject Tiffany/);
+    assert.match(email.answer, /Nothing further is scheduled/);
+    assert.match(email.answer, /If you want a follow-up visit/i);
+    assert.doesNotMatch(email.answer, /The next step is/i);
+    assert.doesNotMatch(email.answer, /the visit shows/i);
     assert.match(summary.answer, /Homeowner summary/);
     assert.doesNotMatch(summary.answer, /^Hi /m);
     assert.match(summary.answer, /is the work on this file/i);
@@ -1050,4 +1056,77 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
   assert.match(prompt, /Never write "The file does have that\."/);
   assert.match(prompt, /Never write "Seated man"/);
   assert.match(prompt, /Do not end with "I checked the clips"/);
+  assert.match(prompt, /Never sign with the project or job name/);
+  assert.match(prompt, /Do not invent a next step/);
+});
+
+test('an email signs with the asker and org, and groups a same-day pair', async () => {
+  const day = catalog({
+    jobTitle: 'Project Tiffany & Co.',
+    clientName: 'Tiffany & Co.',
+    askerName: 'Elena Ortiz',
+    orgName: 'Stand-in Restoration',
+    timeZone: 'America/Chicago',
+    clips: [
+      clip({
+        proofId: OFFICE,
+        title: 'Sep 17 office recording',
+        workDate: '2026-09-17',
+        summary: 'A webcam take in a small office.',
+        recordedByUserIds: [EL],
+      }),
+      clip({
+        proofId: TABLE,
+        title: 'Short Handheld Phone Clip Surveys a Light Whitewashed',
+        workDate: '2026-09-21',
+        summary: 'A phone video of a whitewashed dining table.',
+        recordedByUserIds: [EL],
+      }),
+      clip({
+        proofId: 'c8d6e77f-6d86-4eee-8312-076038c15bac',
+        title: 'Handheld Phone Video Shot Sideways Inside a Home',
+        workDate: '2026-09-21',
+        summary: 'A sideways walkthrough into the dining area.',
+        recordedByUserIds: [EL],
+      }),
+    ],
+  });
+  const prev = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const email = await answerFromAskLookup({ question: 'draft an email to the homeowner', catalog: day, step: async () => null });
+    assert.match(email.answer, /On Sep 17, the file shows/);
+    assert.match(email.answer, /Sep 21 also includes/);
+    const sep21 = email.answer.split('Sep 21 also includes')[1] ?? '';
+    assert.match(sep21, /whitewashed dining table/i);
+    assert.match(sep21, /sideways walkthrough/i);
+    assert.match(sep21, / and /);
+    assert.doesNotMatch(email.answer, /On Sep 21/);
+    assert.doesNotMatch(email.answer, /the visit shows/i);
+    assert.match(email.answer, /Thanks,\s*\nElena Ortiz\nStand-in Restoration/);
+    assert.doesNotMatch(email.answer, /Thanks,\s*\nProject Tiffany/);
+    const nameOnly = catalog({ ...day, orgName: null });
+    const shorter = await answerFromAskLookup({ question: 'draft an email to the homeowner', catalog: nameOnly, step: async () => null });
+    assert.match(shorter.answer, /Thanks,\s*\nElena Ortiz\n⟦\/artifact⟧/);
+    assert.doesNotMatch(shorter.answer, /Stand-in Restoration/);
+    assert.doesNotMatch(shorter.answer, /Thanks,\s*\nProject Tiffany/);
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev;
+  }
+
+  const signed = stampEmailSignOff(
+    'Hi Tiffany & Co,\n\nWe looked at the rooms.\n\nThanks,\nProject Tiffany & Co.',
+    catalog({ jobTitle: 'Project Tiffany & Co.', askerName: 'Elena Ortiz', orgName: 'Stand-in Restoration' }),
+  );
+  assert.match(signed, /Thanks,\nElena Ortiz\nStand-in Restoration/);
+  assert.doesNotMatch(signed, /Thanks,\s*\nProject Tiffany/);
+  const prompt = buildLookupUserPrompt({
+    question: 'draft an email',
+    catalog: catalog({ askerName: 'Elena Ortiz', orgName: 'Stand-in Restoration', jobTitle: 'Project Tiffany & Co.' }),
+  });
+  assert.match(prompt, /Sender: Elena Ortiz/);
+  assert.match(prompt, /Organization: Stand-in Restoration/);
 });

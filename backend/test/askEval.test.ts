@@ -27,6 +27,8 @@ const tiffany: AskLookupCatalog = {
   jobId: JOB,
   access: 'org',
   jobTitle: 'Project Tiffany & Co.',
+  askerName: 'El Presidente',
+  orgName: 'Stand-in Restoration',
   timeZone: 'America/Chicago',
   people: [
     {
@@ -280,6 +282,8 @@ const tiffanyLive: AskLookupCatalog = {
   jobId: JOB,
   access: 'org',
   jobTitle: 'Project Tiffany & Co.',
+  askerName: 'El Presidente',
+  orgName: 'Stand-in Restoration',
   jobAddress: '123 Michigan Ave, Chicago, IL',
   clientName: 'Tiffany & Co.',
   jobDescription: 'Interior walkthrough and an office check-in.',

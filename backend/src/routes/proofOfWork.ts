@@ -2985,17 +2985,25 @@ export async function runProofAsk(input: {
 
     const askAccess: 'org' | 'viewer' = input.access === 'org' ? 'org' : 'viewer';
     let authorLabel: string | null = null;
-    if (userId && askAccess === 'org') {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', userId)
-          .maybeSingle();
-        authorLabel = (profile as any)?.full_name ?? (profile as any)?.email ?? null;
-      } catch {
-        authorLabel = null;
-      }
+    let askerName: string | null = null;
+    let askOrgName: string | null = null;
+    try {
+      const profileQuery = userId
+        ? supabase.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()
+        : Promise.resolve({ data: null });
+      const orgQuery = orgId
+        ? supabase.from('orgs').select('name').eq('id', orgId).maybeSingle()
+        : Promise.resolve({ data: null });
+      const [profileRes, orgRes] = await Promise.all([profileQuery, orgQuery]);
+      const profile = profileRes.data as { full_name?: string | null; email?: string | null } | null;
+      const fullName = String(profile?.full_name ?? '').trim();
+      if (userId && askAccess === 'org') authorLabel = fullName || profile?.email || null;
+      askerName = fullName || null;
+      askOrgName = String((orgRes.data as { name?: string | null } | null)?.name ?? '').trim() || null;
+    } catch {
+      authorLabel = null;
+      askerName = null;
+      askOrgName = null;
     }
 
     const memoryClips = proofRows.map((row) => {
@@ -3076,6 +3084,8 @@ export async function runProofAsk(input: {
       jobTitle: file.job?.title ?? null,
       jobAddress: siteAddress,
       clientName,
+      askerName,
+      orgName: askOrgName,
       jobDescription: file.job?.description ?? null,
       timeZone: input.timeZone ?? null,
       people: mergeJobAskPeople({

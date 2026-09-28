@@ -206,6 +206,61 @@ function bullet(clip: ClipFact, timeZone?: string | null, openJobId?: string | n
   return `- **${when}.** ${seen}${elsewhere}.`;
 }
 
+function plainName(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/[.]+$/, '');
+}
+
+/** Sender name, then organization. Never the job title. */
+function emailSignature(catalog: AskLookupCatalog): string[] {
+  const person = plainName(catalog.askerName);
+  const org = plainName(catalog.orgName);
+  if (person && org) return [person, org];
+  if (person) return [person];
+  if (org) return [org];
+  return [];
+}
+
+function emailVisitSentences(clips: ClipFact[], timeZone?: string | null): string {
+  if (!clips.length) return 'Nothing recorded is on this file yet.';
+  const ordered = [...clips].sort((a, b) => String(a.workDate ?? '9999').localeCompare(String(b.workDate ?? '9999')));
+  const groups = new Map<string, string[]>();
+  for (const clip of ordered) {
+    const when = dateLabel(clip.workDate, timeZone);
+    const seen = visitSeen(clip);
+    const sentence = seen.charAt(0).toLowerCase() + seen.slice(1);
+    const notes = groups.get(when) ?? [];
+    const phrase = /^(?:a|an|the)\b/i.test(sentence) ? sentence : `a ${sentence}`;
+    notes.push(phrase);
+    groups.set(when, notes);
+  }
+  return [...groups.entries()]
+    .map(([when, notes], index) => {
+      const joined = notes.length === 1 ? notes[0]! : `${notes.slice(0, -1).join(', ')}, and ${notes[notes.length - 1]}`;
+      if (index === 0) return `On ${when}, the file shows ${joined}.`;
+      if (index === 1) return `${when} also includes ${joined}.`;
+      return `There is more from ${when}: ${joined}.`;
+    })
+    .join(' ');
+}
+
+/** Replace a job-title signature with the asker's name and organization. */
+export function stampEmailSignOff(text: string, catalog: AskLookupCatalog): string {
+  const signature = emailSignature(catalog);
+  const job = plainName(catalog.jobTitle);
+  let next = text;
+  if (job) {
+    const escaped = job.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    next = next.replace(new RegExp(`(Thanks,\\s*\\n)${escaped}\\.?`, 'gi'), signature.length ? `$1${signature.join('\n')}` : '$1');
+  }
+  if (!signature.length) return next;
+  const block = signature.join('\n');
+  const signed = new RegExp(`Thanks,\\s*\\n${signature.map((line) => line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*\\n')}`, 'i');
+  if (signed.test(next)) return next;
+  if (/Thanks,/i.test(next)) return next.replace(/Thanks,\s*$/i, `Thanks,\n${block}`);
+  if (/⟦\/artifact⟧/.test(next)) return next.replace(/⟦\/artifact⟧/, `Thanks,\n${block}\n⟦/artifact⟧`);
+  return `${next.trim()}\n\nThanks,\n${block}`;
+}
+
 function clipCountLead(count: number): string {
   return count === 1 ? 'There is **1 clip** on this file.' : `There are **${count} clips** on this file.`;
 }
@@ -802,25 +857,12 @@ function composeTask(
   }
 
   if (task === 'email') {
-    const body = clips.length
-      ? clips
-          .map((clip) => {
-            const seen = visitSeen(clip);
-            const sentence = seen.charAt(0).toLowerCase() + seen.slice(1);
-            return `On ${dateLabel(clip.workDate, catalog.timeZone)}, the visit shows ${sentence}.`;
-          })
-          .join(' ')
-      : 'Nothing recorded is on this file yet.';
-    const letter = [
-      `Hi ${client},`,
-      '',
-      body,
-      '',
-      'The next step is a follow-up visit once you tell us which of these you want us to come back for.',
-      '',
-      'Thanks,',
-      name,
-    ].join('\n');
+    const body = emailVisitSentences(clips, catalog.timeZone);
+    const closing = clips.length
+      ? 'Nothing further is scheduled on this file. If you want a follow-up visit, say which of these to come back for.'
+      : 'Nothing further is scheduled on this file.';
+    const signature = emailSignature(catalog);
+    const letter = [`Hi ${client},`, '', body, '', closing, '', 'Thanks,', ...signature].join('\n');
     return `Here is a draft you can send.\n\n${artifact(`**Email to the homeowner — ${name}**\n\n${letter}`)}`;
   }
 

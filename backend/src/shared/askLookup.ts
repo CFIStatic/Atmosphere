@@ -103,6 +103,10 @@ export type AskLookupCatalog = {
   jobAddress?: string | null;
   /** Client or party contacts on the job. */
   clientName?: string | null;
+  /** Asking user's profile name. Used to sign an email, never the job title. */
+  askerName?: string | null;
+  /** Organization name from the org record. Omitted from the sign-off when empty. */
+  orgName?: string | null;
   jobDescription?: string | null;
   /** Asker's IANA zone. History stamps use this, never UTC. */
   timeZone?: string | null;
@@ -584,6 +588,8 @@ export function askLookupCatalogFromJob(input: {
   jobTitle?: string | null;
   jobAddress?: string | null;
   clientName?: string | null;
+  askerName?: string | null;
+  orgName?: string | null;
   jobDescription?: string | null;
   people?: AskLookupPerson[] | null;
   timeZone?: string | null;
@@ -597,6 +603,8 @@ export function askLookupCatalogFromJob(input: {
     jobTitle: input.jobTitle ?? null,
     jobAddress: trim(input.jobAddress) || null,
     clientName: trim(input.clientName) || null,
+    askerName: trim(input.askerName) || null,
+    orgName: trim(input.orgName) || null,
     jobDescription: trim(input.jobDescription) || null,
     timeZone: input.timeZone ?? null,
     people: input.people ?? [],
@@ -1099,6 +1107,8 @@ export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null |
 export function formatAskJobContext(catalog: AskLookupCatalog): string {
   const lines: string[] = [];
   lines.push(`Project: ${trim(catalog.jobTitle) || 'Untitled job'}`);
+  if (trim(catalog.askerName)) lines.push(`Sender: ${trim(catalog.askerName)}`);
+  lines.push(trim(catalog.orgName) ? `Organization: ${trim(catalog.orgName)}` : 'Organization: not on file');
   if (trim(catalog.jobAddress)) lines.push(`Address: ${trim(catalog.jobAddress)}`);
   if (trim(catalog.clientName)) lines.push(`Client: ${trim(catalog.clientName)}`);
   if (trim(catalog.jobDescription)) lines.push(`Description: ${trim(catalog.jobDescription)}`);

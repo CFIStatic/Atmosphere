@@ -45,6 +45,7 @@ import {
   composeGroundedAsk,
   namedSpeaker,
   polishAskProse,
+  stampEmailSignOff,
   resolveAskQuestion,
   speechQuotesForQuestion,
   wrapTaskArtifact,
@@ -64,7 +65,7 @@ Rules:
    ⟦artifact⟧
    the copyable note
    ⟦/artifact⟧
-   The sentence before that wrapper is the answer, not a preamble. A homeowner summary is prose. An email has a greeting, a few natural sentences on what was done or seen, a next step, and a sign-off. A punch list and an estimate are different documents. None of them is a repeated list of clips. Never paste a vision clip title. Describe what happened.
+   The sentence before that wrapper is the answer, not a preamble. A homeowner summary is prose. An email has a greeting, a few natural sentences on what was done or seen, and a sign-off. Group clips from the same day into one sentence, and do not start every sentence the same way. Sign with the sender's name and organization from the context. Never sign with the project or job name. If the organization is not on file, sign with the sender's name only. A punch list and an estimate are different documents. None of them is a repeated list of clips. Never paste a vision clip title. Describe what happened.
 7. Cite a spoken moment as video/<jobId>/<proofId>/<slug>@<seconds> using cite and atSeconds from the tool. Omit @seconds when the tool has no timing.
 8. After the prose, append exactly one sources line and, only when a tool returned a spoken excerpt the question asked for, one quotes line:
    ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>⟧
@@ -77,7 +78,7 @@ Rules:
 13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.
 14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
-16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.`;
+16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Do not invent a next step. You may close with an optional follow-up only in neutral words, and only when the file does not already name one. Never write that a follow-up visit is the next step unless the file says so.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -145,7 +146,11 @@ export function finalizeLookupAnswer(
     jobTitle: catalog.jobTitle,
     speakerName: namedSpeaker(catalog),
   });
-  if (classifyAskIntent(question).kind === 'task') text = wrapTaskArtifact(text);
+  const intent = classifyAskIntent(question);
+  if (intent.kind === 'task') {
+    text = wrapTaskArtifact(text);
+    if (intent.task === 'email') text = stampEmailSignOff(text, catalog);
+  }
   const spoken = /\b(say|said|quote|transcript|tell|mention)\b/i.test(question);
   const quoteTrace = trace.filter(
     (step) => step.tool === 'search_transcripts' || (spoken && step.tool === 'get_clip'),
