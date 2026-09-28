@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { displayMentionText } from '../shared/mentions.js';
 
 /**
  * Agent Memory — the server's side of the record.
@@ -196,6 +197,19 @@ export function serializeWorkLog(w: any, people?: PeopleMap) {
   };
 }
 
+function cleanMentionLeaves(value: unknown): unknown {
+  if (typeof value === 'string') return displayMentionText(value);
+  if (Array.isArray(value)) return value.map(cleanMentionLeaves);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = cleanMentionLeaves(child);
+    }
+    return out;
+  }
+  return value;
+}
+
 export function serializeMemoryEvent(e: any) {
   if (!e) return null;
   return {
@@ -210,9 +224,9 @@ export function serializeMemoryEvent(e: any) {
     entityType: e.entity_type,
     entityId: e.entity_id ?? null,
     jobId: e.job_id ?? null,
-    summary: e.summary,
-    changes: e.changes ?? {},
-    snapshot: e.snapshot ?? null,
+    summary: typeof e.summary === 'string' ? displayMentionText(e.summary) : e.summary,
+    changes: cleanMentionLeaves(e.changes ?? {}),
+    snapshot: cleanMentionLeaves(e.snapshot ?? null),
     source: e.source,
     occurredAt: e.occurred_at,
   };

@@ -64,6 +64,24 @@ test('clip custody export names who filmed, when, the job, device, and integrity
   assert.equal(isClipCustodyExport(record), true);
 });
 
+test('custody export shows a mention as @Name and drops the id', () => {
+  const record = buildClipCustodyExport({
+    job: { id: 'job-1', name: 'Tiffany' },
+    proof: { id: 'pf-1', phase: 'during', checks: [] },
+    chainOfCustody: [
+      {
+        action: 'asked',
+        by: 'Office',
+        detail: 'what activity does @[El Presidente](mention:111832c2-d6f9-4412-86ce-1fccc439eb40)',
+        at: '2026-09-17T16:00:00Z',
+      },
+    ],
+  });
+  assert.equal(record.chainOfCustody[0]!.detail, 'what activity does @El Presidente');
+  assert.equal(String(record.chainOfCustody[0]!.detail).includes('111832c2'), false);
+  assert.equal(String(record.chainOfCustody[0]!.detail).includes('mention:'), false);
+});
+
 test('missing device and hash stay null — unknown is not invented', () => {
   const record = buildClipCustodyExport({
     job: { id: 'job-1' },

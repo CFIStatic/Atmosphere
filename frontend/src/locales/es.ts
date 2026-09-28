@@ -36,6 +36,7 @@ export const ES: MessageCatalog = {
   'nav.renameChat': 'Renombrar chat',
   'nav.rename': 'Renombrar',
   'nav.newChat': 'Nuevo chat',
+  'nav.newChatHint': 'Empieza un chat nuevo. Los chats anteriores siguen en esta lista.',
 
   'crm.title': 'Conectar',
   'crm.subtitle': 'Un agente de Atmosphere inicia sesión con tu usuario y contraseña del CRM para obtener y actualizar trabajos, contactos y reclamos.',

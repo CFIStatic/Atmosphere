@@ -10,15 +10,20 @@ import {
   scrubProviderDetail,
 } from '../src/lib/askModel.js';
 import {
+  asksAboutOtherJobs,
   buildLookupUserPrompt,
+  continueAskLookup,
   executeAskLookup,
   groundedLookupProse,
   lookupPeopleFromContexts,
+  mergeJobAskPeople,
   planAskLookup,
   redactClipTranscriptForAsk,
+  scrubStoredAskText,
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
+import { classifyAskIntent, classifyChatTurn, composeGroundedAsk, composeJobOverview } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -324,16 +329,89 @@ test('a person who is not on the job gets no clips from it', () => {
   assert.doesNotMatch(JSON.stringify(result), /tarp/);
 });
 
-test('lookup prompt is an index, not the transcript', () => {
-  const file = catalog({ clips: [office] });
-  const prompt = buildLookupUserPrompt({
-    question: 'what had @El Presidente done in this file',
-    catalog: file,
+test('job context includes the redacted transcript and prior turns', () => {
+  const file = catalog({
+    clips: [office],
+    jobTitle: 'Project Tiffany & Co.',
+    jobAddress: '123 Michigan Ave, Chicago, IL',
+    clientName: 'Tiffany & Co.',
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] }],
   });
-  assert.match(prompt, /Sep 17 office recording/);
-  assert.ok(prompt.includes(OFFICE));
-  assert.doesNotMatch(prompt, /tarp came off/);
+  const prompt = buildLookupUserPrompt({
+    question: 'what did he say there',
+    resolved: 'What did El Presidente say on Sep 17?',
+    catalog: file,
+    history: [
+      { role: 'user', text: 'What did El Presidente say on Sep 17?' },
+      { role: 'assistant', text: 'The lockbox code is 4412. The tarp came off.' },
+    ],
+  });
+  assert.match(prompt, /123 Michigan Ave/);
+  assert.match(prompt, /Tiffany & Co\./);
+  assert.match(prompt, /El Presidente/);
+  assert.match(prompt, /tarp came off/);
+  assert.match(prompt, /This follow-up refers to: What did El Presidente say on Sep 17\?/);
+  assert.match(prompt, /Earlier turns/);
   assert.doesNotMatch(prompt, /4412/);
+  assert.match(prompt, /\[privacy redacted\]/);
+});
+
+test('people on the job are available without an @mention', () => {
+  const people = mergeJobAskPeople({
+    mentioned: [
+      {
+        userId: '22222222-2222-4222-8222-222222222222',
+        name: 'Off Site',
+        onThisJob: false,
+        otherJobTitles: ['Riverside roof'],
+        recordedProofIds: [],
+        taggedProofIds: [],
+      },
+    ],
+    crew: [{ userId: EL, name: 'El Presidente' }],
+    contacts: [{ name: 'Tiffany Buyer', proofIds: [OFFICE] }],
+    clips: [office],
+  });
+  const onJob = people.filter((person) => person.onThisJob).map((person) => person.name);
+  assert.ok(onJob.includes('El Presidente'));
+  assert.ok(onJob.includes('Seated man'));
+  assert.ok(onJob.includes('Tiffany Buyer'));
+  assert.deepEqual(people.find((person) => person.name === 'El Presidente')?.recordedProofIds, [OFFICE]);
+  const off = people.find((person) => person.name === 'Off Site');
+  assert.equal(off?.onThisJob, false);
+  assert.deepEqual(off?.recordedProofIds, []);
+});
+
+test('a clip summary and an untimed transcript do not keep a redacted secret', () => {
+  const secret = clip({
+    ...office,
+    summary: 'Office check-in. The lockbox code is 4412.',
+  });
+  const file = catalog({
+    clips: [secret],
+    jobTitle: 'Project Tiffany & Co.',
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] }],
+  });
+  const prompt = buildLookupUserPrompt({ question: 'what was this job about', catalog: file });
+  assert.doesNotMatch(prompt, /4412/);
+  assert.match(prompt, /Office check-in/);
+  const overview = composeJobOverview(file);
+  assert.doesNotMatch(overview, /4412/);
+  assert.match(overview, /Office check-in/);
+  const loaded = executeAskLookup('get_clip', { proofId: OFFICE }, file);
+  assert.doesNotMatch(JSON.stringify(loaded.data), /4412/);
+
+  const untimed = clip({
+    proofId: 'untimed-secret',
+    title: 'Untimed private line',
+    transcript: 'The gate code is 9088.',
+    segments: [],
+    words: [],
+    privacyRedactions: { ranges: [{ startSec: 0, endSec: 8, reason: 'private', confidence: 0.9, source: 'vision' }] },
+  });
+  const scrubbed = scrubStoredAskText('He said The gate code is 9088. on camera.', [untimed]);
+  assert.doesNotMatch(scrubbed, /9088/);
+  assert.match(scrubbed, /\[privacy redacted\]/);
 });
 
 test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups', async () => {
@@ -746,5 +824,122 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  }
+});
+
+test('other jobs are searched only by search_other_jobs, and a viewer cannot', () => {
+  const elsewhere = clip({
+    proofId: 'other-proof',
+    jobId: OTHER_JOB,
+    jobTitle: 'Riverside roof',
+    title: 'North slope',
+    segments: [{ start: 2, end: 4, text: 'The tarp came off the north slope again.' }],
+  });
+  const foreign = clip({
+    proofId: 'foreign-proof',
+    orgId: OTHER_ORG,
+    jobId: 'foreign-job',
+    jobTitle: 'Foreign',
+    title: 'Foreign tarp',
+    segments: [{ start: 1, end: 2, text: 'The tarp came off somewhere else.' }],
+  });
+  const file = catalog({ clips: [office], orgClips: [elsewhere, foreign] });
+  const open = executeAskLookup('search_transcripts', { query: 'tarp' }, file);
+  assert.equal(((open.data as { hits: unknown[] }).hits).length, 1);
+  assert.equal(((open.data as { hits: Array<{ proofId: string }> }).hits)[0]?.proofId, OFFICE);
+
+  const other = executeAskLookup('search_other_jobs', { query: 'tarp on other jobs' }, file);
+  const hits = (other.data as { hits: Array<{ proofId: string; jobId: string }> }).hits;
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.proofId, 'other-proof');
+  assert.equal(hits[0]?.jobId, OTHER_JOB);
+  assert.doesNotMatch(JSON.stringify(other.data), /somewhere else/);
+
+  const opened = executeAskLookup('get_clip', { proofId: 'other-proof' }, file);
+  assert.equal(opened.ok, true);
+  assert.match(opened.summary, /Riverside roof/);
+
+  const viewerCatalog = catalog({ access: 'viewer', clips: [office], orgClips: [elsewhere] });
+  const viewer = executeAskLookup('search_other_jobs', { query: 'tarp' }, viewerCatalog);
+  assert.equal(viewer.ok, false);
+  assert.match(viewer.summary, /open job/);
+  assert.equal(executeAskLookup('get_clip', { proofId: 'other-proof' }, viewerCatalog).ok, false);
+});
+
+test('continueAskLookup opens a search hit and searches other jobs only when asked', () => {
+  const file = catalog({
+    clips: [office],
+    orgClips: [
+      clip({
+        proofId: 'other-proof',
+        jobId: OTHER_JOB,
+        title: 'North slope',
+        segments: [{ start: 2, end: 3, text: 'The tarp came off again.' }],
+      }),
+    ],
+  });
+  const searched = executeAskLookup('search_transcripts', { query: 'tarp' }, file);
+  const trace = [{ tool: 'search_transcripts', input: { query: 'tarp' }, result: searched }];
+  const next = continueAskLookup('what did he say about the tarp', file, trace);
+  assert.ok(next.some((step) => step.name === 'get_clip' && step.input.proofId === OFFICE));
+  assert.equal(next.some((step) => step.name === 'search_other_jobs'), false);
+
+  const asked = continueAskLookup('have we seen a tarp on other jobs', file, trace);
+  assert.ok(asked.some((step) => step.name === 'search_other_jobs'));
+  assert.equal(asksAboutOtherJobs('what did El Presidente say about the tarp'), false);
+  assert.equal(asksAboutOtherJobs('have we seen a tarp on other jobs'), true);
+});
+
+test('an email and an estimate do not invent a price or quote a redacted code', async () => {
+  const email = classifyAskIntent('draft an email to the homeowner');
+  const mentioned = classifyAskIntent('did he mention an email about the tarp');
+  const summary = classifyAskIntent('write a homeowner summary');
+  const estimate = classifyAskIntent('draft an estimate');
+  assert.equal(mentioned.kind, 'question');
+  assert.equal(email.kind, 'task');
+  assert.equal(email.kind === 'task' && email.task, 'email');
+  assert.equal(summary.kind === 'task' && summary.task, 'summary');
+  assert.equal(estimate.kind === 'task' && estimate.task, 'estimate');
+  const paper = catalog({
+    jobTitle: 'Paper job',
+    clips: [
+      clip({
+        proofId: 'paper-1',
+        title: 'Notes',
+        workDate: '2026-09-21',
+        segments: [{ start: 1, end: 2, text: 'It is all on paper.' }],
+      }),
+    ],
+  });
+  assert.equal(classifyChatTurn('Thanks. What did El Presidente say about the tarp?', [], paper), null);
+  const opinion = composeGroundedAsk(
+    'Thanks. What do you think he was getting at?',
+    [],
+    paper,
+    [{ role: 'assistant', text: 'On Sep 21 he said “It is all on paper.”' }],
+  );
+  assert.doesNotMatch(opinion, /QuickBooks/i);
+  assert.match(opinion, /motive past those words/i);
+  const prev = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const file = catalog({
+      clips: [office],
+      jobTitle: 'Project Tiffany & Co.',
+      clientName: 'Tiffany & Co.',
+      timeZone: 'America/Chicago',
+    });
+    for (const question of ['draft an email to the homeowner', 'draft an estimate']) {
+      const result = await answerFromAskLookup({ question, catalog: file, step: async () => null });
+      assert.match(result.answer, /⟦artifact⟧/);
+      assert.doesNotMatch(result.answer, /4412/);
+      assert.doesNotMatch(result.answer, /\$\d/);
+      assert.match(result.answer, question.includes('estimate') ? /no prices/i : /draft you can send/i);
+    }
+  } finally {
+    if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev;
   }
 });

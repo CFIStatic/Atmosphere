@@ -4052,7 +4052,7 @@ export const api = {
       onToken?: (text: string) => void;
       onStatus?: (phase: string) => void;
     } = {},
-    opts?: { threadId?: string | null },
+    opts?: { threadId?: string | null; signal?: AbortSignal },
   ): Promise<{
     answer: string;
     groundedOn: number;
@@ -4066,6 +4066,7 @@ export const api = {
       res = await fetch(`${API_BASE}/api/operations/shared/${jobId}/proof/ask?stream=1`, {
         method: 'POST',
         credentials: 'include',
+        signal: opts?.signal,
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/x-ndjson',
@@ -4077,7 +4078,8 @@ export const api = {
           timeZone: browserTimeZone(),
         }),
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') throw err;
       throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
     }
     if (!res.ok) {
@@ -4096,6 +4098,10 @@ export const api = {
     let stored: ProofQuestion | null = null;
     let threadId: string | null = opts?.threadId ?? null;
     while (true) {
+      if (opts?.signal?.aborted) {
+        await reader.cancel().catch(() => undefined);
+        throw new DOMException('Stopped', 'AbortError');
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
