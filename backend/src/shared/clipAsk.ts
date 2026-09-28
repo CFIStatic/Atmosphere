@@ -1444,7 +1444,9 @@ export async function answerFromClip(input: {
   // transcript ("only one fragment" over five lines) is not shown.
   const lineCount = transcriptLineCount(input.record.transcript);
   if (lineCount && speechCountContradictions(completed.text, [lineCount]).length) {
-    const fixed = speechCountAnswer(input.record);
+    // Only a count question gets the full count listing; a narrow question
+    // gets the evidence-first answer instead of a transcript dump.
+    const fixed = isSpeechCountQuestion(input.question) ? speechCountAnswer(input.record) : grounded;
     input.onToken?.(`\n\n${fixed}`);
     return { answer: fixed, model: completed.model, usage: completed.usage };
   }
