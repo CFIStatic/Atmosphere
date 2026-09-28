@@ -324,16 +324,31 @@ test('a person who is not on the job gets no clips from it', () => {
   assert.doesNotMatch(JSON.stringify(result), /tarp/);
 });
 
-test('lookup prompt is an index, not the transcript', () => {
-  const file = catalog({ clips: [office] });
-  const prompt = buildLookupUserPrompt({
-    question: 'what had @El Presidente done in this file',
-    catalog: file,
+test('job context includes the redacted transcript and prior turns', () => {
+  const file = catalog({
+    clips: [office],
+    jobTitle: 'Project Tiffany & Co.',
+    jobAddress: '123 Michigan Ave, Chicago, IL',
+    clientName: 'Tiffany & Co.',
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] }],
   });
-  assert.match(prompt, /Sep 17 office recording/);
-  assert.ok(prompt.includes(OFFICE));
-  assert.doesNotMatch(prompt, /tarp came off/);
+  const prompt = buildLookupUserPrompt({
+    question: 'what did he say there',
+    resolved: 'What did El Presidente say on Sep 17?',
+    catalog: file,
+    history: [
+      { role: 'user', text: 'What did El Presidente say on Sep 17?' },
+      { role: 'assistant', text: 'The lockbox code is 4412. The tarp came off.' },
+    ],
+  });
+  assert.match(prompt, /123 Michigan Ave/);
+  assert.match(prompt, /Tiffany & Co\./);
+  assert.match(prompt, /El Presidente/);
+  assert.match(prompt, /tarp came off/);
+  assert.match(prompt, /This follow-up refers to: What did El Presidente say on Sep 17\?/);
+  assert.match(prompt, /Earlier turns/);
   assert.doesNotMatch(prompt, /4412/);
+  assert.match(prompt, /\[privacy redacted\]/);
 });
 
 test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups', async () => {
