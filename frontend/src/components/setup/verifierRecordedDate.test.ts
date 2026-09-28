@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,5 +108,51 @@ describe('verifier recorded-date formatting', () => {
     expect(header?.textContent).not.toContain('Recorded date');
 
     dom.window.close();
+  });
+});
+
+/** Run the Dashboard date helpers in a real process pinned to a timezone. */
+function inZone(timeZone: string, body: string): unknown {
+  const start = verifierHtml.indexOf('function parseDate(iso)');
+  const end = verifierHtml.indexOf('function integrityOf(item)');
+  const script = `${verifierHtml.slice(start, end)}\nconsole.log(JSON.stringify((function () { ${body} })()));`;
+  const out = execFileSync(process.execPath, ['-e', script], {
+    env: { ...process.env, TZ: timeZone },
+    encoding: 'utf8',
+  });
+  return JSON.parse(out);
+}
+
+describe('verifier recorded date across the CT / UTC midnight edge', () => {
+  // 11:30 PM Sep 27 in Chicago is already Sep 28 in UTC.
+  const LATE_EVENING_CT = '2026-09-28T04:30:30.856Z';
+
+  it('shows the Chicago day and the Chicago clock for the same instant, even with a UTC day string', () => {
+    expect(
+      inZone(
+        'America/Chicago',
+        `return {
+          fromInstant: whenCell('', '${LATE_EVENING_CT}'),
+          withUtcDay: whenCell('${LATE_EVENING_CT}'.slice(0, 10), '${LATE_EVENING_CT}'),
+          stamp: stamp('${LATE_EVENING_CT}'),
+        };`,
+      ),
+    ).toEqual({
+      fromInstant: expect.stringContaining('>Sep 27, 2026</time><small>11:30 PM</small>'),
+      withUtcDay: expect.stringContaining('>Sep 27, 2026</time><small>11:30 PM</small>'),
+      stamp: 'Sep 27, 2026 · 11:30 PM',
+    });
+  });
+
+  it('a UTC viewer sees the UTC day and clock for that instant', () => {
+    expect(inZone('UTC', `return whenCell('2026-09-27', '${LATE_EVENING_CT}');`)).toEqual(
+      expect.stringContaining('>Sep 28, 2026</time><small>4:30 AM</small>'),
+    );
+  });
+
+  it('falls back to a date-only work day when there is no instant', () => {
+    expect(inZone('America/Chicago', "return whenCell('2026-09-27', '');")).toEqual(
+      expect.stringContaining('>Sep 27, 2026</time>'),
+    );
   });
 });
