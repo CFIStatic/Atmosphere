@@ -114,7 +114,11 @@ Rules:
 17. Use only the job context, the tool results, and the earlier turns in this request. No guessing and no outside knowledge about this job. When a fact is missing, write that it is not on file.
 18. Quote only words that appear in a transcript line, exactly as written there, and cite that clip at the time the line was said. Times, dates, clip clocks, job numbers, and names must be ones that appear in the context or tool results.
 19. Never invent a speaker role. Do not call someone the homeowner, adjuster, contractor, or client unless the file says so; use the name or label the file gives, or say the file does not say who spoke.
-20. Your answer is checked against the file before anyone sees it. Unsupported quotes, times, and names are removed.`;
+20. Your answer is checked against the file before anyone sees it. Unsupported quotes, times, names, and speech counts are removed.
+21. Each clip card gives the raw transcript (authoritative) and an AI summary (may be stale). The raw transcript decides what was said and how much. When the AI summary disagrees with the transcript, follow the transcript and do not repeat the summary's claim.
+22. When the question asks how many (lines, utterances, quotes, times something was said), the first sentence is the number, counted from the raw transcript lines, for example "There are **5** lines in the transcript." Then list them if asked. Never lead with a summary.
+23. When the question assumes something the file does not show (an object, a brand, an install, a person, an event, a visual detail), say that plainly in the first sentence, for example "The file does not show a ceiling light being installed, and no brand is visible or mentioned." Do not guess, and do not answer with a nearby detail as if it were the thing asked.
+24. For a specific question, look up the exact transcript lines and timed events first (search_transcripts / get_clip); the AI summary is supplementary. Answer in one direct sentence, then only the supporting quotes with their times. Never paste a whole transcript for a narrow question.`;
 
 /**
  * Fast turns already have the job file in the cached prefix. Answer from it
@@ -136,7 +140,11 @@ Rules:
 7. Do not put those machine lines inside the sentences. Use the person's name. Never write a visual label when the file names who spoke.
 8. Use only this context and tool results. No guessing. When a fact is missing, write that it is not on file.
 9. Quote only exact words from a transcript line and cite that clip at the time the line was said. Times, dates, and names must appear in the context.
-10. Never invent a speaker role such as homeowner, adjuster, or contractor. Use the name or label the file gives, or say the file does not say who spoke.`;
+10. Never invent a speaker role such as homeowner, adjuster, or contractor. Use the name or label the file gives, or say the file does not say who spoke.
+11. The raw transcript (authoritative) decides what was said and how much. The AI summary may be stale; when they disagree, follow the transcript and do not repeat the summary's claim.
+12. A "how many" question gets the number first, counted from the raw transcript lines: "There are **5** lines in the transcript." Then list them if asked.
+13. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly in the first sentence that it is not in the evidence. Do not guess.
+14. For a specific question, answer in one direct sentence from the exact transcript lines and timed events, then only the supporting quotes with their times. The AI summary is supplementary. Never paste a whole transcript for a narrow question.`;
 
 export type LookupModelTurn = {
   model: string;
@@ -694,18 +702,16 @@ export async function groundLookupAnswer(input: {
     repaired: false,
     stripped: false,
   };
-  if (!first.open.length) return { answer: first.answer, failures: first.failures, verify };
-
-  const system = ASK_REPAIR_SYSTEM;
-  const user = formatRepairPrompt({
-    answer: first.answer,
-    failures: first.open,
-    source: groundingSourceText(input.catalog, input.trace, shown),
-  });
-  let repairedText: string | null = null;
-  if (!input.signal?.aborted) {
+  const runRepair = async (failures: typeof first.open): Promise<string | null> => {
+    if (input.signal?.aborted) return null;
+    const system = ASK_REPAIR_SYSTEM;
+    const user = formatRepairPrompt({
+      answer: first.answer,
+      failures,
+      source: groundingSourceText(input.catalog, input.trace, shown),
+    });
     try {
-      repairedText = input.repair
+      return input.repair
         ? await input.repair({ system, user })
         : (
             await completeAskText({
@@ -720,14 +726,34 @@ export async function groundLookupAnswer(input: {
           )?.text ?? null;
     } catch (err) {
       logAskFailure('ask_grounding_repair_failed', err);
+      return null;
     }
+  };
+  const trailersOf = (text: string) => text.match(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi) ?? [];
+  const proseOf = (text: string) => text.replace(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi, '').trim();
+
+  if (!first.open.length) {
+    // Every fact checks out. Answer-shape problems (no number for a count, no
+    // time for a "when", a whole-transcript dump) get one repair attempt; the
+    // repair is kept only when it is at least as grounded and better shaped.
+    if (first.quality.length) {
+      const text = await runRepair(first.quality);
+      if (text?.trim()) {
+        const second = verifyAskAnswer([proseOf(text), ...trailersOf(first.answer)].filter(Boolean).join('\n\n'), index);
+        if (!second.open.length && second.quality.length < first.quality.length) {
+          verify.repaired = true;
+          return { answer: second.answer, failures: [...first.failures, ...first.quality], verify };
+        }
+      }
+    }
+    return { answer: first.answer, failures: first.failures, verify };
   }
+
+  const repairedText = await runRepair(first.open);
   let current = first;
   if (repairedText?.trim()) {
     // Keep the checked trailers; take only the repaired prose.
-    const trailers = first.answer.match(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi) ?? [];
-    const prose = repairedText.replace(/⟦(?:sources|quotes|followups|actions):[^⟧]*⟧/gi, '').trim();
-    const second = verifyAskAnswer([prose, ...trailers].filter(Boolean).join('\n\n'), index);
+    const second = verifyAskAnswer([proseOf(repairedText), ...trailersOf(first.answer)].filter(Boolean).join('\n\n'), index);
     if (!second.open.length) {
       verify.repaired = true;
       return { answer: second.answer, failures: [...first.failures, ...second.failures], verify };

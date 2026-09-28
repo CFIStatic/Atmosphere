@@ -11,6 +11,8 @@
  * it is not, a grounded lookup still answers from the same record so the Ask
  * tab works in demo and in environments without a provider.
  */
+import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
+import { answerQualityFailures, normalizeForMatch } from './askVerify.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
@@ -103,6 +105,14 @@ export type ClipAskRecord = {
   /** Private intervals — Ask must not quote speech inside these ranges. */
   privacyRedactions?: PrivacyRedactionRange[] | { ranges?: PrivacyRedactionRange[] } | null;
   childPrivacyRedactions?: ChildPrivacyRange[] | { ranges?: ChildPrivacyRange[] } | null;
+  /** Summary freshness from the library item (fresh | updating | failed | untracked | none). */
+  summaryState?: string | null;
+  /**
+   * True when the AI conversation summary was built from an older transcript
+   * (or contradicts the current one). Ask then drops it and answers from the
+   * raw transcript, which is authoritative.
+   */
+  conversationStale?: boolean | null;
 };
 
 
@@ -182,7 +192,7 @@ const CLIP_QA_SYSTEM = `You are a sharp, friendly expert who has already watched
 
 Rules:
 1. Answer only from the reading given (frame description + VERBATIM Whisper transcript when present). Never invent people, quotes, times, rooms, or events.
-2. If the reading does not contain the answer, say so briefly ("The footage on file does not show that") and stop. Do not guess. EXCEPTION: when "Heard on the mic" is present and the question is about talk / conversation / what was said, answer from that transcript — never deny on-file speech (including TV/laptop audio in the room).
+2. If the reading does not contain the answer, say so plainly in the first sentence ("The footage on file does not show that") and stop. Do not guess. EXCEPTION: when a "Raw transcript" is present and the question is about talk / conversation / what was said, answer from that transcript — never deny on-file speech (including TV/laptop audio in the room).
 3. LAYERED DEFAULT (Glance style) for broad asks ("what is happening", "what's going on", "describe this", "what are they talking about", "summarize") unless the user asks for depth:
    - Open with ONE plain sentence on what happened.
    - Follow with a few markdown bullets only (use **Label:** sparingly) — prefer who was involved, what was decided, and what's next when the reading has them.
@@ -195,6 +205,10 @@ Rules:
 8. Never estimate cost, hours, or whether work was worth paying for.
 9. Preserve uncertainty marked in the reading ("unclear", "cannot confirm"). Prefer "the footage does not show that" over a plausible guess.
 10. Tone: warm expert colleague, lightly structured, no stiff disclaimers, no wall-of-evidence unless depth was requested.
+11. The raw transcript is authoritative for what was said and how much. The AI summary of the conversation may be stale (built from an older transcript). When they disagree, follow the raw transcript and never repeat the summary's claim.
+12. COUNTS FIRST: when asked how many (lines, utterances, quotes, things said), the first sentence is the number, counted from the raw transcript lines ("There are **5** lines in the raw transcript."). Then list them if asked. Never open with a summary.
+13. NOT IN THE EVIDENCE: when the question assumes something the reading does not show (an object, a brand, a model, an install, a repair, a person, an event, a color or other visual detail), say so plainly in the first sentence ("Not shown" / "Not established") — e.g. "The footage on file does not show a ceiling light being installed, and no brand is visible or mentioned." Do not guess, do not name a brand or time that is not in the reading, and do not answer with a nearby detail as if it were the thing asked. If the reading says a detail is illegible or unclear, say that.
+14. ANSWER FORMAT for a specific question: one sentence that answers it directly, then only the supporting quotes or events with their [m:ss] times. Never paste the whole transcript or every event for a narrow question. The AI summary is supplementary; never answer from it when a transcript line or timed event covers the question.
 
 ` + ASK_PROSE_FORMAT_RULES;
 
@@ -266,6 +280,12 @@ export function clipRecordFromEvidenceItem(item: {
     peopleCount: analysis?.peopleCount ?? (Array.isArray(analysis?.peoplePresent) ? analysis.peoplePresent.length : null),
     peopleSpeakers: Array.isArray(analysis?.peopleSpeakers) ? analysis.peopleSpeakers : [],
     peopleSource: typeof analysis?.peopleSource === 'string' ? analysis.peopleSource : null,
+    summaryState: typeof analysis?.summaryState === 'string' ? analysis.summaryState : null,
+    conversationStale:
+      analysis?.conversationStale === true ||
+      analysis?.summaryState === 'updating' ||
+      analysis?.summaryState === 'failed' ||
+      analysis?.summaryState === 'quarantined',
   };
 }
 
@@ -299,8 +319,11 @@ function tokens(value: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .split(/\s+/)
-    .filter((token) => token.length > 2 && !STOP.has(token));
+    .filter((token) => (token.length > 2 || SHORT_KEEP.has(token)) && !STOP.has(token));
 }
+
+/** Two-letter words that name a real thing in a question ("is the TV on?"). */
+const SHORT_KEEP = new Set(['tv', 'pc', 'ac', 'hd']);
 
 function parseClock(stamp: string): number | null {
   const parts = stamp.split(':').map((p) => Number(p));
@@ -340,6 +363,47 @@ export function speechSafeClipRecord(record: ClipAskRecord): ClipAskRecord {
       })
     : record.conversationTurns;
   return { ...record, transcript, conversationTurns: turns };
+}
+
+const CONVERSATION_FIELDS = [
+  'conversationDetails',
+  'conversationAgreements',
+  'conversationConcerns',
+  'conversationRooms',
+  'conversationTurns',
+  'conversationCommitments',
+  'conversationActionItems',
+  'conversationMoneyTalk',
+  'conversationInsurance',
+  'conversationKeyMoments',
+  'conversationAgreementFacts',
+  'conversationConcernFacts',
+  'conversationRefusals',
+] as const;
+
+/** Every AI-conversation claim on the record, for checking against the transcript. */
+function conversationClaims(record: ClipAskRecord): string {
+  const out: string[] = [String(record.conversationExecutiveSummary ?? ''), String(record.conversationSummary ?? '')];
+  for (const line of record.conversationDetails ?? []) out.push(String(line ?? ''));
+  return out.filter((line) => line.trim()).join('\n');
+}
+
+/**
+ * The raw transcript is authoritative. When the AI conversation summary is
+ * marked stale, or it states an amount of speech the transcript contradicts
+ * ("the only speech is a single fragment" over five lines), drop every
+ * summary-derived field so no Ask path can repeat it. Idempotent.
+ */
+export function withAuthoritativeTranscript(record: ClipAskRecord): ClipAskRecord {
+  const transcript = String(record.transcript ?? '').trim();
+  if (!transcript) return record;
+  const hasSummary = Boolean(conversationClaims(record)) || (record.conversationTurns ?? []).length > 0;
+  if (!hasSummary) return record;
+  const contradicted = speechCountContradictions(conversationClaims(record), [transcriptLineCount(transcript)]).length > 0;
+  if (!record.conversationStale && !contradicted) return record;
+  const out: ClipAskRecord = { ...record, conversationStale: true, conversationSummary: null, conversationExecutiveSummary: null };
+  for (const key of CONVERSATION_FIELDS) (out as Record<string, unknown>)[key] = [];
+  return out;
 }
 
 function splitTranscript(transcript: string | null | undefined): Array<{ at: number | null; text: string }> {
@@ -504,6 +568,158 @@ function conversationTopic(record: ClipAskRecord): string | null {
   return detail || null;
 }
 
+/**
+ * "How many lines were said?" — the number first, from the raw transcript,
+ * then each line with its time. Never from the AI summary.
+ */
+export function speechCountAnswer(record: ClipAskRecord): string {
+  record = speechSafeClipRecord(record);
+  const rows = splitTranscript(record.transcript);
+  if (!rows.length) {
+    if (isTranscriptPending(record.transcriptStatus)) return HEARING_MIC;
+    return 'There are **0** lines in the raw transcript. No speech was transcribed on this clip.';
+  }
+  const n = rows.length;
+  const head = `There ${n === 1 ? 'is' : 'are'} **${n}** ${n === 1 ? 'line' : 'lines'} in the raw transcript of this clip.`;
+  const list = rows.slice(0, 40).map((row, i) => {
+    const seek = formatClipTime(row.at);
+    return `${i + 1}. ${seek ? `[${seek}] ` : ''}“${row.text}”`;
+  });
+  const more = n > 40 ? `\n\n(${n - 40} more lines in the transcript.)` : '';
+  return `${head}\n\n${list.join('\n')}${more}`;
+}
+
+/** Words that describe the question, not the thing asked about. */
+const QUESTION_FRAME = new Set([
+  'timestamp', 'timestamps', 'time', 'times', 'exactly', 'exact', 'point', 'moment', 'second', 'seconds', 'minute',
+  'happen', 'happens', 'happened', 'does', 'doing', 'did', 'tell', 'know', 'which', 'many', 'much', 'there',
+  'recording', 'camera', 'frame', 'filmed', 'film', 'see', 'can', 'you', 'your', 'describe', 'visible',
+]);
+/** Specific details that need a literal hit in the reading; never inferred. */
+const LITERAL_DETAIL = /^(brand|brands|make|model|manufacturer|maker|serial|sku|part|price|prices|cost|costs|dollars?|warranty|license|plate|address|phone|model number)$/;
+
+/**
+ * Question words the clip's reading and raw transcript never mention. Two or
+ * more, or any literal detail like a brand or price, means the question
+ * assumes something the evidence does not show.
+ */
+export function missingFromEvidence(question: string, record: ClipAskRecord): { missing: string[]; literal: string[] } {
+  const hay = clipCorpus(record).flatMap((row) => tokens(row.text));
+  const asked = tokens(question).filter((token) => !QUESTION_FRAME.has(token));
+  const missing = asked.filter((token) => !hay.some((h) => tokensOverlap(token, h) || h.startsWith(token.slice(0, 5)) && token.length >= 6));
+  return { missing, literal: missing.filter((token) => LITERAL_DETAIL.test(token)) };
+}
+
+function notInEvidenceAnswer(missing: string[], yesNo: boolean, record: ClipAskRecord): string {
+  const words = missing.slice(0, 4).map((word) => `“${word}”`).join(', ');
+  const lead = yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
+  const labelSeen = clipCorpus(record).find((row) => /\b(maker'?s name|manufacturer|logo|brand name|label|printed)\b/i.test(row.text));
+  const labelNote =
+    missing.some((word) => /^(brand|make|maker|manufacturer|model)$/.test(word)) && labelSeen
+      ? ' The reading notes a printed name or label on something in frame but does not say what it reads.'
+      : '';
+  return `${lead} Nothing in this clip's reading or raw transcript mentions ${words}, so I can't give a time or detail for it.${labelNote}`;
+}
+
+/** The sentence of a long reading row that best matches the question, so a detail question is not answered with the whole narration. */
+function focusRow(text: string, qTokens: string[]): string {
+  if (text.length <= 320) return text;
+  const parts = text.split(/(?<=[.;!?])\s+/).filter((part) => part.trim());
+  let best = parts[0] ?? text;
+  let bestScore = -1;
+  for (const part of parts) {
+    const hay = tokens(part);
+    const score = qTokens.filter((token) => hay.some((h) => tokensOverlap(token, h))).length;
+    if (score > bestScore) {
+      best = part;
+      bestScore = score;
+    }
+  }
+  return best.trim();
+}
+
+/** Words that frame a talk question rather than name its subject. */
+const TALK_FRAME = new Set([
+  'mention', 'mentioned', 'mentions', 'mentioning', 'talk', 'talked', 'talking', 'talks', 'said', 'saying', 'say', 'says',
+  'discuss', 'discussed', 'discussing', 'conversation', 'topic', 'heard', 'hear', 'mic', 'spoken', 'speak', 'spoke',
+  'quote', 'quotes', 'verbatim', 'transcript', 'words', 'word', 'line', 'lines', 'exact', 'exactly', 'full',
+  'agree', 'agreed', 'decide', 'decided', 'promise', 'promised', 'ask', 'asked', 'tell', 'told', 'want', 'wanted',
+  'come', 'comes', 'came', 'bring', 'brought', 'anyone', 'everyone', 'somebody', 'recording', 'whole', 'entire',
+  'give', 'read', 'back', 'list', 'repeat', 'share', 'provide', 'please', 'everything', 'all', 'each', 'every',
+  // Who spoke is not what was said about: role words frame the question.
+  'homeowner', 'homeowners', 'owner', 'owners', 'contractor', 'contractors', 'client', 'customer', 'adjuster',
+  'inspector', 'tenant', 'guy', 'lady', 'man', 'woman', 'speaker', 'speakers', 'voice', 'voices', 'she', 'he', 'her', 'him',
+]);
+
+function askedTerm(question: string, token: string): string {
+  const m = question.match(new RegExp(`\\b(${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\w*)`, 'i'));
+  return m ? m[1]! : token;
+}
+
+/**
+ * The transcript lines about the thing asked, with times. Null when the
+ * question names no subject (a broad "what was said?"). When nothing in the
+ * transcript mentions the subject, says so plainly instead of dumping lines.
+ */
+export function topicalSpeechAnswer(question: string, record: ClipAskRecord): string | null {
+  const heard = splitTranscript(record.transcript);
+  if (!heard.length) return null;
+  const asked = tokens(question).filter((token) => !TALK_FRAME.has(token) && !QUESTION_FRAME.has(token));
+  if (!asked.length) return null;
+  const scored = heard
+    .map((row) => {
+      const hay = tokens(row.text);
+      return { row, score: asked.filter((token) => hay.some((h) => tokensOverlap(token, h))).length };
+    })
+    .filter((entry) => entry.score > 0);
+  const yesNo = isYesNoQuestion(question);
+  const terms = asked.slice(0, 3).map((token) => `“${askedTerm(question, token)}”`).join(', ');
+  const n = heard.length;
+  if (!scored.length) {
+    const lead = yesNo ? 'No. ' : '';
+    return `${lead}Not established: the raw transcript (${n} ${n === 1 ? 'line' : 'lines'}) never mentions ${terms}.`;
+  }
+  const best = Math.max(...scored.map((entry) => entry.score));
+  const hits = scored.filter((entry) => entry.score === best).slice(0, 6);
+  const times = hits.map((entry) => formatClipTime(entry.row.at)).filter(Boolean) as string[];
+  const when = times.length ? ` at ${times.length > 2 ? `${times.slice(0, -1).join(', ')}, and ${times[times.length - 1]}` : times.join(' and ')}` : '';
+  const subject = asked
+    .filter((token) => hits.some((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h))))
+    .slice(0, 3)
+    .map((token) => `“${askedTerm(question, token)}”`)
+    .join(' and ');
+  const unmatched = asked
+    .filter((token) => !hits.some((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h))))
+    .slice(0, 3)
+    .map((token) => `“${askedTerm(question, token)}”`);
+  const quotesOf = (list: typeof hits) =>
+    list.map((entry) => {
+      const seek = formatClipTime(entry.row.at);
+      return `- ${seek ? `[${seek}] ` : ''}“${entry.row.text}”`;
+    });
+  // A yes/no question is only "yes" when one line carries everything asked;
+  // a line that shares one word ("table") does not establish a price agreement.
+  if (yesNo && unmatched.length) {
+    return `No. Not established: the raw transcript (${n} ${n === 1 ? 'line' : 'lines'}) never mentions ${unmatched.join(' or ')} alongside ${subject}.\n\nClosest line${hits.length === 1 ? '' : 's'}, for context:\n${quotesOf(hits.slice(0, 3)).join('\n')}`;
+  }
+  // Every term is there, but in different lines: not a yes to a question about
+  // them together. Say where each one comes up instead.
+  if (yesNo && !unmatched.length && best < asked.length) {
+    const where = asked
+      .slice(0, 3)
+      .map((token) => {
+        const first = hits.find((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h)));
+        const at = first ? formatClipTime(first.row.at) : null;
+        return `“${askedTerm(question, token)}”${at ? ` at ${at}` : ''}`;
+      })
+      .join('; ');
+    return `Not established in any single line: ${where}.\n\n${quotesOf(hits).join('\n')}`;
+  }
+  const missingNote = unmatched.length ? ` ${unmatched.join(' and ')} ${unmatched.length === 1 ? 'is' : 'are'} never mentioned.` : '';
+  const lead = yesNo ? `Yes. ${subject} comes up${when}.` : `${subject[0]?.toUpperCase() ?? ''}${subject.slice(1)} comes up${when}.${missingNote}`;
+  return `${lead}\n\n${quotesOf(hits).join('\n')}`;
+}
+
 /** User asked to dig in — quotes, who said what, timestamps, more detail. */
 export function wantsAskDepth(question: string): boolean {
   const q = question.toLowerCase();
@@ -540,8 +756,25 @@ export function layeredClipBriefing(record: ClipAskRecord, kind: 'scene' | 'topi
 
   if (kind === 'topic') {
     if (!topic && !hasUsableSpeech(record)) return null;
+    const brief = record.conversationStale
+      ? ''
+      : String(record.conversationExecutiveSummary || record.conversationSummary || '').trim();
+    const heard = splitTranscript(record.transcript);
+    const otherTalk = [...(record.conversationDetails ?? []), ...(record.conversationAgreements ?? []), ...(record.conversationConcerns ?? [])]
+      .some((line) => String(line || '').trim());
+    if (!brief && heard.length && (record.conversationStale || !otherTalk)) {
+      // No usable AI summary: say what the raw transcript has instead of
+      // promoting its first line to "the topic".
+      const n = heard.length;
+      const shown = heard.slice(0, 5).map((row) => {
+        const seek = formatClipTime(row.at);
+        return `${seek ? `[${seek}] ` : ''}“${row.text}”`;
+      });
+      const more = n > 5 ? `\n- …and ${n - 5} more` : '';
+      return `What they're talking about, from the raw transcript (${n} ${n === 1 ? 'line' : 'lines'}); no work topic is stated:\n\n${bulletBlock(shown)}${more}\n\nWant the full transcript with timestamps?`;
+    }
     const opener = topic
-      ? `They're talking about this: ${trimSentence(topic)}.`
+      ? `What they're talking about, per the AI summary: ${trimSentence(topic)}.`
       : 'There is conversation on the mic in this clip.';
     for (const line of (record.conversationAgreements ?? []).slice(0, 2)) {
       const t = String(line || '').trim();
@@ -641,17 +874,16 @@ function exactSpeechAnswer(record: ClipAskRecord, opts?: { topic?: boolean }): s
     }
   }
   if (!lines.length) return null;
-  const topic = conversationTopic(record);
+  const topic = record.conversationStale ? null : conversationTopic(record);
+  if (heard.length && !opts?.topic) {
+    // Quoted straight from the raw transcript; the AI summary is not the source.
+    return `Exact words from the raw transcript (${heard.length} ${heard.length === 1 ? 'line' : 'lines'}): ${lines.join(' ')}`;
+  }
   if (opts?.topic) {
-    const head = topic
-      ? `They are talking about this: ${topic}`
-      : 'They are talking about this (exact words from the recording):';
+    const head = topic ? `AI summary: ${topic}` : 'From the raw transcript:';
     return `${head} Exact words from the recording: ${lines.join(' ')}`;
   }
-  const head = topic
-    ? `Yes — they are talking about this: ${topic} Exact words from the recording:`
-    : 'Yes — exact words from the recording:';
-  return `${head} ${lines.join(' ')}`;
+  return `Exact words from the recording: ${lines.join(' ')}`;
 }
 
 function isYesNoQuestion(question: string): boolean {
@@ -756,8 +988,9 @@ function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
  * configured, and as a fallback if the model call fails.
  */
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
-  record = speechSafeClipRecord(record);
+  record = withAuthoritativeTranscript(speechSafeClipRecord(record));
   const q = question.trim();
+  if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
   if (isWhoQuestion(q)) {
     const people = peopleFromRecord(record);
     const answer = formatPeopleAnswer(people);
@@ -766,17 +999,24 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
   // Depth / exact-recall asks get verbatim quotes. Broad topic asks stay layered.
   // (Leave what-happened+depth to the scene briefing path below.)
+  if (isWhatWasSaid(q) || /\b(quote|quotes|verbatim|transcript)\b/i.test(q)) {
+    const topical = topicalSpeechAnswer(q, record);
+    if (topical) return topical;
+  }
   if (
     wantsAskDepth(q) &&
     hasUsableSpeech(record) &&
     !isWhatHappened(q) &&
-    (isWhatWasSaid(q) ||
-      /\b(quote|verbatim|transcript|timestamp|seek time|who said|full conversation)\b/i.test(q))
+    (isWhatWasSaid(q) || /\b(quote|quotes|verbatim|transcript|who said|full conversation)\b/i.test(q))
   ) {
     const speech = exactSpeechAnswer(record, { topic: false });
     if (speech) return speech;
   }
   if (isWhatWasSaid(q)) {
+    // A narrow question ("what was said about the accounting app, and when") gets the
+    // matching transcript lines with times, never the whole transcript.
+    const topical = topicalSpeechAnswer(q, record);
+    if (topical) return topical;
     if (isConversationTopic(q) && !wantsAskDepth(q)) {
       const layered = layeredClipBriefing(record, 'topic');
       if (layered) return layered;
@@ -812,8 +1052,14 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const qTokens = tokens(q);
   if (!qTokens.length) {
-    const speech = exactSpeechAnswer(record);
-    if (speech) return speech;
+    // Only a speech question gets the transcript; a narrow question with no
+    // content words gets the scene reading, never a whole-transcript dump.
+    if (isWhatWasSaid(q)) {
+      const speech = exactSpeechAnswer(record);
+      if (speech) return speech;
+    }
+    const layered = layeredClipBriefing(record, 'scene');
+    if (layered) return layered;
     return (record.dictation || record.summary || 'The footage on file does not show that.').trim();
   }
 
@@ -828,9 +1074,14 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     .filter((entry) => entry.score >= need)
     .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
 
+  // A question that assumes something the reading never mentions (a brand, an
+  // install) is answered plainly as not in the evidence, not with the nearest match.
+  const gap = missingFromEvidence(q, record);
+  if (gap.literal.length || gap.missing.length >= 2) return notInEvidenceAnswer(gap.missing, yesNo, record);
+
   if (!scored.length) {
     // Never deny on-file speech for talk-ish questions when Whisper heard it.
-    if (hasUsableSpeech(record)) {
+    if (hasUsableSpeech(record) && isWhatWasSaid(q)) {
       const speech = exactSpeechAnswer(record);
       if (speech) return speech;
     }
@@ -840,6 +1091,8 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   if (yesNo) {
+    const state = stateAnswer(q, scored.map((entry) => entry.row), qTokens);
+    if (state) return state;
     const timed = scored.find((entry) => entry.row.at != null) ?? scored[0];
     return yesFromRow(timed.row);
   }
@@ -852,7 +1105,7 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
       .map(({ row }) => {
         const spoken = formatClipTimeSpoken(row.at);
         const clock = formatClipTime(row.at);
-        const text = row.text.replace(/\.$/, '');
+        const text = focusRow(row.text, qTokens).replace(/\.$/, '');
         if (spoken) return `At ${clock}, ${text[0].toLowerCase()}${text.slice(1)}. That was ${spoken}`;
         return text;
       })
@@ -860,15 +1113,70 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   );
 }
 
+/** On/off style states: a row that names the thing is not a yes unless it states the asked state. */
+const STATE_PAIRS: Array<[RegExp, RegExp]> = [
+  // "On" as a state (is on / turned on / "on," at a clause end), never the preposition ("on the ceiling").
+  [
+    /\b(?:is|was|are|were|turned|switched|left|stays?|remains?|powered|comes?|came) on\b|\bon\s*(?:[),.;?!]|$)|\bplaying\b|\brunning\b|\b(?:screen|display) (?:is )?(?:lit|showing)\b/i,
+    /\boff\b|\bblack\/off\b|\bnot (on|playing|running)\b|\bscreen (is )?(black|dark)\b/i,
+  ],
+  [/\b(?:is|was|are|were|left|stands?|swung|propped) open\b|\bopen\s*(?:[),.;?!]|$)|\bopened\b/i, /\bclosed\b|\bshut\b/i],
+];
+
+function stateAnswer(question: string, rows: CorpusRow[], qTokens: string[]): string | null {
+  const q = question.replace(/^\s*(is|are|was|were)\b/i, '');
+  for (const [yes, no] of STATE_PAIRS) {
+    const askYes = yes.test(q);
+    const askNo = no.test(q);
+    if (!askYes && !askNo) continue;
+    const sentences = rows.flatMap((row) =>
+      row.text.split(/(?<=[.;!?])\s+/).map((text) => ({ row, text: text.trim() })),
+    ).filter((entry) => {
+      const hay = tokens(entry.text);
+      return qTokens.some((token) => hay.some((h) => tokensOverlap(token, h)));
+    }).sort((a, b) => Number(a.row.at == null) - Number(b.row.at == null) || a.text.length - b.text.length);
+    const said = (entry: { row: CorpusRow; text: string }) => {
+      const clock = formatClipTime(entry.row.at);
+      return `${entry.text.replace(/[.;,:]+$/, '')}${clock ? ` (${clock})` : ''}.`;
+    };
+    const negative = sentences.find((entry) => no.test(entry.text));
+    const positive = sentences.find((entry) => yes.test(entry.text));
+    if (askYes && negative) return `No. ${said(negative)}`;
+    if (askYes && positive) return `Yes. ${said(positive)}`;
+    if (askNo && negative) return `Yes. ${said(negative)}`;
+    if (askNo && positive) return `No. ${said(positive)}`;
+    if (sentences.length) return `Not established: the footage on file shows it but does not say either way. ${said(sentences[0]!)}`;
+  }
+  return null;
+}
+
 export function formatClipRecordForModel(record: ClipAskRecord): string {
-  record = speechSafeClipRecord(record);
+  record = withAuthoritativeTranscript(speechSafeClipRecord(record));
   const lines: string[] = [];
   if (record.workDate) lines.push(`Work date: ${record.workDate}`);
   if (record.phase) lines.push(`Phase: ${record.phase}`);
   if (record.company) lines.push(`Crew: ${record.company}`);
   if (record.durationSeconds != null) lines.push(`Duration: ${formatClipTime(record.durationSeconds) ?? record.durationSeconds}s`);
-  if (record.dictation) lines.push(`Dictation: ${record.dictation}`);
-  if (record.summary && record.summary !== record.dictation) lines.push(`Summary: ${record.summary}`);
+  // The raw transcript goes first and is labeled authoritative: it decides
+  // what was said and how much, over any AI summary below.
+  if (record.transcript) {
+    const count = splitTranscript(record.transcript).length;
+    lines.push(
+      `Raw transcript (authoritative; verbatim Whisper; ${count} ${count === 1 ? 'line' : 'lines'}; quote exactly; never invent dialogue):\n${record.transcript}`,
+    );
+  } else if (isTranscriptPending(record.transcriptStatus)) {
+    lines.push('Raw transcript: not ready yet.');
+  } else {
+    lines.push('Raw transcript: none (no speech was transcribed).');
+  }
+  if (record.conversationStale) {
+    lines.push('AI summary of the conversation: left out. It was built from an older transcript and is being regenerated; use the raw transcript.');
+  }
+  // Timed analysis events come next; the untimed AI description of the whole
+  // clip is supplementary and goes after them.
+  const overview: string[] = [];
+  if (record.dictation) overview.push(`AI description of the whole clip (supplementary, untimed): ${record.dictation}`);
+  if (record.summary && record.summary !== record.dictation) overview.push(`AI clip summary (supplementary, untimed): ${record.summary}`);
   if (record.materialChange) {
     lines.push(
       `Material change: ${record.materialChange}${record.materialBecause ? ` — ${record.materialBecause}` : ''}`,
@@ -893,6 +1201,7 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
     const when = formatClipTime(window.startSeconds);
     lines.push(`Window${when ? ` @ ${when}` : ''}: ${window.summary}`);
   }
+  lines.push(...overview);
   if ((record.changes ?? []).length) lines.push(`Changes: ${record.changes!.join('; ')}`);
   for (const line of record.scope ?? []) {
     if (!line.title) continue;
@@ -902,11 +1211,11 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
-  if (record.transcript) lines.push(`Heard on the mic (verbatim Whisper; quote exactly; never invent dialogue):\n${record.transcript}`);
+  const summaryLabel = 'AI summary of the conversation (may be stale; if it disagrees with the raw transcript, the transcript is right)';
   if (record.conversationExecutiveSummary) {
-    lines.push(`Conversation brief: ${record.conversationExecutiveSummary}`);
+    lines.push(`${summaryLabel}: ${record.conversationExecutiveSummary}`);
   } else if (record.conversationSummary) {
-    lines.push(`Conversation summary: ${record.conversationSummary}`);
+    lines.push(`${summaryLabel}: ${record.conversationSummary}`);
   }
   for (const moment of record.conversationKeyMoments ?? []) {
     if (!moment?.text) continue;
@@ -994,6 +1303,8 @@ function isTopicExplainQuestion(question: string): boolean {
 export function preferClipGroundedFastPath(question: string, grounded: string, record: ClipAskRecord): boolean {
   if (/still being read|reading of this clip failed|could not be read/i.test(grounded)) return false;
   if (/still hearing the mic/i.test(grounded)) return true;
+  // A line count is exact from the transcript; no model needed.
+  if (isSpeechCountQuestion(question) && /lines? in the raw transcript/.test(grounded)) return true;
   // Exact speech recall is instant from the transcript. Topic/explain questions
   // still use the fast Ask model (with talkHint) so they can summarize.
   if (
@@ -1009,7 +1320,12 @@ export function preferClipGroundedFastPath(question: string, grounded: string, r
   }
   // Broad what-happened / topic asks go to the model for conversational prose.
   // Depth digs still use the grounded transcript path for instant exact quotes.
-  if (wantsAskDepth(question) && hasUsableSpeech(record) && !/does not (show that|include usable speech)/i.test(grounded)) {
+  if (
+    wantsAskDepth(question) &&
+    hasUsableSpeech(record) &&
+    (isWhatWasSaid(question) || /\b(quote|quotes|verbatim|transcript|who said|full conversation)\b/i.test(question)) &&
+    !/does not (show that|include usable speech)/i.test(grounded)
+  ) {
     return true;
   }
   if (
@@ -1023,6 +1339,30 @@ export function preferClipGroundedFastPath(question: string, grounded: string, r
   return false;
 }
 
+/**
+ * Retrieval first: the transcript lines and timed events that share words
+ * with the question, with their times. The model sees these before the rest.
+ */
+export function relevantClipEvidence(question: string, record: ClipAskRecord, limit = 8): string[] {
+  const asked = tokens(question).filter((token) => !QUESTION_FRAME.has(token) && !TALK_FRAME.has(token));
+  if (!asked.length) return [];
+  const rows = clipCorpus(record).filter((row) => row.kind === 'heard' || row.at != null);
+  return rows
+    .map((row) => {
+      const hay = tokens(row.text);
+      return { row, score: asked.filter((token) => hay.some((h) => tokensOverlap(token, h))).length };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || (a.row.at ?? 1e9) - (b.row.at ?? 1e9))
+    .slice(0, limit)
+    .sort((a, b) => (a.row.at ?? 1e9) - (b.row.at ?? 1e9))
+    .map(({ row }) => {
+      const seek = formatClipTime(row.at);
+      const source = row.kind === 'heard' ? 'transcript' : 'event';
+      return `- ${seek ? `[${seek}] ` : '[untimed] '}(${source}) ${row.text.length > 300 ? `${row.text.slice(0, 297)}…` : row.text}`;
+    });
+}
+
 export async function answerFromClip(input: {
   question: string;
   record: ClipAskRecord;
@@ -1031,6 +1371,7 @@ export async function answerFromClip(input: {
   /** Org-scoped dossier for people @mentioned in the question. */
   supplement?: string | null;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
+  input = { ...input, record: withAuthoritativeTranscript(speechSafeClipRecord(input.record)) };
   const grounded = groundedAnswerFromClip(input.question, input.record);
   const supplement = String(input.supplement ?? '').trim();
   if (!supplement && /still hearing the mic/i.test(grounded)) {
@@ -1072,6 +1413,12 @@ export async function answerFromClip(input: {
           `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
         : ''),
     user:
+      (() => {
+        const hits = relevantClipEvidence(input.question, input.record);
+        return hits.length
+          ? `Evidence matching the question (use this first; quote it with its time):\n${hits.join('\n')}\n\n`
+          : `Evidence matching the question: nothing in the transcript or timed events shares its key words. If the question assumes something, say it is not shown.\n\n`;
+      })() +
       `Reading of this clip:\n\n${reading}` +
       (supplement ? `\n\n${supplement}` : '') +
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
@@ -1092,6 +1439,32 @@ export async function answerFromClip(input: {
   ) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
+  }
+  // A model answer that states a different amount of speech than the raw
+  // transcript ("only one fragment" over five lines) is not shown.
+  const lineCount = transcriptLineCount(input.record.transcript);
+  if (lineCount && speechCountContradictions(completed.text, [lineCount]).length) {
+    // Only a count question gets the full count listing; a narrow question
+    // gets the evidence-first answer instead of a transcript dump.
+    const fixed = isSpeechCountQuestion(input.question) ? speechCountAnswer(input.record) : grounded;
+    input.onToken?.(`\n\n${fixed}`);
+    return { answer: fixed, model: completed.model, usage: completed.usage };
+  }
+  // Post-generation shape and support checks. A model answer that contradicts
+  // itself, skips the number or the time, dumps the whole transcript, or claims
+  // work / prices / commitments the reading does not support is replaced by the
+  // grounded answer when that one checks out better.
+  if (!supplement) {
+    const evidenceNorm = normalizeForMatch(reading);
+    const transcripts = [transcriptLines(input.record.transcript)];
+    const modelIssues = answerQualityFailures({ question: input.question, answer: completed.text, transcripts, evidenceNorm });
+    if (modelIssues.length) {
+      const groundedIssues = answerQualityFailures({ question: input.question, answer: grounded, transcripts, evidenceNorm });
+      if (groundedIssues.length < modelIssues.length) {
+        input.onToken?.(`\n\n${grounded}`);
+        return { answer: grounded, model: completed.model, usage: completed.usage };
+      }
+    }
   }
   const answer = normalizeAskProse(completed.text);
   return { answer, model: completed.model, usage: completed.usage };
