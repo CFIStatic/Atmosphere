@@ -677,9 +677,12 @@ export async function groundLookupAnswer(input: {
   failures: ReturnType<typeof verifyAskAnswer>['failures'];
   verify: { quotesChecked: number; quotesFailed: number; claimsFailed: number; repaired: boolean; stripped: boolean };
 }> {
+  // The lookup prompt already showed this summary and these notes. Check and repair against them too.
+  const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  const shown = [memoryBlock, input.extra].filter(Boolean).join('\n\n') || null;
   const index = buildGroundingIndex({
     catalog: input.catalog,
-    extra: [input.extra, formatTrace(input.trace)].filter(Boolean).join('\n\n'),
+    extra: [shown, formatTrace(input.trace)].filter(Boolean).join('\n\n'),
     question: input.question,
     now: input.now,
   });
@@ -697,7 +700,7 @@ export async function groundLookupAnswer(input: {
   const user = formatRepairPrompt({
     answer: first.answer,
     failures: first.open,
-    source: groundingSourceText(input.catalog, input.trace, input.extra),
+    source: groundingSourceText(input.catalog, input.trace, shown),
   });
   let repairedText: string | null = null;
   if (!input.signal?.aborted) {

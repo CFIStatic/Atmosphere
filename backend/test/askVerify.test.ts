@@ -195,6 +195,52 @@ test('an answer with nothing supported still ends with what is on file, never a 
   assert.doesNotMatch(grounded.answer, /Mike Delgado said/);
 });
 
+test('a decision stored in thread memory stays, and repair still sees those notes', async () => {
+  const prompts: string[] = [];
+  const grounded = await groundLookupAnswer({
+    answer: 'Pat Nguyen will handle the ridge cap. That was decided on Sep 14. Mike Delgado quoted a new roof.',
+    catalog,
+    trace: [],
+    extra: null,
+    question: 'What did we decide?',
+    resolved: 'What did we decide?',
+    memory: {
+      summary: 'Earlier turns covered the ridge.',
+      notes: [{ note: 'Pat Nguyen will handle the ridge cap', sourceQuestionId: 'q1', at: '2026-09-14T15:00:00Z' }],
+    },
+    now,
+    repair: async ({ user }) => {
+      prompts.push(user);
+      return null;
+    },
+  });
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0]!, /Pat Nguyen will handle the ridge cap/);
+  assert.match(grounded.answer, /Pat Nguyen will handle the ridge cap/);
+  assert.match(grounded.answer, /Sep 14/);
+  assert.doesNotMatch(grounded.answer, /Mike Delgado quoted/);
+  assert.match(grounded.answer, /Not on file, so I left it out:.*Mike Delgado/);
+});
+
+test('construction fractions are not calendar dates', () => {
+  const fractions = buildGroundingIndex({
+    catalog,
+    extra: 'Use 3/4 inch plywood, 5/8 drywall, 1/2 inch trim, and a 5/4 pitch.',
+    now,
+  });
+  for (const sentence of ['Started on March 4.', 'Delivery was May 8.', 'They met on January 2.', 'Set on May 4.']) {
+    const result = verifyAskAnswer(sentence, fractions);
+    assert.ok(result.open.some((failure) => failure.kind === 'date'), sentence);
+  }
+  const dates = buildGroundingIndex({
+    catalog,
+    extra: 'Change order 10/19. Closed on 5/8/2026.',
+    now,
+  });
+  assert.deepEqual(verifyAskAnswer('The change order is Oct 19.', dates).open, []);
+  assert.deepEqual(verifyAskAnswer('It closed on May 8.', dates).open, []);
+});
+
 test('answerFromAskLookup checks a model answer and logs the counts on ask_turn', async () => {
   const clock = createAskTurnClock(0);
   const result = await answerFromAskLookup({

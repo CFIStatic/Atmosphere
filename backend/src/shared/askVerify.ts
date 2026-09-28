@@ -194,8 +194,13 @@ function collectDates(text: string, into: Set<string>): void {
   for (const match of text.matchAll(/\b(20\d{2})-(\d{2})-(\d{2})\b/g)) {
     into.add(`${Number(match[2])}-${Number(match[3])}`);
   }
-  for (const match of text.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(?:20)?\d{2})?\b/g)) {
-    into.add(`${Number(match[1])}-${Number(match[2])}`);
+  for (const match of text.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/((?:20)?\d{2}))?\b/g)) {
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    // No year and a day of 1-12 is a fraction or a pitch (3/4, 5/8, 1/2, 5/4), not a calendar day.
+    if (!match[3] && day <= 12) continue;
+    into.add(`${month}-${day}`);
   }
 }
 
