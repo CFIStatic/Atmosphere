@@ -194,6 +194,18 @@ function catalogClips(catalog: AskLookupCatalog): AskLookupClip[] {
   );
 }
 
+function catalogVisitFacts(catalog: AskLookupCatalog): ClipFact[] {
+  return catalogClips(catalog)
+    .slice()
+    .sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')))
+    .map((clip) => ({
+      title: cleanMentionTitle(clip.title) || 'Clip',
+      workDate: clip.workDate ?? null,
+      summary: oneLine(String(clip.summary ?? '').trim()),
+      cite: clip.proofId,
+    }));
+}
+
 function clearestLine(transcript: string): string {
   const lines = transcript
     .split('\n')
@@ -611,15 +623,17 @@ function composeTask(
   const gap = 'Not on this file: a written scope, a punch list, or open issues.';
 
   if (task === 'compare') {
-    if (clips.length < 2) {
-      return `This file does not have two visits to compare. ${clips.length === 1 ? 'One clip is on file.' : 'No clips are on file.'}`;
+    const visits = catalogVisitFacts(catalog);
+    const rows = visits.length >= clips.length ? visits : clips;
+    if (rows.length < 2) {
+      return `This file does not have two visits to compare. ${rows.length === 1 ? 'One clip is on file.' : 'No clips are on file.'}`;
     }
-    const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate, catalog.timeZone)))];
+    const dates = [...new Set(rows.map((clip) => dateLabel(clip.workDate, catalog.timeZone)))];
     const lead =
       dates.length >= 2
         ? `**${dates[0]}** and **${dates[1]}** are different visits on this file.`
         : `These clips are on this file, and they are not separate dated visits.`;
-    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(clips, catalog.timeZone)}\n\n${gap}`)}`;
+    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(rows, catalog.timeZone)}\n\n${gap}`)}`;
   }
 
   if (task === 'scope') {

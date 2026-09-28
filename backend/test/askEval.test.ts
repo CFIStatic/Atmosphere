@@ -466,6 +466,15 @@ test('a follow-up uses the prior turn for the person and the date', async () => 
   assert.match(again, /El Presidente/);
   assert.match(again, /QuickBooks online|love that girl/i);
   assert.notEqual(again, 'This file does not have that.');
+
+  const compared = await askLive('compare that to the first visit', remembered);
+  const comparison = visible(compared.answer);
+  assert.match(comparison, /Sep 17/);
+  assert.match(comparison, /Sep 21/);
+  assert.match(comparison, /different visits/i);
+  assert.match(comparison, /breakfast table|whitewashed/i);
+  assert.match(comparison, /sideways|walkthrough/i);
+  assert.notEqual(comparison, 'This file does not have that.');
 });
 
 test('a privacy-redacted line is never quoted or chipped', async () => {
