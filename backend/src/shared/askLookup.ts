@@ -198,20 +198,86 @@ function asTimed(raw: unknown): AskLookupTimed[] {
   return out;
 }
 
-/** Group word timings into short lines so the redactors see the same [m:ss] clocks as segments. */
-function linesFromWords(words: AskLookupTimed[]): Array<{ start: number; text: string }> {
+type TimedRange = { startSec: number; endSec: number };
+type RedactionKind = 'clear' | 'privacy' | 'child';
+
+/** True when any point of [start, end] sits in a stored range, including the inclusive end. */
+function spanOverlaps(start: number, end: number, ranges: TimedRange[] | null | undefined): boolean {
+  if (!ranges?.length) return false;
+  const lo = Math.min(start, Number.isFinite(end) ? end : start);
+  const hi = Math.max(lo, Number.isFinite(end) ? end : start);
+  for (const range of ranges) {
+    if (!Number.isFinite(range.startSec) || !Number.isFinite(range.endSec) || range.endSec < range.startSec) continue;
+    if (hi >= range.startSec && lo < range.endSec) return true;
+    if (Math.abs(lo - range.endSec) < 0.05 || Math.abs(hi - range.endSec) < 0.05) return true;
+  }
+  return false;
+}
+
+function redactionKind(start: number, end: number, privacy: TimedRange[], child: TimedRange[]): RedactionKind {
+  if (spanOverlaps(start, end, child)) return 'child';
+  if (spanOverlaps(start, end, privacy)) return 'privacy';
+  return 'clear';
+}
+
+function labelFor(kind: RedactionKind): string | null {
+  if (kind === 'child') return CHILD_PRIVACY_REDACTED_LABEL;
+  if (kind === 'privacy') return PRIVACY_REDACTED_LABEL;
+  return null;
+}
+
+/** A clock the line redactors will still treat as inside the range after rounding to a second. */
+function stampFor(start: number, end: number, kind: RedactionKind, privacy: TimedRange[], child: TimedRange[]): number {
+  if (kind === 'clear') return start;
+  const ranges = kind === 'child' ? child : privacy;
+  const hit = ranges.find((range) => spanOverlaps(start, end, [range]));
+  if (!hit) return start;
+  if (start >= hit.startSec && start < hit.endSec) return start;
+  return hit.startSec;
+}
+
+/**
+ * Group word timings into short lines. A word that overlaps a privacy or
+ * child-privacy range never shares a line with speech outside that range,
+ * and its text is replaced before the line is rendered.
+ */
+function linesFromWords(
+  words: AskLookupTimed[],
+  privacy: TimedRange[],
+  child: TimedRange[],
+): Array<{ start: number; text: string }> {
   const lines: Array<{ start: number; text: string }> = [];
-  let current: { start: number; parts: string[] } | null = null;
+  let current: { start: number; kind: RedactionKind; parts: string[] } | null = null;
+  const flush = () => {
+    if (!current) return;
+    const label = labelFor(current.kind);
+    lines.push({ start: current.start, text: label ?? current.parts.join(' ') });
+    current = null;
+  };
   for (const word of words) {
-    if (!current || word.start - current.start > 4 || current.parts.join(' ').length > 120) {
-      if (current) lines.push({ start: current.start, text: current.parts.join(' ') });
-      current = { start: word.start, parts: [word.text] };
-    } else {
+    const kind = redactionKind(word.start, word.end, privacy, child);
+    const start = stampFor(word.start, word.end, kind, privacy, child);
+    const tooLong = kind === 'clear' && current != null && current.parts.join(' ').length > 120;
+    if (!current || kind !== current.kind || word.start - current.start > 4 || tooLong) {
+      flush();
+      current = { start, kind, parts: kind === 'clear' ? [word.text] : [] };
+    } else if (kind === 'clear') {
       current.parts.push(word.text);
     }
   }
-  if (current) lines.push({ start: current.start, text: current.parts.join(' ') });
+  flush();
   return lines;
+}
+
+function renderTimedLines(rows: AskLookupTimed[], privacy: TimedRange[], child: TimedRange[]): string {
+  return rows
+    .map((row) => {
+      const kind = redactionKind(row.start, row.end, privacy, child);
+      const text = labelFor(kind) ?? row.text;
+      const start = stampFor(row.start, row.end, kind, privacy, child);
+      return `[${formatAskClock(start)}] ${text}`;
+    })
+    .join('\n');
 }
 
 /**
@@ -225,13 +291,15 @@ function redactAskText(text: string, clip: AskLookupClip): string {
 }
 
 export function redactClipTranscriptForAsk(clip: AskLookupClip): string {
+  const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
+  const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
   const segments = asTimed(clip.segments);
   const words = asTimed(clip.words);
   let rendered: string;
   if (segments.length) {
-    rendered = segments.map((seg) => `[${formatAskClock(seg.start)}] ${seg.text}`).join('\n');
+    rendered = renderTimedLines(segments, privacy, child);
   } else if (words.length) {
-    rendered = linesFromWords(words)
+    rendered = linesFromWords(words, privacy, child)
       .map((line) => `[${formatAskClock(line.start)}] ${line.text}`)
       .join('\n');
   } else {
@@ -426,7 +494,7 @@ function preciseMoment(clip: AskLookupClip, atSeconds: number | null): number | 
   let best: number | null = null;
   let dist = 0.75;
   for (const row of pool) {
-    if (transcriptSecondIsRedacted(clip, row.start)) continue;
+    if (spanIsRedacted(clip, row.start, row.end)) continue;
     const next = Math.abs(row.start - atSeconds);
     if (next < dist) {
       best = row.start;
@@ -852,6 +920,12 @@ export function collectMomentSourceIds(trace: AskLookupTraceStep[]): string[] {
     if (typeof data.cite === 'string') push(data.cite);
   }
   return ids.slice(0, 6);
+}
+
+function spanIsRedacted(clip: AskLookupClip, start: number, end: number): boolean {
+  const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
+  const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
+  return redactionKind(start, end, privacy, child) !== 'clear';
 }
 
 /** True when a seek second on a returned line sits inside a redaction range. Tools must not surface that speech. */

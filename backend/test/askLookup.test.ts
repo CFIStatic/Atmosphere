@@ -122,6 +122,87 @@ test('every transcript tool redacts privacy and child ranges', () => {
   assert.doesNotMatch(hit.excerpt, /4412/);
 });
 
+test('word groups and overlapping segments do not leak speech from a later redaction range', () => {
+  const wordsOnly = clip({
+    proofId: 'word-leak',
+    title: 'Word timing',
+    recordedByUserIds: [EL],
+    words: [
+      { start: 9.2, end: 9.6, text: 'The' },
+      { start: 9.6, end: 10.0, text: 'gate' },
+      { start: 10.2, end: 10.7, text: 'code' },
+      { start: 10.7, end: 11.3, text: 'secretword' },
+      { start: 11.4, end: 11.8, text: 'is' },
+      { start: 11.9, end: 12.4, text: '4412' },
+      { start: 16.0, end: 16.4, text: 'Clear' },
+      { start: 16.4, end: 16.9, text: 'again' },
+    ],
+    privacyRedactions: { ranges: [{ startSec: 11, endSec: 15, reason: 'private', confidence: 0.9, source: 'vision' }] },
+  });
+  const rendered = redactClipTranscriptForAsk(wordsOnly);
+  assert.match(rendered, /The gate code/);
+  assert.match(rendered, /\[privacy redacted\]/);
+  assert.match(rendered, /Clear again/);
+  assert.doesNotMatch(rendered, /4412/);
+  assert.doesNotMatch(rendered, /secretword/);
+  assert.doesNotMatch(rendered, /\bis\b/);
+
+  const childWords = clip({
+    proofId: 'child-words',
+    title: 'Child words',
+    words: [
+      { start: 17.2, end: 17.6, text: 'Then' },
+      { start: 17.8, end: 18.4, text: 'toddler' },
+      { start: 18.6, end: 19.1, text: 'said' },
+      { start: 19.2, end: 19.8, text: 'hello' },
+    ],
+    childPrivacyRedactions: {
+      ranges: [{ startSec: 18, endSec: 22, reason: 'child present', confidence: 0.9, source: 'vision', category: 'child_privacy' }],
+    },
+  });
+  const childRendered = redactClipTranscriptForAsk(childWords);
+  assert.match(childRendered, /Then/);
+  assert.match(childRendered, /child present \[privacy redacted\]/);
+  assert.doesNotMatch(childRendered, /toddler/);
+  assert.doesNotMatch(childRendered, /hello/);
+
+  const overlapping = clip({
+    proofId: 'seg-overlap',
+    title: 'Overlap',
+    segments: [{ start: 10.2, end: 13, text: 'The lockbox code is 4412.' }],
+    privacyRedactions: { ranges: [{ startSec: 11, endSec: 15, reason: 'private', confidence: 0.9, source: 'vision' }] },
+  });
+  const overlapRendered = redactClipTranscriptForAsk(overlapping);
+  assert.doesNotMatch(overlapRendered, /4412/);
+  assert.match(overlapRendered, /\[privacy redacted\]/);
+
+  const file = catalog({
+    clips: [wordsOnly, childWords],
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: ['word-leak', 'child-words'] }],
+  });
+  for (const name of ['search_transcripts', 'get_clip', 'list_person_activity'] as const) {
+    const result =
+      name === 'search_transcripts'
+        ? executeAskLookup(name, { query: '4412 secretword toddler hello' }, file)
+        : name === 'get_clip'
+          ? executeAskLookup(name, { proofId: 'word-leak' }, file)
+          : executeAskLookup(name, { name: 'El Presidente' }, file);
+    const data = result.data as {
+      hits?: Array<{ excerpt?: string }>;
+      transcript?: string | null;
+      clips?: Array<{ excerpt?: string | null; summary?: string | null }>;
+    };
+    const spoken = [
+      ...(data.hits ?? []).map((hit) => hit.excerpt ?? ''),
+      data.transcript ?? '',
+      ...(data.clips ?? []).flatMap((row) => [row.excerpt ?? '', row.summary ?? '']),
+    ].join('\n');
+    assert.doesNotMatch(spoken, /4412/, name);
+    assert.doesNotMatch(spoken, /secretword/, name);
+    assert.doesNotMatch(spoken, /toddler/, name);
+  }
+});
+
 test('job scope stays on the open job and org-wide Ask can see the org', () => {
   const other = clip({
     proofId: TABLE,
