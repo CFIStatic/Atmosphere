@@ -645,4 +645,26 @@ describe('JobAskPanel', () => {
     expect(screen.queryByTestId('ask-answer-body')).not.toBeInTheDocument();
   });
 
+  it('a new question after a failure does not leave the failed one orphaned', async () => {
+    askAboutProofs.mockRejectedValueOnce(new Error('boom'));
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByTestId('ask-error')).toBeInTheDocument();
+    await user.type(box, 'Any do-nots?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText(/skylights be left alone/i)).toBeInTheDocument();
+    expect(screen.queryByText('Was the tarp removed?')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-error')).not.toBeInTheDocument();
+    expect(screen.getByText('Any do-nots?')).toBeInTheDocument();
+  });
+
 });
