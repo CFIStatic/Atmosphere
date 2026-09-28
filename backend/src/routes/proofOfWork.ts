@@ -2982,7 +2982,7 @@ export async function runProofAsk(input: {
         ...recorderIds,
       ]),
       propertyPromise,
-      profilePromise.catch(() => ({ data: null })),
+      Promise.resolve(profilePromise).catch(() => ({ data: null })),
     ]);
     const personName = (id: string | null | undefined) => {
       if (!id) return null;
