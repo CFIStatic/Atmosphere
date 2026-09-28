@@ -1,8 +1,8 @@
 /**
  * Per-turn Ask timings for the API logs.
  *
- * One JSON line, event `ask_turn`. Tool names and durations only — never the
- * question, the answer, a transcript, a name, or an address.
+ * One JSON line, event `ask_turn`. Tool names, durations, and grounding-check
+ * counts only — never the question, the answer, a transcript, a name, or an address.
  */
 import { logger } from '../lib/logger.js';
 
@@ -44,6 +44,24 @@ export type AskTurnTiming = {
   promptCache: boolean;
   geminiCache: AskGeminiCache;
   cacheReadTokens: number;
+  /** Quotes the grounding check compared with transcripts (trailer and prose). */
+  quotesChecked: number;
+  /** Quotes that did not match the cited clip or any transcript. */
+  quotesFailed: number;
+  /** Other unsupported claims (times, dates, names, roles, refs) found before repair. */
+  claimsFailed: number;
+  /** True when the one repair pass fixed every open failure. */
+  repaired: boolean;
+  /** True when unsupported sentences were removed after the repair pass. */
+  stripped: boolean;
+};
+
+export type AskTurnVerify = {
+  quotesChecked: number;
+  quotesFailed: number;
+  claimsFailed: number;
+  repaired: boolean;
+  stripped: boolean;
 };
 
 export type AskTurnClock = {
@@ -60,12 +78,14 @@ export type AskTurnClock = {
   promptCache: boolean;
   geminiCache: AskGeminiCache;
   cacheReadTokens: number;
+  verify: AskTurnVerify;
   markFirstToken: () => void;
   addTool: (name: string, durationMs: number) => void;
   addCacheRead: (tokens: number) => void;
   noteModel: (model: string | null) => void;
   noteRoute: (route: AskTurnRoute, reason: string, fallback?: boolean) => void;
   noteGeminiCache: (state: AskGeminiCache) => void;
+  noteVerify: (verify: AskTurnVerify) => void;
   snapshot: (now?: number) => AskTurnTiming;
 };
 
@@ -89,6 +109,7 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
     promptCache: false,
     geminiCache: 'skip',
     cacheReadTokens: 0,
+    verify: { quotesChecked: 0, quotesFailed: 0, claimsFailed: 0, repaired: false, stripped: false },
     markFirstToken() {
       if (clock.ttftMs != null) return;
       clock.ttftMs = roundMs(Date.now() - clock.startedAt);
@@ -113,6 +134,9 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
     noteGeminiCache(state: AskGeminiCache) {
       clock.geminiCache = state;
     },
+    noteVerify(verify: AskTurnVerify) {
+      clock.verify = { ...verify };
+    },
     snapshot(at = Date.now()): AskTurnTiming {
       return {
         route: clock.route,
@@ -128,6 +152,11 @@ export function createAskTurnClock(now = Date.now()): AskTurnClock {
         promptCache: clock.promptCache,
         geminiCache: clock.geminiCache,
         cacheReadTokens: clock.cacheReadTokens,
+        quotesChecked: clock.verify.quotesChecked,
+        quotesFailed: clock.verify.quotesFailed,
+        claimsFailed: clock.verify.claimsFailed,
+        repaired: clock.verify.repaired,
+        stripped: clock.verify.stripped,
       };
     },
   };
@@ -154,6 +183,11 @@ export function askTurnLogFields(timing: AskTurnTiming): Record<string, unknown>
     promptCache: timing.promptCache,
     geminiCache: timing.geminiCache,
     cacheReadTokens: timing.cacheReadTokens,
+    quotesChecked: timing.quotesChecked ?? 0,
+    quotesFailed: timing.quotesFailed ?? 0,
+    claimsFailed: timing.claimsFailed ?? 0,
+    repaired: timing.repaired ?? false,
+    stripped: timing.stripped ?? false,
   };
 }
 

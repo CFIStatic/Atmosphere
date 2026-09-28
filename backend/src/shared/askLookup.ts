@@ -64,6 +64,8 @@ export type AskLookupClip = {
   /** Display names already on the clip, when the file identified them. */
   speakers?: string[] | null;
   recordedByUserIds?: string[] | null;
+  /** When the clip was filmed. Ask's grounding check allows its local time. */
+  capturedAt?: string | null;
 };
 
 export type AskLookupHistoryEvent = {
@@ -571,6 +573,7 @@ export function clipFromProofRow(
     childPrivacyRedactions: findings.childPrivacyRedactions,
     speakers,
     recordedByUserIds: [...new Set(recorded)],
+    capturedAt: row.captured_at ? String(row.captured_at) : null,
   };
 }
 
@@ -1506,7 +1509,8 @@ export function collectMomentSourceIds(trace: AskLookupTraceStep[]): string[] {
   return ids.slice(0, 6);
 }
 
-function spanIsRedacted(clip: AskLookupClip, start: number, end: number): boolean {
+/** True when any part of a transcript span overlaps a privacy or child-privacy range. */
+export function spanIsRedacted(clip: AskLookupClip, start: number, end: number): boolean {
   const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
   const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
   return redactionKind(start, end, privacy, child) !== 'clear';
