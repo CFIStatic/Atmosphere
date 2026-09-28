@@ -698,11 +698,16 @@ export function JobAskPanel({
     setAsking(true);
     setDraft('');
     setError(null);
+    // The error is panel-level, so a new ask must drop the unanswered question with it.
+    const failedPendingId = askFailure?.pendingId;
     setAskFailure(null);
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
     const answerId = `${pendingId}-a`;
-    setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
+    setTurns((prev) => [
+      ...prev.filter((turn) => turn.id !== failedPendingId),
+      { id: pendingId, role: 'user', content: text, at: now },
+    ]);
     try {
       let res: {
         answer: string;
