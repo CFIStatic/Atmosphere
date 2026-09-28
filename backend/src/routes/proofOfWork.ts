@@ -3110,7 +3110,7 @@ export async function runProofAsk(input: {
           .eq('thread_id', threadId);
         await touchAskThreadAfterMessage(writeDb, {
           threadId,
-          question: input.question,
+          question: storedQuestion,
           isFirstMessage: (count ?? 0) <= 1,
         });
       } catch {
