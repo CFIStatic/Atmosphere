@@ -2733,7 +2733,7 @@ export async function runProofAsk(input: {
     ] = await Promise.all([
       supabase
         .from('job_proofs')
-        .select('party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
+        .select('id, party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
         .eq('org_id', orgId)
         .eq('job_id', jobId)
         .is('deleted_at', null)

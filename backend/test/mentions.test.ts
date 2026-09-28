@@ -9,14 +9,10 @@ import {
   loginNameFromMetadata,
   mentionDisplayName,
   mentionToken,
-  ACTIVITY_ANSWER_INSTRUCTIONS,
+  MENTION_MODEL_INSTRUCTIONS,
   activitySystemAddendum,
-  asksForFindings,
-  asksForPersonActivity,
-  asksForPersonRecord,
   carryPriorMention,
   stripMentionMarks,
-  unmatchedMentionSentence,
   parseMentions,
   rankMentionItems,
   resolveMentions,
@@ -25,6 +21,7 @@ import {
 } from '../src/shared/mentions.js';
 import { fieldCaptureEmail } from '../src/field/crewJoin.js';
 import { listJobMentionMembers, loadPersonContext, prepareMentionAsk } from '../src/shared/mentionContext.js';
+import { assembleMentionModelPrompt } from '../src/shared/jobFileAsk.js';
 
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
@@ -336,11 +333,9 @@ test('context retrieval stays inside the org and cites the electrical job', asyn
   assert.match(answer.answer, new RegExp(`video/${JOB_ELEC}/${PROOF_ELEC}/`));
   assert.doesNotMatch(answer.answer, /\[\[web:/);
   assert.match(answer.answer, /John Cyganiak/);
-  assert.equal(
-    unmatchedMentionSentence('John Cyganiak', ['Kitchen faucet']),
-    "John Cyganiak doesn't have that on file. What's here: Kitchen faucet.",
-  );
-  assert.doesNotMatch(unmatchedMentionSentence('John Cyganiak', []), /No .+ found for/);
+  assert.match(answer.answer, /not in the file/);
+  assert.doesNotMatch(answer.answer, /filmed \d+ clips?/);
+  assert.doesNotMatch(answer.answer, /doesn't have that on file/);
 });
 
 test('tagged notes outside the recent message window still load from the mention index', async () => {
@@ -399,8 +394,11 @@ test('a person with no matching evidence is told so, and another org is invisibl
     now: new Date('2026-09-20T00:00:00.000Z'),
   });
   assert.equal(prep.mentions[0]?.userId, JANE);
-  assert.match(prep.directAnswer ?? '', /Jane Alvarez doesn't have that on file/);
+  assert.match(prep.directAnswer ?? '', /Jane Alvarez/);
+  assert.match(prep.directAnswer ?? '', /not in the file/);
   assert.match(prep.directAnswer ?? '', /Kitchen faucet/);
+  assert.doesNotMatch(prep.directAnswer ?? '', /doesn't have that on file/);
+  assert.doesNotMatch(prep.directAnswer ?? '', /filmed \d+ clips?/);
   assert.doesNotMatch(prep.directAnswer ?? '', /No .+ found for/);
   assert.doesNotMatch(prep.directAnswer ?? '', /\[\[web:/);
   assert.doesNotMatch(prep.directAnswer ?? '', /Cedar panel|other-org/);
@@ -671,9 +669,12 @@ function tiffanyTables() {
         state: 'analysed',
         title: 'Sep 17 office recording',
         ai_summary: 'A single fixed webcam-style take of one seated man in a small office.',
-        transcript_text: "It's simple.",
+        transcript_text: '[0:04] It\'s simple.',
         narration_text: null,
-        ai_findings: { events: [{ text: 'Light-blue binder labeled RESTORE 365.' }] },
+        ai_findings: {
+          events: [{ text: 'Light-blue binder labeled RESTORE 365.' }],
+          people: { speakers: [{ speakerLabel: 'Person 1', displayName: 'Seated man', turnCount: 1 }] },
+        },
         device_metadata: {},
         captured_at: '2026-09-17T16:00:00.000Z',
         received_at: '2026-09-17T16:05:00.000Z',
@@ -771,23 +772,22 @@ function tiffanyTables() {
   };
 }
 
-test('multi-word names stay whole, and every clip that person filmed is listed', async () => {
+test('multi-word names stay whole, and the fallback lists every clip that person filmed', async () => {
   const roster = [{ userId: EL, fullName: 'El Presidente', email: 'el@example.com' }];
   const chip = `@[El Presidente](mention:${EL})`;
   assert.equal(stripMentionMarks(`${chip} which clips did he film`, ['El Presidente']).includes('El Presidente'), false);
   assert.match(stripMentionMarks('which clips did @El Presidente film', ['El Presidente']), /which clips did\s+film/);
-  assert.equal(asksForPersonRecord('which clips did @El Presidente film', ['El Presidente']), true);
-  assert.equal(asksForPersonRecord('what did @El Presidente take a video of', ['El Presidente']), true);
-  assert.equal(asksForPersonRecord('what all the videos they upload', ['El Presidente']), true);
-  assert.equal(asksForPersonRecord('@John did he record the electrical panel?', ['John']), false);
-  assert.equal(asksForPersonRecord('@El what did they say in the videos about the leak?', ['El']), false);
-  assert.equal(asksForPersonRecord('did she upload the roof footage?'), false);
   const resolved = resolveMentions('which clips did @El Presidente film', roster);
   assert.equal(resolved.mentions[0]?.name, 'El Presidente');
   const punctuated = resolveMentions("what did @Mary-Jane O'Brien film", [
     { userId: EL, fullName: "Mary-Jane O'Brien" },
   ]);
   assert.equal(punctuated.mentions[0]?.name, "Mary-Jane O'Brien");
+  const jane = resolveMentions("summarize @Jane's work", [{ userId: JANE, fullName: 'Jane Alvarez' }]);
+  assert.equal(jane.mentions[0]?.userId, JANE);
+  assert.equal(jane.mentions[0]?.name, 'Jane Alvarez');
+  const possessive = resolveMentions("what did @El Presidente's crew film", roster);
+  assert.equal(possessive.mentions[0]?.userId, EL);
 
   const db = fakeDb(tiffanyTables());
   const which = await prepareMentionAsk(db as any, {
@@ -797,37 +797,24 @@ test('multi-word names stay whole, and every clip that person filmed is listed',
     now: new Date('2026-09-22T00:00:00.000Z'),
   });
   const whichAnswer = which.directAnswer ?? '';
-  assert.match(whichAnswer, /El Presidente filmed 3 clips/);
   assert.match(whichAnswer, /Sep 17 office recording/);
   assert.match(whichAnswer, /Sep 21 tabletop close-up/);
   assert.match(whichAnswer, /Sep 21 home walkthrough/);
   assert.match(whichAnswer, /RESTORE 365/);
   assert.match(whichAnswer, /webcam-style take/);
+  assert.match(whichAnswer, /not in the file/);
+  assert.doesNotMatch(whichAnswer, /filmed \d+ clips?/);
+  assert.doesNotMatch(whichAnswer, /doesn't have that on file/);
   assert.doesNotMatch(whichAnswer, /It's simple/);
   assert.doesNotMatch(whichAnswer, /Her entire life/);
   assert.doesNotMatch(whichAnswer, /But I know they have their ways/);
   assert.doesNotMatch(whichAnswer, /Someone else roof/);
-  assert.doesNotMatch(whichAnswer, /No which clips/);
-  assert.doesNotMatch(whichAnswer, /found for El\./);
-
-  const took = await prepareMentionAsk(db as any, {
-    orgId: ORG_A,
-    jobId: JOB_TIFFANY,
-    question: 'what did @El Presidente take a video of',
-    now: new Date('2026-09-22T00:00:00.000Z'),
-  });
-  const tookAnswer = took.directAnswer ?? '';
-  assert.match(tookAnswer, /El Presidente filmed 3 clips/);
-  assert.match(tookAnswer, /office recording/);
-  assert.match(tookAnswer, /tabletop/);
-  assert.match(tookAnswer, /walkthrough/);
-  assert.doesNotMatch(tookAnswer, /one clip/i);
 
   const follow = await prepareMentionAsk(db as any, {
     orgId: ORG_A,
     jobId: JOB_TIFFANY,
     question: 'what all the videos they upload',
-    history: [{ role: 'user', text: 'what did @El Presidente take a video of' }, { role: 'assistant', text: tookAnswer }],
+    history: [{ role: 'user', text: 'what did @El Presidente take a video of' }, { role: 'assistant', text: whichAnswer }],
     now: new Date('2026-09-22T00:00:00.000Z'),
   });
   assert.equal(follow.mentions[0]?.userId, EL);
@@ -837,24 +824,137 @@ test('multi-word names stay whole, and every clip that person filmed is listed',
   assert.equal(carryPriorMention('what about the weather', [], roster), null);
 });
 
-test('what someone had done is a dossier, not a canned miss', async () => {
-  assert.equal(asksForPersonActivity('what had @El Presidente done in this file', ['El Presidente']), true);
-  assert.equal(asksForPersonActivity('what did @El Presidente do', ['El Presidente']), true);
-  assert.equal(asksForPersonActivity("summarize @El Presidente's work", ['El Presidente']), true);
-  assert.equal(asksForPersonActivity('what did they find', ['El Presidente']), false);
-  assert.equal(asksForFindings('what did they find', ['El Presidente']), true);
-  assert.equal(asksForPersonActivity('what did @El Presidente say about the leak?', ['El Presidente']), false);
-  assert.equal(asksForPersonActivity('what did @El Presidente record', ['El Presidente']), true);
-  assert.equal(asksForPersonActivity('what did @El Presidente record the electrical panel', ['El Presidente']), false);
-  assert.equal(asksForFindings('what had @El Presidente done in this file', ['El Presidente']), false);
-  assert.equal(asksForPersonActivity('did he record the electrical panel?', ['El Presidente']), false);
-
+test('a missing model gets a grounded briefing, not a keyword template', async () => {
   const db = fakeDb(tiffanyTables());
-  const historyQuestion = 'what did @El Presidente take a video of';
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what did @El Presidente say about the leak?',
+    askerUserId: EL,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const answer = prep.directAnswer ?? '';
+  assert.match(answer, /On Project Tiffany & Co, this is what the file attributes to you/);
+  assert.match(answer, /not in the file/);
+  assert.match(answer, /Sep 17, 11:00 AM CT — Sep 17 office recording/);
+  assert.match(answer, /Sep 21, 5:00 PM CT — Sep 21 tabletop close-up/);
+  assert.match(answer, /Sep 21, 6:00 PM CT — Sep 21 home walkthrough/);
+  assert.match(answer, /Sep 17: You opened this job file and created the Field Capture party/);
+  assert.match(answer, /RESTORE 365/);
+  assert.match(answer, /⟦sources:/);
+  assert.match(answer, new RegExp(`video/${JOB_TIFFANY}/${CLIP_OFFICE}/`));
+  assert.doesNotMatch(answer, /filmed \d+ clips?/);
+  assert.doesNotMatch(answer, /doesn't have that on file/);
+  assert.doesNotMatch(answer, /you recorded 3 videos/);
+  assert.doesNotMatch(answer, /#12/);
+  assert.doesNotMatch(answer, /UTC/);
+  assert.doesNotMatch(answer, /It's simple/);
+  assert.doesNotMatch(answer, /\[\[web:/);
+  assert.equal(prep.fallbackAnswer, prep.directAnswer);
+});
+
+test('a configured model gets the dossier, the job file, and the recent turns', async () => {
+  const db = fakeDb(tiffanyTables());
+  const history = [
+    { role: 'user' as const, text: 'what had @El Presidente done in this file' },
+    { role: 'assistant' as const, text: 'You recorded the office clip on Sep 17.' },
+  ];
+  const question = 'what did he say in the office clip';
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question,
+    askerUserId: EL,
+    history,
+    anthropicApiKey: 'test-key-not-a-real-secret',
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(prep.directAnswer, null);
+  assert.equal(prep.mentions[0]?.userId, EL);
+  assert.match(prep.supplement, /MENTION ASK/);
+  assert.match(prep.supplement, /ATTRIBUTION DOSSIER for El Presidente/);
+  assert.match(prep.supplement, /Address them as "you"/);
+  assert.match(prep.supplement, /Recorded by this person/);
+  assert.match(prep.supplement, /Sep 17 office recording/);
+  assert.match(prep.supplement, /priority-clip:/);
+  const recorded = prep.supplement.split('Someone else recorded:')[0] ?? '';
+  assert.match(recorded, /Sep 17 office recording/);
+  assert.doesNotMatch(recorded, /Someone else roof/);
+  assert.match(prep.supplement, /JOB FILE/);
+  assert.match(prep.supplement, /webcam-style take/);
+  assert.match(prep.supplement, /RESTORE 365/);
+  assert.match(prep.supplement, /Speakers: Seated man/);
+  assert.match(prep.supplement, /\[0:04\] It's simple/);
+  assert.match(prep.supplement, /Field Capture/);
+  assert.match(prep.supplement, /opened job #12/);
+  assert.match(prep.supplement, /Shares:\nnone/);
+  assert.match(prep.supplement, /RECENT CONVERSATION/);
+  assert.match(prep.supplement, /what had @El Presidente done in this file/);
+  assert.match(prep.supplement, /not in the file/);
+  assert.match(prep.supplement, /⟦sources:/);
+  assert.doesNotMatch(prep.supplement, /one-line overview/);
+  assert.doesNotMatch(prep.supplement, /filmed \d+ clips/);
+  assert.match(activitySystemAddendum(prep.supplement) ?? '', /not in the file/);
+  assert.match(activitySystemAddendum(prep.supplement) ?? '', /⟦sources:/);
+  assert.doesNotMatch(activitySystemAddendum(prep.supplement) ?? '', /one-line overview/);
+  assert.match(MENTION_MODEL_INSTRUCTIONS, /Never invent/);
+  assert.match(prep.fallbackAnswer ?? '', /this is what the file attributes to you/);
+  assert.doesNotMatch(prep.fallbackAnswer ?? '', /It's simple/);
+
+  const prompt = assembleMentionModelPrompt({
+    question,
+    history,
+    file: {
+      job: { title: 'Project Tiffany & Co.', jobNumber: 12, status: 'scheduled' },
+      mentionSupplement: prep.supplement,
+      clips: [
+        {
+          proofId: CLIP_OTHER,
+          workDate: '2026-09-22',
+          summary: 'A different crew member filmed the roof.',
+          transcript: 'Roof crew only.',
+        },
+        {
+          proofId: CLIP_OFFICE,
+          workDate: '2026-09-17',
+          summary: 'A single fixed webcam-style take of one seated man in a small office.',
+          transcript: "[0:04] It's simple.",
+        },
+      ],
+    },
+  });
+  assert.match(prompt.system, /MENTION ASK|not in the file/);
+  assert.match(prompt.system, /⟦sources:/);
+  assert.match(prompt.user, /ATTRIBUTION DOSSIER/);
+  assert.match(prompt.user, /JOB FILE/);
+  assert.match(prompt.user, /RECENT CONVERSATION/);
+  assert.match(prompt.user, /Earlier questions on this file/);
+  assert.match(prompt.user, /Question: what did he say in the office clip/);
+  const videosAt = prompt.user.indexOf('Videos and mic');
+  const mentionAt = prompt.user.indexOf('MENTION ASK');
+  assert.ok(videosAt > 0 && mentionAt > videosAt);
+  const videos = prompt.user.slice(videosAt, mentionAt);
+  assert.ok(videos.indexOf('webcam-style') >= 0);
+  assert.ok(videos.indexOf('webcam-style') < videos.indexOf('different crew'));
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
+  assert.match(jobAsk, /assembleMentionModelPrompt/);
+  assert.match(jobAsk, /activitySystemAddendum/);
+  assert.match(clipAsk, /activitySystemAddendum/);
+});
+
+test('six mention questions all go to the model instead of a template', async () => {
+  const db = fakeDb(tiffanyTables());
+  const prior = [{ role: 'user', text: 'what had @El Presidente done in this file' }, { role: 'assistant', text: 'The office clip is on Sep 17.' }];
   const questions = [
-    'what had @[El Presidente](mention:' + EL + ') done in this file',
-    'what did @El Presidente do',
-    "summarize @El Presidente's work",
+    'what had @El Presidente done in this file',
+    'what did @El Presidente say about the leak?',
+    'did @El Presidente check the attic?',
+    'when was the last time @El Presidente was on site?',
+    'how does the office clip compare with the walkthrough for @El Presidente?',
+    'what did he say in the office clip',
   ];
   for (const question of questions) {
     const prep = await prepareMentionAsk(db as any, {
@@ -862,138 +962,22 @@ test('what someone had done is a dossier, not a canned miss', async () => {
       jobId: JOB_TIFFANY,
       question,
       askerUserId: EL,
+      history: question.startsWith('what did he') ? prior : [],
+      anthropicApiKey: 'test-key-not-a-real-secret',
       now: new Date('2026-09-22T00:00:00.000Z'),
     });
-    const answer = prep.directAnswer ?? '';
-    assert.match(answer, /On Project Tiffany & Co\., you recorded 3 videos between Sep 17 and Sep 21/);
-    assert.match(answer, /Sep 17, 11:00 AM CT — Sep 17 office recording/);
-    assert.match(answer, /Sep 21, 5:00 PM CT — Sep 21 tabletop close-up/);
-    assert.match(answer, /Sep 21, 6:00 PM CT — Sep 21 home walkthrough/);
-    assert.match(answer, /Sep 17: You opened this job file and created the Field Capture party/);
-    assert.match(answer, /RESTORE 365/);
-    assert.match(answer, /webcam-style take/);
-    assert.match(prep.supplement, /ACTIVITY DOSSIER/);
-    assert.match(prep.supplement, /Address them as "you"/);
-    assert.match(prep.supplement, /one-line overview/);
-    assert.match(prep.supplement, /strictly grounded/);
-    const officeAt = answer.indexOf('11:00 AM CT');
-    const openedAt = answer.indexOf('opened this job file');
-    assert.ok(officeAt >= 0 && openedAt > officeAt);
-    assert.doesNotMatch(answer, /doesn't have that on file/);
-    assert.doesNotMatch(answer, /#12/);
-    assert.doesNotMatch(answer, /UTC/);
-    assert.doesNotMatch(answer, /walkthrough,/);
-    assert.doesNotMatch(answer, /It's simple/);
-    assert.doesNotMatch(answer, /Her entire life/);
-    assert.doesNotMatch(answer, /But I know they have their ways/);
-    assert.doesNotMatch(answer, /Someone else roof/);
-    assert.doesNotMatch(answer, /⟦sources:/);
-    assert.doesNotMatch(answer, /\[\[web:/);
-    assert.doesNotMatch(answer, /^- /m);
+    assert.equal(prep.directAnswer, null, question);
+    assert.equal(prep.mentions[0]?.userId, EL, question);
+    assert.match(prep.supplement, /ATTRIBUTION DOSSIER/);
+    assert.match(prep.supplement, /JOB FILE/);
+    assert.match(prep.supplement, /Sep 17 office recording/);
+    assert.match(prep.supplement, /\[0:04\] It's simple/);
+    assert.match(prep.fallbackAnswer ?? '', /not in the file/);
+    assert.doesNotMatch(prep.fallbackAnswer ?? '', /filmed \d+ clips?|doesn't have that on file/);
   }
-
-  const follow = await prepareMentionAsk(db as any, {
-    orgId: ORG_A,
-    jobId: JOB_TIFFANY,
-    question: 'what did they find',
-    askerUserId: EL,
-    history: [
-      { role: 'user', text: historyQuestion },
-      { role: 'assistant', text: 'El Presidente recorded 3 videos.' },
-    ],
-    now: new Date('2026-09-22T00:00:00.000Z'),
-  });
-  assert.equal(follow.mentions[0]?.userId, EL);
-  const found = follow.directAnswer ?? '';
-  assert.match(found, /what turned up in the clips you recorded/);
-  assert.match(found, /RESTORE 365/);
-  assert.match(found, /tabletop/i);
-  assert.match(found, /walkthrough/i);
-  assert.match(found, /Blurry close passes over a whitewashed wood tabletop/);
-  assert.doesNotMatch(found, /you recorded 3 videos/);
-  assert.doesNotMatch(found, /opened this job file/);
-  assert.doesNotMatch(found, /Field Capture party/);
-  assert.doesNotMatch(found, /doesn't have that on file/);
-  assert.doesNotMatch(found, /#12/);
-  assert.doesNotMatch(found, /UTC/);
-  assert.doesNotMatch(found, /It's simple|Her entire life|But I know they have their ways/);
 });
 
-test('a configured model receives the activity dossier, not a canned answer', async () => {
-  const db = fakeDb(tiffanyTables());
-  const prep = await prepareMentionAsk(db as any, {
-    orgId: ORG_A,
-    jobId: JOB_TIFFANY,
-    question: 'what had @[El Presidente](mention:' + EL + ') done in this file',
-    askerUserId: EL,
-    anthropicApiKey: 'test-key-not-a-real-secret',
-    now: new Date('2026-09-22T00:00:00.000Z'),
-  });
-  assert.equal(prep.directAnswer, null);
-  assert.match(prep.supplement, /ACTIVITY DOSSIER/);
-  assert.match(prep.supplement, /RESTORE 365/);
-  assert.match(prep.supplement, /Sep 17, 11:00 AM CT/);
-  assert.match(prep.supplement, /opened this job file and created the Field Capture party/);
-  assert.match(prep.supplement, /one-line overview/);
-  assert.match(prep.supplement, /strictly grounded in this dossier/);
-  assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /one-line overview/);
-  assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /about 25 words/);
-  assert.match(activitySystemAddendum(prep.supplement) ?? '', /one-line overview/);
-  assert.match(prep.fallbackAnswer ?? '', /you recorded 3 videos between Sep 17 and Sep 21/);
-  const here = dirname(fileURLToPath(import.meta.url));
-  const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
-  const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
-  assert.match(jobAsk, /activitySystemAddendum/);
-  assert.match(clipAsk, /activitySystemAddendum/);
-  assert.doesNotMatch(prep.supplement, /It's simple|Her entire life|But I know they have their ways/);
-});
-
-test('a specific question is answered directly, not as an activity rundown', async () => {
-  const jane = resolveMentions("summarize @Jane's work", [{ userId: JANE, fullName: 'Jane Alvarez' }]);
-  assert.equal(jane.mentions[0]?.userId, JANE);
-  assert.equal(jane.mentions[0]?.name, 'Jane Alvarez');
-  const possessive = resolveMentions("what did @El Presidente's crew film", [
-    { userId: EL, fullName: 'El Presidente' },
-  ]);
-  assert.equal(possessive.mentions[0]?.userId, EL);
-
-  const db = fakeDb(tiffanyTables());
-  const question = 'what did @El Presidente say about the leak?';
-  const prep = await prepareMentionAsk(db as any, {
-    orgId: ORG_A,
-    jobId: JOB_TIFFANY,
-    question,
-    askerUserId: EL,
-    now: new Date('2026-09-22T00:00:00.000Z'),
-  });
-  assert.equal(prep.mentions[0]?.userId, EL);
-  const answer = prep.directAnswer ?? '';
-  assert.match(answer, /doesn't have that on file|leak/i);
-  assert.doesNotMatch(answer, /you recorded 3 videos/);
-  assert.doesNotMatch(answer, /Sep 17: You opened this job file/);
-  assert.doesNotMatch(prep.supplement, /one-line overview/);
-  assert.match(prep.supplement, /Answer the actual question/);
-
-  const modeled = await prepareMentionAsk(db as any, {
-    orgId: ORG_A,
-    jobId: JOB_TIFFANY,
-    question,
-    askerUserId: EL,
-    anthropicApiKey: 'test-key-not-a-real-secret',
-    now: new Date('2026-09-22T00:00:00.000Z'),
-  });
-  assert.equal(modeled.directAnswer, null);
-  assert.match(modeled.supplement, /ACTIVITY DOSSIER/);
-  assert.match(modeled.supplement, /Answer the actual question/);
-  assert.doesNotMatch(modeled.supplement, /ACTIVITY RUNDOWN/);
-  assert.doesNotMatch(modeled.supplement, /one-line overview/);
-  assert.match(modeled.fallbackAnswer ?? '', /doesn't have that on file|leak/i);
-  assert.doesNotMatch(modeled.fallbackAnswer ?? '', /you recorded 3 videos/);
-  assert.match(activitySystemAddendum(modeled.supplement) ?? '', /Answer the actual question/);
-  assert.doesNotMatch(activitySystemAddendum(modeled.supplement) ?? '', /one-line overview/);
-});
-
-test('filmed clips are not dropped when other file notes outrank them', async () => {
+test('filmed clips stay in the briefing when other file notes outrank them', async () => {
   const notes = Array.from({ length: 45 }, (_, index) => ({
     id: `file-note-${index}`,
     org_id: ORG_A,
@@ -1015,7 +999,7 @@ test('filmed clips are not dropped when other file notes outrank them', async ()
   assert.match(answer, /Sep 17 office recording/);
   assert.match(answer, /Sep 21 tabletop close-up/);
   assert.match(answer, /Sep 21 home walkthrough/);
-  assert.match(answer, /you recorded 3 videos/);
+  assert.doesNotMatch(answer, /filmed \d+ clips?/);
 });
 
 test('a clip someone was only tagged in is not counted as recorded', async () => {
@@ -1044,12 +1028,17 @@ test('a clip someone was only tagged in is not counted as recorded', async () =>
     jobId: JOB_TIFFANY,
     question: 'what had @El Presidente done in this file',
     askerUserId: EL,
+    anthropicApiKey: 'test-key-not-a-real-secret',
     now: new Date('2026-09-23T00:00:00.000Z'),
   });
-  const answer = prep.directAnswer ?? '';
-  assert.match(answer, /you recorded 3 videos/);
-  assert.doesNotMatch(answer, /recorded 4 videos/);
+  const answer = prep.fallbackAnswer ?? '';
+  assert.match(answer, /Sep 17 office recording/);
   assert.match(answer, /Named in Tagged only roof mention, which someone else recorded/);
+  assert.doesNotMatch(answer, /recorded 4/);
+  const recorded = prep.supplement.split('Someone else recorded:')[0] ?? '';
+  assert.doesNotMatch(recorded, /Tagged only roof mention/);
+  assert.match(prep.supplement, /Tagged only roof mention/);
+  assert.match(prep.supplement, /stood nearby/);
 });
 
 test('party and job events keep a date without a memory row', async () => {
@@ -1064,4 +1053,5 @@ test('party and job events keep a date without a memory row', async () => {
     now: new Date('2026-09-22T00:00:00.000Z'),
   });
   assert.match(prep.directAnswer ?? '', /Sep 17: You opened this job file and created the Field Capture party/);
+  assert.match(prep.supplement, /Job history:\nnone/);
 });

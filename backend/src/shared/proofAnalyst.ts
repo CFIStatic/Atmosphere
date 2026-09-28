@@ -476,19 +476,29 @@ export interface CollectionClip {
   transcript?: string | null;
   changes?: string[];
   concerns?: string[];
+  /** Proof id, so a mention prompt can put that person's clips first. */
+  proofId?: string | null;
 }
 
 function clipLabel(clip: CollectionClip): string {
   return `${clip.workDate} (video${clip.company ? `, ${clip.company}` : ''})`;
 }
 
-export function formatCollectionRecord(clips: CollectionClip[]): string {
+export function formatCollectionRecord(
+  clips: CollectionClip[],
+  options?: { transcriptCap?: number },
+): string {
+  const cap = options?.transcriptCap ?? 2000;
   return clips
     .map((clip) => {
       const lines = [clipLabel(clip)];
       if (clip.summary) lines.push(`  Seen: ${clip.summary}`);
       if (clip.narration && clip.narration !== clip.summary) lines.push(`  Narration: ${clip.narration}`);
-      if (clip.transcript) lines.push(`  Heard on the mic (verbatim): ${clip.transcript}`);
+      if (clip.transcript) {
+        const heard =
+          clip.transcript.length > cap ? `${clip.transcript.slice(0, cap).replace(/\s+\S*$/, '').trim()}…` : clip.transcript;
+        lines.push(`  Heard on the mic (verbatim): ${heard}`);
+      }
       if (clip.changes?.length) lines.push(`  Changes: ${clip.changes.join('; ')}`);
       if (clip.concerns?.length) lines.push(`  Concerns: ${clip.concerns.join('; ')}`);
       return lines.join('\n');
@@ -499,6 +509,7 @@ export function formatCollectionRecord(clips: CollectionClip[]): string {
 /** Every filed video on a job. */
 export function collectionClipsFromRows(
   rows: Array<{
+    id?: string;
     work_date?: string;
     workDate?: string;
     phase?: string | null;
@@ -528,6 +539,7 @@ export function collectionClipsFromRows(
       (findings as { childPrivacyRedactions?: unknown }).childPrivacyRedactions,
     );
     return {
+      proofId: row.id ?? null,
       workDate: String(row.work_date ?? row.workDate ?? ''),
       phase: row.phase ?? null,
       company: row.company ?? null,

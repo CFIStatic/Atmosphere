@@ -1,7 +1,9 @@
 /**
- * Load org-scoped evidence for people named with @mentions, then either
- * answer directly (nothing relevant, or no model) or hand a ranked dossier
- * to the existing Ask model call.
+ * Load org-scoped evidence for people named with @mentions.
+ * A resolved person goes to the Ask model with the job file, their
+ * attribution dossier, and recent turns. A grounded briefing is used only
+ * when no model is configured or the model call fails. Job scoping,
+ * ambiguity, and share-link rules stay deterministic.
  */
 import { fieldCaptureEmail } from '../field/crewJoin.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
@@ -9,14 +11,12 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ambiguitySentence,
   answerFromMentionContext,
-  asksForFindings,
-  asksForPersonActivity,
   carryPriorMention,
   cleanMentionTitle,
-  formatActivityDossier,
-  formatMentionPrompt,
+  formatMentionJobFile,
+  formatMentionModelContext,
+  mentionSpeakerLine,
   mentionTimeZone,
-  personHasActivity,
   loginNameFromMetadata,
   mentionDisplayName,
   nameKey,
@@ -701,7 +701,7 @@ export async function loadPersonContext(
   const jobsById = new Map(jobs.map((row) => [String(row.id), row]));
   const assigned = new Set(liveAssignments.map((row) => `${row.user_id}:${row.job_id}`));
 
-  return people.map((person) => {
+  const contexts = people.map((person) => {
     const items: MentionItem[] = [];
     const seen = new Set<string>();
     const push = (item: MentionItem) => {
@@ -768,6 +768,8 @@ export async function loadPersonContext(
         listLine: clipListLine(proof),
         finding: clipFindingLine(proof),
         detail: clipDetail(proof),
+        transcript: String(proof.transcript_text ?? ''),
+        speakers: mentionSpeakerLine(proof.ai_findings) || null,
         durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
         at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
         status: proof.state ?? null,
@@ -796,9 +798,6 @@ export async function loadPersonContext(
       const tagged =
         textMentionsPerson(body, person.userId, roster) ||
         Boolean(taggedForUser.get(person.userId)?.has(`job_message:${message.id}`));
-      // A comment they wrote belongs in an activity rundown. It does not, by
-      // itself, answer a narrower question such as "did she finish the electrical job?"
-      if (authored && !tagged && !asksForPersonActivity(input.question, [person.name])) continue;
       if (!authored && !tagged) continue;
       push({
         kind: 'note',
@@ -909,6 +908,17 @@ export async function loadPersonContext(
       timeZone,
     };
   });
+  const jobFile = formatMentionJobFile({
+    timeZone,
+    jobs,
+    proofs,
+    parties,
+    messages,
+    shares,
+    memory,
+    people: contexts,
+  });
+  return contexts.map((person) => ({ ...person, jobFile }));
 }
 
 export interface MentionAskPrep {
@@ -990,19 +1000,16 @@ export async function prepareMentionAsk(
   });
   const askerUserId = input.askerUserId ?? null;
   const grounded = answerFromMentionContext(input.question, people, { askerUserId });
-  const hasActivity = people.some((person) => personHasActivity(person));
-  const names = people.map((person) => person.name);
-  const findings = names.some((name) => asksForFindings(input.question, [name]));
-  const rundown = !findings && names.some((name) => asksForPersonActivity(input.question, [name]));
-  const mode = findings ? 'findings' : rundown ? 'rundown' : 'context';
-  const dossier = hasActivity
-    ? formatActivityDossier(people, { askerUserId, mode })
-    : formatMentionPrompt(people);
+  const dossier = formatMentionModelContext({
+    people,
+    history: input.history,
+    askerUserId,
+  });
   const supplement = [which, absent, dossier].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
-  // An activity question with real work goes to the model as a dossier.
-  // A topical or yes/no mention keeps the grounded answer.
-  if (!hasActivity || !isAskModelConfigured(input.anthropicApiKey)) {
+  // A resolved mention always goes to the model when one is configured.
+  // The briefing is only for a missing key or a failed model call.
+  if (!isAskModelConfigured(input.anthropicApiKey)) {
     return {
       mentions,
       supplement,
