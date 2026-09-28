@@ -11,8 +11,10 @@ import {
   answerFromMentionContext,
   asksForPersonActivity,
   carryPriorMention,
+  cleanMentionTitle,
   formatActivityDossier,
   formatMentionPrompt,
+  mentionTimeZone,
   personHasActivity,
   loginNameFromMetadata,
   mentionDisplayName,
@@ -297,33 +299,106 @@ function sentences(text: string): string[] {
   return parts?.length ? parts : [clean.slice(0, 280).trim()];
 }
 
-function firstSentence(text: string): string {
-  const sentence = sentences(text)[0] ?? '';
-  if (sentence.length <= 420) return sentence;
-  return sentence.slice(0, 400).replace(/\s+\S*$/, '').trim();
+const OPENER = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
-/** One scene line. Opening black frames are not the detail a list should lead with. */
-function visualDetail(findings: unknown): string {
-  if (!findings || typeof findings !== 'object') return '';
+/** About 25 words, ending on a comma when the cut would land mid-list. */
+function capWords(text: string, max: number): string {
+  const stripped = String(text ?? '')
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = stripped.split(' ').filter(Boolean);
+  if (words.length <= max) return stripped;
+  const joined = words.slice(0, max).join(' ');
+  const comma = joined.lastIndexOf(',');
+  if (comma > 40) return joined.slice(0, comma).replace(/[,:;]+$/g, '').trim();
+  return joined.replace(/[,:;]+$/g, '').trim();
+}
+
+function asSentence(text: string, maxWords: number): string {
+  const clean = capWords(text, maxWords).replace(/^(and|then)\s+/i, '').trim();
+  if (!clean) return '';
+  const headed = clean.charAt(0).toUpperCase() + clean.slice(1);
+  return /[.!?]$/.test(headed) ? headed : `${headed}.`;
+}
+
+function findingEvents(findings: unknown): string[] {
+  if (!findings || typeof findings !== 'object') return [];
   const events = (findings as { events?: unknown }).events;
-  if (!Array.isArray(events)) return '';
-  const lines = events
+  if (!Array.isArray(events)) return [];
+  return events
     .map((event) => {
       if (!event || typeof event !== 'object') return '';
       return String((event as { text?: unknown }).text ?? '').replace(/\s+/g, ' ').trim();
     })
-    .filter(Boolean);
-  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
-  const picked = lines.find((line) => !opener.test(line)) ?? lines[0] ?? '';
-  return firstSentence(picked);
+    .filter((line) => line && !OPENER.test(line));
+}
+
+function clausesOf(text: string): string[] {
+  return text
+    .split(/[.;]+/)
+    .flatMap((part) => (wordCount(part) > 18 ? part.split(',') : [part]))
+    .map((part) => part.replace(/\s+/g, ' ').trim())
+    .filter((part) => wordCount(part) >= 3);
+}
+
+function scoreClause(text: string): number {
+  let score = 0;
+  if (/['"][^'"]+['"]/.test(text) || /\b[A-Z]{2,}\b/.test(text)) score += 5;
+  if (/\b(person|bent over|labeled|binder|no tools|construction|damage|leak|missing|issue)\b/i.test(text)) {
+    score += 4;
+  }
+  if (/\b(no|not|none|without)\b/i.test(text)) score += 2;
+  if (wordCount(text) <= 16) score += 1;
+  if (/^(camera|frame|pan|image resolves)/i.test(text)) score -= 2;
+  return score;
+}
+
+/** One key detail: a short finding, or one notable line from the summary. */
+function oneKeyDetail(row: any): string {
+  const events = findingEvents(row.ai_findings);
+  let best = '';
+  let bestScore = 0;
+  for (const line of events) {
+    for (const clause of clausesOf(line)) {
+      const score = scoreClause(clause);
+      if (score > bestScore) {
+        bestScore = score;
+        best = clause;
+      }
+    }
+  }
+  if (best && bestScore >= 4) return asSentence(tightenDetail(best), 14);
+  const later = sentences(String(row.ai_summary ?? '')).slice(1);
+  for (const line of later) {
+    const score = scoreClause(line);
+    if (score >= 4 && wordCount(line) <= 22) return asSentence(line, 18);
+  }
+  if (best && bestScore >= 1) return asSentence(tightenDetail(best), 14);
+  return '';
+}
+
+/** Keep the labeled object or the person, and drop a verb the word cap would slice. */
+function tightenDetail(clause: string): string {
+  const labeled = clause.match(/(?:a|the|an)\s+['"][^'"]+['"](?:\s+\w+){0,3}/i);
+  if (labeled) return labeled[0];
+  return clause.replace(/\s+(are|is|was|were)\b[\s\S]*$/i, '');
 }
 
 function clipListLine(row: any): string {
-  const parts = sentences(String(row.ai_summary ?? ''));
-  const summary = firstSentence(parts[0] ?? '');
-  const visual = visualDetail(row.ai_findings) || (parts[1] ? firstSentence(parts[1]) : '');
-  return [summary, visual].filter(Boolean).join(' ');
+  const scene = asSentence(sentences(String(row.ai_summary ?? ''))[0] ?? '', 25);
+  const detail = oneKeyDetail(row);
+  if (!detail) return scene;
+  if (scene.toLowerCase().includes(detail.replace(/[.!?]+$/g, '').toLowerCase())) return scene;
+  return `${scene} ${detail}`.trim();
+}
+
+function clipFindingLine(row: any): string {
+  return oneKeyDetail(row);
 }
 
 /** A couple of real sentences from the mic. Fragments stay out of the dossier. */
@@ -333,31 +408,9 @@ function speechHighlight(transcript: unknown): string {
   return spoken.slice(0, 2).join(' ');
 }
 
-function keyFindings(findings: unknown): string {
-  if (!findings || typeof findings !== 'object') return '';
-  const events = (findings as { events?: unknown }).events;
-  if (!Array.isArray(events)) return '';
-  const opener = /black|noisy|no subject|initializ|lens appears covered|no discernible/i;
-  const lines = events
-    .map((event) => {
-      if (!event || typeof event !== 'object') return '';
-      return firstSentence(String((event as { text?: unknown }).text ?? ''));
-    })
-    .filter((line) => line && !opener.test(line));
-  return lines.slice(0, 3).join(' ');
-}
-
 function clipDetail(row: any): string {
-  const summary = sentences(String(row.ai_summary ?? '')).slice(0, 2).join(' ');
-  const shown = keyFindings(row.ai_findings);
   const said = speechHighlight(row.transcript_text);
-  return [
-    summary ? `Summary: ${summary}` : '',
-    shown ? `Shown: ${shown}` : '',
-    said ? `Speech (weave into a sentence only if it explains what they did or said): ${said}` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  return said ? `Said: ${said}` : '';
 }
 
 function metadataUserId(meta: unknown): string | null {
@@ -425,11 +478,17 @@ export async function loadPersonContext(
     roster?: MentionMember[];
     /** When set, evidence is limited to this job. */
     jobId?: string | null;
+    /** Asker's IANA zone. Wins over the org's report timezone. */
+    timeZone?: string | null;
   },
 ): Promise<PersonMentionContext[]> {
   const { orgId, people } = input;
   if (!people.length) return [];
   const scopeJobId = input.jobId ? String(input.jobId) : null;
+  const orgRows = await selectRows(db, 'orgs', (query) =>
+    query.select('id, daily_job_report_timezone').eq('id', orgId).limit(1),
+  );
+  const timeZone = mentionTimeZone(input.timeZone, orgRows[0]?.daily_job_report_timezone);
   const roster: MentionMember[] =
     input.roster ?? people.map((person) => ({ userId: person.userId, fullName: person.name }));
   const userIds = people.map((person) => person.userId);
@@ -542,7 +601,7 @@ export async function loadPersonContext(
     evidenceJobIds.length
       ? selectRows(db, 'job_parties', (query) =>
           query
-            .select('id, job_id, created_by, company, trade')
+            .select('id, job_id, created_by, company, trade, created_at')
             .eq('org_id', orgId)
             .in('job_id', evidenceJobIds),
         )
@@ -664,7 +723,9 @@ export async function loadPersonContext(
       const captured = proofCapturedBy(proof, person.userId, partiesById, uploadKeys, ackKeys, aliases);
       const tagged = textMentionsPerson(clipText(proof), person.userId, roster);
       if (!captured && !tagged) continue;
-      const title = String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim());
+      const title = cleanMentionTitle(
+        String(proof.title || `${proof.phase ?? 'clip'} ${proof.work_date ?? ''}`.trim()),
+      );
       const duration = Number(proof.duration_seconds);
       push({
         kind: 'video',
@@ -674,6 +735,7 @@ export async function loadPersonContext(
         title,
         text: clipText(proof),
         listLine: clipListLine(proof),
+        finding: clipFindingLine(proof),
         detail: clipDetail(proof),
         durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
         at: proof.captured_at ?? proof.received_at ?? proof.work_date ?? null,
@@ -741,7 +803,7 @@ export async function loadPersonContext(
         jobId: party.job_id ?? null,
         title: `Created the ${company} party`,
         text: '',
-        at: null,
+        at: party.created_at ?? null,
         captured: true,
       });
     }
@@ -813,6 +875,7 @@ export async function loadPersonContext(
       items: ranked,
       fileContains,
       jobTitle: scopedJob?.title ? String(scopedJob.title) : null,
+      timeZone,
     };
   });
 }
@@ -837,6 +900,10 @@ export async function prepareMentionAsk(
     history?: Array<{ role?: string | null; text?: string | null }> | null;
     /** When this is the mentioned person, the answer may say "you". */
     askerUserId?: string | null;
+    /** Asker's IANA zone. Wins over the org report timezone. */
+    timeZone?: string | null;
+    /** When set, decides the model path without reading the process environment. */
+    anthropicApiKey?: string | null;
   },
 ): Promise<MentionAskPrep> {
   const roster = await listOrgMentionMembers(db, input.orgId);
@@ -888,6 +955,7 @@ export async function prepareMentionAsk(
     now: input.now,
     roster,
     jobId,
+    timeZone: input.timeZone,
   });
   const askerUserId = input.askerUserId ?? null;
   const grounded = answerFromMentionContext(input.question, people, { askerUserId });
@@ -899,7 +967,7 @@ export async function prepareMentionAsk(
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');
   // A person with real activity is never answered by the canned miss or the
   // clip-list template while a model is configured. The dossier goes to the model.
-  if (!hasActivity || !isAskModelConfigured()) {
+  if (!hasActivity || !isAskModelConfigured(input.anthropicApiKey)) {
     return {
       mentions,
       supplement,

@@ -10,6 +10,7 @@
  * otherwise a grounded lookup still answers from the same text.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { ACTIVITY_ANSWER_INSTRUCTIONS } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
@@ -615,7 +616,7 @@ export async function answerFromJobFile(input: {
     FILE_QA_SYSTEM +
     (mentionScoped
       ? /\bACTIVITY DOSSIER\b/.test(String(input.file.mentionSupplement ?? ''))
-        ? `\n\nThe question is about one person's activity on this job. Answer ONLY from the ACTIVITY DOSSIER. Write one opening sentence, then a short chronological rundown of what they did, with what the videos showed and any findings. If the dossier says to address them as "you", do that. Plain sentences. Do not repeat the job title after every clip, do not list a #job-number row, do not print transcript fragments on their own lines, and do not emit ⟦sources: …⟧ or [[web:…]].`
+        ? `\n\nThe question is about one person's activity on this job. Answer ONLY from the ACTIVITY DOSSIER. ${ACTIVITY_ANSWER_INSTRUCTIONS}`
         : `\n\nThe question @mentions a coworker, or a follow-up pronoun refers to the last person they named. Answer about that person's contributions using their full name. The MENTIONED PEOPLE list is every clip and note tied to them, not a sample — when asked which videos they filmed, name each one. Use the rest of this job file for supporting detail. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what the file does contain. Never answer "No <question words> found for <first name>", and never write [[web:…]].`
       : '') +
     `\n\n${askWebCapabilityRules()}` +

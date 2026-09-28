@@ -347,6 +347,12 @@ export function asksForPersonActivity(question: string, names: string[] = []): b
   );
 }
 
+/** "what did they find" wants findings and issues, not the activity rundown. */
+export function asksForFindings(question: string, names: string[] = []): boolean {
+  const q = stripMentionMarks(question, names).toLowerCase();
+  return /\b(find|found|finding|findings|issue|issues|notable)\b/.test(q);
+}
+
 /** True when this person filmed, wrote, or opened something — not merely a name on a roster. */
 export function personHasActivity(person: { items: Array<{ kind: string; captured?: boolean }> }): boolean {
   return person.items.some(
@@ -389,10 +395,12 @@ export interface MentionItem {
   captured?: boolean;
   proofId?: string | null;
   workDate?: string | null;
-  /** One sentence plus one visual detail. Shown in clip lists; omits raw mic quotes. */
+  /** One short sentence plus at most one key detail. Omits raw mic quotes. */
   listLine?: string | null;
+  /** The one finding or notable issue for this clip, when there is one. */
+  finding?: string | null;
   durationSeconds?: number | null;
-  /** Model-facing clip detail: summary, what was shown, and a short speech highlight. */
+  /** Model-facing clip detail. Speech stays labeled and out of the rundown. */
   detail?: string | null;
 }
 
@@ -477,14 +485,81 @@ export function prettyMentionDate(value: string | null | undefined): string {
   return `${month} ${Number(match[3])}`;
 }
 
-function prettyMentionTime(value: string | null | undefined): string {
-  const match = /[T ](\d{2}):(\d{2})/.exec(String(value ?? ''));
-  if (!match) return '';
-  let hour = Number(match[1]);
-  const minute = match[2];
-  const suffix = hour >= 12 ? 'pm' : 'am';
-  hour = hour % 12 || 12;
-  return `${hour}:${minute}${suffix} UTC`;
+const ZONE_ABBREV: Record<string, string> = {
+  'America/Chicago': 'CT',
+  'America/New_York': 'ET',
+  'America/Denver': 'MT',
+  'America/Los_Angeles': 'PT',
+  'America/Phoenix': 'MST',
+  'America/Anchorage': 'AKT',
+  'Pacific/Honolulu': 'HT',
+};
+
+/** A usable IANA zone, or null. */
+export function mentionTimeZone(...candidates: Array<string | null | undefined>): string {
+  for (const candidate of candidates) {
+    const zone = String(candidate ?? '').trim();
+    if (!zone || zone.length > 64) continue;
+    try {
+      Intl.DateTimeFormat('en-US', { timeZone: zone }).format(new Date());
+      return zone;
+    } catch {
+      /* try the next one */
+    }
+  }
+  return 'America/New_York';
+}
+
+/** Drop a trailing comma or period so titles read as names ("Inside a Home"). */
+export function cleanMentionTitle(title: string): string {
+  return String(title ?? '')
+    .replace(/[\s,;:.!?…]+$/g, '')
+    .trim();
+}
+
+/**
+ * Local calendar stamp. A date-only value stays a date (no invented clock).
+ * A timestamp is the org/user zone, e.g. "Sep 17, 10:11 AM CT", never UTC.
+ */
+export function prettyMentionStamp(
+  value: string | null | undefined,
+  timeZone?: string | null,
+): { day: string; stamp: string } {
+  const raw = String(value ?? '').trim();
+  if (!raw) return { day: '', stamp: '' };
+  const hasTime = /[T ]\d{2}:\d{2}/.test(raw);
+  if (!hasTime) {
+    const day = prettyMentionDate(raw);
+    return { day, stamp: day };
+  }
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) {
+    const day = prettyMentionDate(raw);
+    return { day, stamp: day };
+  }
+  const zone = mentionTimeZone(timeZone);
+  const when = new Date(ms);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(when);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  const day = `${part('month')} ${Number(part('day')) || part('day')}`;
+  const clock = `${part('hour')}:${part('minute')} ${part('dayPeriod').toUpperCase()}`;
+  const abbr = ZONE_ABBREV[zone] ?? zoneAbbrev(zone, when);
+  return { day, stamp: `${day}, ${clock} ${abbr}`.trim() };
+}
+
+function zoneAbbrev(timeZone: string, when: Date): string {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' })
+    .formatToParts(when)
+    .find((item) => item.type === 'timeZoneName')?.value;
+  if (!name || /UTC|GMT/i.test(name)) return '';
+  return name;
 }
 
 export function prettyDuration(seconds: number | null | undefined): string {
@@ -513,20 +588,101 @@ function joinNames(names: string[]): string {
   return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
+function activityZone(person: PersonMentionContext): string {
+  return mentionTimeZone(person.timeZone);
+}
+
+function activityPhrase(item: { title: string; text?: string | null }): string {
+  if (item.title === 'job.created') return 'opened this job file';
+  const title = cleanMentionTitle(item.title);
+  if (!title) return '';
+  const phrase = `${title.charAt(0).toLowerCase()}${title.slice(1)}`.replace(/\.$/, '');
+  return phrase;
+}
+
+function actSentence(day: string, phrases: string[], subject: string): string {
+  const unique = [...new Set(phrases.map((phrase) => phrase.trim()).filter(Boolean))];
+  if (!unique.length) return '';
+  const body =
+    unique.length === 1
+      ? unique[0]!
+      : `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`;
+  const when = day || 'Undated';
+  return `${when}: ${subject} ${body}.`;
+}
+
+interface ActGroup {
+  sort: string;
+  day: string;
+  lastMs: number;
+  phrases: string[];
+}
+
+function groupActs(items: RankedMentionItem[], timeZone: string): ActGroup[] {
+  const groups: ActGroup[] = [];
+  const sorted = [...items].sort(chrono);
+  for (const item of sorted) {
+    const phrase = activityPhrase(item);
+    if (!phrase) continue;
+    const stamp = prettyMentionStamp(item.at || item.workDate, timeZone);
+    if (!stamp.day) continue;
+    const sort = item.at || item.workDate || '9999';
+    const ms = item.at ? Date.parse(item.at) : NaN;
+    const prev = groups[groups.length - 1];
+    const close =
+      prev &&
+      stamp.day &&
+      prev.day === stamp.day &&
+      Number.isFinite(ms) &&
+      Number.isFinite(prev.lastMs) &&
+      Math.abs(ms - prev.lastMs) <= 5 * 60 * 1000;
+    if (close && prev) {
+      prev.phrases.push(phrase);
+      if (Number.isFinite(ms)) prev.lastMs = ms;
+      continue;
+    }
+    groups.push({
+      sort,
+      day: stamp.day,
+      lastMs: Number.isFinite(ms) ? ms : NaN,
+      phrases: [phrase],
+    });
+  }
+  return groups;
+}
+
+function clipStamp(item: { at?: string | null; workDate?: string | null }, timeZone: string): string {
+  const timed = prettyMentionStamp(item.at, timeZone);
+  if (timed.stamp) return timed.stamp;
+  return prettyMentionStamp(item.workDate, timeZone).stamp;
+}
+
+function clipAnswerLine(video: RankedMentionItem, timeZone: string): string {
+  const when = clipStamp(video, timeZone);
+  const title = cleanMentionTitle(video.title);
+  const duration = prettyDuration(video.durationSeconds);
+  const bit = String(video.listLine ?? '').replace(/\s+/g, ' ').trim();
+  const head = `${when ? `${when} — ` : ''}${title}${duration ? ` (${duration})` : ''}`;
+  return bit ? `${head}. ${bit}` : `${head}.`;
+}
+
 /**
- * One overview sentence, then a chronological rundown. No source trailer,
- * no #job-number item, and no raw transcript lines.
+ * One overview sentence, then a chronological rundown. Clips and the other
+ * things they did share one timeline. No source trailer, no #job-number item,
+ * and no raw transcript lines.
  */
 export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson: boolean): string {
   const name = person.name.trim() || 'That person';
   const who = askerIsPerson ? 'you' : name;
+  const zone = activityZone(person);
   const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
   const jobs = person.items.filter((item) => item.kind === 'job');
-  const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job').sort(chrono);
+  const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
   const scope = String(person.jobTitle ?? '').trim();
-  const jobLabels = [...new Set(jobs.map((item) => displayJobTitle(item.title)).filter(Boolean))];
-  const extraJobs = scope
-    ? jobLabels.filter((title) => title.toLowerCase() !== scope.toLowerCase())
+  const scopeKey = cleanMentionTitle(scope).toLowerCase();
+  const jobLabels = [...new Set(jobs.map((item) => displayJobTitle(cleanMentionTitle(item.title))).filter(Boolean))];
+  const extraJobs = scopeKey
+    ? jobLabels.filter((title) => cleanMentionTitle(title).toLowerCase() !== scopeKey)
     : jobLabels;
   const dates = videos
     .map((item) => item.workDate || (item.at ? item.at.slice(0, 10) : ''))
@@ -556,30 +712,47 @@ export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson:
     overview = askerIsPerson ? 'You have activity on this file.' : `${name} has activity on this file.`;
   }
 
-  const lines: string[] = [];
-  for (const video of videos) {
-    const day = prettyMentionDate(video.workDate || video.at);
-    const clock = prettyMentionTime(video.at);
-    const when = [day, clock].filter(Boolean).join(' ');
-    const duration = prettyDuration(video.durationSeconds);
-    const bit = String(video.listLine ?? '').replace(/\s+/g, ' ').trim();
-    const head = `${when ? `${when} — ` : ''}${video.title}${duration ? ` (${duration})` : ''}`;
-    lines.push(`- ${head}${bit ? `. ${bit}` : ''}`);
+  const subject = askerIsPerson ? 'You' : name;
+  const events: Array<{ sort: string; text: string }> = [
+    ...videos.map((video) => ({
+      sort: video.at || video.workDate || '',
+      text: clipAnswerLine(video, zone),
+    })),
+    ...groupActs(rest, zone).map((group) => ({
+      sort: group.sort,
+      text: actSentence(group.day, group.phrases, subject),
+    })),
+  ].filter((event) => event.text);
+  events.sort((a, b) => a.sort.localeCompare(b.sort) || a.text.localeCompare(b.text));
+  const lines = events.map((event) => event.text);
+  for (const title of extraJobs) lines.push(`Also on ${title}.`);
+  return [overview, ...lines].join('\n');
+}
+
+/**
+ * Findings and issues from the clips. Not the activity rundown.
+ */
+export function writeFindingsAnswer(person: PersonMentionContext, askerIsPerson: boolean): string {
+  const name = person.name.trim() || 'That person';
+  const who = askerIsPerson ? 'you' : name;
+  const zone = activityZone(person);
+  const scope = String(person.jobTitle ?? '').trim();
+  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const overview = scope
+    ? `On ${scope}, here is what turned up in the clips ${who} recorded.`
+    : `Here is what turned up in the clips ${who} recorded.`;
+  if (!videos.length) {
+    return askerIsPerson
+      ? 'You have no clips on this file, so there are no findings to report.'
+      : `${name} has no clips on this file, so there are no findings to report.`;
   }
-  for (const title of extraJobs) lines.push(`- Also on ${title}.`);
-  for (const item of rest) {
-    const day = prettyMentionDate(item.workDate || item.at);
-    if (item.title === 'job.created') {
-      lines.push(`- ${day ? `${day} — ` : ''}Opened this job file.`);
-      continue;
-    }
-    const text = String(item.text ?? '')
-      .replace(/#\d+\b\s*[—-]?\s*/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 220);
-    lines.push(`- ${day ? `${day} — ` : ''}${item.title}${text ? `. ${text}` : ''}`);
-  }
+  const lines = videos.map((video) => {
+    const when = clipStamp(video, zone);
+    const title = cleanMentionTitle(video.title);
+    const bit = String(video.finding || video.listLine || '').replace(/\s+/g, ' ').trim();
+    const head = `${when ? `${when} — ` : ''}${title}`;
+    return bit ? `${head}. ${bit}` : `${head}.`;
+  });
   return [overview, ...lines].join('\n');
 }
 
@@ -604,6 +777,8 @@ export interface PersonMentionContext {
   fileContains?: string[];
   /** Job title without the #number, when Ask is scoped to one job. */
   jobTitle?: string | null;
+  /** IANA zone for clocks in the answer. Never format those clocks as UTC. */
+  timeZone?: string | null;
 }
 
 const STATE_WORD: Record<string, string> = {
@@ -677,6 +852,15 @@ export function answerFromMentionContext(
     const videos = person.items.filter((item) => item.kind === 'video').slice(0, 20);
     const inventory = asksForPersonRecord(question, [person.name]);
     if (
+      asksForFindings(question, [person.name]) &&
+      !inventory &&
+      personHasActivity(person)
+    ) {
+      blocks.push(writeFindingsAnswer(person, options?.askerUserId === person.userId));
+      groundedOn += videos.length;
+      continue;
+    }
+    if (
       asksForPersonActivity(question, [person.name]) &&
       !inventory &&
       personHasActivity(person)
@@ -712,6 +896,20 @@ export function answerFromMentionContext(
 export const ACTIVITY_DOSSIER_MARK = 'ACTIVITY DOSSIER';
 
 /**
+ * Shared by the dossier and the model system prompt so a configured model
+ * writes the same shape as the grounded answer.
+ */
+export const ACTIVITY_ANSWER_INSTRUCTIONS =
+  'Write a one-line overview, then a short chronological rundown. ' +
+  'Each clip is one sentence of about 25 words plus at most one key detail. ' +
+  'Put other activity in that same chronological order as full dated sentences, for example "Sep 17: You opened this job file and created the Field Capture party." ' +
+  'Times in the dossier are already in the local timezone. Never rewrite them as UTC. ' +
+  'If the question asks what they found, answer the findings and issues from the clips. Do not repeat the activity rundown. ' +
+  'Stay strictly grounded in this dossier. Do not invent clips, times, people, quotes, or events. ' +
+  'If it says to address them as "you", do that. ' +
+  'Do not repeat the job title after every clip, do not list a #job-number row, do not print transcript fragments as their own lines, and do not emit ⟦sources: …⟧ or [[web:…]].';
+
+/**
  * Everything attributable to the person, for the model to write from.
  * The grounded fallback never prints this speech block as its own lines.
  */
@@ -734,46 +932,39 @@ export function formatActivityDossier(
     if (!person.items.length) {
       return `${header}\nNothing on this job is attributed to this person.`;
     }
+    const zone = activityZone(person);
     const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
     const jobs = person.items.filter((item) => item.kind === 'job');
-    const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job').sort(chrono);
+    const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
+    const subject = asker ? 'You' : person.name;
     const lines: string[] = [];
-    for (const video of videos) {
-      const day = prettyMentionDate(video.workDate || video.at) || 'undated';
-      const clock = prettyMentionTime(video.at);
-      const duration = prettyDuration(video.durationSeconds);
-      lines.push(
-        `- Video ${[day, clock].filter(Boolean).join(' ')}${duration ? ` (${duration})` : ''}: ${video.title}. ${String(video.detail || video.listLine || '').replace(/\s+/g, ' ').trim()}`,
-      );
+    const timeline: Array<{ sort: string; text: string }> = videos.map((video) => {
+      const line = clipAnswerLine(video, zone);
+      const finding = String(video.finding ?? '').replace(/\s+/g, ' ').trim();
+      const said = String(video.detail ?? '').replace(/\s+/g, ' ').trim();
+      const extras = [
+        finding && !line.includes(finding) ? `Finding: ${finding}` : '',
+        said.startsWith('Said:') ? said : '',
+      ].filter(Boolean);
+      return { sort: video.at || video.workDate || '', text: [line, ...extras].join(' ') };
+    });
+    for (const group of groupActs(rest, zone)) {
+      timeline.push({
+        sort: group.sort,
+        text: actSentence(group.day, group.phrases, subject),
+      });
     }
-    const scope = String(person.jobTitle ?? '').trim().toLowerCase();
+    timeline.sort((a, b) => a.sort.localeCompare(b.sort) || a.text.localeCompare(b.text));
+    lines.push(...timeline.map((event) => event.text));
+    const scope = cleanMentionTitle(String(person.jobTitle ?? '')).toLowerCase();
     for (const job of jobs) {
-      const title = displayJobTitle(job.title);
-      if (scope && title.toLowerCase() === scope) continue;
-      lines.push(`- Job record: ${title}${job.status ? ` (${stateWord(job.status)})` : ''}. ${job.text}`.trim());
-    }
-    for (const item of rest) {
-      const when = item.at ? item.at.slice(0, 16).replace('T', ' ') : '';
-      if (item.title === 'job.created') {
-        lines.push(`- ${when}: Opened this job file.`);
-        continue;
-      }
-      const text = String(item.text ?? '')
-        .replace(/#\d+\b\s*[—-]?\s*/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 400);
-      lines.push(`- ${item.kind} ${when}: ${item.title}. ${text}`.trim());
+      const title = displayJobTitle(cleanMentionTitle(job.title));
+      if (scope && cleanMentionTitle(title).toLowerCase() === scope) continue;
+      lines.push(`Also on ${title}${job.status ? ` (${stateWord(job.status)})` : ''}.`.trim());
     }
     return `${header}\n${lines.join('\n')}`;
   });
-  return (
-    `${sections.join('\n\n')}\n\n` +
-    `Write one opening sentence (on this job, what they did, and the date span), then a short chronological rundown in plain sentences. ` +
-    `Use the useful specifics: what the video showed, findings, and speech only when it explains what they did or said. ` +
-    `Do not print transcript fragments as their own lines. Do not repeat the job title after every clip. ` +
-    `Do not list a #job-number row. Do not emit ⟦sources: …⟧, [[web:…]], or any other source tag.`
-  );
+  return `${sections.join('\n\n')}\n\n${ACTIVITY_ANSWER_INSTRUCTIONS}`;
 }
 
 export function formatMentionPrompt(people: PersonMentionContext[]): string {

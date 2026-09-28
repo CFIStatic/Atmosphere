@@ -9,6 +9,8 @@ import {
   loginNameFromMetadata,
   mentionDisplayName,
   mentionToken,
+  ACTIVITY_ANSWER_INSTRUCTIONS,
+  asksForFindings,
   asksForPersonActivity,
   asksForPersonRecord,
   carryPriorMention,
@@ -701,7 +703,7 @@ function tiffanyTables() {
         work_date: '2026-09-21',
         phase: 'after',
         state: 'analysed',
-        title: 'Sep 21 home walkthrough',
+        title: 'Sep 21 home walkthrough,',
         ai_summary: 'Handheld interior walkthrough of a furnished home, chandelier and dining wall.',
         transcript_text: 'Her entire life.',
         narration_text: null,
@@ -731,11 +733,39 @@ function tiffanyTables() {
       },
     ],
     job_parties: [
-      { id: 'party-el', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: EL, company: 'Field Capture', trade: 'field_capture' },
-      { id: 'party-seat', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: EL_SEAT, company: 'Field Capture', trade: 'field_capture' },
+      {
+        id: 'party-el',
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        created_by: EL,
+        company: 'Field Capture',
+        trade: 'field_capture',
+        created_at: '2026-09-17T16:37:29.206Z',
+      },
+      {
+        id: 'party-seat',
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        created_by: EL_SEAT,
+        company: 'Field Capture',
+        trade: 'field_capture',
+        created_at: '2026-09-17T16:37:29.206Z',
+      },
       { id: 'party-other', org_id: ORG_A, job_id: JOB_TIFFANY, created_by: JANE, company: 'Other crew', trade: 'roofing' },
     ],
     job_messages: [],
+    memory_events: [
+      {
+        id: 'mem-tiffany',
+        org_id: ORG_A,
+        job_id: JOB_TIFFANY,
+        actor_id: EL,
+        event_type: 'job.created',
+        summary: 'opened job #12 — Project Tiffany & Co.',
+        occurred_at: '2026-09-17T16:37:28.774Z',
+      },
+    ],
+    orgs: [{ id: ORG_A, daily_job_report_timezone: 'America/Chicago' }],
   };
 }
 
@@ -810,6 +840,8 @@ test('what someone had done is a dossier, not a canned miss', async () => {
   assert.equal(asksForPersonActivity('what did @El Presidente do', ['El Presidente']), true);
   assert.equal(asksForPersonActivity("summarize @El Presidente's work", ['El Presidente']), true);
   assert.equal(asksForPersonActivity('what did they find', ['El Presidente']), true);
+  assert.equal(asksForFindings('what did they find', ['El Presidente']), true);
+  assert.equal(asksForFindings('what had @El Presidente done in this file', ['El Presidente']), false);
   assert.equal(asksForPersonActivity('did he record the electrical panel?', ['El Presidente']), false);
 
   const db = fakeDb(tiffanyTables());
@@ -829,21 +861,30 @@ test('what someone had done is a dossier, not a canned miss', async () => {
     });
     const answer = prep.directAnswer ?? '';
     assert.match(answer, /On Project Tiffany & Co\., you recorded 3 videos between Sep 17 and Sep 21/);
-    assert.match(answer, /Sep 17 office recording/);
-    assert.match(answer, /Sep 21 tabletop close-up/);
-    assert.match(answer, /Sep 21 home walkthrough/);
+    assert.match(answer, /Sep 17, 11:00 AM CT — Sep 17 office recording/);
+    assert.match(answer, /Sep 21, 5:00 PM CT — Sep 21 tabletop close-up/);
+    assert.match(answer, /Sep 21, 6:00 PM CT — Sep 21 home walkthrough/);
+    assert.match(answer, /Sep 17: You opened this job file and created the Field Capture party/);
     assert.match(answer, /RESTORE 365/);
     assert.match(answer, /webcam-style take/);
     assert.match(prep.supplement, /ACTIVITY DOSSIER/);
     assert.match(prep.supplement, /Address them as "you"/);
+    assert.match(prep.supplement, /one-line overview/);
+    assert.match(prep.supplement, /strictly grounded/);
+    const officeAt = answer.indexOf('11:00 AM CT');
+    const openedAt = answer.indexOf('opened this job file');
+    assert.ok(officeAt >= 0 && openedAt > officeAt);
     assert.doesNotMatch(answer, /doesn't have that on file/);
     assert.doesNotMatch(answer, /#12/);
+    assert.doesNotMatch(answer, /UTC/);
+    assert.doesNotMatch(answer, /walkthrough,/);
     assert.doesNotMatch(answer, /It's simple/);
     assert.doesNotMatch(answer, /Her entire life/);
     assert.doesNotMatch(answer, /But I know they have their ways/);
     assert.doesNotMatch(answer, /Someone else roof/);
     assert.doesNotMatch(answer, /⟦sources:/);
     assert.doesNotMatch(answer, /\[\[web:/);
+    assert.doesNotMatch(answer, /^- /m);
   }
 
   const follow = await prepareMentionAsk(db as any, {
@@ -859,10 +900,44 @@ test('what someone had done is a dossier, not a canned miss', async () => {
   });
   assert.equal(follow.mentions[0]?.userId, EL);
   const found = follow.directAnswer ?? '';
+  assert.match(found, /what turned up in the clips you recorded/);
   assert.match(found, /RESTORE 365/);
-  assert.match(found, /tabletop/);
-  assert.match(found, /walkthrough/);
+  assert.match(found, /tabletop/i);
+  assert.match(found, /walkthrough/i);
+  assert.match(found, /Blurry close passes over a whitewashed wood tabletop/);
+  assert.doesNotMatch(found, /you recorded 3 videos/);
+  assert.doesNotMatch(found, /opened this job file/);
+  assert.doesNotMatch(found, /Field Capture party/);
   assert.doesNotMatch(found, /doesn't have that on file/);
   assert.doesNotMatch(found, /#12/);
+  assert.doesNotMatch(found, /UTC/);
   assert.doesNotMatch(found, /It's simple|Her entire life|But I know they have their ways/);
+});
+
+test('a configured model receives the activity dossier, not a canned answer', async () => {
+  const db = fakeDb(tiffanyTables());
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what had @[El Presidente](mention:' + EL + ') done in this file',
+    askerUserId: EL,
+    anthropicApiKey: 'test-key-not-a-real-secret',
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(prep.directAnswer, null);
+  assert.match(prep.supplement, /ACTIVITY DOSSIER/);
+  assert.match(prep.supplement, /RESTORE 365/);
+  assert.match(prep.supplement, /Sep 17, 11:00 AM CT/);
+  assert.match(prep.supplement, /opened this job file and created the Field Capture party/);
+  assert.match(prep.supplement, /one-line overview/);
+  assert.match(prep.supplement, /strictly grounded in this dossier/);
+  assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /one-line overview/);
+  assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /about 25 words/);
+  assert.match(prep.fallbackAnswer ?? '', /you recorded 3 videos between Sep 17 and Sep 21/);
+  const here = dirname(fileURLToPath(import.meta.url));
+  const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
+  assert.match(jobAsk, /ACTIVITY_ANSWER_INSTRUCTIONS/);
+  assert.match(clipAsk, /ACTIVITY_ANSWER_INSTRUCTIONS/);
+  assert.doesNotMatch(prep.supplement, /It's simple|Her entire life|But I know they have their ways/);
 });
