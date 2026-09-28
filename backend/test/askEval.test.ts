@@ -701,7 +701,7 @@ test('Ask rubric scores answer-first, grounded, no dead ends, and carried contex
   const hello = await say('Hey', /Project Tiffany/);
   const which = await say('What did he say?', /Which day/i, /QuickBooks/);
   const sep21 = await say('Sep 21', /QuickBooks online/);
-  const opinion = await say('Thanks. What do you think he was getting at?', /off paper and onto QuickBooks/i);
+  const opinion = await say('Thanks. What do you think he was getting at?', /QuickBooks online/);
   const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.', /not Sep 17/);
 
   const fresh = async (question: string, expect: RegExp, forbid?: RegExp) => {

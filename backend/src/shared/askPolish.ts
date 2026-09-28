@@ -338,10 +338,12 @@ export function resolveAskQuestion(
   history: AskMemoryTurn[] | null | undefined,
   catalog: AskLookupCatalog,
 ): string {
-  const q = question.trim();
+  const raw = question.trim();
+  const social = splitSocial(raw);
+  const q = social.prefix === 'thanks' && isFollowOnQuestion(social.body) ? social.body : raw;
   if (isLongMemoryQuestion(q)) return q;
   const turns = (history ?? []).filter((turn) => String(turn.text ?? '').trim()).slice(-8);
-  if (!turns.length) return question;
+  if (!turns.length) return q === raw ? question : q;
   if (isCorrection(q)) return q;
   const person = recentPerson(turns, catalog) || soleOnJobPerson(catalog);
   const namedHere = (catalog.people ?? []).some((row) => row.name && q.toLowerCase().includes(row.name.toLowerCase()));
@@ -385,7 +387,7 @@ export function resolveAskQuestion(
     }
     return next;
   }
-  return question;
+  return q === raw ? question : q;
 }
 
 function personBlock(trace: AskLookupTraceStep[]): { name: string; offJob: string | null } | null {
@@ -951,12 +953,7 @@ function composeOpinion(question: string, catalog: AskLookupCatalog, history: As
   if (!lines.length) return `${jobOffer(catalog)} The transcripts do not give me more than that to go on.`;
   const when = lines[0]!.when;
   const spoken = lines.map((line) => `“${line.text}”`).join(', then ');
-  const blob = lines.map((line) => line.text).join(' ');
-  const read =
-    /paper|spreadsheet/i.test(blob) && /quickbooks/i.test(blob)
-      ? 'He is talking about getting the work off paper and onto QuickBooks.'
-      : 'I would not add a motive past those words.';
-  return `On ${when}, the lines run ${spoken}. ${read}`;
+  return `On ${when}, the lines run ${spoken}. I would not add a motive past those words.`;
 }
 
 function composeCorrection(question: string, catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
