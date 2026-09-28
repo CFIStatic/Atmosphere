@@ -316,10 +316,24 @@ export async function renameAskThread(
   return data as AskThreadRow;
 }
 
+function scopeOwnedThread(
+  query: any,
+  input: { threadId: string; orgId?: string; jobId?: string; owner?: AskThreadOwner },
+) {
+  let q = query.eq('id', input.threadId);
+  if (input.orgId) q = q.eq('org_id', input.orgId);
+  if (input.jobId) q = q.eq('job_id', input.jobId);
+  if (input.owner) q = ownerFilter(q, input.owner);
+  return q;
+}
+
 export async function touchAskThreadAfterMessage(
   supabase: SupabaseClient,
   input: {
     threadId: string;
+    orgId?: string;
+    jobId?: string;
+    owner?: AskThreadOwner;
     question: string;
     answer?: string | null;
     isFirstMessage: boolean;
@@ -334,18 +348,17 @@ export async function touchAskThreadAfterMessage(
   /* Auto-title only while the chat is still the default name — a user rename sticks. */
   let wroteAuto = false;
   if (input.isFirstMessage) {
-    const { data: row } = await supabase
-      .from('ask_threads')
-      .select('title')
-      .eq('id', input.threadId)
-      .maybeSingle();
+    const { data: row } = await scopeOwnedThread(
+      supabase.from('ask_threads').select('title'),
+      input,
+    ).maybeSingle();
     const current = ((row as { title?: string } | null)?.title || '').trim();
     if (!current || current === 'New chat' || current === 'Earlier questions' || askThreadTitleIsRaw(current)) {
       patch.title = titleFromFirstQuestion(input.question);
       wroteAuto = true;
     }
   }
-  await supabase.from('ask_threads').update(patch).eq('id', input.threadId);
+  await scopeOwnedThread(supabase.from('ask_threads').update(patch), input);
   if (!wroteAuto || typeof patch.title !== 'string') return;
   const refined = await modelAskThreadTitle({
     question: input.question,
@@ -353,17 +366,16 @@ export async function touchAskThreadAfterMessage(
     complete: input.complete,
   });
   if (!refined || refined === patch.title) return;
-  const { data: again } = await supabase
-    .from('ask_threads')
-    .select('title')
-    .eq('id', input.threadId)
-    .maybeSingle();
+  const { data: again } = await scopeOwnedThread(
+    supabase.from('ask_threads').select('title'),
+    input,
+  ).maybeSingle();
   const nowTitle = ((again as { title?: string } | null)?.title || '').trim();
   if (nowTitle !== patch.title) return;
-  await supabase
-    .from('ask_threads')
-    .update({ title: refined, updated_at: new Date().toISOString() })
-    .eq('id', input.threadId);
+  await scopeOwnedThread(
+    supabase.from('ask_threads').update({ title: refined, updated_at: new Date().toISOString() }),
+    input,
+  );
 }
 
 export type AskThreadMemoryState = {
@@ -374,13 +386,12 @@ export type AskThreadMemoryState = {
 /** Rolling summary stored on the thread. Missing columns mean the migration is not applied yet. */
 export async function loadAskThreadMemory(
   supabase: SupabaseClient,
-  threadId: string,
+  input: { orgId: string; jobId: string; threadId: string; owner: AskThreadOwner },
 ): Promise<AskThreadMemoryState> {
-  const { data, error } = await supabase
-    .from('ask_threads')
-    .select('rolling_summary, summary_through_question_id')
-    .eq('id', threadId)
-    .maybeSingle();
+  const { data, error } = await scopeOwnedThread(
+    supabase.from('ask_threads').select('rolling_summary, summary_through_question_id'),
+    input,
+  ).maybeSingle();
   if (error || !data) return { summary: null, throughId: null };
   const row = data as { rolling_summary?: string | null; summary_through_question_id?: string | null };
   return {
@@ -442,16 +453,16 @@ export async function persistAskThreadMemory(
     const prev = (input.previousSummary ?? '').trim();
     const throughChanged = (input.summaryThroughId ?? null) !== (input.previousThroughId ?? null);
     if (next && (next !== prev || throughChanged)) {
-      const { error } = await supabase
-        .from('ask_threads')
-        .update({
+      const { error } = await scopeOwnedThread(
+        supabase.from('ask_threads').update({
           rolling_summary: next,
           summary_through_question_id: input.summaryThroughId,
           summary_turn_count: input.coveredCount,
           summarized_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', input.threadId);
+        }),
+        input,
+      );
       if (error && !missingMemorySchema(error)) return;
     }
     const have = new Set(input.existingNotes.map((note) => noteKey(note.note)));

@@ -2720,7 +2720,10 @@ export async function runProofAsk(input: {
       : input.shareId
         ? { kind: 'share', shareId: input.shareId }
         : null;
-    if (owner) {
+    if (!owner) {
+      // No principal to check. A caller-supplied thread id is not bound.
+      threadId = null;
+    } else {
       try {
         if (threadId) {
           await getAskThreadForOwner(writeDb, { orgId, jobId, threadId, owner });
@@ -2732,9 +2735,12 @@ export async function runProofAsk(input: {
             threadId = created.id;
           }
         }
-      } catch {
-        // Threads table may be mid-migrate — Ask still answers without history scoping.
-        threadId = threadId ?? null;
+      } catch (err) {
+        const unavailable =
+          err instanceof HttpError && (err.status === 503 || err.code === 'ask_threads_unavailable');
+        if (!unavailable) throw err;
+        // Threads table may be mid-migrate — Ask still answers, with no thread bound.
+        threadId = null;
       }
     }
 
@@ -2848,7 +2854,9 @@ export async function runProofAsk(input: {
             .eq('thread_id', threadId)
             .order('created_at', { ascending: false })
             .limit(200),
-          loadAskThreadMemory(writeDb, threadId),
+          owner
+            ? loadAskThreadMemory(writeDb, { orgId, jobId, threadId, owner })
+            : Promise.resolve({ summary: null, throughId: null }),
           owner ? loadAskJobNotes(writeDb, { orgId, jobId, owner }) : Promise.resolve([] as DurableJobNote[]),
         ]);
         const rows = [...((lateRes.data ?? []) as Array<Record<string, unknown>>)].reverse();
@@ -3237,7 +3245,10 @@ export async function runProofAsk(input: {
           .select('id', { count: 'exact', head: true })
           .eq('thread_id', threadId);
         await touchAskThreadAfterMessage(writeDb, {
+          orgId,
+          jobId,
           threadId,
+          owner,
           question: storedQuestion,
           answer: storedAnswer,
           isFirstMessage: (count ?? 0) <= 1,

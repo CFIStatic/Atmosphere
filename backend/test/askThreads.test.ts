@@ -7,7 +7,9 @@ import { displayMentionText } from '../src/shared/mentions.js';
 import {
   acceptModelAskTitle,
   listAskThreads,
+  loadAskThreadMemory,
   modelAskThreadTitle,
+  persistAskThreadMemory,
   presentAskThread,
   renameAskThread,
   titleFromFirstQuestion,
@@ -240,6 +242,80 @@ test('office Ask routes expose thread list/create/rename and threadId on ask', (
   assert.match(shared, /ask\/threads\/:threadId/);
   assert.match(threads, /export async function renameAskThread/);
   assert.match(threads, /user rename sticks/);
+});
+
+test('thread memory reads and writes stay on the owner', async () => {
+  const filters: string[] = [];
+  const chain = () => {
+    const b: Record<string, unknown> = {
+      select() {
+        return b;
+      },
+      update() {
+        return b;
+      },
+      insert() {
+        return Promise.resolve({ error: null });
+      },
+      eq(col: string, val: string) {
+        filters.push(`${col}=${val}`);
+        return b;
+      },
+      is(col: string, val: unknown) {
+        filters.push(`is:${col}=${String(val)}`);
+        return b;
+      },
+      maybeSingle() {
+        return Promise.resolve({
+          data: { rolling_summary: 'walnut tabletop', summary_through_question_id: null },
+          error: null,
+        });
+      },
+      then(resolve: (value: { error: null }) => void) {
+        resolve({ error: null });
+      },
+    };
+    return b;
+  };
+  const supabase = { from: () => chain() };
+  const owner = { kind: 'user' as const, userId: 'owner-1' };
+  const loaded = await loadAskThreadMemory(supabase as never, {
+    orgId: 'org-1',
+    jobId: 'job-1',
+    threadId: 'thread-1',
+    owner,
+  });
+  assert.equal(loaded.summary, 'walnut tabletop');
+  assert.ok(filters.includes('id=thread-1'));
+  assert.ok(filters.includes('org_id=org-1'));
+  assert.ok(filters.includes('job_id=job-1'));
+  assert.ok(filters.includes('owner_user_id=owner-1'));
+  filters.length = 0;
+  await persistAskThreadMemory(supabase as never, {
+    orgId: 'org-1',
+    jobId: 'job-1',
+    threadId: 'thread-1',
+    owner,
+    summary: 'redo the tabletop in walnut',
+    summaryThroughId: 'q1',
+    coveredCount: 2,
+    previousSummary: null,
+    previousThroughId: null,
+    notes: [],
+    existingNotes: [],
+  });
+  assert.ok(filters.includes('owner_user_id=owner-1'));
+  assert.ok(filters.includes('org_id=org-1'));
+  assert.ok(filters.includes('job_id=job-1'));
+  assert.equal(filters.includes('id=someone-else'), false);
+});
+
+test('a thread the caller does not own is not kept for memory', () => {
+  const proof = readFileSync(join(here, '../src/routes/proofOfWork.ts'), 'utf8');
+  assert.match(proof, /if \(!unavailable\) throw err/);
+  assert.match(proof, /threadId = null/);
+  assert.equal(proof.includes('threadId = threadId ?? null'), false);
+  assert.match(proof, /loadAskThreadMemory\(writeDb, \{ orgId, jobId, threadId, owner \}\)/);
 });
 
 test('progress-share Ask persists share-scoped threads', () => {
