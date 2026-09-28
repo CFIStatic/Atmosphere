@@ -15,11 +15,22 @@ import {
   createAskThread,
   ensureAskThreads,
   getAskThreadForOwner,
+  loadAskJobNotes,
+  loadAskThreadMemory,
+  persistAskThreadMemory,
   presentAskThread,
   renameAskThread,
   touchAskThreadAfterMessage,
   type AskThreadOwner,
 } from '../shared/askThreads.js';
+import { displayMentionText } from '../shared/mentions.js';
+import {
+  foldThreadMemory,
+  mergeDurableNotes,
+  scrubLongMemory,
+  type DurableJobNote,
+  type StoredAskPair,
+} from '../shared/askMemory.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import {
@@ -40,7 +51,14 @@ import {
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
-import { askLookupCatalogFromJob, lookupPeopleFromContexts } from '../shared/askLookup.js';
+import {
+  askLookupCatalogFromJob,
+  asksAboutOtherJobs,
+  clipFromProofRow,
+  lookupPeopleFromContexts,
+  mergeJobAskPeople,
+  scrubStoredAskText,
+} from '../shared/askLookup.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -2683,6 +2701,8 @@ export async function runProofAsk(input: {
   requestId: string;
   onToken?: (text: string) => void;
   onStatus?: (phase: string) => void;
+  /** Set when the reader stops the answer. A stopped turn is not stored. */
+  signal?: AbortSignal;
   /** org = office member; viewer = progress-share homeowner. */
   access?: 'org' | 'viewer';
 }): Promise<{
@@ -2801,22 +2821,48 @@ export async function runProofAsk(input: {
         .eq('job_id', jobId)
         .order('created_at', { ascending: false })
         .limit(5),
-      (threadId
-        ? supabase
+      (async () => {
+        const shape = 'id, question, answer, created_at';
+        if (!threadId) {
+          const { data } = await supabase
             .from('job_proof_questions')
-            .select('question, answer')
+            .select(shape)
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .order('created_at', { ascending: false })
+            .limit(8);
+          return { rows: (data ?? []) as Array<Record<string, unknown>>, memory: null, notes: [] as DurableJobNote[] };
+        }
+        const [earlyRes, lateRes, memory, notes] = await Promise.all([
+          supabase
+            .from('job_proof_questions')
+            .select(shape)
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .eq('thread_id', threadId)
+            .order('created_at', { ascending: true })
+            .limit(12),
+          supabase
+            .from('job_proof_questions')
+            .select(shape)
             .eq('org_id', orgId)
             .eq('job_id', jobId)
             .eq('thread_id', threadId)
             .order('created_at', { ascending: false })
-            .limit(8)
-        : supabase
-            .from('job_proof_questions')
-            .select('question, answer')
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
-            .order('created_at', { ascending: false })
-            .limit(8)),
+            .limit(60),
+          loadAskThreadMemory(writeDb, threadId),
+          owner ? loadAskJobNotes(writeDb, { orgId, jobId, owner }) : Promise.resolve([] as DurableJobNote[]),
+        ]);
+        const seen = new Set<string>();
+        const rows = [...((earlyRes.data ?? []) as Array<Record<string, unknown>>), ...((lateRes.data ?? []) as Array<Record<string, unknown>>)]
+          .filter((row) => {
+            const id = String(row.id ?? '');
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        return { rows, memory, notes };
+      })(),
     ]);
 
     const partyRows = (partyRes.data ?? []) as any[];
@@ -2831,10 +2877,20 @@ export async function runProofAsk(input: {
     const taskRows = (taskRes.data ?? []) as any[];
     const crewRows = ((crewRes.data ?? []) as any[]).filter((row) => !row.released_at);
     const logRows = (logRes.data ?? []) as any[];
+    const proofRows = ((proofsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+    const recorderIds = proofRows.flatMap((row) => {
+      const device =
+        row.device_metadata && typeof row.device_metadata === 'object'
+          ? (row.device_metadata as { userId?: unknown }).userId
+          : null;
+      const party = partyRows.find((item) => item.id === row.party_id);
+      return [device, party?.created_by];
+    });
     const people = await loadPeople(supabase, [
       ...taskRows.map((row) => row.assigned_to),
       ...crewRows.map((row) => row.user_id),
       ...logRows.map((row) => row.author_id),
+      ...recorderIds,
     ]);
     const personName = (id: string | null | undefined) => {
       if (!id) return null;
@@ -2942,14 +2998,51 @@ export async function runProofAsk(input: {
       }
     }
 
-    const history: JobFileAskTurn[] = ((recentRes.data ?? []) as any[])
-      .reverse()
-      .flatMap((row) => {
-        const turns: JobFileAskTurn[] = [];
-        if (row.question) turns.push({ role: 'user', text: String(row.question) });
-        if (row.answer) turns.push({ role: 'assistant', text: String(row.answer) });
-        return turns;
+    const memoryClips = proofRows.map((row) => {
+        const party = partyRows.find((item) => item.id === row.party_id);
+        return clipFromProofRow(row, {
+          orgId,
+          jobId,
+          jobTitle: file.job?.title ?? null,
+          partyCreatedBy: party?.created_by ?? null,
+        });
       });
+    const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
+    const priorPairs: StoredAskPair[] = (recentRes.rows ?? []).flatMap((row) => {
+      const question = scrubAsk(String(row.question ?? ''));
+      if (!question.trim()) return [];
+      return [
+        {
+          id: String(row.id ?? ''),
+          question,
+          answer: scrubAsk(String(row.answer ?? '')),
+          createdAt: String(row.created_at ?? ''),
+        },
+      ];
+    });
+    const askTimeZone = input.timeZone ?? 'America/Chicago';
+    const folded = foldThreadMemory({
+      pairs: priorPairs,
+      previousSummary: recentRes.memory?.summary ?? null,
+      summarizedThroughId: recentRes.memory?.throughId ?? null,
+      timeZone: askTimeZone,
+    });
+    const scrubbedFold = scrubLongMemory(folded, scrubAsk);
+    const storedNotes = (recentRes.notes ?? []).flatMap((note) => {
+      const text = scrubAsk(note.note).trim();
+      if (!text || /\[privacy redacted\]/i.test(text)) return [];
+      return [{ ...note, note: text }];
+    });
+    const durableNotes = mergeDurableNotes(storedNotes, scrubbedFold.notes);
+    const history: JobFileAskTurn[] = folded.recent.map((turn) => ({
+      role: turn.role === 'assistant' ? 'assistant' : 'user',
+      text: scrubAsk(turn.text),
+    }));
+    const longMemory = {
+      summary: scrubbedFold.summary,
+      notes: durableNotes,
+      now: new Date().toISOString(),
+    };
 
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
@@ -2967,6 +3060,11 @@ export async function runProofAsk(input: {
       file.mentionSupplement = mentionPrep.supplement;
     }
     if (mentionPrep?.directAnswer) input.onToken?.(mentionPrep.directAnswer);
+    const clientName = partyRows
+      .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
+      .filter(Boolean)
+      .slice(0, 4)
+      .join('; ');
     const lookup = askLookupCatalogFromJob({
       orgId,
       jobId,
@@ -2975,17 +3073,59 @@ export async function runProofAsk(input: {
       parties: partyRows,
       history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
       jobTitle: file.job?.title ?? null,
+      jobAddress: siteAddress,
+      clientName,
+      jobDescription: file.job?.description ?? null,
       timeZone: input.timeZone ?? null,
-      people: lookupPeopleFromContexts([
-        ...(mentionPrep?.people ?? []),
-        ...(mentionPrep?.offJobPeople ?? []).map((person) => ({
-          userId: person.userId,
-          name: person.name,
-          onThisJob: false,
-          otherJobTitles: person.otherJobTitles,
+      people: mergeJobAskPeople({
+        mentioned: lookupPeopleFromContexts([
+          ...(mentionPrep?.people ?? []),
+          ...(mentionPrep?.offJobPeople ?? []).map((person) => ({
+            userId: person.userId,
+            name: person.name,
+            onThisJob: false,
+            otherJobTitles: person.otherJobTitles,
+          })),
+        ]),
+        crew: crewRows.map((row) => ({ userId: row.user_id, name: personName(row.user_id) })),
+        contacts: partyRows.map((row) => ({
+          userId: row.created_by,
+          name: row.contact_name,
+          proofIds: proofRows.filter((proof) => proof.party_id === row.id).map((proof) => String(proof.id ?? '')),
         })),
-      ]),
+        clips: memoryClips,
+      }),
     });
+    if (askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted) {
+      const { data: otherRows } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
+        .eq('org_id', orgId)
+        .neq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(24);
+      const rows = ((otherRows ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
+      const titles = new Map<string, string>();
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
+        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
+          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
+        }
+      }
+      lookup.orgClips = rows
+        .map((row) =>
+          clipFromProofRow(row, {
+            orgId,
+            jobId: String(row.job_id ?? ''),
+            jobTitle: titles.get(String(row.job_id ?? '')) || null,
+          }),
+        )
+        .filter((clip) => clip.proofId && clip.jobId !== jobId);
+    }
     const result = mentionPrep?.directAnswer
       ? {
           answer: mentionPrep.directAnswer,
@@ -2999,10 +3139,23 @@ export async function runProofAsk(input: {
       : await answerFromJobFile({
       question: input.question,
       file,
-      history,
+      history: history.map((turn) => ({
+        ...turn,
+        text: scrubStoredAskText(turn.text, lookup.clips),
+      })),
+      memory: {
+        summary: scrubStoredAskText(longMemory.summary, lookup.clips),
+        notes: longMemory.notes.flatMap((note) => {
+          const text = scrubStoredAskText(note.note, lookup.clips).trim();
+          if (!text || /\[privacy redacted\]/i.test(text)) return [];
+          return [{ ...note, note: text }];
+        }),
+        now: longMemory.now,
+      },
       apiKey,
       onToken: input.onToken,
       onStatus: input.onStatus,
+      signal: input.signal,
       lookup,
       toolContext: {
         orgId,
@@ -3047,13 +3200,25 @@ export async function runProofAsk(input: {
       ...((file.tasks ?? []).length ? ['tasks'] : []),
       ...((file.documents ?? []).length ? ['documents'] : []),
     ];
+    const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
+    const storedAnswer = scrubStoredAskText(result.answer, lookup.clips);
+    result.answer = storedAnswer;
+    if (input.signal?.aborted) {
+      return {
+        answer: storedAnswer,
+        model: result.model,
+        question: null,
+        groundedOn: groundedOn.length,
+        threadId,
+      };
+    }
     const { data: stored } = await supabase
       .from('job_proof_questions')
       .insert({
         org_id: orgId,
         job_id: jobId,
-        question: input.question,
-        answer: result.answer,
+        question: storedQuestion,
+        answer: storedAnswer,
         model: result.model,
         grounded_on: groundedOn,
         asked_by: userId ?? null,
@@ -3080,11 +3245,47 @@ export async function runProofAsk(input: {
           .eq('thread_id', threadId);
         await touchAskThreadAfterMessage(writeDb, {
           threadId,
-          question: input.question,
+          question: storedQuestion,
+          answer: storedAnswer,
           isFirstMessage: (count ?? 0) <= 1,
         });
       } catch {
         // Non-fatal — answer already stored.
+      }
+      if (stored?.id) {
+        try {
+          const withTurn = [
+            ...priorPairs,
+            {
+              id: String(stored.id),
+              question: storedQuestion,
+              answer: storedAnswer,
+              createdAt: String(stored.created_at ?? new Date().toISOString()),
+            },
+          ];
+          const again = foldThreadMemory({
+            pairs: withTurn,
+            previousSummary: recentRes.memory?.summary ?? null,
+            summarizedThroughId: recentRes.memory?.throughId ?? null,
+            timeZone: askTimeZone,
+          });
+          const againScrub = scrubLongMemory(again, (text) => scrubStoredAskText(text, lookup.clips));
+          await persistAskThreadMemory(writeDb, {
+            orgId,
+            jobId,
+            threadId,
+            owner,
+            summary: againScrub.summary,
+            summaryThroughId: again.summaryThroughId,
+            coveredCount: again.coveredCount,
+            previousSummary: recentRes.memory?.summary ?? null,
+            previousThroughId: recentRes.memory?.throughId ?? null,
+            notes: againScrub.notes,
+            existingNotes: storedNotes,
+          });
+        } catch {
+          // The custody row is already stored. Summary and notes can catch up next turn.
+        }
       }
     }
 
@@ -3127,31 +3328,44 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('X-Accel-Buffering', 'no');
       const writeEvent = (payload: Record<string, unknown>) => {
+        if (res.writableEnded) return;
         res.write(`${JSON.stringify(payload)}\n`);
       };
-      writeEvent({ type: 'status', phase: 'thinking' });
-      const result = await runProofAsk({
-        supabase,
-        orgId,
-        jobId: req.params.jobId,
-        question: input.question,
-        userId,
-        threadId: input.threadId ?? null,
-        timeZone: input.timeZone ?? null,
-        requestId: `ask:${req.params.jobId}:${randomUUID()}`,
-        access: access === 'org' ? 'org' : 'viewer',
-        onToken: (text) => writeEvent({ type: 'token', text }),
-        onStatus: (phase) => writeEvent({ type: 'status', phase }),
-      });
-      writeEvent({
-        type: 'done',
-        answer: result.answer,
-        model: result.model,
-        groundedOn: result.groundedOn,
-        question: result.question,
-        threadId: result.threadId,
-      });
-      res.end();
+      const abort = new AbortController();
+      const onClose = () => {
+        if (!res.writableEnded) abort.abort();
+      };
+      res.on('close', onClose);
+      try {
+        writeEvent({ type: 'status', phase: 'Looking through clips…' });
+        const result = await runProofAsk({
+          supabase,
+          orgId,
+          jobId: req.params.jobId,
+          question: input.question,
+          userId,
+          threadId: input.threadId ?? null,
+          timeZone: input.timeZone ?? null,
+          requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+          access: access === 'org' ? 'org' : 'viewer',
+          signal: abort.signal,
+          onToken: (text) => writeEvent({ type: 'token', text }),
+          onStatus: (phase) => writeEvent({ type: 'status', phase }),
+        });
+        if (!abort.signal.aborted && !res.writableEnded) {
+          writeEvent({
+            type: 'done',
+            answer: result.answer,
+            model: result.model,
+            groundedOn: result.groundedOn,
+            question: result.question,
+            threadId: result.threadId,
+          });
+          res.end();
+        }
+      } finally {
+        res.off('close', onClose);
+      }
       return;
     }
 
@@ -3577,7 +3791,7 @@ export async function recordAccess(
       party_id: input.partyId ?? null,
       actor_label: input.actorLabel,
       actor_role: input.actorRole ?? null,
-      detail: input.detail ?? null,
+      detail: input.detail ? displayMentionText(input.detail) || null : null,
     });
   } catch {
     /* see above */
@@ -3666,7 +3880,12 @@ export async function evidenceCustody(req: Request, res: Response, next: NextFun
       .order('occurred_at', { ascending: false })
       .limit(200);
     if (error) throw new HttpError(500, error.message, 'custody_failed');
-    res.json({ entries: data ?? [] });
+    res.json({
+      entries: ((data ?? []) as Array<{ detail?: string | null }>).map((entry) => ({
+        ...entry,
+        detail: entry.detail ? displayMentionText(entry.detail) : entry.detail ?? null,
+      })),
+    });
   } catch (err) {
     next(err);
   }

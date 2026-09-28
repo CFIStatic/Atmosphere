@@ -95,6 +95,7 @@ export interface VerifierChromeStrings {
   switchToDark: string;
   chatHistory: string;
   newChat: string;
+  newChatHint: string;
 }
 
 export function verifierChromeStrings(
@@ -119,5 +120,6 @@ export function verifierChromeStrings(
     switchToDark: translate(locale, 'nav.switchToDark'),
     chatHistory: translate(locale, 'nav.chatHistory'),
     newChat: translate(locale, 'nav.newChat'),
+    newChatHint: translate(locale, 'nav.newChatHint'),
   };
 }

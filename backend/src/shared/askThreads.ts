@@ -7,6 +7,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
+import { completeAskText } from '../lib/askModel.js';
+import type { DurableJobNote } from './askMemory.js';
+import { displayMentionText } from './mentions.js';
 
 export type AskThreadOwner =
   | { kind: 'user'; userId: string }
@@ -25,16 +28,85 @@ export type AskThreadRow = {
 };
 
 export function titleFromFirstQuestion(question: string): string {
-  const cleaned = question.trim().replace(/\s+/g, ' ');
+  const cleaned = displayMentionText(question).replace(/\s+/g, ' ').trim();
   if (!cleaned) return 'New chat';
   if (cleaned.length <= 72) return cleaned;
   return `${cleaned.slice(0, 69)}…`;
+}
+
+/** A stored title still has the raw chip or an id fragment. */
+export function askThreadTitleIsRaw(title: string): boolean {
+  return /@\[|mention:/i.test(String(title ?? ''));
+}
+
+const TITLE_WORDS = /^(?:(\S+)\s+){1,5}\S+$/;
+
+/**
+ * A model title is 2 to 6 words, with no ids and no mention markup.
+ * The prompt asks for 3 to 6; two words still beat a raw question.
+ */
+export function acceptModelAskTitle(raw: string): string | null {
+  const cleaned = displayMentionText(raw)
+    .replace(/^["'“”«»]+|["'“”«»]+$/g, '')
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length > 80) return null;
+  if (/mention:|@\[/i.test(cleaned)) return null;
+  if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(cleaned)) return null;
+  const words = cleaned.split(' ').filter(Boolean).slice(0, 6);
+  if (words.length < 2) return null;
+  const title = words.join(' ');
+  return TITLE_WORDS.test(title) ? title : null;
+}
+
+type AskTitleComplete = (input: {
+  system: string;
+  user: string;
+  maxTokens?: number;
+  mode?: 'interactive';
+  signal?: AbortSignal;
+}) => Promise<{ text: string } | null>;
+
+/** Short title from the first exchange. Null keeps the cleaned question. */
+export async function modelAskThreadTitle(input: {
+  question: string;
+  answer?: string | null;
+  complete?: AskTitleComplete;
+}): Promise<string | null> {
+  const question = displayMentionText(input.question).replace(/\s+/g, ' ').trim().slice(0, 500);
+  const answer = displayMentionText(input.answer ?? '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  if (!question) return null;
+  const complete = input.complete ?? ((req) => completeAskText(req));
+  try {
+    const result = await complete({
+      system:
+        'Name this chat in 3 to 6 words. Use the person\'s name, never an id. No quotes, no mention markup, no trailing punctuation.',
+      user: `Question: ${question}\nAnswer: ${answer || '(none yet)'}`,
+      maxTokens: 24,
+      mode: 'interactive',
+      signal: AbortSignal.timeout(4000),
+    });
+    return acceptModelAskTitle(result?.text ?? '');
+  } catch {
+    return null;
+  }
 }
 
 function missingAskThreadsTable(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;
   const blob = `${error.message ?? ''} ${error.code ?? ''}`;
   return /ask_threads|does not exist|schema cache/i.test(blob);
+}
+
+function missingMemorySchema(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const blob = `${error.message ?? ''} ${error.code ?? ''}`;
+  return /ask_job_notes|rolling_summary|summary_through|does not exist|schema cache/i.test(blob);
+}
+
+function noteKey(note: string): string {
+  return note.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function ownerFilter(query: any, owner: AskThreadOwner) {
@@ -60,7 +132,32 @@ export async function listAskThreads(
     if (missingAskThreadsTable(error)) return [];
     throw new HttpError(500, error.message, 'ask_threads_list_failed');
   }
-  return (data ?? []) as AskThreadRow[];
+  return backfillRawAskTitles(supabase, (data ?? []) as AskThreadRow[]);
+}
+
+/**
+ * Rewrite ask_threads.title when it still contains a mention token.
+ * Does not update job_proof_questions or any custody table.
+ */
+async function backfillRawAskTitles(
+  supabase: SupabaseClient,
+  rows: AskThreadRow[],
+): Promise<AskThreadRow[]> {
+  const cleaned = rows.map((row) =>
+    askThreadTitleIsRaw(row.title) ? { ...row, title: titleFromFirstQuestion(row.title) } : row,
+  );
+  await Promise.all(
+    rows.filter((row) => askThreadTitleIsRaw(row.title)).map(async (row) => {
+      const title = titleFromFirstQuestion(row.title);
+      if (!title || title === row.title) return;
+      try {
+        await supabase.from('ask_threads').update({ title }).eq('id', row.id);
+      } catch {
+        // The list response is already cleaned for display.
+      }
+    }),
+  );
+  return cleaned;
 }
 
 export async function createAskThread(
@@ -77,7 +174,7 @@ export async function createAskThread(
     job_id: input.jobId,
     owner_user_id: input.owner.kind === 'user' ? input.owner.userId : null,
     share_id: input.owner.kind === 'share' ? input.owner.shareId : null,
-    title: (input.title?.trim() || 'New chat').slice(0, 200),
+    title: (displayMentionText(input.title ?? '').replace(/\s+/g, ' ').trim() || 'New chat').slice(0, 200),
   };
   const { data, error } = await supabase
     .from('ask_threads')
@@ -191,7 +288,7 @@ export async function renameAskThread(
   supabase: SupabaseClient,
   input: { orgId: string; jobId: string; threadId: string; owner: AskThreadOwner; title: string },
 ): Promise<AskThreadRow> {
-  const title = input.title.trim().replace(/\s+/g, ' ').slice(0, 200);
+  const title = displayMentionText(input.title).replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!title) throw new HttpError(400, 'Chat name cannot be empty.', 'ask_thread_title_empty');
 
   // Ownership check first.
@@ -221,7 +318,13 @@ export async function renameAskThread(
 
 export async function touchAskThreadAfterMessage(
   supabase: SupabaseClient,
-  input: { threadId: string; question: string; isFirstMessage: boolean },
+  input: {
+    threadId: string;
+    question: string;
+    answer?: string | null;
+    isFirstMessage: boolean;
+    complete?: AskTitleComplete;
+  },
 ): Promise<void> {
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = {
@@ -229,6 +332,7 @@ export async function touchAskThreadAfterMessage(
     updated_at: now,
   };
   /* Auto-title only while the chat is still the default name — a user rename sticks. */
+  let wroteAuto = false;
   if (input.isFirstMessage) {
     const { data: row } = await supabase
       .from('ask_threads')
@@ -236,17 +340,146 @@ export async function touchAskThreadAfterMessage(
       .eq('id', input.threadId)
       .maybeSingle();
     const current = ((row as { title?: string } | null)?.title || '').trim();
-    if (!current || current === 'New chat' || current === 'Earlier questions') {
+    if (!current || current === 'New chat' || current === 'Earlier questions' || askThreadTitleIsRaw(current)) {
       patch.title = titleFromFirstQuestion(input.question);
+      wroteAuto = true;
     }
   }
   await supabase.from('ask_threads').update(patch).eq('id', input.threadId);
+  if (!wroteAuto || typeof patch.title !== 'string') return;
+  const refined = await modelAskThreadTitle({
+    question: input.question,
+    answer: input.answer,
+    complete: input.complete,
+  });
+  if (!refined || refined === patch.title) return;
+  const { data: again } = await supabase
+    .from('ask_threads')
+    .select('title')
+    .eq('id', input.threadId)
+    .maybeSingle();
+  const nowTitle = ((again as { title?: string } | null)?.title || '').trim();
+  if (nowTitle !== patch.title) return;
+  await supabase
+    .from('ask_threads')
+    .update({ title: refined, updated_at: new Date().toISOString() })
+    .eq('id', input.threadId);
+}
+
+export type AskThreadMemoryState = {
+  summary: string | null;
+  throughId: string | null;
+};
+
+/** Rolling summary stored on the thread. Missing columns mean the migration is not applied yet. */
+export async function loadAskThreadMemory(
+  supabase: SupabaseClient,
+  threadId: string,
+): Promise<AskThreadMemoryState> {
+  const { data, error } = await supabase
+    .from('ask_threads')
+    .select('rolling_summary, summary_through_question_id')
+    .eq('id', threadId)
+    .maybeSingle();
+  if (error || !data) return { summary: null, throughId: null };
+  const row = data as { rolling_summary?: string | null; summary_through_question_id?: string | null };
+  return {
+    summary: row.rolling_summary ?? null,
+    throughId: row.summary_through_question_id ?? null,
+  };
+}
+
+/** Notes for this job and owner, including notes from older threads on the same job. */
+export async function loadAskJobNotes(
+  supabase: SupabaseClient,
+  input: { orgId: string; jobId: string; owner: AskThreadOwner },
+): Promise<DurableJobNote[]> {
+  let q = supabase
+    .from('ask_job_notes')
+    .select('note, source_question_id, created_at')
+    .eq('org_id', input.orgId)
+    .eq('job_id', input.jobId);
+  q = input.owner.kind === 'user' ? q.eq('owner_user_id', input.owner.userId) : q.eq('share_id', input.owner.shareId);
+  const { data, error } = await q.order('created_at', { ascending: true }).limit(24);
+  if (error || !data) return [];
+  return (data as Array<{ note?: string; source_question_id?: string | null; created_at?: string | null }>).flatMap(
+    (row) => {
+      const note = (row.note ?? '').trim();
+      if (!note) return [];
+      return [
+        {
+          note,
+          sourceQuestionId: row.source_question_id ?? null,
+          at: row.created_at ?? null,
+        },
+      ];
+    },
+  );
+}
+
+/**
+ * Save a regenerated summary and any new notes. Updates ask_threads metadata
+ * and inserts notes. Does not update job_proof_questions.
+ */
+export async function persistAskThreadMemory(
+  supabase: SupabaseClient,
+  input: {
+    orgId: string;
+    jobId: string;
+    threadId: string;
+    owner: AskThreadOwner;
+    summary: string;
+    summaryThroughId: string | null;
+    coveredCount: number;
+    previousSummary: string | null;
+    previousThroughId: string | null;
+    notes: DurableJobNote[];
+    existingNotes: DurableJobNote[];
+  },
+): Promise<void> {
+  try {
+    const next = input.summary.trim();
+    const prev = (input.previousSummary ?? '').trim();
+    const throughChanged = (input.summaryThroughId ?? null) !== (input.previousThroughId ?? null);
+    if (next && (next !== prev || throughChanged)) {
+      const { error } = await supabase
+        .from('ask_threads')
+        .update({
+          rolling_summary: next,
+          summary_through_question_id: input.summaryThroughId,
+          summary_turn_count: input.coveredCount,
+          summarized_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.threadId);
+      if (error && !missingMemorySchema(error)) return;
+    }
+    const have = new Set(input.existingNotes.map((note) => noteKey(note.note)));
+    for (const note of input.notes) {
+      const key = noteKey(note.note);
+      if (!key || have.has(key)) continue;
+      have.add(key);
+      const { error } = await supabase.from('ask_job_notes').insert({
+        org_id: input.orgId,
+        job_id: input.jobId,
+        thread_id: input.threadId,
+        owner_user_id: input.owner.kind === 'user' ? input.owner.userId : null,
+        share_id: input.owner.kind === 'share' ? input.owner.shareId : null,
+        note: note.note.slice(0, 400),
+        source_question_id: note.sourceQuestionId,
+        ...(note.at ? { created_at: note.at } : {}),
+      });
+      if (error && error.code !== '23505' && !missingMemorySchema(error)) return;
+    }
+  } catch {
+    // Memory is an aid. The custody row is already stored.
+  }
 }
 
 export function presentAskThread(row: AskThreadRow) {
   return {
     id: row.id,
-    title: row.title,
+    title: displayMentionText(row.title).replace(/\s+/g, ' ').trim() || 'Chat',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastMessageAt: row.last_message_at,

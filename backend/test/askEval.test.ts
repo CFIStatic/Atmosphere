@@ -6,6 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { planAskLookup, type AskLookupCatalog, type AskLookupClip } from '../src/shared/askLookup.js';
+import { foldThreadMemory, type StoredAskPair } from '../src/shared/askMemory.js';
+import fs from 'node:fs';
 import { parseFollowupTrailer, parseQuoteTrailer, stripMomentTrailers } from '../src/shared/askMoments.js';
 
 const ORG = '8b2cc105-1eec-4123-90db-fdcbc5565252';
@@ -277,6 +279,9 @@ const tiffanyLive: AskLookupCatalog = {
   jobId: JOB,
   access: 'org',
   jobTitle: 'Project Tiffany & Co.',
+  jobAddress: '123 Michigan Ave, Chicago, IL',
+  clientName: 'Tiffany & Co.',
+  jobDescription: 'Interior walkthrough and an office check-in.',
   timeZone: 'America/Chicago',
   people: [
     {
@@ -350,7 +355,10 @@ const tiffanyLive: AskLookupCatalog = {
   ],
 };
 
-async function askLive(question: string) {
+async function askLive(
+  question: string,
+  history?: Array<{ role?: string | null; text?: string | null }>,
+) {
   const prev = {
     anthropic: process.env.ANTHROPIC_API_KEY,
     gemini: process.env.GEMINI_API_KEY,
@@ -363,6 +371,7 @@ async function askLive(question: string) {
     return await answerFromAskLookup({
       question,
       catalog: tiffanyLive,
+      history,
       step: async () => null,
     });
   } finally {
@@ -418,6 +427,107 @@ test('live Tiffany questions answer from the real transcripts', async () => {
   }
 });
 
+test('what was this job about is an overview of the whole file', async () => {
+  const result = await askLive('what was this job about');
+  const body = visible(result.answer);
+  assert.match(body, /Project Tiffany & Co\./);
+  assert.match(body, /123 Michigan Ave, Chicago, IL/);
+  assert.match(body, /Client: Tiffany & Co\./);
+  assert.match(body, /Interior walkthrough/);
+  assert.match(body, /El Presidente/);
+  assert.match(body, /Sep 17/);
+  assert.match(body, /Sep 21/);
+  assert.match(body, /Sample the intervals/);
+  assert.match(body, /QuickBooks online|all on paper|love that girl/i);
+  assert.notEqual(body, 'This file does not have that.');
+  assert.doesNotMatch(body, /^This file does not have that\./);
+  assert.doesNotMatch(body, /Co\.\./);
+});
+
+test('a follow-up uses the prior turn for the person and the date', async () => {
+  const first = await askLive('What did El Presidente say on Sep 17?');
+  const history = [
+    { role: 'user' as const, text: 'What did El Presidente say on Sep 17?' },
+    { role: 'assistant' as const, text: first.answer },
+  ];
+  const second = await askLive('and on Sep 21?', history);
+  const said = visible(second.answer);
+  assert.match(said, /Sep 21/);
+  assert.match(said, /QuickBooks online/);
+  assert.match(said, /love that girl/i);
+  assert.doesNotMatch(said, /Sample the intervals/);
+  assert.notEqual(said, 'This file does not have that.');
+
+  const remembered = [
+    ...history,
+    { role: 'user' as const, text: 'and on Sep 21?' },
+    { role: 'assistant' as const, text: second.answer },
+  ];
+  const pronoun = await askLive('what did he say there', remembered);
+  const again = visible(pronoun.answer);
+  assert.match(again, /El Presidente/);
+  assert.match(again, /QuickBooks online|love that girl/i);
+  assert.notEqual(again, 'This file does not have that.');
+
+  const compared = await askLive('compare that to the first visit', remembered);
+  const comparison = visible(compared.answer);
+  assert.match(comparison, /Sep 17/);
+  assert.match(comparison, /Sep 21/);
+  assert.match(comparison, /different visits/i);
+  assert.match(comparison, /breakfast table|whitewashed/i);
+  assert.match(comparison, /sideways|walkthrough/i);
+  assert.notEqual(comparison, 'This file does not have that.');
+});
+
+test('a conversation mixes a greeting, a clarification, a job question, an opinion, and a correction', async () => {
+  const turns: Array<{ role: 'user' | 'assistant'; text: string }> = [];
+  const say = async (question: string) => {
+    const result = await askLive(question, turns);
+    turns.push({ role: 'user', text: question });
+    turns.push({ role: 'assistant', text: result.answer });
+    return visible(result.answer);
+  };
+
+  const hello = await say('Hey');
+  assert.match(hello, /Project Tiffany/);
+  assert.match(hello, /El Presidente/);
+  assert.match(hello, /Sep 17/);
+  assert.match(hello, /Sep 21/);
+  assert.doesNotMatch(hello, /Certainly|Great question|This file does not have that/i);
+  assert.ok(hello.length > 80);
+
+  const unclear = await say('What did he say?');
+  assert.match(unclear, /Which day/i);
+  assert.match(unclear, /Sep 17/);
+  assert.match(unclear, /Sep 21/);
+  assert.match(unclear, /\?/);
+  assert.doesNotMatch(unclear, /QuickBooks|Sample the intervals/);
+
+  const sep21 = await say('Sep 21');
+  assert.match(sep21, /Sep 21/);
+  assert.match(sep21, /QuickBooks online/);
+  assert.match(sep21, /love that girl/i);
+  assert.doesNotMatch(sep21, /Sample the intervals/);
+  assert.notEqual(sep21, 'This file does not have that.');
+
+  const opinion = await say('Thanks. What do you think he was getting at?');
+  assert.match(opinion, /Sep 21/);
+  assert.match(opinion, /paper/i);
+  assert.match(opinion, /spreadsheets/i);
+  assert.match(opinion, /QuickBooks/);
+  assert.doesNotMatch(opinion, /^(?:thanks|you(?:'|’)re welcome|certainly|great question)\b/i);
+  assert.doesNotMatch(opinion, /This file does not have that/i);
+
+  const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.');
+  assert.match(correction, /Sep 21/);
+  assert.match(correction, /not Sep 17/);
+  assert.match(correction, /Sample the intervals/);
+  assert.match(correction, /spreadsheets/i);
+  assert.doesNotMatch(correction, /^(?:sorry|you(?:'|’)re right)\b/i);
+  assert.doesNotMatch(correction, /This file does not have that/i);
+  assert.doesNotMatch(correction, /\.\./);
+});
+
 test('a privacy-redacted line is never quoted or chipped', async () => {
   const secret = 'The lockbox code is 4412.';
   const result = await ask('What did El Presidente say on Sep 17?');
@@ -463,4 +573,260 @@ test('a clip with no transcript is not offered as a follow-up', async () => {
   assert.doesNotMatch(follows, /Sep 22|Silent hallway/i);
   assert.match(follows, /Sep 21/);
   assert.match(follows, /Sep 17/);
+});
+
+test('a thread of 50 turns over a week still recalls an early decision', async () => {
+  const start = Date.parse('2026-09-21T15:00:00.000Z');
+  const pairs: StoredAskPair[] = [
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      question: 'Please keep the homeowner summaries brief. We decided to redo the tabletop in walnut.',
+      answer: 'Noted. Homeowner summaries stay brief, and the tabletop will be redone in walnut.',
+      createdAt: new Date(start).toISOString(),
+    },
+  ];
+  for (let i = 1; i <= 52; i += 1) {
+    pairs.push({
+      id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+      question: `What is on the clip from visit ${i}?`,
+      answer: `Visit ${i} is on the file. Nothing new was decided.`,
+      createdAt: new Date(start + i * 3 * 60 * 60 * 1000).toISOString(),
+    });
+  }
+  assert.ok(pairs.length >= 51);
+  const now = '2026-09-28T16:00:00.000Z';
+  const folded = foldThreadMemory({ pairs, timeZone: 'America/Chicago' });
+  assert.ok(folded.recent.length <= 8);
+  assert.doesNotMatch(folded.recent.map((turn) => turn.text).join('\n'), /walnut/i);
+  assert.match(folded.summary, /walnut/i);
+
+  const result = await answerFromAskLookup({
+    question: 'Last week you said something about the tabletop. What did we decide?',
+    catalog: tiffanyLive,
+    history: folded.recent,
+    memory: { summary: folded.summary, notes: folded.notes, now },
+    step: async () => null,
+  });
+  const said = visible(result.answer);
+  assert.match(said, /Last week you decided to redo the tabletop in walnut/);
+  assert.match(said, /Sep 21/);
+  assert.match(said, /walnut/i);
+  assert.doesNotMatch(said, /QuickBooks|Sample the intervals|This file does not have that/i);
+  assert.equal(result.model, null);
+
+  const excerpt = [
+    `Turns: ${pairs.length} from Sep 21 through Sep 28. Recent verbatim window does not include walnut.`,
+    '',
+    'User (Sep 21): Please keep the homeowner summaries brief. We decided to redo the tabletop in walnut.',
+    '',
+    '…52 later turns…',
+    '',
+    'User (Sep 28): Last week you said something about the tabletop. What did we decide?',
+    '',
+    `Ask: ${said}`,
+  ].join('\n');
+  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
+  fs.writeFileSync('/opt/cursor/artifacts/ask-long-memory-excerpt.txt', excerpt);
+});
+
+type RubricRow = {
+  question: string;
+  answerFirst: boolean;
+  grounded: boolean;
+  noDeadEnd: boolean;
+  contextCarried: boolean;
+  answer: string;
+};
+
+async function askCatalog(
+  question: string,
+  catalog: AskLookupCatalog,
+  extra?: {
+    history?: Array<{ role?: string | null; text?: string | null }>;
+    memory?: { summary: string; notes: import('../src/shared/askMemory.js').DurableJobNote[]; now?: string };
+  },
+) {
+  const prev = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    google: process.env.GOOGLE_API_KEY,
+  };
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    return await answerFromAskLookup({
+      question,
+      catalog,
+      history: extra?.history,
+      memory: extra?.memory,
+      step: async () => null,
+    });
+  } finally {
+    if (prev.anthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev.anthropic;
+    if (prev.gemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prev.gemini;
+    if (prev.google === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prev.google;
+  }
+}
+
+function scoreAsk(question: string, answer: string, expect: RegExp, forbid?: RegExp): RubricRow {
+  const body = visible(answer);
+  const first = (body.split(/(?<=[.!?])\s/)[0] ?? body).trim();
+  const filler = /^(?:certainly|great question|sure thing|of course|absolutely|happy to help)\b/i.test(first);
+  const onlyMiss = /^this file does not have that\.?$/i.test(body.replace(/\s+/g, ' ').trim());
+  return {
+    question,
+    answer,
+    answerFirst: Boolean(first) && !filler && !onlyMiss,
+    grounded: !/\b4412\b/.test(answer) && !/\$\s?\d/.test(body) && !(forbid ? forbid.test(body) : false),
+    noDeadEnd: body.length > 40 || /\?/.test(body) || /⟦artifact⟧/.test(answer),
+    contextCarried: expect.test(body),
+  };
+}
+
+test('Ask rubric scores answer-first, grounded, no dead ends, and carried context', async () => {
+  const rows: RubricRow[] = [];
+  const turns: Array<{ role: 'user' | 'assistant'; text: string }> = [];
+  const say = async (question: string, expect: RegExp, forbid?: RegExp) => {
+    const result = await askLive(question, turns);
+    turns.push({ role: 'user', text: question });
+    turns.push({ role: 'assistant', text: result.answer });
+    rows.push(scoreAsk(question, result.answer, expect, forbid));
+    return visible(result.answer);
+  };
+
+  const hello = await say('Hey', /Project Tiffany/);
+  const which = await say('What did he say?', /Which day/i, /QuickBooks/);
+  const sep21 = await say('Sep 21', /QuickBooks online/);
+  const opinion = await say('Thanks. What do you think he was getting at?', /off paper and onto QuickBooks/i);
+  const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.', /not Sep 17/);
+
+  const fresh = async (question: string, expect: RegExp, forbid?: RegExp) => {
+    const result = await askLive(question);
+    rows.push(scoreAsk(question, result.answer, expect, forbid));
+    return visible(result.answer);
+  };
+  const overview = await fresh('what was this job about', /Interior walkthrough/);
+  const dated = await fresh('What did El Presidente say on Sep 21?', /love that girl/i);
+  const summary = await fresh('write a homeowner summary', /Homeowner summary/);
+  const punch = await fresh('draft a punch list', /Punch list/);
+  const email = await fresh('draft an email to the homeowner', /Email to the homeowner/);
+  const estimate = await fresh('draft an estimate', /no prices/i, /\$\s?\d/);
+  const missing = await fresh('is there a purple dumpster on this job', /Nothing on this file matches|On file|Sep 17/i, /there is a purple dumpster/i);
+  const tarp = await ask('what did El Presidente say about the tarp');
+  rows.push(scoreAsk('what did El Presidente say about the tarp', tarp.answer, /tarp came off/i, /Which day/i));
+
+  const remembered = [
+    { role: 'user' as const, text: 'What did El Presidente say on Sep 17?' },
+    { role: 'assistant' as const, text: (await askLive('What did El Presidente say on Sep 17?')).answer },
+  ];
+  const follow = await askLive('and on Sep 21?', remembered);
+  rows.push(scoreAsk('and on Sep 21?', follow.answer, /Sep 21/));
+  const compared = await askLive('compare that to the first visit', [
+    ...remembered,
+    { role: 'user', text: 'and on Sep 21?' },
+    { role: 'assistant', text: follow.answer },
+  ]);
+  rows.push(scoreAsk('compare that to the first visit', compared.answer, /different visits/i));
+
+  const start = Date.parse('2026-09-21T15:00:00.000Z');
+  const pairs: StoredAskPair[] = [
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      question: 'Please keep the homeowner summaries brief. We decided to redo the tabletop in walnut.',
+      answer: 'Noted.',
+      createdAt: new Date(start).toISOString(),
+    },
+  ];
+  for (let i = 1; i <= 52; i += 1) {
+    pairs.push({
+      id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+      question: `Routine check ${i}`,
+      answer: `Visit ${i} is on the file.`,
+      createdAt: new Date(start + i * 3 * 60 * 60 * 1000).toISOString(),
+    });
+  }
+  const folded = foldThreadMemory({ pairs, timeZone: 'America/Chicago' });
+  const recall = await askCatalog(
+    'Last week you said something about the tabletop. What did we decide?',
+    tiffanyLive,
+    {
+      history: folded.recent,
+      memory: { summary: folded.summary, notes: folded.notes, now: '2026-09-28T16:00:00.000Z' },
+    },
+  );
+  rows.push(scoreAsk(recall ? 'Last week you said something about the tabletop. What did we decide?' : '', recall.answer, /walnut/i, /QuickBooks/));
+
+  const otherCatalog: AskLookupCatalog = {
+    ...tiffanyLive,
+    orgClips: [
+      clip({
+        proofId: 'other-tarp',
+        jobId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        jobTitle: 'Riverside roof',
+        title: 'North slope check',
+        workDate: '2026-09-18',
+        summary: 'A roof slope with the tarp off.',
+        segments: [{ start: 3, end: 5, text: 'The tarp came off the north slope again.' }],
+      }),
+    ],
+  };
+  const elsewhere = await askCatalog('Have we seen a tarp on other jobs?', otherCatalog);
+  rows.push(scoreAsk('Have we seen a tarp on other jobs?', elsewhere.answer, /Riverside roof/));
+
+  const passed = rows.filter((row) => row.answerFirst && row.grounded && row.noDeadEnd && row.contextCarried);
+  const report = {
+    questions: rows.length,
+    passed: passed.length,
+    rows: rows.map((row) => ({
+      question: row.question,
+      answerFirst: row.answerFirst,
+      grounded: row.grounded,
+      noDeadEnd: row.noDeadEnd,
+      contextCarried: row.contextCarried,
+    })),
+  };
+  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
+  fs.writeFileSync('/opt/cursor/artifacts/ask-rubric-scores.json', `${JSON.stringify(report, null, 2)}\n`);
+
+  const conversation = (title: string, pairsIn: Array<[string, string]>) =>
+    [`## ${title}`, '', ...pairsIn.flatMap(([q, a]) => [`**User:** ${q}`, '', `**Ask:** ${a}`, ''])].join('\n');
+  const samples = [
+    conversation('A visit, then a correction', [
+      ['Hey', hello],
+      ['What did he say?', which],
+      ['Sep 21', sep21],
+      ['Thanks. What do you think he was getting at?', opinion],
+      ['You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.', correction],
+    ]),
+    conversation('Notes the file can actually support', [
+      ['what was this job about', overview],
+      ['write a homeowner summary', summary],
+      ['draft a punch list', punch],
+      ['draft an email to the homeowner', email],
+      ['draft an estimate', estimate],
+    ]),
+    conversation('What is missing, what was said, and another job', [
+      ['is there a purple dumpster on this job', missing],
+      ['what did El Presidente say about the tarp', visible(tarp.answer)],
+      ['Have we seen a tarp on other jobs?', visible(elsewhere.answer)],
+      ['What did El Presidente say on Sep 21?', dated],
+      ['Last week you said something about the tabletop. What did we decide?', visible(recall.answer)],
+    ]),
+  ].join('\n');
+  fs.writeFileSync('/opt/cursor/artifacts/ask-sample-conversations.md', samples);
+
+  const failed = rows.filter((row) => !(row.answerFirst && row.grounded && row.noDeadEnd && row.contextCarried));
+  assert.equal(failed.length, 0, JSON.stringify(failed.map((row) => ({
+    question: row.question,
+    answerFirst: row.answerFirst,
+    grounded: row.grounded,
+    noDeadEnd: row.noDeadEnd,
+    contextCarried: row.contextCarried,
+    answer: visible(row.answer).slice(0, 400),
+  })), null, 2));
+  assert.ok(rows.length >= 15);
 });

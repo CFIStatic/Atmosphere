@@ -5,6 +5,7 @@ import { JobFilePlayer } from './JobFilePlayer';
 import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
+import { displayMentionText } from '../../lib/mentions';
 
 /**
  * The evidence locker.
@@ -481,7 +482,7 @@ function EvidenceDetail({
                     <span className="text-ink-500"> by {entry.actor_label}</span>
                   </span>
                   {entry.detail && (
-                    <span className="block text-[11px] text-ink-500">{entry.detail}</span>
+                    <span className="block text-[11px] text-ink-500">{displayMentionText(entry.detail)}</span>
                   )}
                 </span>
                 <span className="shrink-0 text-[11px] tabular-nums text-ink-400">

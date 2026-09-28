@@ -10,6 +10,7 @@
 
 import { integrityOf, labelForCheck, type StoredCheck } from '../verifier/library.js';
 import { parseDeviceMetadata, type DeviceIdentity } from './deviceIdentity.js';
+import { displayMentionText } from './mentions.js';
 
 export { parseDeviceMetadata, type DeviceIdentity } from './deviceIdentity.js';
 
@@ -96,7 +97,7 @@ function checksOf(raw: unknown): StoredCheck[] {
     out.push({
       key: typeof rec.key === 'string' ? rec.key : String(rec.what ?? 'check'),
       verdict,
-      detail: typeof rec.detail === 'string' ? rec.detail : '',
+      detail: typeof rec.detail === 'string' ? displayMentionText(rec.detail) : '',
     });
   }
   return out;
@@ -198,7 +199,7 @@ export function buildClipCustodyExport(input: {
       action: String(row.action || 'viewed'),
       by: String(row.by || row.actor_label || 'unknown'),
       role: row.role ?? row.actor_role ?? null,
-      detail: row.detail ?? null,
+      detail: row.detail ? displayMentionText(row.detail) || null : null,
       at: String(row.at || row.occurred_at || ''),
     })),
   };

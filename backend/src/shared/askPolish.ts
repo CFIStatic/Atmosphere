@@ -6,7 +6,14 @@
  * note the chat can copy. Visible prose never carries ids, UTC, or filler.
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
-import type { AskLookupCatalog, AskLookupTraceStep } from './askLookup.js';
+import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
+import {
+  asksAboutOtherJobs,
+  clipAskPreview,
+  type AskLookupCatalog,
+  type AskLookupClip,
+  type AskLookupTraceStep,
+} from './askLookup.js';
 import {
   clipMatchesAskDate,
   formatAskDate,
@@ -14,7 +21,7 @@ import {
   type AskMomentQuote,
 } from './askMoments.js';
 
-export type AskTaskKind = 'summary' | 'scope' | 'compare' | 'issues' | 'punch' | 'note';
+export type AskTaskKind = 'summary' | 'scope' | 'compare' | 'issues' | 'punch' | 'note' | 'email' | 'estimate';
 
 export type AskIntent = { kind: 'question' } | { kind: 'task'; task: AskTaskKind };
 
@@ -31,6 +38,8 @@ export function classifyAskIntent(question: string): AskIntent {
   if (/\bopen issues?\b|\boutstanding\b|\bstill open\b/.test(q)) return { kind: 'task', task: 'issues' };
   if (/\bcompare\b|\bversus\b|\bvs\.?\b|\bdifference between\b|\btwo visits\b/.test(q)) return { kind: 'task', task: 'compare' };
   if (/\bscope\b/.test(q) && /\b(draft|write|note|make|prepare)\b/.test(q)) return { kind: 'task', task: 'scope' };
+  if (/\b(email|e-mail)\b/.test(q)) return { kind: 'task', task: 'email' };
+  if (/\bestimate\b|\bbid draft\b|\bdraft (?:an |a )?bid\b/.test(q)) return { kind: 'task', task: 'estimate' };
   if (/\b(summary|summarize)\b/.test(q) || /\b(write|draft)\b[\s\S]{0,40}\b(homeowner|client|customer)\b/.test(q)) {
     return { kind: 'task', task: 'summary' };
   }
@@ -81,6 +90,8 @@ type ClipFact = {
   workDate: string | null;
   summary: string;
   cite: string;
+  jobId?: string | null;
+  jobTitle?: string | null;
 };
 
 type HistoryFact = { summary: string; at: string };
@@ -105,6 +116,8 @@ function clipFact(row: Record<string, unknown>): ClipFact | null {
     workDate: row.workDate ? String(row.workDate) : null,
     summary: oneLine(String(row.summary ?? '').trim()),
     cite: String(row.cite ?? ''),
+    jobId: row.jobId ? String(row.jobId) : null,
+    jobTitle: row.jobTitle ? cleanMentionTitle(String(row.jobTitle)) : null,
   };
 }
 
@@ -154,13 +167,17 @@ function dateLabel(workDate: string | null, timeZone?: string | null): string {
   return localStamp(workDate, timeZone) || workDate;
 }
 
-function bullet(clip: ClipFact, timeZone?: string | null): string {
+function bullet(clip: ClipFact, timeZone?: string | null, openJobId?: string | null): string {
   const when = dateLabel(clip.workDate, timeZone);
   const title = clip.title.toLowerCase().startsWith(when.toLowerCase())
     ? clip.title.slice(when.length).replace(/^[\s—-]+/, '')
     : clip.title;
   const detail = clip.summary ? `. ${clip.summary}` : '';
-  return `- **${when} — ${title}**${detail}`;
+  const elsewhere =
+    clip.jobId && openJobId && clip.jobId !== openJobId && String(clip.jobTitle ?? '').trim()
+      ? ` (${String(clip.jobTitle).trim()})`
+      : '';
+  return `- **${when} — ${title}**${elsewhere}${detail}`;
 }
 
 function clipCountLead(count: number): string {
@@ -179,6 +196,194 @@ function artifact(body: string): string {
 
 function jobName(catalog: AskLookupCatalog): string {
   return cleanMentionTitle(catalog.jobTitle ?? '') || 'this job';
+}
+
+/** A broad "what is this job" question, not a search for one missing fact. */
+export function isJobOverview(question: string): boolean {
+  return /\b(?:what was this (?:job|file|project) about|what(?:'s| is| was) this (?:job|file) about|summar(?:y|ize|ise) this (?:job|file|project)|what was this about|tell me about this (?:job|file|project)|overview of this (?:job|file))\b/i.test(
+    question,
+  );
+}
+
+function catalogClips(catalog: AskLookupCatalog): AskLookupClip[] {
+  return (catalog.clips ?? []).filter(
+    (clip) => clip.orgId === catalog.orgId && (!catalog.jobId || clip.jobId === catalog.jobId),
+  );
+}
+
+function catalogVisitFacts(catalog: AskLookupCatalog): ClipFact[] {
+  return catalogClips(catalog)
+    .slice()
+    .sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')))
+    .map((clip) => ({
+      title: cleanMentionTitle(clip.title) || 'Clip',
+      workDate: clip.workDate ?? null,
+      summary: oneLine(clipAskPreview(clip).summary),
+      cite: clip.proofId,
+    }));
+}
+
+function clearestLine(transcript: string): string {
+  const lines = transcript
+    .split('\n')
+    .map((line) => line.replace(/^\[[^\]]+\]\s*/, '').trim())
+    .filter((line) => line && !/\[privacy redacted\]/i.test(line));
+  return [...lines].sort((a, b) => b.length - a.length)[0]?.slice(0, 160) ?? '';
+}
+
+/** Overview written from the whole job, not from a failed keyword search. */
+export function composeJobOverview(catalog: AskLookupCatalog): string {
+  const name = jobName(catalog);
+  const client = String(catalog.clientName ?? '').trim();
+  const address = String(catalog.jobAddress ?? '').trim();
+  const description = String(catalog.jobDescription ?? '').trim();
+  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  const sentence = (label: string, value: string) => {
+    const text = `${label}: ${value.trim()}`;
+    return /[.!?]$/.test(text) ? text : `${text}.`;
+  };
+  const intro = [`**${name}** is the job on this file.`];
+  if (client) intro.push(sentence('Client', client));
+  if (address) intro.push(sentence('Address', address));
+  if (description) intro.push(/[.!?]$/.test(description) ? description : `${description}.`);
+  if (people.length) intro.push(`People on the job: ${people.join(', ')}.`);
+  const clips = catalogClips(catalog).slice().sort((a, b) => String(a.workDate ?? '').localeCompare(String(b.workDate ?? '')));
+  const visits = clips.map((clip) => {
+    const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+    const title = cleanMentionTitle(clip.title) || 'Clip';
+    const preview = clipAskPreview(clip);
+    const summary = preview.summary.trim();
+    const speech = clearestLine(preview.transcript);
+    const detail = [summary, speech ? `Said: “${speech}”` : ''].filter(Boolean).join(' ');
+    return `- **${when} — ${title}**.${detail ? ` ${detail}` : ''}`;
+  });
+  const history = (catalog.history ?? []).slice(0, 4).map((event) => {
+    const when = localStamp(event.at, catalog.timeZone);
+    return `- ${when || 'Recorded'}: ${event.summary}`;
+  });
+  return [
+    intro.join(' '),
+    visits.length ? visits.join('\n') : 'No clips are on this file yet.',
+    history.length ? `Job history:\n${history.join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+type AskMemoryTurn = { role?: string | null; text?: string | null };
+
+function recentPerson(turns: AskMemoryTurn[], catalog: AskLookupCatalog): string | null {
+  const people = [...(catalog.people ?? [])].filter((person) => person.name).sort((a, b) => b.name.length - a.name.length);
+  for (const turn of [...turns].reverse()) {
+    const hay = String(turn.text ?? '').toLowerCase();
+    const found = people.find((person) => hay.includes(person.name.toLowerCase()));
+    if (found) return found.name;
+  }
+  return null;
+}
+
+function allAskDates(text: string): Array<{ month: number; day: number; year: number | null }> {
+  const found: Array<{ month: number; day: number; year: number | null }> = [];
+  const re =
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?\b/gi;
+  for (const match of text.matchAll(re)) {
+    const parsed = parseAskDate(match[0]);
+    if (!parsed) continue;
+    if (found.some((date) => date.month === parsed.month && date.day === parsed.day && date.year === parsed.year)) continue;
+    found.push(parsed);
+  }
+  return found;
+}
+
+/** A turn that names one day. A list of several days does not pin the thread to the first. */
+function recentDate(turns: AskMemoryTurn[]) {
+  for (const turn of [...turns].reverse()) {
+    const dates = allAskDates(String(turn.text ?? ''));
+    if (dates.length === 1) return dates[0]!;
+  }
+  return null;
+}
+
+/**
+ * Rewrite a short follow-up so pronouns, "and on Sep 21?", and "the first visit"
+ * point at the person, date, and clips from earlier in the thread.
+ */
+function soleOnJobPerson(catalog: AskLookupCatalog): string | null {
+  const names = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  return names.length === 1 ? names[0]! : null;
+}
+
+/** The user is disputing the last answer, not asking a new question. */
+export function isCorrection(question: string): boolean {
+  return /\b(?:that(?:'s| is) wrong|you(?:'re| are) wrong|incorrect|not right|you got\b.+\bwrong|never (?:mentioned|said)|didn'?t say|did not say)\b/i.test(
+    question,
+  );
+}
+
+function isBareDateReply(question: string): boolean {
+  const asked = parseAskDate(question);
+  if (!asked) return false;
+  const stripped = question
+    .replace(/\b(?:on|the|please|just|visit|day)\b/gi, '')
+    .replace(/[?.!,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.length > 0 && stripped.length <= 18;
+}
+
+export function resolveAskQuestion(
+  question: string,
+  history: AskMemoryTurn[] | null | undefined,
+  catalog: AskLookupCatalog,
+): string {
+  const q = question.trim();
+  if (isLongMemoryQuestion(q)) return q;
+  const turns = (history ?? []).filter((turn) => String(turn.text ?? '').trim()).slice(-8);
+  if (!turns.length) return question;
+  if (isCorrection(q)) return q;
+  const person = recentPerson(turns, catalog) || soleOnJobPerson(catalog);
+  const namedHere = (catalog.people ?? []).some((row) => row.name && q.toLowerCase().includes(row.name.toLowerCase()));
+  const asked = parseAskDate(q);
+  const prevDate = recentDate(turns);
+  const prevUser = [...turns].reverse().find((turn) => turn.role !== 'assistant');
+  const prevAssistant = [...turns].reverse().find((turn) => turn.role === 'assistant');
+  const prevSpeech = /\b(say|said|quote|tell|mention)\b/i.test(String(prevUser?.text ?? ''));
+  const assistantAsked = /\b(which (?:day|clip|visit)|do you want|which one)\b/i.test(String(prevAssistant?.text ?? ''));
+
+  if (/\bi meant\b/i.test(q) && asked && person) {
+    return `What did ${person} say on ${formatAskDate(asked)}?`;
+  }
+  if ((assistantAsked || prevSpeech) && isBareDateReply(q) && asked && person && !/\b(compare|versus|why|think|wrong)\b/i.test(q)) {
+    return `What did ${person} say on ${formatAskDate(asked)}?`;
+  }
+  if (!asked && prevDate && person && /\b(he|she|him|her|they)\b/i.test(q) && /\b(say|said)\b/i.test(q)) {
+    return `What did ${person} say on ${formatAskDate(prevDate)}?`;
+  }
+
+  if (/^(?:and\b|what about\b)\s+/i.test(q) && asked && person && !namedHere && prevSpeech) {
+    return `What did ${person} say on ${formatAskDate(asked)}?`;
+  }
+  if (/\bcompare\b/i.test(q) && /\bfirst visit\b/i.test(q) && /\b(that|this|it|there)\b/i.test(q)) {
+    const dates = [
+      ...new Set(
+        catalogClips(catalog)
+          .map((clip) => clip.workDate)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ].sort();
+    const firstParsed = dates[0] ? parseAskDate(dates[0]) : null;
+    const firstLabel = firstParsed ? formatAskDate(firstParsed) : dates[0] || 'the first visit';
+    const subject = prevDate ? formatAskDate(prevDate) : 'the visit just discussed';
+    return `compare ${subject} to the first visit on ${firstLabel}`;
+  }
+  if (!namedHere && person && /\b(he|she|him|her|they)\b/i.test(q)) {
+    let next = q.replace(/\b(he|she|him|her|they)\b/gi, person);
+    if (/\bthere\b/i.test(next) && prevDate && !asked) {
+      next = next.replace(/\bthere\b/gi, `on ${formatAskDate(prevDate)}`);
+    }
+    return next;
+  }
+  return question;
 }
 
 function personBlock(trace: AskLookupTraceStep[]): { name: string; offJob: string | null } | null {
@@ -286,7 +491,7 @@ export function selectSpeechMoments<T extends SpeechMomentPick>(moments: T[], li
 
 function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   const clips = clipsFromTrace(trace);
-  if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n');
+  if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n');
   const events = historyFromTrace(trace, catalog.timeZone);
   if (events[0]) return `Job history shows ${events[0].summary.replace(/\.$/, '')}${events[0].at ? ` on ${events[0].at}` : ''}.`;
   const titles = (catalog.clips ?? [])
@@ -301,7 +506,32 @@ function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): st
 function missingLine(question: string, trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   if (/\bpermit\b/i.test(question)) return 'This file does not include a permit number.';
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
-  return `This file does not have that.\n\n${fileContext(trace, catalog)}`;
+  return `Nothing on this file matches that.\n\n${fileContext(trace, catalog)}`;
+}
+
+/** One sentence naming the lookups that actually ran. */
+export function whatWasChecked(trace: AskLookupTraceStep[]): string {
+  const tools = new Set(trace.map((step) => step.tool));
+  const bits: string[] = [];
+  if (tools.has('search_transcripts')) bits.push('the transcripts');
+  if (tools.has('get_clip')) bits.push('the clips');
+  if (tools.has('list_person_activity')) bits.push('who is on the job');
+  if (tools.has('read_job_history')) bits.push('the job history');
+  if (tools.has('search_other_jobs')) bits.push('other jobs in this organization');
+  if (!bits.length) return '';
+  const list =
+    bits.length === 1
+      ? bits[0]!
+      : bits.length === 2
+        ? `${bits[0]} and ${bits[1]}`
+        : `${bits.slice(0, -1).join(', ')}, and ${bits[bits.length - 1]}`;
+  return `I checked ${list}.`;
+}
+
+function withChecked(text: string, trace: AskLookupTraceStep[]): string {
+  const line = whatWasChecked(trace);
+  if (!line || /\bi checked\b/i.test(text)) return text;
+  return `${text.trim()}\n\n${line}`;
 }
 
 type DatedMoment = SpeechMomentPick & { speaker: string; title: string; workDate: string | null };
@@ -425,6 +655,33 @@ export function speechQuotesForQuestion(
   }));
 }
 
+function openJobLine(catalog: AskLookupCatalog): string {
+  const titles = catalogClips(catalog)
+    .map((clip) => cleanMentionTitle(clip.title))
+    .filter(Boolean)
+    .slice(0, 4);
+  return titles.length ? `On this job: ${titles.join('; ')}.` : 'Nothing else is recorded on this job.';
+}
+
+function composeOtherJobs(
+  trace: AskLookupTraceStep[],
+  catalog: AskLookupCatalog,
+): string | null {
+  const step = [...trace].reverse().find((row) => row.tool === 'search_other_jobs');
+  if (!step && catalog.access === 'viewer') return 'This share can only read the open job.';
+  if (!step) return null;
+  if (!step.result.ok) return `${step.result.summary}\n\n${openJobLine(catalog)}`;
+  const clips = clipsFromTrace(trace).filter((clip) => clip.jobId && catalog.jobId && clip.jobId !== catalog.jobId);
+  if (!clips.length) {
+    return `Nothing on the other jobs in this organization matches that.\n\n${openJobLine(catalog)}`;
+  }
+  const lead =
+    clips.length === 1
+      ? 'One other job in this organization has that.'
+      : `${clips.length} clips on other jobs in this organization have that.`;
+  return `${lead}\n\n${clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')}`;
+}
+
 function composeQuestion(
   question: string,
   trace: AskLookupTraceStep[],
@@ -434,8 +691,12 @@ function composeQuestion(
   if (person?.offJob) return person.offJob;
   const dated = composeDatedSpeech(question, trace, catalog);
   if (dated) return dated;
+  if (asksAboutOtherJobs(question)) {
+    const elsewhere = composeOtherJobs(trace, catalog);
+    if (elsewhere) return elsewhere;
+  }
   const hits = searchHits(trace).concat(speechFromClip(trace));
-  const searched = trace.some((step) => step.tool === 'search_transcripts' || step.tool === 'get_clip');
+  const searched = trace.some((step) => step.tool === 'search_transcripts' || step.tool === 'get_clip' || step.tool === 'search_other_jobs');
   if (searched && !hits.length && (!person || /\b(say|said|quote|permit|lock)\b/i.test(question))) {
     return missingLine(question, trace, catalog);
   }
@@ -450,11 +711,11 @@ function composeQuestion(
   if (person && clips.length) {
     const count = `${clips.length} clip${clips.length === 1 ? '' : 's'}`;
     const lead = `**${person.name}** recorded ${count} on this file.${openedLine(events)}`;
-    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n')].join('\n\n');
+    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')].join('\n\n');
   }
   if (clips.length) {
     const lead = `${clipCountLead(clips.length)}${openedLine(events)}`;
-    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n')].join('\n\n');
+    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')].join('\n\n');
   }
   const first = events[0]!;
   const when = first.at ? ` on ${first.at}` : '';
@@ -483,26 +744,29 @@ function composeTask(
   const clips = clipsFromTrace(trace);
   const events = historyFromTrace(trace, catalog.timeZone);
   const name = jobName(catalog);
-  const lines = clips.map((clip) => bullet(clip, catalog.timeZone));
+  const lines = clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId));
   const gap = 'Not on this file: a written scope, a punch list, or open issues.';
+  const client = String(catalog.clientName ?? '').trim().replace(/[.]+$/, '') || 'there';
 
   if (task === 'compare') {
-    if (clips.length < 2) {
-      return `This file does not have two visits to compare. ${clips.length === 1 ? 'One clip is on file.' : 'No clips are on file.'}`;
+    const visits = catalogVisitFacts(catalog);
+    const rows = visits.length >= clips.length ? visits : clips;
+    if (rows.length < 2) {
+      return `This file does not have two visits to compare. ${rows.length === 1 ? 'One clip is on file.' : 'No clips are on file.'}`;
     }
-    const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate, catalog.timeZone)))];
+    const dates = [...new Set(rows.map((clip) => dateLabel(clip.workDate, catalog.timeZone)))];
     const lead =
       dates.length >= 2
         ? `**${dates[0]}** and **${dates[1]}** are different visits on this file.`
         : `These clips are on this file, and they are not separate dated visits.`;
-    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(clips, catalog.timeZone)}\n\n${gap}`)}`;
+    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(rows, catalog.timeZone)}\n\n${gap}`)}\n\nI can draft a homeowner note from these visits if you want one.`;
   }
 
   if (task === 'scope') {
     const body = clips.length
       ? lines.join('\n')
       : '- Nothing recorded is on this file yet.';
-    return `This file has no written scope.\n\n${artifact(`**Scope note — ${name}**\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}`;
+    return `This file has no written scope.\n\n${artifact(`**Scope note — ${name}**\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}\n\nI can turn this into a punch list if you want the gaps called out.`;
   }
 
   if (task === 'issues' || task === 'punch') {
@@ -511,7 +775,17 @@ function composeTask(
     const observed = clips.length
       ? `Recorded visits, not logged as defects:\n\n${lines.join('\n')}`
       : 'No clips are on this file to review.';
-    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\nNo open items are written down.\n\n${observed}`)}`;
+    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\nNo open items are written down.\n\n${observed}`)}\n\nI can draft a homeowner note from the visits if that is more useful.`;
+  }
+
+  if (task === 'email') {
+    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
+    return `Here is a draft you can send.\n\n${artifact(`**Email to the homeowner — ${name}**\n\nHi ${client},\n\n${body}\n\n${gap}`)}\n\nI can shorten it if you want it briefer.`;
+  }
+
+  if (task === 'estimate') {
+    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
+    return `This file has no prices, so this draft does not invent any.\n\n${artifact(`**Estimate draft — ${name}**\n\nNo prices are on this file.\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}\n\nI can turn the recorded visits into line items once prices are on the file.`;
   }
 
   const who = person ? `**${person.name}** recorded ${clips.length} clip${clips.length === 1 ? '' : 's'} on this file.` : '';
@@ -519,7 +793,245 @@ function composeTask(
   const withOpen = `${lead}${openedLine(events)}`;
   if (!clips.length) return withOpen;
   const heading = task === 'summary' ? 'Homeowner summary' : 'Note';
-  return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}`;
+  const next = task === 'summary' ? 'I can shorten this if you want it briefer.' : 'I can turn this into an email if you want it sent.';
+  return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}\n\n${next}`;
+}
+
+export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
+
+type SpeechLine = { text: string; title: string; when: string; workDate: string | null; clipId: string };
+
+function speechLines(catalog: AskLookupCatalog): SpeechLine[] {
+  const lines: SpeechLine[] = [];
+  for (const clip of catalogClips(catalog)) {
+    const when = dateLabel(clip.workDate ?? null, catalog.timeZone);
+    const title = cleanMentionTitle(clip.title) || 'Clip';
+    for (const raw of clipAskPreview(clip).transcript.split('\n')) {
+      const line = raw.trim();
+      if (!line || /\[privacy redacted\]/i.test(line)) continue;
+      const clock = line.match(/^\[(\d+:\d{2})\]\s*(.*)$/);
+      const text = (clock ? clock[2] : line).replace(/^[^:]{1,40}:\s+/, '').trim();
+      if (!text) continue;
+      lines.push({ text, title, when, workDate: clip.workDate ?? null, clipId: clip.proofId });
+    }
+  }
+  return lines;
+}
+
+function quoteSpoken(text: string): string {
+  const clean = text.trim();
+  return /[.!?]$/.test(clean) ? `“${clean}”` : `“${clean}.”`;
+}
+
+function quotedBits(text: string): string[] {
+  return [...text.matchAll(/[“"]([^”"]{8,})[”"]/g)].map((match) => match[1]!.trim());
+}
+
+function lastAssistant(history: AskMemoryTurn[] | null | undefined): string {
+  const turn = [...(history ?? [])].reverse().find((row) => row.role === 'assistant' && String(row.text ?? '').trim());
+  return String(turn?.text ?? '');
+}
+
+function jobOffer(catalog: AskLookupCatalog): string {
+  const name = jobName(catalog);
+  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && person.name).map((person) => person.name);
+  const clips = catalogClips(catalog);
+  const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate ?? null, catalog.timeZone)).filter((date) => date !== 'Undated'))];
+  const client = String(catalog.clientName ?? '').trim().replace(/\.$/, '');
+  const address = String(catalog.jobAddress ?? '').trim();
+  const where = [client ? `client ${client}` : '', address].filter(Boolean).join(', ');
+  const who = people.length ? people.join(', ') : 'No one is listed';
+  const verb = people.length === 1 ? 'is' : 'are';
+  const when = dates.length ? dates.join(' and ') : 'the clips on file';
+  return `**${name}** is the open file${where ? ` (${where})` : ''}. ${who} ${verb} on clips from ${when}. I can quote a visit, compare the days, or summarize the job.`;
+}
+
+function splitSocial(question: string): { prefix: 'thanks' | 'greeting' | null; body: string } {
+  const raw = question.trim();
+  const thanks = raw.match(/^(?:thanks|thank you|thx|appreciate it|appreciated)[.!,\s]+([\s\S]+)$/i);
+  if (thanks?.[1]?.trim()) return { prefix: 'thanks', body: thanks[1].trim() };
+  const greet = raw.match(/^(?:hi|hey|hello|howdy|good\s+(?:morning|afternoon|evening))[.!,\s]+([\s\S]+)$/i);
+  if (greet?.[1]?.trim() && greet[1].trim().length > 8) return { prefix: 'greeting', body: greet[1].trim() };
+  return { prefix: null, body: raw };
+}
+
+function isGreeting(question: string): boolean {
+  return /^(?:hi|hey|hello|howdy|yo|good\s+(?:morning|afternoon|evening)|how are you|how'?s it going|what'?s up)(?:\s+there)?[!.?\s]*$/i.test(
+    question.trim(),
+  );
+}
+
+function isThanks(question: string): boolean {
+  return /^(?:thanks|thank you|thx|ty|appreciate(?:d| it)?)[!.\s]*$/i.test(question.trim());
+}
+
+function isOpinion(question: string, history: AskMemoryTurn[] | null | undefined): boolean {
+  if (/\b(?:what do you think|why do you think|what(?:'s| is) your take|how come|do you think)\b/i.test(question)) return true;
+  if (/^(?:why|how come)(?:\s+though)?[?.!\s]*$/i.test(question.trim()) && (history ?? []).some((turn) => String(turn.text ?? '').trim())) {
+    return true;
+  }
+  return false;
+}
+
+function isRestateRequest(question: string): boolean {
+  return /^(?:huh|what|what do you mean|can you clarify|come again|say that again)[?.!\s]*$/i.test(question.trim());
+}
+
+function isAmbiguousAsk(question: string, history: AskMemoryTurn[] | null | undefined, catalog: AskLookupCatalog): boolean {
+  const q = question.trim();
+  if (parseAskDate(q) || recentDate(history ?? [])) return false;
+  const dates = [...new Set(catalogClips(catalog).map((clip) => clip.workDate).filter(Boolean))];
+  if (dates.length < 2) return false;
+  const bareSpeech = /^what did\s+(?:he|she|they|[\p{L}][\p{L} .'-]{0,40}?)\s+say\s*\??$/iu.test(q);
+  const bareClip = /^(?:what about (?:the |that )?(?:clip|one|visit|video)|which (?:clip|one|visit)|tell me about (?:it|the clip|that))[?.!\s]*$/i.test(q);
+  return bareSpeech || bareClip;
+}
+
+/** Greeting, thanks, opinion, correction, or a request that needs one clarifying question. */
+export function classifyChatTurn(
+  question: string,
+  history: AskMemoryTurn[] | null | undefined,
+  catalog: AskLookupCatalog,
+): ChatKind | null {
+  const q = question.trim();
+  if (!q || isJobOverview(q)) return null;
+  if (isLongMemoryQuestion(q)) return 'recall';
+  if (isCorrection(q)) return 'correction';
+  const { body, prefix } = splitSocial(q);
+  if (isJobOverview(body)) return null;
+  if (parseAskDate(body) && /\b(say|said|quote|tell|mention)\b/i.test(body)) return null;
+  if (classifyAskIntent(body).kind === 'task' && !isOpinion(body, history)) return null;
+  if (isOpinion(body, history)) return 'opinion';
+  if (isRestateRequest(body)) return 'restate';
+  if (isAmbiguousAsk(body, history, catalog)) return 'clarify';
+  if (prefix === 'thanks' || isThanks(q)) return 'thanks';
+  if (isGreeting(q)) return 'greeting';
+  return null;
+}
+
+function focusLines(question: string, catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): SpeechLine[] {
+  const all = speechLines(catalog);
+  const bits = quotedBits(lastAssistant(history));
+  const counts = new Map<string, number>();
+  for (const line of all) {
+    const hit = bits.some((bit) => {
+      const needle = bit.toLowerCase().slice(0, 24);
+      return line.text.toLowerCase().includes(needle) || needle.includes(line.text.toLowerCase().slice(0, 24));
+    });
+    if (hit) counts.set(line.clipId, (counts.get(line.clipId) ?? 0) + 1);
+  }
+  let best = '';
+  let bestCount = 0;
+  for (const [id, count] of counts) {
+    if (count > bestCount) {
+      best = id;
+      bestCount = count;
+    }
+  }
+  if (best) return all.filter((line) => line.clipId === best);
+  const words = question.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 4);
+  const keywordHits = all.filter((line) => words.some((word) => line.text.toLowerCase().includes(word)));
+  return keywordHits.length ? keywordHits : all.slice(0, 4);
+}
+
+function composeOpinion(question: string, catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
+  const lines = focusLines(question, catalog, history).slice(0, 4);
+  if (!lines.length) return `${jobOffer(catalog)} The transcripts do not give me more than that to go on.`;
+  const when = lines[0]!.when;
+  const spoken = lines.map((line) => `“${line.text}”`).join(', then ');
+  const paperwork = lines.some((line) => /paper|spreadsheet|quickbooks/i.test(line.text));
+  const read = paperwork
+    ? 'He is talking about getting the work off paper and onto QuickBooks.'
+    : 'I would not add a motive past those words.';
+  return `On ${when}, the lines run ${spoken}. ${read}`;
+}
+
+function composeCorrection(question: string, catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
+  const all = speechLines(catalog);
+  const bits = quotedBits(lastAssistant(history));
+  const matched = all.filter((line) =>
+    bits.some((bit) => {
+      const needle = bit.toLowerCase().slice(0, 20);
+      return line.text.toLowerCase().includes(needle);
+    }),
+  );
+  const clipDates = [...new Set(matched.map((line) => line.when))];
+  const parts: string[] = [];
+  const denied = question.match(/\b(?:never|didn'?t|did not)\s+(?:mention(?:ed)?|say|said)\s+(?:anything about\s+)?[“"]?([^”"?.!]+)/i);
+  if (denied?.[1]) {
+    const needle = denied[1].trim();
+    const found = all.find((line) => line.text.toLowerCase().includes(needle.toLowerCase()));
+    if (found) {
+      parts.push(`The file does have that. On ${found.when}, in ${found.title}, the line is ${quoteSpoken(found.text)}`);
+    } else {
+      parts.push(`I do not see “${needle}” in the transcripts.`);
+    }
+  }
+  const userDate = parseAskDate(question);
+  if (userDate && clipDates.length) {
+    const onUserDay = matched.some((line) => clipMatchesAskDate(line.workDate, userDate, catalog.timeZone));
+    if (!onUserDay) {
+      const label = formatAskDate(userDate);
+      const elsewhere = all.find((line) => clipMatchesAskDate(line.workDate, userDate, catalog.timeZone));
+      const other = elsewhere ? ` ${elsewhere.when} only has ${quoteSpoken(elsewhere.text)}` : '';
+      parts.push(`Those lines are from ${clipDates.join(' and ')}, not ${label}.${other}`);
+    }
+  }
+  if (parts.length) return parts.join(' ');
+  const fact = bits[0] ? `“${bits[0]}”` : jobOffer(catalog);
+  return `Here is what the file still supports: ${fact}. Which part of that is off?`;
+}
+
+function composeClarify(catalog: AskLookupCatalog): string {
+  const clips = catalogClips(catalog);
+  const dates = [...new Set(clips.map((clip) => dateLabel(clip.workDate ?? null, catalog.timeZone)).filter((date) => date !== 'Undated'))];
+  if (dates.length >= 2) return `Which day do you mean? On file: ${dates.join(' and ')}.`;
+  const list = clips
+    .slice(0, 4)
+    .map((clip) => `${dateLabel(clip.workDate ?? null, catalog.timeZone)} — ${cleanMentionTitle(clip.title) || 'Clip'}`)
+    .join('; ');
+  return list ? `Which clip do you mean? On file: ${list}.` : 'Which clip do you mean? Nothing is on this file yet.';
+}
+
+function composeRestate(catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
+  const last = lastAssistant(history).replace(/⟦[\s\S]*$/, '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+  if (!last) return jobOffer(catalog);
+  const sentence = last.split(/(?<=[.!?])\s/).slice(0, 2).join(' ');
+  return `${sentence} I can quote a single visit or compare the days if you want it narrower.`;
+}
+
+function composeThanks(catalog: AskLookupCatalog, history: AskMemoryTurn[] | null | undefined): string {
+  const when = recentDate(history ?? []);
+  const stay = when
+    ? `I can stay on ${formatAskDate(when)}, pull another day, or compare the visits on ${jobName(catalog)}.`
+    : jobOffer(catalog);
+  return `Glad that helped. ${stay}`;
+}
+
+function composeChat(
+  kind: ChatKind,
+  question: string,
+  catalog: AskLookupCatalog,
+  history: AskMemoryTurn[] | null | undefined,
+): string {
+  switch (kind) {
+    case 'greeting':
+      return `Hi. ${jobOffer(catalog)}`;
+    case 'thanks':
+      return composeThanks(catalog, history);
+    case 'opinion':
+      return composeOpinion(question, catalog, history);
+    case 'correction':
+      return composeCorrection(question, catalog, history);
+    case 'clarify':
+      return composeClarify(catalog);
+    case 'restate':
+      return composeRestate(catalog, history);
+    case 'recall':
+      return jobOffer(catalog);
+    default:
+      return jobOffer(catalog);
+  }
 }
 
 /** Grounded reply when the model is absent. Never invents a fact the tools did not return. */
@@ -527,13 +1039,31 @@ export function composeGroundedAsk(
   question: string,
   trace: AskLookupTraceStep[],
   catalog: AskLookupCatalog,
+  history?: AskMemoryTurn[] | null,
+  memory?: LongThreadMemory | null,
 ): string {
+  const chat = classifyChatTurn(question, history, catalog);
+  if (chat === 'recall') {
+    return polishAskProse(recallLongMemory(question, memory, { timeZone: catalog.timeZone }), {
+      timeZone: catalog.timeZone,
+      jobTitle: catalog.jobTitle,
+    });
+  }
+  if (chat) {
+    return polishAskProse(composeChat(chat, question, catalog, history), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  }
+  if (isJobOverview(question)) {
+    return polishAskProse(withChecked(composeJobOverview(catalog), trace), {
+      timeZone: catalog.timeZone,
+      jobTitle: catalog.jobTitle,
+    });
+  }
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);
-  const polished = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  const polished = polishAskProse(withChecked(text, trace), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
   if (/^this file does not have that\.?$/i.test(polished)) {
     return polishAskProse(
-      `${polished}\n\n${fileContext(trace, catalog)}`,
+      withChecked(`${polished}\n\n${fileContext(trace, catalog)}`, trace),
       { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle },
     );
   }
