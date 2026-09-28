@@ -427,9 +427,9 @@ describe('SharedDashboardPage job file identity', () => {
       'Timeline',
       'Access',
       'Videos',
-      'Packet',
       'Evidence report',
     ]);
+    expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Job history' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Timeline' }));
     expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
@@ -467,6 +467,36 @@ describe('SharedDashboardPage job file identity', () => {
       'true',
     );
     expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
+  });
+
+  it('opens Timeline for old Packet links and keeps Share and Evidence report', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&section=packet']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('claim-ready-packet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&section=claim-ready']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
+    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
   });
 
   it('shows only the active section panel', async () => {

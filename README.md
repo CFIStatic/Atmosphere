@@ -4,7 +4,7 @@
 and trade jobs.
 
 Crews film the day on site. The office opens a job file — Chat, Timeline,
-videos, packet, evidence — with timed analysis of people, speech, objects, and
+videos, and the evidence report — with timed analysis of people, speech, objects, and
 moments. Atmosphere is not a sales suite, PM board, or general operations OS.
 
 ```
@@ -12,7 +12,7 @@ moments. Atmosphere is not a sales suite, PM board, or general operations OS.
  ─────────────────                       ──────────────────
   Record on phone (web or iOS)            Open job file → Chat by default
   Upload / stream parts                   Analysis auto-queues on finalize
-  Sign in or job-share token              Ask the job; review Videos / Packet
+  Sign in or job-share token              Ask the job; review Videos / Evidence
                                           Share evidence outward
 ```
 
@@ -46,10 +46,9 @@ work without an office seat (invitees / subs). Production ships on **Railway**
 4. **Job file** — Office opens the file at `/job-progress` (bookmarks to
    `/jobs/:id` redirect here). Section bar (office):
    - **Chat** (default on open) — job-scoped Ask
-   - **Timeline** — chronological record of the job, including live capture. Old Happening Now and Job history links open this tab.
+   - **Timeline** — chronological record of the job, including live capture. Old Happening Now, Job history, and Packet links open this tab.
    - **Access** — who has the file (hidden for some grant viewers)
    - **Videos** — filed film
-   - **Packet** — claim-ready packet
    - **Evidence report** — evidence locker
 5. **Playback** — Safari-hostile WebM originals get a sibling `.play.mp4`
    derivative for Platform playback.

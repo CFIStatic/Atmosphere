@@ -13,7 +13,6 @@ export type JobFileSectionId =
   | 'timeline'
   | 'access'
   | 'videos'
-  | 'packet'
   | 'evidence';
 
 export type JobFileSectionTab = {

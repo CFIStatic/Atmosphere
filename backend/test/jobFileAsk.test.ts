@@ -9,7 +9,7 @@ import {
   preferJobFileGroundedFastPath,
   type JobFileAskContext,
 } from '../src/shared/jobFileAsk.js';
-import { pickAskToolsHeuristically } from '../src/shared/askTools.js';
+import { ASK_TOOL_DEFINITIONS, pickAskToolsHeuristically } from '../src/shared/askTools.js';
 
 const file: JobFileAskContext = {
   job: {
@@ -159,6 +159,16 @@ test('pickAskToolsHeuristically includes web_search for topical web intents, not
       !picks.includes('web_search'),
       `capability-only should not fetch google junk via web_search: ${q} got ${picks.join(',')}`,
     );
+  }
+});
+
+test('Ask does not offer a claim packet', () => {
+  const catalog = JSON.stringify(ASK_TOOL_DEFINITIONS);
+  assert.equal(/packet/i.test(catalog), false);
+  assert.equal(catalog.includes('get_claim_ready_summary'), false);
+  for (const q of ['open the claim packet', 'show the claim-ready summary', 'carrier packet']) {
+    const picks = pickAskToolsHeuristically(q, 'org').join(',');
+    assert.equal(picks.includes('get_claim_ready_summary'), false, picks);
   }
 });
 

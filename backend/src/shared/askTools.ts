@@ -75,7 +75,6 @@ export type AskToolName =
   | 'search_crm'
   | 'list_who_has_access'
   | 'get_punch_list'
-  | 'get_claim_ready_summary'
   | 'find_evidence_moments'
   | 'draft_progress_share_copy'
   | 'draft_field_invite_copy'
@@ -191,13 +190,6 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
     },
   },
   {
-    name: 'get_claim_ready_summary',
-    description:
-      'Summarize the claim-ready packet for this job and return the in-app path to open it. Office only.',
-    audience: 'org',
-    input_schema: { type: 'object', properties: {}, additionalProperties: false },
-  },
-  {
     name: 'find_evidence_moments',
     description:
       'Find clip moments / transcript hits for a topic so the UI can jump to video timestamps.',
@@ -278,9 +270,6 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   }
   if (/punch|next steps?|open items?|to-?do|action items?/.test(q)) {
     add('get_punch_list');
-  }
-  if (/claim[- ]?ready|claim packet|carrier packet/.test(q)) {
-    add('get_claim_ready_summary');
   }
   if (/status|where are we|job number|scheduled/.test(q) && !/access|punch|claim/.test(q)) {
     add('get_job_status');
@@ -801,28 +790,6 @@ export async function executeAskTool(
                 seekSeconds: items[0].seekSeconds ?? undefined,
               }
             : { section: 'videos' },
-        };
-      }
-
-      case 'get_claim_ready_summary': {
-        const payload = await buildJobProofPayload(ctx.supabase, ctx.orgId, ctx.jobId);
-        const job = payload.job as { title?: string; claimNumber?: string | null } | null;
-        const videoCount = (payload.videos as unknown[] | undefined)?.length ?? 0;
-        const punchCount = (payload.punchList as unknown[] | undefined)?.length ?? 0;
-        const path = `/jobs/${ctx.jobId}?section=claim-ready`;
-        return {
-          ok: true,
-          tool: name,
-          summary: `Claim-ready packet is available in the job file (${videoCount} clip(s), ${punchCount} punch item(s) on file).`,
-          data: {
-            title: job?.title ?? ctx.file.job?.title ?? null,
-            claimNumber: job?.claimNumber ?? ctx.file.job?.claimNumber ?? null,
-            videoCount,
-            punchCount,
-            path,
-            apiPath: `/api/operations/shared/${ctx.jobId}/claim-ready`,
-          },
-          ui: { path, section: 'setup' },
         };
       }
 

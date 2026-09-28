@@ -29,7 +29,6 @@ export type TimelineKind =
   | 'people'
   | 'clip'
   | 'analysis'
-  | 'packet'
   | 'share'
   | 'custody'
   | 'history';
@@ -82,6 +81,11 @@ const LEGACY_SECTIONS = new Set([
   'job-history',
   'job_history',
   'jobhistory',
+  'packet',
+  'packets',
+  'claim-ready',
+  'claim_ready',
+  'claimready',
 ]);
 
 const CHILD_WORD = /\b(child|children|toddler|kid|kids|minor|baby|infant)\b/i;
@@ -102,7 +106,7 @@ export function initialJobFileSection(search: string, hash = ''): 'chat' | 'time
   return params.get('section') === 'timeline' ? 'timeline' : 'chat';
 }
 
-/** Old Happening Now / Job history links become ?section=timeline. */
+/** Old Happening Now, Job history, and Packet links become ?section=timeline. */
 export function timelineRedirectSearch(search: string, hash = ''): string | null {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const section = params.get('section');
@@ -116,6 +120,27 @@ export function timelineRedirectSearch(search: string, hash = ''): string | null
   params.set('section', 'timeline');
   const next = params.toString();
   return next ? `?${next}` : '?section=timeline';
+}
+
+/**
+ * `/jobs/:id/packet` and `?section=packet` (or claim-ready) open this job's Timeline.
+ * Other job-file bookmarks stay on the plain job path.
+ */
+export function packetTimelineLocation(
+  jobId: string,
+  pathname: string,
+  search: string,
+  hash = '',
+): string | null {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  if (jobId) params.set('job', jobId);
+  const tail = pathname.split('/').filter(Boolean).pop()?.toLowerCase() ?? '';
+  if (isLegacyJobFileSection(tail) && (tail === 'packet' || tail === 'packets' || tail.startsWith('claim'))) {
+    params.set('section', tail);
+  }
+  const rewritten = timelineRedirectSearch(`?${params.toString()}`, hash);
+  if (!rewritten) return null;
+  return `/job-progress${rewritten}`;
 }
 
 export function formatCtTime(iso: string): string {
@@ -454,19 +479,17 @@ function custodyEvents(source: TimelineSource, out: TimelineEvent[]) {
       else if (action === 'released') line = `${actorName ?? 'Someone'} lifted the hold on ${label}`;
       else if (action === 'restored') line = `${actorName ?? 'Someone'} restored ${label}`;
       else if (action === 'deleted') line = `${actorName ?? 'Someone'} removed ${label} from the library`;
-      else if (action === 'exported' || action === 'downloaded') {
-        kind = 'packet';
+      else if (action === 'exported') {
         const detail = text(entry.detail);
         const report = /proof-pack|evidence/i.test(detail);
-        const claim = /claim/i.test(detail);
+        const claimPacket = /claim/i.test(detail) && !report;
+        if (claimPacket) continue;
         if (report) line = `${actorName ?? 'Someone'} exported the evidence report${detail ? ` (${detail})` : ''}`;
-        else if (claim) line = `${actorName ?? 'Someone'} exported the claim packet${detail ? ` (${detail})` : ''}`;
         else line = `${actorName ?? 'Someone'} exported a record from this job${detail ? ` (${detail})` : ''}`;
       } else if (action === 'shared') {
         kind = 'share';
         line = `${actorName ?? 'Someone'} shared ${label}`;
       }
-      if (action === 'downloaded') kind = 'packet';
       push(out, {
         id: `custody:${clip.clip.id}:${action}:${at}`,
         at,
@@ -812,7 +835,6 @@ export const TIMELINE_FILTERS: Array<{ id: TimelineFilter; label: string }> = [
   { id: 'people', label: 'People' },
   { id: 'clip', label: 'Clips' },
   { id: 'analysis', label: 'Analysis' },
-  { id: 'packet', label: 'Packets' },
   { id: 'share', label: 'Shares' },
   { id: 'custody', label: 'Custody' },
   { id: 'history', label: 'History' },

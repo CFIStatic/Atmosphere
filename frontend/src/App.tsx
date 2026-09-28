@@ -35,6 +35,7 @@ import { MyJobsPage } from './pages/MyJobsPage';
 import { MyJobFilesPage } from './pages/MyJobFilesPage';
 import { getPlatform } from './lib/usePlatform';
 import { jobFilePath, sharedJobsRedirectTo } from './lib/jobFileAsk';
+import { packetTimelineLocation } from './components/shared/jobTimeline';
 import { HOMEOWNER_HUB_PATH, isHomeownerHubPath } from './lib/homeownerHub';
 import { resolveNoOrgDestination } from './lib/postAuth';
 
@@ -311,7 +312,9 @@ function DemoRouteBridge() {
 /** Job Files used to open /jobs/:id — that is the same file as Overview now. */
 function JobFileFromProfileRedirect() {
   const { id = '' } = useParams();
-  return <Navigate to={jobFilePath(id)} replace />;
+  const location = useLocation();
+  const packet = packetTimelineLocation(id, location.pathname, location.search, location.hash);
+  return <Navigate to={packet ?? jobFilePath(id)} replace />;
 }
 
 /** Preserve ?job= (and intake handoff state) when moving /shared → the job file. */
@@ -414,6 +417,9 @@ export default function App() {
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<Navigate to="/verifier-library" replace />} />
             {/* Same job file as Overview — /jobs/:id bookmarks join /job-progress. */}
+            <Route path="/jobs/:id/packet" element={<JobFileFromProfileRedirect />} />
+            <Route path="/jobs/:id/packets" element={<JobFileFromProfileRedirect />} />
+            <Route path="/jobs/:id/claim-ready" element={<JobFileFromProfileRedirect />} />
             <Route path="/jobs/:id" element={<JobFileFromProfileRedirect />} />
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />

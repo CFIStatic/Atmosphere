@@ -21,6 +21,7 @@ import {
   initialJobFileSection,
   orderTimeline,
   publicFinding,
+  packetTimelineLocation,
   timelineRedirectSearch,
   timelineSeekTarget,
   type TimelineSource,
@@ -154,8 +155,56 @@ describe('job timeline', () => {
     );
     expect(timelineRedirectSearch('?job=abc&ask=1', '')).toBeNull();
     expect(timelineRedirectSearch('?job=abc&section=timeline', '')).toBeNull();
+    expect(timelineRedirectSearch('?job=abc&section=packet', '')).toBe('?job=abc&section=timeline');
+    expect(timelineRedirectSearch('?job=abc&section=claim-ready&ask=1', '')).toBe(
+      '?job=abc&section=timeline',
+    );
+    expect(timelineRedirectSearch('?job=abc', '#packet')).toBe('?job=abc&section=timeline');
     expect(initialJobFileSection('?section=happening', '')).toBe('timeline');
+    expect(initialJobFileSection('?section=packet', '')).toBe('timeline');
+    expect(initialJobFileSection('?section=claim_ready', '')).toBe('timeline');
     expect(initialJobFileSection('?section=timeline', '')).toBe('timeline');
     expect(initialJobFileSection('?ask=1', '')).toBe('chat');
+    expect(packetTimelineLocation('job-1', '/jobs/job-1/packet', '')).toBe(
+      '/job-progress?job=job-1&section=timeline',
+    );
+    expect(packetTimelineLocation('job-1', '/jobs/job-1', '?section=claim-ready')).toBe(
+      '/job-progress?section=timeline&job=job-1',
+    );
+    expect(packetTimelineLocation('job-1', '/jobs/job-1', '')).toBeNull();
+  });
+
+  it('keeps evidence-report exports and leaves claim packets out', () => {
+    const text = joined();
+    expect(text).toContain('El Presidente exported the evidence report (proof-pack.pdf · full job)');
+    expect(text).not.toMatch(/packet/i);
+
+    const clip = tiffanyCustody.clips[0]!;
+    const withClaim = tiffanySource({
+      custody: {
+        ...tiffanyCustody,
+        clips: [
+          {
+            ...clip,
+            chainOfCustody: [
+              ...clip.chainOfCustody,
+              {
+                action: 'exported',
+                by: 'El Presidente',
+                role: 'global_admin',
+                detail: 'claim packet',
+                at: '2026-09-20T20:00:00.000Z',
+              },
+            ],
+          },
+          ...tiffanyCustody.clips.slice(1),
+        ],
+      },
+    });
+    const claimText = buildJobTimeline(withClaim)
+      .map((event) => event.sentence)
+      .join('\n');
+    expect(claimText).not.toMatch(/packet/i);
+    expect(claimText).toContain('exported the evidence report');
   });
 });

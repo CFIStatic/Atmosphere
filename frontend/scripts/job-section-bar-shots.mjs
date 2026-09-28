@@ -184,8 +184,8 @@ await page.route('**/api/**', async (route) => {
     return route.fulfill(json({ questions: askQuestions, threads: askThreads }));
   }
   if (path.includes('/evidence')) return route.fulfill(json({ items: [] }));
-  if (path.includes('/claim') || path.includes('/packet') || path.includes('/proof-pack')) {
-    return route.fulfill(json({ ready: false, items: [], packet: null }));
+  if (path.includes('/proof-pack')) {
+    return route.fulfill(json({ ready: false, items: [] }));
   }
   if (path.includes('/readiness')) return route.fulfill(json({ checks: [] }));
   if (path.includes('/scope') || path.includes('/documents')) {

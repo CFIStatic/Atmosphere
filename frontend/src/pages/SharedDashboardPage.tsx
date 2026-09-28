@@ -7,7 +7,6 @@ import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPane
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
-import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
 import { JobTimeline } from '../components/shared/JobTimeline';
@@ -449,7 +448,6 @@ function JobFileSections({
     if (!viewerOnly) {
       next.push(
         { id: 'videos', label: 'Videos' },
-        { id: 'packet', label: 'Packet' },
         { id: 'evidence', label: 'Evidence report' },
       );
     }
@@ -492,10 +490,6 @@ function JobFileSections({
 
         {active === 'videos' && !viewerOnly ? (
           <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
-        ) : null}
-
-        {active === 'packet' && !viewerOnly ? (
-          <ClaimReadyPacketPanel jobId={record.job.id} />
         ) : null}
 
         {active === 'evidence' && !viewerOnly ? <EvidenceLocker jobId={record.job.id} /> : null}

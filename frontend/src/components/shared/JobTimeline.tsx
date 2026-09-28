@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clapperboard,
-  FileText,
   FolderOpen,
   History,
   Loader2,
@@ -38,7 +37,6 @@ const KIND_ICON: Record<TimelineKind, LucideIcon> = {
   people: UserRound,
   clip: Video,
   analysis: ScanSearch,
-  packet: FileText,
   share: Share2,
   custody: Shield,
   history: History,
