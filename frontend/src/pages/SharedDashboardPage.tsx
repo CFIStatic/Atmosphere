@@ -34,7 +34,6 @@ import {
   type JobFileSectionTab,
 } from '../components/shared/JobFileSectionBar';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
-import { JobNotesPanel } from '../components/mentions/JobNotesPanel';
 import { jobFilePath, siteLine } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -548,14 +547,6 @@ function JobFileSections({
         ) : null}
 
         {active === 'happening' ? (
-          <div className="space-y-4">
-          {!viewerOnly ? (
-            <JobNotesPanel
-              jobId={record.job.id}
-              messages={record.messages}
-              onPosted={() => onOpenJob(record.job.id)}
-            />
-          ) : null}
           <JobProgressDashboard
             jobId={record.job.id}
             record={record}
@@ -575,7 +566,6 @@ function JobFileSections({
                 : undefined
             }
           />
-          </div>
         ) : null}
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
