@@ -44,6 +44,7 @@ import { resolveDictationEntries } from '../shared/dictationEvents.js';
 import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle, normalizeCustomClipTitle } from './proofClipTitle.js';
 import { clipIdOfStoragePath } from '../shared/proofStoragePath.js';
+import { clipAudioSource, provenSpeakerLabel, readMediaAudio, tagSegmentSources, type MediaAudioReading } from '../audio/audioSource.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
@@ -494,9 +495,32 @@ export function serializeEvidence(input: {
                 childPrivacyRedactionsFromStored(findings.childPrivacyRedactions),
               );
               return {
-                ...conversationFields(proof.transcript_text, shownConversation, peopleResolved),
+                ...conversationFields(
+                  proof.transcript_text,
+                  shownConversation,
+                  peopleResolved,
+                  readMediaAudio({
+                    narration: dictation,
+                    events: [
+                      ...(Array.isArray(actions) ? actions : []),
+                      ...(Array.isArray(findings.timeline) ? findings.timeline : []),
+                      ...(Array.isArray(proof.narration?.entries) ? proof.narration.entries : []),
+                    ] as Parameters<typeof readMediaAudio>[0]['events'],
+                    hasSpeech: typeof proof.transcript_text === 'string' && proof.transcript_text.trim().length > 0,
+                  }),
+                ),
                 ...publicPeopleFields(peopleResolved),
-                evidenceLog: overlaySpeakerLabels(evidence, peopleResolved),
+                evidenceLog: overlaySpeakerLabels(evidence, peopleResolved).map((entry) =>
+                  entry.speakerLabel
+                    ? {
+                        ...entry,
+                        speakerLabel: provenSpeakerLabel(
+                          entry.speakerLabel,
+                          typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+                        ),
+                      }
+                    : entry,
+                ),
               };
             })(),
           }
@@ -508,14 +532,71 @@ function conversationFields(
   transcript: unknown,
   stored: unknown,
   people?: ReturnType<typeof resolvePeoplePresent> | null,
+  media?: MediaAudioReading,
 ) {
   const text = typeof transcript === 'string' ? transcript : null;
   const fields = publicConversationFields(conversationFromStored(transcript, stored));
+  const reading = media ?? readMediaAudio({ hasSpeech: Boolean(text && text.trim()) });
+  // Labels a confident identity did not replace are made up (nothing diarizes
+  // voices): show "unknown". Lines heard from a screen in frame are media.
+  const unproven = <T extends { speakerLabel?: string | null }>(rows: T[]) =>
+    rows.map((row) => (row.speakerLabel ? { ...row, speakerLabel: provenSpeakerLabel(row.speakerLabel, text) } : row));
+  const segments = tagSegmentSources(
+    unproven(overlaySpeakerLabels(parseVerbatimTranscript(text), people ?? null)),
+    reading,
+  );
+  const turns = tagSegmentSources(
+    unproven(overlaySpeakerLabels(fields.conversationTurns ?? [], people ?? null)) as Array<
+      { tSec?: number | null; text?: string | null; speakerLabel?: string | null }
+    >,
+    reading,
+  );
+  // Facts built from lines heard off a screen (a TV price, a show host's
+  // "promise") are not field conversation: drop them from the brief lists.
+  const norm = (value: unknown) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const mediaLines = segments.filter((row) => row.source === 'media').map((row) => norm(row.text)).filter((t) => t.length >= 8);
+  const inMediaWindow = (at: unknown) => {
+    const n = Number(at);
+    return (
+      at != null &&
+      Number.isFinite(n) &&
+      reading.mediaWindows.some((w) => n >= w.startSeconds - 0.5 && n < w.endSeconds + 0.5)
+    );
+  };
+  const mediaText = (value: unknown) => {
+    const t = norm(value);
+    return t.length >= 8 && mediaLines.some((line) => line.includes(t) || t.includes(line));
+  };
+  const isMediaFact = (entry: unknown) =>
+    typeof entry === 'string'
+      ? mediaText(entry)
+      : !!entry &&
+        typeof entry === 'object' &&
+        (inMediaWindow((entry as { tSec?: unknown }).tSec) ||
+          mediaText((entry as { quote?: unknown }).quote) ||
+          mediaText((entry as { text?: unknown }).text));
+  const filtered: Record<string, unknown> = {};
+  let mediaFiltered = 0;
+  if (mediaLines.length || reading.mediaWindows.length) {
+    for (const [key, value] of Object.entries(fields)) {
+      if (!Array.isArray(value) || key === 'conversationTurns' || key === 'conversationRooms') continue;
+      const kept = (value as unknown[]).filter((entry) => !isMediaFact(entry));
+      mediaFiltered += value.length - kept.length;
+      filtered[key] = kept;
+    }
+  }
   return {
     ...fields,
-    conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people ?? null),
+    ...filtered,
+    /** Brief facts dropped because they came from media audio. */
+    conversationMediaFiltered: mediaFiltered,
+    conversationTurns: turns,
     transcriptText: text,
-    transcriptSegments: overlaySpeakerLabels(parseVerbatimTranscript(text), people ?? null),
+    transcriptSegments: segments,
+    /** field | media | mixed | none: whether speech came from people on site or a screen in frame. */
+    audioSource: segments.length ? clipAudioSource(segments.map((row) => row.source), reading) : reading.audioSource,
+    mediaWindows: reading.mediaWindows,
+    mediaUntimed: reading.mediaUntimed,
   };
 }
 

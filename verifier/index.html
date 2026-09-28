@@ -7007,6 +7007,13 @@
   }
 
 
+  /** Diarization letters ("Speaker A") are not an identity; show them as unknown. */
+  function speakerDisplay(label) {
+    var t = String(label || '').trim();
+    if (!t || /^unknown$/i.test(t) || /^speaker(?:[\s_-]*[a-z0-9]{1,2})?$/i.test(t)) return 'Unknown speaker';
+    return t;
+  }
+
   function renderConversationBlock(item) {
     var a = item.analysis || {};
     var summary = a.conversationSummary || null;
@@ -7093,7 +7100,7 @@
       html += '<p class="saw-k">Turns</p><ul class="alog" id="conv-turns">';
       turns.forEach(function (turn) {
         var at = turn.tSec != null ? Number(turn.tSec) : null;
-        var label = esc(turn.speakerLabel || 'Speaker');
+        var label = esc(speakerDisplay(turn.speakerLabel)) + (turn.source === 'media' ? '</span><span class="alog-chip" title="Audio from a TV, laptop or phone in the room, not field conversation">media' : '');
         var body = esc(turn.text || '');
         var inner = '<span class="alog-body"><span class="alog-speaker">' + label + '</span><span class="alog-quote">' + body + '</span></span>';
         if (at != null && isFinite(at)) {
@@ -7105,13 +7112,21 @@
       html += '</ul>';
     }
     if (transcript) {
-      html += '<p class="saw-k">Transcript (raw)</p>';
+      var audioSrc = a.audioSource || item.audioSource || null;
+      var audioPill = audioSrc === 'media'
+        ? ' <span class="pill" style="margin-left:6px;text-transform:none;letter-spacing:0" title="Speech heard from a TV, laptop or phone in frame">media audio</span>'
+        : audioSrc === 'mixed'
+          ? ' <span class="pill" style="margin-left:6px;text-transform:none;letter-spacing:0" title="A screen in frame was playing; some speech may be media, not field conversation">includes media audio</span>'
+          : '';
+      html += '<p class="saw-k">Transcript (raw)' + audioPill + '</p>';
       var segs = (a.transcriptSegments || item.transcriptSegments || []);
       if (segs.length) {
         html += '<ul class="exact-transcript" id="exact-transcript">';
         segs.forEach(function (row) {
           var at = row.tSec != null ? Number(row.tSec) : null;
-          var label = row.speakerLabel ? '<span class="alog-speaker">' + esc(row.speakerLabel) + '</span>' : '';
+          var shownLabel = row.speakerLabel ? speakerDisplay(row.speakerLabel) : '';
+          var mediaTag = row.source === 'media' ? '<span class="alog-chip" title="Audio from a TV, laptop or phone in the room, not field conversation">media</span>' : '';
+          var label = (shownLabel ? '<span class="alog-speaker">' + esc(shownLabel) + '</span>' : '') + mediaTag;
           var body = esc(row.text || '');
           var inner = '<span class="alog-body">' + label + '<span class="alog-quote">' + body + '</span></span>';
           if (at != null && isFinite(at)) {
@@ -8789,7 +8804,11 @@
             conversationSource: reading.conversationSource || null,
             // fresh | updating | failed | quarantined | untracked | none — drives the "Updating…" pill.
             summaryState: reading.summaryState || null,
-            summaryGeneratedAt: reading.summaryGeneratedAt || null
+            summaryGeneratedAt: reading.summaryGeneratedAt || null,
+            // field | media | mixed | none: speech from people on site vs a screen in frame.
+            audioSource: reading.audioSource || null,
+            mediaWindows: Array.isArray(reading.mediaWindows) ? reading.mediaWindows : [],
+            mediaUntimed: reading.mediaUntimed || null
           }
         : raw.analysisState === 'queued'
           ? { state: 'queued', reason: 'This clip is being read now.' }

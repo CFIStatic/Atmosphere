@@ -26,6 +26,7 @@ import {
   type SpeakerIndex,
 } from '../audio/peoplePresent.js';
 import { resolveSpeakerDisplayName } from '../audio/speakerIdentity.js';
+import { tagSegmentSources, type MediaWindow } from '../audio/audioSource.js';
 import {
   PRIVACY_REDACTED_LABEL,
   privacyRedactionsFromStored,
@@ -62,6 +63,10 @@ export type ClipAskAction = {
 };
 
 export type ClipAskRecord = {
+  /** Moments a TV/laptop/phone in frame was playing (speech there is media, not field conversation). */
+  mediaWindows?: MediaWindow[] | null;
+  /** A playing screen described for the whole clip, without a time. */
+  mediaUntimed?: string | null;
   workDate?: string | null;
   phase?: string | null;
   company?: string | null;
@@ -208,6 +213,7 @@ Rules:
 11. The raw transcript is authoritative for what was said and how much. The AI summary of the conversation may be stale (built from an older transcript). When they disagree, follow the raw transcript and never repeat the summary's claim.
 12. COUNTS FIRST: when asked how many (lines, utterances, quotes, things said), the first sentence is the number, counted from the raw transcript lines ("There are **5** lines in the raw transcript."). Then list them if asked. Never open with a summary.
 13. NOT IN THE EVIDENCE: when the question assumes something the reading does not show (an object, a brand, a model, an install, a repair, a person, an event, a color or other visual detail), say so plainly in the first sentence ("Not shown" / "Not established") — e.g. "The footage on file does not show a ceiling light being installed, and no brand is visible or mentioned." Do not guess, do not name a brand or time that is not in the reading, and do not answer with a nearby detail as if it were the thing asked. If the reading says a detail is illegible or unclear, say that.
+15. MEDIA AUDIO: lines marked [media] (or a "Media audio" note) were heard from a TV, laptop, phone or radio in frame. They are not field conversation: never attribute them to the crew, homeowner or anyone on site, and never treat them as an agreement, price, commitment or work done. Who spoke is "unknown" unless the reading names them; never make up labels like "Speaker A".
 14. ANSWER FORMAT for a specific question: one sentence that answers it directly, then only the supporting quotes or events with their [m:ss] times. Never paste the whole transcript or every event for a narrow question. The AI summary is supplementary; never answer from it when a transcript line or timed event covers the question.
 
 ` + ASK_PROSE_FORMAT_RULES;
@@ -242,6 +248,8 @@ export function clipRecordFromEvidenceItem(item: {
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
     transcript: analysis?.transcript ?? null,
+    mediaWindows: Array.isArray(analysis?.mediaWindows) ? analysis.mediaWindows : null,
+    mediaUntimed: typeof analysis?.mediaUntimed === 'string' ? analysis.mediaUntimed : null,
     transcriptStatus: item.transcriptStatus ?? analysis?.transcriptStatus ?? null,
     privacyRedactions: analysis?.privacyRedactions ?? null,
     childPrivacyRedactions: analysis?.childPrivacyRedactions ?? null,
@@ -572,6 +580,26 @@ function conversationTopic(record: ClipAskRecord): string | null {
  * "How many lines were said?" — the number first, from the raw transcript,
  * then each line with its time. Never from the AI summary.
  */
+/** Which transcript lines were heard from a screen in frame. */
+function mediaTags(record: ClipAskRecord, rows: Array<{ at: number | null; text: string }>): boolean[] {
+  const windows = record.mediaWindows ?? [];
+  if (!windows.length && !record.mediaUntimed) return rows.map(() => false);
+  return tagSegmentSources(
+    rows.map((row) => ({ tSec: row.at, text: row.text })),
+    { audioSource: 'mixed', mediaWindows: windows, mediaUntimed: record.mediaUntimed ?? null },
+  ).map((row) => row.source === 'media');
+}
+
+const MEDIA_MARK = ' _(media: TV/screen in frame)_';
+
+function mediaNote(record: ClipAskRecord, mediaCount: number, total: number): string {
+  if (mediaCount > 0) {
+    return ` ${mediaCount === total ? 'All of them are' : `${mediaCount} of them ${mediaCount === 1 ? 'is' : 'are'}`} audio from a screen playing in frame (media), not field conversation.`;
+  }
+  if (record.mediaUntimed) return ' A screen was playing in the clip, so some lines may be media audio; who spoke is not established.';
+  return '';
+}
+
 export function speechCountAnswer(record: ClipAskRecord): string {
   record = speechSafeClipRecord(record);
   const rows = splitTranscript(record.transcript);
@@ -580,10 +608,11 @@ export function speechCountAnswer(record: ClipAskRecord): string {
     return 'There are **0** lines in the raw transcript. No speech was transcribed on this clip.';
   }
   const n = rows.length;
-  const head = `There ${n === 1 ? 'is' : 'are'} **${n}** ${n === 1 ? 'line' : 'lines'} in the raw transcript of this clip.`;
+  const media = mediaTags(record, rows);
+  const head = `There ${n === 1 ? 'is' : 'are'} **${n}** ${n === 1 ? 'line' : 'lines'} in the raw transcript of this clip.${mediaNote(record, media.filter(Boolean).length, n)}`;
   const list = rows.slice(0, 40).map((row, i) => {
     const seek = formatClipTime(row.at);
-    return `${i + 1}. ${seek ? `[${seek}] ` : ''}“${row.text}”`;
+    return `${i + 1}. ${seek ? `[${seek}] ` : ''}“${row.text}”${media[i] ? MEDIA_MARK : ''}`;
   });
   const more = n > 40 ? `\n\n(${n - 40} more lines in the transcript.)` : '';
   return `${head}\n\n${list.join('\n')}${more}`;
@@ -692,15 +721,25 @@ export function topicalSpeechAnswer(question: string, record: ClipAskRecord): st
     .filter((token) => !hits.some((entry) => tokens(entry.row.text).some((h) => tokensOverlap(token, h))))
     .slice(0, 3)
     .map((token) => `“${askedTerm(question, token)}”`);
+  const heardMedia = mediaTags(record, heard);
+  const mediaByRow = new Map(heard.map((row, i) => [row, heardMedia[i]]));
   const quotesOf = (list: typeof hits) =>
     list.map((entry) => {
       const seek = formatClipTime(entry.row.at);
-      return `- ${seek ? `[${seek}] ` : ''}“${entry.row.text}”`;
+      return `- ${seek ? `[${seek}] ` : ''}“${entry.row.text}”${mediaByRow.get(entry.row) ? MEDIA_MARK : ''}`;
     });
   // A yes/no question is only "yes" when one line carries everything asked;
   // a line that shares one word ("table") does not establish a price agreement.
   if (yesNo && unmatched.length) {
     return `No. Not established: the raw transcript (${n} ${n === 1 ? 'line' : 'lines'}) never mentions ${unmatched.join(' or ')} alongside ${subject}.\n\nClosest line${hits.length === 1 ? '' : 's'}, for context:\n${quotesOf(hits.slice(0, 3)).join('\n')}`;
+  }
+  // Every matching line was heard from a screen in frame: that is not the
+  // people on site saying it.
+  if (hits.every((entry) => mediaByRow.get(entry.row))) {
+    const lead = yesNo
+      ? `No, not by anyone on site. ${subject} only comes up${when} in audio from a screen playing in frame (media), not field conversation.`
+      : `${subject[0]?.toUpperCase() ?? ''}${subject.slice(1)} only comes up${when} in audio from a screen playing in frame (media), not field conversation.`;
+    return `${lead}\n\n${quotesOf(hits).join('\n')}`;
   }
   const missingNote = unmatched.length ? ` ${unmatched.join(' and ')} ${unmatched.length === 1 ? 'is' : 'are'} never mentioned.` : '';
   const lead = yesNo ? `Yes. ${subject} comes up${when}.` : `${subject[0]?.toUpperCase() ?? ''}${subject.slice(1)} comes up${when}.${missingNote}`;
@@ -943,7 +982,7 @@ function peopleFromRecord(record: ClipAskRecord): PeoplePresent {
       roomsMentioned: [],
       turns: (record.conversationTurns ?? []).map((t) => ({
         tSec: t.tSec ?? null,
-        speakerLabel: String(t.speakerLabel || 'Speaker A'),
+        speakerLabel: String(t.speakerLabel || 'unknown'),
         text: String(t.text || ''),
       })),
       commitments: [],
@@ -1145,8 +1184,18 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if (record.transcript) {
     const count = splitTranscript(record.transcript).length;
     lines.push(
-      `Raw transcript (authoritative; verbatim Whisper; ${count} ${count === 1 ? 'line' : 'lines'}; quote exactly; never invent dialogue):\n${record.transcript}`,
+      `Raw transcript (authoritative; verbatim Whisper; ${count} ${count === 1 ? 'line' : 'lines'}; quote exactly; never invent dialogue; speakers are unknown unless named):\n${record.transcript}`,
     );
+    const windows = record.mediaWindows ?? [];
+    if (windows.length) {
+      lines.push(
+        `Media audio (not field conversation): ${windows
+          .map((w) => `${formatClipTime(w.startSeconds)}–${formatClipTime(w.endSeconds)} a ${w.device} in frame is playing ("${w.evidence}")`)
+          .join('; ')}. Transcript lines in those moments are [media].`,
+      );
+    } else if (record.mediaUntimed) {
+      lines.push(`Media audio: a screen in frame is playing at some point ("${record.mediaUntimed}"); some lines may be media, not field conversation.`);
+    }
   } else if (isTranscriptPending(record.transcriptStatus)) {
     lines.push('Raw transcript: not ready yet.');
   } else {
