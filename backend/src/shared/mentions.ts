@@ -112,7 +112,9 @@ export function nameMatchesQuery(name: string, query: string): boolean {
 
 function boundaryAfter(text: string, length: number): boolean {
   const next = text[length] ?? '';
-  return next === '' || /[\s,.;:!?)]/.test(next);
+  if (next === '' || /[\s,.;:!?)]/.test(next)) return true;
+  // `@Jane's` and `@El Presidente's` end the name. An apostrophe inside the name does not.
+  return /^['’]s(?=$|[\s,.;:!?])/i.test(text.slice(length));
 }
 
 function membersMatching(query: string, roster: MentionMember[]): MentionMember[] {
@@ -229,9 +231,10 @@ export function resolveMentions(text: string, roster: MentionMember[]): MentionR
     }
     const token = rest.match(/^[A-Za-z0-9][A-Za-z0-9'’.\-]{0,60}/);
     if (!token) continue;
-    const matches = membersMatching(token[0], roster);
+    const query = token[0].replace(/['’]s$/i, '');
+    const matches = membersMatching(query, roster);
     if (matches.length === 1) pushMember(matches[0]!);
-    else if (matches.length > 1) pushAmbiguous(token[0], matches);
+    else if (matches.length > 1) pushAmbiguous(query, matches);
   }
 
   return { mentions, ambiguous };
@@ -318,46 +321,61 @@ export function asksForPersonRecord(question: string, names: string[] = []): boo
   return /\b(which|what|list|show|all)\b[\s\S]{0,60}\b(clips?|videos?|films?|footage|proofs?|uploads?)\b/.test(q);
 }
 
+const ABOUT_TOPIC = /\b(about|regarding|concerning)\b/;
+const FILM_VERB = /\b(film|filmed|upload|uploaded|record|recorded)\b/;
+const FIND_VERB = /\b(find|found|finding|findings)\b/;
+
+/** Words that do not make "what did they record" into a question about one topic. */
+const ACTIVITY_FILLER = new Set([
+  ...TOPIC_STOP,
+  'file', 'files', 'job', 'jobs', 'clip', 'clips', 'video', 'videos', 'footage',
+  'them', 'these', 'those', 'all', 'any', 'just', 'there', 'here',
+]);
+
+/** True when words after the verb name a particular topic ("the leak", "the panel"). */
+function leftoverTopic(question: string, verb: RegExp): boolean {
+  const parts = question.split(verb);
+  const after = parts.length > 1 ? parts[parts.length - 1]! : '';
+  return after
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .some((word) => word.length > 2 && !ACTIVITY_FILLER.has(word));
+}
+
 /**
- * Questions that want the person's work on the file, not a keyword hit.
- * "what had @El Presidente done in this file", "summarize @Name's work",
- * and "what did they find" all count. A yes/no like "did he finish the
- * electrical job?" does not — that still looks for the topic.
+ * Broad "what did they do / summarize their work / what did they record" questions.
+ * A specific ask ("what did they say about the leak?", a yes/no, one clip or topic)
+ * stays a direct answer. Findings are separate.
  */
 export function asksForPersonActivity(question: string, names: string[] = []): boolean {
   const q = stripMentionMarks(question, names).toLowerCase();
-  if (asksForPersonRecord(question, names)) return true;
+  if (ABOUT_TOPIC.test(q)) return false;
+  if (/^\s*(did|does|do|is|are|was|were|has|have|had)\b/.test(q)) return false;
+  if (asksForFindings(question, names)) return false;
   if (/\b(activity|activities)\b/.test(q)) return true;
   if (/\bsummar/.test(q) && /\bwork\b/.test(q)) return true;
-  if (/\b(what|which)\b[\s\S]{0,80}\b(do|did|done|doing)\b/.test(q)) return true;
-  if (/\b(what|which)\b[\s\S]{0,80}\b(film|filmed|upload|uploaded|say|said|find|found|record|recorded)\b/.test(q)) {
-    return true;
-  }
-  if (
-    /\b(what|which)\b[\s\S]{0,40}\b(they|he|she)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b/.test(
-      q,
-    )
-  ) {
-    return true;
-  }
-  return (
-    /\b(what|which)\b[\s\S]{0,40}\b(do|did|done|find|found|film|filmed|upload|uploaded|say|said|record|recorded)\b[\s\S]{0,24}\b(they|he|she)\b/.test(
-      q,
-    )
-  );
+  // "did" here is the auxiliary in "what did they record", not the question "what did they do".
+  if (/\b(what|which)\b[\s\S]{0,80}\b(done|doing)\b/.test(q) && !leftoverTopic(q, /\b(done|doing)\b/)) return true;
+  if (/\b(what|which)\b[\s\S]{0,80}\bdo\b/.test(q) && !leftoverTopic(q, /\bdo\b/)) return true;
+  const filmed =
+    (/\b(what|which)\b[\s\S]{0,80}\b(film|filmed|upload|uploaded|record|recorded)\b/.test(q) ||
+      /\b(what|which)\b[\s\S]{0,40}\b(they|he|she)\b[\s\S]{0,40}\b(film|filmed|upload|uploaded|record|recorded)\b/.test(q) ||
+      /\b(what|which)\b[\s\S]{0,40}\b(film|filmed|upload|uploaded|record|recorded)\b[\s\S]{0,24}\b(they|he|she)\b/.test(q));
+  if (!filmed) return false;
+  return !leftoverTopic(q, FILM_VERB);
 }
 
-/** "what did they find" wants findings and issues, not the activity rundown. */
+/** "what did they find" wants findings, not the activity rundown and not a topic search. */
 export function asksForFindings(question: string, names: string[] = []): boolean {
   const q = stripMentionMarks(question, names).toLowerCase();
-  return /\b(find|found|finding|findings|issue|issues|notable)\b/.test(q);
+  if (ABOUT_TOPIC.test(q)) return false;
+  if (!/\b(what|which)\b[\s\S]{0,80}\b(find|found|finding|findings)\b/.test(q)) return false;
+  return !leftoverTopic(q, FIND_VERB);
 }
 
-/** True when this person filmed, wrote, or opened something — not merely a name on a roster. */
+/** True when this person filmed, wrote, or opened something. A tag in someone else's clip does not count. */
 export function personHasActivity(person: { items: Array<{ kind: string; captured?: boolean }> }): boolean {
-  return person.items.some(
-    (item) => item.captured || item.kind === 'video' || item.kind === 'note' || item.kind === 'log' || item.kind === 'task',
-  );
+  return person.items.some((item) => item.captured === true);
 }
 
 /** "did he finish the electrical job?" → "electrical job". */
@@ -675,7 +693,8 @@ export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson:
   const name = person.name.trim() || 'That person';
   const who = askerIsPerson ? 'you' : name;
   const zone = activityZone(person);
-  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
+  const tagged = person.items.filter((item) => item.kind === 'video' && !item.captured).sort(chrono);
   const jobs = person.items.filter((item) => item.kind === 'job');
   const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
   const scope = String(person.jobTitle ?? '').trim();
@@ -725,6 +744,9 @@ export function writeActivityAnswer(person: PersonMentionContext, askerIsPerson:
   ].filter((event) => event.text);
   events.sort((a, b) => a.sort.localeCompare(b.sort) || a.text.localeCompare(b.text));
   const lines = events.map((event) => event.text);
+  for (const video of tagged) {
+    lines.push(`Named in ${cleanMentionTitle(video.title)}, which someone else recorded.`);
+  }
   for (const title of extraJobs) lines.push(`Also on ${title}.`);
   return [overview, ...lines].join('\n');
 }
@@ -737,7 +759,7 @@ export function writeFindingsAnswer(person: PersonMentionContext, askerIsPerson:
   const who = askerIsPerson ? 'you' : name;
   const zone = activityZone(person);
   const scope = String(person.jobTitle ?? '').trim();
-  const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+  const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
   const overview = scope
     ? `On ${scope}, here is what turned up in the clips ${who} recorded.`
     : `Here is what turned up in the clips ${who} recorded.`;
@@ -849,7 +871,7 @@ export function answerFromMentionContext(
 
   for (const person of named) {
     const who = person.name.trim() || 'That person';
-    const videos = person.items.filter((item) => item.kind === 'video').slice(0, 20);
+    const videos = person.items.filter((item) => item.kind === 'video' && item.captured).slice(0, 20);
     const inventory = asksForPersonRecord(question, [person.name]);
     if (
       asksForFindings(question, [person.name]) &&
@@ -877,8 +899,17 @@ export function answerFromMentionContext(
     }
     const topical = person.items.filter((item) => item.relevant).slice(0, 12);
     if (!topical.length) {
+      const scope = cleanMentionTitle(String(person.jobTitle ?? '')).toLowerCase();
       const contained = person.items.length
-        ? person.items.map((item) => item.title)
+        ? person.items.map((item) => {
+            if (item.title === 'job.created') return '';
+            if (item.kind === 'job') {
+              const title = displayJobTitle(cleanMentionTitle(item.title));
+              if (scope && title.toLowerCase() === scope) return '';
+              return title;
+            }
+            return cleanMentionTitle(item.title);
+          })
         : (person.fileContains ?? []);
       blocks.push(unmatchedMentionSentence(who, contained));
       continue;
@@ -894,20 +925,50 @@ export function answerFromMentionContext(
 }
 
 export const ACTIVITY_DOSSIER_MARK = 'ACTIVITY DOSSIER';
+export const ACTIVITY_RUNDOWN_MARK = 'ACTIVITY RUNDOWN';
+export const ACTIVITY_FINDINGS_MARK = 'ACTIVITY FINDINGS';
 
 /**
- * Shared by the dossier and the model system prompt so a configured model
- * writes the same shape as the grounded answer.
+ * Used only when the question is a broad activity rundown.
+ * A specific question must not be forced into this shape.
  */
 export const ACTIVITY_ANSWER_INSTRUCTIONS =
   'Write a one-line overview, then a short chronological rundown. ' +
   'Each clip is one sentence of about 25 words plus at most one key detail. ' +
   'Put other activity in that same chronological order as full dated sentences, for example "Sep 17: You opened this job file and created the Field Capture party." ' +
   'Times in the dossier are already in the local timezone. Never rewrite them as UTC. ' +
-  'If the question asks what they found, answer the findings and issues from the clips. Do not repeat the activity rundown. ' +
+  'Clips marked as named-in were not recorded by this person. Do not count them as recorded. ' +
   'Stay strictly grounded in this dossier. Do not invent clips, times, people, quotes, or events. ' +
   'If it says to address them as "you", do that. ' +
   'Do not repeat the job title after every clip, do not list a #job-number row, do not print transcript fragments as their own lines, and do not emit ⟦sources: …⟧ or [[web:…]].';
+
+export const ACTIVITY_FINDINGS_INSTRUCTIONS =
+  'Answer what they found, directly, from the findings and issues in this dossier. ' +
+  'Do not repeat the activity rundown. ' +
+  'Stay strictly grounded in this dossier. Do not invent findings. ' +
+  'If it says to address them as "you", do that. ' +
+  'Do not emit ⟦sources: …⟧ or [[web:…]].';
+
+export const ACTIVITY_CONTEXT_INSTRUCTIONS =
+  'The ACTIVITY DOSSIER is background on that person. Answer the actual question. ' +
+  'Do not turn a specific question into a chronological activity rundown. ' +
+  'Stay strictly grounded in the dossier and the job file. Do not invent clips, times, quotes, or events. ' +
+  'If it says to address them as "you", do that. ' +
+  'Do not emit ⟦sources: …⟧ or [[web:…]].';
+
+/** System-prompt addendum for a mention supplement. Specific questions are not forced into a rundown. */
+export function activitySystemAddendum(supplement: string): string | null {
+  if (/\bACTIVITY RUNDOWN\b/.test(supplement)) {
+    return `\n\nThe question asks what this person did. Answer ONLY from the ACTIVITY DOSSIER. ${ACTIVITY_ANSWER_INSTRUCTIONS}`;
+  }
+  if (/\bACTIVITY FINDINGS\b/.test(supplement)) {
+    return `\n\nThe question asks what they found. ${ACTIVITY_FINDINGS_INSTRUCTIONS}`;
+  }
+  if (/\bACTIVITY DOSSIER\b/.test(supplement)) {
+    return `\n\n${ACTIVITY_CONTEXT_INSTRUCTIONS}`;
+  }
+  return null;
+}
 
 /**
  * Everything attributable to the person, for the model to write from.
@@ -915,7 +976,7 @@ export const ACTIVITY_ANSWER_INSTRUCTIONS =
  */
 export function formatActivityDossier(
   people: PersonMentionContext[],
-  options?: { askerUserId?: string | null },
+  options?: { askerUserId?: string | null; mode?: 'rundown' | 'findings' | 'context' },
 ): string {
   if (!people.length) return '';
   const sections = people.map((person) => {
@@ -933,7 +994,8 @@ export function formatActivityDossier(
       return `${header}\nNothing on this job is attributed to this person.`;
     }
     const zone = activityZone(person);
-    const videos = person.items.filter((item) => item.kind === 'video').sort(chrono);
+    const videos = person.items.filter((item) => item.kind === 'video' && item.captured).sort(chrono);
+    const tagged = person.items.filter((item) => item.kind === 'video' && !item.captured).sort(chrono);
     const jobs = person.items.filter((item) => item.kind === 'job');
     const rest = person.items.filter((item) => item.kind !== 'video' && item.kind !== 'job');
     const subject = asker ? 'You' : person.name;
@@ -956,6 +1018,9 @@ export function formatActivityDossier(
     }
     timeline.sort((a, b) => a.sort.localeCompare(b.sort) || a.text.localeCompare(b.text));
     lines.push(...timeline.map((event) => event.text));
+    for (const video of tagged) {
+      lines.push(`Named in ${cleanMentionTitle(video.title)}, which someone else recorded.`);
+    }
     const scope = cleanMentionTitle(String(person.jobTitle ?? '')).toLowerCase();
     for (const job of jobs) {
       const title = displayJobTitle(cleanMentionTitle(job.title));
@@ -964,7 +1029,16 @@ export function formatActivityDossier(
     }
     return `${header}\n${lines.join('\n')}`;
   });
-  return `${sections.join('\n\n')}\n\n${ACTIVITY_ANSWER_INSTRUCTIONS}`;
+  const mode = options?.mode ?? 'context';
+  const mark =
+    mode === 'rundown' ? ACTIVITY_RUNDOWN_MARK : mode === 'findings' ? ACTIVITY_FINDINGS_MARK : '';
+  const instructions =
+    mode === 'rundown'
+      ? ACTIVITY_ANSWER_INSTRUCTIONS
+      : mode === 'findings'
+        ? ACTIVITY_FINDINGS_INSTRUCTIONS
+        : ACTIVITY_CONTEXT_INSTRUCTIONS;
+  return `${sections.join('\n\n')}${mark ? `\n\n${mark}` : ''}\n\n${instructions}`;
 }
 
 export function formatMentionPrompt(people: PersonMentionContext[]): string {

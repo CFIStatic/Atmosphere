@@ -9,6 +9,7 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import {
   ambiguitySentence,
   answerFromMentionContext,
+  asksForFindings,
   asksForPersonActivity,
   carryPriorMention,
   cleanMentionTitle,
@@ -580,7 +581,7 @@ export async function loadPersonContext(
     evidenceJobIds.length
       ? selectRows(db, 'crm_jobs', (query) =>
           query
-            .select('id, job_number, title, status, work_type, owner_id, created_by, updated_at')
+            .select('id, job_number, title, status, work_type, owner_id, created_by, created_at, updated_at')
             .eq('org_id', orgId)
             .in('id', evidenceJobIds),
         )
@@ -692,6 +693,12 @@ export async function loadPersonContext(
     const seen = new Set<string>();
     const push = (item: MentionItem) => {
       if (scopeJobId && item.jobId !== scopeJobId && item.id !== scopeJobId) return;
+      if (
+        item.title === 'job.created' &&
+        items.some((existing) => existing.title === 'job.created' && existing.jobId === item.jobId)
+      ) {
+        return;
+      }
       const key = `${item.kind}:${item.id}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -714,6 +721,17 @@ export async function loadPersonContext(
         status: job.status ?? null,
         captured: owns,
       });
+      if (String(job.created_by ?? '') === person.userId && job.created_at) {
+        push({
+          kind: 'log',
+          id: `opened:${id}`,
+          jobId: id,
+          title: 'job.created',
+          text: '',
+          at: job.created_at,
+          captured: true,
+        });
+      }
     }
 
     const aliases = aliasesByUser.get(person.userId) ?? new Set<string>();
@@ -860,7 +878,10 @@ export async function loadPersonContext(
       });
     }
 
-    const ranked = orderMentionItems(items, input.question, now, [person.name]).slice(0, 40);
+    const rankedAll = orderMentionItems(items, input.question, now, [person.name]);
+    const filmed = rankedAll.filter((item) => item.kind === 'video' && item.captured);
+    const others = rankedAll.filter((item) => !(item.kind === 'video' && item.captured));
+    const ranked = [...filmed, ...others.slice(0, 40)];
     const fileContains = scopeJobId
       ? [
           ...jobs.map((job) => [job.job_number ? `#${job.job_number}` : '', job.title].filter(Boolean).join(' ')),
@@ -960,8 +981,12 @@ export async function prepareMentionAsk(
   const askerUserId = input.askerUserId ?? null;
   const grounded = answerFromMentionContext(input.question, people, { askerUserId });
   const hasActivity = people.some((person) => personHasActivity(person));
+  const names = people.map((person) => person.name);
+  const findings = names.some((name) => asksForFindings(input.question, [name]));
+  const rundown = !findings && names.some((name) => asksForPersonActivity(input.question, [name]));
+  const mode = findings ? 'findings' : rundown ? 'rundown' : 'context';
   const dossier = hasActivity
-    ? formatActivityDossier(people, { askerUserId })
+    ? formatActivityDossier(people, { askerUserId, mode })
     : formatMentionPrompt(people);
   const supplement = [which, absent, dossier].filter(Boolean).join('\n\n');
   const withPrefix = (answer: string) => [which, absent, answer].filter(Boolean).join('\n\n');

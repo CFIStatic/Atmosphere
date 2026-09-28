@@ -10,6 +10,7 @@ import {
   mentionDisplayName,
   mentionToken,
   ACTIVITY_ANSWER_INSTRUCTIONS,
+  activitySystemAddendum,
   asksForFindings,
   asksForPersonActivity,
   asksForPersonRecord,
@@ -646,6 +647,7 @@ function tiffanyTables() {
         work_type: 'restoration',
         owner_id: null,
         created_by: EL,
+        created_at: '2026-09-17T16:37:28.774Z',
         updated_at: '2026-09-21T00:00:00.000Z',
       },
     ],
@@ -839,8 +841,11 @@ test('what someone had done is a dossier, not a canned miss', async () => {
   assert.equal(asksForPersonActivity('what had @El Presidente done in this file', ['El Presidente']), true);
   assert.equal(asksForPersonActivity('what did @El Presidente do', ['El Presidente']), true);
   assert.equal(asksForPersonActivity("summarize @El Presidente's work", ['El Presidente']), true);
-  assert.equal(asksForPersonActivity('what did they find', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('what did they find', ['El Presidente']), false);
   assert.equal(asksForFindings('what did they find', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('what did @El Presidente say about the leak?', ['El Presidente']), false);
+  assert.equal(asksForPersonActivity('what did @El Presidente record', ['El Presidente']), true);
+  assert.equal(asksForPersonActivity('what did @El Presidente record the electrical panel', ['El Presidente']), false);
   assert.equal(asksForFindings('what had @El Presidente done in this file', ['El Presidente']), false);
   assert.equal(asksForPersonActivity('did he record the electrical panel?', ['El Presidente']), false);
 
@@ -933,11 +938,130 @@ test('a configured model receives the activity dossier, not a canned answer', as
   assert.match(prep.supplement, /strictly grounded in this dossier/);
   assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /one-line overview/);
   assert.match(ACTIVITY_ANSWER_INSTRUCTIONS, /about 25 words/);
+  assert.match(activitySystemAddendum(prep.supplement) ?? '', /one-line overview/);
   assert.match(prep.fallbackAnswer ?? '', /you recorded 3 videos between Sep 17 and Sep 21/);
   const here = dirname(fileURLToPath(import.meta.url));
   const jobAsk = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
   const clipAsk = readFileSync(join(here, '../src/shared/clipAsk.ts'), 'utf8');
-  assert.match(jobAsk, /ACTIVITY_ANSWER_INSTRUCTIONS/);
-  assert.match(clipAsk, /ACTIVITY_ANSWER_INSTRUCTIONS/);
+  assert.match(jobAsk, /activitySystemAddendum/);
+  assert.match(clipAsk, /activitySystemAddendum/);
   assert.doesNotMatch(prep.supplement, /It's simple|Her entire life|But I know they have their ways/);
+});
+
+test('a specific question is answered directly, not as an activity rundown', async () => {
+  const jane = resolveMentions("summarize @Jane's work", [{ userId: JANE, fullName: 'Jane Alvarez' }]);
+  assert.equal(jane.mentions[0]?.userId, JANE);
+  assert.equal(jane.mentions[0]?.name, 'Jane Alvarez');
+  const possessive = resolveMentions("what did @El Presidente's crew film", [
+    { userId: EL, fullName: 'El Presidente' },
+  ]);
+  assert.equal(possessive.mentions[0]?.userId, EL);
+
+  const db = fakeDb(tiffanyTables());
+  const question = 'what did @El Presidente say about the leak?';
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question,
+    askerUserId: EL,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(prep.mentions[0]?.userId, EL);
+  const answer = prep.directAnswer ?? '';
+  assert.match(answer, /doesn't have that on file|leak/i);
+  assert.doesNotMatch(answer, /you recorded 3 videos/);
+  assert.doesNotMatch(answer, /Sep 17: You opened this job file/);
+  assert.doesNotMatch(prep.supplement, /one-line overview/);
+  assert.match(prep.supplement, /Answer the actual question/);
+
+  const modeled = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question,
+    askerUserId: EL,
+    anthropicApiKey: 'test-key-not-a-real-secret',
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.equal(modeled.directAnswer, null);
+  assert.match(modeled.supplement, /ACTIVITY DOSSIER/);
+  assert.match(modeled.supplement, /Answer the actual question/);
+  assert.doesNotMatch(modeled.supplement, /ACTIVITY RUNDOWN/);
+  assert.doesNotMatch(modeled.supplement, /one-line overview/);
+  assert.match(modeled.fallbackAnswer ?? '', /doesn't have that on file|leak/i);
+  assert.doesNotMatch(modeled.fallbackAnswer ?? '', /you recorded 3 videos/);
+  assert.match(activitySystemAddendum(modeled.supplement) ?? '', /Answer the actual question/);
+  assert.doesNotMatch(activitySystemAddendum(modeled.supplement) ?? '', /one-line overview/);
+});
+
+test('filmed clips are not dropped when other file notes outrank them', async () => {
+  const notes = Array.from({ length: 45 }, (_, index) => ({
+    id: `file-note-${index}`,
+    org_id: ORG_A,
+    job_id: JOB_TIFFANY,
+    author_id: EL,
+    author_label: 'El Presidente',
+    body: 'Updated the file notes for this file.',
+    created_at: `2026-09-20T00:${String(index % 60).padStart(2, '0')}:00.000Z`,
+  }));
+  const db = fakeDb({ ...tiffanyTables(), job_messages: notes });
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what had @El Presidente done in this file',
+    askerUserId: EL,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  const answer = prep.directAnswer ?? '';
+  assert.match(answer, /Sep 17 office recording/);
+  assert.match(answer, /Sep 21 tabletop close-up/);
+  assert.match(answer, /Sep 21 home walkthrough/);
+  assert.match(answer, /you recorded 3 videos/);
+});
+
+test('a clip someone was only tagged in is not counted as recorded', async () => {
+  const tables = tiffanyTables();
+  tables.job_proofs.push({
+    id: '99999999-9999-4999-8999-999999999999',
+    org_id: ORG_A,
+    job_id: JOB_TIFFANY,
+    party_id: 'party-other',
+    work_date: '2026-09-22',
+    phase: 'after',
+    state: 'analysed',
+    title: 'Tagged only roof mention',
+    ai_summary: 'Another crew filmed the roof.',
+    transcript_text: `@[El Presidente](mention:${EL}) stood nearby.`,
+    narration_text: null,
+    ai_findings: null,
+    device_metadata: {},
+    captured_at: '2026-09-22T18:00:00.000Z',
+    received_at: '2026-09-22T18:05:00.000Z',
+    deleted_at: null,
+  });
+  const db = fakeDb(tables);
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what had @El Presidente done in this file',
+    askerUserId: EL,
+    now: new Date('2026-09-23T00:00:00.000Z'),
+  });
+  const answer = prep.directAnswer ?? '';
+  assert.match(answer, /you recorded 3 videos/);
+  assert.doesNotMatch(answer, /recorded 4 videos/);
+  assert.match(answer, /Named in Tagged only roof mention, which someone else recorded/);
+});
+
+test('party and job events keep a date without a memory row', async () => {
+  const tables = tiffanyTables();
+  tables.memory_events = [];
+  const db = fakeDb(tables);
+  const prep = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_TIFFANY,
+    question: 'what had @El Presidente done in this file',
+    askerUserId: EL,
+    now: new Date('2026-09-22T00:00:00.000Z'),
+  });
+  assert.match(prep.directAnswer ?? '', /Sep 17: You opened this job file and created the Field Capture party/);
 });
