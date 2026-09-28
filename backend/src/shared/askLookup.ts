@@ -1095,6 +1095,27 @@ export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null |
   return out;
 }
 
+/**
+ * Cap for the stable job block. Small files stay whole. Larger files keep
+ * every clip's date, title, and summary, then as many redacted transcripts
+ * as fit, in catalog order so the cached prefix does not change per question.
+ */
+export const ASK_CONTEXT_BUDGET = 14_000;
+
+function renderClipCard(clip: AskLookupClip, catalog: AskLookupCatalog, withTranscript: boolean): string {
+  const when = clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated';
+  const preview = clipAskPreview(clip);
+  const summary = trim(preview.summary);
+  return [
+    `- ${when} — ${clip.title}`,
+    summary ? `  Summary: ${summary}` : '',
+    preview.findings ? `  Findings: ${preview.findings}` : '',
+    withTranscript ? (preview.transcript ? `  Transcript: ${preview.transcript}` : '  Transcript: none') : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 /** Project, address, client, people, history, and every clip's redacted transcript. */
 export function formatAskJobContext(catalog: AskLookupCatalog): string {
   const lines: string[] = [];
@@ -1115,34 +1136,41 @@ export function formatAskJobContext(catalog: AskLookupCatalog): string {
   const clips = clipsInScope(catalog);
   if (!clips.length) {
     lines.push('Clips: none');
-  } else {
-    const rendered = clips.map((clip) => {
-      const when = clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated';
-      const preview = clipAskPreview(clip);
-      const summary = trim(preview.summary);
-      return [
-        `- ${when} — ${clip.title}`,
-        summary ? `  Summary: ${summary}` : '',
-        preview.findings ? `  Findings: ${preview.findings}` : '',
-        preview.transcript ? `  Transcript: ${preview.transcript}` : '  Transcript: none',
-      ]
-        .filter(Boolean)
-        .join('\n');
-    });
-    lines.push(`Clips:\n${rendered.join('\n')}`);
+    return lines.join('\n');
   }
-  return lines.join('\n').slice(0, 24_000);
+  const fullCards = clips.map((clip) => renderClipCard(clip, catalog, true));
+  const full = [...lines, `Clips:\n${fullCards.join('\n')}`].join('\n');
+  if (full.length <= ASK_CONTEXT_BUDGET) return full;
+
+  const compactCards = clips.map((clip) => renderClipCard(clip, catalog, false));
+  let packed = [...lines, `Clips:\n${compactCards.join('\n')}`].join('\n');
+  for (const clip of clips) {
+    const transcript = clipAskPreview(clip).transcript;
+    if (!transcript) continue;
+    const line = `\n  Transcript (${clip.title}): ${transcript}`;
+    if (packed.length + line.length > ASK_CONTEXT_BUDGET) break;
+    packed += line;
+  }
+  return packed.slice(0, ASK_CONTEXT_BUDGET);
 }
 
-/** Titles, redacted transcripts, and the prior thread. Secrets in older turns are scrubbed. */
-export function buildLookupUserPrompt(input: {
+export type LookupPromptInput = {
   question: string;
   catalog: AskLookupCatalog;
   history?: Array<{ role?: string | null; text?: string | null }> | null;
   /** When a short follow-up was rewritten from the thread. */
   resolved?: string | null;
   extra?: string | null;
-}): string {
+};
+
+function lookupPromptSections(input: LookupPromptInput): {
+  scope: string;
+  context: string;
+  extra: string;
+  turns: string;
+  follow: string;
+  question: string;
+} {
   const turns = (input.history ?? [])
     .filter((turn) => trim(turn.text))
     .slice(-8)
@@ -1163,14 +1191,33 @@ export function buildLookupUserPrompt(input: {
     resolved && resolved.toLowerCase() !== input.question.trim().toLowerCase()
       ? `This follow-up refers to: ${resolved}`
       : '';
-  return [
+  return {
     scope,
-    `Job context:\n${formatAskJobContext(input.catalog)}`,
-    input.extra?.trim() ? input.extra.trim() : '',
-    turns ? `Earlier turns in this chat (questions, answers, and the clips they cited):\n${turns}` : '',
+    context: `Job context:\n${formatAskJobContext(input.catalog)}`,
+    extra: input.extra?.trim() ? input.extra.trim() : '',
+    turns: turns ? `Earlier turns in this chat (questions, answers, and the clips they cited):\n${turns}` : '',
     follow,
-    `Question: ${input.question}`,
-  ]
+    question: `Question: ${input.question}`,
+  };
+}
+
+/**
+ * Stable job context (cached) and the volatile turn (question, thread, memory).
+ * The stable block does not include the question, so repeat questions on the
+ * same file share a cache prefix.
+ */
+export function splitLookupPrompt(input: LookupPromptInput): { stable: string; volatile: string } {
+  const parts = lookupPromptSections(input);
+  return {
+    stable: parts.context,
+    volatile: [parts.scope, parts.extra, parts.turns, parts.follow, parts.question].filter(Boolean).join('\n\n'),
+  };
+}
+
+/** Titles, redacted transcripts, and the prior thread. Secrets in older turns are scrubbed. */
+export function buildLookupUserPrompt(input: LookupPromptInput): string {
+  const parts = lookupPromptSections(input);
+  return [parts.scope, parts.context, parts.extra, parts.turns, parts.follow, parts.question]
     .filter(Boolean)
     .join('\n\n');
 }

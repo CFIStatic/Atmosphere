@@ -789,10 +789,19 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     });
     assert.ok(anthropicBodies.length >= 2, `anthropic calls ${anthropicBodies.length}`);
     const first = anthropicBodies[0]!;
-    assert.equal((first.thinking as { type?: string } | undefined)?.type, 'adaptive');
+    assert.equal(first.model, 'claude-sonnet-5');
+    assert.equal(first.thinking, undefined);
+    assert.equal(first.output_config, undefined);
     assert.equal(JSON.stringify(first).includes('budget_tokens'), false);
-    assert.equal((first.output_config as { effort?: string } | undefined)?.effort, 'high');
-    assert.ok(Number(first.max_tokens) >= 16_000);
+    assert.equal(Number(first.max_tokens), 4096);
+    const cachedSystem = first.system as Array<{ text?: string; cache_control?: { type?: string; ttl?: string } }>;
+    assert.ok(Array.isArray(cachedSystem));
+    assert.equal(cachedSystem[0]?.cache_control?.type, 'ephemeral');
+    assert.equal(cachedSystem[1]?.cache_control?.type, 'ephemeral');
+    assert.match(cachedSystem.map((block) => block.text ?? '').join('\n'), /Job context/);
+    assert.match(cachedSystem[0]?.text ?? '', /Start with the answer/);
+    assert.doesNotMatch(cachedSystem[0]?.text ?? '', /Use them before you write/);
+    assert.doesNotMatch(cachedSystem.map((block) => block.text ?? '').join('\n'), /Question:/);
     const second = anthropicBodies[1]!;
     const messages = second.messages as Array<{ role: string; content: unknown }>;
     const assistant = messages.find((message) => message.role === 'assistant');
@@ -806,6 +815,21 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     assert.equal(toolBlocks[0]?.tool_use_id, 'toolu_sep21');
     assert.match(result.answer, /all on paper/i);
     assert.equal(geminiBodies.length, 0);
+
+    anthropicBodies.length = 0;
+    await answerFromAskLookup({
+      question: 'Compare the visits and draft an email to the homeowner',
+      catalog: file,
+      anthropicApiKey: 'sk-ant-test-shape-key',
+      fetchFn,
+    });
+    const deep = anthropicBodies[0]!;
+    assert.match(String((deep.system as Array<{ text?: string }>)[0]?.text ?? ''), /Use them before you write/);
+    assert.equal(deep.model, 'claude-opus-5');
+    assert.equal((deep.thinking as { type?: string } | undefined)?.type, 'adaptive');
+    assert.equal((deep.output_config as { effort?: string } | undefined)?.effort, 'high');
+    assert.ok(Number(deep.max_tokens) >= 16_000);
+    assert.equal(JSON.stringify(deep).includes('budget_tokens'), false);
 
     anthropicBodies.length = 0;
     geminiBodies.length = 0;

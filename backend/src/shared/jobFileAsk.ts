@@ -10,6 +10,7 @@
  * otherwise a grounded lookup still answers from the same text.
  */
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -40,6 +41,7 @@ import {
   formatActionsTrailer,
   formatAskToolResultsForModel,
   parseJobFieldUpdatesFromQuestion,
+  partitionAskTools,
   pickAskToolsHeuristically,
   type AskToolContext,
   type AskToolResult,
@@ -549,6 +551,8 @@ export async function answerFromJobFile(input: {
    * get/update, punch list, drafts). Updates are office-only.
    */
   toolContext?: AskToolContext | null;
+  /** Per-turn timings. Tool inputs are not recorded. */
+  timing?: AskTurnClock | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -559,6 +563,10 @@ export async function answerFromJobFile(input: {
   /** True when the reply came from the lookup tools, including a failed-model grounding. */
   answeredFromLookup?: boolean;
 }> {
+  const emit = (text: string) => {
+    if (text) input.timing?.markFirstToken();
+    input.onToken?.(text);
+  };
   const grounded = groundedJobFileAnswer(input.question, input.file);
   const groundedOn = countJobFileSources(input.file);
   const apiKey = (input.apiKey ?? '').trim();
@@ -575,7 +583,7 @@ export async function answerFromJobFile(input: {
   // search, no model star soup / google.com junk citations.
   if (looksLikePureWebCapabilityAsk(input.question)) {
     const answer = professionalWebCapabilityAnswer(input.question);
-    input.onToken?.(answer);
+    emit(answer);
     return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
   }
 
@@ -584,7 +592,8 @@ export async function answerFromJobFile(input: {
   let webHits: AskWebHit[] = [];
   if (input.toolContext) {
     const picks = pickAskToolsHeuristically(input.question, input.toolContext.access);
-    for (const name of picks) {
+    const { sequential, parallel } = partitionAskTools(picks);
+    const runTool = async (name: (typeof picks)[number]) => {
       const rawInput =
         name === 'web_search'
           ? { query: input.question }
@@ -601,19 +610,23 @@ export async function answerFromJobFile(input: {
                       input.question,
                   }
                 : {};
+      const started = performance.now();
       const result = await executeAskTool(name, rawInput, {
-        ...input.toolContext,
-        fetchFn: input.fetchFn ?? input.toolContext.fetchFn,
+        ...input.toolContext!,
+        fetchFn: input.fetchFn ?? input.toolContext!.fetchFn,
         file: input.file,
       });
-      toolResults.push(result);
-    }
+      input.timing?.addTool(name, performance.now() - started);
+      return result;
+    };
+    for (const name of sequential) toolResults.push(await runTool(name));
+    if (parallel.length) toolResults.push(...(await Promise.all(parallel.map((name) => runTool(name)))));
     webHits = collectWebHitsFromToolResults(toolResults);
   }
 
   const mentionScoped = Boolean(trim(input.file.mentionSupplement));
   if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
-    input.onToken?.(grounded);
+    emit(grounded);
     return { ...empty, answer: grounded, groundedOn: 0, toolResults };
   }
 
@@ -639,7 +652,7 @@ export async function answerFromJobFile(input: {
     preferJobFileGroundedFastPath(input.question, grounded) &&
     !webHits.length
   ) {
-    input.onToken?.(grounded);
+    emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
   if (!isAskModelConfigured(apiKey || null) && !(input.lookup && isLongMemoryQuestion(input.question))) {
@@ -652,16 +665,16 @@ export async function answerFromJobFile(input: {
           : '');
       const trailer = formatActionsTrailer(toolResults);
       const answer = trailer ? `${prose}\n\n${trailer}` : prose;
-      input.onToken?.(answer);
+      emit(answer);
       return { ...empty, answer, groundedOn, toolResults, webHits };
     }
-    input.onToken?.(grounded);
+    emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
 
   const record = formatJobFileRecord(input.file).trim();
   if (!input.lookup && !record && !toolResults.length && !webHits.length) {
-    input.onToken?.(grounded);
+    emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
 
@@ -700,9 +713,10 @@ export async function answerFromJobFile(input: {
       extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,
-      onToken: input.onToken,
+      onToken: emit,
       onStatus: input.onStatus,
       signal: input.signal,
+      timing: input.timing,
     });
     let answer = normalizeAskProse(looked.answer);
     answer = normalizeAskWebCitations(answer, webHits, {
@@ -748,7 +762,7 @@ export async function answerFromJobFile(input: {
     user,
     anthropicApiKey: apiKey || null,
     mode: 'interactive',
-    onToken: input.onToken,
+    onToken: emit,
     fetchFn: input.fetchFn,
   });
   if (!completed) {
@@ -756,7 +770,7 @@ export async function answerFromJobFile(input: {
     const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : grounded;
     const trailer = formatActionsTrailer(toolResults);
     const answer = trailer ? `${prose}\n\n${trailer}` : prose;
-    input.onToken?.(answer);
+    emit(answer);
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
   let answer = normalizeAskProse(completed.text);

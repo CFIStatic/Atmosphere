@@ -7,7 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
-import { completeAskText } from '../lib/askModel.js';
+import { askFastAnthropicModel, completeAskText } from '../lib/askModel.js';
 import type { DurableJobNote } from './askMemory.js';
 import { displayMentionText } from './mentions.js';
 
@@ -77,7 +77,17 @@ export async function modelAskThreadTitle(input: {
   const question = displayMentionText(input.question).replace(/\s+/g, ' ').trim().slice(0, 500);
   const answer = displayMentionText(input.answer ?? '').replace(/\s+/g, ' ').trim().slice(0, 400);
   if (!question) return null;
-  const complete = input.complete ?? ((req) => completeAskText(req));
+  const complete =
+    input.complete ??
+    ((req) =>
+      completeAskText({
+        system: req.system,
+        user: req.user,
+        maxTokens: req.maxTokens,
+        mode: 'interactive',
+        signal: req.signal,
+        anthropicModel: askFastAnthropicModel(),
+      }));
   try {
     const result = await complete({
       system:
