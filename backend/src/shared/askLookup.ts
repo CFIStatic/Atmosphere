@@ -386,6 +386,29 @@ function speakerFor(clip: AskLookupClip, line: RedactedLine): string {
   return named[0] || 'Speaker';
 }
 
+/** A visual label from the reading, not a person's name. */
+export function isGenericSpeakerLabel(name: string): boolean {
+  const text = name.trim();
+  if (!text) return true;
+  return /^(?:(?:seated|standing|walking)\s+)?(?:man|woman|person|guy|girl)$/i.test(text)
+    || /^(?:person|speaker)\s*[a-d0-9]+$/i.test(text)
+    || /^(?:speaker|unknown)$/i.test(text);
+}
+
+/** Prefer the person who recorded the clip over "Seated man" and similar labels. */
+export function personNameForClip(catalog: AskLookupCatalog, clip: AskLookupClip, speaker: string): string {
+  const raw = speaker.trim();
+  if (raw && !isGenericSpeakerLabel(raw)) return raw;
+  const recorded = new Set(clip.recordedByUserIds ?? []);
+  const named = (catalog.people ?? []).filter((person) => {
+    if (!person.name || isGenericSpeakerLabel(person.name) || person.onThisJob === false) return false;
+    if (recorded.has(person.userId)) return true;
+    return (person.recordedProofIds ?? []).includes(clip.proofId);
+  });
+  if (named.length === 1) return named[0]!.name;
+  return raw || 'Speaker';
+}
+
 function isRedactedSpeech(text: string): boolean {
   return text.includes(PRIVACY_REDACTED_LABEL) || text.includes(CHILD_PRIVACY_REDACTED_LABEL);
 }
@@ -461,7 +484,7 @@ export function mergeJobAskPeople(input: {
   for (const clip of clips) {
     for (const speaker of clip.speakers ?? []) {
       const name = trim(speaker);
-      if (!name) continue;
+      if (!name || isGenericSpeakerLabel(name)) continue;
       add({
         userId: `speaker:${name.toLowerCase()}`,
         name,
@@ -749,7 +772,7 @@ export function searchTranscripts(catalog: AskLookupCatalog, query: string): Ask
         continue;
       }
       if (!lineMatches(needle, line.text)) continue;
-      const speaker = speakerFor(clip, line);
+      const speaker = personNameForClip(catalog, clip, speakerFor(clip, line));
       const atSeconds = preciseMoment(clip, line.atSeconds);
       hits.push({
         proofId: clip.proofId,
@@ -810,7 +833,7 @@ export function searchOtherJobs(catalog: AskLookupCatalog, query: string): AskLo
         : [];
     for (const line of rows) {
       if (!line.text || isRedactedSpeech(line.text)) continue;
-      const speaker = speakerFor(clip, line);
+      const speaker = personNameForClip(catalog, clip, speakerFor(clip, line));
       const atSeconds = preciseMoment(clip, line.atSeconds);
       hits.push({
         proofId: clip.proofId,
@@ -853,7 +876,10 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
   }
   const transcript = redactClipTranscriptForAsk(clip);
   const findings = findingsText(clip.findings, clip);
-  const moments = clipMoments(clip);
+  const moments = clipMoments(clip).map((moment) => ({
+    ...moment,
+    speaker: personNameForClip(catalog, clip, moment.speaker),
+  }));
   const atSeconds = representativeAt(clip);
   const where = elsewhere ? ` from ${trim(clip.jobTitle) || 'another job'}` : '';
   return {
@@ -867,7 +893,7 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
       title: clip.title,
       workDate: clip.workDate ?? null,
       summary: redactedClipSummary(clip) || null,
-      speakers: (clip.speakers ?? []).filter(Boolean),
+      speakers: [...new Set((clip.speakers ?? []).map((name) => personNameForClip(catalog, clip, name)).filter(Boolean))],
       cite: citeFor(clip, atSeconds),
       atSeconds,
       transcript: transcript || null,
@@ -920,7 +946,10 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
   const recorded = new Set(person.recordedProofIds ?? []);
   const clips = clipsForPerson(catalog, person)
     .map((clip) => {
-      const moments = clipMoments(clip);
+      const moments = clipMoments(clip).map((moment) => ({
+        ...moment,
+        speaker: personNameForClip(catalog, clip, moment.speaker),
+      }));
       const atSeconds = representativeAt(clip);
       const spoken = moments.find((moment) => moment.atSeconds === atSeconds) ?? moments[0];
       return {
@@ -1162,7 +1191,13 @@ export function planAskLookup(
   history?: Array<{ role?: string | null; text?: string | null }> | null,
 ): Array<{ name: AskLookupToolName; input: Record<string, unknown> }> {
   const resolved = resolveAskQuestion(question, history, catalog);
-  if (classifyChatTurn(resolved, history, catalog)) return [];
+  const chat = classifyChatTurn(resolved, history, catalog);
+  if (chat === 'correction') {
+    return clipsInScope(catalog)
+      .slice(0, 3)
+      .map((clip) => ({ name: 'get_clip' as const, input: { proofId: clip.proofId } }));
+  }
+  if (chat) return [];
   if (isJobOverview(resolved)) {
     const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [
       { name: 'read_job_history', input: {} },

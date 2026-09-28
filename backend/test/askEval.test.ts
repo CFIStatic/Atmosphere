@@ -178,9 +178,10 @@ const prompts: Array<{ question: string; check: (answer: string) => void }> = [
   {
     question: 'write a summary for the homeowner',
     check: (answer) => {
-      assert.match(firstSentence(answer), /clip/i);
       assert.match(answer, /⟦artifact⟧/);
       assert.match(answer, /Homeowner summary/);
+      assert.doesNotMatch(answer, /I checked the clips/i);
+      assert.doesNotMatch(visible(answer), /Short Handheld|Nearly Black, Noisy/i);
       assert.match(answer, /RESTORE 365/);
       assert.doesNotMatch(visible(answer), /Sample the intervals/);
     },
@@ -392,7 +393,9 @@ test('live Tiffany questions answer from the real transcripts', async () => {
   assert.match(visible(activity.answer), /El Presidente/i);
   assert.match(visible(activity.answer), /3 clips/i);
   assert.match(activity.answer, /11:37 AM CT/);
-  assert.match(visible(activity.answer), /Nearly Black/i);
+  assert.match(visible(activity.answer), /small office|webcam/i);
+  assert.doesNotMatch(visible(activity.answer), /Nearly Black, Noisy/i);
+  assert.doesNotMatch(visible(activity.answer), /I checked the clips/i);
   assert.match(activity.answer, new RegExp(`video/${JOB}/${LIVE_WALK}/[^\\s,⟧]*@10\\.6`));
   assert.match(activity.answer, new RegExp(`video/${JOB}/${LIVE_TABLE}/`));
   assert.doesNotMatch(activity.answer, new RegExp(`video/${JOB}/${LIVE_SEP17}/[^\\s,⟧]*@`));
@@ -520,9 +523,12 @@ test('a conversation mixes a greeting, a clarification, a job question, an opini
 
   const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.');
   assert.match(correction, /Sep 21/);
+  assert.match(correction, /actually from Sep 21/i);
   assert.match(correction, /not Sep 17/);
   assert.match(correction, /Sample the intervals/);
   assert.match(correction, /spreadsheets/i);
+  assert.doesNotMatch(correction, /The file does have that/i);
+  assert.doesNotMatch(correction, /Short Handheld|Light Whitewashed/i);
   assert.doesNotMatch(correction, /^(?:sorry|you(?:'|’)re right)\b/i);
   assert.doesNotMatch(correction, /This file does not have that/i);
   assert.doesNotMatch(correction, /\.\./);
@@ -702,7 +708,7 @@ test('Ask rubric scores answer-first, grounded, no dead ends, and carried contex
   const which = await say('What did he say?', /Which day/i, /QuickBooks/);
   const sep21 = await say('Sep 21', /QuickBooks online/);
   const opinion = await say('Thanks. What do you think he was getting at?', /off paper and onto QuickBooks/i);
-  const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.', /not Sep 17/);
+  const correction = await say('You got the date wrong. That was Sep 17, and he never mentioned spreadsheets.', /actually from Sep 21/i);
 
   const fresh = async (question: string, expect: RegExp, forbid?: RegExp) => {
     const result = await askLive(question);

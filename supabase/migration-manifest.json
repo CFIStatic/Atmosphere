@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 168,
+    "migrationCount": 169,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -182,7 +182,8 @@
     "20260927170000_job_proofs_video_content_types.sql",
     "20260927180000_job_proofs_timed_transcript.sql",
     "20260927203000_backfill_proof_upload_actor.sql",
-    "20260928120000_ask_thread_memory.sql"
+    "20260928120000_ask_thread_memory.sql",
+    "20260928143000_ask_job_notes_insert_scope.sql"
   ],
   "migrations": [
     {
@@ -5659,12 +5660,23 @@
         "column|public.ask_threads.summary_turn_count",
         "column|public.ask_threads.summarized_at",
         "policy|public.ask_job_notes.ask_job_notes_select",
-        "policy|public.ask_job_notes.ask_job_notes_insert",
         "rls|public.ask_job_notes"
       ],
       "sharedWithOtherMigrations": [],
-      "createdThenDroppedCount": 0,
+      "createdThenDroppedCount": 1,
       "dropsCount": 0
+    },
+    {
+      "version": "20260928143000_ask_job_notes_insert_scope",
+      "file": "20260928143000_ask_job_notes_insert_scope.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "policy|public.ask_job_notes.ask_job_notes_insert_member_job"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 1
     }
   ]
 }

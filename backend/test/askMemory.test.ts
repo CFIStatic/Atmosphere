@@ -154,6 +154,24 @@ test('a stored summary and note do not keep a redacted secret', () => {
   assert.ok(scrubbed.notes.some((note) => /tabletop/i.test(note.note)));
 });
 
+test('ask_job_notes inserts require org membership and a job in that org', () => {
+  const name = '20260928143000_ask_job_notes_insert_scope.sql';
+  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations', name), 'utf8');
+  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations', name), 'utf8');
+  assert.equal(backendSql, rootSql);
+  assert.match(backendSql, /drop policy if exists ask_job_notes_insert on public\.ask_job_notes/);
+  assert.match(backendSql, /create policy ask_job_notes_insert_member_job on public\.ask_job_notes/);
+  assert.match(backendSql, /private\.is_org_member\(org_id\)/);
+  assert.match(backendSql, /owner_user_id = auth\.uid\(\)/);
+  assert.match(backendSql, /crm_jobs\.id = job_id/);
+  assert.match(backendSql, /crm_jobs\.org_id = ask_job_notes\.org_id/);
+  assert.doesNotMatch(backendSql, /or owner_user_id = auth\.uid\(\)/);
+  assert.doesNotMatch(backendSql, /alter table public\.job_proof_questions/i);
+  assert.doesNotMatch(backendSql, /update public\.job_proof_questions/i);
+  assert.doesNotMatch(backendSql, /job_evidence_access/i);
+  assert.doesNotMatch(backendSql, /grant update|grant delete/i);
+});
+
 test('the memory migration does not rewrite custody answers', () => {
   const backendSql = fs.readFileSync(
     path.join(here, '../supabase/migrations/20260928120000_ask_thread_memory.sql'),
