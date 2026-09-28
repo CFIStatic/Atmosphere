@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  displayMentionText,
   expandMentionTokens,
   filterMentionMembers,
   mentionDisplayName,
@@ -66,6 +67,15 @@ describe('mention parsing', () => {
       'John Cyganiak',
       'Elena Cruz',
     ]);
+  });
+
+  it('renders a mention token as @Name, including a title cut off mid-id', () => {
+    const full = '@[El Presidente](mention:111832c2-d6f9-4412-86ce-1fccc439eb40)';
+    expect(displayMentionText(`what activity does ${full}`)).toBe('what activity does @El Presidente');
+    expect(displayMentionText('what activity does @[El Presidente](mention:111832c2-d6f9-4412-86ce-1…')).toBe(
+      'what activity does @El Presidente',
+    );
+    expect(displayMentionText('Are you connected to the internet')).toBe('Are you connected to the internet');
   });
 
   it('keeps the menu open while the name is incomplete and closes after the full name', () => {

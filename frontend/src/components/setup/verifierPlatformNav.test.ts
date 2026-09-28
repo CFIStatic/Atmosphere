@@ -118,6 +118,8 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("d.atmosphere === 'ask-history'");
     expect(verifierHtml).toContain("atmosphere: 'ask-history-action'");
     expect(verifierHtml).toContain('startAskHistoryRename');
+    expect(verifierHtml).toContain('function displayMentionTitle');
+    expect(verifierHtml).toContain('-webkit-line-clamp: 2');
     expect(verifierHtml).toContain("type: 'rename-thread'");
     expect(verifierHtml).toContain('ask-hist-rename');
     expect(verifierHtml).not.toContain('id="evidence-nav"');

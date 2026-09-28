@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { timeAgo, type MemoryEvent } from '../lib/api';
+import { displayMentionText } from '../lib/mentions';
 
 /**
  * The record, rendered.
@@ -42,7 +43,7 @@ function renderValue(value: unknown): string {
   if (typeof value === 'string') {
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return new Date(value).toLocaleString();
     if (value === '') return '—';
-    return value.replace(/_/g, ' ');
+    return displayMentionText(value).replace(/_/g, ' ');
   }
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
@@ -71,7 +72,7 @@ function EventRow({ event, showJob }: { event: MemoryEvent; showJob: boolean }) 
       <div className="min-w-0 flex-1">
         <p className="text-sm text-ink-800">
           <span className="font-medium text-ink-900">{who}</span>{' '}
-          <span className="text-ink-700">{event.summary}</span>
+          <span className="text-ink-700">{displayMentionText(event.summary)}</span>
         </p>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-ink-500">
