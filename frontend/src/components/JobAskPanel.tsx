@@ -388,13 +388,18 @@ function StopIcon() {
 
 function TypingDots() {
   return (
-    <span className="gpt-typing inline-flex items-center gap-1 rounded-full bg-paper-0 px-3 py-2 ring-1 ring-line">
+    <span className="gpt-typing inline-flex items-center gap-1" aria-hidden>
       <span />
       <span />
       <span />
     </span>
   );
 }
+
+const ASSISTANT_BUBBLE =
+  'max-w-[85%] rounded-2xl bg-paper-0 px-3.5 py-2 text-sm text-ink-800 shadow-card';
+
+type AskFailure = { message: string; question: string; pendingId: string };
 
 export type JobAskFn = (
   question: string,
@@ -446,9 +451,8 @@ export function JobAskPanel({
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
   const [inFlight, setInFlight] = useState(false);
-  const [askStatus, setAskStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -501,6 +505,7 @@ export function JobAskPanel({
     const n = ++seq.current;
     setLoading(true);
     setError(null);
+    setAskFailure(null);
     setActiveThreadId(null);
     setThreads([]);
     setTurns([]);
@@ -569,10 +574,12 @@ export function JobAskPanel({
               setActiveThreadId(created.thread.id);
               setTurns([]);
               setError(null);
+              setAskFailure(null);
               inputRef.current?.focus();
             } else {
               setActiveThreadId(null);
               setTurns([]);
+              setAskFailure(null);
             }
           } catch (err) {
             setError(err instanceof ApiError ? err.message : 'Could not start a new chat.');
@@ -585,6 +592,7 @@ export function JobAskPanel({
           setActiveThreadId(action.threadId);
           setLoading(true);
           setError(null);
+          setAskFailure(null);
           try {
             const msgs = await loadThreadMessages(action.threadId);
             setTurns(msgs);
@@ -688,15 +696,13 @@ export function JobAskPanel({
     abortRef.current = controller;
     setInFlight(true);
     setAsking(true);
-    setAskStatus('Looking through clips…');
     setDraft('');
     setError(null);
+    setAskFailure(null);
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
-    const streamId = `${pendingId}-a`;
-    setStreamingId(streamId);
+    const answerId = `${pendingId}-a`;
     setTurns((prev) => [...prev, { id: pendingId, role: 'user', content: text, at: now }]);
-    let sawFirstToken = false;
     try {
       let res: {
         answer: string;
@@ -710,36 +716,12 @@ export function JobAskPanel({
         res = await askFn(text, threadOpts);
       } else {
         try {
+          // No token handlers: the reply stays on the thinking dots until the
+          // stream's done event, then renders once in its final form.
           res = await api.askAboutProofsStream(
             jobId,
             text,
-            {
-              onStatus: (phase) => {
-                setAskStatus(phase);
-                if (!sawFirstToken) return;
-                // Tokens before this status were a tool-turn preface, not the answer.
-                sawFirstToken = false;
-                setAsking(true);
-                setTurns((prev) => prev.filter((turn) => turn.id !== streamId));
-              },
-              onToken: (delta) => {
-                if (!sawFirstToken) {
-                  sawFirstToken = true;
-                  setAsking(false);
-                  setAskStatus(null);
-                }
-                // Accumulate from the last assistant stream bubble.
-                setTurns((prev) => {
-                  const existing = prev.find((turn) => turn.id === streamId);
-                  const next = (existing?.content ?? '') + delta;
-                  const without = prev.filter((turn) => turn.id !== streamId);
-                  return [
-                    ...without,
-                    { id: streamId, role: 'assistant' as const, content: next, at: now },
-                  ];
-                });
-              },
-            },
+            {},
             { ...threadOpts, signal: controller.signal },
           );
         } catch (err) {
@@ -749,6 +731,7 @@ export function JobAskPanel({
         }
       }
       if (controller.signal.aborted) return;
+      if (!res.answer?.trim()) throw new Error('empty_answer');
       if (res.threadId && res.threadId !== activeThreadIdRef.current) {
         setActiveThreadId(res.threadId);
       }
@@ -759,7 +742,7 @@ export function JobAskPanel({
         void api.askThreads(jobId).then((r) => setThreads(r.threads)).catch(() => {});
       }
       setTurns((prev) => [
-        ...prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId),
+        ...prev.filter((turn) => turn.id !== pendingId),
         {
           id: res.question?.id ? `${res.question.id}-q` : pendingId,
           role: 'user',
@@ -767,7 +750,7 @@ export function JobAskPanel({
           at: res.question?.created_at ?? now,
         },
         {
-          id: res.question?.id ? `${res.question.id}-a` : streamId,
+          id: res.question?.id ? `${res.question.id}-a` : answerId,
           role: 'assistant',
           content: res.answer,
           groundedOn: res.groundedOn,
@@ -785,17 +768,32 @@ export function JobAskPanel({
       if (target) seek(target);
     } catch (err) {
       if (controller.signal.aborted || isAbortError(err)) return;
-      setTurns((prev) => prev.filter((turn) => turn.id !== pendingId && turn.id !== streamId));
-      setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
+      // Keep the question and put the error where the dots were.
+      setAskFailure({
+        message:
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error && err.message === 'empty_answer'
+              ? 'No answer came back. Try again.'
+              : 'Could not answer that from the file.',
+        question: raw,
+        pendingId,
+      });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       inFlightRef.current = false;
-      setStreamingId(null);
       setInFlight(false);
       setAsking(false);
-      setAskStatus(null);
       inputRef.current?.focus();
     }
+  }
+
+  function retryFailedAsk() {
+    const failed = askFailure;
+    if (!failed) return;
+    setTurns((prev) => prev.filter((turn) => turn.id !== failed.pendingId));
+    setAskFailure(null);
+    void ask(failed.question);
   }
 
   function stopAsk() {
@@ -873,8 +871,8 @@ export function JobAskPanel({
             {turns.map((turn) => {
               const lastAssistantId = [...turns]
                 .reverse()
-                .find((row) => row.role === 'assistant' && row.id !== streamingId)?.id;
-              const showActions = turn.role === 'assistant' && turn.id !== streamingId && turn.content.trim();
+                .find((row) => row.role === 'assistant')?.id;
+              const showActions = turn.role === 'assistant' && turn.content.trim();
               return (
               <li
                 key={turn.id}
@@ -884,7 +882,7 @@ export function JobAskPanel({
                   className={
                     turn.role === 'user'
                       ? 'max-w-[85%] rounded-2xl bg-ink-900 px-3.5 py-2 text-sm text-paper-0'
-                      : 'max-w-[85%] rounded-2xl bg-paper-0 px-3.5 py-2 text-sm text-ink-800 shadow-card'
+                      : ASSISTANT_BUBBLE
                   }
                 >
                   {turn.role === 'assistant' ? (
@@ -947,8 +945,32 @@ export function JobAskPanel({
             })}
             {asking && (
               <li className="flex items-start gap-2.5" data-testid="ask-status">
-                <TypingDots />
-                {askStatus ? <span className="pt-2 text-xs text-ink-500">{askStatus}</span> : null}
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`${ASSISTANT_BUBBLE} flex items-center gap-2 py-2.5`}
+                >
+                  <TypingDots />
+                  <span className="text-xs text-ink-500">Thinking</span>
+                </div>
+              </li>
+            )}
+            {!asking && askFailure && (
+              <li className="flex items-start gap-2.5" data-testid="ask-error">
+                <div role="alert" className={ASSISTANT_BUBBLE}>
+                  <p className="leading-relaxed text-danger-700">{askFailure.message}</p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      data-testid="ask-error-retry"
+                      disabled={inFlight}
+                      onClick={retryFailedAsk}
+                      className="rounded-full border border-line bg-paper-0 px-2.5 py-0.5 text-[11px] font-medium text-ink-600 transition hover:border-brand-200 hover:text-ink-900 disabled:opacity-35"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
               </li>
             )}
           </ul>

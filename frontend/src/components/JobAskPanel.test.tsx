@@ -307,7 +307,7 @@ describe('JobAskPanel', () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
-  it('drops a tool-turn preface when status resumes', async () => {
+  it('shows thinking dots and no partial text until the final answer lands', async () => {
     let release: () => void = () => {};
     const paused = new Promise<void>((resolve) => {
       release = resolve;
@@ -339,15 +339,23 @@ describe('JobAskPanel', () => {
     const box = await screen.findByPlaceholderText(/ask what you forgot/i);
     await user.type(box, 'Was the tarp removed?');
     const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
-    expect(await screen.findByText('Searching transcripts')).toBeInTheDocument();
+    const thinking = await screen.findByTestId('ask-status');
+    expect(thinking).toHaveTextContent('Thinking');
+    expect(thinking.querySelector('.gpt-typing')).not.toBeNull();
+    expect(screen.queryByText('Searching transcripts')).not.toBeInTheDocument();
     expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-answer-body')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-message-copy')).not.toBeInTheDocument();
     release();
     await pending;
     expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('ask-status')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('ask-answer-body')).toHaveLength(1);
+    expect(screen.getByTestId('ask-message-copy')).toBeInTheDocument();
     expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
   });
 
-  it('streams tokens into the thread when the stream API is available', async () => {
+  it('uses the stream API and renders only the final answer', async () => {
     askAboutProofsStream.mockImplementation(
       async (
         _jobId: string,
@@ -544,7 +552,7 @@ describe('JobAskPanel', () => {
     const box = await screen.findByPlaceholderText(/ask what you forgot/i);
     await user.type(box, 'Was the tarp removed?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
-    expect(await screen.findByText('Looking through clips…')).toBeInTheDocument();
+    expect(await screen.findByTestId('ask-status')).toHaveTextContent('Thinking');
     await user.click(screen.getByTestId('ask-stop'));
     expect(await screen.findByText('Was the tarp removed?')).toBeInTheDocument();
     expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument();
@@ -593,6 +601,48 @@ describe('JobAskPanel', () => {
       expect(askAboutProofsStream).toHaveBeenCalledTimes(2);
     });
     expect(askAboutProofsStream.mock.calls[1]?.[1]).toBe('Was the tarp removed?');
+  });
+
+  it('replaces the dots with an error bubble and retries the same question', async () => {
+    askAboutProofs.mockRejectedValueOnce(new Error('boom'));
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    const failure = await screen.findByTestId('ask-error');
+    expect(failure).toHaveTextContent(/could not answer that from the file/i);
+    expect(screen.queryByTestId('ask-status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-answer-body')).not.toBeInTheDocument();
+    expect(screen.getByText('Was the tarp removed?')).toBeInTheDocument();
+    await user.click(screen.getByTestId('ask-error-retry'));
+    expect(await screen.findByText(/skylights be left alone/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('ask-error')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Was the tarp removed?')).toHaveLength(1);
+    expect(askAboutProofs).toHaveBeenCalledTimes(2);
+  });
+
+  it('never leaves an empty assistant bubble when the answer is blank', async () => {
+    askAboutProofsStream.mockResolvedValue({ answer: '   ', groundedOn: 0, model: null, question: null });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByTestId('ask-error')).toHaveTextContent(/no answer came back/i);
+    expect(screen.queryByTestId('ask-answer-body')).not.toBeInTheDocument();
   });
 
 });
