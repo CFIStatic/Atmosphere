@@ -46,6 +46,7 @@ test('simple lookups, quotes, greetings, and follow-ups stay on the fast model',
     'follow_up',
   );
   assert.equal(routeAskQuestion({ question: 'What did El Presidente say on Sep 21?', catalog }).reason, 'quote');
+  assert.equal(routeAskQuestion({ question: 'What was said on Sep 21?', catalog }).reason, 'quote');
   assert.equal(routeAskQuestion({ question: 'who opened this job', catalog }).reason, 'lookup');
 });
 
@@ -54,6 +55,10 @@ test('drafts, comparisons, overviews, and other jobs stay on the deep model', ()
   assert.equal(routeAskQuestion({ question: 'draft an estimate', catalog }).reason, 'task_estimate');
   assert.equal(routeAskQuestion({ question: 'compare the two visits', catalog }).route, 'deep');
   assert.equal(routeAskQuestion({ question: 'what was this job about', catalog }).reason, 'overview');
+  assert.equal(
+    routeAskQuestion({ question: 'What has all happened on this file so far', catalog }).reason,
+    'overview',
+  );
   assert.equal(routeAskQuestion({ question: 'Have we seen a tarp on other jobs?', catalog }).reason, 'other_jobs');
   assert.equal(
     routeAskQuestion({ question: 'You got the date wrong. That was Sep 17.', catalog }).reason,

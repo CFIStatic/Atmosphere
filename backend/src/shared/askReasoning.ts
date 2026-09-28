@@ -99,6 +99,25 @@ Rules:
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
 16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.`;
 
+/**
+ * Fast turns already have the job file in the cached prefix. Answer from it
+ * in the first response so a quote is not waiting on a tool round-trip.
+ * Tools stay available when the line is not in that context.
+ */
+const LOOKUP_SYSTEM_FAST = `You are a sharp project manager writing to a colleague or a client. The job context in this request already includes the project, the clips, and the redacted transcripts. Answer from that context in this response.
+
+Rules:
+1. Start with the answer. The reader should see the first sentence before any tool call. Call a tool only when the spoken line or fact is not already in the job context.
+2. Stay grounded in that context. Never invent clips, quotes, times, people, rooms, defects, or scope. Never repeat a line marked privacy redacted. If the file lacks it, say so in one sentence, then give the best answer the file does support.
+3. Quote the words that were said. Cite the moment as video/<jobId>/<proofId>/<slug>@<seconds> using the timestamps already in the context. Omit @seconds when the line has no timing.
+4. The first sentence is the answer. No "Certainly" or other filler. No raw ids, no UTC, no duplicated job names.
+5. After the prose, append exactly one sources line and, when you quoted speech, one quotes line:
+   ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>⟧
+   ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker|verbatim excerpt⟧
+6. Then two or three follow-ups the file can answer:
+   ⟦followups: question one? ;; question two?⟧
+7. Do not put those machine lines inside the sentences. Use the person's name. Never write a visual label when the file names who spoke.`;
+
 export type LookupModelTurn = {
   model: string;
   text: string;
@@ -537,7 +556,9 @@ export function providerLookupStep(input: {
     const prior = formatTrace(state.trace);
     const user = prior
       ? `${state.user}\n\nTool results so far:\n${prior}\n\nUse another tool if you still need a fact. Otherwise answer from these results only.`
-      : `${state.user}\n\nLook up what you need before you answer.`;
+      : route === 'fast'
+        ? state.user
+        : `${state.user}\n\nLook up what you need before you answer.`;
     if (provider === 'anthropic' && anthropic) {
       try {
         return await anthropic({
@@ -601,7 +622,6 @@ export async function answerFromAskLookup(input: {
   followUps: string[];
   answeredFromLookup: true;
 }> {
-  const system = LOOKUP_SYSTEM;
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
   const promptInput = {
@@ -637,9 +657,9 @@ export async function answerFromAskLookup(input: {
   };
   input.onStatus?.('Looking through clips…');
   let forcedOther = false;
-  const consume = async (active: LookupModelStep, userText: string, limit: number) => {
+  const consume = async (active: LookupModelStep, userText: string, limit: number, systemText = LOOKUP_SYSTEM) => {
     for (let i = 0; i < limit && !stopped(); i += 1) {
-      const turn = await active({ system, stable: parts.stable, user: userText, trace });
+      const turn = await active({ system: systemText, stable: parts.stable, user: userText, trace });
       if (!turn || stopped()) break;
       model = turn.model || model;
       input.timing?.noteModel(model);
@@ -691,7 +711,7 @@ export async function answerFromAskLookup(input: {
         onCache: (state) => input.timing?.noteGeminiCache(state),
       });
     if (decision.route === 'fast') {
-      await consume(stepFor('fast'), parts.volatile, 3);
+      await consume(stepFor('fast'), parts.volatile, 3, LOOKUP_SYSTEM_FAST);
       const traceHasHit = trace.some(
         (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
       );
@@ -722,7 +742,7 @@ export async function answerFromAskLookup(input: {
     const completed = stopped()
       ? null
       : await completeAskText({
-      system,
+      system: LOOKUP_SYSTEM,
       user: `${fullUser}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,

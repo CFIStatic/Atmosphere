@@ -21,6 +21,14 @@ function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+/** A walk through the whole file, not one dated line. */
+function isFileNarrative(question: string): boolean {
+  return (
+    /\bwhat(?:'s| has| have)?(?: all)? happened\b/i.test(question) &&
+    /\b(file|job|project|so far)\b/i.test(question)
+  );
+}
+
 function isMultiStep(question: string): boolean {
   const q = question.trim();
   if ((q.match(/\?/g) ?? []).length >= 2) return true;
@@ -46,7 +54,9 @@ export function routeAskQuestion(input: {
   const intent = classifyAskIntent(resolved);
   if (intent.kind === 'task') return { route: 'deep', reason: `task_${intent.task}` };
   if (asksAboutOtherJobs(asked) || asksAboutOtherJobs(resolved)) return { route: 'deep', reason: 'other_jobs' };
-  if (isJobOverview(resolved) || isJobOverview(asked)) return { route: 'deep', reason: 'overview' };
+  if (isJobOverview(resolved) || isJobOverview(asked) || isFileNarrative(resolved) || isFileNarrative(asked)) {
+    return { route: 'deep', reason: 'overview' };
+  }
   if (isMultiStep(resolved) || isMultiStep(asked)) return { route: 'deep', reason: 'multi_step' };
 
   const catalog = input.catalog;

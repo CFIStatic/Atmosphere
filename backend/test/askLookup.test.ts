@@ -799,6 +799,8 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
     assert.equal(cachedSystem[0]?.cache_control?.type, 'ephemeral');
     assert.equal(cachedSystem[1]?.cache_control?.type, 'ephemeral');
     assert.match(cachedSystem.map((block) => block.text ?? '').join('\n'), /Job context/);
+    assert.match(cachedSystem[0]?.text ?? '', /Start with the answer/);
+    assert.doesNotMatch(cachedSystem[0]?.text ?? '', /Use them before you write/);
     assert.doesNotMatch(cachedSystem.map((block) => block.text ?? '').join('\n'), /Question:/);
     const second = anthropicBodies[1]!;
     const messages = second.messages as Array<{ role: string; content: unknown }>;
@@ -822,6 +824,7 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
       fetchFn,
     });
     const deep = anthropicBodies[0]!;
+    assert.match(String((deep.system as Array<{ text?: string }>)[0]?.text ?? ''), /Use them before you write/);
     assert.equal(deep.model, 'claude-opus-5');
     assert.equal((deep.thinking as { type?: string } | undefined)?.type, 'adaptive');
     assert.equal((deep.output_config as { effort?: string } | undefined)?.effort, 'high');
