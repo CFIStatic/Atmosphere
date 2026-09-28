@@ -451,6 +451,10 @@ describe('SharedDashboardPage job file identity', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Happening Now' }));
     expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    expect(screen.queryByTestId('job-notes')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Notes' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/add a note/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Videos' }));
