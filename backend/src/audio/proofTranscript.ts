@@ -23,7 +23,8 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
-import { enrichProofConversation } from './proofConversation.js';
+import { queueSummaryRefresh } from './summaryQueue.js';
+import { staleSummaryPatch } from './summaryFreshness.js';
 import { runSafetyScanForProof } from '../safety/sample.js';
 
 const PROOF_BUCKET = 'job-proofs';
@@ -168,7 +169,11 @@ const MAX_STORED_SEGMENTS = 20_000;
 const MAX_STORED_WORDS = 80_000;
 
 export type TranscribeProofOptions = {
-  /** Conversation enrich and the safety scan. Off for the timing backfill. */
+  /**
+   * The transcript safety scan. Off for the timing backfill. The AI summary is
+   * rebuilt on every transcript write regardless: the write marks it stale and
+   * queues it, so a re-transcription never leaves the old summary in place.
+   */
   enrich?: boolean;
   /**
    * A re-run that hears nothing must not wipe a transcript the office already
@@ -279,13 +284,10 @@ export async function transcribeProofVideo(
         transcript_segments: null,
         transcript_words: null,
         transcript_lease_until: null,
+        ...staleSummaryPatch(),
       })
       .eq('id', proofId);
-    try {
-      await enrichProofConversation(admin, proofId, { transcript: '', durationSeconds: null });
-    } catch {
-      /* additive */
-    }
+    await queueSummaryRefresh(admin, proofId);
     return;
   }
 
@@ -300,20 +302,17 @@ export async function transcribeProofVideo(
       transcript_error: null,
       transcribed_at: new Date().toISOString(),
       transcript_lease_until: null,
+      // Same write: the summary on the row was built from the old text.
+      ...staleSummaryPatch(),
     })
     .eq('id', proofId);
 
-  if (opts?.enrich === false) return;
+  // Conversation summary, evidence log and people log are rebuilt on the
+  // summary retry queue (never fails the Whisper write). This runs for the
+  // timing backfill too — skipping it is how the Tiffany clip's summary went stale.
+  await queueSummaryRefresh(admin, proofId);
 
-  // Structured conversation for Office Analysis — never fail the Whisper write.
-  try {
-    await enrichProofConversation(admin, proofId, {
-      transcript: transcriptText,
-      durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
-    });
-  } catch {
-    /* conversation enrich is additive */
-  }
+  if (opts?.enrich === false) return;
 
   // Verbal threat / medical distress cues from the finished transcript.
   if (proof.org_id && proof.job_id && proof.party_id) {

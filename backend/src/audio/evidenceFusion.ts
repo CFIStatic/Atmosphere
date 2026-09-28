@@ -51,9 +51,11 @@ function parseFusionEntries(text: string): EvidenceLogEntry[] {
       const row = raw as Record<string, unknown>;
       const body = String(row.text ?? '').replace(/\s+/g, ' ').trim();
       if (!body) continue;
-      const at = Number(row.atSeconds);
+      // Number(null) is 0: a beat the model left untimed must not land at 0:00.
+      const at = row.atSeconds == null || row.atSeconds === '' ? NaN : Number(row.atSeconds);
+      if (!Number.isFinite(at) || at < 0) continue;
       out.push({
-        atSeconds: Number.isFinite(at) ? roundTime(at) : 0,
+        atSeconds: roundTime(at),
         text: body.slice(0, 500),
         type: String(row.type || 'other').toLowerCase(),
         quote: row.quote != null ? String(row.quote).slice(0, 500) : null,

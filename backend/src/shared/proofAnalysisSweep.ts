@@ -12,6 +12,7 @@ import { queueProofTranscript } from '../audio/proofTranscript.js';
 import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
 import { claimNextProofWork, type ProofWorkKind } from './outboxClaim.js';
+import { sweepStaleSummaries } from '../audio/summaryQueue.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -193,6 +194,13 @@ async function tick(): Promise<void> {
     }
   } catch (err) {
     console.warn('[proof-analysis] sweep failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    // Summaries marked stale by a transcript write (or left behind by a restart).
+    const summaries = await sweepStaleSummaries(admin);
+    if (summaries) console.log(`[proof-analysis] re-queued ${summaries} stale AI summaries`);
+  } catch (err) {
+    console.warn('[proof-analysis] summary sweep failed:', err instanceof Error ? err.message : err);
   } finally {
     running = false;
   }

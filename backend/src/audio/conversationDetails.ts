@@ -85,6 +85,10 @@ export type StoredConversation = {
   unresolvedQuestions?: ConversationQuotedFact[];
   contradictions?: ConversationQuotedFact[];
   keyMoments?: ConversationKeyMoment[];
+  /** sha256 of the transcript_text this summary read (summaryFreshness). */
+  transcriptSha256?: string | null;
+  /** When this summary was built. */
+  generatedAt?: string | null;
 };
 
 export const CONVERSATION_FINDINGS_VERSION = 2;

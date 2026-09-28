@@ -1,3 +1,5 @@
+import { refreshProofSummary, queueSummaryRefresh } from '../audio/summaryQueue.js';
+import { staleSummaryPatch } from '../audio/summaryFreshness.js';
 import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
@@ -1616,11 +1618,18 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
 }
 
 async function maybeEnrichConversationFromMic(admin: any, proofId: string): Promise<void> {
+  // New narration events change what the summary was built from. Rebuild now
+  // (validated and stamped with the transcript it read); on any failure mark
+  // it stale and hand it to the summary retry queue instead of leaving the old one.
   try {
-    // Rebuild complete evidence log (vision ± speech). Conversation LLM runs when mic text exists.
-    await enrichProofConversation(admin, proofId);
+    await refreshProofSummary(admin, proofId);
   } catch {
-    /* additive */
+    try {
+      await admin.from('job_proofs').update(staleSummaryPatch()).eq('id', proofId);
+      await queueSummaryRefresh(admin, proofId);
+    } catch {
+      /* additive */
+    }
   }
 }
 

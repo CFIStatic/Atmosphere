@@ -46,6 +46,9 @@ import {
   toStoredChildPrivacyRedactions,
   type StoredChildPrivacyRedactions,
 } from './childPrivacyRedactions.js';
+import { transcriptSha256 } from './summaryFreshness.js';
+import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
+import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -90,10 +93,20 @@ export async function enrichProofConversation(
     if (visionContext == null) visionContext = visionContextFromProof(proof);
   }
 
-  const details = await analyzeConversation(transcript, {
-    durationSeconds,
-    visionContext,
-  });
+  // Validate before publishing: a summary that claims a different amount of
+  // speech than the transcript ("only one line" over five) is regenerated,
+  // then quarantined if the second attempt says the same thing.
+  let details = await analyzeConversation(transcript, { durationSeconds, visionContext });
+  let rejected: Array<{ conversation: unknown; contradictions: string[] }> = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const problems = summaryClaimContradictions(details, transcript);
+    if (!problems.length) break;
+    rejected.push({ conversation: toStoredConversation(details), contradictions: problems });
+    if (attempt === 0) details = await analyzeConversation(transcript, { durationSeconds, visionContext });
+  }
+  const quarantined = rejected.length > 0 && summaryClaimContradictions(details, transcript).length > 0;
+  if (quarantined) details = emptyConversationLike(details);
+  if (!quarantined) rejected = rejected.slice(0, 0);
 
   const findings =
     proof?.ai_findings && typeof proof.ai_findings === 'object' && !Array.isArray(proof.ai_findings)
@@ -236,13 +249,28 @@ export async function enrichProofConversation(
     logEntries = applyChildPrivacyToEvidenceEntries(logEntries, childRanges);
   }
 
+  // Provenance: which transcript this summary read. A later transcript write
+  // compares against it (summaryFreshness) instead of trusting the summary.
+  const generatedAt = new Date().toISOString();
+  const sourceSha256 = transcriptSha256(typeof transcript === 'string' ? transcript : null);
   await mergeFindings(admin, proofId, {
-    conversation: hasConversation(details) ? toStoredConversation(details) : null,
+    conversation: hasConversation(details)
+      ? { ...toStoredConversation(details), transcriptSha256: sourceSha256, generatedAt }
+      : null,
+    provenance: { transcriptSha256: sourceSha256, generatedAt },
+    narration: proof?.narration ?? null,
     evidenceLog: logEntries.length ? toStoredEvidenceLog(logEntries) : null,
     people: hasPeople(people) ? toStoredPeople(people) : null,
     privacyRedactions: privacyStored,
     childPrivacyRedactions: childStored,
+    quarantine: quarantined
+      ? rejected.map((row) => ({ ...row, transcriptSha256: sourceSha256, rejectedAt: generatedAt }))
+      : null,
   });
+  if (quarantined) {
+    // The queue retries; after the last attempt the row is marked failed.
+    throw new SummaryContradictionError(rejected[rejected.length - 1]?.contradictions ?? []);
+  }
 
   return hasConversation(details) ? details : null;
 }
@@ -358,6 +386,34 @@ async function loadOrgMembersForProof(admin: any, proofId: string): Promise<OrgM
   }
 }
 
+/** Same shape, nothing said: used when a summary is quarantined so no claim is published. */
+function emptyConversationLike(details: ConversationDetails): ConversationDetails {
+  return {
+    ...details,
+    summary: null,
+    executiveSummary: null,
+    details: [],
+    agreements: [],
+    concerns: [],
+    roomsMentioned: [],
+    turns: [],
+    commitments: [],
+    actionItems: [],
+    agreementFacts: [],
+    concernFacts: [],
+    refusals: [],
+    scopeChanges: [],
+    changeOrders: [],
+    moneyTalk: [],
+    safety: [],
+    insurance: [],
+    unresolvedQuestions: [],
+    contradictions: [],
+    keyMoments: [],
+    source: 'empty',
+  };
+}
+
 async function mergeFindings(
   admin: any,
   proofId: string,
@@ -367,6 +423,10 @@ async function mergeFindings(
     people: StoredPeoplePresent | null;
     privacyRedactions: StoredPrivacyRedactions | null;
     childPrivacyRedactions: StoredChildPrivacyRedactions | null;
+    provenance?: { transcriptSha256: string; generatedAt: string };
+    narration?: unknown;
+    /** Summaries that failed validation, kept for audit; never shown. */
+    quarantine?: unknown[] | null;
   },
 ): Promise<void> {
   const { data: proof } = await admin
@@ -388,7 +448,25 @@ async function mergeFindings(
   else delete prev.privacyRedactions;
   if (patch.childPrivacyRedactions) prev.childPrivacyRedactions = patch.childPrivacyRedactions;
   else delete prev.childPrivacyRedactions;
-  await admin.from('job_proofs').update({ ai_findings: prev }).eq('id', proofId);
+  // Legacy dictation rows stored their beats a second time as an untimed
+  // `timeline`; keep only real windows that are not already a beat.
+  if (Array.isArray(prev.timeline)) {
+    const raw = prev.timeline;
+    const normalized = normalizeAnalysisTimeline(raw, clipBeats({ narration: patch.narration, findings: prev }));
+    // Keep the rows as the model wrote them for audit; the cleaned list is what is shown.
+    if (JSON.stringify(normalized) !== JSON.stringify(raw) && !Array.isArray(prev.timelineRaw)) prev.timelineRaw = raw;
+    prev.timeline = normalized;
+  }
+  if (patch.quarantine?.length) {
+    const earlier = Array.isArray(prev.conversationQuarantine) ? (prev.conversationQuarantine as unknown[]) : [];
+    prev.conversationQuarantine = [...earlier, ...patch.quarantine].slice(-6);
+  }
+  const update: Record<string, unknown> = { ai_findings: prev };
+  if (patch.provenance) {
+    update.summary_transcript_sha256 = patch.provenance.transcriptSha256;
+    update.summary_generated_at = patch.provenance.generatedAt;
+  }
+  await admin.from('job_proofs').update(update).eq('id', proofId);
 }
 
 /** Attach conversation onto a findings object about to be written (sync derive). */

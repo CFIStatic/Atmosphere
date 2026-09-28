@@ -9,6 +9,7 @@
  * Money, hours, and payability stay out of the model prompt either way.
  */
 
+import { normalizeAnalysisTimeline } from './analysisTimeline.js';
 import { narrationEntriesFromEvents, sanitizeDictationEvents } from './dictationEvents.js';
 import { dictatePreparedFrames, type PreparedVideoFrames, type VideoDictationResult } from './videoIntelligence.js';
 import {
@@ -82,17 +83,20 @@ export async function describeRecordingWithoutScope(input: {
 
 export function descriptionFindings(dictation: VideoDictationResult): Record<string, unknown> {
   const events = dictation.events ?? [];
-  const timeline = events.length
-    ? events.map((event) => ({
-        atSeconds: event.atSeconds,
-        action: event.type ?? null,
-        summary: event.text,
-      }))
-    : dictation.actions.map((action) => ({
-        atSeconds: action.atSeconds,
-        action: action.action,
-        summary: action.description,
-      }));
+  // `timeline` is the windowed-reading contract ({ startSeconds, summary }).
+  // A single dictation has no windows: its beats are already `events` (and the
+  // narration entries), so repeating them here only showed every beat twice —
+  // once untimed at 0:00 — in the office player. Actions stand in only when the
+  // model returned no events.
+  const timeline = normalizeAnalysisTimeline(
+    events.length
+      ? []
+      : dictation.actions.map((action) => ({
+          startSeconds: action.atSeconds,
+          action: action.action,
+          summary: action.description,
+        })),
+  );
   return {
     kind: 'day_film',
     longForm: true,
