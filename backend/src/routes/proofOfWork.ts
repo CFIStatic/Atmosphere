@@ -40,7 +40,12 @@ import {
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
-import { askLookupCatalogFromJob, lookupPeopleFromContexts } from '../shared/askLookup.js';
+import {
+  askLookupCatalogFromJob,
+  clipFromProofRow,
+  lookupPeopleFromContexts,
+  scrubStoredAskText,
+} from '../shared/askLookup.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -2943,12 +2948,23 @@ export async function runProofAsk(input: {
       }
     }
 
+    const memoryClips = ((proofsRes.data ?? []) as Array<Record<string, unknown>>)
+      .filter((row) => !row.deleted_at)
+      .map((row) => {
+        const party = partyRows.find((item) => item.id === row.party_id);
+        return clipFromProofRow(row, {
+          orgId,
+          jobId,
+          jobTitle: file.job?.title ?? null,
+          partyCreatedBy: party?.created_by ?? null,
+        });
+      });
     const history: JobFileAskTurn[] = ((recentRes.data ?? []) as any[])
       .reverse()
       .flatMap((row) => {
         const turns: JobFileAskTurn[] = [];
-        if (row.question) turns.push({ role: 'user', text: String(row.question) });
-        if (row.answer) turns.push({ role: 'assistant', text: String(row.answer) });
+        if (row.question) turns.push({ role: 'user', text: scrubStoredAskText(String(row.question), memoryClips) });
+        if (row.answer) turns.push({ role: 'assistant', text: scrubStoredAskText(String(row.answer), memoryClips) });
         return turns;
       });
 
@@ -2968,6 +2984,11 @@ export async function runProofAsk(input: {
       file.mentionSupplement = mentionPrep.supplement;
     }
     if (mentionPrep?.directAnswer) input.onToken?.(mentionPrep.directAnswer);
+    const clientName = partyRows
+      .map((row) => [row.contact_name, row.company].map((part) => String(part ?? '').trim()).filter(Boolean).join(', '))
+      .filter(Boolean)
+      .slice(0, 4)
+      .join('; ');
     const lookup = askLookupCatalogFromJob({
       orgId,
       jobId,
@@ -2976,6 +2997,9 @@ export async function runProofAsk(input: {
       parties: partyRows,
       history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
       jobTitle: file.job?.title ?? null,
+      jobAddress: siteAddress,
+      clientName,
+      jobDescription: file.job?.description ?? null,
       timeZone: input.timeZone ?? null,
       people: lookupPeopleFromContexts([
         ...(mentionPrep?.people ?? []),
@@ -3000,7 +3024,10 @@ export async function runProofAsk(input: {
       : await answerFromJobFile({
       question: input.question,
       file,
-      history,
+      history: history.map((turn) => ({
+        ...turn,
+        text: scrubStoredAskText(turn.text, lookup.clips),
+      })),
       apiKey,
       onToken: input.onToken,
       onStatus: input.onStatus,
@@ -3048,13 +3075,16 @@ export async function runProofAsk(input: {
       ...((file.tasks ?? []).length ? ['tasks'] : []),
       ...((file.documents ?? []).length ? ['documents'] : []),
     ];
+    const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
+    const storedAnswer = scrubStoredAskText(result.answer, lookup.clips);
+    result.answer = storedAnswer;
     const { data: stored } = await supabase
       .from('job_proof_questions')
       .insert({
         org_id: orgId,
         job_id: jobId,
-        question: input.question,
-        answer: result.answer,
+        question: storedQuestion,
+        answer: storedAnswer,
         model: result.model,
         grounded_on: groundedOn,
         asked_by: userId ?? null,

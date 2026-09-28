@@ -277,6 +277,9 @@ const tiffanyLive: AskLookupCatalog = {
   jobId: JOB,
   access: 'org',
   jobTitle: 'Project Tiffany & Co.',
+  jobAddress: '123 Michigan Ave, Chicago, IL',
+  clientName: 'Tiffany & Co.',
+  jobDescription: 'Interior walkthrough and an office check-in.',
   timeZone: 'America/Chicago',
   people: [
     {
@@ -350,7 +353,10 @@ const tiffanyLive: AskLookupCatalog = {
   ],
 };
 
-async function askLive(question: string) {
+async function askLive(
+  question: string,
+  history?: Array<{ role?: string | null; text?: string | null }>,
+) {
   const prev = {
     anthropic: process.env.ANTHROPIC_API_KEY,
     gemini: process.env.GEMINI_API_KEY,
@@ -363,6 +369,7 @@ async function askLive(question: string) {
     return await answerFromAskLookup({
       question,
       catalog: tiffanyLive,
+      history,
       step: async () => null,
     });
   } finally {
@@ -416,6 +423,49 @@ test('live Tiffany questions answer from the real transcripts', async () => {
     assert.notEqual(visible(next.answer), 'This file does not have that.', follow);
     assert.match(visible(next.answer), /Sample the intervals|QuickBooks|love that girl|opened|clip/i, follow);
   }
+});
+
+test('what was this job about is an overview of the whole file', async () => {
+  const result = await askLive('what was this job about');
+  const body = visible(result.answer);
+  assert.match(body, /Project Tiffany & Co\./);
+  assert.match(body, /123 Michigan Ave, Chicago, IL/);
+  assert.match(body, /Client: Tiffany & Co\./);
+  assert.match(body, /Interior walkthrough/);
+  assert.match(body, /El Presidente/);
+  assert.match(body, /Sep 17/);
+  assert.match(body, /Sep 21/);
+  assert.match(body, /Sample the intervals/);
+  assert.match(body, /QuickBooks online|all on paper|love that girl/i);
+  assert.notEqual(body, 'This file does not have that.');
+  assert.doesNotMatch(body, /^This file does not have that\./);
+  assert.doesNotMatch(body, /Co\.\./);
+});
+
+test('a follow-up uses the prior turn for the person and the date', async () => {
+  const first = await askLive('What did El Presidente say on Sep 17?');
+  const history = [
+    { role: 'user' as const, text: 'What did El Presidente say on Sep 17?' },
+    { role: 'assistant' as const, text: first.answer },
+  ];
+  const second = await askLive('and on Sep 21?', history);
+  const said = visible(second.answer);
+  assert.match(said, /Sep 21/);
+  assert.match(said, /QuickBooks online/);
+  assert.match(said, /love that girl/i);
+  assert.doesNotMatch(said, /Sample the intervals/);
+  assert.notEqual(said, 'This file does not have that.');
+
+  const remembered = [
+    ...history,
+    { role: 'user' as const, text: 'and on Sep 21?' },
+    { role: 'assistant' as const, text: second.answer },
+  ];
+  const pronoun = await askLive('what did he say there', remembered);
+  const again = visible(pronoun.answer);
+  assert.match(again, /El Presidente/);
+  assert.match(again, /QuickBooks online|love that girl/i);
+  assert.notEqual(again, 'This file does not have that.');
 });
 
 test('a privacy-redacted line is never quoted or chipped', async () => {

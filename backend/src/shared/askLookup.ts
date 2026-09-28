@@ -24,7 +24,14 @@ import {
   secondsInPrivacyRange,
 } from '../audio/privacyRedactions.js';
 import { cleanMentionTitle, mentionSpeakerLine, sourceSlug } from './mentions.js';
-import { classifyAskIntent, composeGroundedAsk, localStamp, selectSpeechMoments } from './askPolish.js';
+import {
+  classifyAskIntent,
+  composeGroundedAsk,
+  isJobOverview,
+  localStamp,
+  resolveAskQuestion,
+  selectSpeechMoments,
+} from './askPolish.js';
 import {
   clipMatchesAskDate,
   formatAskClock,
@@ -86,6 +93,11 @@ export type AskLookupCatalog = {
   history?: AskLookupHistoryEvent[] | null;
   people?: AskLookupPerson[] | null;
   jobTitle?: string | null;
+  /** Site address, when the job's property has one. */
+  jobAddress?: string | null;
+  /** Client or party contacts on the job. */
+  clientName?: string | null;
+  jobDescription?: string | null;
   /** Asker's IANA zone. History stamps use this, never UTC. */
   timeZone?: string | null;
 };
@@ -441,6 +453,9 @@ export function askLookupCatalogFromJob(input: {
   parties?: Array<{ id?: string | null; created_by?: string | null }> | null;
   history?: Array<Record<string, unknown>> | null;
   jobTitle?: string | null;
+  jobAddress?: string | null;
+  clientName?: string | null;
+  jobDescription?: string | null;
   people?: AskLookupPerson[] | null;
   timeZone?: string | null;
 }): AskLookupCatalog {
@@ -450,6 +465,9 @@ export function askLookupCatalogFromJob(input: {
     jobId: input.access === 'viewer' || input.jobId ? input.jobId : null,
     access: input.access,
     jobTitle: input.jobTitle ?? null,
+    jobAddress: trim(input.jobAddress) || null,
+    clientName: trim(input.clientName) || null,
+    jobDescription: trim(input.jobDescription) || null,
     timeZone: input.timeZone ?? null,
     people: input.people ?? [],
     clips: input.proofs
@@ -800,26 +818,110 @@ export function clipIndex(catalog: AskLookupCatalog): string {
   return lines.length ? lines.join('\n') : '- none';
 }
 
-/** Titles and ids only. Transcript bodies stay behind the tools. */
+/** Redacted transcript and findings for one clip. Safe to put in a prompt or a stored answer. */
+export function clipAskPreview(clip: AskLookupClip): { transcript: string; findings: string } {
+  return {
+    transcript: redactClipTranscriptForAsk(clip).slice(0, 900),
+    findings: findingsText(clip.findings, clip).slice(0, 400),
+  };
+}
+
+/** Phrases that overlap a privacy or child-privacy range. These must not be stored or replayed. */
+export function redactedSourcePhrases(clip: AskLookupClip): string[] {
+  const phrases: string[] = [];
+  for (const row of [...asTimed(clip.segments), ...asTimed(clip.words)]) {
+    if (!spanIsRedacted(clip, row.start, row.end)) continue;
+    const text = trim(row.text);
+    const keep = text.length >= 12 || (text.length >= 4 && /\d{3,}/.test(text));
+    if (keep) phrases.push(text);
+  }
+  return phrases;
+}
+
+/** Replace redacted transcript phrases before an answer is stored or sent back as memory. */
+export function scrubStoredAskText(text: string, clips: AskLookupClip[] | null | undefined): string {
+  let out = String(text ?? '');
+  const sorted = (clips ?? [])
+    .flatMap((clip) => redactedSourcePhrases(clip))
+    .sort((a, b) => b.length - a.length);
+  for (const phrase of sorted) {
+    if (!phrase || !out.includes(phrase)) continue;
+    out = out.split(phrase).join('[privacy redacted]');
+  }
+  return out;
+}
+
+/** Project, address, client, people, history, and every clip's redacted transcript. */
+export function formatAskJobContext(catalog: AskLookupCatalog): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${trim(catalog.jobTitle) || 'Untitled job'}`);
+  if (trim(catalog.jobAddress)) lines.push(`Address: ${trim(catalog.jobAddress)}`);
+  if (trim(catalog.clientName)) lines.push(`Client: ${trim(catalog.clientName)}`);
+  if (trim(catalog.jobDescription)) lines.push(`Description: ${trim(catalog.jobDescription)}`);
+  const people = (catalog.people ?? []).filter((person) => person.onThisJob !== false && trim(person.name));
+  lines.push(people.length ? `People: ${people.map((person) => person.name).join(', ')}` : 'People: none listed');
+  const history = (catalog.history ?? []).slice(0, 12);
+  lines.push(
+    history.length
+      ? `Job history:\n${history
+          .map((event) => `- ${localStamp(event.at, catalog.timeZone) || 'Recorded'}: ${event.summary}`)
+          .join('\n')}`
+      : 'Job history: none',
+  );
+  const clips = clipsInScope(catalog);
+  if (!clips.length) {
+    lines.push('Clips: none');
+  } else {
+    const rendered = clips.map((clip) => {
+      const when = clip.workDate ? localStamp(clip.workDate, catalog.timeZone) || clip.workDate : 'Undated';
+      const preview = clipAskPreview(clip);
+      const summary = trim(clip.summary);
+      return [
+        `- ${when} — ${clip.title}`,
+        summary ? `  Summary: ${summary}` : '',
+        preview.findings ? `  Findings: ${preview.findings}` : '',
+        preview.transcript ? `  Transcript: ${preview.transcript}` : '  Transcript: none',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    });
+    lines.push(`Clips:\n${rendered.join('\n')}`);
+  }
+  return lines.join('\n').slice(0, 24_000);
+}
+
+/** Titles, redacted transcripts, and the prior thread. Secrets in older turns are scrubbed. */
 export function buildLookupUserPrompt(input: {
   question: string;
   catalog: AskLookupCatalog;
   history?: Array<{ role?: string | null; text?: string | null }> | null;
+  /** When a short follow-up was rewritten from the thread. */
+  resolved?: string | null;
   extra?: string | null;
 }): string {
   const turns = (input.history ?? [])
     .filter((turn) => trim(turn.text))
     .slice(-8)
-    .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${trim(turn.text)}`)
+    .map((turn) => {
+      const who = turn.role === 'assistant' ? 'Assistant' : 'User';
+      const text = scrubStoredAskText(trim(turn.text), input.catalog.clips).slice(0, 1500);
+      return `${who}: ${text}`;
+    })
     .join('\n');
   const scope = input.catalog.jobId
     ? `Open job ${input.catalog.jobId}. Do not ask for other jobs.`
     : 'Org-wide office Ask. Stay inside this organization.';
+  const resolved = trim(input.resolved);
+  const follow =
+    resolved && resolved.toLowerCase() !== input.question.trim().toLowerCase()
+      ? `This follow-up refers to: ${resolved}`
+      : '';
   return [
     scope,
-    `Clip index (no transcripts):\n${clipIndex(input.catalog)}`,
+    `Job context:\n${formatAskJobContext(input.catalog)}`,
     input.extra?.trim() ? input.extra.trim() : '',
-    turns ? `Recent conversation:\n${turns}` : '',
+    turns ? `Earlier turns in this chat (questions, answers, and the clips they cited):\n${turns}` : '',
+    follow,
     `Question: ${input.question}`,
   ]
     .filter(Boolean)
@@ -843,13 +945,24 @@ function dedupePlan(
 export function planAskLookup(
   question: string,
   catalog: AskLookupCatalog,
+  history?: Array<{ role?: string | null; text?: string | null }> | null,
 ): Array<{ name: AskLookupToolName; input: Record<string, unknown> }> {
+  const resolved = resolveAskQuestion(question, history, catalog);
+  if (isJobOverview(resolved)) {
+    const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [
+      { name: 'read_job_history', input: {} },
+    ];
+    for (const clip of clipsInScope(catalog).slice(0, 8)) {
+      steps.push({ name: 'get_clip', input: { proofId: clip.proofId } });
+    }
+    return steps;
+  }
   const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [];
-  const q = question.toLowerCase();
-  const person = (catalog.people ?? []).find((row) => q.includes(row.name.toLowerCase()));
+  const q = resolved.toLowerCase();
+  const person = (catalog.people ?? []).find((row) => resolved.toLowerCase().includes(row.name.toLowerCase()));
   if (person) steps.push({ name: 'list_person_activity', input: { name: person.name } });
-  const asked = parseAskDate(question);
-  if (SPEECH_QUESTION.test(question) && asked) {
+  const asked = parseAskDate(resolved);
+  if (SPEECH_QUESTION.test(resolved) && asked) {
     const pool = person ? clipsForPerson(catalog, person) : clipsInScope(catalog);
     const dated = pool.filter((clip) => clipMatchesAskDate(clip.workDate, asked, catalog.timeZone));
     const rest = pool.filter((clip) => !dated.includes(clip) && clipHasClearSpeech(clip));
@@ -859,7 +972,7 @@ export function planAskLookup(
     }
     return dedupePlan(steps);
   }
-  const query = tokens(question)
+  const query = tokens(resolved)
     .filter((token) => !person || !person.name.toLowerCase().includes(token))
     .filter((token) => !ACTIVITY_VERBS.has(token) && !TASK_QUERY.has(token) && !/^\d+$/.test(token))
     .slice(0, 6)
@@ -870,10 +983,10 @@ export function planAskLookup(
     return words.some((word) => q.includes(word));
   });
   if (titled) steps.push({ name: 'get_clip', input: { proofId: titled.proofId } });
-  if (/\b(done|history|file|activity|opened|created)\b/.test(q) || classifyAskIntent(question).kind === 'task') {
+  if (/\b(done|history|file|activity|opened|created)\b/.test(q) || classifyAskIntent(resolved).kind === 'task') {
     steps.push({ name: 'read_job_history', input: {} });
   }
-  if (classifyAskIntent(question).kind === 'task' && !person) {
+  if (classifyAskIntent(resolved).kind === 'task' && !person) {
     for (const row of clipsInScope(catalog).slice(0, 3)) {
       steps.push({ name: 'get_clip', input: { proofId: row.proofId } });
     }
