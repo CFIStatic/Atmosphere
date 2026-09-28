@@ -399,13 +399,17 @@ export function isGenericSpeakerLabel(name: string): boolean {
 export function personNameForClip(catalog: AskLookupCatalog, clip: AskLookupClip, speaker: string): string {
   const raw = speaker.trim();
   if (raw && !isGenericSpeakerLabel(raw)) return raw;
+  const named = (catalog.people ?? []).filter(
+    (person) => person.name && !isGenericSpeakerLabel(person.name) && person.onThisJob !== false,
+  );
   const recorded = new Set(clip.recordedByUserIds ?? []);
-  const named = (catalog.people ?? []).filter((person) => {
-    if (!person.name || isGenericSpeakerLabel(person.name) || person.onThisJob === false) return false;
-    if (recorded.has(person.userId)) return true;
-    return (person.recordedProofIds ?? []).includes(clip.proofId);
-  });
-  if (named.length === 1) return named[0]!.name;
+  const filmed = named.filter((person) => recorded.has(person.userId));
+  if (filmed.length === 1) return filmed[0]!.name;
+  // A contact can list the same proof without having filmed it. Do not let that
+  // tie block the recorder, and do not guess when several people filmed it.
+  if (recorded.size > 0) return raw || 'Speaker';
+  const linked = named.filter((person) => (person.recordedProofIds ?? []).includes(clip.proofId));
+  if (linked.length === 1) return linked[0]!.name;
   return raw || 'Speaker';
 }
 

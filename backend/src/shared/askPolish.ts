@@ -876,11 +876,16 @@ function isGenericSpeakerName(name: string): boolean {
     || /^(?:speaker|unknown)$/i.test(text);
 }
 
-function namedSpeaker(catalog: AskLookupCatalog): string | null {
-  const named = (catalog.people ?? []).filter(
+/** The one person who filmed these clips, when the file names them. */
+export function namedSpeaker(catalog: AskLookupCatalog): string | null {
+  const eligible = (catalog.people ?? []).filter(
     (person) => person.onThisJob !== false && person.name && !isGenericSpeakerName(person.name),
   );
-  return named.length === 1 ? named[0]!.name : null;
+  const recorderIds = new Set(catalogClips(catalog).flatMap((clip) => clip.recordedByUserIds ?? []));
+  const filmed = eligible.filter((person) => recorderIds.has(person.userId));
+  if (filmed.length === 1) return filmed[0]!.name;
+  if (recorderIds.size > 0) return null;
+  return eligible.length === 1 ? eligible[0]!.name : null;
 }
 
 function quoteSpoken(text: string): string {

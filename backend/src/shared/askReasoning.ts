@@ -26,7 +26,6 @@ import {
   continueAskLookup,
   executeAskLookup,
   followUpAnswerable,
-  isGenericSpeakerLabel,
   planAskLookup,
   quotesFromTrace,
   scrubStoredAskText,
@@ -44,6 +43,7 @@ import {
 import {
   classifyAskIntent,
   composeGroundedAsk,
+  namedSpeaker,
   polishAskProse,
   resolveAskQuestion,
   speechQuotesForQuestion,
@@ -140,13 +140,10 @@ export function finalizeLookupAnswer(
       ? datedQuotes.map((quote) => quote.sourceId)
       : [...allowed].slice(0, 6);
   text = text.replace(/(?:\n|^)\s*⟦sources:\s*[^⟧]*⟧\s*/i, '').trim();
-  const named = (catalog.people ?? []).filter(
-    (person) => person.onThisJob !== false && person.name && !isGenericSpeakerLabel(person.name),
-  );
   text = polishAskProse(text, {
     timeZone: catalog.timeZone,
     jobTitle: catalog.jobTitle,
-    speakerName: named.length === 1 ? named[0]!.name : null,
+    speakerName: namedSpeaker(catalog),
   });
   if (classifyAskIntent(question).kind === 'task') text = wrapTaskArtifact(text);
   const spoken = /\b(say|said|quote|transcript|tell|mention)\b/i.test(question);

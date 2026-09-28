@@ -20,6 +20,7 @@ import {
   groundedLookupProse,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
+  personNameForClip,
   planAskLookup,
   redactClipTranscriptForAsk,
   scrubStoredAskText,
@@ -383,6 +384,20 @@ test('people on the job are available without an @mention', () => {
   const off = people.find((person) => person.name === 'Off Site');
   assert.equal(off?.onThisJob, false);
   assert.deepEqual(off?.recordedProofIds, []);
+});
+
+test('a contact on the same clip does not hide the person who recorded it', () => {
+  const file = catalog({
+    clips: [office],
+    people: [
+      { userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] },
+      { userId: 'contact:tiffany', name: 'Tiffany Buyer', onThisJob: true, recordedProofIds: [OFFICE] },
+    ],
+  });
+  assert.equal(personNameForClip(file, office, 'Seated man'), 'El Presidente');
+  const spoken = composeGroundedAsk('what was said about the tarp', [], file);
+  assert.match(spoken, /El Presidente/);
+  assert.doesNotMatch(spoken, /seated man/i);
 });
 
 test('a clip summary and an untimed transcript do not keep a redacted secret', () => {
