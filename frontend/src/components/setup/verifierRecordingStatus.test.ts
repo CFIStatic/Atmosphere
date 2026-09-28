@@ -70,7 +70,11 @@ describe('verifier dashboard recording status', () => {
       cls: 'yellow',
       text: 'Waiting for first clip',
     });
-    expect(verifierHtml).toContain("text: job && job.captureStatus === 'recorded' ? 'Recorded' : 'Waiting for first clip'");
+    // Zero clips is never Recorded, whatever captureStatus says.
+    expect(jobRecordingStatus([], { captureStatus: 'recorded' })).toEqual({
+      cls: 'yellow',
+      text: 'Waiting for first clip',
+    });
     expect(verifierHtml).toContain('Waiting for first clip');
     expect(verifierHtml).toContain('This job is open. The first clip shows up here when Field Capture files it.');
     expect(verifierHtml).not.toContain('No recording');
@@ -150,6 +154,112 @@ describe('verifier dashboard recording status', () => {
     expect(row?.textContent).not.toMatch(/No recording/);
     expect(row?.querySelector('.chip.red, .chip.fail')).toBeNull();
     expect(row?.querySelector('.chip.yellow')?.textContent).toMatch(/Waiting for first clip/);
+    dom.window.close();
+  });
+});
+
+function bootWithLibrary(library: unknown) {
+  return new JSDOM(verifierHtml, {
+    url: 'https://atmosphere.test/verifier/',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    beforeParse(window) {
+      window.sessionStorage.setItem('atmosphere.fieldEmbed.accessToken', 'test-token');
+      window.fetch = ((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/evidence-portal/library')) {
+          return Promise.resolve(
+            new globalThis.Response(JSON.stringify(library), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.reject(new Error(`unexpected fetch ${url}`));
+      }) as typeof fetch;
+      window.matchMedia = ((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+        dispatchEvent() {
+          return false;
+        },
+      })) as unknown as typeof window.matchMedia;
+    },
+  });
+}
+
+async function waitForRow(document: Document, selector: string) {
+  for (let i = 0; i < 40; i += 1) {
+    if (document.querySelector(selector)) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return document.querySelector(selector);
+}
+
+describe('verifier dashboard job status and Recorded date', () => {
+  // Job #13 as stored: created 2026-09-28 04:30:30Z (11:30 PM Sep 27 CT), zero clips.
+  const JOB_13 = {
+    jobId: 'e754a03e-c2fa-4609-aa8e-72f56295bc10',
+    jobName: 'Jack Cyganiak',
+    jobNumber: 13,
+    createdAt: '2026-09-28T04:30:30.856894+00:00',
+  };
+
+  it.each(['in_progress', 'recorded', ''])(
+    'a zero-clip job is Waiting for first clip with no Recorded date (captureStatus %j)',
+    async (captureStatus) => {
+      const dom = bootWithLibrary({ jobs: [{ ...JOB_13, captureStatus }], items: [] });
+      const row = await waitForRow(dom.window.document, `tr.jobrow[data-job="${JOB_13.jobId}"]`);
+      expect(row).not.toBeNull();
+      const status = row!.querySelector('td.job-status')?.textContent ?? '';
+      expect(status).toBe('Waiting for first clip');
+      expect(row!.textContent).not.toMatch(/\bRecorded\b/);
+      // The job's creation time is not a recording date.
+      const when = row!.querySelector('td.job-when');
+      expect(when?.querySelector('time')?.textContent).toBe('—');
+      expect(when?.querySelector('small')).toBeNull();
+      expect(row!.textContent).not.toMatch(/Sep 2[78], 2026/);
+      expect(row!.textContent).not.toMatch(/\d{1,2}:\d{2} [AP]M/);
+      expect(row!.querySelector('.job-card-meta')?.textContent).toBe('Waiting for first clip');
+      dom.window.close();
+    },
+  );
+
+  it('a job with a clip is Recorded, dated from the clip capture time (not job creation)', async () => {
+    const capturedAt = '2026-09-28T04:45:00Z';
+    const dom = bootWithLibrary({
+      jobs: [{ ...JOB_13, captureStatus: 'recorded' }],
+      items: [
+        {
+          id: 'clip-1',
+          jobId: JOB_13.jobId,
+          jobName: JOB_13.jobName,
+          jobNumber: 13,
+          workDate: '2026-09-28',
+          capturedAt,
+          uploadedAt: '2026-09-28T04:47:00Z',
+          analysisState: 'done',
+          person: 'El Presidente',
+        },
+      ],
+    });
+    const row = await waitForRow(dom.window.document, `tr.jobrow[data-job="${JOB_13.jobId}"]`);
+    expect(row).not.toBeNull();
+    expect(row!.querySelector('td.job-status')?.textContent).toBe('Recorded');
+    const when = row!.querySelector('td.job-when');
+    const at = new Date(capturedAt);
+    // Day and clock both come from the capture instant in the viewer's zone.
+    expect(when?.querySelector('time')?.textContent).toBe(
+      at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    );
+    expect(when?.querySelector('small')?.textContent).toBe(
+      at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    );
+    expect(when?.querySelector('time')?.getAttribute('datetime')).toBe(capturedAt);
     dom.window.close();
   });
 });
