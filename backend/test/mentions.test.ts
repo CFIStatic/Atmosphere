@@ -498,6 +498,22 @@ test('job ask stays on that job, and a person from another job is named as absen
   });
   assert.match(foreign.directAnswer ?? '', /isn't in this organization/);
   assert.doesNotMatch(foreign.directAnswer ?? '', /Other org|Secret/);
+
+  const mixed = await prepareMentionAsk(db as any, {
+    orgId: ORG_A,
+    jobId: JOB_ELEC,
+    question: '@johncyganiak and @janealvarez what did they do?',
+    now: new Date('2026-09-20T00:00:00.000Z'),
+    anthropicApiKey: 'test-key-not-a-real-secret',
+  });
+  assert.equal(mixed.directAnswer, null);
+  assert.equal(mixed.mentions[0]?.userId, JOHN);
+  assert.equal(mixed.people.some((person) => person.userId === JANE), false);
+  const jane = mixed.offJobPeople.find((person) => person.userId === JANE);
+  assert.ok(jane);
+  assert.match(jane.otherJobTitles.join(' '), /Kitchen faucet/);
+  assert.match(mixed.supplement, /Jane Alvarez isn't on this job/);
+  assert.match(mixed.supplement, /Kitchen faucet/);
 });
 
 test('job-scoped context keeps this job when other jobs fill the fetch windows', async () => {

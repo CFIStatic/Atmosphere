@@ -594,7 +594,14 @@ export function JobAskPanel({
             jobId,
             text,
             {
-              onStatus: (phase) => setAskStatus(phase),
+              onStatus: (phase) => {
+                setAskStatus(phase);
+                if (!sawFirstToken) return;
+                // Tokens before this status were a tool-turn preface, not the answer.
+                sawFirstToken = false;
+                setAsking(true);
+                setTurns((prev) => prev.filter((turn) => turn.id !== streamId));
+              },
               onToken: (delta) => {
                 if (!sawFirstToken) {
                   sawFirstToken = true;

@@ -307,6 +307,46 @@ describe('JobAskPanel', () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
+  it('drops a tool-turn preface when status resumes', async () => {
+    let release: () => void = () => {};
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    askAboutProofsStream.mockImplementation(
+      async (
+        _jobId: string,
+        _q: string,
+        handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void },
+      ) => {
+        handlers.onToken?.("I'll look that up. ");
+        handlers.onStatus?.('Searching transcripts');
+        await paused;
+        handlers.onToken?.('The tarp came off.');
+        return {
+          answer: 'The tarp came off.',
+          groundedOn: 1,
+          model: 'claude-opus',
+          question: null,
+        };
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider><VideoSeekProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+      </VideoSeekProvider></JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    const pending = user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText('Searching transcripts')).toBeInTheDocument();
+    expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+    release();
+    await pending;
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/I'll look that up/)).not.toBeInTheDocument();
+  });
+
   it('streams tokens into the thread when the stream API is available', async () => {
     askAboutProofsStream.mockImplementation(
       async (

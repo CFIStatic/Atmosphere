@@ -288,6 +288,9 @@ export function lookupPeopleFromContexts(
   people: Array<{
     userId: string;
     name: string;
+    /** False when mention prep already decided they are not on the open job. */
+    onThisJob?: boolean;
+    otherJobTitles?: string[] | null;
     items?: Array<{ kind?: string; proofId?: string | null; captured?: boolean }> | null;
   }>,
 ): AskLookupPerson[] {
@@ -295,10 +298,12 @@ export function lookupPeopleFromContexts(
     .filter((person) => person.userId && person.name)
     .map((person) => {
       const items = person.items ?? [];
+      const elsewhere = (person.otherJobTitles ?? []).map((title) => trim(title)).filter(Boolean);
       return {
         userId: person.userId,
         name: person.name,
-        onThisJob: true,
+        onThisJob: person.onThisJob !== false,
+        ...(elsewhere.length ? { otherJobTitles: elsewhere } : {}),
         recordedProofIds: items
           .filter((item) => item.kind === 'video' && item.captured && item.proofId)
           .map((item) => String(item.proofId)),
@@ -579,7 +584,7 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
       };
     });
   const actions = historyInScope(catalog)
-    .filter((event) => !event.actorId || event.actorId === person.userId)
+    .filter((event) => event.actorId === person.userId)
     .map((event) => ({ at: event.at ?? null, summary: event.summary }));
   return {
     ok: true,
@@ -858,7 +863,38 @@ export function groundedLookupProse(question: string, trace: AskLookupTraceStep[
       }
     } else if (step.tool === 'search_transcripts') {
       const hits = Array.isArray(data.hits) ? data.hits : [];
-      if (!hits.length) bits.push('The transcripts in scope do not contain that.');
+      if (!hits.length) {
+        bits.push('The transcripts in scope do not contain that.');
+        continue;
+      }
+      const lines = hits.map((row) => {
+        if (!row || typeof row !== 'object') return '';
+        const hit = row as { title?: unknown; speaker?: unknown; excerpt?: unknown };
+        const said = trim(hit.excerpt);
+        const title = trim(hit.title) || 'a clip';
+        const speaker = trim(hit.speaker);
+        if (!said) return title;
+        return speaker ? `${speaker} in ${title}: ${said}` : `${title}: ${said}`;
+      }).filter(Boolean);
+      bits.push(lines.length ? `Transcript moments: ${lines.join(' ')}` : step.result.summary);
+    } else if (step.tool === 'get_clip') {
+      const title = trim(data.title) || 'a clip';
+      const transcript = trim(data.transcript);
+      const spoken = transcript
+        ? redactedLines(transcript)
+            .map((line) => line.text.replace(/^[^:]{1,40}:\s+/, '').trim())
+            .filter(
+              (text) =>
+                text &&
+                text !== PRIVACY_REDACTED_LABEL &&
+                !text.endsWith(PRIVACY_REDACTED_LABEL) &&
+                !text.includes(CHILD_PRIVACY_REDACTED_LABEL),
+            )
+            .slice(0, 6)
+            .map((text) => excerpt(text))
+        : [];
+      const detail = spoken.join(' ') || trim(data.summary) || trim(data.findings);
+      bits.push(detail ? `${title}: ${detail}` : step.result.summary);
     }
   }
   if (!bits.length) {

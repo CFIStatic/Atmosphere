@@ -9,6 +9,8 @@ import {
 import {
   buildLookupUserPrompt,
   executeAskLookup,
+  groundedLookupProse,
+  lookupPeopleFromContexts,
   planAskLookup,
   redactClipTranscriptForAsk,
   type AskLookupCatalog,
@@ -154,6 +156,48 @@ test('job scope stays on the open job and org-wide Ask can see the org', () => {
   assert.equal(((viewerOffice.data as { hits: unknown[] }).hits).length, 1);
 });
 
+test('list_person_activity does not treat unattributed history as that person', () => {
+  const file = catalog({
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true }],
+    history: [
+      { id: 'shared', jobId: JOB, orgId: ORG, summary: 'Job-level memory with no actor.', actorId: null },
+      { id: 'blank', jobId: JOB, orgId: ORG, summary: 'Blank actor event.', actorId: '' },
+      { id: 'el', jobId: JOB, orgId: ORG, summary: 'El opened the job.', actorId: EL },
+      { id: 'other', jobId: JOB, orgId: ORG, summary: 'Jane uploaded a clip.', actorId: 'jane' },
+    ],
+  });
+  const result = executeAskLookup('list_person_activity', { name: 'El Presidente' }, file);
+  const actions = (result.data as { actions: Array<{ summary: string }> }).actions;
+  assert.deepEqual(
+    actions.map((action) => action.summary),
+    ['El opened the job.'],
+  );
+});
+
+test('lookup people keep an off-job record and its other jobs', () => {
+  const people = lookupPeopleFromContexts([
+    {
+      userId: 'jane',
+      name: 'Jane Alvarez',
+      onThisJob: false,
+      otherJobTitles: ['Kitchen faucet'],
+    },
+    {
+      userId: EL,
+      name: 'El Presidente',
+      items: [{ kind: 'video', proofId: OFFICE, captured: true }],
+    },
+  ]);
+  assert.equal(people[0]?.onThisJob, false);
+  assert.deepEqual(people[0]?.otherJobTitles, ['Kitchen faucet']);
+  const activity = executeAskLookup('list_person_activity', { name: 'Jane Alvarez' }, catalog({ people }));
+  assert.match(activity.summary, /isn't on this job/);
+  assert.match(activity.summary, /Kitchen faucet/);
+  assert.deepEqual((activity.data as { clips: unknown[] }).clips, []);
+  assert.equal(people[1]?.onThisJob, true);
+  assert.deepEqual(people[1]?.recordedProofIds, [OFFICE]);
+});
+
 test('a person who is not on the job gets no clips from it', () => {
   const file = catalog({
     clips: [office],
@@ -225,6 +269,43 @@ test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups'
   const follows = parseFollowupTrailer(result.answer);
   assert.ok(follows.length >= 2 && follows.length <= 3);
   assert.ok(follows.some((item) => /tabletop/i.test(item)));
+});
+
+test('a failed model keeps transcript hits and clip speech in the fallback', async () => {
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const file = catalog({ clips: [office] });
+    const result = await answerFromAskLookup({
+      question: 'what was said about the tarp',
+      catalog: file,
+      step: async () => null,
+    });
+    assert.equal(result.model, null);
+    assert.match(result.answer, /tarp came off/);
+    assert.doesNotMatch(result.answer, /This job file does not have that/);
+    assert.match(result.answer, new RegExp(`video/${JOB}/${OFFICE}/`));
+    const prose = groundedLookupProse('what was said about the tarp', [
+      {
+        tool: 'get_clip',
+        input: { proofId: OFFICE },
+        result: executeAskLookup('get_clip', { proofId: OFFICE }, file),
+      },
+    ]);
+    assert.match(prose, /tarp came off/);
+    assert.doesNotMatch(prose, /This job file does not have that/);
+  } finally {
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+  }
 });
 
 test('a failed model falls back to tool results and does not invent', async () => {

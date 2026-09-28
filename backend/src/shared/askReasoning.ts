@@ -173,11 +173,11 @@ async function anthropicLookupTurn(input: {
   );
   let streamed = false;
   const deltas: string[] = [];
+  // Hold text until the turn is finished. A tool_use turn often starts with a
+  // short preface; forwarding it would paint text the caller then discards.
   stream.on('text', (delta: string) => {
     if (!delta) return;
     deltas.push(delta);
-    streamed = true;
-    input.onToken?.(delta);
   });
   const response = await stream.finalMessage();
   const calls = response.content
@@ -194,6 +194,12 @@ async function anthropicLookupTurn(input: {
       .map((block: { type: string; text?: string }) => block.text ?? '')
       .join('\n')
       .trim();
+  if (!calls.length) {
+    for (const delta of deltas) {
+      streamed = true;
+      input.onToken?.(delta);
+    }
+  }
   return {
     model: response.model,
     text: calls.length ? '' : text,

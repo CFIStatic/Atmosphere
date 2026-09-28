@@ -690,7 +690,7 @@ export async function answerFromJobFile(input: {
       question: input.question,
       catalog: input.lookup,
       history: input.history,
-      extra: [webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
+      extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,
       onToken: input.onToken,

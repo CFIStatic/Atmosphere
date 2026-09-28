@@ -2976,7 +2976,15 @@ export async function runProofAsk(input: {
       parties: partyRows,
       history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
       jobTitle: file.job?.title ?? null,
-      people: lookupPeopleFromContexts(mentionPrep?.people ?? []),
+      people: lookupPeopleFromContexts([
+        ...(mentionPrep?.people ?? []),
+        ...(mentionPrep?.offJobPeople ?? []).map((person) => ({
+          userId: person.userId,
+          name: person.name,
+          onThisJob: false,
+          otherJobTitles: person.otherJobTitles,
+        })),
+      ]),
     });
     const result = mentionPrep?.directAnswer
       ? {
