@@ -326,8 +326,10 @@ export function foldThreadMemory(input: {
   /** The pair list is a tail, not the whole thread. Do not rebuild the summary from that hole. */
   incomplete?: boolean;
   /**
-   * Use the stored summary as-is for this turn. Recent pairs stay verbatim.
-   * The caller regenerates the summary after the reply has streamed.
+   * Do not rebuild the stored summary before the reply. Recent pairs stay
+   * verbatim. Turns after the stored cursor that have already left that
+   * window are packed into the prompt so a follow-up cannot skip them
+   * while the post-reply write is still running.
    */
   reuseSummary?: boolean;
 }): ThreadMemoryFold {
@@ -336,13 +338,24 @@ export function foldThreadMemory(input: {
   );
   if (input.reuseSummary) {
     const recentPairs = chronological.slice(-RECENT_PAIRS);
+    const recentIds = new Set(recentPairs.map((pair) => pair.id));
+    const previous = String(input.previousSummary ?? '').trim();
+    const cursorIndex = input.summarizedThroughId
+      ? chronological.findIndex((pair) => pair.id === input.summarizedThroughId)
+      : -1;
+    const uncovered =
+      cursorIndex >= 0
+        ? chronological.slice(cursorIndex + 1).filter((pair) => !recentIds.has(pair.id))
+        : chronological.filter((pair) => !recentIds.has(pair.id));
+    const gap = packSummary(uncovered, uncovered.length, input.timeZone).replace(/^Earlier turns[^\n]*\n/, '');
+    const summary = (gap ? (previous ? `${previous}\n${gap}` : gap) : previous).slice(0, 2200);
     return {
-      summary: String(input.previousSummary ?? '').trim(),
+      summary,
       summaryThroughId: input.summarizedThroughId ?? null,
-      coveredCount: 0,
+      coveredCount: uncovered.length,
       recent: recentPairs.flatMap(pairToTurns),
       notes: capDurableNotes(chronological.flatMap(pairNotes)),
-      regenerate: false,
+      regenerate: uncovered.length > 0,
     };
   }
   const recentPairs = chronological.slice(-RECENT_PAIRS);

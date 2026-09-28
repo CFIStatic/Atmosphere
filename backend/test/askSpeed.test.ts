@@ -125,6 +125,31 @@ test('the prompt reuses the stored summary and does not rebuild it first', () =>
   assert.match(folded.recent.map((turn) => turn.text).join(' '), /walnut/);
 });
 
+test('a reused summary still includes turns the recent window has already passed', () => {
+  const pairs: StoredAskPair[] = [
+    { id: '1', question: 'Keep summaries brief.', answer: 'Noted.', createdAt: '2026-09-01T00:00:00.000Z' },
+    { id: '2', question: 'We decided to redo the tabletop in walnut.', answer: 'Noted.', createdAt: '2026-09-02T00:00:00.000Z' },
+    { id: '3', question: 'Routine 3', answer: 'Ok.', createdAt: '2026-09-03T00:00:00.000Z' },
+    { id: '4', question: 'Routine 4', answer: 'Ok.', createdAt: '2026-09-04T00:00:00.000Z' },
+    { id: '5', question: 'Routine 5', answer: 'Ok.', createdAt: '2026-09-05T00:00:00.000Z' },
+    { id: '6', question: 'Routine 6', answer: 'Ok.', createdAt: '2026-09-06T00:00:00.000Z' },
+  ];
+  const folded = foldThreadMemory({
+    pairs,
+    previousSummary: 'Earlier turns: keep summaries brief.',
+    summarizedThroughId: '1',
+    reuseSummary: true,
+  });
+  assert.match(folded.summary, /keep summaries brief/);
+  assert.match(folded.summary, /walnut/);
+  assert.equal(
+    folded.recent.some((turn) => /walnut/.test(turn.text)),
+    false,
+  );
+  assert.match(folded.recent.map((turn) => turn.text).join(' '), /Routine 6/);
+  assert.equal(folded.regenerate, true);
+});
+
 test('stable job context is cached ahead of the question and stays redacted', () => {
   const secret: AskLookupClip = {
     proofId: 'p1',

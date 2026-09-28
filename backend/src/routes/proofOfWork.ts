@@ -2896,8 +2896,40 @@ export async function runProofAsk(input: {
             : Promise.resolve({ summary: null, throughId: null }),
           owner ? loadAskJobNotes(writeDb, { orgId, jobId, owner }) : Promise.resolve([] as DurableJobNote[]),
         ]);
-        const rows = [...((lateRes.data ?? []) as Array<Record<string, unknown>>)].reverse();
+        let rows = [...((lateRes.data ?? []) as Array<Record<string, unknown>>)].reverse();
         const total = typeof countRes.count === 'number' ? countRes.count : rows.length;
+        const throughId = memory?.throughId ?? null;
+        const cursorLoaded = !throughId || rows.some((row) => String(row.id ?? '') === throughId);
+        if (total > rows.length && !cursorLoaded && throughId) {
+          const { data: cursor } = await supabase
+            .from('job_proof_questions')
+            .select('created_at')
+            .eq('org_id', orgId)
+            .eq('job_id', jobId)
+            .eq('thread_id', threadId)
+            .eq('id', throughId)
+            .maybeSingle();
+          const createdAt = (cursor as { created_at?: string | null } | null)?.created_at ?? null;
+          if (createdAt) {
+            const { data: bridge } = await supabase
+              .from('job_proof_questions')
+              .select(shape)
+              .eq('org_id', orgId)
+              .eq('job_id', jobId)
+              .eq('thread_id', threadId)
+              .gt('created_at', createdAt)
+              .order('created_at', { ascending: true })
+              .limit(48);
+            const byId = new Map<string, Record<string, unknown>>();
+            for (const row of [...((bridge ?? []) as Array<Record<string, unknown>>), ...rows]) {
+              const id = String(row.id ?? '');
+              if (id) byId.set(id, row);
+            }
+            rows = [...byId.values()].sort((a, b) =>
+              String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
+            );
+          }
+        }
         clock.memoryLoadMs = Date.now() - memoryStarted;
         return { rows, memory, notes, incomplete: total > rows.length, total };
       })(),
