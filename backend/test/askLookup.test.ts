@@ -14,11 +14,14 @@ import {
   executeAskLookup,
   groundedLookupProse,
   lookupPeopleFromContexts,
+  mergeJobAskPeople,
   planAskLookup,
   redactClipTranscriptForAsk,
+  scrubStoredAskText,
   type AskLookupCatalog,
   type AskLookupClip,
 } from '../src/shared/askLookup.js';
+import { composeJobOverview } from '../src/shared/askPolish.js';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { parseFollowupTrailer, parseMomentSource, parseQuoteTrailer } from '../src/shared/askMoments.js';
 
@@ -349,6 +352,64 @@ test('job context includes the redacted transcript and prior turns', () => {
   assert.match(prompt, /Earlier turns/);
   assert.doesNotMatch(prompt, /4412/);
   assert.match(prompt, /\[privacy redacted\]/);
+});
+
+test('people on the job are available without an @mention', () => {
+  const people = mergeJobAskPeople({
+    mentioned: [
+      {
+        userId: '22222222-2222-4222-8222-222222222222',
+        name: 'Off Site',
+        onThisJob: false,
+        otherJobTitles: ['Riverside roof'],
+        recordedProofIds: [],
+        taggedProofIds: [],
+      },
+    ],
+    crew: [{ userId: EL, name: 'El Presidente' }],
+    contacts: [{ name: 'Tiffany Buyer', proofIds: [OFFICE] }],
+    clips: [office],
+  });
+  const onJob = people.filter((person) => person.onThisJob).map((person) => person.name);
+  assert.ok(onJob.includes('El Presidente'));
+  assert.ok(onJob.includes('Seated man'));
+  assert.ok(onJob.includes('Tiffany Buyer'));
+  assert.deepEqual(people.find((person) => person.name === 'El Presidente')?.recordedProofIds, [OFFICE]);
+  const off = people.find((person) => person.name === 'Off Site');
+  assert.equal(off?.onThisJob, false);
+  assert.deepEqual(off?.recordedProofIds, []);
+});
+
+test('a clip summary and an untimed transcript do not keep a redacted secret', () => {
+  const secret = clip({
+    ...office,
+    summary: 'Office check-in. The lockbox code is 4412.',
+  });
+  const file = catalog({
+    clips: [secret],
+    jobTitle: 'Project Tiffany & Co.',
+    people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [OFFICE] }],
+  });
+  const prompt = buildLookupUserPrompt({ question: 'what was this job about', catalog: file });
+  assert.doesNotMatch(prompt, /4412/);
+  assert.match(prompt, /Office check-in/);
+  const overview = composeJobOverview(file);
+  assert.doesNotMatch(overview, /4412/);
+  assert.match(overview, /Office check-in/);
+  const loaded = executeAskLookup('get_clip', { proofId: OFFICE }, file);
+  assert.doesNotMatch(JSON.stringify(loaded.data), /4412/);
+
+  const untimed = clip({
+    proofId: 'untimed-secret',
+    title: 'Untimed private line',
+    transcript: 'The gate code is 9088.',
+    segments: [],
+    words: [],
+    privacyRedactions: { ranges: [{ startSec: 0, endSec: 8, reason: 'private', confidence: 0.9, source: 'vision' }] },
+  });
+  const scrubbed = scrubStoredAskText('He said The gate code is 9088. on camera.', [untimed]);
+  assert.doesNotMatch(scrubbed, /9088/);
+  assert.match(scrubbed, /\[privacy redacted\]/);
 });
 
 test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups', async () => {

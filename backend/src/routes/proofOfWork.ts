@@ -44,6 +44,7 @@ import {
   askLookupCatalogFromJob,
   clipFromProofRow,
   lookupPeopleFromContexts,
+  mergeJobAskPeople,
   scrubStoredAskText,
 } from '../shared/askLookup.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
@@ -2836,10 +2837,20 @@ export async function runProofAsk(input: {
     const taskRows = (taskRes.data ?? []) as any[];
     const crewRows = ((crewRes.data ?? []) as any[]).filter((row) => !row.released_at);
     const logRows = (logRes.data ?? []) as any[];
+    const proofRows = ((proofsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+    const recorderIds = proofRows.flatMap((row) => {
+      const device =
+        row.device_metadata && typeof row.device_metadata === 'object'
+          ? (row.device_metadata as { userId?: unknown }).userId
+          : null;
+      const party = partyRows.find((item) => item.id === row.party_id);
+      return [device, party?.created_by];
+    });
     const people = await loadPeople(supabase, [
       ...taskRows.map((row) => row.assigned_to),
       ...crewRows.map((row) => row.user_id),
       ...logRows.map((row) => row.author_id),
+      ...recorderIds,
     ]);
     const personName = (id: string | null | undefined) => {
       if (!id) return null;
@@ -2947,9 +2958,7 @@ export async function runProofAsk(input: {
       }
     }
 
-    const memoryClips = ((proofsRes.data ?? []) as Array<Record<string, unknown>>)
-      .filter((row) => !row.deleted_at)
-      .map((row) => {
+    const memoryClips = proofRows.map((row) => {
         const party = partyRows.find((item) => item.id === row.party_id);
         return clipFromProofRow(row, {
           orgId,
@@ -3000,15 +3009,24 @@ export async function runProofAsk(input: {
       clientName,
       jobDescription: file.job?.description ?? null,
       timeZone: input.timeZone ?? null,
-      people: lookupPeopleFromContexts([
-        ...(mentionPrep?.people ?? []),
-        ...(mentionPrep?.offJobPeople ?? []).map((person) => ({
-          userId: person.userId,
-          name: person.name,
-          onThisJob: false,
-          otherJobTitles: person.otherJobTitles,
+      people: mergeJobAskPeople({
+        mentioned: lookupPeopleFromContexts([
+          ...(mentionPrep?.people ?? []),
+          ...(mentionPrep?.offJobPeople ?? []).map((person) => ({
+            userId: person.userId,
+            name: person.name,
+            onThisJob: false,
+            otherJobTitles: person.otherJobTitles,
+          })),
+        ]),
+        crew: crewRows.map((row) => ({ userId: row.user_id, name: personName(row.user_id) })),
+        contacts: partyRows.map((row) => ({
+          userId: row.created_by,
+          name: row.contact_name,
+          proofIds: proofRows.filter((proof) => proof.party_id === row.id).map((proof) => String(proof.id ?? '')),
         })),
-      ]),
+        clips: memoryClips,
+      }),
     });
     const result = mentionPrep?.directAnswer
       ? {
