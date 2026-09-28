@@ -9,6 +9,7 @@
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { logger } from '../lib/logger.js';
 import { findVerbatimQuote } from './verbatimTranscript.js';
+import { provenSpeakerLabel } from './audioSource.js';
 
 export type ConversationQuotedFact = {
   text: string;
@@ -232,11 +233,13 @@ function normalizeSpeaker(raw: string): string {
   if (/^contractor|^crew|^tech|^technician|^worker/.test(s)) return 'Crew';
   if (/^adjuster/.test(s)) return 'Adjuster';
   if (/^inspector/.test(s)) return 'Inspector';
+  // A letter label written in the transcript itself ("Speaker A: …") is kept
+  // as written; it is never generated for unlabeled speech.
   if (/^speaker\s*a|^person\s*1/.test(s)) return 'Speaker A';
   if (/^speaker\s*b|^person\s*2/.test(s)) return 'Speaker B';
   if (/^speaker\s*c/.test(s)) return 'Speaker C';
   if (/^speaker\s*d/.test(s)) return 'Speaker D';
-  return raw.trim().replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 24) || 'Speaker A';
+  return raw.trim().replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 24) || 'unknown';
 }
 
 type StampChunk = { at: number | null; text: string };
@@ -292,9 +295,9 @@ function turnsFromChunks(chunks: StampChunk[]): ConversationTurn[] {
         speakerLabel = lastLabel;
         text = part.trim();
       } else {
+        // Unlabeled speech: who said it is not proven. Never make up "Speaker A".
         anon += 1;
-        speakerLabel =
-          anon === 1 ? 'Speaker A' : anon === 2 ? 'Speaker B' : `Speaker ${String.fromCharCode(64 + Math.min(anon, 26))}`;
+        speakerLabel = 'unknown';
         text = part.trim();
         lastLabel = speakerLabel;
       }
@@ -537,7 +540,7 @@ function asTurnList(value: unknown): ConversationTurn[] {
     const text = String((item as { text?: unknown }).text ?? '').trim();
     if (!text) continue;
     const speakerLabel =
-      String((item as { speakerLabel?: unknown }).speakerLabel ?? 'Speaker A').trim() || 'Speaker A';
+      String((item as { speakerLabel?: unknown }).speakerLabel ?? 'unknown').trim() || 'unknown';
     const tRaw =
       (item as { tSec?: unknown; atSeconds?: unknown }).tSec ?? (item as { atSeconds?: unknown }).atSeconds;
     const tSec = Number(tRaw);
@@ -664,7 +667,10 @@ export function parseConversationModelJson(
     return null;
   }
 
-  const turns = asTurnList(data.turns);
+  const turns = asTurnList(data.turns).map((turn) => ({
+    ...turn,
+    speakerLabel: provenSpeakerLabel(turn.speakerLabel, fallback.turns ?? []),
+  }));
   const agreementFacts = asFactList(data.agreements);
   const concernFacts = asFactList(data.concerns ?? data.objections);
   const commitments = asFactList(data.commitments ?? data.promises);
@@ -729,7 +735,7 @@ Return JSON only (no markdown). Schema:
 {
   "executiveSummary": "3-7 sentence reconstruction for the office: topics, what was decided, refused, promised, money/insurance, open questions, next steps — grounded in quotes",
   "summary": "1-2 sentence headline",
-  "turns": [{"tSec": number|null, "speakerLabel": "Homeowner"|"Crew"|"Adjuster"|"Speaker A"|"Speaker B"|string, "text": "..."}],
+  "turns": [{"tSec": number|null, "speakerLabel": "Homeowner"|"Crew"|"Adjuster"|"unknown"|string, "text": "..."}],
   "agreements": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":null,"kind":"agreement"}],
   "refusals": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":null,"kind":"refusal"}],
   "commitments": [{"text":"...","tSec":number|null,"quote":"...","confidence":0.0,"owner":"Crew"|"Homeowner"|string,"kind":"promise"}],
@@ -751,7 +757,8 @@ Rules:
 - Use [m:ss] / [h:mm:ss] stamps for tSec whenever present. Quote must be a verbatim transcript span.
 - confidence 0–1 reflecting how clearly the transcript supports the claim. Use ≤0.4 when uncertain.
 - commitments MUST set owner when clear ("Crew will…", "Homeowner will…"); leave owner null when unclear — do not guess.
-- Prefer Homeowner/Crew/Adjuster labels; else Speaker A/B. Never invent a legal name.
+- speakerLabel: use Homeowner/Crew/Adjuster only when the transcript itself shows the role (a spoken name/role, "Homeowner:" lead, or unmistakable content). Otherwise "unknown". Never output Speaker A/B/C or any made-up label, and never invent a legal name.
+- Speech from a TV, laptop, phone or radio in the room (a show, news, a video, a call on speaker) is media, not field conversation: never attribute it to the crew or homeowner and never list it as an agreement, commitment, price or decision.
 - Never invent speech. Empty arrays when silent or noise-only.
 - CRITICAL: quote fields must be EXACT verbatim substrings of the transcript. Do not paraphrase quotes. Do not rewrite the transcript. Structure sits ON TOP OF the verbatim log.
 - Surface money/deductible, insurance/adjuster, change orders, scope in/out, safety, refusals, next steps, and unresolved questions explicitly and densely.
