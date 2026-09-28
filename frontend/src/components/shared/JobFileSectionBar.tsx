@@ -10,12 +10,10 @@ import { cn } from '../../design/cn';
 
 export type JobFileSectionId =
   | 'chat'
-  | 'happening'
+  | 'timeline'
   | 'access'
   | 'videos'
-  | 'packet'
-  | 'evidence'
-  | 'history';
+  | 'evidence';
 
 export type JobFileSectionTab = {
   id: JobFileSectionId;

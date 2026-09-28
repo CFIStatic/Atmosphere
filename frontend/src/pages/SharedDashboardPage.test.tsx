@@ -36,16 +36,12 @@ vi.mock('../components/JobAskPanel', () => ({
   JobAskPanel: () => <div data-testid="job-ask-panel" aria-label="Ask this job" />,
 }));
 
-vi.mock('../components/shared/JobProgressDashboard', () => ({
-  JobProgressDashboard: ({ framed }: { framed?: boolean }) =>
-    framed ? (
-      <div data-testid="job-happening-now">
-        <h2>Happening Now</h2>
-        <p>What&apos;s on site right now, what&apos;s done, and what&apos;s left.</p>
-      </div>
-    ) : (
-      <div>Job progress</div>
-    ),
+vi.mock('../components/shared/JobTimeline', () => ({
+  JobTimeline: () => (
+    <div data-testid="job-timeline">
+      <h2>Timeline</h2>
+    </div>
+  ),
 }));
 
 vi.mock('../components/shared/EvidenceLocker', () => ({
@@ -166,7 +162,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByTestId('job-file-section-bar')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('job-file-ask')).toBeInTheDocument();
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Evidence report' })).toBeInTheDocument();
     expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
@@ -202,7 +198,7 @@ describe('SharedDashboardPage job file identity', () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId('job-file')).toHaveAttribute('data-ask-placement', 'section');
     expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
     expect(screen.queryByTestId('job-file-ask-split')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'File' })).not.toBeInTheDocument();
@@ -215,7 +211,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(ask.className).toMatch(/min-h-0/);
     expect(ask.className).not.toMatch(/min-h-\[/);
     expect(screen.getByTestId('job-file-section-panel-chat').className).toMatch(/flex-1/);
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
 
     expect(screen.queryByRole('button', { name: /Overview/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Overview/ })).not.toBeInTheDocument();
@@ -306,11 +302,11 @@ describe('SharedDashboardPage job file identity', () => {
 
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Timeline' })).toHaveAttribute(
       'aria-selected',
       'false',
     );
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
   });
 
   it('opens the Chat section first when deep-linked with ?ask=1', async () => {
@@ -325,7 +321,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('job-file-ask')).toContainElement(screen.getByTestId('job-ask-panel'));
     expect(screen.queryByRole('tab', { name: 'Ask' })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
   });
 
   it('uses the Chat section tab on a phone — same Ask, no File/Ask chrome tabs', async () => {
@@ -341,7 +337,7 @@ describe('SharedDashboardPage job file identity', () => {
       await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Happening Now' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Timeline' })).toHaveAttribute(
       'aria-selected',
       'false',
     );
@@ -361,8 +357,8 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('job-ask-panel')).toBeInTheDocument();
     expect(screen.getByTestId('job-file-ask')).toHaveAttribute('aria-label', 'Ask this job');
 
-    await user.click(screen.getByRole('tab', { name: 'Happening Now' }));
-    expect(await screen.findByTestId('job-happening-now')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Timeline' }));
+    expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
     expect(screen.queryByTestId('job-file-ask')).not.toBeInTheDocument();
   });
 
@@ -414,7 +410,7 @@ describe('SharedDashboardPage job file identity', () => {
     expect(screen.queryByTestId('similar-past-jobs')).not.toBeInTheDocument();
   });
 
-  it('keeps Scope in Job history and omits Job facts and On the record', async () => {
+  it('puts Timeline where Happening Now was and drops Job facts and On the record', async () => {
     const user = userEvent.setup();
     authMembership.current = { role: 'global_admin', org: { id: 'org-1', name: 'Jettx' } };
     sharedJob.mockResolvedValue({ ...record, access: 'org' });
@@ -425,14 +421,82 @@ describe('SharedDashboardPage job file identity', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('tab', { name: 'Videos' })).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Job history' }));
-    expect(await screen.findByRole('heading', { name: 'Scope' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add a line' })).toBeInTheDocument();
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Chat',
+      'Timeline',
+      'Access',
+      'Videos',
+      'Evidence report',
+    ]);
+    expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Job history' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Timeline' }));
+    expect(await screen.findByTestId('job-timeline')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Scope' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a line' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Job facts' })).not.toBeInTheDocument();
     expect(screen.queryByText('Publish a change')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'On the record' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Nothing here can be edited or deleted/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-notes')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Notes' })).not.toBeInTheDocument();
+  });
+
+  it('opens Timeline for old Happening Now and Job history links', async () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&section=happening&ask=1']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByTestId('job-ask-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038#job-history']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
+  });
+
+  it('opens Timeline for old Packet links and keeps Share and Evidence report', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&section=packet']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('tab', { name: 'Packet' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('claim-ready-packet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with homeowner' })).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038&section=claim-ready']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Timeline' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
+    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
   });
 
   it('shows only the active section panel', async () => {
@@ -446,11 +510,11 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('job-file-ask')).toContainElement(
       screen.getByTestId('job-ask-panel'),
     );
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
     expect(screen.queryByText('Evidence locker')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: 'Happening Now' }));
-    expect(screen.getByTestId('job-happening-now')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Timeline' }));
+    expect(screen.getByTestId('job-timeline')).toBeInTheDocument();
     expect(screen.queryByTestId('job-notes')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Notes' })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/add a note/i)).not.toBeInTheDocument();
@@ -459,7 +523,7 @@ describe('SharedDashboardPage job file identity', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Videos' }));
     expect(screen.getByTestId('job-file-section-panel-videos')).toHaveTextContent('Videos');
-    expect(screen.queryByTestId('job-happening-now')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('job-timeline')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Evidence report' }));
     expect(screen.getByText('Evidence locker')).toBeInTheDocument();

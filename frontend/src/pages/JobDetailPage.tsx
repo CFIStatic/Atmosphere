@@ -23,7 +23,6 @@ import {
   type JobFileBeat,
 } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
-import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { OfficeLiveView } from '../components/shared/OfficeLiveView';
 
 /**
@@ -235,10 +234,6 @@ export function JobDetailPage() {
             </ul>
           </section>
         )}
-
-        <div className="mt-6">
-          <ClaimReadyPacketPanel jobId={job.id} />
-        </div>
 
         <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-knows">
           <h2 className="text-base font-semibold text-ink-900">On this file</h2>

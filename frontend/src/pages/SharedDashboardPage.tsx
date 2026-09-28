@@ -1,40 +1,22 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type FormEvent,
-  type SetStateAction,
-} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  api,
-  type SharedJobSummary,
-  type SharedJobRecord,
-  type JobScopeItem,
-  type ScopeState,
-  type IntakeCaptureInvite,
-} from '../lib/api';
+import { api, type SharedJobSummary, type SharedJobRecord, type IntakeCaptureInvite } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobAskPanel } from '../components/JobAskPanel';
-import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
-import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
-import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
-import { ClaimReadyPacketPanel } from '../components/shared/ClaimReadyPacketPanel';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
+import { JobTimeline } from '../components/shared/JobTimeline';
 import {
   JobFileSectionBar,
   type JobFileSectionId,
   type JobFileSectionTab,
 } from '../components/shared/JobFileSectionBar';
-import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
-import { jobFilePath, siteLine } from '../lib/jobFileAsk';
+import { initialJobFileSection, timelineRedirectSearch } from '../components/shared/jobTimeline';
+import { jobFilePath } from '../lib/jobFileAsk';
 import { touchJobFile } from '../lib/jobFileRecents';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useAuth } from '../context/AuthContext';
@@ -73,37 +55,6 @@ type HandoffState = {
  *   is a blocker, not a to-do, because at that point the crew either goes home
  *   or does it anyway, and doing it anyway is the whole thing being prevented.
  */
-
-const STATE_STYLE: Record<ScopeState, string> = {
-  excluded: 'bg-danger-50 text-danger-600',
-  proposed: 'bg-caution-50 text-caution-600',
-  included: 'bg-paper-200/60 text-ink-700',
-  approved: 'bg-success-50 text-success-600',
-  declined: 'bg-paper-200/60 text-ink-500',
-};
-
-const STATE_WORD: Record<ScopeState, string> = {
-  excluded: 'DO NOT',
-  proposed: 'asked',
-  included: 'in scope',
-  approved: 'approved',
-  declined: 'declined',
-};
-
-const money = (n: number | null | undefined) =>
-  n === null || n === undefined
-    ? null
-    : n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-
-function ago(iso: string | null): string {
-  if (!iso) return 'never';
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms)) return 'never';
-  const hours = Math.round(ms / 3_600_000);
-  if (hours < 1) return 'just now';
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 function placeholderRecord(
   jobId: string,
@@ -160,10 +111,19 @@ export function SharedDashboardPage() {
         : null),
   );
   const [error, setError] = useState<string | null>(null);
-  const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
-  /** Default lands on Chat; ?ask=1 (Field Capture / emailed Ask) also forces Chat. */
-  const [section, setSection] = useState<JobFileSectionId>('chat');
+  /** Chat by default. A legacy Happening Now / Job history link opens Timeline before paint. */
+  const [section, setSection] = useState<JobFileSectionId>(() =>
+    initialJobFileSection(location.search, location.hash),
+  );
+  const askLink =
+    openAsk && !timelineRedirectSearch(location.search, location.hash);
+  const askKey = askLink ? `${openId ?? ''}:${location.search}` : '';
+  const [seenAsk, setSeenAsk] = useState(askKey);
+  if (askLink && askKey !== seenAsk) {
+    setSeenAsk(askKey);
+    setSection('chat');
+  }
 
   const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
   const viewerOnly = record?.access === 'viewer';
@@ -178,9 +138,13 @@ export function SharedDashboardPage() {
   }, [openId]);
 
   useEffect(() => {
-    if (!openAsk) return;
-    setSection('chat');
-  }, [openAsk, openId]);
+    const next = timelineRedirectSearch(location.search, location.hash);
+    if (!next) return;
+    navigate(
+      { pathname: location.pathname, search: next, hash: '' },
+      { replace: true, state: location.state },
+    );
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
 
   useEffect(() => {
     if (!stayOnRecord) navigate('/verifier-library', { replace: true });
@@ -207,7 +171,12 @@ export function SharedDashboardPage() {
       const next: Record<string, string> = jobId ? { job: jobId } : {};
       if (requestedTitle) next.title = requestedTitle;
       if (requestedNumber) next.number = requestedNumber;
-      if (openAsk) next.ask = '1';
+      const keepTimeline =
+        section === 'timeline' ||
+        searchParams.get('section') === 'timeline' ||
+        Boolean(timelineRedirectSearch(location.search, location.hash));
+      if (keepTimeline) next.section = 'timeline';
+      else if (openAsk) next.ask = '1';
       setSearchParams(next, {
         replace: true,
         state: location.state,
@@ -229,7 +198,7 @@ export function SharedDashboardPage() {
         awaiting: 0,
         exclusions: 0,
       });
-    } catch (err) {
+    } catch {
       if (seq !== openSeq.current) return;
       // Never wipe a just-created job file on a flaky GET — keep the handoff.
       if (recordIdRef.current === jobId) {
@@ -297,24 +266,6 @@ export function SharedDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedJob]);
 
-  async function decide(item: JobScopeItem, decision: 'approved' | 'declined') {
-    if (!record) return;
-    const amount =
-      decision === 'approved'
-        ? Number(
-            window.prompt(`Approve "${item.title}" for how much?`, String(item.amount ?? '')) ?? '',
-          )
-        : null;
-    if (decision === 'approved' && (!Number.isFinite(amount) || amount === null)) return;
-    try {
-      await api.decideJobScope(record.job.id, item.id, { decision, amount });
-      await openJob(record.job.id);
-      await loadList();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not record that decision.');
-    }
-  }
-
   if (!stayOnRecord) return null;
 
   const jobId = record?.job.id ?? requestedJob ?? '';
@@ -350,6 +301,8 @@ export function SharedDashboardPage() {
               if (requestedJob === record.job.id) {
                 const next: Record<string, string> = { job: record.job.id, title: nextTitle };
                 if (requestedNumber) next.number = requestedNumber;
+                if (section === 'timeline') next.section = 'timeline';
+                else if (openAsk) next.ask = '1';
                 setSearchParams(next, { replace: true, state: location.state });
               }
             }}
@@ -433,13 +386,8 @@ export function SharedDashboardPage() {
           onSectionChange={setSection}
           grantViewer={grantViewer}
           viewerOnly={viewerOnly}
-          justApproved={justApproved}
-          readinessKey={readinessKey}
-          setReadinessKey={setReadinessKey}
-          onOpenJob={(id) => void openJob(id)}
+          office={!viewerOnly && !grantViewer}
           onOpenHref={(href) => navigate(href)}
-          onLoadList={() => void loadList()}
-          onDecide={decide}
         />
       ) : (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
@@ -455,7 +403,7 @@ export function SharedDashboardPage() {
       pane={section === 'chat' ? 'ask' : 'file'}
       onPaneChange={(next) => {
         if (next === 'ask') setSection('chat');
-        else if (section === 'chat') setSection('happening');
+        else if (section === 'chat') setSection('timeline');
       }}
       extra={
         shareFormOpen && record ? (
@@ -480,39 +428,27 @@ function JobFileSections({
   onSectionChange,
   grantViewer,
   viewerOnly,
-  justApproved,
-  readinessKey,
-  setReadinessKey,
-  onOpenJob,
+  office,
   onOpenHref,
-  onLoadList,
-  onDecide,
 }: {
   record: SharedJobRecord;
   section: JobFileSectionId;
   onSectionChange: (id: JobFileSectionId) => void;
   grantViewer: boolean;
   viewerOnly: boolean;
-  justApproved: boolean;
-  readinessKey: number;
-  setReadinessKey: Dispatch<SetStateAction<number>>;
-  onOpenJob: (id: string) => void;
+  office: boolean;
   onOpenHref?: (href: string) => void;
-  onLoadList: () => void;
-  onDecide: (item: JobScopeItem, decision: 'approved' | 'declined') => void;
 }) {
   const tabs = useMemo(() => {
     const next: JobFileSectionTab[] = [
       { id: 'chat', label: 'Chat' },
-      { id: 'happening', label: 'Happening Now' },
+      { id: 'timeline', label: 'Timeline' },
     ];
     if (!grantViewer) next.push({ id: 'access', label: 'Access' });
     if (!viewerOnly) {
       next.push(
         { id: 'videos', label: 'Videos' },
-        { id: 'packet', label: 'Packet' },
         { id: 'evidence', label: 'Evidence report' },
-        { id: 'history', label: 'Job history' },
       );
     }
     return next;
@@ -531,8 +467,8 @@ function JobFileSections({
         aria-labelledby={`job-file-section-${active}`}
         data-testid={`job-file-section-panel-${active}`}
         className={
-          active === 'chat'
-            ? 'flex min-h-0 flex-1 flex-col'
+          active === 'chat' || active === 'timeline'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
             : 'min-h-0 flex-1 overflow-y-auto'
         }
       >
@@ -546,26 +482,8 @@ function JobFileSections({
           </div>
         ) : null}
 
-        {active === 'happening' ? (
-          <JobProgressDashboard
-            jobId={record.job.id}
-            record={record}
-            readOnly={viewerOnly}
-            showProofOfWork={false}
-            showIdentity={false}
-            showLiveStory={false}
-            framed
-            initialProof={
-              justApproved
-                ? {
-                    days: [],
-                    videos: [],
-                    counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-                    siteKnown: Boolean(siteLine(record)),
-                  }
-                : undefined
-            }
-          />
+        {active === 'timeline' ? (
+          <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
         ) : null}
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}
@@ -574,375 +492,8 @@ function JobFileSections({
           <ProofOfWork jobId={record.job.id} heading="Videos" showCollectionAsk={false} />
         ) : null}
 
-        {active === 'packet' && !viewerOnly ? (
-          <ClaimReadyPacketPanel jobId={record.job.id} />
-        ) : null}
-
         {active === 'evidence' && !viewerOnly ? <EvidenceLocker jobId={record.job.id} /> : null}
-
-        {active === 'history' && !viewerOnly ? (
-          <div className="space-y-4" data-job-section="setup" data-testid="job-file-history">
-            <section className="rounded-xl glass-card p-5">
-              <h2 className="text-base font-semibold text-ink-900">Job history</h2>
-              <p className="mt-1 text-sm text-ink-500">
-                Scope, crew, and documents for this job file.
-              </p>
-            </section>
-            <PartyList
-              record={record}
-              onChanged={() => {
-                onOpenJob(record.job.id);
-                onLoadList();
-              }}
-            />
-            <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
-            <ScopeDocPanel
-              jobId={record.job.id}
-              onChanged={() => {
-                onOpenJob(record.job.id);
-                setReadinessKey((k) => k + 1);
-              }}
-            />
-            <ScopeList
-              record={record}
-              onDecide={onDecide}
-              onChanged={() => onOpenJob(record.job.id)}
-            />
-          </div>
-        ) : null}
       </div>
     </div>
-  );
-}
-
-/** Who is on the job, whether they have accepted, and their link. */
-function PartyList({ record, onChanged }: { record: SharedJobRecord; onChanged: () => void }) {
-  const [adding, setAdding] = useState(false);
-  const [company, setCompany] = useState('');
-  const [trade, setTrade] = useState('');
-  const [token, setToken] = useState<{ company: string; token: string } | null>(null);
-
-  async function add(event: FormEvent) {
-    event.preventDefault();
-    const res = await api.addJobParty(record.job.id, { company, trade: trade || null });
-    // Shown once, here. It is the credential — there is nowhere else it can be
-    // read from later, and that is the point.
-    if (res.party.accessToken) setToken({ company, token: res.party.accessToken });
-    setCompany('');
-    setTrade('');
-    setAdding(false);
-    onChanged();
-  }
-
-  return (
-    <section className="rounded-xl glass-card p-5" data-job-section="parties">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Who is on this job</h2>
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
-        >
-          {adding ? 'Cancel' : 'Add a company'}
-        </button>
-      </div>
-
-      {adding && (
-        <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
-          <input
-            required
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            placeholder="Company"
-            className="min-w-[10rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          <select
-            required
-            value={trade}
-            onChange={(e) => setTrade(e.target.value)}
-            className="min-w-[10rem] rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          >
-            <option value="" disabled>
-              Trade
-            </option>
-            {JOB_PARTY_TRADE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
-          >
-            Add
-          </button>
-        </form>
-      )}
-
-      {token && (
-        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
-          <p className="text-xs font-semibold text-brand-700">Link for {token.company}</p>
-          <code className="mt-1 block break-all text-[11px] text-ink-700">
-            /shared/{token.token}
-          </code>
-          <p className="mt-1 text-[11px] text-ink-500">
-            Copy it now — it is not shown again. Anyone with it can read this job and accept the
-            scope, so send it to the person, not to a group inbox.
-          </p>
-        </div>
-      )}
-
-      <ul className="mt-3 space-y-2">
-        {record.parties.map((party) => (
-          <li
-            key={party.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2"
-          >
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-ink-800">
-                {party.company}
-                {party.trade && <span className="ml-1.5 text-xs text-ink-500">{party.trade}</span>}
-              </p>
-              <p className="text-[11px] text-ink-500">{party.because}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {/* The two things a general contractor actually needs and could
-                  not do: look at what the sub is looking at, and send the link
-                  again when the first text never arrived. Without the second,
-                  people add the company twice and split its acceptance and
-                  proof history across two rows. */}
-              {!party.revoked_at && (
-                <PartyLink jobId={record.job.id} partyId={party.id} company={party.company} />
-              )}
-              <span className="text-[11px] text-ink-400">
-                {party.last_seen_at ? `seen ${ago(party.last_seen_at)}` : 'never opened'}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-                  party.revoked_at
-                    ? 'bg-paper-200/60 text-ink-500'
-                    : party.clear
-                      ? 'bg-success-50 text-success-600'
-                      : 'bg-danger-50 text-danger-600'
-                }`}
-              >
-                {party.revoked_at ? 'revoked' : party.clear ? 'clear to work' : 'not clear'}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/** Scope, exclusions at the top. */
-function ScopeList({
-  record,
-  onDecide,
-  onChanged,
-}: {
-  record: SharedJobRecord;
-  onDecide: (item: JobScopeItem, decision: 'approved' | 'declined') => void;
-  onChanged: () => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const [state, setState] = useState<ScopeState>('excluded');
-  const [reason, setReason] = useState('');
-
-  const rank: Record<ScopeState, number> = {
-    excluded: 0,
-    proposed: 1,
-    included: 2,
-    approved: 3,
-    declined: 4,
-  };
-  const ordered = [...record.scope].sort(
-    (a, b) => rank[a.state] - rank[b.state] || a.created_at.localeCompare(b.created_at),
-  );
-
-  async function add(event: FormEvent) {
-    event.preventDefault();
-    await api.addJobScope(record.job.id, {
-      title,
-      state,
-      reason: reason || null,
-    });
-    setTitle('');
-    setReason('');
-    setAdding(false);
-    onChanged();
-  }
-
-  return (
-    <section className="rounded-xl glass-card p-5" data-job-section="scope">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Scope</h2>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-ink-500">
-            {money(record.money.approved)} approved
-            {record.money.pending > 0 && ` · ${money(record.money.pending)} asked for`}
-          </span>
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="font-medium text-brand-600 hover:text-brand-700"
-          >
-            {adding ? 'Cancel' : 'Add a line'}
-          </button>
-        </div>
-      </div>
-
-      {adding && (
-        <form onSubmit={add} className="mt-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            {(['excluded', 'included'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setState(s)}
-                aria-pressed={state === s}
-                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
-                  state === s ? STATE_STYLE[s] : 'glass-card text-ink-600'
-                }`}
-              >
-                {STATE_WORD[s]}
-              </button>
-            ))}
-          </div>
-          <input
-            required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={state === 'excluded' ? 'What must nobody touch?' : 'What is to be done?'}
-            className="w-full rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          {state === 'excluded' && (
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Why — e.g. the owner is handling flooring themselves"
-              className="w-full rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            />
-          )}
-          <button
-            type="submit"
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
-          >
-            Add
-          </button>
-        </form>
-      )}
-
-      {ordered.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-600">
-          Nothing written down yet. Start with what nobody should touch — that is the line that
-          costs money when it is only in somebody's head.
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-2">
-          {ordered.map((item) => (
-            <li key={item.id} className="rounded-lg border border-line px-3 py-2">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-ink-800">{item.title}</p>
-                  {item.reason && <p className="text-[11px] text-ink-500">{item.reason}</p>}
-                  {item.detail && <p className="mt-0.5 text-[11px] text-ink-600">{item.detail}</p>}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {item.amount !== null && (
-                    <span className="text-xs tabular-nums text-ink-700">{money(item.amount)}</span>
-                  )}
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${STATE_STYLE[item.state]}`}
-                  >
-                    {STATE_WORD[item.state]}
-                  </span>
-                </div>
-              </div>
-
-              {item.state === 'proposed' && (
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => onDecide(item, 'approved')}
-                    className="rounded-lg bg-success-600 px-2.5 py-1 text-[11px] font-semibold text-white"
-                  >
-                    Approve with a number
-                  </button>
-                  <button
-                    onClick={() => onDecide(item, 'declined')}
-                    className="rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700"
-                  >
-                    Decline
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-/**
- * Open, or copy, a company's link.
- *
- * "Open their view" is the honest label: this is not a preview mode, it is the
- * subcontractor's actual screen behind their actual token. Anything else would
- * let a general contractor sign off a scope on the sub's behalf without meaning
- * to, and an acceptance nobody made is worse than none.
- */
-function PartyLink({
-  jobId,
-  partyId,
-  company,
-}: {
-  jobId: string;
-  partyId: string;
-  company: string;
-}) {
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  async function go(open: boolean) {
-    setBusy(true);
-    try {
-      const { path } = await api.jobPartyLink(jobId, partyId);
-      if (open) {
-        navigate(path);
-        return;
-      }
-      const full = `${window.location.origin}${path}`;
-      await navigator.clipboard?.writeText(full).catch(() => {
-        // Clipboard is refused on insecure origins and in some embedded
-        // frames. Showing the link beats failing silently.
-        window.prompt(`Link for ${company}`, full);
-      });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <span className="flex items-center gap-1.5">
-      <button
-        onClick={() => void go(true)}
-        disabled={busy}
-        className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-50"
-      >
-        Open their view
-      </button>
-      <button
-        onClick={() => void go(false)}
-        disabled={busy}
-        className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-50"
-      >
-        {copied ? 'Copied' : 'Copy link'}
-      </button>
-    </span>
   );
 }
