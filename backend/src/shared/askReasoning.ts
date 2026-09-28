@@ -101,12 +101,13 @@ export function finalizeLookupAnswer(
   const allowed = new Set(collectMomentSourceIds(trace));
   let text = stripMomentTrailers(prose);
   text = normalizeAskSources(text);
-  const kept = parseSourceTrailerIds(text).filter((id) => {
+  const cited = parseSourceTrailerIds(text).filter((id) => {
     const moment = parseMomentSource(id);
     if (!moment) return true;
     if (!allowed.size) return false;
     return [...allowed].some((cite) => cite === id || cite.startsWith(`video/${moment.jobId}/${moment.proofId}/`));
   });
+  const kept = cited.length ? cited : [...allowed].slice(0, 4);
   text = text.replace(/(?:\n|^)\s*⟦sources:\s*[^⟧]*⟧\s*/i, '').trim();
   const quotes = quotesFromTrace(trace).filter((quote) => {
     const moment = parseMomentSource(quote.sourceId);

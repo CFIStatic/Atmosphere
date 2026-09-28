@@ -153,6 +153,8 @@ export const ASK_LOOKUP_TOOLS: ToolDef[] = [
   },
 ];
 
+const ACTIVITY_VERBS = new Set(['done', 'filmed', 'recorded', 'opened', 'created', 'activity']);
+
 const STOP = new Set([
   'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',
   'are', 'were', 'this', 'that', 'it', 'any', 'what', 'when', 'where', 'how', 'who', 'why',
@@ -684,6 +686,7 @@ export function planAskLookup(
   if (person) steps.push({ name: 'list_person_activity', input: { name: person.name } });
   const query = tokens(question)
     .filter((token) => !person || !person.name.toLowerCase().includes(token))
+    .filter((token) => !ACTIVITY_VERBS.has(token))
     .slice(0, 6)
     .join(' ');
   if (query) steps.push({ name: 'search_transcripts', input: { query } });
