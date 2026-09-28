@@ -25,6 +25,7 @@ import {
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
+import { displayMentionText } from '../shared/mentions.js';
 import {
   clipHasReading,
   shouldKickUnreadClip,
@@ -492,7 +493,7 @@ async function custodyFor(client: any, proofId: string) {
     action: entry.action,
     by: entry.actor_label,
     role: entry.actor_role,
-    detail: entry.detail,
+    detail: entry.detail ? displayMentionText(entry.detail) : entry.detail,
     at: entry.occurred_at,
   }));
 }

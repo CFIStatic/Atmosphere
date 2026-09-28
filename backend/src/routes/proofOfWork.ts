@@ -23,6 +23,7 @@ import {
   touchAskThreadAfterMessage,
   type AskThreadOwner,
 } from '../shared/askThreads.js';
+import { displayMentionText } from '../shared/mentions.js';
 import {
   foldThreadMemory,
   mergeDurableNotes,
@@ -3246,6 +3247,7 @@ export async function runProofAsk(input: {
         await touchAskThreadAfterMessage(writeDb, {
           threadId,
           question: storedQuestion,
+          answer: storedAnswer,
           isFirstMessage: (count ?? 0) <= 1,
         });
       } catch {
@@ -3790,7 +3792,7 @@ export async function recordAccess(
       party_id: input.partyId ?? null,
       actor_label: input.actorLabel,
       actor_role: input.actorRole ?? null,
-      detail: input.detail ?? null,
+      detail: input.detail ? displayMentionText(input.detail) || null : null,
     });
   } catch {
     /* see above */
@@ -3879,7 +3881,12 @@ export async function evidenceCustody(req: Request, res: Response, next: NextFun
       .order('occurred_at', { ascending: false })
       .limit(200);
     if (error) throw new HttpError(500, error.message, 'custody_failed');
-    res.json({ entries: data ?? [] });
+    res.json({
+      entries: ((data ?? []) as Array<{ detail?: string | null }>).map((entry) => ({
+        ...entry,
+        detail: entry.detail ? displayMentionText(entry.detail) : entry.detail ?? null,
+      })),
+    });
   } catch (err) {
     next(err);
   }

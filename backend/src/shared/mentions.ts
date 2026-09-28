@@ -91,6 +91,29 @@ export function mentionToken(name: string, userId: string): string {
   return `@[${name}](mention:${userId})`;
 }
 
+const MENTION_CHIP_RE = /@\[([^\]\n]{0,80})\](?:\(mention:[^)\n]*)?\)?/g;
+const MENTION_TRUNCATED_RE = /@\[([^\]\n]{1,80})/g;
+
+/**
+ * Visible text for a mention. `@[El Presidente](mention:uuid)` and a title cut
+ * off mid-token both become `@El Presidente`. Ids and `mention:` never remain.
+ * Stored custody rows are not rewritten by this.
+ */
+export function displayMentionText(value: string): string {
+  let text = String(value ?? '');
+  text = text.replace(MENTION_CHIP_RE, (_match, name: string) => {
+    const clean = String(name ?? '').replace(/\s+/g, ' ').trim();
+    return clean ? `@${clean}` : '';
+  });
+  text = text.replace(MENTION_TRUNCATED_RE, (_match, name: string) => {
+    const clean = String(name ?? '').replace(/[….]+$/g, '').replace(/\s+/g, ' ').trim();
+    return clean ? `@${clean}` : '';
+  });
+  text = text.replace(/\(mention:[^)\n]*\)?/gi, '');
+  text = text.replace(/\bmention:[A-Za-z0-9_-]{4,}/gi, '');
+  return text.replace(/[ \t]{2,}/g, ' ').trim();
+}
+
 function nameWords(name: string): string[] {
   return name
     .toLowerCase()

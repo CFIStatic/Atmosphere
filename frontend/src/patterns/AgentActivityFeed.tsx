@@ -4,6 +4,7 @@ import { Badge, EmptyState, StatusDot, ToneText, cn } from '../design';
 import { relativeTime } from '../domain/format';
 import type { AgentRun } from '../domain/types';
 import { runOutcomeLabel, runOutcomeTone } from './tone';
+import { displayMentionText } from '../lib/mentions';
 
 const ICONS = {
   succeeded: Check,
@@ -59,7 +60,7 @@ export function AgentActivityFeed({
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="text-xs leading-relaxed text-fg-2">{run.summary}</p>
+              <p className="text-xs leading-relaxed text-fg-2">{displayMentionText(run.summary)}</p>
 
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-4">
                 {compact && (

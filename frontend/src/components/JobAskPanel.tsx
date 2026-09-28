@@ -28,7 +28,7 @@ import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
-import { expandMentionTokens } from '../lib/mentions';
+import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
@@ -467,7 +467,14 @@ export function JobAskPanel({
   }, [activeThreadId]);
 
   useEffect(() => {
-    publishAskHistory({ jobId, threads, activeThreadId });
+    publishAskHistory({
+      jobId,
+      threads: threads.map((thread) => ({
+        ...thread,
+        title: displayMentionText(thread.title) || thread.title,
+      })),
+      activeThreadId,
+    });
   }, [jobId, threads, activeThreadId]);
 
   async function loadThreadMessages(threadId: string | null) {
@@ -590,7 +597,7 @@ export function JobAskPanel({
 
       if (action.type === 'rename-thread') {
         void (async () => {
-          const nextTitle = action.title.trim();
+          const nextTitle = displayMentionText(action.title).replace(/\s+/g, ' ').trim();
           if (!nextTitle) return;
           try {
             const renamed = renameThread
