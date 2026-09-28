@@ -7,7 +7,13 @@
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
 import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
-import { clipAskPreview, type AskLookupCatalog, type AskLookupClip, type AskLookupTraceStep } from './askLookup.js';
+import {
+  asksAboutOtherJobs,
+  clipAskPreview,
+  type AskLookupCatalog,
+  type AskLookupClip,
+  type AskLookupTraceStep,
+} from './askLookup.js';
 import {
   clipMatchesAskDate,
   formatAskDate,
@@ -15,7 +21,7 @@ import {
   type AskMomentQuote,
 } from './askMoments.js';
 
-export type AskTaskKind = 'summary' | 'scope' | 'compare' | 'issues' | 'punch' | 'note';
+export type AskTaskKind = 'summary' | 'scope' | 'compare' | 'issues' | 'punch' | 'note' | 'email' | 'estimate';
 
 export type AskIntent = { kind: 'question' } | { kind: 'task'; task: AskTaskKind };
 
@@ -32,6 +38,8 @@ export function classifyAskIntent(question: string): AskIntent {
   if (/\bopen issues?\b|\boutstanding\b|\bstill open\b/.test(q)) return { kind: 'task', task: 'issues' };
   if (/\bcompare\b|\bversus\b|\bvs\.?\b|\bdifference between\b|\btwo visits\b/.test(q)) return { kind: 'task', task: 'compare' };
   if (/\bscope\b/.test(q) && /\b(draft|write|note|make|prepare)\b/.test(q)) return { kind: 'task', task: 'scope' };
+  if (/\b(email|e-mail)\b/.test(q)) return { kind: 'task', task: 'email' };
+  if (/\bestimate\b|\bbid draft\b|\bdraft (?:an |a )?bid\b/.test(q)) return { kind: 'task', task: 'estimate' };
   if (/\b(summary|summarize)\b/.test(q) || /\b(write|draft)\b[\s\S]{0,40}\b(homeowner|client|customer)\b/.test(q)) {
     return { kind: 'task', task: 'summary' };
   }
@@ -82,6 +90,8 @@ type ClipFact = {
   workDate: string | null;
   summary: string;
   cite: string;
+  jobId?: string | null;
+  jobTitle?: string | null;
 };
 
 type HistoryFact = { summary: string; at: string };
@@ -106,6 +116,8 @@ function clipFact(row: Record<string, unknown>): ClipFact | null {
     workDate: row.workDate ? String(row.workDate) : null,
     summary: oneLine(String(row.summary ?? '').trim()),
     cite: String(row.cite ?? ''),
+    jobId: row.jobId ? String(row.jobId) : null,
+    jobTitle: row.jobTitle ? cleanMentionTitle(String(row.jobTitle)) : null,
   };
 }
 
@@ -155,13 +167,17 @@ function dateLabel(workDate: string | null, timeZone?: string | null): string {
   return localStamp(workDate, timeZone) || workDate;
 }
 
-function bullet(clip: ClipFact, timeZone?: string | null): string {
+function bullet(clip: ClipFact, timeZone?: string | null, openJobId?: string | null): string {
   const when = dateLabel(clip.workDate, timeZone);
   const title = clip.title.toLowerCase().startsWith(when.toLowerCase())
     ? clip.title.slice(when.length).replace(/^[\s—-]+/, '')
     : clip.title;
   const detail = clip.summary ? `. ${clip.summary}` : '';
-  return `- **${when} — ${title}**${detail}`;
+  const elsewhere =
+    clip.jobId && openJobId && clip.jobId !== openJobId && String(clip.jobTitle ?? '').trim()
+      ? ` (${String(clip.jobTitle).trim()})`
+      : '';
+  return `- **${when} — ${title}**${elsewhere}${detail}`;
 }
 
 function clipCountLead(count: number): string {
@@ -475,7 +491,7 @@ export function selectSpeechMoments<T extends SpeechMomentPick>(moments: T[], li
 
 function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   const clips = clipsFromTrace(trace);
-  if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n');
+  if (clips.length) return clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n');
   const events = historyFromTrace(trace, catalog.timeZone);
   if (events[0]) return `Job history shows ${events[0].summary.replace(/\.$/, '')}${events[0].at ? ` on ${events[0].at}` : ''}.`;
   const titles = (catalog.clips ?? [])
@@ -490,7 +506,32 @@ function fileContext(trace: AskLookupTraceStep[], catalog: AskLookupCatalog): st
 function missingLine(question: string, trace: AskLookupTraceStep[], catalog: AskLookupCatalog): string {
   if (/\bpermit\b/i.test(question)) return 'This file does not include a permit number.';
   if (/\block\s?box\b|\bcode\b/i.test(question)) return 'This file does not include that code.';
-  return `This file does not have that.\n\n${fileContext(trace, catalog)}`;
+  return `Nothing on this file matches that.\n\n${fileContext(trace, catalog)}`;
+}
+
+/** One sentence naming the lookups that actually ran. */
+export function whatWasChecked(trace: AskLookupTraceStep[]): string {
+  const tools = new Set(trace.map((step) => step.tool));
+  const bits: string[] = [];
+  if (tools.has('search_transcripts')) bits.push('the transcripts');
+  if (tools.has('get_clip')) bits.push('the clips');
+  if (tools.has('list_person_activity')) bits.push('who is on the job');
+  if (tools.has('read_job_history')) bits.push('the job history');
+  if (tools.has('search_other_jobs')) bits.push('other jobs in this organization');
+  if (!bits.length) return '';
+  const list =
+    bits.length === 1
+      ? bits[0]!
+      : bits.length === 2
+        ? `${bits[0]} and ${bits[1]}`
+        : `${bits.slice(0, -1).join(', ')}, and ${bits[bits.length - 1]}`;
+  return `I checked ${list}.`;
+}
+
+function withChecked(text: string, trace: AskLookupTraceStep[]): string {
+  const line = whatWasChecked(trace);
+  if (!line || /\bi checked\b/i.test(text)) return text;
+  return `${text.trim()}\n\n${line}`;
 }
 
 type DatedMoment = SpeechMomentPick & { speaker: string; title: string; workDate: string | null };
@@ -614,6 +655,33 @@ export function speechQuotesForQuestion(
   }));
 }
 
+function openJobLine(catalog: AskLookupCatalog): string {
+  const titles = catalogClips(catalog)
+    .map((clip) => cleanMentionTitle(clip.title))
+    .filter(Boolean)
+    .slice(0, 4);
+  return titles.length ? `On this job: ${titles.join('; ')}.` : 'Nothing else is recorded on this job.';
+}
+
+function composeOtherJobs(
+  trace: AskLookupTraceStep[],
+  catalog: AskLookupCatalog,
+): string | null {
+  const step = [...trace].reverse().find((row) => row.tool === 'search_other_jobs');
+  if (!step && catalog.access === 'viewer') return 'This share can only read the open job.';
+  if (!step) return null;
+  if (!step.result.ok) return `${step.result.summary}\n\n${openJobLine(catalog)}`;
+  const clips = clipsFromTrace(trace).filter((clip) => clip.jobId && catalog.jobId && clip.jobId !== catalog.jobId);
+  if (!clips.length) {
+    return `Nothing on the other jobs in this organization matches that.\n\n${openJobLine(catalog)}`;
+  }
+  const lead =
+    clips.length === 1
+      ? 'One other job in this organization has that.'
+      : `${clips.length} clips on other jobs in this organization have that.`;
+  return `${lead}\n\n${clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')}`;
+}
+
 function composeQuestion(
   question: string,
   trace: AskLookupTraceStep[],
@@ -623,8 +691,12 @@ function composeQuestion(
   if (person?.offJob) return person.offJob;
   const dated = composeDatedSpeech(question, trace, catalog);
   if (dated) return dated;
+  if (asksAboutOtherJobs(question)) {
+    const elsewhere = composeOtherJobs(trace, catalog);
+    if (elsewhere) return elsewhere;
+  }
   const hits = searchHits(trace).concat(speechFromClip(trace));
-  const searched = trace.some((step) => step.tool === 'search_transcripts' || step.tool === 'get_clip');
+  const searched = trace.some((step) => step.tool === 'search_transcripts' || step.tool === 'get_clip' || step.tool === 'search_other_jobs');
   if (searched && !hits.length && (!person || /\b(say|said|quote|permit|lock)\b/i.test(question))) {
     return missingLine(question, trace, catalog);
   }
@@ -639,11 +711,11 @@ function composeQuestion(
   if (person && clips.length) {
     const count = `${clips.length} clip${clips.length === 1 ? '' : 's'}`;
     const lead = `**${person.name}** recorded ${count} on this file.${openedLine(events)}`;
-    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n')].join('\n\n');
+    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')].join('\n\n');
   }
   if (clips.length) {
     const lead = `${clipCountLead(clips.length)}${openedLine(events)}`;
-    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone)).join('\n')].join('\n\n');
+    return [lead, clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId)).join('\n')].join('\n\n');
   }
   const first = events[0]!;
   const when = first.at ? ` on ${first.at}` : '';
@@ -672,8 +744,9 @@ function composeTask(
   const clips = clipsFromTrace(trace);
   const events = historyFromTrace(trace, catalog.timeZone);
   const name = jobName(catalog);
-  const lines = clips.map((clip) => bullet(clip, catalog.timeZone));
+  const lines = clips.map((clip) => bullet(clip, catalog.timeZone, catalog.jobId));
   const gap = 'Not on this file: a written scope, a punch list, or open issues.';
+  const client = String(catalog.clientName ?? '').trim().replace(/[.]+$/, '') || 'there';
 
   if (task === 'compare') {
     const visits = catalogVisitFacts(catalog);
@@ -686,14 +759,14 @@ function composeTask(
       dates.length >= 2
         ? `**${dates[0]}** and **${dates[1]}** are different visits on this file.`
         : `These clips are on this file, and they are not separate dated visits.`;
-    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(rows, catalog.timeZone)}\n\n${gap}`)}`;
+    return `${lead}\n\n${artifact(`**Visit comparison — ${name}**\n\n${visitRows(rows, catalog.timeZone)}\n\n${gap}`)}\n\nI can draft a homeowner note from these visits if you want one.`;
   }
 
   if (task === 'scope') {
     const body = clips.length
       ? lines.join('\n')
       : '- Nothing recorded is on this file yet.';
-    return `This file has no written scope.\n\n${artifact(`**Scope note — ${name}**\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}`;
+    return `This file has no written scope.\n\n${artifact(`**Scope note — ${name}**\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}\n\nI can turn this into a punch list if you want the gaps called out.`;
   }
 
   if (task === 'issues' || task === 'punch') {
@@ -702,7 +775,17 @@ function composeTask(
     const observed = clips.length
       ? `Recorded visits, not logged as defects:\n\n${lines.join('\n')}`
       : 'No clips are on this file to review.';
-    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\nNo open items are written down.\n\n${observed}`)}`;
+    return `${lead}\n\n${artifact(`**${title} — ${name}**\n\nNo open items are written down.\n\n${observed}`)}\n\nI can draft a homeowner note from the visits if that is more useful.`;
+  }
+
+  if (task === 'email') {
+    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
+    return `Here is a draft you can send.\n\n${artifact(`**Email to the homeowner — ${name}**\n\nHi ${client},\n\n${body}\n\n${gap}`)}\n\nI can shorten it if you want it briefer.`;
+  }
+
+  if (task === 'estimate') {
+    const body = clips.length ? lines.join('\n') : 'Nothing recorded is on this file yet.';
+    return `This file has no prices, so this draft does not invent any.\n\n${artifact(`**Estimate draft — ${name}**\n\nNo prices are on this file.\n\nRecorded visits only:\n\n${body}\n\n${gap}`)}\n\nI can turn the recorded visits into line items once prices are on the file.`;
   }
 
   const who = person ? `**${person.name}** recorded ${clips.length} clip${clips.length === 1 ? '' : 's'} on this file.` : '';
@@ -710,7 +793,8 @@ function composeTask(
   const withOpen = `${lead}${openedLine(events)}`;
   if (!clips.length) return withOpen;
   const heading = task === 'summary' ? 'Homeowner summary' : 'Note';
-  return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}`;
+  const next = task === 'summary' ? 'I can shorten this if you want it briefer.' : 'I can turn this into an email if you want it sent.';
+  return `${withOpen}\n\n${artifact(`**${heading} — ${name}**\n\n${lines.join('\n')}\n\n${openedLine(events).trim()}\n\n${gap}`.replace(/\n{3,}/g, '\n\n'))}\n\n${next}`;
 }
 
 export type ChatKind = 'greeting' | 'thanks' | 'opinion' | 'correction' | 'clarify' | 'restate' | 'recall';
@@ -969,14 +1053,17 @@ export function composeGroundedAsk(
     return polishAskProse(composeChat(chat, question, catalog, history), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
   }
   if (isJobOverview(question)) {
-    return polishAskProse(composeJobOverview(catalog), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+    return polishAskProse(withChecked(composeJobOverview(catalog), trace), {
+      timeZone: catalog.timeZone,
+      jobTitle: catalog.jobTitle,
+    });
   }
   const intent = classifyAskIntent(question);
   const text = intent.kind === 'task' ? composeTask(intent.task, trace, catalog) : composeQuestion(question, trace, catalog);
-  const polished = polishAskProse(text, { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
+  const polished = polishAskProse(withChecked(text, trace), { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle });
   if (/^this file does not have that\.?$/i.test(polished)) {
     return polishAskProse(
-      `${polished}\n\n${fileContext(trace, catalog)}`,
+      withChecked(`${polished}\n\n${fileContext(trace, catalog)}`, trace),
       { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle },
     );
   }

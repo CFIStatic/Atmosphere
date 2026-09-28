@@ -52,6 +52,7 @@ import {
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import {
   askLookupCatalogFromJob,
+  asksAboutOtherJobs,
   clipFromProofRow,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
@@ -2699,6 +2700,8 @@ export async function runProofAsk(input: {
   requestId: string;
   onToken?: (text: string) => void;
   onStatus?: (phase: string) => void;
+  /** Set when the reader stops the answer. A stopped turn is not stored. */
+  signal?: AbortSignal;
   /** org = office member; viewer = progress-share homeowner. */
   access?: 'org' | 'viewer';
 }): Promise<{
@@ -3092,6 +3095,36 @@ export async function runProofAsk(input: {
         clips: memoryClips,
       }),
     });
+    if (askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted) {
+      const { data: otherRows } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, party_id, job_id, org_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
+        .eq('org_id', orgId)
+        .neq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(24);
+      const rows = ((otherRows ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+      const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
+      const titles = new Map<string, string>();
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from('crm_jobs').select('id, title').eq('org_id', orgId).in('id', jobIds);
+        for (const job of (jobs ?? []) as Array<{ id?: string; title?: string | null }>) {
+          if (job.id) titles.set(String(job.id), String(job.title ?? ''));
+        }
+      }
+      lookup.orgClips = rows
+        .map((row) =>
+          clipFromProofRow(row, {
+            orgId,
+            jobId: String(row.job_id ?? ''),
+            jobTitle: titles.get(String(row.job_id ?? '')) || null,
+          }),
+        )
+        .filter((clip) => clip.proofId && clip.jobId !== jobId);
+    }
     const result = mentionPrep?.directAnswer
       ? {
           answer: mentionPrep.directAnswer,
@@ -3121,6 +3154,7 @@ export async function runProofAsk(input: {
       apiKey,
       onToken: input.onToken,
       onStatus: input.onStatus,
+      signal: input.signal,
       lookup,
       toolContext: {
         orgId,
@@ -3168,6 +3202,15 @@ export async function runProofAsk(input: {
     const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
     const storedAnswer = scrubStoredAskText(result.answer, lookup.clips);
     result.answer = storedAnswer;
+    if (input.signal?.aborted) {
+      return {
+        answer: storedAnswer,
+        model: result.model,
+        question: null,
+        groundedOn: groundedOn.length,
+        threadId,
+      };
+    }
     const { data: stored } = await supabase
       .from('job_proof_questions')
       .insert({
@@ -3283,31 +3326,44 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('X-Accel-Buffering', 'no');
       const writeEvent = (payload: Record<string, unknown>) => {
+        if (res.writableEnded) return;
         res.write(`${JSON.stringify(payload)}\n`);
       };
-      writeEvent({ type: 'status', phase: 'thinking' });
-      const result = await runProofAsk({
-        supabase,
-        orgId,
-        jobId: req.params.jobId,
-        question: input.question,
-        userId,
-        threadId: input.threadId ?? null,
-        timeZone: input.timeZone ?? null,
-        requestId: `ask:${req.params.jobId}:${randomUUID()}`,
-        access: access === 'org' ? 'org' : 'viewer',
-        onToken: (text) => writeEvent({ type: 'token', text }),
-        onStatus: (phase) => writeEvent({ type: 'status', phase }),
-      });
-      writeEvent({
-        type: 'done',
-        answer: result.answer,
-        model: result.model,
-        groundedOn: result.groundedOn,
-        question: result.question,
-        threadId: result.threadId,
-      });
-      res.end();
+      const abort = new AbortController();
+      const onClose = () => {
+        if (!res.writableEnded) abort.abort();
+      };
+      res.on('close', onClose);
+      try {
+        writeEvent({ type: 'status', phase: 'Looking through clips…' });
+        const result = await runProofAsk({
+          supabase,
+          orgId,
+          jobId: req.params.jobId,
+          question: input.question,
+          userId,
+          threadId: input.threadId ?? null,
+          timeZone: input.timeZone ?? null,
+          requestId: `ask:${req.params.jobId}:${randomUUID()}`,
+          access: access === 'org' ? 'org' : 'viewer',
+          signal: abort.signal,
+          onToken: (text) => writeEvent({ type: 'token', text }),
+          onStatus: (phase) => writeEvent({ type: 'status', phase }),
+        });
+        if (!abort.signal.aborted && !res.writableEnded) {
+          writeEvent({
+            type: 'done',
+            answer: result.answer,
+            model: result.model,
+            groundedOn: result.groundedOn,
+            question: result.question,
+            threadId: result.threadId,
+          });
+          res.end();
+        }
+      } finally {
+        res.off('close', onClose);
+      }
       return;
     }
 

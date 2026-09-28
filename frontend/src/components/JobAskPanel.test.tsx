@@ -521,4 +521,78 @@ describe('JobAskPanel', () => {
     expect(screen.getByTestId('ask-copy')).toHaveTextContent('Copied');
   });
 
+  it('shows looking through clips, then stop keeps the question', async () => {
+    askAboutProofsStream.mockImplementation(
+      (_jobId: string, _q: string, _handlers: unknown, opts?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          const signal = opts?.signal;
+          if (signal?.aborted) {
+            reject(new DOMException('Stopped', 'AbortError'));
+            return;
+          }
+          signal?.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')));
+        }),
+    );
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText('Looking through clips…')).toBeInTheDocument();
+    await user.click(screen.getByTestId('ask-stop'));
+    expect(await screen.findByText('Was the tarp removed?')).toBeInTheDocument();
+    expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ask this job/i })).toBeInTheDocument();
+  });
+
+  it('copies a message without the source trailer and regenerates it', async () => {
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    const answer = 'The tarp came off.\n\n⟦sources: video/job-1038/proof-tarp/north-slope@18⟧';
+    let n = 0;
+    askAboutProofsStream.mockImplementation(async (_jobId: string, question: string, handlers: { onToken?: (t: string) => void }) => {
+      n += 1;
+      handlers.onToken?.('The tarp came off.');
+      return {
+        answer,
+        groundedOn: 1,
+        model: 'claude-opus',
+        question: {
+          id: `q-copy-${n}`,
+          question,
+          answer,
+          grounded_on: ['proof-tarp'],
+          created_at: '2026-08-06T12:00:00Z',
+        },
+      };
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'Was the tarp removed?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByText(/the tarp came off/i)).toBeInTheDocument();
+    await user.click(screen.getByTestId('ask-message-copy'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('The tarp came off.');
+    });
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() => {
+      expect(askAboutProofsStream).toHaveBeenCalledTimes(2);
+    });
+    expect(askAboutProofsStream.mock.calls[1]?.[1]).toBe('Was the tarp removed?');
+  });
+
 });
