@@ -54,7 +54,7 @@ function isClipId(raw: string): raw is `clip:${string}` {
 function isLinkedSource(raw: string): raw is AskSourceId {
   return (
     /^job\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw) ||
-    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+$/.test(raw)
+    /^video\/[0-9a-z][0-9a-z-]{0,63}\/[0-9a-z][0-9a-z-]{0,63}\/[a-z0-9-]+(?:@\d+(?:\.\d+)?)?$/.test(raw)
   );
 }
 

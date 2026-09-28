@@ -80,6 +80,78 @@ function AskCiteSpans({
 }
 
 
+function AskQuoteList({
+  quotes,
+  onOpen,
+}: {
+  quotes: ReturnType<typeof extractAskSources>['quotes'];
+  onOpen: (source: AskSourceChip) => void;
+}) {
+  if (!quotes.length) return null;
+  return (
+    <div className="mt-2 space-y-1.5" data-testid="ask-quotes">
+      {quotes.map((quote) => (
+        <button
+          key={`${quote.sourceId}-${quote.text}`}
+          type="button"
+          data-testid="ask-quote"
+          data-at={quote.atSeconds == null ? '' : String(quote.atSeconds)}
+          data-proof-id={quote.proofId ?? ''}
+          onClick={() =>
+            onOpen({
+              id: quote.sourceId as AskSourceChip['id'],
+              label: quote.speaker,
+              section: 'videos',
+              proofId: quote.proofId,
+              jobId: quote.jobId,
+              atSeconds: quote.atSeconds ?? undefined,
+            })
+          }
+          className="block w-full rounded-lg border border-line bg-paper-50 px-2.5 py-1.5 text-left"
+        >
+          <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
+          <span className="mt-0.5 block text-[11px] text-ink-500">
+            {quote.speaker}
+            {quote.atSeconds != null ? ` · ${formatMomentClock(quote.atSeconds)}` : ''}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatMomentClock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function AskFollowUps({
+  questions,
+  onAsk,
+}: {
+  questions: string[];
+  onAsk: (question: string) => void;
+}) {
+  if (questions.length < 2) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="ask-followups">
+      {questions.slice(0, 3).map((question) => (
+        <button
+          key={question}
+          type="button"
+          data-testid="ask-followup"
+          onClick={() => onAsk(question)}
+          className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-left text-[12px] text-ink-700 transition hover:border-brand-200 hover:bg-brand-50"
+        >
+          {question}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AskSourceChips({
   sources,
   onOpen,
@@ -144,20 +216,25 @@ function AskAnswerBody({
   onSeek,
   sources,
   onOpenSource,
+  onAskFollowUp,
 }: {
   text: string;
   events: number[];
   onSeek: (atSeconds: number) => void;
   sources: AskSourceChip[];
   onOpenSource: (source: AskSourceChip) => void;
+  onAskFollowUp?: (question: string) => void;
 }) {
-  const { body } = extractAskSources(text);
+  const extracted = extractAskSources(text);
+  const { body, quotes, followUps } = extracted;
   const blocks = parseAskProseBlocks(body);
   if (!blocks.length) {
     return (
       <>
         <p className="leading-relaxed">{body || text}</p>
+        <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
         <AskSourceChips sources={sources} onOpen={onOpenSource} />
+        {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
       </>
     );
   }
@@ -188,7 +265,9 @@ function AskAnswerBody({
           </p>
         ),
       )}
+      <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />
+      {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
     </div>
   );
 }
@@ -266,6 +345,7 @@ export function JobAskPanel({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
+  const [askStatus, setAskStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -448,13 +528,15 @@ export function JobAskPanel({
     beats: dossier,
   });
   function openAskSource(source: AskSourceChip) {
-    if (source.href && onOpenHref) {
+    const sameJob = !source.jobId || source.jobId === jobId;
+    if (source.href && onOpenHref && source.jobId && !sameJob) {
       onOpenHref(source.href);
       return;
     }
-    if (source.workDate || source.section === 'videos') {
+    if (source.proofId || source.atSeconds != null || source.workDate || source.section === 'videos') {
       seek({
-        atSeconds: 0,
+        atSeconds: source.atSeconds ?? 0,
+        proofId: source.proofId,
         workDate: source.workDate,
       });
     }
@@ -487,6 +569,7 @@ export function JobAskPanel({
     const text = expandMentionTokens(raw, members);
     if (!text || asking) return;
     setAsking(true);
+    setAskStatus('Reading the file');
     setDraft('');
     setError(null);
     const now = new Date().toISOString();
@@ -511,10 +594,12 @@ export function JobAskPanel({
             jobId,
             text,
             {
+              onStatus: (phase) => setAskStatus(phase),
               onToken: (delta) => {
                 if (!sawFirstToken) {
                   sawFirstToken = true;
                   setAsking(false);
+                  setAskStatus(null);
                 }
                 // Accumulate from the last assistant stream bubble.
                 setTurns((prev) => {
@@ -574,6 +659,7 @@ export function JobAskPanel({
       setError(err instanceof ApiError ? err.message : 'Could not answer that from the file.');
     } finally {
       setAsking(false);
+      setAskStatus(null);
       inputRef.current?.focus();
     }
   }
@@ -665,6 +751,7 @@ export function JobAskPanel({
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
                       sources={extractAskSources(turn.content).sources}
                       onOpenSource={openAskSource}
+                      onAskFollowUp={(question) => void ask(question)}
                     />
                   ) : (
                     <p className="whitespace-pre-wrap leading-relaxed">
@@ -678,8 +765,9 @@ export function JobAskPanel({
               </li>
             ))}
             {asking && (
-              <li className="flex items-start gap-2.5">
+              <li className="flex items-start gap-2.5" data-testid="ask-status">
                 <TypingDots />
+                {askStatus ? <span className="pt-2 text-xs text-ink-500">{askStatus}</span> : null}
               </li>
             )}
           </ul>

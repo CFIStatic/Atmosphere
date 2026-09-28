@@ -69,6 +69,25 @@ describe('askSources', () => {
     expect(actions[0]?.section).toBe('setup');
   });
 
+  it('opens a moment chip at the transcript timestamp and keeps the quote', () => {
+    const job = 'd7fe1a01-4483-42c5-abb8-eaaa4c6988df';
+    const proof = '00608802-140e-4897-9f02-1d5d0db88ecf';
+    const cite = `video/${job}/${proof}/sep-17-office-recording@4.2`;
+    const { body, sources, quotes, followUps } = extractAskSources(
+      `The tarp came off.\n\n⟦sources: ${cite}⟧\n⟦quotes: ${cite}|Seated man|The tarp came off the north slope.⟧\n⟦followups: What was said in the tabletop clip? ;; What does the job history say?⟧`,
+    );
+    expect(body).toBe('The tarp came off.');
+    expect(sources[0]?.label).toMatch(/0:04/);
+    expect(sources[0]?.atSeconds).toBe(4.2);
+    expect(sources[0]?.proofId).toBe(proof);
+    expect(sources[0]?.jobId).toBe(job);
+    expect(quotes[0]).toMatchObject({ speaker: 'Seated man', text: 'The tarp came off the north slope.', atSeconds: 4.2 });
+    expect(followUps).toEqual([
+      'What was said in the tabletop clip?',
+      'What does the job history say?',
+    ]);
+  });
+
   it('cites CRM trailers as CRM source chips', () => {
     const { body, sources } = extractAskSources(
       'Claim CLM-9 is on the JobNimbus file.\n\n⟦sources: crm, claim⟧',

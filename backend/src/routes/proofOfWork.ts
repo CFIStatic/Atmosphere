@@ -40,6 +40,7 @@ import {
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
+import { askLookupCatalogFromJob, lookupPeopleFromContexts } from '../shared/askLookup.js';
 import { isModelProviderConfigured, resolveAskApiKey } from '../lib/anthropic.js';
 import { loadPeople } from '../lib/memory.js';
 import { RetryQueue } from '../shared/retryQueue.js';
@@ -2682,6 +2683,7 @@ export async function runProofAsk(input: {
   timeZone?: string | null;
   requestId: string;
   onToken?: (text: string) => void;
+  onStatus?: (phase: string) => void;
   /** org = office member; viewer = progress-share homeowner. */
   access?: 'org' | 'viewer';
 }): Promise<{
@@ -2733,7 +2735,9 @@ export async function runProofAsk(input: {
     ] = await Promise.all([
       supabase
         .from('job_proofs')
-        .select('id, party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
+        .select(
+          'id, party_id, job_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+        )
         .eq('org_id', orgId)
         .eq('job_id', jobId)
         .is('deleted_at', null)
@@ -2741,7 +2745,7 @@ export async function runProofAsk(input: {
         .limit(80),
       supabase
         .from('job_parties')
-        .select('id, company, trade, contact_name')
+        .select('id, company, trade, contact_name, created_by')
         .eq('job_id', jobId),
       supabase
         .from('crm_jobs')
@@ -2788,7 +2792,7 @@ export async function runProofAsk(input: {
         .limit(40),
       supabase
         .from('memory_events')
-        .select('summary')
+        .select('id, summary, occurred_at, actor_id, job_id, org_id')
         .eq('job_id', jobId)
         .order('seq', { ascending: false })
         .limit(40),
@@ -2964,6 +2968,16 @@ export async function runProofAsk(input: {
       file.mentionSupplement = mentionPrep.supplement;
     }
     if (mentionPrep?.directAnswer) input.onToken?.(mentionPrep.directAnswer);
+    const lookup = askLookupCatalogFromJob({
+      orgId,
+      jobId,
+      access: askAccess,
+      proofs: ((proofsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at),
+      parties: partyRows,
+      history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
+      jobTitle: file.job?.title ?? null,
+      people: lookupPeopleFromContexts(mentionPrep?.people ?? []),
+    });
     const result = mentionPrep?.directAnswer
       ? {
           answer: mentionPrep.directAnswer,
@@ -2972,6 +2986,7 @@ export async function runProofAsk(input: {
           groundedOn: mentionPrep.groundedOn,
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
+          answeredFromLookup: false,
         }
       : await answerFromJobFile({
       question: input.question,
@@ -2979,6 +2994,8 @@ export async function runProofAsk(input: {
       history,
       apiKey,
       onToken: input.onToken,
+      onStatus: input.onStatus,
+      lookup,
       toolContext: {
         orgId,
         jobId,
@@ -2996,7 +3013,8 @@ export async function runProofAsk(input: {
       mentionPrep?.fallbackAnswer &&
       mentionPrep.mentions.length &&
       !mentionPrep.directAnswer &&
-      !result.model
+      !result.model &&
+      !result.answeredFromLookup
     ) {
       result.answer = mentionPrep.fallbackAnswer;
       input.onToken?.(mentionPrep.fallbackAnswer);
@@ -3115,6 +3133,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         requestId: `ask:${req.params.jobId}:${randomUUID()}`,
         access: access === 'org' ? 'org' : 'viewer',
         onToken: (text) => writeEvent({ type: 'token', text }),
+        onStatus: (phase) => writeEvent({ type: 'status', phase }),
       });
       writeEvent({
         type: 'done',

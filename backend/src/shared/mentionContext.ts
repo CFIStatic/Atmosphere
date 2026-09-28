@@ -933,6 +933,8 @@ export interface MentionAskPrep {
   /** Grounded person answer, used when the model is skipped or unavailable. */
   fallbackAnswer: string | null;
   groundedOn: number;
+  /** People the model may ask list_person_activity about. Empty when Ask skips the model. */
+  people: PersonMentionContext[];
 }
 
 export async function prepareMentionAsk(
@@ -957,7 +959,7 @@ export async function prepareMentionAsk(
     const job = await jobInOrg(db, input.orgId, jobId);
     if (!job) {
       const missing = "That job isn't in this organization.";
-      return { mentions: [], supplement: '', directAnswer: missing, fallbackAnswer: missing, groundedOn: 0 };
+      return { mentions: [], supplement: '', directAnswer: missing, fallbackAnswer: missing, groundedOn: 0, people: [] };
     }
   }
   const carried = carryPriorMention(input.question, input.history, roster);
@@ -991,6 +993,7 @@ export async function prepareMentionAsk(
       directAnswer: direct || null,
       fallbackAnswer: direct || null,
       groundedOn: 0,
+      people: [],
     };
   }
   const people = await loadPersonContext(db, {
@@ -1020,6 +1023,7 @@ export async function prepareMentionAsk(
       directAnswer: withPrefix(grounded.answer),
       fallbackAnswer: withPrefix(grounded.answer),
       groundedOn: grounded.groundedOn,
+      people,
     };
   }
   return {
@@ -1028,6 +1032,7 @@ export async function prepareMentionAsk(
     directAnswer: null,
     fallbackAnswer: withPrefix(grounded.answer),
     groundedOn: grounded.groundedOn,
+    people,
   };
 }
 

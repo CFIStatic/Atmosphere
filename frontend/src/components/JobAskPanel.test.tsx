@@ -394,4 +394,63 @@ describe('JobAskPanel', () => {
     });
   });
 
+  it('streams text, seeks a moment chip, and asks a follow-up', async () => {
+    const job = 'job-1038';
+    const proof = 'proof-tarp';
+    const cite = `video/${job}/${proof}/north-slope@18`;
+    const answer = `The tarp came off.\n\n⟦sources: ${cite}⟧\n⟦quotes: ${cite}|Homeowner|The tarp came off the north slope.⟧\n⟦followups: What was said about the skylights? ;; What does the job history say?⟧`;
+    askAboutProofsStream.mockImplementation(
+      async (_jobId: string, question: string, handlers: { onToken?: (t: string) => void; onStatus?: (phase: string) => void }) => {
+        if (/skylights/i.test(question)) {
+          handlers.onToken?.('The file does not mention skylights.');
+          return {
+            answer: 'The file does not mention skylights.',
+            groundedOn: 0,
+            model: 'claude-opus',
+            question: null,
+          };
+        }
+        handlers.onStatus?.('Searching transcripts');
+        handlers.onToken?.('The tarp ');
+        handlers.onToken?.('came off.');
+        return {
+          answer,
+          groundedOn: 1,
+          model: 'claude-opus',
+          question: {
+            id: 'q-moment',
+            question,
+            answer,
+            grounded_on: [proof],
+            created_at: '2026-08-06T12:00:00Z',
+          },
+        };
+      },
+    );
+    const seeks: AskSeekTarget[] = [];
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <SeekProbe onSeek={(target) => seeks.push(target)} />
+          <JobAskPanel jobId={job} file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'What happened to the tarp?');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    expect(await screen.findByTestId('ask-answer-body')).toHaveTextContent(/the tarp came off/i);
+    expect(screen.getByTestId('ask-quote').textContent).toMatch(/Homeowner/);
+    expect(screen.getByTestId('ask-quote').textContent).toMatch(/north slope/);
+    const chip = await screen.findByTestId('ask-source-chip');
+    expect(chip.textContent).toMatch(/0:18/);
+    await user.click(chip);
+    await waitFor(() => {
+      expect(seeks.at(-1)).toMatchObject({ atSeconds: 18, proofId: proof });
+    });
+    await user.click(screen.getByRole('button', { name: /skylights/i }));
+    expect(await screen.findByText(/does not mention skylights/i)).toBeInTheDocument();
+  });
+
 });
