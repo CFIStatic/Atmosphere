@@ -44,6 +44,20 @@ export const GEMINI_ASK_ANALYSIS_MAX_TOKENS = 12_288;
 export const GEMINI_ASK_THINKING_LEVEL = 'minimal';
 /** Offline Analysis: strong thinking for dense reconstruction (never invent). */
 export const GEMINI_ASK_ANALYSIS_THINKING_LEVEL = 'high';
+/**
+ * Gemini 2.5 Pro is retired (the API 404s). Analysis and the Ask lookup
+ * fallback use this id unless ASK_ANALYSIS_MODEL names a model Google still serves.
+ */
+export const GEMINI_ANALYSIS_MODEL_DEFAULT = 'gemini-3.1-pro-preview';
+/**
+ * Adaptive thinking counts toward max_tokens. 2048 is too small for a tool
+ * loop on Opus 4.7+ / Opus 5; this leaves room for thinking and the answer.
+ */
+export const ANTHROPIC_REASONING_MAX_TOKENS = 16_000;
+
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+const RETIRED_GEMINI_ANALYSIS = /^(?:gemini-2\.5-pro|gemini-2\.0-pro|gemini-1\.5-pro|gemini-pro)(?:-|$)/i;
 
 export type AskCompletionMode = 'interactive' | 'analysis' | 'reasoning';
 
@@ -110,13 +124,83 @@ function anthropicAskModel(): string {
   return resolveAnthropicModel(process.env.ANTHROPIC_MODEL, process.env.ANTHROPIC_DEFAULT_MODEL);
 }
 
+/** Known-retired analysis ids. Callers still retry a 404 the API suggests a replacement for. */
+export function isRetiredGeminiAnalysisModel(model: string): boolean {
+  return RETIRED_GEMINI_ANALYSIS.test(model.trim().toLowerCase());
+}
+
+/**
+ * Map a configured analysis model onto one Gemini still serves.
+ * An explicit current id is left alone. gemini-2.5-pro and the other
+ * retired pro ids become GEMINI_ANALYSIS_MODEL_DEFAULT.
+ */
+export function resolveGeminiAskModel(model: string, mode: AskCompletionMode = 'analysis'): string {
+  const id = model.trim();
+  if ((mode === 'analysis' || mode === 'reasoning') && isRetiredGeminiAnalysisModel(id)) {
+    return GEMINI_ANALYSIS_MODEL_DEFAULT;
+  }
+  return id;
+}
+
+/**
+ * Opus 4.5 and older still require thinking.type "enabled" plus budget_tokens.
+ * Opus 4.6+ accepts adaptive thinking; Opus 4.7+ and Opus 5 reject budget_tokens.
+ */
+export function anthropicUsesBudgetTokens(model: string): boolean {
+  const id = model.trim().toLowerCase();
+  if (/^claude-3(?:[.-]|$)/.test(id)) return true;
+  const match = id.match(/claude-(?:opus|sonnet|haiku)-(\d+)(?:[.-](\d+))?/);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = match[2] != null ? Number(match[2]) : 0;
+  return major < 4 || (major === 4 && minor <= 5);
+}
+
+/** ASK_ANALYSIS_THINKING_LEVEL → output_config.effort. Off leaves thinking unset. */
+export function askAnalysisEffort(): AnthropicEffort | null {
+  const level = (process.env.ASK_ANALYSIS_THINKING_LEVEL ?? 'high').trim().toLowerCase();
+  if (level === 'off' || level === 'none' || level === 'minimal') return null;
+  if (level === 'low') return 'low';
+  if (level === 'medium') return 'medium';
+  if (level === 'xhigh') return 'xhigh';
+  if (level === 'max') return 'max';
+  return 'high';
+}
+
+/**
+ * Request fields for a reasoning Ask turn.
+ * claude-opus-5 uses thinking.type "adaptive" plus output_config.effort.
+ * budget_tokens is only attached for models that still require it.
+ */
+export function anthropicReasoningRequest(model: string): {
+  max_tokens: number;
+  thinking?: { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number };
+  output_config?: { effort: AnthropicEffort };
+} {
+  const effort = askAnalysisEffort();
+  const budget = askReasoningThinkingBudget();
+  if (!effort || budget == null) return { max_tokens: ANTHROPIC_REASONING_MAX_TOKENS };
+  if (anthropicUsesBudgetTokens(model)) {
+    const budgetTokens = Math.max(1024, budget);
+    return {
+      max_tokens: Math.max(ANTHROPIC_REASONING_MAX_TOKENS, budgetTokens + 1024),
+      thinking: { type: 'enabled', budget_tokens: budgetTokens },
+    };
+  }
+  return {
+    max_tokens: ANTHROPIC_REASONING_MAX_TOKENS,
+    thinking: { type: 'adaptive' },
+    output_config: { effort },
+  };
+}
+
 /** Low-latency interactive Ask model (override with ASK_MODEL / ASK_FAST_MODEL). */
 export function geminiAskModel(mode: AskCompletionMode = 'interactive'): string {
   if (mode === 'analysis' || mode === 'reasoning') {
     return (
       process.env.ASK_ANALYSIS_MODEL ??
       process.env.VERIFICATION_PRIMARY_MODEL ??
-      'gemini-2.5-pro'
+      GEMINI_ANALYSIS_MODEL_DEFAULT
     ).trim();
   }
   return (
@@ -140,8 +224,54 @@ function geminiBaseUrl(): string {
   return (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
 }
 
-function errorDetail(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').slice(0, 280);
+const PROVIDER_SECRET_RE =
+  /\b(?:sk-ant-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{20,}|ya29\.[0-9A-Za-z._-]+|Bearer\s+[A-Za-z0-9._~+/-]{12,})\b/gi;
+
+/** Drop API keys and collapse whitespace. Safe to put in a log line. */
+export function scrubProviderDetail(value: string): string {
+  return value.replace(PROVIDER_SECRET_RE, '[redacted]').replace(/\s+/g, ' ').trim();
+}
+
+export function describeProviderError(err: unknown): { status: number | null; code: string | null; detail: string } {
+  let status: number | null = null;
+  let code: string | null = null;
+  let message = err instanceof Error ? err.message : String(err);
+  if (err && typeof err === 'object') {
+    const rec = err as { status?: unknown; type?: unknown; error?: { type?: unknown; message?: unknown } };
+    if (typeof rec.status === 'number') status = rec.status;
+    if (typeof rec.type === 'string' && rec.type && rec.type !== 'error') code = rec.type;
+    const nested = rec.error;
+    if (nested && typeof nested === 'object') {
+      if (typeof nested.type === 'string' && nested.type) code = nested.type;
+      if (typeof nested.message === 'string' && nested.message.trim()) message = nested.message;
+    }
+  }
+  if (status == null) {
+    const match = message.match(/\b(?:error|status)\s+(\d{3})\b/i);
+    if (match) status = Number(match[1]);
+  }
+  if (!code) {
+    const typeMatch = message.match(
+      /\b(invalid_request_error|authentication_error|permission_error|not_found_error|rate_limit_error|api_error|INVALID_ARGUMENT|NOT_FOUND|PERMISSION_DENIED)\b/,
+    );
+    if (typeMatch) code = typeMatch[1] ?? null;
+  }
+  return { status, code, detail: scrubProviderDetail(message).slice(0, 240) };
+}
+
+/**
+ * Railway's log view shows the message, not nested fields. Keep status and
+ * the provider's error text in the message, with secrets stripped.
+ */
+export function logAskFailure(event: string, err: unknown): void {
+  const info = describeProviderError(err);
+  const status = info.status == null ? 'none' : String(info.status);
+  const code = info.code ?? 'error';
+  logger.warn(`${event} status=${status} code=${code} ${info.detail}`, {
+    status: info.status,
+    code,
+    detail: info.detail,
+  });
 }
 
 function resolveMaxTokens(input: { maxTokens?: number; mode?: AskCompletionMode }): {
@@ -159,24 +289,36 @@ function resolveMaxTokens(input: { maxTokens?: number; mode?: AskCompletionMode 
   return { anthropicMax, geminiMax };
 }
 
-function buildGeminiGenerationConfig(input: {
+/**
+ * Gemini 3 only accepts thinkingLevel low or high. thinkingBudget on a
+ * gemini-3 model (and thinkingLevel values such as minimal or medium on
+ * gemini-3.1-pro) is rejected immediately. Never send both.
+ */
+export function gemini3ThinkingLevel(level: string): 'low' | 'high' {
+  const value = level.trim().toLowerCase();
+  if (value === 'high' || value === 'xhigh' || value === 'max' || value === 'medium') return 'high';
+  return 'low';
+}
+
+export function buildGeminiGenerationConfig(input: {
   model: string;
   maxTokens: number;
   mode: AskCompletionMode;
 }): Record<string, unknown> {
   const generationConfig: Record<string, unknown> = {
-    temperature: 0,
     maxOutputTokens: input.maxTokens,
   };
   const level = geminiThinkingLevel(input.mode);
   // Flash-Lite / non-thinking ids reject thinkingConfig; only attach when useful.
   if (/^gemini-3/i.test(input.model)) {
-    if (level === 'none' || level === 'off') {
-      // omit thinkingConfig
-    } else {
-      generationConfig.thinkingConfig = { thinkingLevel: level };
+    // Gemini 3 reasoning is tuned for the default temperature. Don't send 0.
+    if (level !== 'none' && level !== 'off') {
+      generationConfig.thinkingConfig = { thinkingLevel: gemini3ThinkingLevel(level) };
     }
-  } else if (/^gemini-2\.5/i.test(input.model) && !/lite/i.test(input.model)) {
+  } else {
+    generationConfig.temperature = 0;
+  }
+  if (/^gemini-2\.5/i.test(input.model) && !/lite/i.test(input.model)) {
     // 2.5 Flash/Pro: thinkingBudget 0 disables hidden reasoning for interactive Ask.
     if (input.mode === 'interactive' || level === 'none' || level === 'off' || level === 'minimal') {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
@@ -198,15 +340,17 @@ async function completeWithAnthropic(input: {
   user: string;
   maxTokens: number;
   onToken?: (text: string) => void;
-  thinkingBudget?: number | null;
+  reasoning?: boolean;
   signal?: AbortSignal;
 }): Promise<AskModelResult> {
-  const budget = input.thinkingBudget ?? null;
-  const maxTokens = budget ? Math.max(input.maxTokens, budget + 1024) : input.maxTokens;
-  const thinking =
-    budget && budget >= 1024
-      ? { thinking: { type: 'enabled' as const, budget_tokens: budget } }
-      : {};
+  const shaped = input.reasoning ? anthropicReasoningRequest(anthropicAskModel()) : null;
+  const maxTokens = shaped?.max_tokens ?? input.maxTokens;
+  const extra = shaped
+    ? {
+        ...(shaped.thinking ? { thinking: shaped.thinking } : {}),
+        ...(shaped.output_config ? { output_config: shaped.output_config } : {}),
+      }
+    : {};
   if (input.onToken) {
     const stream = anthropicClientForKey(input.apiKey).messages.stream(
       {
@@ -214,7 +358,7 @@ async function completeWithAnthropic(input: {
         max_tokens: maxTokens,
         system: input.system,
         messages: [{ role: 'user', content: input.user }],
-        ...thinking,
+        ...extra,
       },
       input.signal ? { signal: input.signal } : undefined,
     );
@@ -241,7 +385,7 @@ async function completeWithAnthropic(input: {
       max_tokens: maxTokens,
       system: input.system,
       messages: [{ role: 'user', content: input.user }],
-      ...thinking,
+      ...extra,
     },
     input.signal ? { signal: input.signal } : undefined,
   );
@@ -254,13 +398,79 @@ async function completeWithAnthropic(input: {
   return { text, model: response.model, usage: tryExtractUsage(response.usage) };
 }
 
+function visibleGeminiText(part: { text?: string; thought?: boolean }): string {
+  if (part.thought) return '';
+  return part.text ?? '';
+}
+
 function extractGeminiText(payload: {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
 }): string {
   return (payload.candidates?.[0]?.content?.parts ?? [])
-    .map((part) => part.text ?? '')
+    .map((part) => visibleGeminiText(part))
     .join('')
     .trim();
+}
+
+/**
+ * POST generateContent, rewriting a retired model and retrying one 404
+ * that names a replacement. The generation config is rebuilt for the
+ * model that actually runs, so a gemini-3 retry never keeps thinkingBudget.
+ */
+export async function requestGemini(input: {
+  apiKey: string;
+  model: string;
+  mode: AskCompletionMode;
+  maxTokens: number;
+  body: Record<string, unknown>;
+  fetchFn?: typeof fetch;
+  signal?: AbortSignal;
+  stream?: boolean;
+}): Promise<{ response: Response; model: string }> {
+  const fetchFn = input.fetchFn ?? fetch;
+  let model = resolveGeminiAskModel(input.model, input.mode);
+  if (model !== input.model.trim()) {
+    logger.warn(`ask_gemini_model_retired model=${input.model.trim()} suggested=${model}`, {
+      model: input.model.trim(),
+      suggested: model,
+    });
+  }
+  let retried = false;
+  while (true) {
+    const generationConfig = buildGeminiGenerationConfig({
+      model,
+      maxTokens: input.maxTokens,
+      mode: input.mode,
+    });
+    const method = input.stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
+    const url = `${geminiBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:${method}`;
+    const response = await fetchFn(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
+      body: JSON.stringify({ ...input.body, generationConfig }),
+      signal: input.signal,
+    });
+    if (response.ok) return { response, model };
+    const errText = await response.text();
+    const suggestedRaw = errText.match(/use models\/([a-z0-9._-]+)/i)?.[1] ?? '';
+    const suggested = suggestedRaw.replace(/[.\s]+$/g, '') || null;
+    const retiredFallback =
+      response.status === 404 && isRetiredGeminiAnalysisModel(model) ? GEMINI_ANALYSIS_MODEL_DEFAULT : null;
+    const next = suggested && suggested !== model ? suggested : retiredFallback && retiredFallback !== model ? retiredFallback : null;
+    if (!retried && next) {
+      retried = true;
+      const detail = scrubProviderDetail(errText).slice(0, 180);
+      logger.warn(`ask_gemini_model_retired status=${response.status} model=${model} suggested=${next} ${detail}`, {
+        status: response.status,
+        model,
+        suggested: next,
+        detail,
+      });
+      model = next;
+      continue;
+    }
+    throw new Error(`Gemini Ask error ${response.status}: ${scrubProviderDetail(errText).slice(0, 300)}`);
+  }
 }
 
 async function completeWithGemini(input: {
@@ -274,36 +484,24 @@ async function completeWithGemini(input: {
   onToken?: (text: string) => void;
   signal?: AbortSignal;
 }): Promise<AskModelResult> {
-  const model = input.model || geminiAskModel(input.mode);
-  const fetchFn = input.fetchFn ?? fetch;
-  const generationConfig = buildGeminiGenerationConfig({
-    model,
-    maxTokens: input.maxTokens,
+  const requested = input.model || geminiAskModel(input.mode);
+  const posted = await requestGemini({
+    apiKey: input.apiKey,
+    model: requested,
     mode: input.mode,
+    maxTokens: input.maxTokens,
+    fetchFn: input.fetchFn,
+    signal: input.signal,
+    stream: Boolean(input.onToken),
+    body: {
+      system_instruction: { parts: [{ text: input.system }] },
+      contents: [{ role: 'user', parts: [{ text: input.user }] }],
+    },
   });
-  const body = JSON.stringify({
-    system_instruction: { parts: [{ text: input.system }] },
-    contents: [{ role: 'user', parts: [{ text: input.user }] }],
-    generationConfig,
-  });
+  const model = posted.model;
+  const response = posted.response;
 
   if (input.onToken) {
-    const url = `${geminiBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
-    const response = await fetchFn(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
-      body,
-      signal: input.signal,
-    });
-    if (!response.ok) {
-      const errText = await response.text();
-      const suggested = errText.match(/use models\/([a-z0-9._-]+)/i)?.[1];
-      if (response.status === 404 && suggested && suggested !== model && !input.model) {
-        logger.warn('ask_gemini_model_retired', { model, suggested });
-        return completeWithGemini({ ...input, model: suggested });
-      }
-      throw new Error(`Gemini Ask error ${response.status}: ${errText.slice(0, 400)}`);
-    }
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Gemini Ask stream returned no body');
     const decoder = new TextDecoder();
@@ -324,7 +522,7 @@ async function completeWithGemini(input: {
         const raw = trimmed.slice(5).trim();
         if (!raw || raw === '[DONE]') continue;
         let payload: {
-          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
           usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
           modelVersion?: string;
         };
@@ -334,7 +532,7 @@ async function completeWithGemini(input: {
           continue;
         }
         const delta = (payload.candidates?.[0]?.content?.parts ?? [])
-          .map((part) => part.text ?? '')
+          .map((part) => visibleGeminiText(part))
           .join('');
         if (delta) {
           text += delta;
@@ -365,22 +563,6 @@ async function completeWithGemini(input: {
     };
   }
 
-  const url = `${geminiBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await fetchFn(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
-    body,
-    signal: input.signal,
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    const suggested = errText.match(/use models\/([a-z0-9._-]+)/i)?.[1];
-    if (response.status === 404 && suggested && suggested !== model && !input.model) {
-      logger.warn('ask_gemini_model_retired', { model, suggested });
-      return completeWithGemini({ ...input, model: suggested });
-    }
-    throw new Error(`Gemini Ask error ${response.status}: ${errText.slice(0, 400)}`);
-  }
   const payload = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
@@ -442,11 +624,11 @@ export async function completeAskText(input: {
         user: input.user,
         maxTokens: anthropicMax,
         onToken: input.onToken,
-        thinkingBudget: reasoning ? askReasoningThinkingBudget() : null,
+        reasoning,
         signal: signalFor(),
       });
     } catch (err) {
-      logger.warn('ask_anthropic_failed', { detail: errorDetail(err) });
+      logAskFailure('ask_anthropic_failed', err);
     }
   }
 
@@ -464,7 +646,7 @@ export async function completeAskText(input: {
         signal: reasoning ? signalFor() : input.signal,
       });
     } catch (err) {
-      logger.warn('ask_gemini_failed', { detail: errorDetail(err) });
+      logAskFailure('ask_gemini_failed', err);
     }
   }
 

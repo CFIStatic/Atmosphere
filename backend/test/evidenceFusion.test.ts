@@ -48,7 +48,7 @@ test('fuseVisionTranscriptEvidence merges Analysis-mode fused beats', async () =
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: any) => {
-    assert.match(String(input), /gemini-2\.5-pro:generateContent/);
+    assert.match(String(input), /gemini-3\.1-pro-preview:generateContent/);
     return new Response(
       JSON.stringify({
         candidates: [
@@ -72,7 +72,7 @@ test('fuseVisionTranscriptEvidence merges Analysis-mode fused beats', async () =
             },
           },
         ],
-        modelVersion: 'gemini-2.5-pro',
+        modelVersion: 'gemini-3.1-pro-preview',
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );

@@ -24,11 +24,13 @@ import {
   secondsInPrivacyRange,
 } from '../audio/privacyRedactions.js';
 import { cleanMentionTitle, mentionSpeakerLine, sourceSlug } from './mentions.js';
-import { classifyAskIntent, composeGroundedAsk, localStamp } from './askPolish.js';
+import { classifyAskIntent, composeGroundedAsk, localStamp, selectSpeechMoments } from './askPolish.js';
 import {
+  clipMatchesAskDate,
   formatAskClock,
   momentSourceId,
   parseAskClock,
+  parseAskDate,
   type AskMomentQuote,
 } from './askMoments.js';
 
@@ -352,6 +354,10 @@ function speakerFor(clip: AskLookupClip, line: RedactedLine): string {
   return named[0] || 'Speaker';
 }
 
+function isRedactedSpeech(text: string): boolean {
+  return text.includes(PRIVACY_REDACTED_LABEL) || text.includes(CHILD_PRIVACY_REDACTED_LABEL);
+}
+
 function clipVisible(catalog: AskLookupCatalog, clip: AskLookupClip): boolean {
   if (clip.orgId !== catalog.orgId) return false;
   if (catalog.access === 'viewer') {
@@ -504,6 +510,70 @@ function preciseMoment(clip: AskLookupClip, atSeconds: number | null): number | 
   return best ?? atSeconds;
 }
 
+export type AskSpeechMoment = {
+  excerpt: string;
+  speaker: string;
+  atSeconds: number | null;
+  cite: string;
+};
+
+function clipMoments(clip: AskLookupClip): AskSpeechMoment[] {
+  const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
+  const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
+  const segments = asTimed(clip.segments);
+  const words = asTimed(clip.words);
+  const timed: Array<{ start: number | null; text: string }> = segments.length
+    ? segments.map((row) => {
+        const kind = redactionKind(row.start, row.end, privacy, child);
+        return {
+          start: kind === 'clear' ? row.start : stampFor(row.start, row.end, kind, privacy, child),
+          text: labelFor(kind) ?? row.text,
+        };
+      })
+    : words.length
+      ? linesFromWords(words, privacy, child).map((line) => ({ start: line.start, text: line.text }))
+      : redactedLines(redactClipTranscriptForAsk(clip)).map((line) => ({
+          start: line.atSeconds,
+          text: line.text,
+        }));
+  return timed
+    .filter((row) => row.text && !isRedactedSpeech(row.text))
+    .map((row) => {
+      const text = row.text.replace(/^[^:]{1,40}:\s+/, '');
+      const atSeconds = row.start;
+      const speaker = speakerFor(clip, { atSeconds, text: row.text, speaker: null });
+      return {
+        excerpt: excerpt(text),
+        speaker,
+        atSeconds,
+        cite: citeFor(clip, atSeconds),
+      };
+    });
+}
+
+/** First real timed moment. Skip a 0:00 opener when a later word or segment exists. */
+function representativeAt(clip: AskLookupClip): number | null {
+  const times = clipMoments(clip)
+    .map((moment) => moment.atSeconds)
+    .filter((at): at is number => at != null);
+  return times.find((at) => at >= 0.5) ?? times[0] ?? null;
+}
+
+function clipHasClearSpeech(clip: AskLookupClip): boolean {
+  return clipMoments(clip).some((moment) => moment.excerpt);
+}
+
+function clipsForPerson(catalog: AskLookupCatalog, person: AskLookupPerson): AskLookupClip[] {
+  const recorded = new Set(person.recordedProofIds ?? []);
+  const tagged = new Set(person.taggedProofIds ?? []);
+  const explicitLists = person.recordedProofIds != null || person.taggedProofIds != null;
+  return clipsInScope(catalog).filter((clip) => {
+    if (recorded.has(clip.proofId) || tagged.has(clip.proofId)) return true;
+    if (explicitLists) return false;
+    return (clip.recordedByUserIds ?? []).includes(person.userId);
+  });
+}
+
 function excerpt(text: string): string {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= 160) return clean;
@@ -575,6 +645,8 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
   }
   const transcript = redactClipTranscriptForAsk(clip);
   const findings = findingsText(clip.findings, clip);
+  const moments = clipMoments(clip);
+  const atSeconds = representativeAt(clip);
   return {
     ok: true,
     tool: 'get_clip',
@@ -587,9 +659,11 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
       workDate: clip.workDate ?? null,
       summary: redactAskText(trim(clip.summary), clip) || null,
       speakers: (clip.speakers ?? []).filter(Boolean),
-      cite: citeFor(clip, null),
+      cite: citeFor(clip, atSeconds),
+      atSeconds,
       transcript: transcript || null,
       findings: findings || null,
+      moments,
     },
   };
 }
@@ -635,20 +709,11 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
     };
   }
   const recorded = new Set(person.recordedProofIds ?? []);
-  const tagged = new Set(person.taggedProofIds ?? []);
-  const explicitLists = person.recordedProofIds != null || person.taggedProofIds != null;
-  const clips = clipsInScope(catalog)
-    .filter((clip) => {
-      if (recorded.has(clip.proofId) || tagged.has(clip.proofId)) return true;
-      if (explicitLists) return false;
-      return (clip.recordedByUserIds ?? []).includes(person.userId);
-    })
+  const clips = clipsForPerson(catalog, person)
     .map((clip) => {
-      const transcript = redactClipTranscriptForAsk(clip);
-      const first = redactedLines(transcript).find(
-        (line) => line.text && !line.text.includes(PRIVACY_REDACTED_LABEL) && !line.text.includes(CHILD_PRIVACY_REDACTED_LABEL),
-      );
-      const atSeconds = preciseMoment(clip, first?.atSeconds ?? null);
+      const moments = clipMoments(clip);
+      const first = moments[0];
+      const atSeconds = representativeAt(clip);
       return {
         proofId: clip.proofId,
         jobId: clip.jobId,
@@ -659,8 +724,8 @@ export function listPersonActivity(catalog: AskLookupCatalog, name: string): Ask
         summary: redactAskText(trim(clip.summary), clip) || null,
         cite: citeFor(clip, atSeconds),
         atSeconds,
-        speaker: first ? speakerFor(clip, first) : null,
-        excerpt: first ? excerpt(first.text.replace(/^[^:]{1,40}:\s+/, '')) : null,
+        speaker: first?.speaker ?? null,
+        excerpt: first?.excerpt ?? null,
       };
     });
   const actions = historyInScope(catalog)
@@ -761,6 +826,20 @@ export function buildLookupUserPrompt(input: {
     .join('\n\n');
 }
 
+const SPEECH_QUESTION = /\b(say|said|quote|tell|mention)\b/i;
+
+function dedupePlan(
+  steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }>,
+): Array<{ name: AskLookupToolName; input: Record<string, unknown> }> {
+  const seen = new Set<string>();
+  return steps.filter((step) => {
+    const key = `${step.name}:${JSON.stringify(step.input)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
+
 export function planAskLookup(
   question: string,
   catalog: AskLookupCatalog,
@@ -769,6 +848,17 @@ export function planAskLookup(
   const q = question.toLowerCase();
   const person = (catalog.people ?? []).find((row) => q.includes(row.name.toLowerCase()));
   if (person) steps.push({ name: 'list_person_activity', input: { name: person.name } });
+  const asked = parseAskDate(question);
+  if (SPEECH_QUESTION.test(question) && asked) {
+    const pool = person ? clipsForPerson(catalog, person) : clipsInScope(catalog);
+    const dated = pool.filter((clip) => clipMatchesAskDate(clip.workDate, asked, catalog.timeZone));
+    const rest = pool.filter((clip) => !dated.includes(clip) && clipHasClearSpeech(clip));
+    for (const clip of [...dated, ...rest]) {
+      if (steps.filter((step) => step.name === 'get_clip').length >= 3) break;
+      steps.push({ name: 'get_clip', input: { proofId: clip.proofId } });
+    }
+    return dedupePlan(steps);
+  }
   const query = tokens(question)
     .filter((token) => !person || !person.name.toLowerCase().includes(token))
     .filter((token) => !ACTIVITY_VERBS.has(token) && !TASK_QUERY.has(token) && !/^\d+$/.test(token))
@@ -788,13 +878,32 @@ export function planAskLookup(
       steps.push({ name: 'get_clip', input: { proofId: row.proofId } });
     }
   }
-  const seen = new Set<string>();
-  return steps.filter((step) => {
-    const key = `${step.name}:${JSON.stringify(step.input)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 4);
+  return dedupePlan(steps);
+}
+
+export function followUpAnswerable(question: string, catalog: AskLookupCatalog): boolean {
+  if (SPEECH_QUESTION.test(question) && !/\bhistory\b/i.test(question)) {
+    const asked = parseAskDate(question);
+    const person = (catalog.people ?? []).find((row) => question.toLowerCase().includes(row.name.toLowerCase()));
+    const pool = person ? clipsForPerson(catalog, person) : clipsInScope(catalog);
+    const dated = asked ? pool.filter((clip) => clipMatchesAskDate(clip.workDate, asked, catalog.timeZone)) : [];
+    const titled = pool.filter((clip) =>
+      tokens(clip.title).some((word) => word.length > 3 && question.toLowerCase().includes(word)),
+    );
+    const targets = dated.length ? dated : titled.length ? titled : asked ? [] : pool;
+    if (!targets.length) return false;
+    return targets.some((clip) => clipHasClearSpeech(clip));
+  }
+  const plan = planAskLookup(question, catalog);
+  if (!plan.length) return false;
+  const trace: AskLookupTraceStep[] = plan.map((step) => ({
+    tool: step.name,
+    input: step.input,
+    result: executeAskLookup(step.name, step.input, catalog),
+  }));
+  const prose = composeGroundedAsk(question, trace, catalog).replace(/\s+/g, ' ').trim();
+  if (!prose || /^this file does not have that\b/i.test(prose)) return false;
+  return true;
 }
 
 function dataOf(result: AskLookupResult): Record<string, unknown> {
@@ -805,46 +914,50 @@ function dataOf(result: AskLookupResult): Record<string, unknown> {
 export function quotesFromTrace(trace: AskLookupTraceStep[]): AskMomentQuote[] {
   const quotes: AskMomentQuote[] = [];
   const push = (quote: AskMomentQuote) => {
-    if (!quote.text || quotes.some((existing) => existing.sourceId === quote.sourceId && existing.text === quote.text)) return;
+    if (!quote.text || isRedactedSpeech(quote.text)) return;
+    if (quotes.some((existing) => existing.sourceId === quote.sourceId && existing.text === quote.text)) return;
     quotes.push(quote);
   };
+  const pool: Array<{ excerpt: string; speaker: string; atSeconds: number | null; cite: string; proofId: string }> = [];
   for (const step of trace) {
     const data = dataOf(step.result);
-    const hits = Array.isArray(data.hits) ? data.hits : Array.isArray(data.clips) ? data.clips : [];
+    const hits = Array.isArray(data.hits) ? data.hits : [];
     for (const hit of hits) {
       if (!hit || typeof hit !== 'object') continue;
       const row = hit as Record<string, unknown>;
       const cite = trim(row.cite);
       const text = trim(row.excerpt);
-      if (!cite || !text) continue;
+      if (!cite || !text || isRedactedSpeech(text)) continue;
       push({
         sourceId: cite,
         speaker: trim(row.speaker) || 'Speaker',
         text,
         atSeconds: row.atSeconds == null ? null : Number(row.atSeconds),
       });
-      if (quotes.length >= 3) return quotes;
     }
-    const transcript = trim(data.transcript);
-    if (transcript && quotes.length < 3) {
-      const line = redactedLines(transcript).find(
-        (row) => row.text && !row.text.includes(PRIVACY_REDACTED_LABEL) && !row.text.includes(CHILD_PRIVACY_REDACTED_LABEL),
-      );
-      const cite = trim(data.cite);
-      if (line && cite) {
-        const at = line.atSeconds;
-        const sourceId = at == null ? cite : `${cite}@${Math.round(at * 1000) / 1000}`;
-        const speakers = Array.isArray(data.speakers) ? data.speakers.map((name) => trim(name)).filter(Boolean) : [];
-        push({
-          sourceId,
-          speaker: line.speaker || speakers[0] || 'Speaker',
-          text: excerpt(line.text.replace(/^[^:]{1,40}:\s+/, '')),
-          atSeconds: at,
-        });
-      }
+    const proofId = trim(data.proofId);
+    const moments = Array.isArray(data.moments) ? data.moments : [];
+    for (const moment of moments) {
+      if (!moment || typeof moment !== 'object') continue;
+      const row = moment as Record<string, unknown>;
+      const text = trim(row.excerpt);
+      const cite = trim(row.cite);
+      if (!text || !cite || isRedactedSpeech(text)) continue;
+      const at = row.atSeconds == null || Number.isNaN(Number(row.atSeconds)) ? null : Number(row.atSeconds);
+      pool.push({ excerpt: text, speaker: trim(row.speaker) || 'Speaker', atSeconds: at, cite, proofId });
     }
   }
-  return quotes.slice(0, 3);
+  if (quotes.length < 6) {
+    for (const moment of selectSpeechMoments(pool, 6 - quotes.length)) {
+      push({
+        sourceId: moment.cite,
+        speaker: moment.speaker,
+        text: moment.excerpt,
+        atSeconds: moment.atSeconds,
+      });
+    }
+  }
+  return quotes.slice(0, 6);
 }
 
 const FOLLOW_STOP = STOP;
@@ -879,6 +992,7 @@ export function suggestFollowUps(question: string, trace: AskLookupTraceStep[], 
   for (const item of suggestions) {
     if (item.toLowerCase() === question.toLowerCase()) continue;
     if (!groundedQuestion(item, `${evidence} ${clipIndex(catalog).toLowerCase()}`)) continue;
+    if (!followUpAnswerable(item, catalog)) continue;
     if (unique.some((existing) => existing.toLowerCase() === item.toLowerCase())) continue;
     unique.push(item);
     if (unique.length >= 3) break;
@@ -918,6 +1032,15 @@ export function collectMomentSourceIds(trace: AskLookupTraceStep[]): string[] {
       push(trim((row as { cite?: unknown }).cite));
     }
     if (typeof data.cite === 'string') push(data.cite);
+    if (Array.isArray(data.moments)) {
+      for (const moment of data.moments) {
+        if (!moment || typeof moment !== 'object') continue;
+        const cite = trim((moment as { cite?: unknown }).cite);
+        const text = trim((moment as { excerpt?: unknown }).excerpt);
+        if (!cite || !text || isRedactedSpeech(text)) continue;
+        push(cite);
+      }
+    }
   }
   return ids.slice(0, 6);
 }

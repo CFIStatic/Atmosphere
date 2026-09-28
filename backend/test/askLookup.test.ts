@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  anthropicReasoningRequest,
+  anthropicUsesBudgetTokens,
   askReasoningConfig,
   askReasoningTimeoutMs,
   completeAskText,
   geminiAskModel,
+  scrubProviderDetail,
 } from '../src/lib/askModel.js';
 import {
   buildLookupUserPrompt,
@@ -449,21 +452,29 @@ test('reasoning mode uses the analysis model, thinking budget, and Gemini after 
   const originalFetch = globalThis.fetch;
   try {
     const config = askReasoningConfig();
-    assert.equal(config.geminiModel, 'gemini-2.5-pro');
-    assert.equal(geminiAskModel('reasoning'), 'gemini-2.5-pro');
+    assert.equal(config.geminiModel, 'gemini-3.1-pro-preview');
+    assert.equal(geminiAskModel('reasoning'), 'gemini-3.1-pro-preview');
     assert.equal(config.thinkingLevel, 'high');
     assert.equal(config.thinkingBudget, 8000);
     assert.equal(config.timeoutMs, 12000);
     assert.equal(askReasoningTimeoutMs(), 12000);
     assert.match(config.anthropicModel, /claude-opus-test|claude/);
 
-    globalThis.fetch = (async (_input: unknown, init?: { body?: unknown }) => {
+    globalThis.fetch = (async (input: unknown, init?: { body?: unknown }) => {
+      const url = String(input);
+      if (!url.includes('generativelanguage')) {
+        return new Response(
+          JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'rejected' } }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       const body = JSON.parse(String(init?.body ?? '{}'));
-      assert.equal(body.generationConfig?.thinkingConfig?.thinkingBudget, 8192);
+      assert.equal(body.generationConfig?.thinkingConfig?.thinkingLevel, 'high');
+      assert.equal(body.generationConfig?.thinkingConfig?.thinkingBudget, undefined);
       return new Response(
         JSON.stringify({
           candidates: [{ content: { parts: [{ text: 'Grounded Gemini fallback.' }] } }],
-          modelVersion: 'gemini-2.5-pro',
+          modelVersion: 'gemini-3.1-pro-preview',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -477,7 +488,236 @@ test('reasoning mode uses the analysis model, thinking budget, and Gemini after 
       fetchFn: globalThis.fetch,
     });
     assert.equal(result?.text, 'Grounded Gemini fallback.');
-    assert.equal(result?.model, 'gemini-2.5-pro');
+    assert.equal(result?.model, 'gemini-3.1-pro-preview');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+function anthropicSse(events: Array<{ event: string; data: unknown }>): string {
+  return events.map((item) => `event: ${item.event}\ndata: ${JSON.stringify(item.data)}\n\n`).join('');
+}
+
+function anthropicMessage(stop: string | null, contentEvents: Array<{ event: string; data: unknown }>): string {
+  return anthropicSse([
+    {
+      event: 'message_start',
+      data: {
+        type: 'message_start',
+        message: {
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [],
+          model: 'claude-opus-5',
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 1 },
+        },
+      },
+    },
+    ...contentEvents,
+    {
+      event: 'message_delta',
+      data: {
+        type: 'message_delta',
+        delta: { stop_reason: stop, stop_sequence: null },
+        usage: { output_tokens: 30 },
+      },
+    },
+    { event: 'message_stop', data: { type: 'message_stop' } },
+  ]);
+}
+
+test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingBudget', async () => {
+  const prev = {
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
+    ASK_ANALYSIS_MODEL: process.env.ASK_ANALYSIS_MODEL,
+    ASK_ANALYSIS_THINKING_LEVEL: process.env.ASK_ANALYSIS_THINKING_LEVEL,
+    ASK_REASONING_TIMEOUT_MS: process.env.ASK_REASONING_TIMEOUT_MS,
+  };
+  delete process.env.GOOGLE_API_KEY;
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test-shape-key';
+  process.env.GEMINI_API_KEY = 'test-gemini';
+  process.env.ANTHROPIC_MODEL = 'claude-opus-5';
+  process.env.ASK_ANALYSIS_MODEL = 'gemini-retired-custom';
+  process.env.ASK_ANALYSIS_THINKING_LEVEL = 'high';
+  process.env.ASK_REASONING_TIMEOUT_MS = '20000';
+  const opus = anthropicReasoningRequest('claude-opus-5');
+  assert.equal(opus.thinking?.type, 'adaptive');
+  assert.equal('budget_tokens' in (opus.thinking ?? {}), false);
+  assert.equal(opus.output_config?.effort, 'high');
+  assert.ok(opus.max_tokens >= 16_000);
+  assert.equal(anthropicUsesBudgetTokens('claude-opus-4-5'), true);
+  const legacy = anthropicReasoningRequest('claude-opus-4-5');
+  assert.equal(legacy.thinking?.type, 'enabled');
+  assert.equal(legacy.thinking && 'budget_tokens' in legacy.thinking ? legacy.thinking.budget_tokens : 0, 8000);
+  assert.equal(anthropicUsesBudgetTokens('claude-opus-5'), false);
+  assert.doesNotMatch(scrubProviderDetail('rejected sk-ant-api03-abcdefghijklmnop'), /sk-ant-/);
+  const originalFetch = globalThis.fetch;
+  const anthropicBodies: Array<Record<string, unknown>> = [];
+  const geminiBodies: Array<{ url: string; body: Record<string, unknown> }> = [];
+  try {
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      if (url.includes('api.anthropic.com') || url.includes('/v1/messages')) {
+        anthropicBodies.push(body);
+        if (anthropicBodies.length === 1) {
+          return new Response(
+            anthropicMessage('tool_use', [
+              {
+                event: 'content_block_start',
+                data: {
+                  type: 'content_block_start',
+                  index: 0,
+                  content_block: { type: 'thinking', thinking: '', signature: '' },
+                },
+              },
+              {
+                event: 'content_block_delta',
+                data: {
+                  type: 'content_block_delta',
+                  index: 0,
+                  delta: { type: 'thinking_delta', thinking: 'Check the Sep 21 clip.' },
+                },
+              },
+              {
+                event: 'content_block_delta',
+                data: {
+                  type: 'content_block_delta',
+                  index: 0,
+                  delta: { type: 'signature_delta', signature: 'sig_live_ask' },
+                },
+              },
+              { event: 'content_block_stop', data: { type: 'content_block_stop', index: 0 } },
+              {
+                event: 'content_block_start',
+                data: {
+                  type: 'content_block_start',
+                  index: 1,
+                  content_block: { type: 'tool_use', id: 'toolu_sep21', name: 'get_clip', input: {} },
+                },
+              },
+              {
+                event: 'content_block_delta',
+                data: {
+                  type: 'content_block_delta',
+                  index: 1,
+                  delta: { type: 'input_json_delta', partial_json: JSON.stringify({ proofId: TABLE }) },
+                },
+              },
+              { event: 'content_block_stop', data: { type: 'content_block_stop', index: 1 } },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+          );
+        }
+        return new Response(
+          anthropicMessage('end_turn', [
+            {
+              event: 'content_block_start',
+              data: {
+                type: 'content_block_start',
+                index: 0,
+                content_block: { type: 'text', text: '' },
+              },
+            },
+            {
+              event: 'content_block_delta',
+              data: {
+                type: 'content_block_delta',
+                index: 0,
+                delta: { type: 'text_delta', text: 'On Sep 21 he said it is all on paper.' },
+              },
+            },
+            { event: 'content_block_stop', data: { type: 'content_block_stop', index: 0 } },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+        );
+      }
+      geminiBodies.push({ url, body });
+      if (url.includes('gemini-retired-custom')) {
+        return new Response(
+          'This model models/gemini-retired-custom is no longer available. Please update your code to use models/gemini-3.1-pro-preview.',
+          { status: 404 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: 'Gemini lookup answer.' }] } }],
+          modelVersion: 'gemini-3.1-pro-preview',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    };
+    globalThis.fetch = fetchFn;
+    const file = catalog({
+      clips: [clip({ proofId: TABLE, title: 'Sep 21 table', workDate: '2026-09-21', segments: [{ start: 14.6, end: 16, text: 'QuickBooks online.' }] })],
+      people: [{ userId: EL, name: 'El Presidente', onThisJob: true, recordedProofIds: [TABLE] }],
+    });
+    const result = await answerFromAskLookup({
+      question: 'What did El Presidente say on Sep 21?',
+      catalog: file,
+      anthropicApiKey: 'sk-ant-test-shape-key',
+      fetchFn,
+    });
+    assert.ok(anthropicBodies.length >= 2, `anthropic calls ${anthropicBodies.length}`);
+    const first = anthropicBodies[0]!;
+    assert.equal((first.thinking as { type?: string } | undefined)?.type, 'adaptive');
+    assert.equal(JSON.stringify(first).includes('budget_tokens'), false);
+    assert.equal((first.output_config as { effort?: string } | undefined)?.effort, 'high');
+    assert.ok(Number(first.max_tokens) >= 16_000);
+    const second = anthropicBodies[1]!;
+    const messages = second.messages as Array<{ role: string; content: unknown }>;
+    const assistant = messages.find((message) => message.role === 'assistant');
+    const blocks = assistant?.content as Array<{ type?: string; thinking?: string; signature?: string }>;
+    const thinking = blocks.find((block) => block.type === 'thinking');
+    assert.equal(thinking?.thinking, 'Check the Sep 21 clip.');
+    assert.equal(thinking?.signature, 'sig_live_ask');
+    const toolTurn = messages.find((message) => message.role === 'user' && Array.isArray(message.content));
+    const toolBlocks = toolTurn?.content as Array<{ type?: string; tool_use_id?: string }>;
+    assert.equal(toolBlocks[0]?.type, 'tool_result');
+    assert.equal(toolBlocks[0]?.tool_use_id, 'toolu_sep21');
+    assert.match(result.answer, /all on paper/i);
+    assert.equal(geminiBodies.length, 0);
+
+    anthropicBodies.length = 0;
+    geminiBodies.length = 0;
+    const failingFetch: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes('anthropic') || url.includes('/v1/messages')) {
+        return new Response(
+          JSON.stringify({
+            type: 'error',
+            error: { type: 'invalid_request_error', message: 'thinking.type enabled is not supported' },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return fetchFn(input, init);
+    };
+    globalThis.fetch = failingFetch;
+    const failed = await answerFromAskLookup({
+      question: 'What did El Presidente say on Sep 21?',
+      catalog: file,
+      anthropicApiKey: 'sk-ant-test-shape-key',
+      fetchFn: failingFetch,
+    });
+    assert.ok(geminiBodies.length >= 2);
+    assert.match(geminiBodies[0]!.url, /gemini-retired-custom/);
+    assert.match(geminiBodies[1]!.url, /gemini-3\.1-pro-preview/);
+    const retry = geminiBodies[1]!.body.generationConfig as { thinkingConfig?: { thinkingLevel?: string; thinkingBudget?: number } };
+    assert.equal(retry.thinkingConfig?.thinkingLevel, 'high');
+    assert.equal(retry.thinkingConfig?.thinkingBudget, undefined);
+    assert.match(failed.answer, /Gemini lookup answer|QuickBooks/i);
+    assert.doesNotMatch(JSON.stringify(geminiBodies), /sk-ant-/);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(prev)) {

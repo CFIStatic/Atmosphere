@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { answerFromAskLookup } from '../src/shared/askReasoning.js';
 import { planAskLookup, type AskLookupCatalog, type AskLookupClip } from '../src/shared/askLookup.js';
-import { stripMomentTrailers } from '../src/shared/askMoments.js';
+import { parseFollowupTrailer, parseQuoteTrailer, stripMomentTrailers } from '../src/shared/askMoments.js';
 
 const ORG = '8b2cc105-1eec-4123-90db-fdcbc5565252';
 const JOB = 'd7fe1a01-4483-42c5-abb8-eaaa4c6988df';
@@ -265,4 +265,202 @@ test('model filler and a raw UTC stamp are cleaned before the reader sees them',
   assert.match(body, /11:37 AM CT/);
   assert.doesNotMatch(body, UUID_SAFE);
   assert.match(result.answer, /⟦artifact⟧/);
+});
+
+const LIVE_SEP17 = '00608802-140e-4897-9f02-1d5d0db88ecf';
+const LIVE_TABLE = 'd088682f-b5c8-400f-ae51-fcbeed97258a';
+const LIVE_WALK = 'c8d6e77f-6d86-4eee-8312-076038c15bac';
+
+/** Production shape: one untimed transcript, two clips with segments and words. */
+const tiffanyLive: AskLookupCatalog = {
+  orgId: ORG,
+  jobId: JOB,
+  access: 'org',
+  jobTitle: 'Project Tiffany & Co.',
+  timeZone: 'America/Chicago',
+  people: [
+    {
+      userId: EL,
+      name: 'El Presidente',
+      onThisJob: true,
+      recordedProofIds: [LIVE_SEP17, LIVE_TABLE, LIVE_WALK],
+      taggedProofIds: [],
+    },
+  ],
+  history: [
+    {
+      id: '18346820-5594-43cf-9e8b-a13aed56ac95',
+      jobId: JOB,
+      orgId: ORG,
+      summary: 'opened job #12 — Project Tiffany & Co.',
+      at: '2026-09-17T16:37:28.774Z',
+      actorId: EL,
+    },
+  ],
+  clips: [
+    clip({
+      proofId: LIVE_SEP17,
+      title: 'Clip Opens With Two Nearly Black, Noisy Frames',
+      workDate: '2026-09-17',
+      summary: 'A single fixed webcam-style take of one seated man speaking to camera from a small office.',
+      speakers: ['El Presidente'],
+      transcript: 'Sample the intervals.',
+      segments: [],
+      words: [],
+    }),
+    clip({
+      proofId: LIVE_TABLE,
+      title: 'Short Handheld Phone Clip Surveys a Light Whitewashed',
+      workDate: '2026-09-21',
+      summary: 'Handheld, often blurry phone video shot at a dining/breakfast table inside a home.',
+      speakers: ['El Presidente'],
+      segments: [
+        { start: 0, end: 3, text: "It's all on paper, and I'm like, God help you women people." },
+        { start: 3, end: 6, text: 'You guys do this on spreadsheets.' },
+        { start: 7, end: 10, text: 'have to have physical paper.' },
+        { start: 14.6, end: 16.5, text: "We've just got to go to QuickBooks online." },
+        { start: 16.7, end: 19, text: "I mean, that's the main thing." },
+        { start: 21, end: 24, text: "I think I'm going to be stuck in here." },
+        { start: 25, end: 27, text: "We're getting stuck." },
+      ],
+      words: [
+        { start: 14.6, end: 14.9, text: "We've" },
+        { start: 15.1, end: 15.4, text: 'just' },
+        { start: 10.6, end: 10.9, text: 'You' },
+      ],
+    }),
+    clip({
+      proofId: LIVE_WALK,
+      title: 'Handheld Phone Video Shot Sideways Inside a Home',
+      workDate: '2026-09-21',
+      summary: 'A short handheld interior walkthrough of a furnished home, recorded sideways.',
+      speakers: ['El Presidente'],
+      segments: [
+        { start: 0, end: 2, text: 'her entire life.' },
+        { start: 10.6, end: 13, text: 'You know I love that girl.' },
+        { start: 30, end: 32, text: 'I think she farts.' },
+        { start: 35, end: 37, text: 'I love her so much.' },
+        { start: 38, end: 40, text: 'I love that.' },
+      ],
+      words: [
+        { start: 10.6, end: 10.9, text: 'You' },
+        { start: 11.2, end: 11.5, text: 'love' },
+      ],
+    }),
+  ],
+};
+
+async function askLive(question: string) {
+  const prev = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    google: process.env.GOOGLE_API_KEY,
+  };
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    return await answerFromAskLookup({
+      question,
+      catalog: tiffanyLive,
+      step: async () => null,
+    });
+  } finally {
+    if (prev.anthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev.anthropic;
+    if (prev.gemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prev.gemini;
+    if (prev.google === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prev.google;
+  }
+}
+
+test('live Tiffany questions answer from the real transcripts', async () => {
+  const activity = await askLive('what activity does @El Presidente have in this job file');
+  const sep21 = await askLive('What did El Presidente say on Sep 21?');
+  const sep17 = await askLive('What did El Presidente say on Sep 17?');
+
+  assert.match(visible(activity.answer), /El Presidente/i);
+  assert.match(visible(activity.answer), /3 clips/i);
+  assert.match(activity.answer, /11:37 AM CT/);
+  assert.match(visible(activity.answer), /Nearly Black/i);
+  assert.match(activity.answer, new RegExp(`video/${JOB}/${LIVE_WALK}/[^\\s,⟧]*@10\\.6`));
+  assert.match(activity.answer, new RegExp(`video/${JOB}/${LIVE_TABLE}/`));
+  assert.doesNotMatch(activity.answer, new RegExp(`video/${JOB}/${LIVE_SEP17}/[^\\s,⟧]*@`));
+  assert.notEqual(visible(activity.answer), 'This file does not have that.');
+
+  const said21 = visible(sep21.answer);
+  assert.match(said21, /Sep 21/);
+  assert.match(said21, /QuickBooks online/);
+  assert.match(said21, /love that girl/i);
+  assert.match(sep21.answer, /@14\.6/);
+  assert.match(sep21.answer, /@10\.6/);
+  assert.doesNotMatch(sep21.answer, /Sample the intervals/);
+  assert.doesNotMatch(sep21.answer, new RegExp(LIVE_SEP17));
+  const quoted21 = parseQuoteTrailer(sep21.answer);
+  assert.ok(quoted21.some((quote) => quote.atSeconds === 14.6 && /QuickBooks/.test(quote.text)));
+  assert.ok(quoted21.some((quote) => quote.atSeconds === 10.6 && /love that girl/i.test(quote.text)));
+  assert.notEqual(said21, 'This file does not have that.');
+
+  const said17 = visible(sep17.answer);
+  assert.match(said17, /only one short untimed line/i);
+  assert.match(said17, /Sample the intervals/);
+  assert.match(said17, /no timed speech/i);
+  assert.match(said17, /QuickBooks online/);
+  assert.match(sep17.answer, /@14\.6/);
+  assert.match(sep17.answer, /@10\.6/);
+  assert.notEqual(said17, 'This file does not have that.');
+
+  for (const follow of parseFollowupTrailer(activity.answer)) {
+    const next = await askLive(follow);
+    assert.notEqual(visible(next.answer), 'This file does not have that.', follow);
+    assert.match(visible(next.answer), /Sample the intervals|QuickBooks|love that girl|opened|clip/i, follow);
+  }
+});
+
+test('a privacy-redacted line is never quoted or chipped', async () => {
+  const secret = 'The lockbox code is 4412.';
+  const result = await ask('What did El Presidente say on Sep 17?');
+  assert.doesNotMatch(result.answer, /4412/);
+  assert.doesNotMatch(result.answer, /lockbox code/i);
+  assert.match(visible(result.answer), /tarp came off/i);
+  assert.match(result.answer, /@4\.2/);
+  assert.doesNotMatch(result.answer, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('a clip with no transcript is not offered as a follow-up', async () => {
+  const empty = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const catalog: AskLookupCatalog = {
+    ...tiffanyLive,
+    people: [
+      {
+        userId: EL,
+        name: 'El Presidente',
+        onThisJob: true,
+        recordedProofIds: [LIVE_SEP17, LIVE_TABLE, LIVE_WALK, empty],
+        taggedProofIds: [],
+      },
+    ],
+    clips: [
+      ...tiffanyLive.clips,
+      clip({
+        proofId: empty,
+        title: 'Silent hallway pan',
+        workDate: '2026-09-22',
+        summary: 'No one speaks.',
+        transcript: '',
+        segments: [],
+        words: [],
+      }),
+    ],
+  };
+  const result = await answerFromAskLookup({
+    question: 'what activity does @El Presidente have in this job file',
+    catalog,
+    step: async () => null,
+  });
+  const follows = parseFollowupTrailer(result.answer).join(' ');
+  assert.doesNotMatch(follows, /Sep 22|Silent hallway/i);
+  assert.match(follows, /Sep 21/);
+  assert.match(follows, /Sep 17/);
 });
