@@ -400,14 +400,32 @@ const ROW_TONE: Record<VideoRowTone, string> = {
 };
 
 /**
+ * Refetch when a clip is added or its reading finishes. Count alone stays
+ * put while analysis writes the Dashboard title and poster onto an existing row.
+ */
+function libraryClipMetaKey(videos: ProofVideoRecord[]): string {
+  return videos
+    .map((video) =>
+      [
+        video.id,
+        video.analysisStatus ?? '',
+        video.narrationStatus ?? '',
+        video.transcriptStatus ?? '',
+      ].join(':'),
+    )
+    .join('|');
+}
+
+/**
  * Titles and poster stills from the Dashboard's library rows, so the Videos
  * tab names a clip exactly as the Dashboard does. Office only — the library
  * is an org endpoint; a homeowner's read-only file keeps the fallback name.
  */
-function useLibraryClipMeta(jobId: string | undefined, videoCount: number) {
+function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[]) {
   const [meta, setMeta] = useState<Map<string, LibraryClipMeta>>(() => new Map());
+  const refreshKey = libraryClipMetaKey(videos);
   useEffect(() => {
-    if (!jobId || videoCount === 0) return;
+    if (!jobId || !refreshKey) return;
     let cancelled = false;
     void api
       .evidenceLibrary(jobId)
@@ -425,7 +443,7 @@ function useLibraryClipMeta(jobId: string | undefined, videoCount: number) {
     return () => {
       cancelled = true;
     };
-  }, [jobId, videoCount]);
+  }, [jobId, refreshKey]);
   return meta;
 }
 
@@ -448,7 +466,7 @@ function VideoCatalog({
   onSeek?: (proofId: string, seconds: number) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const library = useLibraryClipMeta(jobId, videos.length);
+  const library = useLibraryClipMeta(jobId, videos);
 
   useEffect(() => {
     if (seekProofId) setOpenId(seekProofId);

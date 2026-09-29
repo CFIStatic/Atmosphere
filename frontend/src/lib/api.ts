@@ -4252,9 +4252,9 @@ export const api = {
     }),
 
   /**
-   * Org evidence library. Pass the open job id as `q` so the response is
-   * limited to that job, then still drop any row whose jobId does not match.
-   * A poster URL is a still, not an opening.
+   * Org evidence library. Pass the open job id so the server reads that job
+   * before the newest-500 window, then still drop any row whose jobId does
+   * not match. A poster URL is a still, not an opening.
    */
   evidenceLibrary: (jobId?: string) =>
     request<{
@@ -4265,7 +4265,7 @@ export const api = {
         title?: string | null;
       }>;
     }>(
-      `/api/evidence-portal/library${jobId ? `?q=${encodeURIComponent(jobId)}` : ''}`,
+      `/api/evidence-portal/library${jobId ? `?jobId=${encodeURIComponent(jobId)}` : ''}`,
       { method: 'GET' },
     ),
 
