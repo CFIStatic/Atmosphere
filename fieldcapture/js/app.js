@@ -177,7 +177,7 @@
     showFieldAccount(true, { account: Boolean(opts.account) });
   }
 
-  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-status', 's-platform'];
+  var SCREENS = ['s-home', 's-new-job', 's-rec', 's-door', 's-blocked', 's-terms', 's-platform'];
 
   /** Keep .app inside the visible Safari viewport (URL bar expanded or not). */
   function syncAppHeight() {
@@ -205,14 +205,14 @@
     if (app) {
       app.setAttribute(
         'data-switch',
-        id === 's-home' || id === 's-new-job' || id === 's-status' || id === 's-platform' ? 'on' : 'off',
+        id === 's-home' || id === 's-new-job' || id === 's-platform' ? 'on' : 'off',
       );
     }
     var switchbar = document.getElementById('product-switch');
     if (switchbar) {
       /* Only after sign-in (Today / new job / Platform). Never on login or terms. */
       var showSwitch =
-        id === 's-home' || id === 's-new-job' || id === 's-status' || id === 's-platform';
+        id === 's-home' || id === 's-new-job' || id === 's-platform';
       switchbar.hidden = !showSwitch;
     }
     var todayTab = document.querySelector('#product-switch a[href="#today"]');
@@ -222,7 +222,7 @@
       else todayTab.removeAttribute('aria-current');
     }
     if (platformTab) {
-      if (id === 's-status') platformTab.setAttribute('aria-current', 'page');
+      if (id === 's-platform') platformTab.setAttribute('aria-current', 'page');
       else platformTab.removeAttribute('aria-current');
     }
     window.scrollTo(0, 0);
@@ -1298,6 +1298,7 @@
     show('s-home');
     beginAccountFiling(me);
     claimShareFilmsForAccount();
+    warmPlatformFrame();
   }
 
   /**
@@ -2398,8 +2399,6 @@
       includeUnclaimedShare: Boolean(signedIn && state.owner && state.owner.indexOf('user:') === 0),
     });
     renderFilingStrip(mine);
-    /* A film finishing filing is new office work: refetch; progress ticks repaint locally. */
-    repaintFieldStatus({ localOnly: reason !== 'filed' });
     if (state.doorFilmId && onScreen('s-door')) {
       for (var i = 0; i < films.length; i += 1) {
         if (films[i].id === state.doorFilmId) {
@@ -2609,8 +2608,8 @@
     show('s-home');
   }
 
+  var warmPlatformFrame = function () {};
   var notifyOfficeLibraryChanged = function () {};
-  var repaintFieldStatus = function () {};
 
   /* ---------- wire ---------- */
 
@@ -2626,10 +2625,8 @@
   (function bindProductSwitch() {
     var link = document.getElementById('platform-link');
     var frame = document.getElementById('platform-frame');
-    var officeLink = document.getElementById('fstat-office-link');
-    if (officeLink && Core.resolveOfficeHref) {
-      /* The full dashboard is a desktop page: a new tab, never embedded here. */
-      officeLink.href = Core.resolveOfficeHref('/verifier-library');
+    if (link && Core.resolveOfficePlatformHref) {
+      link.href = Core.resolveOfficePlatformHref('/verifier-library');
     }
     var forgot = document.getElementById('forgot-link');
     if (forgot && Core.resolveOfficeHref) {
@@ -2713,182 +2710,43 @@
       );
     }
 
-    /* Office pages still open in-app for account Settings only. The job
-       Dashboard is not embedded on a phone; the Status tab is native. */
     function setPlatformFrame(pathname) {
-      var path = pathname || '/settings';
-      var href = Core.resolveOfficePlatformHref ? Core.resolveOfficePlatformHref(path) : '';
+      var path = pathname || '/verifier-library';
+      var href = (link && link.getAttribute('href')) || '';
+      if (Core.resolveOfficePlatformHref) {
+        href = Core.resolveOfficePlatformHref(path);
+        if (link && path === '/verifier-library') link.href = href;
+      }
       if (frame && href && frame.getAttribute('src') !== href) {
         frame.setAttribute('src', href);
       }
     }
 
+    warmPlatformFrame = function () {
+      setPlatformFrame('/verifier-library');
+    };
+
+    var pendingLibraryNotify = false;
+
     notifyOfficeLibraryChanged = function () {
-      if (onScreen('s-status')) paintFieldStatus();
       if (!frame) return;
       var href = frame.getAttribute('src') || '';
-      if (!href || href === 'about:blank') return;
+      if (!href || href === 'about:blank') {
+        pendingLibraryNotify = true;
+        warmPlatformFrame();
+        return;
+      }
       var target = officeFrameOrigin(href);
       if (!target || !frame.contentWindow) return;
       frame.contentWindow.postMessage({ atmosphere: 'library-changed' }, target);
     };
 
     function openPlatformInFrame(pathname) {
-      setPlatformFrame(pathname || '/settings');
+      setPlatformFrame(pathname || '/verifier-library');
       show('s-platform');
       postFieldSession();
+      notifyOfficeLibraryChanged();
     }
-
-    /* ---- Status tab: field-first card for one job ---- */
-    var statusSeq = 0;
-    var statusJobId = null;
-    /* Last office answer per job, so filing progress repaints without refetching. */
-    var statusSources = { jobId: null, videos: null, people: null };
-
-    function statusJobs() {
-      return (state.jobs || []).filter(function (j) {
-        return j && j.id;
-      });
-    }
-
-    function paintFieldStatus(opts) {
-      var localOnly = Boolean(opts && opts.localOnly);
-      var jobs = statusJobs();
-      var card = document.getElementById('fstat-card');
-      var empty = document.getElementById('fstat-empty');
-      var row = document.getElementById('fstat-job-row');
-      var select = document.getElementById('fstat-job');
-      if (!card || !empty || !row || !select) return;
-      if (!jobs.length) {
-        card.hidden = true;
-        row.hidden = true;
-        empty.hidden = false;
-        return;
-      }
-      empty.hidden = true;
-      if (!statusJobId || !jobs.some(function (j) { return j.id === statusJobId; })) {
-        statusJobId = state.activeJobId && jobs.some(function (j) { return j.id === state.activeJobId; })
-          ? state.activeJobId
-          : jobs[0].id;
-      }
-      row.hidden = jobs.length < 2;
-      select.innerHTML = jobs
-        .map(function (j) {
-          return (
-            '<option value="' + escapeHtml(j.id) + '"' + (j.id === statusJobId ? ' selected' : '') + '>' +
-            escapeHtml(j.name || j.title || 'Job') +
-            '</option>'
-          );
-        })
-        .join('');
-      var job = jobs.filter(function (j) { return j.id === statusJobId; })[0];
-      var films = filmQueue ? filmQueue.films() : [];
-      var cached = statusSources.jobId === job.id;
-      var base = {
-        jobId: job.id,
-        jobName: job.name || job.title || 'Job',
-        films: films,
-        videos: cached ? statusSources.videos : null,
-        people: cached ? statusSources.people : null,
-        orgName: supportCtx.orgName || '',
-        online: navigator.onLine !== false,
-      };
-      renderFieldStatus(Core.fieldJobStatus(base));
-      card.hidden = false;
-      var local = Core.isLocalJobId && Core.isLocalJobId(job.id);
-      if (localOnly || local || !sessionUsable() || !state.accessToken || !Core.loadFieldJobStatusSources) return;
-      var seq = ++statusSeq;
-      Core.loadFieldJobStatusSources(API_BASE, state.accessToken, job.id).then(function (src) {
-        if (seq !== statusSeq || statusJobId !== job.id) return;
-        /* undefined: this refetch failed. null: this account cannot read it. */
-        var had = statusSources.jobId === job.id;
-        var videos = src.videos === undefined ? (had ? statusSources.videos : null) : src.videos;
-        var people = src.people === undefined ? (had ? statusSources.people : null) : src.people;
-        statusSources = { jobId: job.id, videos: videos, people: people };
-        base.videos = videos;
-        base.people = people;
-        base.films = filmQueue ? filmQueue.films() : films;
-        renderFieldStatus(Core.fieldJobStatus(base));
-      });
-    }
-
-    function renderFieldStatus(model) {
-      var name = document.getElementById('fstat-name');
-      if (name) name.textContent = model.name;
-      var steps = document.getElementById('fstat-steps');
-      if (steps) {
-        steps.innerHTML = model.steps
-          .map(function (st) {
-            var busy =
-              !st.done &&
-              ((st.key === 'uploaded' && model.counts.onPhone > 0) ||
-                (st.key === 'processing' && model.counts.processing > 0));
-            return (
-              '<li class="fstat-step" data-step="' + st.key + '" data-done="' + (st.done ? '1' : '0') +
-              '" data-busy="' + (busy ? '1' : '0') + '">' +
-              '<span class="fstat-mark" aria-hidden="true"></span>' +
-              '<span><b>' + escapeHtml(st.label) + (st.done ? '' : busy ? ' · in progress' : '') + '</b>' +
-              '<span>' + escapeHtml(st.detail) + '</span></span></li>'
-            );
-          })
-          .join('');
-      }
-      var audience = document.getElementById('fstat-audience');
-      if (audience) {
-        audience.innerHTML = model.audience
-          .map(function (who) {
-            return '<li>' + escapeHtml(who) + '</li>';
-          })
-          .join('');
-      }
-      var note = document.getElementById('fstat-audience-note');
-      if (note) note.hidden = model.audienceKnown;
-      var hint = document.getElementById('fstat-next-hint');
-      if (hint) hint.textContent = model.next.hint;
-      var btn = document.getElementById('fstat-next-btn');
-      if (btn) {
-        btn.textContent = model.next.label;
-        btn.hidden = model.next.action !== 'record';
-        btn.setAttribute('data-job-id', model.jobId);
-      }
-    }
-
-    repaintFieldStatus = function (opts) {
-      if (onScreen('s-status')) paintFieldStatus(opts);
-    };
-
-    function openFieldStatus() {
-      show('s-status');
-      paintFieldStatus();
-    }
-
-    var statusSelect = document.getElementById('fstat-job');
-    if (statusSelect) {
-      statusSelect.addEventListener('change', function () {
-        statusJobId = statusSelect.value || null;
-        paintFieldStatus();
-      });
-    }
-    var statusNext = document.getElementById('fstat-next-btn');
-    if (statusNext) {
-      statusNext.addEventListener('click', function () {
-        /* Pick the job on Today, where the crew starts recording. */
-        var id = statusNext.getAttribute('data-job-id');
-        if (id) state.activeJobId = id;
-        renderExpect();
-        when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
-        show('s-home');
-      });
-    }
-    window.addEventListener('online', function () {
-      if (onScreen('s-status')) paintFieldStatus();
-    });
-    window.addEventListener('offline', function () {
-      if (!onScreen('s-status')) return;
-      /* Ignore an in-flight refetch so it cannot repaint over this snapshot. */
-      statusSeq += 1;
-      paintFieldStatus({ localOnly: true });
-    });
 
     function signOutFieldAccount() {
       closeFieldAccountMenu();
@@ -2965,6 +2823,10 @@
       frame.addEventListener('load', function () {
         postFieldSession();
         postFieldTheme();
+        if (pendingLibraryNotify) {
+          pendingLibraryNotify = false;
+          notifyOfficeLibraryChanged();
+        }
       });
     }
     window.addEventListener('message', function (event) {
@@ -2990,7 +2852,7 @@
         if (blocked && blocked.getAttribute('data-on') === '1') return;
         var terms = document.getElementById('s-terms');
         if (terms && terms.getAttribute('data-on') === '1') return;
-        openFieldStatus();
+        openPlatformInFrame();
       });
     }
     var today = document.querySelector('#product-switch a[href="#today"]');
