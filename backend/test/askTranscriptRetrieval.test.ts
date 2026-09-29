@@ -268,3 +268,59 @@ test('the quote trailer round-trips the clip name', () => {
   assert.equal(quote!.atSeconds, 14.6);
   assert.equal(quote!.text, 'We just have to switch to LedgerPro cloud.');
 });
+
+/* ------------------------------------------------------ review fixes -- */
+
+test('a topic word that is also in a clip title still searches the transcripts', () => {
+  const evidence = topicEvidence('What was said about the dog?', catalog);
+  assert.ok(evidence);
+  assert.ok(evidence!.transcript.some((hit) => /best dog/.test(hit.text)));
+});
+
+test('a line with a colon keeps its full text; only diarization prefixes are speakers', () => {
+  const chunks = chunkClipTranscript(
+    clip({ proofId: TABLE, title: 'x', segments: [{ start: 1, end: 3, text: 'The issue is this: the door sticks.' }] }),
+  );
+  assert.equal(chunks[0]!.text, 'The issue is this: the door sticks.');
+  assert.equal(chunks[0]!.speaker, null);
+});
+
+test('the speaker sanitizer never rewrites quoted speech or clip titles', () => {
+  const title = 'Person 1 Walks the Seated Man Through the Kitchen';
+  const out = sanitizeSpeakerProse(
+    `Person 1 (Seated said “Ask the seated man about Person 2.” in ${title}.\n- “Ask the seated man about Person 2.” (${title}, 0:04)`,
+    { protect: [title] },
+  );
+  assert.match(out, /^An unidentified speaker said “Ask the seated man about Person 2\.”/);
+  assert.equal(out.split(title).length - 1, 2);
+  assert.match(out, /\(Person 1 Walks the Seated Man Through the Kitchen, 0:04\)/);
+});
+
+test('a failed chunk write leaves the old rows in place', async () => {
+  const calls: string[] = [];
+  const row = {
+    id: TABLE,
+    org_id: ORG,
+    job_id: JOB,
+    title: 'x',
+    transcript_text: null,
+    transcript_segments: [{ start: 1, end: 2, text: 'One line.' }],
+    transcript_words: null,
+  };
+  const admin = {
+    from: (table: string) => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: row, error: null }) }) }),
+      upsert: async () => {
+        calls.push(`upsert:${table}`);
+        return { error: { message: 'boom' } };
+      },
+      delete: () => {
+        calls.push(`delete:${table}`);
+        return { eq: () => ({ gte: async () => ({ error: null }) }) };
+      },
+    }),
+  };
+  const { writeTranscriptChunks } = await import('../src/shared/askTranscriptChunkStore.js');
+  assert.equal(await writeTranscriptChunks(admin, TABLE), null);
+  assert.deepEqual(calls, ['upsert:ask_transcript_chunks']);
+});

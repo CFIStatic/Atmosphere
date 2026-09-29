@@ -34,7 +34,7 @@ import {
 } from './askLookup.js';
 import { clipMatchesAskDate, formatAskClock, parseAskDate, type AskCalendarDate } from './askMoments.js';
 import { cleanMentionTitle } from './mentions.js';
-import { speakerLabelOrUnidentified, UNIDENTIFIED_SPEAKER } from './askSpeakers.js';
+import { diarizationLabel, speakerLabelOrUnidentified, UNIDENTIFIED_SPEAKER } from './askSpeakers.js';
 
 export type TranscriptChunk = {
   /** `${proofId}#${seq}`: stable for one transcript version. */
@@ -49,7 +49,7 @@ export type TranscriptChunk = {
   endSec: number | null;
   /** Exact redacted transcript text for this span. Never truncated. */
   text: string;
-  /** Diarization label ("Speaker 1") or an explicit "Name:" prefix in the transcript. Null when unknown. */
+  /** Diarization label ("Speaker 1"), from the segment or a "SPEAKER_00:" prefix. Null when unknown. */
   speaker: string | null;
   /** Moment source id that opens the clip at startSec. */
   cite: string;
@@ -118,9 +118,10 @@ function isRedactedText(text: string): boolean {
   return text.includes(PRIVACY_REDACTED_LABEL) || text.includes(CHILD_PRIVACY_REDACTED_LABEL);
 }
 
+/** A diarization prefix ("SPEAKER_01: …", "Speaker 2: …"). Any other "Words: …" is speech and stays in the text. */
 function explicitPrefix(text: string): { speaker: string | null; body: string } {
-  const match = text.match(/^([A-Z][\w .'-]{0,38}):\s+(\S[\s\S]*)$/);
-  if (!match) return { speaker: null, body: text };
+  const match = text.match(/^((?:SPEAKER_\d{1,3}|(?:speaker|spk)[\s_-]*(?:\d{1,3}|[a-z]))):\s+(\S[\s\S]*)$/i);
+  if (!match || !diarizationLabel(match[1]!)) return { speaker: null, body: text };
   return { speaker: match[1]!.trim(), body: match[2]!.trim() };
 }
 

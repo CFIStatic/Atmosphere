@@ -269,7 +269,7 @@ export function enforceQuoteGrounding(
     const grounded = groundLine(line, input, report, used);
     if (grounded != null) kept.push(grounded);
   }
-  body = sanitizeSpeakerProse(kept.join('\n'))
+  body = sanitizeSpeakerProse(kept.join('\n'), { protect: input.chunks.map((chunk) => chunk.clipTitle) })
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

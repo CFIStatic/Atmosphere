@@ -93,17 +93,21 @@ export async function writeTranscriptChunks(admin: any, proofId: string): Promis
       .maybeSingle();
     if (error || !data) return null;
     const rows = transcriptChunkRows(data as ProofTranscriptRow);
-    const del = await admin.from(TRANSCRIPT_CHUNK_TABLE).delete().eq('proof_id', proofId);
-    if (del?.error) {
-      warnOnce(`chunk index unavailable: ${del.error.message ?? del.error}`);
-      return null;
-    }
+    // Upsert first, then trim rows past the new end, so a failed write never
+    // leaves the clip with no index rows.
     for (let i = 0; i < rows.length; i += 500) {
-      const ins = await admin.from(TRANSCRIPT_CHUNK_TABLE).insert(rows.slice(i, i + 500));
-      if (ins?.error) {
-        warnOnce(`chunk write failed: ${ins.error.message ?? ins.error}`);
+      const up = await admin
+        .from(TRANSCRIPT_CHUNK_TABLE)
+        .upsert(rows.slice(i, i + 500), { onConflict: 'proof_id,seq' });
+      if (up?.error) {
+        warnOnce(`chunk write failed: ${up.error.message ?? up.error}`);
         return null;
       }
+    }
+    const trim = await admin.from(TRANSCRIPT_CHUNK_TABLE).delete().eq('proof_id', proofId).gte('seq', rows.length);
+    if (trim?.error) {
+      warnOnce(`chunk trim failed: ${trim.error.message ?? trim.error}`);
+      return null;
     }
     return rows.length;
   } catch (err) {

@@ -30,9 +30,18 @@ export function topicEvidence(question: string, catalog: AskLookupCatalog): Evid
   const evidence = retrieveAskEvidence(catalog, question);
   if (!isTopicSpeechQuestion(question, evidence)) return null;
   // "what was said in the office recording" names a clip, not a topic: the clip path answers it.
-  if (evidence.phrases.every((phrase) => namesAClip(phrase, catalog))) return null;
+  // A phrase that is spoken in a transcript is always a topic, even if a title shares its words.
+  if (
+    !evidence.transcript.some((hit) => hit.pinned) &&
+    CLIP_REFERENCE.test(question) &&
+    evidence.phrases.every((phrase) => namesAClip(phrase, catalog))
+  ) {
+    return null;
+  }
   return evidence;
 }
+
+const CLIP_REFERENCE = /\b(?:recording|clip|video|footage|take|film|walk-?through)\b/i;
 
 function namesAClip(phrase: string, catalog: AskLookupCatalog): boolean {
   const words = phrase.toLowerCase().match(/[a-z0-9']+/g) ?? [];

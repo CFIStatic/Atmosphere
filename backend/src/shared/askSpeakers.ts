@@ -91,9 +91,29 @@ function articleFix(text: string): string {
  * speaker said". A dangling "Person 1 (Seated" (the old comma-split bug) is
  * removed whole, so no unclosed parenthesis survives.
  */
-export function sanitizeSpeakerProse(input: string): string {
-  let text = String(input ?? '');
-  if (!text) return text;
+export function sanitizeSpeakerProse(input: string, opts?: { protect?: string[] }): string {
+  const raw = String(input ?? '');
+  if (!raw) return raw;
+  // Quoted speech, "(Clip, m:ss)" attachments, machine trailers and clip titles
+  // are evidence text, not labels: mask them so they are never rewritten.
+  const masked: string[] = [];
+  const mask = (value: string) => {
+    masked.push(value);
+    return `\uE000${masked.length - 1}\uE001`;
+  };
+  let text = raw.replace(/⟦[^⟧]*⟧|“[^”\n]*”|"[^"\n]*"|\([^()\n]*,\s*\d{1,2}:\d{2}(?::\d{2})?\)/g, mask);
+  const titles = [...new Set((opts?.protect ?? []).map((t) => String(t ?? '').trim()).filter((t) => t.length >= 3))].sort(
+    (x, y) => y.length - x.length,
+  );
+  for (const title of titles) {
+    text = text.split(title).join(mask(title));
+  }
+  text = sanitizeUnmasked(text);
+  return text.replace(/\uE000(\d+)\uE001/g, (_m, i: string) => masked[Number(i)] ?? '');
+}
+
+function sanitizeUnmasked(input: string): string {
+  let text = input;
   const patterns: RegExp[] = [
     // "Person 1 (Seated, Unknown Role)" and the unclosed "Person 1 (Seated".
     /\bPerson\s+\d+\s*\((?:[^()\n⟧|]*\)|[A-Z][\w/'-]*(?:,?\s+[A-Z][\w/'-]*){0,5})/g,
