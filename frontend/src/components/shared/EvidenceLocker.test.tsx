@@ -56,7 +56,9 @@ describe('EvidenceLocker', () => {
     render(<EvidenceLocker jobId="job-1038" />);
 
     expect(await screen.findByText('After — Aug 04 (disputed)')).toBeInTheDocument();
+    expect(screen.getByText('Not reviewed')).toBeInTheDocument();
     expect(screen.queryByText('on hold')).not.toBeInTheDocument();
+    expect(screen.queryByText('On hold')).not.toBeInTheDocument();
     expect(screen.queryByText('hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Place on legal hold')).not.toBeInTheDocument();
     expect(screen.queryByText('Lift the hold')).not.toBeInTheDocument();
