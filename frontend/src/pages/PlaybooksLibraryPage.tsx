@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -36,19 +36,26 @@ export function PlaybooksLibraryPage() {
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const loadSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (filters?: { status: PlaybookStatus | 'all'; q: string }) => {
+    const seq = ++loadSeq.current;
+    const status = filters?.status ?? statusFilter;
+    const query = (filters?.q ?? q).trim();
     setError(null);
     try {
       const res = await api.listPlaybooks({
-        status: statusFilter,
-        q: q.trim() || undefined,
+        status,
+        q: query || undefined,
       });
+      // A slower response from the previous filter must not replace this list.
+      if (seq !== loadSeq.current) return;
       setPlaybooks(res.playbooks);
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setError(err instanceof ApiError ? err.message : 'Could not load playbooks.');
     } finally {
-      setLoaded(true);
+      if (seq === loadSeq.current) setLoaded(true);
     }
   }, [statusFilter, q]);
 
@@ -89,7 +96,9 @@ export function PlaybooksLibraryPage() {
     setCreatorOpen(false);
     setStatusFilter('all');
     setQ('');
-    await load();
+    // This load still closes over the active filter. Request the cleared list
+    // explicitly so a filtered response cannot land after the unfiltered one.
+    await load({ status: 'all', q: '' });
     openPlaybook(playbook.id);
   }
 
