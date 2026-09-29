@@ -1,17 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreateEvidenceShareResult, EvidenceShare } from '../../lib/api';
 
 const evidenceShares = vi.fn();
 const createProgressShare = vi.fn();
 const revokeEvidenceShare = vi.fn();
+const getBillingOnboarding = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   api: {
     evidenceShares: (...args: unknown[]) => evidenceShares(...args),
     createProgressShare: (...args: unknown[]) => createProgressShare(...args),
     revokeEvidenceShare: (...args: unknown[]) => revokeEvidenceShare(...args),
+    getBillingOnboarding: (...args: unknown[]) => getBillingOnboarding(...args),
   },
 }));
 
@@ -50,6 +53,7 @@ describe('ShareJobProgressPanel', () => {
     evidenceShares.mockReset();
     createProgressShare.mockReset();
     revokeEvidenceShare.mockReset();
+    getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
     evidenceShares.mockResolvedValue({ shares: [liveShare] });
     createProgressShare.mockResolvedValue(created);
   });
@@ -111,5 +115,23 @@ describe('ShareJobProgressPanel', () => {
       await screen.findByText('Atmosphere mail is not configured, so the invite was not sent.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/invite sent/i)).toBeNull();
+  });
+
+  it('previews the homeowner share but refuses to send while unpaid', async () => {
+    getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1']}>
+        <ShareJobProgressPanel jobId="job-1" modal creating onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('upgrade-prompt')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Choose a plan' }).getAttribute('href')).toContain(
+      '/signup?step=2',
+    );
+    await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
+    await user.click(screen.getByRole('button', { name: /send homeowner invite/i }));
+    expect(createProgressShare).not.toHaveBeenCalled();
   });
 });

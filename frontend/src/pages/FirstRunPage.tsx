@@ -238,13 +238,17 @@ export function FirstRunPage() {
               <ClipCard
                 sample
                 title={SAMPLE_EVIDENCE.title}
-                posterUrl={null}
+                posterUrl={SAMPLE_EVIDENCE.posterUrl}
                 durationSeconds={SAMPLE_EVIDENCE.durationSeconds}
                 summary={SAMPLE_EVIDENCE.summary}
                 lines={[...SAMPLE_EVIDENCE.lines]}
                 ask={SAMPLE_EVIDENCE.ask}
               />
-              <PlanFooter onContinue={continueToPlan} ready />
+              <PlanFooter
+                onContinue={continueToPlan}
+                ready
+                jobHref={jobHref.startsWith('/job-progress') ? jobHref : undefined}
+              />
             </Card>
           )}
         </div>
@@ -411,10 +415,12 @@ function PlanFooter({
   onContinue,
   ready,
   onSwitch,
+  jobHref,
 }: {
   onContinue: () => void;
   ready: boolean;
   onSwitch?: () => void;
+  jobHref?: string;
 }) {
   return (
     <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -428,9 +434,19 @@ function PlanFooter({
           </button>
         ) : null}
       </p>
-      <Primary onClick={onContinue} disabled={!ready}>
-        Choose a plan
-      </Primary>
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        {jobHref ? (
+          <a
+            href={jobHref}
+            className="inline-flex items-center justify-center rounded-lg border border-line bg-paper-0 px-4 py-3 text-center font-semibold text-ink-900 hover:border-brand-300"
+          >
+            Open the job file
+          </a>
+        ) : null}
+        <Primary onClick={onContinue} disabled={!ready}>
+          Choose a plan
+        </Primary>
+      </div>
     </div>
   );
 }

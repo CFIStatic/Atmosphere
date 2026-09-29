@@ -69,7 +69,11 @@ describe('FirstRunPage (value before payment)', () => {
     await user.click(await screen.findByTestId('first-run-office'));
     const sample = await screen.findByTestId('sample-evidence');
     expect(sample).toHaveTextContent('Sample');
+    expect(sample.querySelector('img')?.getAttribute('src')).toBe('/samples/kitchen-leak-poster.jpg');
     expect(screen.getByText(/This is a sample, not your data/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the job file' }).getAttribute('href')).toContain(
+      '/job-progress?job=job-1',
+    );
 
     await user.click(screen.getByRole('button', { name: 'Choose a plan' }));
     const where = await screen.findByTestId('where');

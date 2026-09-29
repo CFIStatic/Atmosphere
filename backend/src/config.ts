@@ -4,6 +4,7 @@ import { resolveStripeSecretKey } from './lib/stripeSecret.js';
 import { resolveTranscriptionConfig } from './lib/transcriptionConfig.js';
 import { resolveCrmCredentialKeyMaterial } from './lib/crmCredentialKey.js';
 import { usageCustomerMarkup } from './metering/customerMarkup.js';
+import { officeSignupReturnBase } from './lib/signupReturnBase.js';
 
 /**
  * Centralised, validated configuration for the Atmosphere backend.
@@ -346,9 +347,16 @@ export const config = {
     onboardingAnnualPriceId: process.env.STRIPE_ONBOARDING_ANNUAL_PRICE_ID ?? '',
     scaleAnnualPriceId: process.env.STRIPE_SCALE_ANNUAL_PRICE_ID ?? '',
     extraSeatAnnualPriceId: process.env.STRIPE_EXTRA_SEAT_ANNUAL_PRICE_ID ?? '',
-    /** Base path for signup billing return URLs (step 2 + checkout query params appended). */
-    onboardingReturnBase:
-      process.env.STRIPE_ONBOARDING_RETURN_URL ?? `${frontendOrigins[0]}/signup`,
+    /**
+     * Signup Checkout return base (step 2 + checkout query params appended).
+     * Always the office host — never Field Capture — so cancel and success
+     * keep the platform session. STRIPE_ONBOARDING_RETURN_URL still wins
+     * when it is not app.atmosphereteam.com.
+     */
+    onboardingReturnBase: officeSignupReturnBase(
+      frontendOrigins,
+      process.env.STRIPE_ONBOARDING_RETURN_URL,
+    ),
   },
 
 

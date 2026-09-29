@@ -8,6 +8,7 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { isGlobalAdmin } from '../lib/productRoles.js';
 import { unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
   createSignedPlayableProofUrl,
   PROOF_PLAYBACK_URL_TTL_SECONDS,
@@ -1094,6 +1095,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       })
       .parse(req.body);
     const { supabase, orgId, userId } = await requireOrgContext(req);
+    await assertOrgProductActionsAllowed(supabase, orgId);
 
     const { data: job } = await supabase
       .from('crm_jobs')

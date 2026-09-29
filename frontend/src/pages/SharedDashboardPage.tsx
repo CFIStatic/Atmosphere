@@ -8,6 +8,8 @@ import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
+import { UnpaidJobEvaluation } from '../components/shared/UnpaidJobEvaluation';
+import { useProductActionsLocked } from '../components/billing/ProductActionLock';
 import { JobFileTodayStrip } from '../components/shared/JobFileTodayStrip';
 import { JobTimeline } from '../components/shared/JobTimeline';
 import {
@@ -76,6 +78,7 @@ function placeholderRecord(
 
 export function SharedDashboardPage() {
   const { membership } = useAuth();
+  const actionsLocked = useProductActionsLocked();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -315,6 +318,8 @@ export function SharedDashboardPage() {
           />
         ) : null}
       </header>
+
+      {actionsLocked && record ? <UnpaidJobEvaluation jobId={record.job.id} /> : null}
 
       {record && <JobFileTodayStrip jobId={record.job.id} record={record} />}
 

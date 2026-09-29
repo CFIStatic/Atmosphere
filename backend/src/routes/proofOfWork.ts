@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
   createSignedPlayableProofUrl,
   ensurePlayableDerivative,
@@ -509,6 +510,12 @@ export type ProofUploadPart = {
   uploadUrl: string;
 };
 
+async function assertPartyProductActions(party: { org_id?: string | null }, admin: any) {
+  const orgId = typeof party?.org_id === 'string' ? party.org_id : '';
+  if (!orgId) return;
+  await assertOrgProductActionsAllowed(admin, orgId);
+}
+
 export async function createUploadUrl(
   party: any,
   admin: any,
@@ -521,6 +528,7 @@ export async function createUploadUrl(
   chunkSize: number;
   parts?: ProofUploadPart[];
 }> {
+  await assertPartyProductActions(party, admin);
   const input = z
     .object({
       workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -622,6 +630,7 @@ export async function createPartUploadUrl(
   maxParts: number;
   assembleMaxBytes: number;
 }> {
+  await assertPartyProductActions(party, admin);
   const input = partUploadSchema.parse(body ?? {});
   await assertRecordingAckForProof({
     admin,
@@ -704,6 +713,7 @@ export async function completeChunkedProofUpload(
   body: unknown,
   options?: { maxBytes?: number },
 ): Promise<{ path: string; byteSize: number }> {
+  await assertPartyProductActions(party, admin);
   const input = completeChunksSchema.parse(body ?? {});
   await assertRecordingAckForProof({
     admin,
@@ -824,6 +834,7 @@ const recordSchema = z.object({
  * job, which is only meaningful at the moment of upload.
  */
 export async function recordProof(party: any, admin: any, body: unknown) {
+  await assertPartyProductActions(party, admin);
   const input = recordSchema.parse(body);
   await assertRecordingAckForProof({
     admin,
