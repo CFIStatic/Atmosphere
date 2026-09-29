@@ -13,6 +13,7 @@
  * unverified, not clean, and nothing in this file is allowed to blur that.
  */
 
+import { servableSummary } from '../audio/summaryServe.js';
 import {
   conversationFromStored,
   publicConversationFields,
@@ -35,8 +36,6 @@ import {
   redactTranscriptForChildPrivacy,
 } from '../audio/childPrivacyRedactions.js';
 import { buildEvidenceLog } from '../audio/evidenceLog.js';
-import { summaryStateOf } from '../audio/summaryFreshness.js';
-import { summaryClaimContradictions } from '../audio/summaryValidation.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
 import { parseVerbatimTranscript } from '../audio/verbatimTranscript.js';
 import { apiTranscriptWords } from '../lib/transcription.js';
@@ -283,11 +282,11 @@ export function serializeEvidence(input: {
   const findings = proof.ai_findings ?? {};
   // A stored AI summary that contradicts the transcript on speech amount is
   // quarantined: never shown, never fed to Ask, until the queue rebuilds it.
-  const summaryQuarantined =
-    typeof proof.transcript_text === 'string' &&
-    Boolean(findings.conversation) &&
-    summaryClaimContradictions(findings.conversation, proof.transcript_text).length > 0;
-  const shownConversation = summaryQuarantined ? null : findings.conversation;
+  // A summary built from an older transcript / older visual events, or one
+  // whose rebuild failed, is not shown either: "Summary still processing" and
+  // the raw transcript instead (servableSummary).
+  const servable = servableSummary(proof);
+  const shownConversation = servable.conversation;
   const analysis = analysisStateOf({
     phase: proof.phase,
     analysisStatus: proof.analysis_status ?? null,
@@ -445,7 +444,7 @@ export function serializeEvidence(input: {
              */
             // quarantined: the stored summary states a different amount of
             // speech than the transcript; it is not shown until rebuilt.
-            summaryState: summaryQuarantined ? 'quarantined' : summaryStateOf(proof),
+            summaryState: servable.state,
             summaryGeneratedAt:
               (typeof proof.summary_generated_at === 'string' ? proof.summary_generated_at : null) ??
               (typeof findings.conversation?.generatedAt === 'string' ? findings.conversation.generatedAt : null),
@@ -477,7 +476,7 @@ export function serializeEvidence(input: {
               });
               let evidence = applyPrivacyToEvidenceEntries(
                 buildEvidenceLog({
-                  storedLog: summaryQuarantined ? null : findings.evidenceLog,
+                  storedLog: servable.evidenceLog,
                   storedEntries: proof.narration?.entries,
                   narrationText: dictation,
                   summary: proof.ai_summary ?? findings.summary ?? null,

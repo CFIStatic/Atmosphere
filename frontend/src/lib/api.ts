@@ -974,6 +974,12 @@ export interface ProofPeoplePresent {
 
 /** Structured mic conversation for Analysis — null when silent / noise-only. */
 export interface ProofConversation {
+  /**
+   * Summary freshness (fresh | updating | quarantined | failed | untracked | none).
+   * While updating / quarantined / failed the server withholds the summary
+   * and the UI says "Summary still processing".
+   */
+  summaryState?: string | null;
   conversationSummary?: string | null;
   conversationExecutiveSummary?: string | null;
   conversationDetails?: string[];
@@ -3208,6 +3214,13 @@ function browserTimeZone(): string | undefined {
   }
 }
 
+/** A job the "Create from completed job" picker can offer. */
+export interface PlaybookSourceJob {
+  jobId: string;
+  label: string;
+  analyzedClips: number;
+}
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -3967,6 +3980,10 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  /** Jobs POST /from-job accepts (server applies the same rule as the create). */
+  playbookSourceJobs: () =>
+    request<{ jobs: PlaybookSourceJob[] }>('/api/playbooks/source-jobs', { method: 'GET' }),
+
   createPlaybookFromJob: (jobId: string) =>
     request<{ playbook: TradePlaybook }>('/api/playbooks/from-job', {
       method: 'POST',
@@ -4252,9 +4269,9 @@ export const api = {
     }),
 
   /**
-   * Org evidence library. Pass the open job id as `q` so the response is
-   * limited to that job, then still drop any row whose jobId does not match.
-   * A poster URL is a still, not an opening.
+   * Org evidence library. Pass the open job id so the server reads that job
+   * before the newest-500 window, then still drop any row whose jobId does
+   * not match. A poster URL is a still, not an opening.
    */
   evidenceLibrary: (jobId?: string) =>
     request<{
@@ -4265,7 +4282,7 @@ export const api = {
         title?: string | null;
       }>;
     }>(
-      `/api/evidence-portal/library${jobId ? `?q=${encodeURIComponent(jobId)}` : ''}`,
+      `/api/evidence-portal/library${jobId ? `?jobId=${encodeURIComponent(jobId)}` : ''}`,
       { method: 'GET' },
     ),
 
