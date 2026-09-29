@@ -29,6 +29,7 @@ import {
   requestGemini,
 } from '../lib/askModel.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
+import { toGeminiFunctionDeclaration } from './geminiSchema.js';
 import {
   ASK_LOOKUP_TOOLS,
   asksAboutOtherJobs,
@@ -380,14 +381,10 @@ function anthropicLookupSession(input: {
 
 type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } };
 
-function geminiLookupTools() {
+export function geminiLookupTools() {
   return [
     {
-      functionDeclarations: ASK_LOOKUP_TOOLS.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.input_schema,
-      })),
+      functionDeclarations: ASK_LOOKUP_TOOLS.map(toGeminiFunctionDeclaration),
     },
   ];
 }
