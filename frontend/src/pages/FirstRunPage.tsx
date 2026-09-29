@@ -7,7 +7,6 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { SpinnerIcon } from '../components/icons';
 import {
   billingStepHref,
-  fieldCaptureOpenUrl,
   readFirstRun,
   writeFirstRun,
   type FirstRunState,
@@ -19,9 +18,9 @@ import { firstClipPreview, posterClock, SAMPLE_EVIDENCE, type FirstClipPreview }
 const POLL_MS = 5000;
 
 /**
- * Value before payment. A new Global Admin names the first job, then either
- * records it in Field Capture or sees labeled sample evidence, and only then
- * picks a plan. Collaborators and homeowner sharing wait for the job file.
+ * Value before payment. A new Global Admin names the first job and can preview
+ * labeled sample evidence before a plan. Field Capture recording stays locked
+ * until checkout, so the field path offers the plan instead of waiting on a clip.
  */
 export function FirstRunPage() {
   const { membership, membershipLoading, logout } = useAuth();
@@ -123,7 +122,6 @@ export function FirstRunPage() {
 
   function choose(path: 'field' | 'office') {
     save({ path, evidenceSeen: path === 'office' ? true : state.evidenceSeen });
-    if (path === 'field') window.open(fieldCaptureOpenUrl(), '_blank', 'noopener');
   }
 
   function continueToPlan() {
@@ -183,7 +181,7 @@ export function FirstRunPage() {
                 <ChoiceButton
                   testId="first-run-field"
                   title="I'm in the field"
-                  detail="Record the first clip in Field Capture on your phone. It shows up here when it uploads."
+                  detail="Choose a plan, then record the first clip in Field Capture. Recording stays locked until then."
                   onClick={() => choose('field')}
                 />
                 <ChoiceButton
@@ -198,13 +196,13 @@ export function FirstRunPage() {
 
           {stage === 'evidence' && state.path === 'field' && (
             <Card
-              title={clip ? 'Your first evidence' : 'Waiting for first clip'}
+              title={clip ? 'Your first evidence' : 'Choose a plan to record'}
               subtitle={
                 clip
                   ? clip.processing
                     ? 'Uploaded. Transcript and summary are processing.'
                     : 'Transcript and summary from your recording.'
-                  : 'Open Field Capture on your phone, pick this job and record. Keep this page open.'
+                  : 'Field Capture cannot file a clip until this workspace has a plan. Choose a plan, then record on your phone with the same login.'
               }
             >
               {clip ? (
@@ -217,19 +215,17 @@ export function FirstRunPage() {
                   processing={clip.processing}
                 />
               ) : (
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <a
-                    href={fieldCaptureOpenUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-semibold text-ink-900 hover:border-brand-300"
+                <p className="mt-5 text-sm text-ink-600">
+                  <button
+                    type="button"
+                    onClick={() => choose('office')}
+                    className="font-medium text-brand-600 hover:text-brand-700"
                   >
-                    Open Field Capture
-                  </a>
-                  <span className="text-sm text-ink-500">app.atmosphereteam.com, same login</span>
-                </div>
+                    See sample evidence instead
+                  </button>
+                </p>
               )}
-              <PlanFooter onContinue={continueToPlan} ready={Boolean(clip)} onSwitch={() => choose('office')} />
+              <PlanFooter onContinue={continueToPlan} ready />
             </Card>
           )}
 
