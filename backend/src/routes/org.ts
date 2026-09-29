@@ -18,6 +18,7 @@ import {
   updateOrgProfileSchema,
 } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fcSeatLimitFromDb, isFcSeatLimitDbError } from '../lib/fieldCaptureSeats.js';
 import { ensureFieldCaptureSeatForInvite } from '../lib/fieldCaptureInviteSeats.js';
 import { isGlobalAdmin, toOrgProductRole } from '../lib/productRoles.js';
@@ -642,6 +643,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     const input = createInviteSchema.parse(req.body ?? {});
     const supabase = createUserClient(req.accessToken!);
     const { orgId, name, role: callerRole } = await orgForInvites(supabase, req.user!.id);
+    await assertOrgProductActionsAllowed(supabase, orgId);
     if (!isGlobalAdmin(callerRole)) {
       throw new HttpError(
         403,

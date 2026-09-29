@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../lib/i18n';
 import { isGlobalAdmin, PRODUCT_ROLE_BLURBS, type OrgProductRole } from '../../domain/productRoles';
 import { SpinnerIcon } from '../icons';
+import { UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
 import type { ServiceRoleSlug } from '../../lib/serviceRole';
 
 /**
@@ -31,6 +32,7 @@ const ago = (iso: string) => {
 export function InvitePanel() {
   const t = useT();
   const { membership } = useAuth();
+  const actionsLocked = useProductActionsLocked();
   const admin = isGlobalAdmin(membership?.role);
   const roles: OrgProductRole[] = ROLES;
 
@@ -82,6 +84,10 @@ export function InvitePanel() {
 
   async function invite(event: FormEvent) {
     event.preventDefault();
+    if (actionsLocked) {
+      setError('Choose a plan to upload, record, share, or invite.');
+      return;
+    }
     setBusy(true);
     setError(null);
     setOutcome(null);
@@ -127,6 +133,11 @@ export function InvitePanel() {
     <section className="mb-6 rounded-xl glass-card p-5">
       <h2 className="text-base font-semibold text-ink-900">{t('settings.invites.title')}</h2>
       <p className="mt-1 text-xs text-ink-500">{t('settings.invites.description')}</p>
+      {actionsLocked ? (
+        <div className="mt-3">
+          <UpgradePrompt />
+        </div>
+      ) : null}
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">
         <input

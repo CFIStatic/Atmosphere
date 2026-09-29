@@ -12,6 +12,7 @@ import {
 } from '../shared/inviteeJobAccess.js';
 import { listTombstonedJobIds } from '../lib/jobFileDelete.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { setSessionCookies } from '../lib/session.js';
 import {
   fieldOfficeSchema,
@@ -834,6 +835,7 @@ fieldAppRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId, userId, supabase } = await requireOrgContext(req);
+      await assertOrgProductActionsAllowed(supabase, orgId);
       const jobId = z.string().uuid().parse(req.params.jobId);
       const input = z
         .object({

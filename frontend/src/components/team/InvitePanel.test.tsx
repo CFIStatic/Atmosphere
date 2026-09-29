@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createOrgInvite = vi.fn();
 const orgInvites = vi.fn();
 const getBillingWorkspace = vi.fn();
+const getBillingOnboarding = vi.fn();
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
@@ -21,6 +23,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       createOrgInvite: (...args: unknown[]) => createOrgInvite(...args),
       orgInvites: (...args: unknown[]) => orgInvites(...args),
       getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
+      getBillingOnboarding: (...args: unknown[]) => getBillingOnboarding(...args),
     },
   };
 });
@@ -32,6 +35,7 @@ describe('InvitePanel', () => {
   beforeEach(() => {
     createOrgInvite.mockReset();
     orgInvites.mockReset().mockResolvedValue({ invites: [] });
+    getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
     getBillingWorkspace.mockReset().mockResolvedValue({
       fieldCaptureSeats: { used: 3, allowed: 3, included: 3, extra: 0, remaining: 0 },
     });
@@ -74,5 +78,18 @@ describe('InvitePanel', () => {
 
     expect(await screen.findByText(/Invited — Atmosphere emailed crew@example.com/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Add a Field Capture seat/i })).toBeNull();
+  });
+
+  it('previews the invite form and does not send while unpaid', async () => {
+    getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    render(
+      <MemoryRouter initialEntries={['/settings?section=organization']}>
+        <InvitePanel />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('upgrade-prompt')).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('their@email.com'), 'crew@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite/i }));
+    expect(createOrgInvite).not.toHaveBeenCalled();
   });
 });

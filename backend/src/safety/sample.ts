@@ -10,6 +10,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { z } from 'zod';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { classifySafetySample } from './classify.js';
 import { createSafetyIncident } from './incidents.js';
 import { fanoutSafetyAlert } from './alerts.js';
@@ -56,6 +57,7 @@ export async function processSafetySample(
   party: { org_id: string; job_id: string; id: string },
   body: unknown,
 ): Promise<SafetySampleResult> {
+  await assertOrgProductActionsAllowed(admin, party.org_id);
   const input = safetySampleSchema.parse(body ?? {});
   const classification = await classifySafetySample({
     frames: input.frames,

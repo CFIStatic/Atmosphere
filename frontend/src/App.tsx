@@ -20,6 +20,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { FirstRunPage } from './pages/FirstRunPage';
 import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
+import { isUnpaidEvaluationLocation } from './lib/unpaidEvaluation';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -203,6 +204,9 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+  if (gate === 'blocked' && isUnpaidEvaluationLocation(location.pathname, location.search)) {
+    return <>{children}</>;
   }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;

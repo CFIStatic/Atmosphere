@@ -69,7 +69,11 @@ describe('FirstRunPage (value before payment)', () => {
     await user.click(await screen.findByTestId('first-run-office'));
     const sample = await screen.findByTestId('sample-evidence');
     expect(sample).toHaveTextContent('Sample');
+    expect(sample.querySelector('img')?.getAttribute('src')).toBe('/samples/kitchen-leak-poster.jpg');
     expect(screen.getByText(/This is a sample, not your data/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the job file' }).getAttribute('href')).toContain(
+      '/job-progress?job=job-1',
+    );
 
     await user.click(screen.getByRole('button', { name: 'Choose a plan' }));
     const where = await screen.findByTestId('where');
@@ -77,14 +81,18 @@ describe('FirstRunPage (value before payment)', () => {
     expect(decodeURIComponent(where.textContent ?? '')).toContain('/job-progress?job=job-1');
   });
 
-  it('field path opens Field Capture and waits for the first clip; plan stays disabled', async () => {
+  it('field path offers a plan before any clip, because recording is locked until checkout', async () => {
     const user = userEvent.setup();
     localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith kitchen leak' }));
     renderPage();
     await user.click(await screen.findByTestId('first-run-field'));
-    expect(window.open).toHaveBeenCalledWith('https://app.atmosphereteam.com', '_blank', 'noopener');
-    expect(await screen.findByRole('heading', { name: 'Waiting for first clip' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Choose a plan' })).toBeDisabled();
+    expect(window.open).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { name: 'Choose a plan to record' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open Field Capture' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'See sample evidence instead' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Choose a plan' }));
+    const where = await screen.findByTestId('where');
+    expect(where.textContent).toMatch(/^\/signup\?step=2&next=/);
   });
 
   it('field path shows the first clip (title, timestamps, summary) and then enables the plan step', async () => {

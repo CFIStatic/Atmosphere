@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { config } from '../config.js';
 import {
   beginMediaUpload,
@@ -98,7 +99,8 @@ const beginSchema = z.object({
  */
 mediaCatalogRouter.post('/uploads', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId } = await requireOrgContext(req);
+    const { orgId, supabase } = await requireOrgContext(req);
+    await assertOrgProductActionsAllowed(supabase, orgId);
     const body = beginSchema.parse(req.body ?? {});
     const { media, session } = await beginMediaUpload({ orgId, ...body });
     res.status(201).json({ media, session });
@@ -121,7 +123,8 @@ mediaCatalogRouter.post(
   '/uploads/complete',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId } = await requireOrgContext(req);
+      const { orgId, supabase } = await requireOrgContext(req);
+      await assertOrgProductActionsAllowed(supabase, orgId);
       const body = completeSchema.parse(req.body ?? {});
       const media = await completeMediaUpload({ orgId, ...body });
       res.json({ media });
