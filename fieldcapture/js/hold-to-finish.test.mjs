@@ -197,38 +197,26 @@ assert.match(
 );
 assert.match(
   html,
-  /id="platform-link"[^>]*>Status<\/a>/,
-  'second tab is the field-first job Status, with no subtitle',
+  /id="platform-link"[^>]*>Dashboard<\/a>/,
+  'office tab reads Dashboard with no subtitle',
 );
 assert.doesNotMatch(html, /<small>Your jobs<\/small>/, 'Your jobs subtitle is gone from the switcher');
 assert.doesNotMatch(html, /<small>The office<\/small>/, 'The office subtitle is gone from the switcher');
 assert.match(
   appSrc,
-  /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-status' \|\| id === 's-platform'/,
-  'the Field Capture / Status bar returns after sign-in, on Status and on Settings',
+  /id === 's-home' \|\| id === 's-new-job' \|\| id === 's-platform'/,
+  'the Field Capture / Platform bar returns after sign-in and on the office pane',
 );
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
-assert.doesNotMatch(
-  appSrc,
-  /resolveOfficePlatformHref\('\/verifier-library'\)/,
-  'a phone never embeds the desktop office dashboard',
-);
-assert.match(appSrc, /openFieldStatus\(\)/, 'the second tab opens the native Status card');
-assert.match(html, /id="s-status"/, 'Status is an in-app screen');
-assert.match(appSrc, /Core\.fieldJobStatus\(/, 'Status is built from field facts, not an iframe');
-assert.match(
-  html,
-  /id="fstat-office-link"[^>]*target="_blank"/,
-  'the full dashboard opens in a new tab on a computer, not inside the phone frame',
-);
-assert.match(appSrc, /openPlatformInFrame\('\/settings'\)/, 'Settings still opens in-app');
-assert.match(html, /id="s-platform"/, 'Settings is an in-app screen, not a new page');
+assert.match(appSrc, /resolveOfficePlatformHref\('\/verifier-library'\)/, 'Platform tab opens the office web console');
+assert.match(appSrc, /openPlatformInFrame/, 'Platform stays inside the Field Capture web frame');
+assert.match(html, /id="s-platform"/, 'Platform is an in-app screen, not a new page');
 assert.match(html, /id="platform-frame"/);
 assert.match(html, /max-width: 480px/, 'the web frame stays phone-width');
 assert.match(
   html,
-  /id="platform-link"[^>]*href="#status"/,
-  'the Status tab stays in this app',
+  /id="platform-link"[^>]*href="https:\/\/platform\.atmosphereteam\.com\/verifier-library\?embed=field&amp;v=no-overview-back-2"/,
+  'standalone Field Capture must not use /field — that path is this same app',
 );
 assert.equal(
   Core.resolveOfficePlatformHref('/verifier-library'),
@@ -402,7 +390,7 @@ assert.match(appSrc, /function applyOfficeTheme/);
 assert.match(html, /html\[data-theme="dark"\] \{ color-scheme: dark; \}/);
 assert.match(appSrc, /request-field-session/, 'Platform iframe can ask Field Capture for the shared session');
 assert.match(appSrc, /field-session-missing/, 'unsigned Field Capture must not fake an office session');
-assert.doesNotMatch(appSrc, /warmPlatformFrame/, 'signing in no longer preloads the desktop dashboard in a hidden frame');
+assert.match(appSrc, /warmPlatformFrame/, 'signing in on Field Capture warms the in-app Platform');
 assert.match(appSrc, /notifyOfficeLibraryChanged/, 'a new Field Capture job must refresh the office list');
 assert.match(appSrc, /atmosphere: 'library-changed'/);
 assert.match(coreSrc, /nextFilingBackoffMs/, 'a failed filing retries on its own with backoff');
