@@ -135,7 +135,7 @@ describe('filePulse', () => {
 describe('jobFileSuggestions', () => {
   it('leads with the forgotten question when the mic has been read', () => {
     expect(jobFileSuggestions({ hasMic: true, hasVideo: true, latestDate: '2026-08-05' })[0]).toBe(
-      'What did the homeowner say?',
+      'What was said on this job?',
     );
   });
 
@@ -160,7 +160,7 @@ describe('jobFileSuggestions', () => {
       latestDate: '2026-08-05',
       beats,
     });
-    expect(prompts[0]).toBe('What did the homeowner say about the skylights?');
+    expect(prompts[0]).toBe('What was said about the skylights?');
     expect(prompts[1]).toBe('What happened with the tarp?');
     expect(prompts.some((prompt) => /crew do on/.test(prompt))).toBe(true);
     expect(prompts).toContain('Is anything still unfinished?');

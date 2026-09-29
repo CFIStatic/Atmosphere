@@ -854,7 +854,7 @@ export function JobAskPanel({
         ) : turns.length === 0 && !asking ? (
           <div>
             <p className="text-sm text-ink-600">
-              Forgot something? Ask what happened on site or what the homeowner said.
+              Forgot something? Ask what happened on site or what was said.
             </p>
             {suggestions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
