@@ -3,16 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type PlaybookSourceJob,
   type PlaybookStatus,
   type TradePlaybook,
 } from '../lib/api';
 import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
-import {
-  playbookSourceJobs,
-  type LibraryClipForPlaybook,
-  type PlaybookSourceJob,
-} from '../lib/playbookSources';
 
 const STATUS_LABEL: Record<PlaybookStatus, string> = {
   draft: 'Draft',
@@ -36,28 +32,32 @@ export function PlaybooksLibraryPage() {
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creatorOpen, setCreatorOpen] = useState(false);
-  const loadSeq = useRef(0);
 
-  const load = useCallback(async (filters?: { status: PlaybookStatus | 'all'; q: string }) => {
-    const seq = ++loadSeq.current;
-    const status = filters?.status ?? statusFilter;
-    const query = (filters?.q ?? q).trim();
-    setError(null);
-    try {
-      const res = await api.listPlaybooks({
-        status,
-        q: query || undefined,
-      });
-      // A slower response from the previous filter must not replace this list.
-      if (seq !== loadSeq.current) return;
-      setPlaybooks(res.playbooks);
-    } catch (err) {
-      if (seq !== loadSeq.current) return;
-      setError(err instanceof ApiError ? err.message : 'Could not load playbooks.');
-    } finally {
-      if (seq === loadSeq.current) setLoaded(true);
-    }
-  }, [statusFilter, q]);
+  // Only the newest list request may paint: a slower, older (filtered)
+  // response must not replace the list after a create resets the filters.
+  const loadSeq = useRef(0);
+  const load = useCallback(
+    async (override?: { status: PlaybookStatus | 'all'; q: string }) => {
+      const seq = ++loadSeq.current;
+      const status = override?.status ?? statusFilter;
+      const query = override?.q ?? q;
+      setError(null);
+      try {
+        const res = await api.listPlaybooks({
+          status,
+          q: query.trim() || undefined,
+        });
+        if (seq === loadSeq.current) setPlaybooks(res.playbooks);
+      } catch (err) {
+        if (seq === loadSeq.current) {
+          setError(err instanceof ApiError ? err.message : 'Could not load playbooks.');
+        }
+      } finally {
+        if (seq === loadSeq.current) setLoaded(true);
+      }
+    },
+    [statusFilter, q],
+  );
 
   useEffect(() => {
     setLoaded(false);
@@ -96,8 +96,6 @@ export function PlaybooksLibraryPage() {
     setCreatorOpen(false);
     setStatusFilter('all');
     setQ('');
-    // This load still closes over the active filter. Request the cleared list
-    // explicitly so a filtered response cannot land after the unfiltered one.
     await load({ status: 'all', q: '' });
     openPlaybook(playbook.id);
   }
@@ -371,10 +369,10 @@ function CreateFromJobPanel({
   useEffect(() => {
     let cancelled = false;
     void api
-      .evidenceLibrary()
+      .playbookSourceJobs()
       .then((res) => {
         if (cancelled) return;
-        const options = playbookSourceJobs(res.items as LibraryClipForPlaybook[]);
+        const options = res.jobs;
         setJobs(options);
         setJobId((current) => current || options[0]?.jobId || '');
       })
