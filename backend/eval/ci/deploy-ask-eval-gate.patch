@@ -1,0 +1,44 @@
+diff --git a/.github/workflows/deploy-production.yml b/.github/workflows/deploy-production.yml
+index 71787b0..7c251a1 100644
+--- a/.github/workflows/deploy-production.yml
++++ b/.github/workflows/deploy-production.yml
+@@ -69,8 +69,39 @@ concurrency:
+   cancel-in-progress: true
+ 
+ jobs:
++  # Ask regression gate (backend/eval/README.md). Nothing deploys unless the
++  # synthetic gold passes and, when the EVAL_GOLD_URL secret is set, the private
++  # real-clip gold passes too (topic + owner quotes with times, the 5-line clip count,
++  # and not-found). Reports are redacted: Actions logs are public.
++  ask-eval-gate:
++    name: Ask eval gate
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    defaults:
++      run:
++        working-directory: backend
++    env:
++      HAS_PRIVATE_GOLD: ${{ secrets.EVAL_GOLD_URL != '' }}
++    steps:
++      - uses: actions/checkout@v5
++      - uses: actions/setup-node@v5
++        with:
++          node-version: '22'
++          cache: npm
++          cache-dependency-path: backend/package-lock.json
++      - run: npm ci
++      - name: Synthetic gold (deterministic)
++        run: npm run eval:ask
++      - name: Private gold (real consented clips, redacted report)
++        if: env.HAS_PRIVATE_GOLD == 'true'
++        env:
++          EVAL_GOLD_URL: ${{ secrets.EVAL_GOLD_URL }}
++          EVAL_GOLD_TOKEN: ${{ secrets.EVAL_GOLD_TOKEN }}
++        run: npm run eval:ask
++
+   backend:
+     name: Sync Keys → Railway and deploy backend
++    needs: ask-eval-gate
+     runs-on: ubuntu-latest
+     environment: Keys
+     steps:

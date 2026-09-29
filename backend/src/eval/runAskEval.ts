@@ -9,6 +9,7 @@ import { summaryClaimContradictions } from '../audio/summaryValidation.js';
 import { publishableConversation } from '../audio/proofConversation.js';
 import { scoreAnswer, type AnswerScore } from './scoreAsk.js';
 import type { GoldClip, GoldSet } from './goldTypes.js';
+import { runJob, type JobAnswerFn, type JobResult } from './runJobAskEval.js';
 
 export type AnswerFn = (question: string, record: ClipAskRecord) => Promise<string>;
 
@@ -34,6 +35,8 @@ export type EvalMetrics = {
   contradictionRate: number;
   criticalAssertions: number;
   summaryContradictions: number;
+  /** Job Ask answers with a fabricated speaker label or an unbalanced parenthesis (gate: 0). */
+  speakerLabelFailures: number;
 };
 
 export type EvalReport = {
@@ -43,6 +46,7 @@ export type EvalReport = {
   byType: Record<string, { questions: number; correctness: number }>;
   gate: { pass: boolean; reasons: string[] };
   clips: ClipResult[];
+  jobs: JobResult[];
 };
 
 export const defaultAnswerFn: AnswerFn = async (question, record) => (await answerFromClip({ question, record })).answer;
@@ -90,11 +94,13 @@ export async function runClip(clip: GoldClip, answer: AnswerFn, opts?: { summari
   };
 }
 
-export function summarize(gold: GoldSet, clips: ClipResult[], model: string | null): EvalReport {
-  const all = clips.flatMap((clip) => clip.answers);
+export function summarize(gold: GoldSet, clips: ClipResult[], model: string | null, jobs: JobResult[] = []): EvalReport {
+  const all = [...clips.flatMap((clip) => clip.answers), ...jobs.flatMap((job) => job.answers)];
+  const speakerLabelFailures = jobs.reduce((n, job) => n + job.answers.filter((a) => a.speakerLabelFailures.length).length, 0);
+  const jobMisses = jobs.reduce((n, job) => n + job.answers.filter((a) => !a.correct).length, 0);
   const timed = all.map((a) => a.timestampAccuracy).filter((n): n is number => n != null);
   const abstainQs = all.filter((a) => {
-    const q = gold.clips.flatMap((c) => c.questions).find((x) => x.id === a.questionId);
+    const q = [...gold.clips.flatMap((c) => c.questions), ...(gold.jobs ?? []).flatMap((j) => j.questions)].find((x) => x.id === a.questionId);
     return q?.expect.answerType === 'abstain';
   });
   const criticalAssertions = all.reduce((n, a) => n + a.criticalAssertions.length, 0);
@@ -113,6 +119,7 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
     contradictionRate: mean(all.map((a) => (a.contradiction ? 1 : 0))),
     criticalAssertions,
     summaryContradictions,
+    speakerLabelFailures,
   };
   const byType: EvalReport['byType'] = {};
   for (const a of all) {
@@ -126,21 +133,32 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
   if (summaryContradictions > 0) reasons.push(`${summaryContradictions} summary-transcript contradiction(s)`);
   const answerContradictions = all.filter((a) => a.contradiction).length;
   if (answerContradictions > 0) reasons.push(`${answerContradictions} answer(s) contradict the transcript line count`);
+  if (speakerLabelFailures > 0) reasons.push(`${speakerLabelFailures} job answer(s) with a fabricated speaker label or unbalanced parenthesis`);
+  // Job-level regression cases (topic retrieval, exact quotes with clip + time, not-found) gate on every miss.
+  if (jobMisses > 0) reasons.push(`${jobMisses} job-level Ask regression case(s) failed`);
   const floor = Number(process.env.EVAL_MIN_CORRECTNESS ?? '');
   if (Number.isFinite(floor) && floor > 0 && metrics.correctness < floor) {
     reasons.push(`correctness ${metrics.correctness.toFixed(3)} below EVAL_MIN_CORRECTNESS ${floor}`);
   }
-  return { gold: gold.name, model, metrics, byType, gate: { pass: reasons.length === 0, reasons }, clips };
+  return { gold: gold.name, model, metrics, byType, gate: { pass: reasons.length === 0, reasons }, clips, jobs };
 }
 
-export async function runAskEval(gold: GoldSet, opts?: { answer?: AnswerFn; model?: string | null; summaries?: boolean }): Promise<EvalReport> {
+export async function runAskEval(
+  gold: GoldSet,
+  opts?: { answer?: AnswerFn; jobAnswer?: JobAnswerFn; model?: string | null; summaries?: boolean },
+): Promise<EvalReport> {
   const answer = opts?.answer ?? defaultAnswerFn;
   const clips: ClipResult[] = [];
   for (const clip of gold.clips) {
     if (clip.consent?.status === 'declined') continue;
     clips.push(await runClip(clip, answer, { summaries: opts?.summaries }));
   }
-  return summarize(gold, clips, opts?.model ?? null);
+  const jobs: JobResult[] = [];
+  for (const job of gold.jobs ?? []) {
+    if (job.consent?.status === 'declined') continue;
+    jobs.push(await runJob(job, opts?.jobAnswer));
+  }
+  return summarize(gold, clips, opts?.model ?? null, jobs);
 }
 
 /** Drop quoted clip text from a miss so private gold never lands in a public CI log. */
@@ -169,6 +187,7 @@ export function reportMarkdown(report: EvalReport, opts?: { redact?: boolean }):
     `| contradiction rate | ${pct(m.contradictionRate)} |`,
     `| critical assertions (gate: 0) | ${m.criticalAssertions} |`,
     `| summary-transcript contradictions (gate: 0) | ${m.summaryContradictions} |`,
+    `| job answers with fabricated speaker labels / unbalanced parens (gate: 0) | ${m.speakerLabelFailures} |`,
     '',
     '| question type | n | correctness |',
     '| --- | --- | --- |',
@@ -182,6 +201,13 @@ export function reportMarkdown(report: EvalReport, opts?: { redact?: boolean }):
           `- \`${opts?.redact ? clip.clipId.slice(0, 8) : clip.clipId}\` ${a.questionId} (${a.type}): ${(opts?.redact ? a.misses.map(redactMiss) : a.misses).join('; ')}`,
       ),
   );
+  for (const job of report.jobs ?? []) {
+    for (const a of job.answers.filter((row) => !row.correct)) {
+      misses.push(
+        `- job \`${opts?.redact ? job.jobId.slice(0, 8) : job.jobId}\` ${a.questionId} (${a.type}): ${(opts?.redact ? a.misses.map(redactMiss) : a.misses).join('; ')}`,
+      );
+    }
+  }
   if (misses.length) lines.push('', '## Misses', ...misses);
   return lines.join('\n');
 }

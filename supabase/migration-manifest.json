@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 170,
+    "migrationCount": 171,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3583
+    "finalObjects": 3603
   },
   "outOfOrder": [
     {
@@ -184,7 +184,8 @@
     "20260927203000_backfill_proof_upload_actor.sql",
     "20260928120000_ask_thread_memory.sql",
     "20260928143000_ask_job_notes_insert_scope.sql",
-    "20260928190000_job_proofs_summary_provenance.sql"
+    "20260928190000_job_proofs_summary_provenance.sql",
+    "20260929160000_ask_transcript_chunks.sql"
   ],
   "migrations": [
     {
@@ -5691,6 +5692,25 @@
         "column|public.job_proofs.summary_error",
         "column|public.job_proofs.summary_lease_until",
         "index|public.job_proofs.job_proofs_summary_pending_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260929160000_ask_transcript_chunks",
+      "file": "20260929160000_ask_transcript_chunks.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.ask_transcript_chunks",
+        "index|public.ask_transcript_chunks.ask_transcript_chunks_pkey",
+        "index|public.ask_transcript_chunks.ask_transcript_chunks_proof_seq_key",
+        "index|public.ask_transcript_chunks.ask_transcript_chunks_job_idx",
+        "index|public.ask_transcript_chunks.ask_transcript_chunks_proof_idx",
+        "index|public.ask_transcript_chunks.ask_transcript_chunks_fts_idx",
+        "policy|public.ask_transcript_chunks.ask_transcript_chunks_select",
+        "rls|public.ask_transcript_chunks"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

@@ -8,7 +8,7 @@ import { speechCountContradictions, transcriptLineCount, transcriptLines } from 
 import type { GoldQuestion } from './goldTypes.js';
 
 export const ABSTAIN_RE =
-  /\b(not shown|not established|does not show|doesn't show|not visible|isn't visible|never mentions?|no one mentions|nothing (?:in|on) (?:this|the)|not by anyone on site|can't (?:tell|see|give)|cannot (?:tell|see)|no (?:brand|price|time) is (?:visible|mentioned)|not on file|no speech was transcribed|does not include usable speech|no one is heard)\b/i;
+  /\b(not shown|not established|does not show|doesn't show|not visible|isn't visible|never mentions?|no one mentions|nothing (?:in|on) (?:this|the)|not by anyone on site|can't (?:tell|see|give)|cannot (?:tell|see)|no (?:brand|price|time) is (?:visible|mentioned)|not on file|no speech was transcribed|does not include usable speech|no one is heard|not found|wasn't found|was not found|no transcript\b[^.]{0,60}\bmentions)\b/i;
 
 export type AnswerScore = {
   questionId: string;

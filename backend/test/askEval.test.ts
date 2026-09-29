@@ -528,7 +528,8 @@ test('a conversation mixes a greeting, a clarification, a job question, an opini
   assert.match(correction, /Sample the intervals/);
   assert.match(correction, /spreadsheets/i);
   assert.doesNotMatch(correction, /The file does have that/i);
-  assert.doesNotMatch(correction, /Short Handheld|Light Whitewashed/i);
+  // Every quote carries its clip name and time.
+  assert.match(correction, /spreadsheets\.” \([^)]+, 0:03\)/);
   assert.doesNotMatch(correction, /^(?:sorry|you(?:'|’)re right)\b/i);
   assert.doesNotMatch(correction, /This file does not have that/i);
   assert.doesNotMatch(correction, /\.\./);

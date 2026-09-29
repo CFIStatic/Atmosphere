@@ -16,6 +16,26 @@ test('synthetic gold covers every question type and 6+ questions per clip', () =
   assert.ok(gold.clips.every((clip) => clip.consent?.status === 'synthetic'));
 });
 
+test('synthetic gold mirrors the job-level regressions: owner quotes, a line count, and not found', () => {
+  const jobs = gold.jobs ?? [];
+  assert.ok(jobs.length >= 1);
+  assert.ok(jobs.every((job) => job.consent?.status === 'synthetic'));
+  const questions = jobs.flatMap((job) => job.questions);
+  assert.ok(questions.some((q) => q.expect.quoteCards && (q.expect.quotes?.length ?? 0) >= 2 && q.expect.mustContain?.includes('unidentified speaker')));
+  assert.ok(questions.some((q) => q.expect.answerType === 'abstain'));
+  const walk = gold.clips.find((clip) => clip.id === 'syn-walkthrough-stale-summary')!;
+  assert.ok(walk.questions.some((q) => q.question === 'how many spoken lines are in this clip' && q.expect.count === 5 && q.expect.quotes?.length === 5));
+});
+
+test('the gate fails when a job answer quotes the wrong lines or invents a speaker label', async () => {
+  const report = await runAskEval(gold, {
+    jobAnswer: async () => 'The recording on Sep 21 said:\n- Person 1 (Seated said “All her life.” (0:00)',
+  });
+  assert.equal(report.gate.pass, false);
+  assert.ok(report.metrics.speakerLabelFailures > 0);
+  assert.match(report.gate.reasons.join(' '), /job/i);
+});
+
 test('current clip Ask passes the release gate on the synthetic gold', async () => {
   const report = await runAskEval(gold);
   assert.equal(report.gate.pass, true, report.gate.reasons.join('; '));

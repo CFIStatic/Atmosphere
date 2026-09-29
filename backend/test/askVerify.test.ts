@@ -83,7 +83,7 @@ test('a fabricated trailer quote is dropped and a misattributed one moves to the
   assert.equal(result.quotesFailed, 2);
   assert.ok(result.failures.some((failure) => failure.kind === 'quote_clip' && failure.fixed));
   assert.ok(result.failures.some((failure) => failure.kind === 'quote' && failure.fixed));
-  assert.match(result.answer, new RegExp(`${cite(CLIP_B, 'dining-table', 14.6)}\\|Speaker\\|We've just got to go to QuickBooks online\\.`));
+  assert.match(result.answer, new RegExp(`${cite(CLIP_B, 'dining-table', 14.6)}\\|Unidentified speaker\\|We've just got to go to QuickBooks online\\.`));
   assert.doesNotMatch(result.answer, /new roof/);
   assert.equal(result.open.length, 0);
 });

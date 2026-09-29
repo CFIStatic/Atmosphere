@@ -69,6 +69,24 @@ describe('askSources', () => {
     expect(actions[0]?.section).toBe('setup');
   });
 
+  it('reads the clip name off a quote card and never shows a blank speaker', () => {
+    const job = '00000000-0000-4000-8000-0000000000a2';
+    const proof = '00000000-0000-4000-8000-0000000000b1';
+    const cite = `video/${job}/${proof}/dining-table@14.6`;
+    const { quotes } = extractAskSources(
+      `Two lines.\n\n⟦quotes: ${cite}|Unidentified speaker|We just have to switch to LedgerPro cloud.|clip=Short Handheld Phone Clip ;; ${cite.replace('@14.6', '@18.56')}||Okay, I'm going to set it up now.⟧`,
+    );
+    expect(quotes[0]).toMatchObject({
+      speaker: 'Unidentified speaker',
+      text: 'We just have to switch to LedgerPro cloud.',
+      atSeconds: 14.6,
+      proofId: proof,
+      clipTitle: 'Short Handheld Phone Clip',
+    });
+    expect(quotes[1]).toMatchObject({ speaker: 'Unidentified speaker', atSeconds: 18.56 });
+    expect(quotes[1]?.clipTitle).toBeUndefined();
+  });
+
   it('opens a moment chip at the transcript timestamp and keeps the quote', () => {
     const job = 'd7fe1a01-4483-42c5-abb8-eaaa4c6988df';
     const proof = '00608802-140e-4897-9f02-1d5d0db88ecf';

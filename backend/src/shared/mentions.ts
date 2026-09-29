@@ -1,3 +1,4 @@
+import { diarizedSpeakerLabels } from './askSpeakers.js';
 import { mentionTimedLines, privacySafeMentionProof, redactMentionSpeech } from './mentionPrivacy.js';
 
 /**
@@ -827,34 +828,14 @@ export function trimMentionTranscript(text: unknown, cap: number): string {
   return `${kept.trim()}…`;
 }
 
-/** Speaker labels stored on a clip's findings, when the file has them. */
+/**
+ * Diarized speaker labels stored on a clip's findings ("Speaker 1", or a name
+ * the file explicitly gave that speaker). Visual people labels such as
+ * "Person 1 (Seated, Unknown Role)" describe who was seen, not who spoke, and
+ * are never returned here.
+ */
 export function mentionSpeakerLine(findings: unknown): string {
-  if (!findings || typeof findings !== 'object') return '';
-  const root = findings as Record<string, unknown>;
-  const block =
-    root.people && typeof root.people === 'object' ? (root.people as Record<string, unknown>) : root;
-  const speakers = Array.isArray(block.speakers) ? block.speakers : [];
-  const fromSpeakers = speakers
-    .map((row) => {
-      if (!row || typeof row !== 'object') return '';
-      const speaker = row as { displayName?: unknown; speakerLabel?: unknown };
-      return String(speaker.displayName || speaker.speakerLabel || '').trim();
-    })
-    .filter(Boolean);
-  if (fromSpeakers.length) return [...new Set(fromSpeakers)].join(', ');
-  const present = Array.isArray(block.people)
-    ? block.people
-    : Array.isArray(root.peoplePresent)
-      ? root.peoplePresent
-      : [];
-  const labels = present
-    .map((row) => {
-      if (!row || typeof row !== 'object') return '';
-      const person = row as { displayName?: unknown; label?: unknown };
-      return String(person.displayName || person.label || '').trim();
-    })
-    .filter(Boolean);
-  return [...new Set(labels)].join(', ');
+  return diarizedSpeakerLabels(findings).join(', ');
 }
 
 function pushSpeechBit(lines: string[], value: unknown): void {

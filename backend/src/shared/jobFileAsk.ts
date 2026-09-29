@@ -12,6 +12,7 @@
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
+import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
@@ -143,6 +144,8 @@ Rules:
 9. The raw mic transcript is authoritative for what was said and how much. An AI summary or conversation brief may be stale; when it disagrees with the transcript, follow the transcript and do not repeat the summary's claim.
 10. A "how many" question (lines, utterances, quotes, times something was said) gets the number first, counted from the raw transcript lines: "There are **5** lines in the transcript." Then list them if asked.
 11. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly that it is not in the evidence. Do not guess or answer with a nearby detail.
+12. Quotes are exact transcript words only, never paraphrased inside quotation marks, each followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15).
+13. Speakers: use only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)" as a speaker.
 
 ` + ASK_PROSE_FORMAT_RULES;
 
@@ -722,6 +725,8 @@ export async function answerFromJobFile(input: {
       timing: input.timing,
     });
     let answer = normalizeAskProse(looked.answer);
+    // Final check before render: every quote is a retrieved transcript line.
+    answer = enforceQuoteGrounding(answer, { chunks: looked.retrievedChunks, question: input.question }).answer;
     answer = normalizeAskWebCitations(answer, webHits, {
       question: input.question,
       attachIfMissing: webHits.length > 0,

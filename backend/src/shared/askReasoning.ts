@@ -60,7 +60,6 @@ import {
   classifyAskIntent,
   composeGroundedAsk,
   localStamp,
-  namedSpeaker,
   polishAskProse,
   resolveAskQuestion,
   speechQuotesForQuestion,
@@ -76,6 +75,14 @@ import {
   geminiSystemPrefix,
 } from './askPromptCache.js';
 import type { AskTurnClock } from './askTiming.js';
+import {
+  evidenceTraceStep,
+  formatEvidenceForPrompt,
+  isTopicSpeechQuestion,
+  retrievedChunksFor,
+} from './askEvidenceAnswer.js';
+import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import {
   ASK_REPAIR_SYSTEM,
   buildGroundingIndex,
@@ -102,19 +109,19 @@ Rules:
 7. Cite a spoken moment as video/<jobId>/<proofId>/<slug>@<seconds> using cite and atSeconds from the tool. Omit @seconds when the tool has no timing.
 8. After the prose, append exactly one sources line and, only when a tool returned a spoken excerpt the question asked for, one quotes line:
    ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>⟧
-   ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker|verbatim excerpt⟧
+   ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker label|verbatim excerpt|clip=Clip name⟧
 9. Then append two or three follow-up questions the tool results can answer:
    ⟦followups: question one? ;; question two?⟧
 10. Do not put those machine lines inside the sentences. Never write [[web:…]] or "(Source: …)".
 11. On a tool-call turn, do not write the answer yet.
-12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user is wrong, answer politely and name the day: "That line is actually from Sep 21 — here's the clip." Never write "The file does have that." Use the person's name. Never write "Seated man" or another visual label when the file names who spoke. Answer first. No canned filler. Never stop at one line that only says the file does not have it.
+12. This is a conversation. Answer a greeting, a thanks, or a short reaction in a natural professional voice, and say what this job can answer. "Why" and "what do you think" stay tied to lines actually on the file; do not invent a motive. If the request could mean two days or two clips and the thread does not pick one, ask one short clarifying question. If the user is wrong, answer politely and name the day: "That line is actually from Sep 21 — here's the clip." Never write "The file does have that." Answer first. No canned filler. Never stop at one line that only says the file does not have it.
 13. A thread can span days and weeks. Older turns may be a summary; the latest turns are verbatim. Durable notes are preferences and decisions, each dated to the turn it came from. When the user says "last week you said" or asks what was decided, answer from those notes and the summary, name that day, and do not invent a decision that is not written there.
 14. Sound like a warm, clear colleague. The first sentence answers the question. Write full sentences. No canned filler. Use a table, a list, or a quote only when it makes the answer easier to scan.
 15. Keep calling tools until the question is answered. When the user asks about other jobs in this organization, call search_other_jobs, then get_clip on those results. Do not search other jobs unless they asked. Do not end with "I checked the clips" or any similar footer. Sources belong in the sources line, which the reader sees as citation chips.
 16. A homeowner email or an estimate draft is a finished note in the artifact wrapper. Never invent a price. If prices are not on the file, say that in a sentence and draft only from what was seen. Do not repeat the clip list. Offer one next step.
 17. Use only the job context, the tool results, and the earlier turns in this request. No guessing and no outside knowledge about this job. When a fact is missing, write that it is not on file.
-18. Quote only words that appear in a transcript line, exactly as written there, and cite that clip at the time the line was said. Times, dates, clip clocks, job numbers, and names must be ones that appear in the context or tool results.
-19. Never invent a speaker role. Do not call someone the homeowner, adjuster, contractor, or client unless the file says so; use the name or label the file gives, or say the file does not say who spoke.
+18. Quote only words that appear in a transcript line, exactly as written there, and cite that clip at the time the line was said. Put every quote in “ ” and follow it with the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15). Never paraphrase inside quotation marks. When the request lists "Retrieved transcript lines", those are the exact lines that match the question: quote from them. If that list says nothing matched, say the transcripts do not mention it and do not quote other lines as if they were about it. Times, dates, clip clocks, job numbers, and names must be ones that appear in the context or tool results.
+19. Speakers: use only diarization labels ("Speaker 1", "Speaker 2") or a name the file explicitly attaches to that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name (not even from who filmed the clip), a role (homeowner, adjuster, contractor, client), a posture, or a relationship, and never write visual labels such as "Person 1 (Seated…)" or "Seated man". When asked who committed to or will do something and the file does not identify that speaker, say the owner is an unidentified speaker.
 20. Your answer is checked against the file before anyone sees it. Unsupported quotes, times, names, and speech counts are removed.
 21. Each clip card gives the raw transcript (authoritative) and an AI summary (may be stale). The raw transcript decides what was said and how much. When the AI summary disagrees with the transcript, follow the transcript and do not repeat the summary's claim.
 22. When the question asks how many (lines, utterances, quotes, times something was said), the first sentence is the number, counted from the raw transcript lines, for example "There are **5** lines in the transcript." Then list them if asked. Never lead with a summary.
@@ -135,13 +142,13 @@ Rules:
 4. The first sentence is the answer. No "Certainly" or other filler. No raw ids, no UTC, no duplicated job names.
 5. After the prose, append exactly one sources line and, when you quoted speech, one quotes line:
    ⟦sources: video/<jobId>/<proofId>/<slug>@<seconds>⟧
-   ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker|verbatim excerpt⟧
+   ⟦quotes: video/<jobId>/<proofId>/<slug>@<seconds>|Speaker label|verbatim excerpt|clip=Clip name⟧
 6. Then two or three follow-ups the file can answer:
    ⟦followups: question one? ;; question two?⟧
-7. Do not put those machine lines inside the sentences. Use the person's name. Never write a visual label when the file names who spoke.
+7. Do not put those machine lines inside the sentences.
 8. Use only this context and tool results. No guessing. When a fact is missing, write that it is not on file.
-9. Quote only exact words from a transcript line and cite that clip at the time the line was said. Times, dates, and names must appear in the context.
-10. Never invent a speaker role such as homeowner, adjuster, or contractor. Use the name or label the file gives, or say the file does not say who spoke.
+9. Quote only exact words from a transcript line and cite that clip at the time the line was said. Put every quote in “ ” followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15). Never paraphrase inside quotation marks. When the request lists "Retrieved transcript lines", quote from them; if it says nothing matched, say the transcripts do not mention it. Times, dates, and names must appear in the context.
+10. Speakers: only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)". If asked who committed to something and the speaker is not identified, say the owner is an unidentified speaker.
 11. The raw transcript (authoritative) decides what was said and how much. The AI summary may be stale; when they disagree, follow the transcript and do not repeat the summary's claim.
 12. A "how many" question gets the number first, counted from the raw transcript lines: "There are **5** lines in the transcript." Then list them if asked.
 13. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly in the first sentence that it is not in the evidence. Do not guess.
@@ -213,7 +220,6 @@ export function finalizeLookupAnswer(
   text = polishAskProse(text, {
     timeZone: catalog.timeZone,
     jobTitle: catalog.jobTitle,
-    speakerName: namedSpeaker(catalog),
   });
   if (classifyAskIntent(question).kind === 'task') text = wrapTaskArtifact(text);
   const spoken = /\b(say|said|quote|transcript|tell|mention)\b/i.test(question);
@@ -795,15 +801,23 @@ export async function answerFromAskLookup(input: {
   trace: AskLookupTraceStep[];
   followUps: string[];
   answeredFromLookup: true;
+  /** Transcript chunks this Ask retrieved. The final quote check verifies against these. */
+  retrievedChunks: TranscriptChunk[];
 }> {
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
+  // Retrieval runs first, over transcript chunks and summaries, so the exact
+  // lines for the question's topic are in front of the model (and the
+  // fallback) whatever the lookup plan does.
+  const evidence = retrieveAskEvidence(input.catalog, resolved);
+  const topicQuestion = isTopicSpeechQuestion(resolved, evidence);
+  const evidenceBlock = formatEvidenceForPrompt(evidence, topicQuestion);
   const promptInput = {
     question: input.question,
     resolved,
     catalog: input.catalog,
     history: input.history,
-    extra: [memoryBlock, input.extra?.trim()].filter(Boolean).join('\n\n'),
+    extra: [memoryBlock, input.extra?.trim(), evidenceBlock].filter(Boolean).join('\n\n'),
   };
   const fullUser = buildLookupUserPrompt(promptInput);
   const parts = splitLookupPrompt(promptInput);
@@ -937,6 +951,7 @@ export async function answerFromAskLookup(input: {
     }
   }
 
+  const retrievedChunks = retrievedChunksFor(evidence, trace, `${fullUser}\n\n${formatTrace(trace)}`);
   if (stopped()) {
     return {
       answer: scrubStoredAskText(prose, input.catalog.clips),
@@ -945,9 +960,11 @@ export async function answerFromAskLookup(input: {
       trace,
       followUps: [],
       answeredFromLookup: true,
+      retrievedChunks,
     };
   }
 
+  if (topicQuestion) trace.unshift(evidenceTraceStep(evidence, input.catalog));
   const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);
   let answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
   if (model) {
@@ -969,6 +986,8 @@ export async function answerFromAskLookup(input: {
     answer = scrubStoredAskText(grounded.answer, input.catalog.clips);
     input.timing?.noteVerify(grounded.verify);
   }
+  // Every quote must be an exact retrieved transcript line, with its clip and time.
+  answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
   if (!streamed) onToken(answer);
   return {
     answer,
@@ -977,5 +996,6 @@ export async function answerFromAskLookup(input: {
     trace,
     followUps: finalized.followUps,
     answeredFromLookup: true,
+    retrievedChunks,
   };
 }

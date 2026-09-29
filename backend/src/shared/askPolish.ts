@@ -7,6 +7,8 @@
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
 import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
+import { composeTopicSpeech, topicQuotes } from './askEvidenceAnswer.js';
+import { UNIDENTIFIED_SPEAKER, sanitizeSpeakerProse, speakerLabelOrUnidentified } from './askSpeakers.js';
 import {
   asksAboutOtherJobs,
   clipAskPreview,
@@ -59,7 +61,7 @@ export function localStamp(value: string | null | undefined, timeZone?: string |
 /** Strip filler, ids, raw clip ids, and UTC timestamps from text the reader sees. */
 export function polishAskProse(
   input: string,
-  opts?: { timeZone?: string | null; jobTitle?: string | null; speakerName?: string | null },
+  opts?: { timeZone?: string | null; jobTitle?: string | null },
 ): string {
   let text = String(input ?? '');
   text = text.replace(FILLER_RE, '');
@@ -78,12 +80,9 @@ export function polishAskProse(
     '',
   );
   text = text.replace(/(?:^|\n)\s*I checked\b[^\n]*\.?\s*$/i, '');
-  const speaker = String(opts?.speakerName ?? '').trim();
-  if (speaker) {
-    const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    text = text.replace(/\b(?:the |a )?(?:seated|standing|walking)\s+(?:man|woman)\b/gi, speaker);
-    text = text.replace(new RegExp(`\\b(?:one|a|the)\\s+${escaped}\\b`, 'gi'), speaker);
-  }
+  // Visual labels ("Person 1 (Seated", "the seated man") never name a
+  // speaker, and neither does the person who filmed the clip.
+  text = sanitizeSpeakerProse(text);
   return text
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/ +\n/g, '\n')
@@ -443,10 +442,11 @@ function speechFromClip(trace: AskLookupTraceStep[]): Array<{ excerpt: string; s
       const text = (clock ? clock[3] : line).replace(/^[^:]{1,40}:\s+/, '').trim();
       if (!text) continue;
       const speakers = dataOf(step).speakers;
-      const speaker = Array.isArray(speakers) ? String(speakers[0] ?? '').trim() : '';
+      // One diarized speaker on the clip names the line; several cannot.
+      const speaker = Array.isArray(speakers) && speakers.length === 1 ? String(speakers[0] ?? '') : '';
       hits.push({
         excerpt: text,
-        speaker: speaker || 'Speaker',
+        speaker: speakerLabelOrUnidentified(speaker),
         atSeconds: clock ? Number(clock[1]) * 60 + Number(clock[2]) : null,
       });
       break;
@@ -468,7 +468,7 @@ function searchHits(trace: AskLookupTraceStep[]): Array<{ excerpt: string; speak
       const at = (row as { atSeconds?: unknown }).atSeconds;
       hits.push({
         excerpt,
-        speaker: String((row as { speaker?: unknown }).speaker ?? '').trim() || 'Speaker',
+        speaker: speakerLabelOrUnidentified((row as { speaker?: unknown }).speaker),
         atSeconds: at == null || Number.isNaN(Number(at)) ? null : Number(at),
       });
     }
@@ -576,7 +576,7 @@ function spokenClips(trace: AskLookupTraceStep[]): Array<{
       const at = rec.atSeconds == null || Number.isNaN(Number(rec.atSeconds)) ? null : Number(rec.atSeconds);
       moments.push({
         excerpt,
-        speaker: String(rec.speaker ?? '').trim() || 'Speaker',
+        speaker: speakerLabelOrUnidentified(rec.speaker),
         atSeconds: at,
         cite: String(rec.cite ?? ''),
         proofId,
@@ -592,7 +592,8 @@ function spokenClips(trace: AskLookupTraceStep[]): Array<{
 function quoteBullet(moment: DatedMoment, showTitle: boolean): string {
   const when = moment.atSeconds == null ? '' : `At ${clock(moment.atSeconds)}, `;
   const where = showTitle && moment.title && !isVisionCaption(moment.title) ? ` (${moment.title})` : '';
-  return `- ${when}${moment.speaker} said “${moment.excerpt}”${where}`;
+  const who = moment.speaker === UNIDENTIFIED_SPEAKER ? 'an unidentified speaker' : moment.speaker;
+  return `- ${when}${who} said “${moment.excerpt}”${where}`;
 }
 
 function composeDatedSpeech(
@@ -647,6 +648,8 @@ export function speechQuotesForQuestion(
   trace: AskLookupTraceStep[],
   catalog: AskLookupCatalog,
 ): AskMomentQuote[] | null {
+  const topic = catalogClips(catalog).length ? topicQuotes(question, catalog) : null;
+  if (topic) return topic;
   if (!/\b(say|said|quote|tell|mention)\b/i.test(question)) return null;
   const asked = parseAskDate(question);
   if (!asked) return null;
@@ -706,6 +709,11 @@ function composeQuestion(
 ): string {
   const person = personBlock(trace);
   if (person?.offJob) return person.offJob;
+  // A topic ("what was said about LedgerPro cloud") is answered from the
+  // transcript chunks that mention it, never from the day's longest lines.
+  // Only when the catalog carries the clips; a bare trace falls through.
+  const topic = catalogClips(catalog).length ? composeTopicSpeech(question, catalog) : null;
+  if (topic) return topic;
   const dated = composeDatedSpeech(question, trace, catalog);
   if (dated) return dated;
   if (asksAboutOtherJobs(question)) {
@@ -720,7 +728,8 @@ function composeQuestion(
   if (hits.length && /\b(say|said|quote|tell|mention)\b/i.test(question)) {
     const hit = hits[0]!;
     const when = hit.atSeconds == null ? '' : `At ${clock(hit.atSeconds)}, `;
-    return `${when}${hit.speaker} said “${hit.excerpt}”`;
+    const who = speakerLabelOrUnidentified(hit.speaker);
+    return `${when}${who === UNIDENTIFIED_SPEAKER ? 'an unidentified speaker' : who} said “${hit.excerpt}”`;
   }
   const clips = clipsFromTrace(trace);
   const events = historyFromTrace(trace, catalog.timeZone);
@@ -874,18 +883,6 @@ function isGenericSpeakerName(name: string): boolean {
   return /^(?:(?:seated|standing|walking)\s+)?(?:man|woman|person|guy|girl)$/i.test(text)
     || /^(?:person|speaker)\s*[a-d0-9]+$/i.test(text)
     || /^(?:speaker|unknown)$/i.test(text);
-}
-
-/** The one person who filmed these clips, when the file names them. */
-export function namedSpeaker(catalog: AskLookupCatalog): string | null {
-  const eligible = (catalog.people ?? []).filter(
-    (person) => person.onThisJob !== false && person.name && !isGenericSpeakerName(person.name),
-  );
-  const recorderIds = new Set(catalogClips(catalog).flatMap((clip) => clip.recordedByUserIds ?? []));
-  const filmed = eligible.filter((person) => recorderIds.has(person.userId));
-  if (filmed.length === 1) return filmed[0]!.name;
-  if (recorderIds.size > 0) return null;
-  return eligible.length === 1 ? eligible[0]!.name : null;
 }
 
 function quoteSpoken(text: string): string {
@@ -1136,10 +1133,9 @@ export function composeGroundedAsk(
     return polishAskProse(composeChat(chat, question, catalog, history), {
       timeZone: catalog.timeZone,
       jobTitle: catalog.jobTitle,
-      speakerName: namedSpeaker(catalog),
     });
   }
-  const voice = { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle, speakerName: namedSpeaker(catalog) };
+  const voice = { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle };
   if (isJobOverview(question)) {
     return polishAskProse(composeJobOverview(catalog), voice);
   }
