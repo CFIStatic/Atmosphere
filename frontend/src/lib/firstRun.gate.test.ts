@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { billingStepHref, readFirstRun, unpaidWorkspaceTarget, writeFirstRun } from './firstRun';
+import { billingStepHref, firstRunDestination, readFirstRun, unpaidWorkspaceTarget, writeFirstRun } from './firstRun';
 
 describe('first run gate (value before payment)', () => {
   beforeEach(() => localStorage.clear());
@@ -13,6 +13,19 @@ describe('first run gate (value before payment)', () => {
       '/signup?step=2&next=%2Fverifier-library',
     );
     expect(billingStepHref(null)).toBe('/signup?step=2');
+  });
+
+  it('after first evidence a generic landing returns from checkout to the first job, not Start a job', () => {
+    const state = { evidenceSeen: true, jobId: 'job-1', jobTitle: 'Kitchen', jobNumber: 1 };
+    const href = unpaidWorkspaceTarget(state, '/verifier-library');
+    expect(href.startsWith('/signup?step=2&next=')).toBe(true);
+    const next = decodeURIComponent(href.split('next=')[1] ?? '');
+    expect(next).toBe('/job-progress?job=job-1&title=Kitchen&number=1');
+    expect(firstRunDestination(next, '/verifier-library')).toBe(next);
+    // A specific deep link is kept.
+    expect(unpaidWorkspaceTarget(state, '/settings?section=team')).toBe(
+      '/signup?step=2&next=%2Fsettings%3Fsection%3Dteam',
+    );
   });
 
   it('keeps progress per org', () => {

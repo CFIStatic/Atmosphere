@@ -1,4 +1,5 @@
 import type { ProofResponse, ProofVideoRecord } from './api';
+import { formatClipClock } from './clipDuration';
 
 export interface FirstClipPreview {
   id: string;
@@ -8,6 +9,11 @@ export interface FirstClipPreview {
   processing: boolean;
   summary: string | null;
   lines: Array<{ at: string; text: string }>;
+}
+
+/** Poster badge length: unknown (empty WebM header) reads as a dash, never 0:00. */
+export function posterClock(seconds: number | null | undefined): string {
+  return formatClipClock(seconds);
 }
 
 export function clock(seconds: number | null | undefined): string {

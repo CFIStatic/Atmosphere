@@ -13,7 +13,8 @@ import {
   type FirstRunState,
 } from '../lib/firstRun';
 import { jobFilePath } from '../lib/jobFileAsk';
-import { clock, firstClipPreview, SAMPLE_EVIDENCE, type FirstClipPreview } from '../lib/firstEvidence';
+import { safeAuthRedirect } from '../lib/authRedirect';
+import { firstClipPreview, posterClock, SAMPLE_EVIDENCE, type FirstClipPreview } from '../lib/firstEvidence';
 
 const POLL_MS = 5000;
 
@@ -101,7 +102,7 @@ export function FirstRunPage() {
 
   const jobHref = state.jobId
     ? jobFilePath(state.jobId, { title: state.jobTitle, number: state.jobNumber ?? null })
-    : params.get('next') || '/intake';
+    : safeAuthRedirect(params.get('next')) || '/intake';
   if (billingDone) return <Navigate to={jobHref} replace />;
 
   async function createJob(e: FormEvent) {
@@ -359,7 +360,7 @@ function ClipCard({
         <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md bg-ink-900/80">
           {posterUrl ? <img src={posterUrl} alt="" className="h-full w-full object-cover" /> : null}
           <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[11px] font-semibold text-white">
-            {clock(durationSeconds)}
+            {posterClock(durationSeconds)}
           </span>
         </div>
         <div className="min-w-0">

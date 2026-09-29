@@ -30,9 +30,9 @@ function Where() {
   return <p data-testid="where">{`${loc.pathname}${loc.search}`}</p>;
 }
 
-function renderPage() {
+function renderPage(entry = '/welcome') {
   return render(
-    <MemoryRouter initialEntries={['/welcome']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/welcome" element={<FirstRunPage />} />
         <Route path="*" element={<Where />} />
@@ -123,5 +123,11 @@ describe('FirstRunPage (value before payment)', () => {
     localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith' }));
     renderPage();
     await waitFor(() => expect(screen.getByTestId('where').textContent).toContain('/job-progress?job=job-1'));
+  });
+
+  it('never follows an off-site ?next= (security review)', async () => {
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+    renderPage('/welcome?next=//evil.example/phish');
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/intake'));
   });
 });

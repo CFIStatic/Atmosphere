@@ -5,6 +5,8 @@
  * Keep helpers here so signup, the welcome page, and the billing gate agree.
  */
 
+import { jobFilePath } from './jobFileAsk';
+
 /** Where Global Admins land after billing — Start a job, not an empty dashboard. */
 export const FIRST_RUN_HOME = '/intake';
 
@@ -125,6 +127,15 @@ export function billingStepHref(next: string | null | undefined): string {
 export function unpaidWorkspaceTarget(state: FirstRunState, returnPath: string): string {
   if (!state.evidenceSeen) {
     return `${FIRST_RUN_WELCOME}?next=${encodeURIComponent(returnPath)}`;
+  }
+  // Checkout returns to the first job, not Start a job, when the blocked page
+  // was only a generic landing (dashboard, jobs list, Start a job itself).
+  const pathOnly = returnPath.split(/[?#]/)[0] ?? returnPath;
+  const generic = GENERIC_POST_AUTH.has(pathOnly) || pathOnly === FIRST_RUN_HOME || pathOnly === FIRST_RUN_WELCOME;
+  if (state.jobId && generic) {
+    return billingStepHref(
+      jobFilePath(state.jobId, { title: state.jobTitle, number: state.jobNumber ?? null }),
+    );
   }
   return billingStepHref(returnPath);
 }
