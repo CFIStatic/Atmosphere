@@ -1072,8 +1072,71 @@ function mediaSourceAnswer(q: string, record: ClipAskRecord, rows: Array<{ at: n
  * Deterministic answer from the clip's reading. Used when no model is
  * configured, and as a fallback if the model call fails.
  */
+const SPEECH_VERB =
+  /\b(say|says|said|saying|ask|asks|asked|tell|tells|told|mention|mentions|mentioned|want|wants|wanted|agree|agreed|talk|talked|request|requested|complain|complained)\b/;
+const SPEAKER_ROLE =
+  /\b(home ?owners?|owners?|customers?|clients?|adjusters?|contractors?|crew|workers?|technicians?|techs?|foreman|inspectors?|tenants?|landlords?|subs?|subcontractors?)\b/;
+
+/**
+ * The speaker role a question takes for granted — "What did the homeowner
+ * say?" presumes the homeowner is on the mic. Null when the question names
+ * no role, or does not ask about speech at all.
+ */
+export function presumedSpeakerRole(question: string): string | null {
+  const q = question.toLowerCase();
+  if (!SPEECH_VERB.test(q)) return null;
+  const match = q.match(SPEAKER_ROLE);
+  if (!match) return null;
+  const word = match[1]!.replace(/\s+/g, '').replace(/s$/, '');
+  return word === 'tech' ? 'technician' : word === 'sub' ? 'subcontractor' : word;
+}
+
+/**
+ * Is a speaker in this role proven on the clip? A person tied to a speech
+ * turn with that role, a speaker identified (roster / OCR / voice) with that
+ * service title, or a transcript line labeled with it counts. A face or a
+ * guess does not.
+ */
+export function speakerRoleEstablished(record: ClipAskRecord, role: string): boolean {
+  const matches = (value: unknown) => {
+    const text = String(value ?? '').toLowerCase().replace(/\s+/g, '');
+    return Boolean(text) && text.includes(role);
+  };
+  for (const person of record.peoplePresent ?? []) {
+    if (person?.speakerLabel && matches(person.role)) return true;
+  }
+  // A transcript or conversation turn that itself names the speaker
+  // ("Homeowner: …") — speakers stay "unknown" unless diarization proved them.
+  for (const turn of record.conversationTurns ?? []) {
+    if (matches(turn?.speakerLabel) && !/unknown/i.test(String(turn?.speakerLabel))) return true;
+  }
+  for (const line of String(record.transcript ?? '').split('\n')) {
+    const label = line.replace(/^\s*\[[0-9:.]+\]\s*/, '').match(/^([A-Za-z][A-Za-z ]{1,30}):/)?.[1];
+    if (label && matches(label)) return true;
+  }
+  for (const speaker of record.peopleSpeakers ?? []) {
+    if (!speaker || !speaker.identityMethod || speaker.identityMethod === 'unknown') continue;
+    if (matches(speaker.serviceTitle)) return true;
+  }
+  return false;
+}
+
+/** Leads a speech answer with "who is talking is not established" when the question presumed a role. */
+export function withUnprovenSpeakerCaveat(question: string, record: ClipAskRecord, answer: string): string {
+  const role = presumedSpeakerRole(question);
+  if (!role || speakerRoleEstablished(record, role)) return answer;
+  if (!/[“"]/.test(answer)) return answer;
+  if (/not (identify|identified|established)|unknown speaker/i.test(answer)) return answer;
+  const article = /^[aeiou]/.test(role) ? 'an' : 'a';
+  return `The recording doesn't identify who is speaking, so these words can't be attributed to ${article} ${role} (unknown speaker). ${answer}`;
+}
+
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
   record = withAuthoritativeTranscript(speechSafeClipRecord(record));
+  return withUnprovenSpeakerCaveat(question, record, groundedAnswerCore(question, record));
+}
+
+function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
   const heardRows = splitTranscript(record.transcript);
@@ -1579,6 +1642,6 @@ export async function answerFromClip(input: {
       }
     }
   }
-  const answer = normalizeAskProse(completed.text);
+  const answer = withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text));
   return { answer, model: completed.model, usage: completed.usage };
 }

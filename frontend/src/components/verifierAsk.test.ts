@@ -290,7 +290,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     const suggest = document.querySelector(
-      '[data-ask="What did the homeowner say?"]',
+      '[data-ask="What was said in this clip?"]',
     ) as HTMLElement | null;
     expect(suggest).not.toBeNull();
     suggest!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));

@@ -117,7 +117,7 @@ describe('JobAskPanel', () => {
       model: 'gemini-3.6-flash',
       question: {
         id: 'q1',
-        question: 'What did the homeowner say about the skylights?',
+        question: 'What was said about the skylights?',
         answer: 'Yes. The homeowner asked that the skylights be left alone.',
         grounded_on: ['2026-08-05:after'],
         created_at: '2026-08-06T12:00:00Z',
@@ -146,14 +146,14 @@ describe('JobAskPanel', () => {
     expect(screen.queryByRole('heading', { name: 'Ask this job' })).not.toBeInTheDocument();
     await user.click(
       await screen.findByRole('button', {
-        name: 'What did the homeowner say about the skylights?',
+        name: 'What was said about the skylights?',
       }),
     );
 
     await waitFor(() => {
       expect(askAboutProofs).toHaveBeenCalledWith(
         'job-1038',
-        'What did the homeowner say about the skylights?',
+        'What was said about the skylights?',
         { threadId: 'thr-1' },
       );
     });
@@ -170,7 +170,7 @@ describe('JobAskPanel', () => {
       groundedOn: 1,
       question: {
         id: 'q-guest',
-        question: 'What did the homeowner say about the skylights?',
+        question: 'What was said about the skylights?',
         answer: 'From the guest file.',
         grounded_on: ['brief'],
         created_at: '2026-08-06T12:00:00Z',
@@ -190,12 +190,12 @@ describe('JobAskPanel', () => {
 
     await user.click(
       await screen.findByRole('button', {
-        name: 'What did the homeowner say about the skylights?',
+        name: 'What was said about the skylights?',
       }),
     );
 
     await waitFor(() => {
-      expect(ask).toHaveBeenCalledWith('What did the homeowner say about the skylights?', {
+      expect(ask).toHaveBeenCalledWith('What was said about the skylights?', {
         threadId: null,
       });
     });

@@ -88,6 +88,8 @@ export type StoredConversation = {
   keyMoments?: ConversationKeyMoment[];
   /** sha256 of the transcript_text this summary read (summaryFreshness). */
   transcriptSha256?: string | null;
+  /** sha256 of the visual events (narration entries + actions) this summary read. */
+  eventsSha256?: string | null;
   /** When this summary was built. */
   generatedAt?: string | null;
 };

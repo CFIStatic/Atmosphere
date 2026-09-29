@@ -46,7 +46,7 @@ import {
   toStoredChildPrivacyRedactions,
   type StoredChildPrivacyRedactions,
 } from './childPrivacyRedactions.js';
-import { transcriptSha256 } from './summaryFreshness.js';
+import { eventsSha256, transcriptSha256 } from './summaryFreshness.js';
 import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
 
@@ -270,9 +270,11 @@ export async function enrichProofConversation(
   // compares against it (summaryFreshness) instead of trusting the summary.
   const generatedAt = new Date().toISOString();
   const sourceSha256 = transcriptSha256(typeof transcript === 'string' ? transcript : null);
+  // …and which visual events (narration entries + actions): one evidence record version.
+  const sourceEventsSha256 = eventsSha256({ narration: proof?.narration ?? null, actions: proof?.actions ?? null });
   await mergeFindings(admin, proofId, {
     conversation: hasConversation(details)
-      ? { ...toStoredConversation(details), transcriptSha256: sourceSha256, generatedAt }
+      ? { ...toStoredConversation(details), transcriptSha256: sourceSha256, eventsSha256: sourceEventsSha256, generatedAt }
       : null,
     provenance: { transcriptSha256: sourceSha256, generatedAt },
     narration: proof?.narration ?? null,
