@@ -6,6 +6,22 @@ import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { DownloadProofPackButton } from '../analysis/DownloadProofPackButton';
 import { displayMentionText } from '../../lib/mentions';
+import { evidenceCategoryLabel, evidenceStatus, tradeLabel, type StatusTone } from '../../lib/customerLabels';
+
+const TONE_STYLE: Record<StatusTone, string> = {
+  neutral: 'bg-paper-200/60 text-ink-600',
+  progress: 'bg-brand-50 text-brand-700',
+  good: 'bg-success-50 text-success-600',
+  bad: 'bg-danger-50 text-danger-600',
+};
+
+function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
+  return (
+    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE_STYLE[tone]}`}>
+      {label}
+    </span>
+  );
+}
 
 /**
  * The evidence locker.
@@ -140,7 +156,14 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
   const listed = (items ?? []).filter(
     (item) =>
       !query ||
-      [item.title, item.company ?? '', item.category ?? '', item.workDate, ...(item.tags ?? [])]
+      [
+        item.title,
+        item.company ?? '',
+        evidenceCategoryLabel(item.category, item.phase).label,
+        tradeLabel(item.trade),
+        item.workDate,
+        ...(item.tags ?? []),
+      ]
         .join(' ')
         .toLowerCase()
         .includes(query),
@@ -203,7 +226,7 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
               narrow screen rather than reflowed into cards — a records view
               that hides columns hides the column somebody came for. */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] text-left text-xs">
+            <table className="w-full min-w-[54rem] text-left text-xs">
               <thead className="text-[10.5px] uppercase tracking-wide text-ink-500">
                 <tr className="border-b border-line">
                   <th className="px-5 py-2 font-semibold">File</th>
@@ -212,13 +235,21 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                   <th className="px-3 py-2 font-semibold">Filmed</th>
                   <th className="px-3 py-2 font-semibold">Length</th>
                   <th className="px-3 py-2 font-semibold">Opened</th>
-                  <th className="px-5 py-2 font-semibold">Status</th>
+                  <th className="px-3 py-2 font-semibold">Capture</th>
+                  <th className="px-3 py-2 font-semibold">Processing</th>
+                  <th className="px-5 py-2 font-semibold">Review</th>
                 </tr>
               </thead>
               <tbody>
                 {listed.map((item) => {
                   const failed = (item.checks ?? []).filter((c) => c.verdict === 'fail').length;
                   const on = selected?.id === item.id;
+                  const category = evidenceCategoryLabel(item.category, item.phase);
+                  const trade = tradeLabel(item.trade);
+                  const status = evidenceStatus({
+                    state: item.state,
+                    failedChecks: failed,
+                  });
                   return (
                     <tr
                       key={item.id}
@@ -234,15 +265,15 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                       </td>
                       <td className="px-3 py-2.5 text-ink-600">
                         {item.company ?? '—'}
-                        {item.trade && <span className="text-ink-400"> · {item.trade}</span>}
+                        {trade && <span className="text-ink-400"> · {trade}</span>}
                       </td>
                       <td className="px-3 py-2.5">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            CATEGORY_STYLE[item.category ?? 'other']
+                            CATEGORY_STYLE[category.key] ?? CATEGORY_STYLE.other
                           }`}
                         >
-                          {item.category ?? 'other'}
+                          {category.label}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 tabular-nums text-ink-600">
@@ -260,16 +291,14 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-2.5">
+                        <StatusPill {...status.capture} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusPill {...status.processing} />
+                      </td>
                       <td className="px-5 py-2.5">
-                        {failed > 0 ? (
-                          <span className="rounded-full bg-danger-50 px-2 py-0.5 text-[10px] font-semibold text-danger-600">
-                            {failed} failed
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[10px] font-semibold text-ink-600">
-                            {item.state}
-                          </span>
-                        )}
+                        <StatusPill {...status.review} />
                       </td>
                     </tr>
                   );
