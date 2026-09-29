@@ -48,6 +48,7 @@ import {
 } from './childPrivacyRedactions.js';
 import { eventsSha256, transcriptSha256 } from './summaryFreshness.js';
 import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
+import { transcriptLineCount } from '../shared/speechCount.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -70,6 +71,16 @@ function visionContextFromProof(proof: any): string | null {
  * quarantined (emptied) if the second attempt says the same thing. Shared by
  * the pipeline and the Ask eval release gate.
  */
+/** What the regeneration is told after a rejected summary. */
+export function regenerationCorrection(transcript: string | null | undefined, problems: string[]): string {
+  const lines = transcriptLineCount(transcript);
+  return [
+    `The transcript has ${lines} line${lines === 1 ? '' : 's'}. Every line is speech on this clip.`,
+    'Do not state a different amount of speech (no "only two…", "the only speech is…" unless it is true of every line).',
+    ...problems.slice(0, 4).map((p) => `Rejected: ${p}`),
+  ].join('\n');
+}
+
 export async function publishableConversation(
   transcript: string | null | undefined,
   opts?: { durationSeconds?: number | null; visionContext?: string | null },
@@ -78,15 +89,20 @@ export async function publishableConversation(
   rejected: Array<{ conversation: unknown; contradictions: string[] }>;
   quarantined: boolean;
 }> {
-  const analyze = () =>
-    analyzeConversation(transcript, { durationSeconds: opts?.durationSeconds ?? null, visionContext: opts?.visionContext ?? null });
+  const analyze = (correction?: string) =>
+    analyzeConversation(transcript, {
+      durationSeconds: opts?.durationSeconds ?? null,
+      visionContext: opts?.visionContext ?? null,
+      correction: correction ?? null,
+    });
   let details = await analyze();
   let rejected: Array<{ conversation: unknown; contradictions: string[] }> = [];
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const problems = summaryClaimContradictions(details, transcript);
     if (!problems.length) break;
     rejected.push({ conversation: toStoredConversation(details), contradictions: problems });
-    if (attempt === 0) details = await analyze();
+    // Regenerate once, told what was wrong, so the retry does not repeat it.
+    if (attempt === 0) details = await analyze(regenerationCorrection(transcript, problems));
   }
   const quarantined = rejected.length > 0 && summaryClaimContradictions(details, transcript).length > 0;
   if (quarantined) details = emptyConversationLike(details);

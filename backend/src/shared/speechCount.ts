@@ -29,8 +29,8 @@ export function transcriptLineCount(transcript: string | null | undefined): numb
 export type SpeechCountClaim = { count: number; text: string };
 
 const UNIT =
-  '(?:lines?|fragments?|utterances?|sentences?|phrases?|remarks?|quotes?|snippets?|spoken lines?|transcript lines?|lines? of (?:speech|dialogue)|things? (?:was |were )?said|bits? of speech)';
-const FILLER = '(?:(?:short|brief|stray|spoken|audible|transcribed|captured|context[- ]free|out[- ]of[- ]context|isolated|lone|distinct|separate|single|verbal)[\\s,-]+){0,4}';
+  '(?:lines?|fragments?|utterances?|sentences?|phrases?|remarks?|quotes?|snippets?|spoken lines?|transcript lines?|lines? of (?:speech|dialogue)|things? (?:was |were )?said|bits? of speech|(?:speech|spoken) (?:events?|segments?|moments?|turns?)|segments? of speech)';
+const FILLER = '(?:(?:short|brief|stray|spoken|audible|intelligible|understandable|clear|transcribed|captured|context[- ]free|out[- ]of[- ]context|isolated|lone|distinct|separate|single|verbal)[\\s,-]+){0,4}';
 // "only one line about QuickBooks", "the only speech mentioning the table":
 // a claim about one topic, not about how much was said on the clip.
 const TOPIC_SCOPED =
@@ -44,7 +44,7 @@ const CLAIMS: Array<{ re: RegExp; count: (m: RegExpMatchArray) => number | null 
   { re: new RegExp(`\\b(?:a|one)\\s+(?:single|lone)\\s+${FILLER}${UNIT}(?!\\w)${TOPIC_SCOPED}`, 'gi'), count: () => 1 },
   // "the only speech ... is one ..." / "the only thing said"
   {
-    re: new RegExp(`\\bthe only (?:speech|audible speech|thing (?:that was |anyone )?said|spoken (?:words?|line))\\b${TOPIC_SCOPED}`, 'gi'),
+    re: new RegExp(`\\bthe only (?:(?:audible|intelligible|understandable|clear) )?(?:speech|thing (?:that was |anyone )?said|spoken (?:words?|line))\\b${TOPIC_SCOPED}`, 'gi'),
     count: () => 1,
   },
   // "five transcript lines", "3 distinct utterances"
