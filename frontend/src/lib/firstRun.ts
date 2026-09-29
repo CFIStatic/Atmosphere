@@ -1,7 +1,11 @@
 /**
- * Sold first-run path: new org → billing → first job → film in Field Capture.
- * Keep helpers here so signup, intake, and empty states stay aligned.
+ * Sold first-run path, value before payment: create the account → name the
+ * first job → record it in Field Capture (field) or see sample evidence
+ * (office) → only then plan and card → invites from the job file.
+ * Keep helpers here so signup, the welcome page, and the billing gate agree.
  */
+
+import { jobFilePath } from './jobFileAsk';
 
 /** Where Global Admins land after billing — Start a job, not an empty dashboard. */
 export const FIRST_RUN_HOME = '/intake';
@@ -18,21 +22,20 @@ const GENERIC_POST_AUTH = new Set([
 ]);
 
 /**
- * After workspace + billing, prefer Start a job unless the user already had a
- * specific deep link (job file, settings section, etc.).
+ * After workspace + billing, open the job already filed on the welcome page.
+ * A generic office home used to mean "no job yet" and went to Start a job.
+ * A specific deep link (this job file, a settings section) still wins.
  */
 export function firstRunDestination(
   requested: string | null | undefined,
   platformHome: string,
+  state?: FirstRunState | null,
 ): string {
   const next = (requested ?? '').trim();
-  if (!next) return FIRST_RUN_HOME;
-  if (next === platformHome) return FIRST_RUN_HOME;
-  const pathOnly = next.split(/[?#]/)[0] ?? next;
-  if (GENERIC_POST_AUTH.has(pathOnly) || pathOnly.startsWith('/signup')) {
-    return FIRST_RUN_HOME;
-  }
-  return next;
+  const filed = filedFirstJobHref(state);
+  if (filed && replacesWithFiledJob(next, platformHome)) return filed;
+  if (!isGenericPostAuth(next, platformHome)) return next;
+  return FIRST_RUN_HOME;
 }
 
 /** Absolute Field Capture URL for a relative invite path or bare host. */
@@ -69,4 +72,88 @@ export function fieldCaptureInviteOpenUrl(token: string, email?: string | null):
   if (address) params.set('email', address);
   params.set('account', '1');
   return `${FIELD_CAPTURE_WEB_ORIGIN}/?${params.toString()}`;
+}
+
+/** Value-first page between the account step and plan/card. */
+export const FIRST_RUN_WELCOME = '/welcome';
+
+export type FirstRunPath = 'field' | 'office';
+
+export interface FirstRunState {
+  jobId?: string;
+  jobTitle?: string;
+  jobNumber?: number | null;
+  path?: FirstRunPath;
+  /** First evidence was on screen: the creator's own first clip, or the labeled sample. */
+  evidenceSeen?: boolean;
+}
+
+const FIRST_RUN_KEY = 'atmosphere.firstRun.';
+
+/** This browser's first-run progress for one org. A UI hint only; billing is enforced server-side by the gate. */
+export function readFirstRun(orgId: string | null | undefined): FirstRunState {
+  if (!orgId) return {};
+  try {
+    const raw = localStorage.getItem(FIRST_RUN_KEY + orgId);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as FirstRunState) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeFirstRun(orgId: string | null | undefined, patch: FirstRunState): FirstRunState {
+  const next = { ...readFirstRun(orgId), ...patch };
+  if (!orgId) return next;
+  try {
+    localStorage.setItem(FIRST_RUN_KEY + orgId, JSON.stringify(next));
+  } catch {
+    /* private mode: the page still works for this visit */
+  }
+  return next;
+}
+
+/** Billing step URL. Stripe checkout returns to ?step=2 as before. */
+export function billingStepHref(next: string | null | undefined): string {
+  const target = (next ?? '').trim();
+  return target ? `/signup?step=2&next=${encodeURIComponent(target)}` : '/signup?step=2';
+}
+
+/**
+ * Where an unpaid workspace goes when it opens the office: the welcome page
+ * until the first evidence has been seen, then plan and card. Checkout returns
+ * to the job already filed — a generic home would open Start a job again.
+ */
+export function unpaidWorkspaceTarget(state: FirstRunState, returnPath: string): string {
+  if (!state.evidenceSeen) {
+    return `${FIRST_RUN_WELCOME}?next=${encodeURIComponent(returnPath)}`;
+  }
+  // Checkout returns to the first job, not Start a job, when the blocked page
+  // was only a generic landing (dashboard, jobs list, Start a job itself).
+  const filed = filedFirstJobHref(state);
+  const next = filed && replacesWithFiledJob(returnPath) ? filed : returnPath;
+  return billingStepHref(next);
+}
+
+/** Dashboard, signup, and other homes that are not a job file or settings link. */
+function isGenericPostAuth(path: string, platformHome?: string): boolean {
+  const next = path.trim();
+  if (!next) return true;
+  if (platformHome && next === platformHome) return true;
+  const pathOnly = next.split(/[?#]/)[0] ?? next;
+  return GENERIC_POST_AUTH.has(pathOnly) || pathOnly.startsWith('/signup');
+}
+
+/** Generic homes, plus Start a job and the welcome page once a job is filed. */
+function replacesWithFiledJob(path: string, platformHome?: string): boolean {
+  if (isGenericPostAuth(path, platformHome)) return true;
+  const pathOnly = path.trim().split(/[?#]/)[0] ?? path;
+  return pathOnly === FIRST_RUN_HOME || pathOnly === FIRST_RUN_WELCOME;
+}
+
+/** Job file created on the welcome page, when this browser still has it. */
+function filedFirstJobHref(state: FirstRunState | null | undefined): string | null {
+  const jobId = state?.jobId?.trim();
+  if (!jobId) return null;
+  return jobFilePath(jobId, { title: state?.jobTitle, number: state?.jobNumber ?? null });
 }

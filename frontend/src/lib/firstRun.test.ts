@@ -24,6 +24,22 @@ describe('firstRunDestination', () => {
       '/settings?section=billing',
     );
   });
+
+  it('opens the job already filed when the return path is a generic home', () => {
+    const state = {
+      jobId: 'job-1',
+      jobTitle: 'Smith kitchen leak',
+      jobNumber: 1,
+      evidenceSeen: true as const,
+    };
+    const job = '/job-progress?job=job-1&title=Smith+kitchen+leak&number=1';
+    expect(firstRunDestination('/verifier-library', '/verifier-library', state)).toBe(job);
+    expect(firstRunDestination(null, '/verifier-library', state)).toBe(job);
+    expect(firstRunDestination('/signup?step=2', '/verifier-library', state)).toBe(job);
+    expect(firstRunDestination('/settings?section=billing', '/verifier-library', state)).toBe(
+      '/settings?section=billing',
+    );
+  });
 });
 
 describe('fieldCaptureOpenUrl', () => {

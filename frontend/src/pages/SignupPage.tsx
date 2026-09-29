@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
-import { captureAfterSignup, firstRunDestination } from '../lib/firstRun';
+import {
+  captureAfterSignup,
+  firstRunDestination,
+  FIRST_RUN_WELCOME,
+  readFirstRun,
+} from '../lib/firstRun';
 import { homeownerAfterSignup } from '../lib/homeownerHub';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -39,14 +44,19 @@ export function SignupPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
+  const navigate = useNavigate();
   const platformHome = PLATFORM_HOME[getPlatform()];
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
     (location.state as { from?: string } | null)?.from,
     platformHome,
   );
-  /** After billing, land on Start a job unless a specific deep link was requested. */
-  const afterSetupTo = firstRunDestination(redirectTo, platformHome);
+  /** After billing, open the job filed before payment, or Start a job. */
+  const afterSetupTo = firstRunDestination(
+    redirectTo,
+    platformHome,
+    readFirstRun(membership?.org?.id),
+  );
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
@@ -207,6 +217,13 @@ export function SignupPage() {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
       if (needsBilling) {
+        // Value before payment: first job and first evidence, then plan and card.
+        const org = (await refreshMembership())?.org ?? membership?.org ?? null;
+        if (!readFirstRun(org?.id).evidenceSeen) {
+          // The session is already set by now (signup or existing login).
+          navigate(FIRST_RUN_WELCOME, { replace: true });
+          return;
+        }
         goToStep(2);
         return;
       }
@@ -359,7 +376,7 @@ export function SignupPage() {
                 ? 'Invited email + password. Free — no plan or payment.'
                 : mode === 'join'
                   ? 'Use the invite from your Global Admin — create the account with the invited email.'
-                  : 'You are creating this company as Global Admin. After billing, you will start a job and film in Field Capture.'
+                  : 'You are creating this company as Global Admin. Next you name your first job and see your first evidence. Plan and card come after that.'
           }
         >
           {accountNotice && (
@@ -516,7 +533,7 @@ export function SignupPage() {
         <SetupBillingStep
           redirectTo={afterSetupTo}
           checkoutOutcome={checkoutParam}
-          nextLabel="Start your first job"
+          nextLabel="Open your job and invite your team"
           onComplete={enterApp}
         />
       )}
