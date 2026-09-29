@@ -9,6 +9,12 @@ const renameJobFile = vi.fn();
 const duplicateJobFile = vi.fn();
 const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
+const getBillingOnboarding = vi.fn();
+const orgInvites = vi.fn();
+const getBillingWorkspace = vi.fn();
+const evidenceShares = vi.fn();
+const createProgressShare = vi.fn();
+const createOrgInvite = vi.fn();
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -62,6 +68,15 @@ vi.mock('../components/shared/JobAccessRoster', () => ({
   JobAccessRoster: () => <div data-testid="job-access-roster">Who has access</div>,
 }));
 
+vi.mock('../components/team/InvitePanel', () => ({
+  InvitePanel: () => (
+    <section>
+      <input placeholder="their@email.com" />
+      <button type="button">Invite</button>
+    </section>
+  ),
+}));
+
 vi.mock('../components/shared/ScopeDocPanel', () => ({
   ScopeDocPanel: () => null,
 }));
@@ -74,6 +89,12 @@ vi.mock('../lib/api', () => ({
     duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
     jobProofs: (...args: unknown[]) => jobProofs(...args),
     proofQuestions: (...args: unknown[]) => proofQuestions(...args),
+    getBillingOnboarding: (...args: unknown[]) => getBillingOnboarding(...args),
+    orgInvites: (...args: unknown[]) => orgInvites(...args),
+    getBillingWorkspace: (...args: unknown[]) => getBillingWorkspace(...args),
+    evidenceShares: (...args: unknown[]) => evidenceShares(...args),
+    createProgressShare: (...args: unknown[]) => createProgressShare(...args),
+    createOrgInvite: (...args: unknown[]) => createOrgInvite(...args),
   },
 }));
 
@@ -120,6 +141,12 @@ describe('SharedDashboardPage job file identity', () => {
     duplicateJobFile.mockReset();
     jobProofs.mockReset();
     proofQuestions.mockReset();
+    getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    orgInvites.mockReset().mockResolvedValue({ invites: [] });
+    getBillingWorkspace.mockReset().mockResolvedValue({});
+    evidenceShares.mockReset().mockResolvedValue({ shares: [] });
+    createProgressShare.mockReset();
+    createOrgInvite.mockReset();
     jobProofs.mockResolvedValue({
       days: [],
       videos: [],
@@ -562,6 +589,32 @@ describe('SharedDashboardPage job file identity', () => {
     expect(await screen.findByTestId('your-job-files')).toBeInTheDocument();
     expect(screen.queryByTestId('motion-clips-browser')).not.toBeInTheDocument();
     expect(screen.queryByText('Motion clips')).not.toBeInTheDocument();
+  });
+
+  it('lets an unpaid office preview the job file, invite panel, and homeowner share', async () => {
+    getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('unpaid-job-evaluation')).toBeInTheDocument();
+    expect(screen.getByTestId('job-sample-evidence').querySelector('img')?.getAttribute('src')).toBe(
+      '/samples/kitchen-leak-poster.jpg',
+    );
+    expect(screen.getByText('Kitchen leak walkthrough')).toBeInTheDocument();
+    expect(screen.getAllByTestId('upgrade-prompt').length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText('their@email.com')).toBeInTheDocument();
+    expect(screen.getByLabelText(/homeowner email/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/homeowner email/i), 'owner@example.com');
+    await user.click(screen.getByRole('button', { name: /send homeowner invite/i }));
+    expect(createProgressShare).not.toHaveBeenCalled();
+
+    expect(screen.getByPlaceholderText('their@email.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
 });
 

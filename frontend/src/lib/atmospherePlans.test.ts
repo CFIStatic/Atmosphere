@@ -39,6 +39,9 @@ describe('atmosphere self-serve plans', () => {
     expect(planPickerFootnote('year')).toMatch(/\$1,250\/yr/);
     expect(planPickerFootnote('year')).toMatch(/non-refundable/);
     expect(planPickerFootnote('year')).toMatch(/billed the day it is used/);
+    expect(planPickerFootnote('month')).toMatch(/\$1\.00 per million input tokens/);
+    expect(planPickerFootnote('month')).toMatch(/\$0\.01 each/);
+    expect(planPickerFootnote('year')).toMatch(/\$4\.00 per million output tokens/);
   });
 
   it('formats Field Capture seat copy without included', () => {

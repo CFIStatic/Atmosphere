@@ -6061,6 +6061,8 @@ export interface SelfServeBillingCatalog {
   defaultInterval: 'month' | 'year';
   annualAvailable: boolean;
   plans: AtmosphereSelfServePlan[];
+  /** Customer usage rates from the billing constants. */
+  usageRateLabel?: string;
 }
 
 export interface BillingOnboardingStatus {
@@ -6074,6 +6076,8 @@ export interface BillingOnboardingStatus {
   /** False when annual Stripe price ids are not configured. Hide the Yearly toggle. */
   annualAvailable?: boolean;
   plans?: AtmosphereSelfServePlan[];
+  /** Customer usage rates from the billing constants. */
+  usageRateLabel?: string;
   plan: {
     code?: string;
     name: string;

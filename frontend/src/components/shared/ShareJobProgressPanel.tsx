@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
+import { UpgradePrompt, useProductActionsLocked } from '../billing/ProductActionLock';
 
 /**
  * Invite someone to the job file by email.
@@ -33,6 +34,7 @@ export function ShareJobProgressPanel({
   modal?: boolean;
   onClose?: () => void;
 }) {
+  const actionsLocked = useProductActionsLocked();
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
   const [creatingInternal, setCreatingInternal] = useState(false);
   const creating = creatingProp ?? creatingInternal;
@@ -70,6 +72,10 @@ export function ShareJobProgressPanel({
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (actionsLocked) {
+      setError('Choose a plan to upload, record, share, or invite.');
+      return;
+    }
     const to = email.trim().toLowerCase();
     if (!to) {
       setError('Enter an email to send the invite.');
@@ -137,6 +143,12 @@ export function ShareJobProgressPanel({
           </button>
         )}
       </div>
+
+      {actionsLocked ? (
+        <div className="mt-3">
+          <UpgradePrompt />
+        </div>
+      ) : null}
 
       {error && (
         <p role="alert" className="mt-3 text-xs text-danger-600">

@@ -205,6 +205,7 @@ export function SetupBillingStep({
           interval={interval}
           annualAvailable={annualAvailable}
           onIntervalChange={selectInterval}
+          usageRateLabel={status.usageRateLabel}
         />
       </div>
 

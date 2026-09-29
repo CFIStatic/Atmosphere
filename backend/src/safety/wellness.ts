@@ -10,6 +10,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import { fanoutSafetyAlert } from './alerts.js';
 import { createSafetyIncident } from './incidents.js';
 import { loadOrgSafetySettings } from './settings.js';
@@ -298,6 +299,7 @@ export async function processWellnessHeartbeat(
   party: { org_id: string; job_id: string; id: string },
   body: unknown,
 ): Promise<WellnessHeartbeatResult> {
+  await assertOrgProductActionsAllowed(admin, party.org_id);
   const input = wellnessHeartbeatSchema.parse(body ?? {});
   const settings = await loadOrgSafetySettings(admin, party.org_id);
   const nowMs = input.clientNowMs && input.clientNowMs > 0 ? input.clientNowMs : Date.now();

@@ -5,6 +5,7 @@ import {
   planPickerFootnote,
   type AtmosphereBillingInterval,
 } from '../../lib/atmospherePlans';
+import { usageRateClause } from '../../lib/usageRates';
 import { formatCents } from '../../lib/money';
 import { cn } from '../../design/cn';
 
@@ -20,6 +21,7 @@ export function AtmospherePlanPicker({
   interval = 'month',
   onIntervalChange,
   annualAvailable = false,
+  usageRateLabel,
 }: {
   plans: AtmosphereSelfServePlan[];
   value: AtmosphereSelfServePlan['code'];
@@ -31,8 +33,14 @@ export function AtmospherePlanPicker({
   onIntervalChange?: (interval: AtmosphereBillingInterval) => void;
   /** Hide the Yearly toggle when annual Stripe price ids are not set. */
   annualAvailable?: boolean;
+  /** Live clause from billing. Falls back to the shared default rate. */
+  usageRateLabel?: string;
 }) {
   const activeInterval: AtmosphereBillingInterval = annualAvailable && interval === 'year' ? 'year' : 'month';
+  const defaultClause = usageRateClause();
+  const footnote = usageRateLabel
+    ? planPickerFootnote(activeInterval).replace(defaultClause, usageRateLabel)
+    : planPickerFootnote(activeInterval);
 
   return (
     <div>
@@ -88,7 +96,7 @@ export function AtmospherePlanPicker({
           );
         })}
       </fieldset>
-      <p className="mt-3 text-xs text-ink-500">{planPickerFootnote(activeInterval)}</p>
+      <p className="mt-3 text-xs text-ink-500">{footnote}</p>
     </div>
   );
 }

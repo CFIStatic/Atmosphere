@@ -6,6 +6,7 @@ import { assertInviteeAccount } from '../shared/inviteeJobAccess.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { adminForPartyToken, requireAdmin, unscopedAdminOrNull, writerForJob, writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
   JOB_SHARE_COOKIE,
   clearShareCookie,
@@ -1001,6 +1002,7 @@ sharedJobsRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId, userId, supabase } = await requireOrgContext(req);
+      await assertOrgProductActionsAllowed(supabase, orgId);
       const input = partySchema.parse(req.body ?? {});
 
       const partyRole = input.role ?? 'subcontractor';
@@ -1822,6 +1824,7 @@ jobShareRouter.post(
     try {
       const { party, admin } = await partyForToken(req.params.token);
       assertInviteeAccount(req, party);
+      await assertOrgProductActionsAllowed(admin, party.org_id);
       const input = z
         .object({
           disclosureVersion: z.string().trim().min(1).max(64),

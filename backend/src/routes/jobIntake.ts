@@ -7,7 +7,8 @@ import { deriveServiceRole } from '../shared/serviceRole.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
-import { writerForOrg } from '../lib/scopedAdmin.js';
+import { unscopedAdminOrNull, writerForOrg } from '../lib/scopedAdmin.js';
+import { assertOrgProductActionsAllowed } from '../lib/paidWorkspace.js';
 import {
   deliverPartyInvite,
   fieldCaptureInvitePath,
@@ -550,6 +551,10 @@ export async function createJobFile(
   input: z.infer<typeof approveSchema>,
   options?: ResolveIntakeOptions,
 ): Promise<CreatedJobFile> {
+  if (input.invitees.length > 0) {
+    const admin = unscopedAdminOrNull();
+    await assertOrgProductActionsAllowed(admin ?? supabase, orgId);
+  }
   const addressLine = (input.address ?? '').trim();
   const site: IntakeAddress | null = addressLine
     ? await resolveIntakeAddress(

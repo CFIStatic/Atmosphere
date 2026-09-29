@@ -63,6 +63,8 @@ export function firstClipPreview(
 /** Clearly labeled sample for office users with nothing filmed yet. Not customer data. */
 export const SAMPLE_EVIDENCE = {
   title: 'Kitchen leak walkthrough',
+  /** Synthetic poster of the sample scene. Not a customer clip. */
+  posterUrl: '/samples/kitchen-leak-poster.jpg',
   durationSeconds: 38,
   summary:
     'Leak under the kitchen sink; the lower cabinet reads 28% moisture. Plan said on camera: pull the toe kick and set two air movers today; the base cabinet comes out if it is wet behind.',

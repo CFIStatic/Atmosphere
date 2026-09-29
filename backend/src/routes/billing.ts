@@ -18,6 +18,7 @@ import {
 import { createWorkVerificationExtraSeatCheckout } from '../lib/fieldCaptureInviteSeats.js';
 import { addExtraFieldCaptureSeats, canOpenStripeBillingPortal } from '../lib/stripeExtraSeats.js';
 import { signupCheckoutReturnUrl } from '../lib/signupOnboarding.js';
+import { billedUsageRateClause } from '../lib/usageDisplayRates.js';
 import { loadWorkspaceBilling, publicSelfServePlans, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadOrgBillingInvoices } from '../lib/stripeInvoices.js';
@@ -51,6 +52,7 @@ billingRouter.get('/self-serve', (_req: Request, res: Response) => {
     defaultInterval: 'month',
     annualAvailable: annualBillingAvailable(),
     plans: publicSelfServePlans(),
+    usageRateLabel: billedUsageRateClause(),
   });
 });
 
@@ -516,6 +518,7 @@ billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextF
       defaultInterval: 'month',
       annualAvailable: annualBillingAvailable(),
       plans: publicSelfServePlans(),
+      usageRateLabel: billedUsageRateClause(),
       plan: {
         code: workspace.subscription.code,
         name: workspace.subscription.name,
