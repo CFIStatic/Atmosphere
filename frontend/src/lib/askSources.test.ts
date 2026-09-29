@@ -99,7 +99,8 @@ describe('askSources', () => {
     expect(sources[0]?.atSeconds).toBe(4.2);
     expect(sources[0]?.proofId).toBe(proof);
     expect(sources[0]?.jobId).toBe(job);
-    expect(quotes[0]).toMatchObject({ speaker: 'Seated man', text: 'The tarp came off the north slope.', atSeconds: 4.2 });
+    expect(quotes[0]).toMatchObject({ speaker: 'Unidentified speaker', text: 'The tarp came off the north slope.', atSeconds: 4.2 });
+    expect(quotes[0]?.speaker).not.toMatch(/\(|seated|homeowner/i);
     expect(followUps).toEqual([
       'What was said in the tabletop clip?',
       'What does the job history say?',

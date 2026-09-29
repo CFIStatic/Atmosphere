@@ -67,6 +67,27 @@ test('a summary that contradicts the transcript is dropped from every Ask path a
   assert.doesNotMatch(topic, /only speech|single context-free|Yes — they are talking about this/);
 });
 
+test('in-flight analysis stays Analyzing in the model context', () => {
+  const running = formatClipRecordForModel({
+    analysisState: 'running',
+    transcriptStatus: 'done',
+    transcript: '[0:01] hello there.',
+  });
+  assert.match(running, /Clip processing: analyzing \(Analyzing\)/);
+  assert.doesNotMatch(running, /Clip processing: uploaded \(Recorded\)/);
+  const pending = formatClipRecordForModel({ analysisState: 'pending', transcriptStatus: 'done' });
+  assert.match(pending, /Clip processing: analyzing \(Analyzing\)/);
+  const narrating = formatClipRecordForModel({
+    analysisState: 'done',
+    transcriptStatus: 'done',
+    narrationStatus: 'running',
+    transcript: '[0:01] hello there.',
+  });
+  assert.match(narrating, /Clip processing: analyzing \(Analyzing\)/);
+  const checked = formatClipRecordForModel({ analysisState: 'none', proofState: 'checked', transcriptStatus: 'done' });
+  assert.match(checked, /Clip processing: analyzing \(Analyzing\)/);
+});
+
 test('summaryState from the library (updating / quarantined) marks the conversation stale', () => {
   for (const summaryState of ['updating', 'quarantined', 'failed']) {
     const record = clipRecordFromEvidenceItem({

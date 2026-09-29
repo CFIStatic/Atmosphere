@@ -8,6 +8,7 @@
  * "field_capture · other · analysed".
  */
 import { SERVICE_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
+import { clipProcessing, type ClipProcessingInput } from './clipProcessing';
 
 const TRADE_WORDS: Record<string, string> = {
   field_capture: 'Field capture',
@@ -76,23 +77,22 @@ export interface EvidenceStatus {
 export function evidenceStatus(input: {
   state: string | null | undefined;
   failedChecks?: number;
+  analysisStatus?: string | null;
+  transcriptStatus?: string | null;
+  narrationStatus?: string | null;
+  summaryState?: string | null;
 }): EvidenceStatus {
   const state = (input.state ?? '').trim().toLowerCase();
   const capture = { label: 'Uploaded', tone: 'good' as StatusTone };
-
-  let processing: EvidenceStatus['processing'];
-  if ((input.failedChecks ?? 0) > 0) {
-    const n = input.failedChecks ?? 0;
-    processing = { label: `${n} check${n === 1 ? '' : 's'} failed`, tone: 'bad' };
-  } else if (state === 'uploaded') {
-    processing = { label: 'Waiting to process', tone: 'neutral' };
-  } else if (state === 'checked') {
-    processing = { label: 'Analyzing', tone: 'progress' };
-  } else if (state === 'analysed' || state === 'analyzed' || state === 'accepted' || state === 'rejected') {
-    processing = { label: 'Analyzed', tone: 'good' };
-  } else {
-    processing = { label: state ? humanizeSlug(state) : 'Unknown', tone: 'neutral' };
-  }
+  const derived = clipProcessing({
+    proofState: input.state,
+    failedChecks: input.failedChecks,
+    analysisStatus: input.analysisStatus,
+    transcriptStatus: input.transcriptStatus,
+    narrationStatus: input.narrationStatus,
+    summaryState: input.summaryState,
+  } satisfies ClipProcessingInput);
+  const processing = { label: derived.label, tone: derived.tone };
 
   let review: EvidenceStatus['review'];
   if (state === 'accepted') review = { label: 'Accepted', tone: 'good' };

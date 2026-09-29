@@ -729,10 +729,21 @@
   }
 
   /**
-   * Same-origin on the office console. On the standalone Field Capture
-   * host (app.atmosphereteam.com or the Railway field-capture service),
-   * talk to the live office /api so the same email + password as the
-   * Platform can attach this phone to the office account.
+   * atmosphereteam.com and its subdomains share one session cookie. Their
+   * nginx already proxies /api, so those hosts must call same-origin /api.
+   * A cross-origin call to platform.atmosphereteam.com cannot see a
+   * host-only cookie, and a parent-domain cookie is first-party only on
+   * this site. Railway hosts are a different site and still call the office.
+   */
+  function isAtmosphereSiteHost(hostname) {
+    var host = String(hostname || '').replace(/:\d+$/, '').toLowerCase();
+    return host === 'atmosphereteam.com' || host.slice(-('.atmosphereteam.com'.length)) === '.atmosphereteam.com';
+  }
+
+  /**
+   * Same-origin on the office console and on app.atmosphereteam.com.
+   * On a Railway Field Capture host, talk to the live office /api so the
+   * same email + password as the Platform can attach this phone.
    */
   function resolveApiBase(explicit) {
     var given = (explicit || '').trim().replace(/\/$/, '');
@@ -743,6 +754,7 @@
     } catch (e) {
       hostname = '';
     }
+    if (isAtmosphereSiteHost(hostname)) return '';
     if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN;
     return '';
   }
@@ -1009,13 +1021,11 @@
   }
 
   /**
-   * Single sign-on with the Platform. platform.atmosphereteam.com keeps the
-   * session in httpOnly, SameSite=Lax cookies on its own host; this app is on
-   * the same site (app.atmosphereteam.com), so a credentialed call to the
-   * office API carries them. With no token in this tab, trade the Platform's
-   * refresh cookie for a session instead of asking for a second login. The
-   * cookie never becomes readable here, is never widened to the parent
-   * domain, and CORS only lets the listed Atmosphere origins read the reply.
+   * Single sign-on with the Platform. The session is an httpOnly SameSite=Lax
+   * cookie on Domain=atmosphereteam.com. This host's own /api (same origin)
+   * sends that cookie. No token is placed in the URL, and this page never
+   * reads the cookie. Railway hosts, which cannot share that domain, still
+   * call the office origin with credentials.
    */
   function adoptPlatformSession(apiBase) {
     return refreshSession(apiBase, null).then(

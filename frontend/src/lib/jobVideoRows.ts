@@ -6,6 +6,7 @@
  * fed from the same /api/evidence-portal/library rows.
  */
 import type { ProofVideoRecord } from './api';
+import { clipProcessing } from './clipProcessing';
 
 export interface LibraryClipMeta {
   id: string;
@@ -48,18 +49,17 @@ export function clipClock(seconds: number | null | undefined): string {
 
 export type VideoRowTone = 'good' | 'progress' | 'bad' | 'neutral';
 
-/** One status word per clip: is it still being processed, done, or stuck. */
+/** One status word per clip, from the shared clip-processing model. */
 export function videoRowStatus(
-  video: Pick<ProofVideoRecord, 'analysisStatus' | 'transcriptStatus' | 'narrationStatus'>,
+  video: Pick<ProofVideoRecord, 'analysisStatus' | 'transcriptStatus' | 'narrationStatus' | 'conversation'>,
 ): { label: string; tone: VideoRowTone } {
-  const busy = (s: string | null | undefined) => s === 'queued' || s === 'running' || s === 'pending';
-  const analysis = video.analysisStatus ?? null;
-  if (analysis === 'failed') return { label: 'Needs attention', tone: 'bad' };
-  if (busy(analysis) || busy(video.transcriptStatus) || busy(video.narrationStatus)) {
-    return { label: 'Processing', tone: 'progress' };
-  }
-  if (analysis === 'done') return { label: 'Analyzed', tone: 'good' };
-  return { label: 'Recorded', tone: 'neutral' };
+  const derived = clipProcessing({
+    analysisStatus: video.analysisStatus,
+    transcriptStatus: video.transcriptStatus,
+    narrationStatus: video.narrationStatus,
+    summaryState: video.conversation?.summaryState,
+  });
+  return { label: derived.label, tone: derived.tone };
 }
 
 export interface ClipMoment {

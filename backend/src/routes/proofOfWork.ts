@@ -4002,6 +4002,34 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
     if (error) throw new HttpError(500, error.message, 'evidence_failed');
 
     const rows = (data ?? []) as any[];
+    const proofIds = rows.map((row) => row.id).filter((id: unknown) => typeof id === 'string' && id);
+    const processingById = new Map<
+      string,
+      {
+        analysisStatus: string | null;
+        transcriptStatus: string | null;
+        narrationStatus: string | null;
+        summaryState: string | null;
+      }
+    >();
+    if (proofIds.length) {
+      const { data: proofs } = await supabase
+        .from('job_proofs')
+        .select(
+          'id, analysis_status, transcript_status, narration_status, summary_status, summary_transcript_sha256, transcript_text, ai_findings, narration, actions',
+        )
+        .eq('org_id', orgId)
+        .in('id', proofIds);
+      for (const proof of (proofs ?? []) as any[]) {
+        if (!proof?.id) continue;
+        processingById.set(proof.id, {
+          analysisStatus: proof.analysis_status ?? null,
+          transcriptStatus: proof.transcript_status ?? null,
+          narrationStatus: proof.narration_status ?? null,
+          summaryState: servableSummary(proof).state,
+        });
+      }
+    }
     res.json({
       items: rows.map((row) => ({
         id: row.id,
@@ -4019,6 +4047,10 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
         receivedAt: row.received_at,
         hasLocation: row.lat !== null && row.lon !== null,
         state: row.state,
+        analysisStatus: processingById.get(row.id)?.analysisStatus ?? null,
+        transcriptStatus: processingById.get(row.id)?.transcriptStatus ?? null,
+        narrationStatus: processingById.get(row.id)?.narrationStatus ?? null,
+        summaryState: processingById.get(row.id)?.summaryState ?? null,
         checks: row.checks ?? [],
         aiSummary: row.ai_summary,
         legalHold: row.legal_hold,

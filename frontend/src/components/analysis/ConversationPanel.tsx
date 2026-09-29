@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { eventClock } from '../../lib/downloadJson';
 import type { ConversationQuotedFact, ProofConversation, ProofPeoplePresent } from '../../lib/api';
+import { clipProcessing } from '../../lib/clipProcessing';
 import { speakerDisplayName } from '../../lib/speakerDisplay';
 
 function hasTalk(conversation: ProofConversation | null | undefined): boolean {
@@ -221,15 +222,17 @@ export function ConversationPanel({
             data-testid="summary-processing"
             className="mt-1.5 rounded-lg bg-brand-50 px-2.5 py-2 text-[12.5px] leading-snug text-ink-800"
           >
-            {c.summaryState === 'failed' ? (
+            {clipProcessing({ summaryState: c.summaryState }).label === 'Summary unavailable' ? (
               <>
                 <span className="font-semibold">Summary unavailable.</span> It could not be rebuilt
                 from the latest transcript; the transcript is current.
               </>
             ) : (
               <>
-                <span className="font-semibold">Summary still processing.</span> The transcript is
-                current.
+                <span className="font-semibold">
+                  {clipProcessing({ summaryState: c.summaryState }).label}.
+                </span>{' '}
+                The transcript is current.
               </>
             )}
           </p>

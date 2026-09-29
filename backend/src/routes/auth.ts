@@ -108,7 +108,7 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
       userAgent: clientUserAgent(req),
     });
 
-    setSessionCookies(res, result.session);
+    setSessionCookies(res, result.session, req.hostname);
     res.status(result.status).json({
       user: publicUser(result.user),
       needsEmailConfirmation: false,
@@ -130,7 +130,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
     const result = await signInPasswordAccount(email, password);
     if (result.kind === 'error') throw result.error;
 
-    setSessionCookies(res, result.session);
+    setSessionCookies(res, result.session, req.hostname);
 
     // Signing in is a real event with no row behind it, so the trigger that
     // records everything else cannot see it. Recorded here instead — and
@@ -213,7 +213,7 @@ authRouter.post('/internal-login', authLimiter, async (req: Request, res: Respon
       throw result.error;
     }
 
-    setSessionCookies(res, result.session);
+    setSessionCookies(res, result.session, req.hostname);
     const fromMeta =
       typeof result.user.user_metadata?.full_name === 'string'
         ? result.user.user_metadata.full_name.trim()
@@ -262,11 +262,11 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
       }
     }
 
-    clearSessionCookies(res);
+    clearSessionCookies(res, req.hostname);
     res.json({ ok: true });
   } catch (err) {
     // Even if revocation fails, ensure cookies are cleared.
-    clearSessionCookies(res);
+    clearSessionCookies(res, req.hostname);
     next(err);
   }
 });
@@ -286,11 +286,11 @@ authRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
     const supabase = createAnonClient();
     const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
     if (error || !data.session || !data.user) {
-      clearSessionCookies(res);
+      clearSessionCookies(res, req.hostname);
       throw unauthorized('Session expired. Please sign in again.', 'session_expired');
     }
 
-    setSessionCookies(res, data.session);
+    setSessionCookies(res, data.session, req.hostname);
     res.json({ user: publicUser(data.user), session: sessionTokens(data.session) });
   } catch (err) {
     next(err);
@@ -459,7 +459,7 @@ authRouter.post(
       await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
 
       clearDeviceCookie(res);
-      setSessionCookies(res, session);
+      setSessionCookies(res, session, req.hostname);
 
       await recordEvent(createUserClient(session.access_token), {
         type: 'auth.password_reset',
@@ -550,7 +550,7 @@ authRouter.post(
       // device keeps its session.
       await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
 
-      setSessionCookies(res, verified.session);
+      setSessionCookies(res, verified.session, req.hostname);
       res.json({ user: publicUser(updated.user) });
     } catch (err) {
       next(err);

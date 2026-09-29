@@ -13,10 +13,17 @@ type Core = {
   adoptPlatformSession: (apiBase: string) => Promise<Session>;
   signOutPlatform: (apiBase: string, refreshToken?: string | null) => Promise<boolean>;
   refreshSession: (apiBase: string, refreshToken: string | null) => Promise<Session>;
+  resolveApiBase: (explicit?: string) => string;
 };
 
-function loadCore(fetchImpl: (url: string, init: RequestInit) => Promise<Response>) {
-  const sandbox: Record<string, unknown> = { console, URL, URLSearchParams, fetch: fetchImpl };
+function loadCore(fetchImpl: (url: string, init: RequestInit) => Promise<Response>, hostname = '') {
+  const sandbox: Record<string, unknown> = {
+    console,
+    URL,
+    URLSearchParams,
+    fetch: fetchImpl,
+    location: { hostname, pathname: '/', search: '' },
+  };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   vm.runInNewContext(coreSrc, sandbox);
@@ -30,6 +37,16 @@ function json(status: number, body: unknown) {
 const API = 'https://platform.atmosphereteam.com';
 
 describe('Field Capture single sign-on with the Platform', () => {
+  it('uses same-origin /api on atmosphereteam.com and the office origin on Railway', () => {
+    const app = loadCore(() => json(401, {}), 'app.atmosphereteam.com');
+    const platform = loadCore(() => json(401, {}), 'platform.atmosphereteam.com');
+    const railway = loadCore(() => json(401, {}), 'field-capture-production.up.railway.app');
+    expect(app.resolveApiBase()).toBe('');
+    expect(platform.resolveApiBase()).toBe('');
+    expect(railway.resolveApiBase()).toBe('https://platform.atmosphereteam.com');
+    expect(app.resolveApiBase('https://example.test/api/')).toBe('https://example.test/api');
+  });
+
   it('trades the Platform session cookie for a session, sending credentials and no token', async () => {
     const fetchMock = vi.fn((_url: string, _init: RequestInit) =>
       json(200, {

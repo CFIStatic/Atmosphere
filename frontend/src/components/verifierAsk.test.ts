@@ -79,6 +79,25 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('>Events</h4>');
   });
 
+  it('does not rewrite quoted speech or clip titles in an Ask bubble', () => {
+    const start = verifierHtml.indexOf('function sanitizeAskSpeakerProse');
+    const end = verifierHtml.indexOf('function renderAskMarkdown');
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const sanitize = new Function(
+      `${verifierHtml.slice(start, end)}; return sanitizeAskSpeakerProse;`,
+    )() as (input: string, protect?: string[]) => string;
+    const title = 'Person 1 Walks the Seated Man Through the Kitchen';
+    const out = sanitize(
+      `Person 1 (Seated said “Ask the seated man about Person 2.” in ${title}.\n- “Ask the seated man about Person 2.” (${title}, 0:04)`,
+      [title],
+    );
+    expect(out).toMatch(/^Speaker 1 said “Ask the seated man about Person 2\.”/);
+    expect(out.split('“')[0] ?? '').not.toMatch(/\(|Seated|Person/);
+    expect(out.split(title)).toHaveLength(3);
+    expect(out).toContain(`(${title}, 0:04)`);
+  });
+
   it('answers clip questions from the reading of that clip', () => {
     expect(verifierHtml).toContain('function answerClipLocally');
     expect(verifierHtml).toContain('Did anything happen');

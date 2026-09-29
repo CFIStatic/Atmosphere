@@ -72,8 +72,9 @@ function writeFieldSession(
   user: User,
   session: Session,
   extra: Record<string, unknown> = {},
+  publicHost?: string | null,
 ) {
-  setSessionCookies(res, session);
+  setSessionCookies(res, session, publicHost);
   res.status(status).json({
     user: publicUser(user),
     needsEmailConfirmation: false,
@@ -132,7 +133,7 @@ fieldAppRouter.post(
           fullName: input.fullName,
           orgName: input.orgName,
         });
-        writeFieldSession(res, created.status, created.user, created.session, { org });
+        writeFieldSession(res, created.status, created.user, created.session, { org }, req.hostname);
       } catch (err) {
         // Account exists and the phone has tokens — do not roll that back
         // because the office step failed. The app can retry linking.
@@ -143,7 +144,7 @@ fieldAppRouter.post(
           writeFieldSession(res, created.status, created.user, created.session, {
             org: null,
             orgError: err.message,
-          });
+          }, req.hostname);
           return;
         }
         throw err;

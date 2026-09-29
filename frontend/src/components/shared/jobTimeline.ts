@@ -23,6 +23,7 @@ import { formatViewerDay, viewerDayKey } from '../../lib/viewerTime';
 import { scrubHomeownerText } from '../../lib/privacyText';
 import { dayIsOnSite } from './jobProgressStory';
 import { tradeLabel } from '../../lib/customerLabels';
+import { clipProcessing } from '../../lib/clipProcessing';
 
 export type TimelineKind =
   | 'job'
@@ -362,20 +363,20 @@ function clipEvents(source: TimelineSource, out: TimelineEvent[]) {
       childPrivacyRedactions: video.childPrivacyRedactions ?? null,
     });
 
-    const reading =
-      video.analysisStatus === 'queued' ||
-      video.analysisStatus === 'running' ||
-      video.narrationStatus === 'queued' ||
-      video.narrationStatus === 'running' ||
-      video.transcriptStatus === 'queued' ||
-      video.transcriptStatus === 'running';
+    const processing = clipProcessing({
+      analysisStatus: video.analysisStatus,
+      transcriptStatus: video.transcriptStatus,
+      narrationStatus: video.narrationStatus,
+      summaryState: video.conversation?.summaryState,
+    });
+    const reading = processing.state === 'transcribing' || processing.state === 'analyzing';
     if (reading) {
       const place = where ? ` ${where}` : '';
       push(out, {
         id: `live:analysis:${video.id}`,
         at: received ?? at,
         kind: 'analysis',
-        sentence: `Analysis is still reading ${who}'s clip${place}`,
+        sentence: `Analysis is still reading ${who}'s clip${place} — ${processing.label}`,
         actorName: who,
         actorEmail: member?.email ?? null,
         avatarUrl: member?.avatarUrl ?? null,
@@ -415,6 +416,13 @@ function custodyEvents(source: TimelineSource, out: TimelineEvent[]) {
     const video = videos.get(clip.clip.id);
     const where = roomPhrase(video);
     const label = where ? `the clip ${where}` : 'the clip';
+    const analysedRuns: Array<{
+      at: string;
+      atMs: number;
+      actorName: string | null;
+      member: (typeof source.members)[number] | undefined;
+      finding: string | null;
+    }> = [];
     for (const entry of clip.chainOfCustody ?? []) {
       const at = stamp(entry.at);
       if (!at) continue;
@@ -435,10 +443,14 @@ function custodyEvents(source: TimelineSource, out: TimelineEvent[]) {
       else if (action === 'viewed') line = `${actorName ?? 'Someone'} opened ${label}`;
       else if (action === 'downloaded') line = `${actorName ?? 'Someone'} downloaded ${label}`;
       else if (action === 'analysed') {
-        kind = 'analysis';
-        line = finding
-          ? `${actorName ?? 'Analysis'} finished reading ${label}. ${finding}`
-          : `${actorName ?? 'Analysis'} finished reading ${label}`;
+        analysedRuns.push({
+          at,
+          atMs: Date.parse(at),
+          actorName,
+          member,
+          finding,
+        });
+        continue;
       } else if (action === 'accepted') line = `${actorName ?? 'Someone'} accepted the day for ${label}`;
       else if (action === 'rejected') line = `${actorName ?? 'Someone'} rejected the day for ${label}`;
       else if (action === 'held') line = `${actorName ?? 'Someone'} placed a hold on ${label}`;
@@ -472,7 +484,81 @@ function custodyEvents(source: TimelineSource, out: TimelineEvent[]) {
         childPrivacyRedactions: video?.childPrivacyRedactions ?? null,
       });
     }
+    emitAnalysedRuns(
+      source,
+      out,
+      clip.clip.id,
+      label,
+      video,
+      analysedRuns,
+      video?.durationSeconds ?? clip.clip.durationSeconds,
+    );
   }
+}
+
+/** One pipeline writes several `analysed` rows seconds apart. Those are one reading. */
+const ANALYSED_RUN_MS = 30 * 60 * 1000;
+
+function emitAnalysedRuns(
+  source: TimelineSource,
+  out: TimelineEvent[],
+  clipId: string,
+  label: string,
+  video: ProofVideoRecord | undefined,
+  runs: Array<{
+    at: string;
+    atMs: number;
+    actorName: string | null;
+    member: TimelineSource['members'][number] | undefined;
+    finding: string | null;
+  }>,
+  durationSeconds: number | null,
+) {
+  const sorted = runs.filter((row) => Number.isFinite(row.atMs)).sort((a, b) => a.atMs - b.atMs);
+  if (!sorted.length) return;
+  const clusters: Array<typeof sorted> = [];
+  for (const row of sorted) {
+    const current = clusters[clusters.length - 1];
+    const first = current?.[0];
+    if (!current || !first || row.atMs - first.atMs > ANALYSED_RUN_MS) clusters.push([row]);
+    else current.push(row);
+  }
+  const processing = clipProcessing({
+    analysisStatus: video?.analysisStatus,
+    transcriptStatus: video?.transcriptStatus,
+    narrationStatus: video?.narrationStatus,
+    summaryState: video?.conversation?.summaryState,
+  });
+  const unfinished =
+    processing.label === 'Summary still processing' ||
+    processing.label === 'Summary unavailable' ||
+    processing.state === 'failed';
+  clusters.forEach((cluster, index) => {
+    const row = cluster[0]!;
+    const latest = cluster[cluster.length - 1]!;
+    const actor = row.actorName ?? 'Analysis';
+    const last = index === clusters.length - 1;
+    let sentence: string;
+    if (last && unfinished) sentence = `${actor} is still reading ${label} — ${processing.label}`;
+    else if (index > 0) sentence = `${actor} re-analyzed ${label}`;
+    else if (latest.finding) sentence = `${actor} finished reading ${label}. ${latest.finding}`;
+    else sentence = `${actor} finished reading ${label}`;
+    push(out, {
+      id: `custody:${clipId}:analysed:${row.at}`,
+      at: row.at,
+      kind: 'analysis',
+      sentence,
+      actorName: row.actorName,
+      actorEmail: row.member?.email ?? null,
+      avatarUrl: row.member?.avatarUrl ?? null,
+      live: false,
+      posterUrl: posterFor(source, clipId),
+      proofId: clipId,
+      durationSeconds,
+      privacyRedactions: video?.privacyRedactions ?? null,
+      childPrivacyRedactions: video?.childPrivacyRedactions ?? null,
+    });
+  });
 }
 
 function shareEvents(source: TimelineSource, out: TimelineEvent[]) {
@@ -719,7 +805,22 @@ export function buildJobTimeline(source: TimelineSource): TimelineEvent[] {
     if (event.sentence && REDACTION_MARK.test(event.sentence)) continue;
     unique.push(event);
   }
-  return unique;
+  // A summary rebuild is one live "still reading" row. The clustered custody
+  // line uses another id, so id-dedupe would show both.
+  const liveAnalysis = new Set(
+    unique
+      .filter((event) => event.live && event.kind === 'analysis' && event.proofId)
+      .map((event) => event.proofId),
+  );
+  if (!liveAnalysis.size) return unique;
+  return unique.filter((event) => {
+    if (event.live || event.kind !== 'analysis' || !event.proofId || !liveAnalysis.has(event.proofId)) {
+      return true;
+    }
+    const duplicateReading =
+      event.sentence.includes('still reading') && event.sentence.includes('Summary still processing');
+    return !duplicateReading;
+  });
 }
 
 export function filterTimeline(

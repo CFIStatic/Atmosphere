@@ -1378,6 +1378,11 @@ export interface EvidenceItem {
   receivedAt: string;
   hasLocation: boolean;
   state: string;
+  /** Shared clip-processing inputs. Absent on older payloads; the report then uses `state` alone. */
+  analysisStatus?: string | null;
+  transcriptStatus?: string | null;
+  narrationStatus?: string | null;
+  summaryState?: string | null;
   checks: ProofCheck[];
   aiSummary: string | null;
   legalHold: boolean;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
+import { AskProseView } from '../components/AskProseView';
 import { Logo } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { SpinnerIcon } from '../components/icons';
@@ -399,7 +400,9 @@ function ClipCard({
           <div className="rounded-lg bg-paper-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Ask</p>
             <p className="mt-1 text-sm font-medium text-ink-900">{ask.question}</p>
-            <p className="mt-1 text-sm text-ink-700">{ask.answer}</p>
+            <div className="mt-1 text-sm text-ink-700">
+              <AskProseView text={ask.answer} />
+            </div>
           </div>
         ) : null}
       </div>

@@ -114,7 +114,7 @@ describe('ProofOfWork video collection', () => {
     expect(screen.queryByTestId('punch-list-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('save-as-playbook')).not.toBeInTheDocument();
     const statuses = screen.getAllByTestId('job-video-status').map((el) => el.textContent);
-    expect(statuses).toEqual(['Analyzed', 'Processing']);
+    expect(statuses).toEqual(['Analyzed', 'Analyzing']);
     expect(screen.getByText('42 seconds')).toBeInTheDocument();
     expect(screen.getByText('10 minutes')).toBeInTheDocument();
     expect(screen.queryByText(/Field Capture/)).not.toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('ProofOfWork video collection', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByTestId('job-video-status')).toHaveTextContent('Processing');
+    expect(screen.getByTestId('job-video-status')).toHaveTextContent('Transcribing');
     expect(screen.getByTestId('job-video-title')).toHaveTextContent(/Video ·/);
     expect(screen.getByTestId('job-video-thumb').querySelector('img')).toBeNull();
     const libraryCalls = evidenceLibrary.mock.calls.length;
