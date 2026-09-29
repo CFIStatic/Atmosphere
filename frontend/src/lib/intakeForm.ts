@@ -30,7 +30,9 @@ export function membersToCaptureTeam(members: OrgMember[]): CaptureTeamMember[] 
     email: m.email,
     role: m.role,
     workType: m.workType,
-    selected: true,
+    // Nobody is invited until the office ticks them — a job starts with just
+    // a name, like the field app. Teammates can film without an invite.
+    selected: false,
   }));
 }
 
@@ -56,4 +58,13 @@ export function cityPostalFromAddress(formatted: string): { city: string; postal
       ? bits[1]!.replace(/\s+[A-Z]{2}$/, '').replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i, '').trim()
       : '';
   return { city, postalCode: postal };
+}
+
+/**
+ * Start a job's one button says what will happen: a bare "Create job" when
+ * nobody is on the invite list, "Create & send invites" once anyone is —
+ * including the homeowner, who is emailed a link to the job file.
+ */
+export function startJobActionLabel(input: { invited: number; homeownerShare: boolean }): string {
+  return input.invited > 0 || input.homeownerShare ? 'Create & send invites' : 'Create job';
 }

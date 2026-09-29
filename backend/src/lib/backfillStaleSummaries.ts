@@ -8,7 +8,9 @@
  *
  * What counts as older than the transcript:
  * - a summary that recorded its source (summary_transcript_sha256 or the
- *   stamp in ai_findings.conversation): the hash differs from the live transcript;
+ *   stamp in ai_findings.conversation): the hash differs from the live transcript,
+ *   or the visual-events stamp differs from the live narration entries + actions
+ *   (events_changed — the clip's evidence record is one version);
  * - a summary from before provenance existed: transcribed_at is later than the
  *   last time the summary is known to have been rebuilt
  *   (summary_generated_at, else narrated_at — narration completion rebuilt it).
@@ -26,12 +28,17 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { summarySourceHash, transcriptSha256 } from '../audio/summaryFreshness.js';
+import { eventsSha256, summaryEventsHash, summarySourceHash, transcriptSha256 } from '../audio/summaryFreshness.js';
 import { summaryClaimContradictions } from '../audio/summaryValidation.js';
 
 const PAGE = 100;
 
-export type StaleSummaryReason = 'summary_contradiction' | 'hash_mismatch' | 'transcript_newer' | 'untimed_timeline';
+export type StaleSummaryReason =
+  | 'summary_contradiction'
+  | 'hash_mismatch'
+  | 'events_changed'
+  | 'transcript_newer'
+  | 'untimed_timeline';
 
 export type StaleSummaryRow = {
   id: string;
@@ -43,6 +50,8 @@ export type StaleSummaryRow = {
   summary_transcript_sha256?: string | null;
   summary_generated_at?: string | null;
   ai_findings?: unknown;
+  narration?: unknown;
+  actions?: unknown;
 };
 
 function findingsOf(row: StaleSummaryRow): Record<string, unknown> {
@@ -85,6 +94,9 @@ export function staleSummaryReason(row: StaleSummaryRow): StaleSummaryReason | n
     const source = summarySourceHash(row);
     if (source) {
       if (source !== transcriptSha256(row.transcript_text ?? null)) return 'hash_mismatch';
+      // Same record, other half: the frames were re-read after the summary.
+      const events = summaryEventsHash(row);
+      if (events && events !== eventsSha256(row)) return 'events_changed';
     } else {
       const heard = time(row.transcribed_at);
       const built = time(row.summary_generated_at) ?? time(row.narrated_at);
@@ -104,7 +116,7 @@ export type StaleSummaryBackfillResult = {
 
 const SELECT =
   'id, transcript_text, transcript_status, transcribed_at, narrated_at, ' +
-  'summary_status, summary_transcript_sha256, summary_generated_at, ai_findings';
+  'summary_status, summary_transcript_sha256, summary_generated_at, ai_findings, narration, actions';
 
 export async function backfillStaleSummaries(
   admin: SupabaseClient,

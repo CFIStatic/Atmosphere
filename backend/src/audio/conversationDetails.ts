@@ -88,6 +88,8 @@ export type StoredConversation = {
   keyMoments?: ConversationKeyMoment[];
   /** sha256 of the transcript_text this summary read (summaryFreshness). */
   transcriptSha256?: string | null;
+  /** sha256 of the visual events (narration entries + actions) this summary read. */
+  eventsSha256?: string | null;
   /** When this summary was built. */
   generatedAt?: string | null;
 };
@@ -843,6 +845,11 @@ export type AnalyzeConversationOpts = {
   durationSeconds?: number | null;
   /** Vision dictation / day-film summary already on the proof. */
   visionContext?: string | null;
+  /**
+   * Regeneration after a pre-publish check rejected the last summary: what it
+   * got wrong (e.g. a speech count the transcript contradicts). Told to the model.
+   */
+  correction?: string | null;
 };
 
 /**
@@ -864,6 +871,7 @@ export async function analyzeConversation(
       ? Number(opts.durationSeconds)
       : null;
   const vision = String(opts?.visionContext || '').trim().slice(0, 4000);
+  const correction = String(opts?.correction || '').trim().slice(0, 1500);
   const chunks = planTranscriptChunks(raw);
 
   try {
@@ -877,6 +885,7 @@ export async function analyzeConversation(
           duration != null ? `Clip length: ${Math.round(duration)} seconds.` : null,
           chunks.length > 1 ? `Transcript chunk ${i + 1} of ${chunks.length}.` : null,
           vision ? `Vision / dictation context (may be incomplete; transcript is ground truth for speech):\n${vision}` : null,
+          correction ? `Correction (a previous summary was rejected):\n${correction}` : null,
           'Transcript:',
           chunk,
         ]
@@ -928,6 +937,7 @@ export async function analyzeConversation(
           'Extractions JSON:',
           sketch,
           vision ? `Vision context:\n${vision}` : null,
+          correction ? `Correction (a previous summary was rejected):\n${correction}` : null,
         ]
           .filter(Boolean)
           .join('\n\n'),

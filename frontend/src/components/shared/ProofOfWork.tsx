@@ -6,6 +6,15 @@ import {
   type ProofVideoRecord,
 } from '../../lib/api';
 import { formatClipLength } from '../../lib/clipDuration';
+import {
+  clipClock,
+  clipDisplayTitle,
+  clipMoments,
+  momentClock,
+  videoRowStatus,
+  type LibraryClipMeta,
+  type VideoRowTone,
+} from '../../lib/jobVideoRows';
 import { JobFilePlayer, type JobFilePlayerCaptions } from './JobFilePlayer';
 import { useVideoSeek } from '../../lib/videoSeek';
 import type { AskSeekTarget } from '../../lib/askSeek';
@@ -226,6 +235,7 @@ export function ProofOfWork({
           seekProofId={seekProofId}
           seekAt={seekAt}
           seekNonce={seekNonce}
+          onSeek={applyClipSeek}
         />
       )}
 
@@ -280,14 +290,6 @@ export function ProofOfWork({
       )}
     </section>
   );
-}
-
-function statusWord(status: string | null, done: string): string {
-  if (status === 'done') return done;
-  if (status === 'queued' || status === 'running') return 'reading';
-  if (status === 'failed') return 'failed';
-  if (status === 'skipped') return 'skipped';
-  return 'waiting';
 }
 
 function captionsForVideo(video: ProofVideoRecord | undefined | null): JobFilePlayerCaptions | null {
@@ -390,6 +392,61 @@ function CopyTranscriptButton({ text }: { text: string }) {
   );
 }
 
+const ROW_TONE: Record<VideoRowTone, string> = {
+  good: 'bg-success-50 text-success-600',
+  progress: 'bg-brand-50 text-brand-700',
+  bad: 'bg-danger-50 text-danger-600',
+  neutral: 'bg-paper-200/60 text-ink-600',
+};
+
+/**
+ * Refetch when a clip is added or its reading finishes. Count alone stays
+ * put while analysis writes the Dashboard title and poster onto an existing row.
+ */
+function libraryClipMetaKey(videos: ProofVideoRecord[]): string {
+  return videos
+    .map((video) =>
+      [
+        video.id,
+        video.analysisStatus ?? '',
+        video.narrationStatus ?? '',
+        video.transcriptStatus ?? '',
+      ].join(':'),
+    )
+    .join('|');
+}
+
+/**
+ * Titles and poster stills from the Dashboard's library rows, so the Videos
+ * tab names a clip exactly as the Dashboard does. Office only — the library
+ * is an org endpoint; a homeowner's read-only file keeps the fallback name.
+ */
+function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[]) {
+  const [meta, setMeta] = useState<Map<string, LibraryClipMeta>>(() => new Map());
+  const refreshKey = libraryClipMetaKey(videos);
+  useEffect(() => {
+    if (!jobId || !refreshKey) return;
+    let cancelled = false;
+    void api
+      .evidenceLibrary(jobId)
+      .then((res) => {
+        if (cancelled) return;
+        const next = new Map<string, LibraryClipMeta>();
+        for (const item of (res.items ?? []) as LibraryClipMeta[]) {
+          if (item?.id && item.jobId === jobId) next.set(item.id, item);
+        }
+        setMeta(next);
+      })
+      .catch(() => {
+        /* rows keep the Video · id fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, refreshKey]);
+  return meta;
+}
+
 function VideoCatalog({
   jobId,
   videos,
@@ -397,6 +454,7 @@ function VideoCatalog({
   seekProofId,
   seekAt,
   seekNonce,
+  onSeek,
 }: {
   jobId?: string;
   videos: ProofVideoRecord[];
@@ -404,8 +462,11 @@ function VideoCatalog({
   seekProofId?: string | null;
   seekAt?: number | null;
   seekNonce?: number;
+  /** Open a clip at a moment (jump-to-moment chips). */
+  onSeek?: (proofId: string, seconds: number) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const library = useLibraryClipMeta(jobId, videos);
 
   useEffect(() => {
     if (seekProofId) setOpenId(seekProofId);
@@ -420,6 +481,16 @@ function VideoCatalog({
           const captions = captionsForVideo(video);
           const plain = transcriptPlainText(video);
           const hasTranscript = Boolean(plain);
+          const meta = library.get(video.id) ?? null;
+          const title = clipDisplayTitle(video, meta);
+          const status = videoRowStatus(video);
+          const moments = clipMoments(video);
+          const day = new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC',
+          });
           return (
             <li
               key={video.id}
@@ -428,29 +499,84 @@ function VideoCatalog({
               data-job-clip-date={video.workDate}
               data-open={open ? '1' : undefined}
             >
-              <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
+              <div className="flex items-start gap-3 px-3 py-2.5">
                 <button
                   type="button"
-                  className="min-w-0 flex-1 text-left"
                   onClick={() => setOpenId(open ? null : video.id)}
-                  aria-expanded={open}
+                  aria-label={`Play ${title}`}
+                  className="relative h-[54px] w-24 shrink-0 overflow-hidden rounded-md bg-paper-200"
+                  data-testid="job-video-thumb"
                 >
-                  <p className="text-xs font-medium text-ink-800">
-                    {new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                    <span className="ml-1.5 font-normal text-ink-500">
-                      {video.company || 'Field Capture'}
+                  {meta?.posterUrl ? (
+                    <img
+                      src={meta.posterUrl}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="grid h-full w-full place-items-center text-ink-400" aria-hidden>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
                     </span>
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-ink-500">
-                    {formatClipLength(video.durationSeconds)}
-                    {' · '}
-                    Mic: {statusWord(video.transcriptStatus, 'heard')}
-                  </p>
+                  )}
+                  <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-medium tabular-nums text-white">
+                    {clipClock(video.durationSeconds)}
+                  </span>
                 </button>
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setOpenId(open ? null : video.id)}
+                    aria-expanded={open}
+                  >
+                    <p className="truncate text-sm font-medium text-ink-900" data-testid="job-video-title">
+                      {title}
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-500">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ROW_TONE[status.tone]}`}
+                        data-testid="job-video-status"
+                      >
+                        {status.label}
+                      </span>
+                      <span>{day}</span>
+                      <span aria-hidden>·</span>
+                      <span>{formatClipLength(video.durationSeconds)}</span>
+                      {video.person || video.company ? (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span className="truncate">{video.person || video.company}</span>
+                        </>
+                      ) : null}
+                    </p>
+                  </button>
+                  {moments.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1" data-testid="job-video-moments">
+                      {moments.map((moment) => (
+                        <button
+                          key={moment.atSeconds}
+                          type="button"
+                          title={moment.text}
+                          aria-label={`Jump to ${momentClock(moment.atSeconds)}: ${moment.text}`}
+                          onClick={() => {
+                            setOpenId(video.id);
+                            onSeek?.(video.id, moment.atSeconds);
+                          }}
+                          className="inline-flex max-w-[14rem] items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-[11px] text-ink-700 hover:border-brand-300"
+                        >
+                          <span className="font-semibold tabular-nums text-brand-700">
+                            {momentClock(moment.atSeconds)}
+                          </span>
+                          <span className="truncate">{moment.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {!open ? (
                     <button

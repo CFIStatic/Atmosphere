@@ -183,14 +183,16 @@ export function jobFileSuggestions(input: {
   const said = beats.find((beat) => beat.kind === 'said');
   const clip = beats.find((beat) => beat.kind === 'video');
 
+  // Presets never name who spoke. A mic hears voices, not roles — "What did
+  // the homeowner say?" presumes a speaker the transcript cannot establish.
   if (said) {
     const topic = topicFrom(said.detail);
     uniquePush(
       suggestions,
-      topic ? `What did the homeowner say about the ${topic}?` : 'What did the homeowner say?',
+      topic ? `What was said about the ${topic}?` : 'What was said on this job?',
     );
   } else if (input.hasMic) {
-    uniquePush(suggestions, 'What did the homeowner say?');
+    uniquePush(suggestions, 'What was said on this job?');
   }
 
   if (clip) {
