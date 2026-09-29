@@ -61,6 +61,18 @@ describe('Field status card', () => {
     expect(m.next.hint).toMatch(/No signal/);
   });
 
+  it('clips the office has not started are still processing, not ready', () => {
+    const m = loadCore().fieldJobStatus({
+      jobId: JOB,
+      films: [],
+      videos: [{ analysisStatus: null }, { analysisStatus: 'idle' }, {}],
+    });
+    expect(m.counts.processing).toBe(3);
+    expect(m.counts.ready).toBe(0);
+    expect(step(m, 'processing')).toMatchObject({ done: false, detail: '3 clips processing' });
+    expect(m.next.hint).toMatch(/office processes/);
+  });
+
   it('filed clips still being analyzed show processing; analyzed clips are done', () => {
     const Core = loadCore();
     const busy = Core.fieldJobStatus({
@@ -106,6 +118,27 @@ describe('Field status card', () => {
     const m = Core.fieldJobStatus({ jobId: JOB, films: [], videos: null, people: null });
     expect(m.audienceKnown).toBe(false);
     expect(m.audience).toEqual(['Your office team']);
+  });
+
+  it('a dead radio or a 500 leaves the source unknown instead of unreadable', async () => {
+    const offline = loadCore(vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))));
+    const missed = await offline.loadFieldJobStatusSources(
+      'https://platform.atmosphereteam.com',
+      't',
+      JOB,
+    );
+    expect(missed.videos).toBeUndefined();
+    expect(missed.people).toBeUndefined();
+    const down = loadCore(
+      vi.fn(() => Promise.resolve(new Response('{"error":"down"}', { status: 500 }))),
+    );
+    const failed = await down.loadFieldJobStatusSources(
+      'https://platform.atmosphereteam.com',
+      't',
+      JOB,
+    );
+    expect(failed.videos).toBeUndefined();
+    expect(failed.people).toBeUndefined();
   });
 
   it('the phone has a native Status screen and never embeds the dashboard', () => {

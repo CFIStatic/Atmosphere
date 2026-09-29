@@ -1037,6 +1037,8 @@
     if (v.analysisStatus === 'failed') return 'attention';
     if (busy(v.analysisStatus) || busy(v.transcriptStatus) || busy(v.narrationStatus)) return 'processing';
     if (v.analysisStatus === 'done') return 'ready';
+    /* Unset and idle are unread: the office has not started. Not finished. */
+    if (!v.analysisStatus || v.analysisStatus === 'idle') return 'processing';
     return 'filed';
   }
 
@@ -1165,17 +1167,19 @@
   /**
    * Office facts for the status card. Each source may be closed to this
    * account (an invited crew member is not in the org): that source is null
-   * and the card says what the phone itself knows.
+   * and the card says what the phone itself knows. A 500 or a dead radio
+   * leaves the source undefined so the caller can keep the last good answer.
    */
   function loadFieldJobStatusSources(apiBase, accessToken, jobId) {
     var base = origin(apiBase) + '/api/operations/shared/' + encodeURIComponent(jobId);
     function soft(p) {
       return p.then(
         function (v) {
-          return v;
+          return { value: v };
         },
-        function () {
-          return null;
+        function (err) {
+          if (err && err.status === 403) return { value: null };
+          return { failed: true };
         },
       );
     }
@@ -1191,7 +1195,10 @@
         }),
       ),
     ]).then(function (both) {
-      return { videos: both[0], people: both[1] };
+      return {
+        videos: both[0].failed ? undefined : both[0].value,
+        people: both[1].failed ? undefined : both[1].value,
+      };
     });
   }
 

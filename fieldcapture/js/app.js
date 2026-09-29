@@ -2693,9 +2693,13 @@
       var seq = ++statusSeq;
       Core.loadFieldJobStatusSources(API_BASE, state.accessToken, job.id).then(function (src) {
         if (seq !== statusSeq || statusJobId !== job.id) return;
-        statusSources = { jobId: job.id, videos: src.videos, people: src.people };
-        base.videos = src.videos;
-        base.people = src.people;
+        /* undefined: this refetch failed. null: this account cannot read it. */
+        var had = statusSources.jobId === job.id;
+        var videos = src.videos === undefined ? (had ? statusSources.videos : null) : src.videos;
+        var people = src.people === undefined ? (had ? statusSources.people : null) : src.people;
+        statusSources = { jobId: job.id, videos: videos, people: people };
+        base.videos = videos;
+        base.people = people;
         base.films = filmQueue ? filmQueue.films() : films;
         renderFieldStatus(Core.fieldJobStatus(base));
       });
@@ -2773,7 +2777,10 @@
       if (onScreen('s-status')) paintFieldStatus();
     });
     window.addEventListener('offline', function () {
-      if (onScreen('s-status')) paintFieldStatus();
+      if (!onScreen('s-status')) return;
+      /* Ignore an in-flight refetch so it cannot repaint over this snapshot. */
+      statusSeq += 1;
+      paintFieldStatus({ localOnly: true });
     });
 
     function signOutFieldAccount() {
