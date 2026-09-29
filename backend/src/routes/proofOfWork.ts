@@ -56,6 +56,7 @@ import {
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
+import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
 import {
   askLookupCatalogFromJob,
   asksAboutOtherJobs,
@@ -2956,10 +2957,36 @@ export async function runProofAsk(input: {
     ]);
     threadId = threadIdResolved;
 
+    // One Ask loads the newest 80 clips. When the job has more, the transcript
+    // chunk index finds older clips whose speech matches the question, and
+    // their rows are loaded too. Quoted text still comes from job_proofs.
+    const loadedProofs = ((proofsRes.data ?? []) as Array<Record<string, unknown>>).slice();
+    if (loadedProofs.length >= 80 && !input.signal?.aborted) {
+      const olderIds = await proofIdsMatchingQuestion(supabase, {
+        orgId,
+        jobId,
+        question: input.question,
+        exclude: loadedProofs.map((row) => String(row.id ?? '')),
+        limit: 20,
+      });
+      if (olderIds.length) {
+        const { data: older } = await supabase
+          .from('job_proofs')
+          .select(
+            'id, party_id, job_id, work_date, phase, title, ai_summary, ai_findings, narration_text, transcript_text, transcript_segments, transcript_words, device_metadata, captured_at',
+          )
+          .eq('org_id', orgId)
+          .eq('job_id', jobId)
+          .is('deleted_at', null)
+          .in('id', olderIds);
+        loadedProofs.push(...((older ?? []) as Array<Record<string, unknown>>));
+      }
+    }
+
     const partyRows = (partyRes.data ?? []) as any[];
     const company = new Map(partyRows.map((p) => [p.id, p.company]));
     const clips = collectionClipsFromRows(
-      ((proofsRes.data ?? []) as any[]).map((row) => ({
+      (loadedProofs as any[]).map((row) => ({
         ...row,
         company: company.get(row.party_id) ?? null,
       })),
@@ -2968,7 +2995,7 @@ export async function runProofAsk(input: {
     const taskRows = (taskRes.data ?? []) as any[];
     const crewRows = ((crewRes.data ?? []) as any[]).filter((row) => !row.released_at);
     const logRows = (logRes.data ?? []) as any[];
-    const proofRows = ((proofsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
+    const proofRows = loadedProofs.filter((row) => !row.deleted_at);
     const recorderIds = proofRows.flatMap((row) => {
       const device =
         row.device_metadata && typeof row.device_metadata === 'object'
@@ -3166,7 +3193,7 @@ export async function runProofAsk(input: {
       orgId,
       jobId,
       access: askAccess,
-      proofs: ((proofsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at),
+      proofs: loadedProofs.filter((row) => !row.deleted_at),
       parties: partyRows,
       history: (memoryRes.data ?? []) as Array<Record<string, unknown>>,
       jobTitle: file.job?.title ?? null,

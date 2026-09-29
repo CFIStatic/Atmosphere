@@ -28,7 +28,8 @@ describe('Ask never invents a speaker role', () => {
   it('labels the speaker unknown when the transcript cannot establish the homeowner', () => {
     const answer = groundedAnswerFromClip('What did the homeowner say?', tiffany44);
     assert.match(answer, /doesn't identify who is speaking/);
-    assert.match(answer, /unknown speaker/);
+    assert.match(answer, /an unidentified speaker/);
+    assert.doesNotMatch(answer, /\(unknown speaker\)|\(unidentified speaker\)/);
     // Verbatim quotes with timestamps stay.
     assert.match(answer, /“You know I love that girl\.” .*\[0:11\]/);
     assert.doesNotMatch(answer, /the homeowner said/i);
@@ -38,7 +39,7 @@ describe('Ask never invents a speaker role', () => {
     const answer = groundedAnswerFromClip('What was said in this clip?', tiffany44);
     assert.match(answer, /5 lines/);
     assert.match(answer, /\[0:00\].*\[0:11\].*\[0:30\].*\[0:35\].*\[0:38\]/s);
-    assert.doesNotMatch(answer, /homeowner|unknown speaker/i);
+    assert.doesNotMatch(answer, /homeowner|unknown speaker|unidentified speaker/i);
   });
 
   it('says QuickBooks is not in this clip rather than borrowing another clip', () => {
@@ -54,7 +55,7 @@ describe('Ask never invents a speaker role', () => {
       ],
     };
     assert.equal(speakerRoleEstablished(proven, 'homeowner'), true);
-    assert.doesNotMatch(groundedAnswerFromClip('What did the homeowner say?', proven), /unknown speaker/);
+    assert.doesNotMatch(groundedAnswerFromClip('What did the homeowner say?', proven), /unknown speaker|unidentified speaker/);
     const guessed: ClipAskRecord = {
       ...tiffany44,
       peopleSpeakers: [
@@ -75,7 +76,7 @@ test('summary turn labels and guessed roles do not establish a speaker (Bugbot #
     } as never,
     '“x” [0:01]',
   );
-  assert.match(out, /unknown speaker/);
+  assert.match(out, /unidentified speaker/);
 });
 
 test('paraphrased role attributions are neutralized, not only quoted ones', async () => {
@@ -86,7 +87,7 @@ test('paraphrased role attributions are neutralized, not only quoted ones', asyn
     'The homeowner asked that the skylights be left alone.',
   );
   assert.match(out, /^The recording doesn't identify who is speaking/);
-  assert.match(out, /An unknown speaker asked that the skylights be left alone\./);
+  assert.match(out, /An unidentified speaker asked that the skylights be left alone\./);
   assert.doesNotMatch(out, /The homeowner asked/);
 });
 

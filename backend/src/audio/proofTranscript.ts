@@ -26,6 +26,7 @@ import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
 import { queueSummaryRefresh } from './summaryQueue.js';
 import { staleSummaryPatch } from './summaryFreshness.js';
 import { runSafetyScanForProof } from '../safety/sample.js';
+import { writeTranscriptChunks } from '../shared/askTranscriptChunkStore.js';
 
 const PROOF_BUCKET = 'job-proofs';
 
@@ -287,6 +288,7 @@ export async function transcribeProofVideo(
         ...staleSummaryPatch(),
       })
       .eq('id', proofId);
+    await writeTranscriptChunks(admin, proofId);
     await queueSummaryRefresh(admin, proofId);
     return;
   }
@@ -306,6 +308,10 @@ export async function transcribeProofVideo(
       ...staleSummaryPatch(),
     })
     .eq('id', proofId);
+
+  // Rebuild the Ask transcript chunk index for this clip. Failure-tolerant:
+  // a missing table or a failed write never fails the transcript save.
+  await writeTranscriptChunks(admin, proofId);
 
   // Conversation summary, evidence log and people log are rebuilt on the
   // summary retry queue (never fails the Whisper write). This runs for the

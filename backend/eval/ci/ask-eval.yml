@@ -1,5 +1,8 @@
 # To enable: copy this file to .github/workflows/ask-eval.yml (the push token used
 # for this PR has no `workflow` scope, so it could not add it there directly).
+# To gate production deploys on the same evals, also apply
+# deploy-ask-eval-gate.patch (adds an `ask-eval-gate` job that the deploy
+# `backend` job needs):  git apply backend/eval/ci/deploy-ask-eval-gate.patch
 
 name: Ask eval gate
 
@@ -21,6 +24,7 @@ on:
       - 'backend/src/shared/speechCount.ts'
       - 'backend/src/shared/analysisTimeline.ts'
       - 'backend/src/shared/mentions.ts'
+      - 'backend/src/routes/proofOfWork.ts'
       - 'backend/src/audio/**'
       - 'backend/src/lib/askModel.ts'
       - 'backend/src/lib/anthropic.ts'

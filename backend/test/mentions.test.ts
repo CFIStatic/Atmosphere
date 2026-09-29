@@ -913,7 +913,9 @@ test('a configured model gets the dossier, the job file, and the recent turns', 
   assert.match(prep.supplement, /JOB FILE/);
   assert.match(prep.supplement, /webcam-style take/);
   assert.match(prep.supplement, /RESTORE 365/);
-  assert.match(prep.supplement, /Speakers: Seated man/);
+  // A visual guess ("Seated man") is never passed off as the speaker.
+  assert.match(prep.supplement, /Speakers: not identified on this clip/);
+  assert.doesNotMatch(prep.supplement, /Speakers: Seated man/);
   assert.match(prep.supplement, /\[0:04\] It's simple/);
   assert.match(prep.supplement, /Field Capture/);
   assert.match(prep.supplement, /opened job #12/);

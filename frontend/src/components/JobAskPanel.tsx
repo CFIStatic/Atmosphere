@@ -112,6 +112,7 @@ function AskQuoteList({
           <span className="block text-[13px] text-ink-800">“{quote.text}”</span>
           <span className="mt-0.5 block text-[11px] text-ink-500">
             {quote.speaker}
+            {quote.clipTitle ? ` · ${quote.clipTitle}` : ''}
             {quote.atSeconds != null ? ` · ${formatMomentClock(quote.atSeconds)}` : ''}
           </span>
         </button>

@@ -11,7 +11,11 @@ export type AskMomentQuote = {
   speaker: string;
   text: string;
   atSeconds: number | null;
+  /** Clip name shown on the quote card. Rides as a trailing `|clip=` field. */
+  clipTitle?: string | null;
 };
+
+import { speakerLabelOrUnidentified } from './askSpeakers.js';
 
 const QUOTES_RE = /(?:\n|^)\s*⟦quotes:\s*([^⟧]*)⟧\s*/i;
 const FOLLOWUPS_RE = /(?:\n|^)\s*⟦followups:\s*([^⟧]*)⟧\s*/i;
@@ -172,9 +176,10 @@ export function formatQuoteTrailer(quotes: AskMomentQuote[]): string {
     .filter((quote) => quote.sourceId && quote.text)
     .slice(0, 4)
     .map((quote) => {
-      const speaker = cleanTrailerText(quote.speaker || 'Speaker', 40) || 'Speaker';
+      const speaker = cleanTrailerText(speakerLabelOrUnidentified(quote.speaker), 40);
       const text = cleanTrailerText(quote.text, 180);
-      return `${quote.sourceId}|${speaker}|${text}`;
+      const clip = cleanTrailerText(String(quote.clipTitle ?? '').replace(/;;/g, ' '), 80);
+      return `${quote.sourceId}|${speaker}|${text}${clip ? `|clip=${clip}` : ''}`;
     });
   if (!parts.length) return '';
   return `⟦quotes: ${parts.join(' ;; ')}⟧`;
@@ -186,15 +191,18 @@ export function parseQuoteTrailer(raw: string): AskMomentQuote[] {
   const out: AskMomentQuote[] = [];
   for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
     const [sourceId, speaker, ...rest] = part.split('|');
+    const clipField = rest.length > 1 && /^clip=/.test(rest[rest.length - 1] ?? '') ? rest.pop()! : '';
     const text = rest.join('|').trim();
     const id = String(sourceId ?? '').trim();
     if (!id || !text) continue;
     const moment = parseMomentSource(id);
+    const clipTitle = clipField.replace(/^clip=/, '').trim();
     out.push({
       sourceId: id,
-      speaker: String(speaker ?? '').trim() || 'Speaker',
+      speaker: speakerLabelOrUnidentified(speaker),
       text: text.slice(0, 180),
       atSeconds: moment?.atSeconds ?? null,
+      ...(clipTitle ? { clipTitle } : {}),
     });
   }
   return out;

@@ -206,7 +206,7 @@ Rules:
 4. GO DEEP when they ask for specifics: exact quotes, who said X, timestamps, "be specific", "more detail", full conversation, verbatim, or follow-ups that dig in. Then quote EXACT transcript words with seek times ([m:ss] / spoken clock). Never invent, paraphrase, or clean up dialogue. Structured agreements may summarize, but any speech claim in deep mode still needs an exact quote.
 5. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 6. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when (spoken timestamp when the reading has one).
-7. When asked who is present / talking, answer ONLY from the People present / speakers section. Use labels like "Person 1 (crew-like)" — never invent a legal name that is not in the reading.
+7. When asked who is present, answer ONLY from the People present section; those labels describe people seen, never who spoke. When asked who is talking or who said something, use only diarization speaker labels ("Speaker 1", "Speaker 2") or a name the reading explicitly attaches to that speaker; otherwise say "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)" as a speaker.
 8. Never estimate cost, hours, or whether work was worth paying for.
 9. Preserve uncertainty marked in the reading ("unclear", "cannot confirm"). Prefer "the footage does not show that" over a plausible guess.
 10. Tone: warm expert colleague, lightly structured, no stiff disclaimers, no wall-of-evidence unless depth was requested.
@@ -1129,7 +1129,7 @@ const NO_SPEECH_ANSWER =
 /**
  * When the question presumed a role the clip does not establish: lead with
  * "who is talking is not established" and turn "the homeowner said/asked…"
- * in the answer into "an unknown speaker said/asked…". Quoted or paraphrased.
+ * in the answer into "an unidentified speaker said/asked…". Quoted or paraphrased.
  */
 export function withUnprovenSpeakerCaveat(question: string, record: ClipAskRecord, answer: string): string {
   const role = presumedSpeakerRole(question);
@@ -1140,10 +1140,10 @@ export function withUnprovenSpeakerCaveat(question: string, record: ClipAskRecor
     `\\b(?:the|a|an|our|their)\\s+(?:${ROLE_WORDS})(?=\\s+(?:\\w+\\s+)?(?:${SPEECH_VERBS})\\b)`,
     'gi',
   );
-  const neutral = text.replace(attributed, (m) => (/^[A-Z]/.test(m) ? 'An unknown speaker' : 'an unknown speaker'));
-  if (/not (identify|identified|established)|unknown speaker/i.test(text)) return neutral;
+  const neutral = text.replace(attributed, (m) => (/^[A-Z]/.test(m) ? 'An unidentified speaker' : 'an unidentified speaker'));
+  if (/not (identify|identified|established)|unknown speaker|unidentified speaker/i.test(text)) return neutral;
   const article = /^[aeiou]/.test(role) ? 'an' : 'a';
-  return `The recording doesn't identify who is speaking, so these words can't be attributed to ${article} ${role} (unknown speaker). ${neutral}`;
+  return `The recording doesn't identify who is speaking, so these words are from an unidentified speaker and can't be attributed to ${article} ${role}. ${neutral}`;
 }
 
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {

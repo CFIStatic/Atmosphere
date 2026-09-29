@@ -44,6 +44,12 @@ export type GoldExpect = {
    */
   mustNotContain?: string[];
   critical?: string[];
+  /**
+   * Job Ask: each expected quote must also come back as a quote card whose
+   * link opens its clip at that second (±1 s), carrying this clip name.
+   */
+  quoteCards?: boolean;
+  clipTitle?: string;
 };
 
 export type GoldQuestion = {
@@ -65,8 +71,25 @@ export type GoldClip = {
   questions: GoldQuestion[];
 };
 
+/**
+ * Job-level Ask gold: the raw job_proofs rows a job Ask loads, plus the
+ * questions asked across the whole job. Real rows only in private gold.
+ */
+export type GoldJob = {
+  id: string;
+  consent?: GoldClip['consent'];
+  timeZone?: string | null;
+  fixture: {
+    job: { id: string; org_id: string; title: string };
+    parties: Array<Record<string, unknown>>;
+    proofs: Array<Record<string, unknown>>;
+  };
+  questions: GoldQuestion[];
+};
+
 export type GoldSet = {
   version: 1;
   name: string;
   clips: GoldClip[];
+  jobs?: GoldJob[];
 };

@@ -130,7 +130,8 @@ test('every transcript tool redacts privacy and child ranges', () => {
   assert.equal(hit.atSeconds, 4.2);
   assert.equal(parseMomentSource(hit.cite)?.atSeconds, 4.2);
   assert.match(hit.excerpt, /tarp came off/);
-  assert.equal(hit.speaker, 'El Presidente');
+  // Filming the clip does not make someone its speaker; there is no diarization here.
+  assert.equal(hit.speaker, 'Unidentified speaker');
   assert.doesNotMatch(hit.excerpt, /4412/);
 });
 
@@ -386,7 +387,7 @@ test('people on the job are available without an @mention', () => {
   assert.deepEqual(off?.recordedProofIds, []);
 });
 
-test('a contact on the same clip does not hide the person who recorded it', () => {
+test('neither the recorder nor a contact on the clip is named as its speaker', () => {
   const file = catalog({
     clips: [office],
     people: [
@@ -394,9 +395,11 @@ test('a contact on the same clip does not hide the person who recorded it', () =
       { userId: 'contact:tiffany', name: 'Tiffany Buyer', onThisJob: true, recordedProofIds: [OFFICE] },
     ],
   });
-  assert.equal(personNameForClip(file, office, 'Seated man'), 'El Presidente');
+  assert.equal(personNameForClip(file, office, 'Seated man'), 'Unidentified speaker');
+  assert.equal(personNameForClip(file, office, 'Speaker 2'), 'Speaker 2');
   const spoken = composeGroundedAsk('what was said about the tarp', [], file);
-  assert.match(spoken, /El Presidente/);
+  assert.match(spoken, /“The tarp came off the north slope\.” \(Sep 17 office recording, 0:04\)/);
+  assert.doesNotMatch(spoken, /El Presidente|Tiffany Buyer/);
   assert.doesNotMatch(spoken, /seated man/i);
 });
 
@@ -465,7 +468,7 @@ test('a tool loop cites the moment, quotes the speaker, and suggests follow-ups'
   assert.match(result.answer, /@4\.2/);
   const quotes = parseQuoteTrailer(result.answer);
   assert.match(quotes[0]?.text ?? '', /tarp came off/);
-  assert.equal(quotes[0]?.speaker, 'El Presidente');
+  assert.equal(quotes[0]?.speaker, 'Unidentified speaker');
   assert.doesNotMatch(result.answer, /seated man/i);
   assert.doesNotMatch(result.answer, /invented quote/);
   assert.doesNotMatch(result.answer, /dumpster/i);
@@ -1062,9 +1065,8 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
 
   const polished = polishAskProse(
     'The file does have that. The seated man said it.\n\nI checked the clips and the job history.',
-    { speakerName: 'El Presidente' },
   );
-  assert.equal(polished, 'El Presidente said it.');
+  assert.equal(polished, 'An unidentified speaker said it.');
 
   const prompt = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/shared/askReasoning.ts'),
@@ -1072,6 +1074,7 @@ test('drafts are distinct documents, corrections are polite, and the footer is g
   );
   assert.match(prompt, /A homeowner summary is prose/);
   assert.match(prompt, /Never write "The file does have that\."/);
-  assert.match(prompt, /Never write "Seated man"/);
+  assert.match(prompt, /never write visual labels such as "Person 1 \(Seated…\)" or "Seated man"/);
+  assert.match(prompt, /write "an unidentified speaker" and append nothing/);
   assert.match(prompt, /Do not end with "I checked the clips"/);
 });

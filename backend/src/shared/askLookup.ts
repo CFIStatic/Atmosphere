@@ -24,7 +24,15 @@ import {
   redactTranscriptForAsk,
   secondsInPrivacyRange,
 } from '../audio/privacyRedactions.js';
-import { cleanMentionTitle, mentionSpeakerLine, sourceSlug } from './mentions.js';
+import { cleanMentionTitle, sourceSlug } from './mentions.js';
+import {
+  UNIDENTIFIED_SPEAKER,
+  diarizationLabel,
+  diarizedSpeakerLabels,
+  isFabricatedSpeakerLabel,
+  speakerLabelOrUnidentified,
+} from './askSpeakers.js';
+import { retrieveAskEvidence } from './askTranscriptIndex.js';
 import {
   classifyAskIntent,
   classifyChatTurn,
@@ -45,7 +53,13 @@ import {
 
 export type AskLookupAccess = 'org' | 'viewer';
 
-export type AskLookupTimed = { start: number; end: number; text: string };
+export type AskLookupTimed = {
+  start: number;
+  end: number;
+  text: string;
+  /** Diarization label on this segment ("Speaker 1"), when the transcriber produced one. */
+  speaker?: string | null;
+};
 
 export type AskLookupClip = {
   proofId: string;
@@ -230,9 +244,20 @@ function asTimed(raw: unknown): AskLookupTimed[] {
     const end = Number(rec.end ?? rec.endSeconds ?? rec.endSec ?? start);
     const text = trim(rec.text ?? rec.word);
     if (!Number.isFinite(start) || start < 0 || !text) continue;
-    out.push({ start, end: Number.isFinite(end) ? end : start, text });
+    const speaker = diarizedSegmentLabel(rec.speaker ?? rec.speakerLabel ?? rec.speaker_label);
+    out.push({ start, end: Number.isFinite(end) ? end : start, text, ...(speaker ? { speaker } : {}) });
   }
   return out;
+}
+
+/** Stored segment/word timings as Ask reads them. */
+export function askTimed(raw: unknown): AskLookupTimed[] {
+  return asTimed(raw);
+}
+
+/** A diarization label on a stored segment ("Speaker 1"); anything else is dropped. */
+export function diarizedSegmentLabel(raw: unknown): string | null {
+  return diarizationLabel(raw);
 }
 
 type TimedRange = { startSec: number; endSec: number };
@@ -327,6 +352,18 @@ function redactAskText(text: string, clip: AskLookupClip): string {
   return trim(redactTranscriptForChildPrivacy(redactTranscriptForAsk(text, privacy), child));
 }
 
+/** Run both Ask redactors over one rendered `[m:ss] text` line (or any text) for a clip. */
+export function redactAskLine(text: string, clip: AskLookupClip): string {
+  return redactAskText(text, clip);
+}
+
+/** The span's redaction label, or null when the span is clear speech. */
+export function askSpanRedactionLabel(clip: AskLookupClip, start: number, end: number): string | null {
+  const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
+  const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
+  return labelFor(redactionKind(start, end, privacy, child));
+}
+
 export function redactClipTranscriptForAsk(clip: AskLookupClip): string {
   const privacy = privacyRedactionsFromStored(clip.privacyRedactions);
   const child = childPrivacyRedactionsFromStored(clip.childPrivacyRedactions);
@@ -383,10 +420,22 @@ export function redactedLines(transcript: string): RedactedLine[] {
   return rows;
 }
 
+/**
+ * Who said a line: an explicit label on the line, or the clip's only
+ * diarized speaker. A clip-level list of several speakers cannot attribute a
+ * line, so that is "Unidentified speaker", never the first name listed.
+ */
 function speakerFor(clip: AskLookupClip, line: RedactedLine): string {
-  if (line.speaker) return line.speaker;
-  const named = (clip.speakers ?? []).map((name) => trim(name)).filter(Boolean);
-  return named[0] || 'Speaker';
+  if (line.speaker) return speakerLabelOrUnidentified(line.speaker);
+  return clipOnlySpeaker(clip) ?? UNIDENTIFIED_SPEAKER;
+}
+
+/** The clip's single diarized speaker, when diarization found exactly one. */
+export function clipOnlySpeaker(clip: AskLookupClip): string | null {
+  const named = [...new Set((clip.speakers ?? []).map((name) => trim(name)).filter(Boolean))];
+  if (named.length !== 1) return null;
+  const label = speakerLabelOrUnidentified(named[0]);
+  return label === UNIDENTIFIED_SPEAKER ? null : label;
 }
 
 /** A visual label from the reading, not a person's name. */
@@ -395,25 +444,17 @@ export function isGenericSpeakerLabel(name: string): boolean {
   if (!text) return true;
   return /^(?:(?:seated|standing|walking)\s+)?(?:man|woman|person|guy|girl)$/i.test(text)
     || /^(?:person|speaker)\s*[a-d0-9]+$/i.test(text)
-    || /^(?:speaker|unknown)$/i.test(text);
+    || /^(?:speaker|unknown)$/i.test(text)
+    || isFabricatedSpeakerLabel(text) && !diarizationLabel(text);
 }
 
-/** Prefer the person who recorded the clip over "Seated man" and similar labels. */
-export function personNameForClip(catalog: AskLookupCatalog, clip: AskLookupClip, speaker: string): string {
-  const raw = speaker.trim();
-  if (raw && !isGenericSpeakerLabel(raw)) return raw;
-  const named = (catalog.people ?? []).filter(
-    (person) => person.name && !isGenericSpeakerLabel(person.name) && person.onThisJob !== false,
-  );
-  const recorded = new Set(clip.recordedByUserIds ?? []);
-  const filmed = named.filter((person) => recorded.has(person.userId));
-  if (filmed.length === 1) return filmed[0]!.name;
-  // A contact can list the same proof without having filmed it. Do not let that
-  // tie block the recorder, and do not guess when several people filmed it.
-  if (recorded.size > 0) return raw || 'Speaker';
-  const linked = named.filter((person) => (person.recordedProofIds ?? []).includes(clip.proofId));
-  if (linked.length === 1) return linked[0]!.name;
-  return raw || 'Speaker';
+/**
+ * The label Ask shows for a line's speaker. Only diarization output or a name
+ * the file explicitly attached to that speaker; never the person who filmed
+ * the clip, and never a visual label. Otherwise "Unidentified speaker".
+ */
+export function personNameForClip(_catalog: AskLookupCatalog, _clip: AskLookupClip, speaker: string): string {
+  return speakerLabelOrUnidentified(speaker);
 }
 
 function isRedactedSpeech(text: string): boolean {
@@ -554,10 +595,10 @@ export function clipFromProofRow(
       ? (row.device_metadata as Record<string, unknown>)
       : {};
   const recorded = [input.partyCreatedBy, device.userId].map((value) => trim(value)).filter(Boolean);
-  const speakers = mentionSpeakerLine(findings)
-    .split(',')
-    .map((name) => name.trim())
-    .filter(Boolean);
+  // Diarized speakers only, as an array. Visual people labels such as
+  // "Person 1 (Seated, Unknown Role)" are not speakers, and splitting a joined
+  // label line on commas is what produced "Person 1 (Seated".
+  const speakers = diarizedSpeakerLabels(findings);
   return {
     proofId: String(row.id ?? ''),
     jobId: String(row.job_id ?? input.jobId),
@@ -669,6 +710,11 @@ function citeFor(clip: AskLookupClip, atSeconds: number | null): string {
   return momentSourceId(clip.jobId, clip.proofId, sourceSlug(clip.title), atSeconds);
 }
 
+/** Moment source id for a clip second, the id the Ask UI opens at that exact time. */
+export function askClipCite(clip: AskLookupClip, atSeconds: number | null): string {
+  return citeFor(clip, atSeconds);
+}
+
 /** Prefer the segment or word start that produced a redacted line's clock. */
 function preciseMoment(clip: AskLookupClip, atSeconds: number | null): number | null {
   if (atSeconds == null) return null;
@@ -768,35 +814,22 @@ function lineMatches(query: string, line: string): boolean {
 export function searchTranscripts(catalog: AskLookupCatalog, query: string): AskLookupResult {
   const needle = trim(query).slice(0, 300);
   if (!needle) return { ok: false, tool: 'search_transcripts', summary: 'Missing search query.' };
-  const hits: Array<Record<string, unknown>> = [];
-  for (const clip of clipsInScope(catalog)) {
-    const transcript = redactClipTranscriptForAsk(clip);
-    for (const line of redactedLines(transcript)) {
-      if (
-        line.text === PRIVACY_REDACTED_LABEL ||
-        line.text.endsWith(PRIVACY_REDACTED_LABEL) ||
-        line.text.includes(CHILD_PRIVACY_REDACTED_LABEL)
-      ) {
-        continue;
-      }
-      if (!lineMatches(needle, line.text)) continue;
-      const speaker = personNameForClip(catalog, clip, speakerFor(clip, line));
-      const atSeconds = preciseMoment(clip, line.atSeconds);
-      hits.push({
-        proofId: clip.proofId,
-        jobId: clip.jobId,
-        jobTitle: clip.jobTitle ?? null,
-        title: clip.title,
-        workDate: clip.workDate ?? null,
-        atSeconds,
-        speaker,
-        excerpt: excerpt(line.text.replace(/^[^:]{1,40}:\s+/, '')),
-        cite: citeFor(clip, atSeconds),
-      });
-      if (hits.length >= 8) break;
-    }
-    if (hits.length >= 8) break;
-  }
+  // Hybrid retrieval over the transcript chunk index (exact phrase pins, BM25,
+  // local semantic score). Each hit is one whole chunk, never truncated, so a
+  // quote taken from it can be checked as an exact substring.
+  const evidence = retrieveAskEvidence(catalog, needle, { useDate: false, limit: 8 });
+  const hits: Array<Record<string, unknown>> = evidence.transcript.slice(0, 12).map((hit) => ({
+    proofId: hit.proofId,
+    jobId: hit.jobId,
+    jobTitle: clipsInScope(catalog).find((clip) => clip.proofId === hit.proofId)?.jobTitle ?? null,
+    title: hit.clipTitle,
+    workDate: hit.workDate,
+    atSeconds: hit.startSec,
+    endSeconds: hit.endSec,
+    speaker: speakerLabelOrUnidentified(hit.speaker),
+    excerpt: hit.text,
+    cite: hit.cite,
+  }));
   return {
     ok: true,
     tool: 'search_transcripts',
@@ -901,7 +934,13 @@ export function getClip(catalog: AskLookupCatalog, proofId: string): AskLookupRe
       title: clip.title,
       workDate: clip.workDate ?? null,
       summary: redactedClipSummary(clip) || null,
-      speakers: [...new Set((clip.speakers ?? []).map((name) => personNameForClip(catalog, clip, name)).filter(Boolean))],
+      speakers: [
+        ...new Set(
+          (clip.speakers ?? [])
+            .map((name) => personNameForClip(catalog, clip, name))
+            .filter((name) => name && name !== UNIDENTIFIED_SPEAKER),
+        ),
+      ],
       cite: citeFor(clip, atSeconds),
       atSeconds,
       transcript: transcript || null,
@@ -1404,7 +1443,7 @@ export function quotesFromTrace(trace: AskLookupTraceStep[]): AskMomentQuote[] {
       if (!cite || !text || isRedactedSpeech(text)) continue;
       push({
         sourceId: cite,
-        speaker: trim(row.speaker) || 'Speaker',
+        speaker: speakerLabelOrUnidentified(row.speaker),
         text,
         atSeconds: row.atSeconds == null ? null : Number(row.atSeconds),
       });
@@ -1418,7 +1457,7 @@ export function quotesFromTrace(trace: AskLookupTraceStep[]): AskMomentQuote[] {
       const cite = trim(row.cite);
       if (!text || !cite || isRedactedSpeech(text)) continue;
       const at = row.atSeconds == null || Number.isNaN(Number(row.atSeconds)) ? null : Number(row.atSeconds);
-      pool.push({ excerpt: text, speaker: trim(row.speaker) || 'Speaker', atSeconds: at, cite, proofId });
+      pool.push({ excerpt: text, speaker: speakerLabelOrUnidentified(row.speaker), atSeconds: at, cite, proofId });
     }
   }
   if (quotes.length < 6) {

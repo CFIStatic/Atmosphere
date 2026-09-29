@@ -9,6 +9,8 @@ This eval checks what clip Ask answers and what clip summaries say against a gol
 
 An answer that states a speech count the transcript contradicts also fails the gate.
 
+The gate also fails on any **job-level** Ask miss (gold `jobs`, see below) and on any job answer with a fabricated speaker label ("Person 1 (Seated", "Seated man") or an unbalanced parenthesis.
+
 Reported metrics:
 
 - correctness
@@ -63,8 +65,19 @@ Schema: `src/eval/goldTypes.ts`. Each clip carries:
 
 Questions drafted automatically carry `needsReview: true` until a person confirms them.
 
+### Job-level gold (`jobs`)
+
+Job-level Ask (the job file Ask box) is scored over a fixture of the job's proof rows, exactly as the route loads them: `fixture.job`, `fixture.parties`, `fixture.proofs` (raw `transcript_text` / `transcript_segments` / `transcript_words`, `ai_findings`, `work_date`, `title`). Each job question uses the same `expect` block plus:
+
+- `quoteCards`: every expected quote must also be a quote card (a moment link at its own time, not 0:00).
+- `clipTitle`: the quote must be attached to this clip name.
+
+Without a model configured the runner scores the deterministic path (retrieval → answer → quote grounding). With `EVAL_WITH_MODEL=1` it scores `answerFromJobFile`.
+
+The committed synthetic job mirrors the real regressions with made-up lines: a topic + owner question on a dated clip (both lines quoted verbatim with clip name and time, owner stated as an unidentified speaker), a spoken-line count ("how many spoken lines are in this clip" → 5, all quoted), and a topic in no clip (not found, nothing improvised). The real versions run from the private gold.
+
 ## CI
 
 The gate workflow is at `eval/ci/ask-eval.yml`. Copy it to `.github/workflows/ask-eval.yml` to turn it on. The PR's push token could not write workflow files.
 
-To make it block releases, mark the **Ask eval gate** check as required on `main` in branch protection. For the private run, add the `EVAL_GOLD_URL` secret (plus `EVAL_GOLD_TOKEN` if needed). To score the model path too, add the `EVAL_WITH_MODEL=1` variable and the `ANTHROPIC_API_KEY` secret.
+To make it block deploys, apply `eval/ci/deploy-ask-eval-gate.patch` (`git apply backend/eval/ci/deploy-ask-eval-gate.patch` from the repo root). It adds an `ask-eval-gate` job to Deploy Work Verification that the backend deploy `needs`, so nothing deploys unless the gate passes. You can also mark the **Ask eval gate** check as required on `main` in branch protection. For the private run, add the `EVAL_GOLD_URL` secret (plus `EVAL_GOLD_TOKEN` if needed). To score the model path too, add the `EVAL_WITH_MODEL=1` variable and the `ANTHROPIC_API_KEY` secret.

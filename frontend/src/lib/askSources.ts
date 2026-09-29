@@ -53,6 +53,8 @@ export type AskMomentQuote = {
   atSeconds: number | null;
   proofId?: string;
   jobId?: string;
+  /** Clip name, from the trailing `|clip=` field. */
+  clipTitle?: string;
 };
 
 /** Public-web citation chip — opens in a new tab. */
@@ -467,17 +469,20 @@ export function parseAskQuoteTrailer(raw: string): AskMomentQuote[] {
   const out: AskMomentQuote[] = [];
   for (const part of (match[1] ?? '').split(/\s*;;\s*/)) {
     const [sourceId, speaker, ...rest] = part.split('|');
+    const clipField = rest.length > 1 && /^clip=/.test(rest[rest.length - 1] ?? '') ? rest.pop()! : '';
     const text = rest.join('|').replace(/\s+/g, ' ').trim();
     const id = trim(sourceId);
     if (!id || !text) continue;
     const moment = parseVideoMoment(id);
+    const clipTitle = clipField.replace(/^clip=/, '').trim();
     out.push({
       sourceId: id,
-      speaker: trim(speaker) || 'Speaker',
+      speaker: trim(speaker) || 'Unidentified speaker',
       text: text.slice(0, 180),
       atSeconds: moment?.atSeconds ?? null,
       proofId: moment?.proofId,
       jobId: moment?.jobId,
+      ...(clipTitle ? { clipTitle } : {}),
     });
   }
   return out;
