@@ -3214,6 +3214,13 @@ function browserTimeZone(): string | undefined {
   }
 }
 
+/** A job the "Create from completed job" picker can offer. */
+export interface PlaybookSourceJob {
+  jobId: string;
+  label: string;
+  analyzedClips: number;
+}
+
 export const api = {
   // ---- Auth ----
   signup: (email: string, password: string, acceptedTermsVersion: string) =>
@@ -3972,6 +3979,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  /** Jobs POST /from-job accepts (server applies the same rule as the create). */
+  playbookSourceJobs: () =>
+    request<{ jobs: PlaybookSourceJob[] }>('/api/playbooks/source-jobs', { method: 'GET' }),
 
   createPlaybookFromJob: (jobId: string) =>
     request<{ playbook: TradePlaybook }>('/api/playbooks/from-job', {
