@@ -354,6 +354,67 @@
     }
   }
 
+  /* ---- Single sign-on with the Platform ---- */
+  var NO_ADOPT_KEY = 'atm.field.noPlatformAdopt';
+  var SIGN_OUT_INCOMPLETE =
+    'Signed out here, but the office session could not be closed. Sign out again when online, or close this browser.';
+
+  /**
+   * Signed out here: do not sign back in from the Platform cookie until a
+   * password sign-in. The tab flag covers a normal sign-out; when the office
+   * logout could not be confirmed the cookie may still be live, so the flag
+   * is also kept in localStorage and a new tab on a shared browser will not
+   * silently sign the last person back in.
+   */
+  function platformAdoptionAllowed() {
+    try {
+      if (sessionStorage.getItem(NO_ADOPT_KEY) === '1') return false;
+    } catch (e) {
+      /* private mode */
+    }
+    try {
+      if (localStorage.getItem(NO_ADOPT_KEY) === '1') return false;
+    } catch (e) {
+      /* private mode */
+    }
+    return true;
+  }
+
+  function allowPlatformAdoption() {
+    try {
+      sessionStorage.removeItem(NO_ADOPT_KEY);
+    } catch (e) {
+      /* private mode */
+    }
+    try {
+      localStorage.removeItem(NO_ADOPT_KEY);
+    } catch (e) {
+      /* private mode */
+    }
+  }
+
+  /** Clear this tab and the Platform session. Resolves true when the office confirmed the logout. */
+  function signOutEverywhere() {
+    var refreshToken = state.refreshToken;
+    try {
+      sessionStorage.setItem(NO_ADOPT_KEY, '1');
+    } catch (e) {
+      /* private mode */
+    }
+    writeStoredSession(null, null);
+    if (!Core.signOutPlatform) return Promise.resolve(true);
+    return Core.signOutPlatform(API_BASE, refreshToken).then(function (ok) {
+      if (!ok) {
+        try {
+          localStorage.setItem(NO_ADOPT_KEY, '1');
+        } catch (e) {
+          /* private mode */
+        }
+      }
+      return ok;
+    });
+  }
+
   function writeStoredSession(accessToken, refreshToken) {
     state.accessToken = accessToken || null;
     state.refreshToken = refreshToken || null;
@@ -580,12 +641,14 @@
 
   function refreshAccess(bound) {
     if (!sessionStillOpen(bound)) return Promise.resolve(null);
-    if (!state.refreshToken || !Core.refreshSession) {
+    if (!Core.refreshSession) {
       if (state.account) sessionExpired();
       return Promise.resolve(null);
     }
     if (!state.refreshing) {
-      var refreshToken = state.refreshToken;
+      // No refresh token in this tab (the session came from the Platform's
+      // cookie): the office API renews from that same-site cookie instead.
+      var refreshToken = state.refreshToken || null;
       state.refreshing = Core.refreshSession(API_BASE, refreshToken).then(
         function (session) {
           state.refreshing = null;
@@ -594,7 +657,9 @@
             sessionExpired();
             return null;
           }
-          writeStoredSession(session.accessToken, session.refreshToken || refreshToken);
+          // Cookie-backed sessions keep the refresh token in the httpOnly
+          // cookie only; never copy it into script-readable storage.
+          writeStoredSession(session.accessToken, refreshToken ? session.refreshToken || refreshToken : null);
           return session.accessToken;
         },
         function (err) {
@@ -1155,9 +1220,11 @@
   }
 
   function failJoinOffice(err) {
-    writeStoredSession(null, null);
-    showLoginError(err.message || 'Ask your Global Admin to invite this email.');
-    bootBlocked();
+    var message = err.message || 'Ask your Global Admin to invite this email.';
+    signOutEverywhere().then(function () {
+      showLoginError(message);
+      bootBlocked();
+    });
   }
 
   function showTermsError(message) {
@@ -1411,6 +1478,7 @@
             if (!session.accessToken) {
               throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
             }
+            allowPlatformAdoption();
             writeStoredSession(session.accessToken, session.refreshToken);
             if (TOKEN) {
               return openInviteAfterAccountSignIn();
@@ -1473,6 +1541,7 @@
             if (!session.accessToken) {
               throw new Error('Account created. Sign in with that email and password.');
             }
+            allowPlatformAdoption();
             writeStoredSession(session.accessToken, session.refreshToken);
             if (TOKEN) return openInviteAfterAccountSignIn();
             return finishAccountConnect();
@@ -1537,12 +1606,14 @@
     when('#terms-sign-out', function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        writeStoredSession(null, null);
         showTermsError('');
-        bootBlocked();
+        signOutEverywhere().then(function (ok) {
+          showLoginError(ok ? '' : SIGN_OUT_INCOMPLETE);
+          bootBlocked();
+        });
       });
     });
-    if (state.accessToken) {
+    function connectStoredSession(renewed) {
       var bootCacheOk = Core.fieldCacheMatchesSession
         ? Core.fieldCacheMatchesSession(state.accessToken)
         : false;
@@ -1559,8 +1630,44 @@
           if (TOKEN) return openInviteAfterAccountSignIn();
           return joinOfficeByInvite().catch(failJoinOffice);
         }
+        // A reload after the one-hour access token lapsed is not a sign-out:
+        // renew once (this tab's refresh token, else the Platform cookie).
+        if (!renewed && err && err.status === 401) {
+          return renewBootSession().then(function (token) {
+            if (token) return connectStoredSession(true);
+            writeStoredSession(null, null);
+            bootBlocked();
+          });
+        }
         writeStoredSession(null, null);
         bootBlocked();
+      });
+    }
+
+    function renewBootSession() {
+      // Same single-flight renewal the film queue uses: two concurrent
+      // refreshes would spend the rotated refresh token twice.
+      return refreshAccess(captureSession());
+    }
+
+    if (state.accessToken) {
+      connectStoredSession(false);
+      return;
+    }
+    // Signed in on the Platform already? Take that session (same-site cookie)
+    // rather than a second login. An invite link only takes it when it is the
+    // invited email; otherwise the invite's own sign-in form is shown.
+    if (Core.adoptPlatformSession && platformAdoptionAllowed()) {
+      Core.adoptPlatformSession(API_BASE).then(function (session) {
+        var invited = INVITE_EMAIL.toLowerCase();
+        var sameInvitee = !invited || String((session && session.email) || '').toLowerCase() === invited;
+        if (!session || !session.accessToken || !sameInvitee) {
+          bootBlocked();
+          return;
+        }
+        // Access token only: the refresh token stays in the Platform's httpOnly cookie.
+        writeStoredSession(session.accessToken, null);
+        connectStoredSession(true);
       });
       return;
     }
@@ -2798,15 +2905,20 @@
         if (!ok) return;
       }
       if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
-      writeStoredSession(null, null);
-      state.account = false;
-      state.owner = '';
-      state.jobs = [];
-      state.activeJobId = null;
-      showJobAdd(false);
-      if (frame) frame.setAttribute('src', 'about:blank');
-      showLoginError('');
-      bootBlocked();
+      // One session across the Platform and this app: signing out here signs
+      // out there too, or the shared cookie would sign this tab straight back in.
+      // Wait for it before showing sign-in, so a quick second sign-in is not
+      // undone by the logout response.
+      signOutEverywhere().then(function (ok) {
+        state.account = false;
+        state.owner = '';
+        state.jobs = [];
+        state.activeJobId = null;
+        showJobAdd(false);
+        if (frame) frame.setAttribute('src', 'about:blank');
+        showLoginError(ok ? '' : SIGN_OUT_INCOMPLETE);
+        bootBlocked();
+      });
     }
 
     var whoBtn = document.getElementById('who-btn');
