@@ -8,6 +8,7 @@ import {
   isInviteEmail,
   membersToCaptureTeam,
   scopeFromSituation,
+  startJobActionLabel,
   workTypeFromSituation,
 } from '../lib/intakeForm';
 import { usePhoneShell } from '../lib/usePhoneShell';
@@ -17,7 +18,10 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useExperiment } from '../hooks/useExperiment';
 
 /**
- * Office intake — name, optional situation, invite list.
+ * Office Start a job — modeled on the field app's New job: a job name, an
+ * optional note, and one button. Invites and homeowner sharing sit behind a
+ * disclosure; the button reads "Create job" until someone is on the list,
+ * then "Create & send invites".
  *
  * One page. Creates the job file, publishes a brief, and can invite Field Capture.
  *
@@ -41,11 +45,8 @@ export function JobIntakePage() {
   const navigate = useNavigate();
   const phone = usePhoneShell();
   useFeatureTimer('job_intake');
+  // Conversion is still tracked; the button copy now follows the invite list.
   const intakeCta = useExperiment('intake_cta_copy');
-  const approveLabel =
-    intakeCta.variantKey === 'proof_first'
-      ? 'Publish brief & invite crew'
-      : 'Approve & invite';
 
   const [name, setName] = useState('');
   const [situation, setSituation] = useState('');
@@ -55,6 +56,8 @@ export function JobIntakePage() {
   const [extCompany, setExtCompany] = useState('');
   const [extEmail, setExtEmail] = useState('');
   const [homeownerEmail, setHomeownerEmail] = useState('');
+  const [shareWithHomeowner, setShareWithHomeowner] = useState(false);
+  const [invitesOpen, setInvitesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -135,7 +138,13 @@ export function JobIntakePage() {
   async function onApprove(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Enter a name.');
+      setError('Enter a job name.');
+      return;
+    }
+    const ownerEmailInput = homeownerEmail.trim().toLowerCase();
+    if (shareWithHomeowner && !isInviteEmail(ownerEmailInput)) {
+      setInvitesOpen(true);
+      setError('Enter the homeowner’s email, or turn off homeowner sharing.');
       return;
     }
     setBusy(true);
@@ -173,8 +182,8 @@ export function JobIntakePage() {
         inviteCount: invitees.length,
         scopeLines: scope.length,
       });
-      const ownerEmail = homeownerEmail.trim().toLowerCase();
-      if (ownerEmail && isInviteEmail(ownerEmail)) {
+      const ownerEmail = ownerEmailInput;
+      if (shareWithHomeowner && isInviteEmail(ownerEmail)) {
         try {
           await api.createProgressShare({
             jobId: res.job.id,
@@ -189,7 +198,7 @@ export function JobIntakePage() {
       // the new job file instead of a confirmation screen.
       navigate(jobFilePath(res.job.id, { title: res.job.title, number: res.job.jobNumber }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not approve that package.');
+      setError(err instanceof Error ? err.message : 'Could not create the job.');
     } finally {
       setBusy(false);
     }
@@ -211,10 +220,21 @@ export function JobIntakePage() {
   }
 
   const invitedCount = selectedCount + externals.length;
+  const actionLabel = startJobActionLabel({
+    invited: invitedCount,
+    homeownerShare: shareWithHomeowner,
+  });
+  const peopleSummary = [
+    invitedCount > 0 ? `${invitedCount} invited` : null,
+    shareWithHomeowner ? 'homeowner' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const cardPad = phone ? 'p-3.5' : 'p-5';
   const sectionTitle = phone ? 'text-[15px] font-semibold text-ink-900' : 'text-base font-semibold text-ink-900';
   const sectionHint = phone ? 'mt-0.5 text-[13px] leading-snug text-ink-600' : 'mt-1 text-sm text-ink-600';
+  const fieldLabel = phone ? 'block text-[13px] font-medium text-ink-700' : 'block text-sm font-medium text-ink-700';
 
   return (
     <div
@@ -225,13 +245,13 @@ export function JobIntakePage() {
         <div className="min-w-0 shrink-0">
           <h1 className="text-xl font-bold tracking-tight text-ink-900">Start a job</h1>
           <p className="mt-1 text-[13px] leading-snug text-ink-600">
-            Name it. A note and invites are optional.
+            Name it, then start. A note and invites are optional.
           </p>
         </div>
       ) : (
         <PageHeader
           title="Start a job"
-          description="Name the job. A short note and invites are optional."
+          description="Name it, then start. A note and invites are optional."
         />
       )}
 
@@ -245,7 +265,7 @@ export function JobIntakePage() {
         onSubmit={onApprove}
         className={cn(
           'animate-fade-in-up',
-          phone ? 'mt-3 flex min-h-0 min-w-0 flex-1 flex-col' : 'mx-auto max-w-3xl space-y-4',
+          phone ? 'mt-3 flex min-h-0 min-w-0 flex-1 flex-col' : 'mx-auto max-w-2xl space-y-4',
         )}
       >
         <div
@@ -255,23 +275,24 @@ export function JobIntakePage() {
               : 'contents'
           }
         >
-          {phone && (
-          <div className={cn('relative z-20 overflow-visible rounded-xl glass-card', cardPad)}>
-            <h2 className={sectionTitle}>Name</h2>
-            <label className="mt-2 block text-xs font-medium text-ink-600">
-              <span className="sr-only">Name</span>
+          <div className={cn('rounded-xl glass-card', cardPad)}>
+            <label className={fieldLabel}>
+              Job name
               <input
-                className="glass-field w-full rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
+                className="glass-field mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                maxLength={200}
                 autoComplete="off"
                 placeholder="East Racine Avenue"
               />
             </label>
 
-            <div className="mt-3.5 flex items-baseline justify-between gap-2">
-              <h2 className={sectionTitle}>Situation</h2>
+            <div className={cn('flex items-baseline justify-between gap-2', phone ? 'mt-3.5' : 'mt-4')}>
+              <label htmlFor="start-job-note" className={fieldLabel}>
+                Note <span className="font-normal text-ink-500">(optional)</span>
+              </label>
               <button
                 type="button"
                 className="shrink-0 text-xs font-medium text-brand-600"
@@ -282,235 +303,245 @@ export function JobIntakePage() {
                 Use a sample note
               </button>
             </div>
-            <p className="mt-0.5 text-xs leading-snug text-ink-500">
-              Optional. AI will describe the day film either way.
-            </p>
             <textarea
+              id="start-job-note"
               value={situation}
               onChange={(e) => setSituation(e.target.value)}
               rows={3}
+              maxLength={2000}
               placeholder="Extract standing water in the living room. Set drying equipment."
-              className="glass-field mt-2 w-full resize-y rounded-lg px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400"
+              className="glass-field mt-1.5 w-full resize-y rounded-lg px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400"
             />
+            <p className="mt-1 text-xs text-ink-500">What needs to be done. AI describes the film either way.</p>
           </div>
-          )}
-
-          {!phone && (
-            <>
-              <div className="rounded-xl glass-card p-5">
-                <h2 className="text-base font-semibold text-ink-900">Name</h2>
-                <p className="mt-1 text-sm text-ink-600">What this job is called on the dashboard.</p>
-                <label className="mt-4 block text-xs font-medium text-ink-600">
-                  Name
-                  <input
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    autoComplete="off"
-                    placeholder="East Racine Avenue"
-                  />
-                </label>
-              </div>
-
-              <div className="rounded-xl glass-card p-5">
-                <h2 className="text-base font-semibold text-ink-900">Situation</h2>
-                <p className="mt-1 text-sm text-ink-600">
-                  Optional. A short note is enough — AI will describe the day film either way.
-                </p>
-                <textarea
-                  value={situation}
-                  onChange={(e) => setSituation(e.target.value)}
-                  rows={4}
-                  placeholder="Extract standing water in the living room. Set drying equipment."
-                  className="glass-field mt-3 w-full resize-y rounded-lg px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400"
-                />
-                <button
-                  type="button"
-                  className="mt-3 text-sm font-medium text-brand-600"
-                  onClick={() => {
-                    setSituation(INTAKE_SAMPLE.situation);
-                  }}
-                >
-                  Use a sample note
-                </button>
-              </div>
-            </>
-          )}
 
           <div className={cn('rounded-xl glass-card', cardPad)}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h2 className={sectionTitle}>Invite list</h2>
-                <p className={sectionHint}>
-                  {phone
-                    ? 'Teammates and outside emails go on this list. Optional.'
-                    : 'One list. Check teammates or add someone by email. They get a capture link for this job only.'}
-                </p>
-              </div>
-              {(captureTeam.length > 0 || externals.length > 0) && (
-                <div className="flex shrink-0 gap-2 text-xs font-medium">
-                  {captureTeam.length > 0 && (
-                    <button type="button" className="text-brand-600" onClick={() => setAllSelected(true)}>
-                      Invite all
-                    </button>
+            <button
+              type="button"
+              aria-expanded={invitesOpen}
+              aria-controls="start-job-people"
+              onClick={() => setInvitesOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className={cn('block', sectionTitle)}>Invite people</span>
+                <span className={cn('block', sectionHint)}>
+                  {peopleSummary
+                    ? peopleSummary
+                    : 'Optional. Crew, outside workers, or the homeowner — or do it later from the job file.'}
+                </span>
+              </span>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden
+                className={cn('shrink-0 text-ink-500 transition-transform', invitesOpen && 'rotate-180')}
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            {invitesOpen && (
+              <div id="start-job-people" className={phone ? 'mt-3' : 'mt-4'}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-ink-900">Invite list</h2>
+                  {(captureTeam.length > 0 || externals.length > 0) && (
+                    <div className="flex shrink-0 gap-2 text-xs font-medium">
+                      {captureTeam.length > 0 && (
+                        <button type="button" className="text-brand-600" onClick={() => setAllSelected(true)}>
+                          Invite all
+                        </button>
+                      )}
+                      {captureTeam.length > 0 && <span className="text-ink-400">·</span>}
+                      <button type="button" className="text-ink-500" onClick={clearInvites}>
+                        Clear
+                      </button>
+                    </div>
                   )}
-                  {captureTeam.length > 0 && <span className="text-ink-400">·</span>}
-                  <button type="button" className="text-ink-500" onClick={clearInvites}>
-                    Clear
+                </div>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  Each person gets a capture link for this job only. Teammates can also film from
+                  Field Capture without an invite.
+                </p>
+
+                {captureTeam.length === 0 && externals.length === 0 ? (
+                  <p className={cn(phone ? 'mt-3 text-[13px] leading-snug text-ink-600' : 'mt-3 text-sm text-ink-600')}>
+                    No teammates in this org yet. Add someone by email — they only see this job.
+                  </p>
+                ) : (
+                  <ul className="mt-3 divide-y divide-line/50">
+                    {captureTeam.map((m) => (
+                      <li
+                        key={m.userId}
+                        className={cn(
+                          'flex min-w-0 items-center gap-3 first:pt-0 last:pb-0',
+                          phone ? 'py-2' : 'py-2.5',
+                        )}
+                      >
+                        <input
+                          id={`capture-${m.userId}`}
+                          type="checkbox"
+                          checked={m.selected}
+                          onChange={() => toggleMember(m.userId)}
+                          className="h-4 w-4 shrink-0 rounded border-line text-brand-600"
+                        />
+                        <label htmlFor={`capture-${m.userId}`} className="min-w-0 flex-1 cursor-pointer">
+                          <span className="block truncate text-sm font-medium text-ink-900">
+                            {m.fullName}
+                          </span>
+                          <span className="block truncate text-xs text-ink-500">
+                            {[m.email, m.workType].filter(Boolean).join(' · ') || m.role}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                    {externals.map((x) => (
+                      <li
+                        key={x.id}
+                        className={cn(
+                          'flex min-w-0 items-center gap-3 first:pt-0 last:pb-0',
+                          phone ? 'py-2' : 'py-2.5',
+                        )}
+                      >
+                        <span className="h-4 w-4 shrink-0" aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink-900">
+                            {x.fullName}
+                          </span>
+                          <span className="block truncate text-xs text-ink-500">
+                            {[x.company !== x.fullName ? x.company : null, x.email]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs font-medium text-ink-500 hover:text-danger-600"
+                          onClick={() => setExternals((list) => list.filter((i) => i.id !== x.id))}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 text-xs text-ink-500">{invitedCount} invited</p>
+
+                <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-4 pt-4')}>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <label className="block text-xs font-medium text-ink-600">
+                      Contact name
+                      <input
+                        className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                        value={extName}
+                        onChange={(e) => setExtName(e.target.value)}
+                        placeholder="Alex Rivera"
+                        autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addExternal();
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-ink-600">
+                      Company
+                      <input
+                        className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                        value={extCompany}
+                        onChange={(e) => setExtCompany(e.target.value)}
+                        placeholder="Rio Grande Mitigation"
+                        autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addExternal();
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-ink-600">
+                      Email
+                      <input
+                        type="email"
+                        className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                        value={extEmail}
+                        onChange={(e) => setExtEmail(e.target.value)}
+                        placeholder="alex@example.com"
+                        autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addExternal();
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addExternal()}
+                    className={cn('font-medium text-brand-600', phone ? 'mt-2.5 text-[13px]' : 'mt-3 text-sm')}
+                  >
+                    Add
                   </button>
                 </div>
-              )}
-            </div>
 
-            {captureTeam.length === 0 && externals.length === 0 ? (
-              <p className={cn(phone ? 'mt-3 text-[13px] leading-snug text-ink-600' : 'mt-4 text-sm text-ink-600')}>
-                {phone
-                  ? 'No teammates yet. Add someone by email — they only see this job.'
-                  : 'No teammates in this org yet. Add someone by email — they only see this job — or add Employees under Team.'}
-              </p>
-            ) : (
-              <ul className={cn('divide-y divide-line/50', phone ? 'mt-3' : 'mt-4')}>
-                {captureTeam.map((m) => (
-                  <li
-                    key={m.userId}
-                    className={cn(
-                      'flex min-w-0 items-center gap-3 first:pt-0 last:pb-0',
-                      phone ? 'py-2' : 'py-2.5',
-                    )}
-                  >
+                <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-4 pt-4')}>
+                  <label className="flex items-start gap-3">
                     <input
-                      id={`capture-${m.userId}`}
                       type="checkbox"
-                      checked={m.selected}
-                      onChange={() => toggleMember(m.userId)}
-                      className="h-4 w-4 shrink-0 rounded border-line text-brand-600"
+                      checked={shareWithHomeowner}
+                      onChange={(e) => setShareWithHomeowner(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-brand-600"
                     />
-                    <label htmlFor={`capture-${m.userId}`} className="min-w-0 flex-1 cursor-pointer">
-                      <span className="block truncate text-sm font-medium text-ink-900">
-                        {m.fullName}
-                      </span>
-                      <span className="block truncate text-xs text-ink-500">
-                        {[m.email, m.workType].filter(Boolean).join(' · ') || m.role}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-                {externals.map((x) => (
-                  <li
-                    key={x.id}
-                    className={cn(
-                      'flex min-w-0 items-center gap-3 first:pt-0 last:pb-0',
-                      phone ? 'py-2' : 'py-2.5',
-                    )}
-                  >
-                    <span className="h-4 w-4 shrink-0" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink-900">
-                        {x.fullName}
-                      </span>
-                      <span className="block truncate text-xs text-ink-500">
-                        {[x.company !== x.fullName ? x.company : null, x.email]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink-900">Share with the homeowner</span>
+                      <span className="block text-xs text-ink-500">Optional. No account needed.</span>
+                    </span>
+                  </label>
+
+                  {shareWithHomeowner && (
+                    <div className="mt-3 space-y-3">
+                      <label className="block text-xs font-medium text-ink-600">
+                        Homeowner email
+                        <input
+                          type="email"
+                          className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                          value={homeownerEmail}
+                          onChange={(e) => setHomeownerEmail(e.target.value)}
+                          placeholder="jordan@example.com"
+                        />
+                      </label>
+                      <div
+                        data-testid="homeowner-disclosure"
+                        className="rounded-lg border border-line bg-paper-0/70 px-3.5 py-3 text-xs leading-relaxed text-ink-700"
+                      >
+                        <p className="font-semibold text-ink-900">What the homeowner will see</p>
+                        <p className="mt-1">
+                          {homeownerEmail.trim() ? homeownerEmail.trim() : 'The homeowner'} gets an
+                          email with a private link to this job file:
+                        </p>
+                        <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                          <li>The job name and its progress</li>
+                          <li>Every recording on this job, with its transcript and AI summary</li>
+                          <li>Answers to questions they ask about those recordings</li>
+                        </ul>
+                        <p className="mt-1.5 text-ink-500">
+                          Recordings added later show up too. You can revoke the link from the job
+                          file at any time.
+                        </p>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="shrink-0 text-xs font-medium text-ink-500 hover:text-danger-600"
-                      onClick={() => setExternals((list) => list.filter((i) => i.id !== x.id))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-3 text-xs text-ink-500">
-              {invitedCount} invited
-              {phone ? '' : ' · teammates can also film from Field Capture without an extra invite'}
-            </p>
-
-            <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <label className="block text-xs font-medium text-ink-600">
-                  Contact name
-                  <input
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                    value={extName}
-                    onChange={(e) => setExtName(e.target.value)}
-                    placeholder="Alex Rivera"
-                    autoComplete="off"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addExternal();
-                      }
-                    }}
-                  />
-                </label>
-                <label className="block text-xs font-medium text-ink-600">
-                  Company
-                  <input
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                    value={extCompany}
-                    onChange={(e) => setExtCompany(e.target.value)}
-                    placeholder="Rio Grande Mitigation"
-                    autoComplete="off"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addExternal();
-                      }
-                    }}
-                  />
-                </label>
-                <label className="block text-xs font-medium text-ink-600">
-                  Email
-                  <input
-                    type="email"
-                    className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                    value={extEmail}
-                    onChange={(e) => setExtEmail(e.target.value)}
-                    placeholder="alex@example.com"
-                    autoComplete="off"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addExternal();
-                      }
-                    }}
-                  />
-                </label>
+                  )}
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => addExternal()}
-                className={cn(
-                  'font-medium text-brand-600',
-                  phone ? 'mt-2.5 text-[13px]' : 'mt-3 text-sm',
-                )}
-              >
-                Add
-              </button>
-            </div>
-
-            <div className={cn('border-t border-line/50', phone ? 'mt-3.5 pt-3' : 'mt-5 pt-4')}>
-              <p className="text-xs font-medium text-ink-600">Homeowner (optional)</p>
-              <p className="mt-1 text-[11px] leading-snug text-ink-500">
-                We email them a link to the job file and every recording. No account needed.
-              </p>
-              <label className="mt-3 block text-xs font-medium text-ink-600">
-                Homeowner email
-                <input
-                  type="email"
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={homeownerEmail}
-                  onChange={(e) => setHomeownerEmail(e.target.value)}
-                  placeholder="jordan@example.com"
-                />
-              </label>
-            </div>
+            )}
           </div>
         </div>
 
@@ -524,8 +555,6 @@ export function JobIntakePage() {
           <button
             type="submit"
             disabled={busy || !name.trim()}
-            data-experiment="intake_cta_copy"
-            data-variant={intakeCta.variantKey ?? 'control'}
             className={cn(
               'inline-flex items-center justify-center gap-2 bg-brand-600 font-semibold text-ink-900 disabled:opacity-50',
               phone
@@ -534,7 +563,7 @@ export function JobIntakePage() {
             )}
           >
             {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-            {approveLabel}
+            {actionLabel}
           </button>
         </div>
       </form>

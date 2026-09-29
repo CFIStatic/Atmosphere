@@ -3,6 +3,7 @@ import type { OrgMember } from './api';
 import {
   cityPostalFromAddress,
   isInviteEmail,
+  startJobActionLabel,
   membersToCaptureTeam,
   scopeFromSituation,
   workTypeFromSituation,
@@ -29,11 +30,11 @@ const office: OrgMember = {
 };
 
 describe('membersToCaptureTeam', () => {
-  it('preselects field technicians and skips office roles when techs exist', () => {
+  it('lists field technicians unticked and skips office roles when techs exist', () => {
     const team = membersToCaptureTeam([tech, office]);
     expect(team).toHaveLength(1);
     expect(team[0]?.userId).toBe('u-1');
-    expect(team[0]?.selected).toBe(true);
+    expect(team[0]?.selected).toBe(false);
   });
 
   it('falls back to field-adjacent members when there are no technicians', () => {
@@ -75,5 +76,16 @@ describe('isInviteEmail', () => {
   it('accepts a normal inbox', () => {
     expect(isInviteEmail('alex@example.com')).toBe(true);
     expect(isInviteEmail('not-an-email')).toBe(false);
+  });
+});
+
+describe('startJobActionLabel', () => {
+  it('says Create job when nobody is invited', () => {
+    expect(startJobActionLabel({ invited: 0, homeownerShare: false })).toBe('Create job');
+  });
+
+  it('says Create & send invites when a teammate, outside email, or homeowner is on the list', () => {
+    expect(startJobActionLabel({ invited: 1, homeownerShare: false })).toBe('Create & send invites');
+    expect(startJobActionLabel({ invited: 0, homeownerShare: true })).toBe('Create & send invites');
   });
 });

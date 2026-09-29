@@ -112,6 +112,7 @@ describe('JobIntakePage', () => {
   beforeEach(() => {
     document.title = 'Atmosphere';
     usePhoneShell.mockReturnValue(false);
+    vi.mocked(api.approveIntake).mockReset();
     vi.mocked(api.createProgressShare).mockReset();
     vi.mocked(api.createProgressShare).mockResolvedValue({
       share: {
@@ -127,7 +128,7 @@ describe('JobIntakePage', () => {
     });
   });
 
-  it('puts name, situation, and invite list on one page without an address field', async () => {
+  it('is the field app’s simple form: job name, optional note, Create job', async () => {
     render(
       <MemoryRouter>
         <JobIntakePage />
@@ -135,50 +136,66 @@ describe('JobIntakePage', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Start a job' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Name' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /^Job name$/i })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Note/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Address' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Situation' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Invite list' })).toBeInTheDocument();
-
-    expect(screen.queryByText('1 · Address')).toBeNull();
-    expect(screen.queryByText('2 · Review')).toBeNull();
-    expect(screen.queryByText('Review before anyone sees it')).toBeNull();
-    expect(screen.queryByText('Job title')).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Next$/i })).toBeNull();
     expect(screen.queryByPlaceholderText('Search Google for the site address')).toBeNull();
 
-    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
-    expect(screen.queryByText('Invite an outside worker')).toBeNull();
-    expect(screen.getByText('Homeowner (optional)')).toBeInTheDocument();
-    expect(
-      screen.getByText(/We email them a link to the job file and every recording/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeInTheDocument();
+    // Invites are tucked behind a disclosure, closed by default.
+    const people = screen.getByRole('button', { name: /Invite people/i });
+    expect(people).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Marcus Webb')).toBeNull();
+    expect(screen.queryByLabelText(/homeowner email/i)).toBeNull();
+
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Approve & invite/i })).toBeNull();
   });
 
-  it('goes straight to the new job file after approve — no confirmation screen', async () => {
+  it('creates the job with nobody invited and goes straight to the job file', async () => {
+    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([]));
+
+    const user = userEvent.setup();
+    renderIntakeWithJobFile();
+
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.type(
+      screen.getByPlaceholderText(/Extract standing water/i),
+      'Extract standing water in the living room.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Create job' }));
+
+    await expectOnNewJobFile();
+    expect(api.approveIntake).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'East Racine', invitees: [] }),
+    );
+    expect(vi.mocked(api.approveIntake).mock.calls[0]?.[0]).not.toHaveProperty('address');
+    expect(api.createProgressShare).not.toHaveBeenCalled();
+  });
+
+  it('switches to Create & send invites once a teammate is ticked', async () => {
     vi.mocked(api.approveIntake).mockResolvedValue(approveResult([MARCUS_INVITE]));
 
     const user = userEvent.setup();
     renderIntakeWithJobFile();
 
+    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: /Marcus Webb/i }));
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
 
     await expectOnNewJobFile();
     expect(api.approveIntake).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'East Racine',
-        invitees: [
-          expect.objectContaining({ userId: 'u-marcus', email: 'marcus@example.com' }),
-        ],
+        invitees: [expect.objectContaining({ userId: 'u-marcus', email: 'marcus@example.com' })],
       }),
     );
-    expect(vi.mocked(api.approveIntake).mock.calls[0]?.[0]).not.toHaveProperty('address');
   });
 
-  it('fits Start a job to the phone frame instead of four desktop cards', async () => {
+  it('fits Start a job to the phone frame with the action pinned to the thumb', async () => {
     usePhoneShell.mockReturnValue(true);
 
     render(
@@ -189,75 +206,10 @@ describe('JobIntakePage', () => {
 
     const page = screen.getByTestId('start-job');
     expect(page.className).toMatch(/flex-1/);
-    expect(screen.getByRole('heading', { name: 'Start a job' })).toBeInTheDocument();
-    expect(screen.getByText('Name it. A note and invites are optional.')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Name the job, then the site. A short note and invites are optional.'),
-    ).toBeNull();
-    expect(screen.queryByText('What this job is called on the dashboard.')).toBeNull();
-    expect(screen.queryByText('Where the crew will work.')).toBeNull();
-
-    expect(screen.getByRole('heading', { name: 'Name' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Address' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Situation' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Invite list' })).toBeInTheDocument();
-
-    expect(screen.getByRole('textbox', { name: /^Name$/i })).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Search Google for the site address')).toBeNull();
-
-    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
-    expect(screen.queryByText('Capture')).toBeNull();
-    expect(
-      screen.getByText('Teammates and outside emails go on this list. Optional.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Invite an outside worker')).toBeNull();
-
-    const approve = screen.getByRole('button', { name: /Approve & invite/i });
-    expect(approve.className).toMatch(/w-full/);
-    expect(approve.className).toMatch(/rounded-xl/);
-  });
-
-  it('goes straight to the new job file after approve on the phone too', async () => {
-    usePhoneShell.mockReturnValue(true);
-    vi.mocked(api.approveIntake).mockResolvedValue(approveResult([MARCUS_INVITE]));
-
-    const user = userEvent.setup();
-    renderIntakeWithJobFile();
-
-    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
-
-    await expectOnNewJobFile();
-  });
-
-  it('creates the job file when the name is filled and nobody is invited', async () => {
-    vi.mocked(api.approveIntake).mockResolvedValue({
-      ...approveResult([]),
-      scopeSaved: 1,
-      sharePath: '',
-      fieldCapturePath: '',
-    });
-
-    const user = userEvent.setup();
-    renderIntakeWithJobFile();
-
-    expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
-    await user.type(
-      screen.getByPlaceholderText(/Extract standing water/i),
-      'Extract standing water in the living room.',
-    );
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
-
-    await expectOnNewJobFile();
-    expect(api.approveIntake).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'East Racine',
-        invitees: [],
-      }),
-    );
+    expect(screen.getByText('Name it, then start. A note and invites are optional.')).toBeInTheDocument();
+    const create = screen.getByRole('button', { name: 'Create job' });
+    expect(create.className).toMatch(/w-full/);
+    expect(create.className).toMatch(/rounded-xl/);
   });
 
   it('adds an outside email onto the same invite list as teammates', async () => {
@@ -268,6 +220,7 @@ describe('JobIntakePage', () => {
       </MemoryRouter>,
     );
 
+    await user.click(screen.getByRole('button', { name: /Invite people/i }));
     expect(await screen.findByText('Marcus Webb')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Contact name'), 'Alex Rivera');
     await user.type(screen.getByLabelText('Company'), 'Rio Grande Mitigation');
@@ -276,19 +229,29 @@ describe('JobIntakePage', () => {
 
     expect(screen.getByText('Alex Rivera')).toBeInTheDocument();
     expect(screen.getByText('Rio Grande Mitigation · alex@example.com')).toBeInTheDocument();
-    expect(screen.getByText(/2 invited/)).toBeInTheDocument();
-    expect(screen.getAllByRole('list')).toHaveLength(1);
+    expect(screen.getAllByText(/^1 invited$/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Create & send invites' })).toBeInTheDocument();
   });
 
-  it('emails the homeowner the job file after approve, then opens the job file', async () => {
+  it('previews what the homeowner will see once sharing is selected, then emails them', async () => {
     vi.mocked(api.approveIntake).mockResolvedValue(approveResult([]));
 
     const user = userEvent.setup();
     renderIntakeWithJobFile();
 
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: /Invite people/i }));
+    expect(screen.queryByTestId('homeowner-disclosure')).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
+
+    const disclosure = screen.getByTestId('homeowner-disclosure');
+    expect(disclosure).toHaveTextContent('What the homeowner will see');
+    expect(disclosure).toHaveTextContent('Every recording on this job, with its transcript and AI summary');
+    expect(disclosure).toHaveTextContent(/revoke the link/i);
+
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+    expect(disclosure).toHaveTextContent('jordan@example.com gets an email');
+    await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
 
     await expectOnNewJobFile();
     expect(api.createProgressShare).toHaveBeenCalledWith({
@@ -298,6 +261,19 @@ describe('JobIntakePage', () => {
     });
   });
 
+  it('asks for the homeowner email instead of creating a job that silently skips them', async () => {
+    const user = userEvent.setup();
+    renderIntakeWithJobFile();
+
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: /Invite people/i }));
+    await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
+    await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/homeowner’s email/);
+    expect(api.approveIntake).not.toHaveBeenCalled();
+  });
+
   it('still opens the job file when the homeowner link fails', async () => {
     vi.mocked(api.approveIntake).mockResolvedValue(approveResult([]));
     vi.mocked(api.createProgressShare).mockRejectedValue(new Error('mail down'));
@@ -305,25 +281,27 @@ describe('JobIntakePage', () => {
     const user = userEvent.setup();
     renderIntakeWithJobFile();
 
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: /Invite people/i }));
+    await user.click(screen.getByRole('checkbox', { name: /Share with the homeowner/i }));
     await user.type(screen.getByLabelText(/homeowner email/i), 'jordan@example.com');
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+    await user.click(screen.getByRole('button', { name: 'Create & send invites' }));
 
     await expectOnNewJobFile();
   });
 
-  it('stays on Start a job and shows the error when approve fails', async () => {
+  it('stays on Start a job and shows the error when create fails', async () => {
     vi.mocked(api.approveIntake).mockRejectedValue(new Error('Could not create the job.'));
 
     const user = userEvent.setup();
     renderIntakeWithJobFile();
 
-    await user.type(screen.getByRole('textbox', { name: /^Name$/i }), 'East Racine');
-    await user.click(screen.getByRole('button', { name: /Approve & invite/i }));
+    await user.type(screen.getByRole('textbox', { name: /^Job name$/i }), 'East Racine');
+    await user.click(screen.getByRole('button', { name: 'Create job' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not create the job.');
     expect(screen.queryByRole('heading', { name: 'Job file' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Start a job' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Approve & invite/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeEnabled();
   });
 });
