@@ -38,7 +38,6 @@ describe('evidenceStatus', () => {
     expect(evidenceStatus({ state: 'uploaded' }).processing.label).toBe('Waiting to process');
     expect(evidenceStatus({ state: 'accepted' }).review.label).toBe('Accepted');
     expect(evidenceStatus({ state: 'rejected' }).review.label).toBe('Rejected');
-    expect(evidenceStatus({ state: 'analysed', legalHold: true }).review.label).toBe('On hold');
     expect(evidenceStatus({ state: 'analysed', failedChecks: 2 }).processing).toEqual({
       label: '2 checks failed',
       tone: 'bad',

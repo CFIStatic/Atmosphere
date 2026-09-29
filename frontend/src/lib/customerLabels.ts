@@ -76,7 +76,6 @@ export interface EvidenceStatus {
 export function evidenceStatus(input: {
   state: string | null | undefined;
   failedChecks?: number;
-  legalHold?: boolean;
 }): EvidenceStatus {
   const state = (input.state ?? '').trim().toLowerCase();
   const capture = { label: 'Uploaded', tone: 'good' as StatusTone };
@@ -98,7 +97,6 @@ export function evidenceStatus(input: {
   let review: EvidenceStatus['review'];
   if (state === 'accepted') review = { label: 'Accepted', tone: 'good' };
   else if (state === 'rejected') review = { label: 'Rejected', tone: 'bad' };
-  else if (input.legalHold) review = { label: 'On hold', tone: 'neutral' };
   else review = { label: 'Not reviewed', tone: 'neutral' };
 
   return { capture, processing, review };
