@@ -18,6 +18,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { api } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
+import { FirstRunPage } from './pages/FirstRunPage';
+import { readFirstRun, unpaidWorkspaceTarget } from './lib/firstRun';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -204,12 +206,9 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
   }
   if (gate === 'blocked') {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
-    return (
-      <Navigate
-        to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
-        replace
-      />
-    );
+    // First evidence before plan and card: an unpaid workspace that has not
+    // seen any yet goes to the welcome page; after that, to billing.
+    return <Navigate to={unpaidWorkspaceTarget(readFirstRun(membership?.org?.id), returnPath)} replace />;
   }
   return <>{children}</>;
 }
@@ -342,6 +341,15 @@ export default function App() {
           <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          {/* First run, value before payment: first job and first evidence, then plan. */}
+          <Route
+            path="/welcome"
+            element={
+              <ProtectedRoute>
+                <FirstRunPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with

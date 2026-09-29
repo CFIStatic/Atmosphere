@@ -252,6 +252,64 @@ describe('SignupPage', () => {
     });
   });
 
+  it('sends a new unpaid workspace to its first job and first evidence before plan and card', async () => {
+    const user = userEvent.setup();
+    localStorage.clear();
+    authState.user = {
+      id: 'user-1',
+      email: 'owner@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = null;
+    authState.refreshMembership
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ org: { id: 'org-1', name: 'Acme Restoration' } });
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    vi.mocked(api.createOrg).mockResolvedValue({
+      org: { id: 'org-1', name: 'Acme Restoration', joinCode: '8F3A9C2B' },
+    });
+
+    renderSignup('/signup');
+    fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => expect(queueRedirect).toHaveBeenCalledWith('/welcome'));
+    expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull();
+  });
+
+  it('goes to plan and card once the first evidence has been seen', async () => {
+    const user = userEvent.setup();
+    localStorage.clear();
+    localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', evidenceSeen: true }));
+    authState.user = {
+      id: 'user-1',
+      email: 'owner@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = null;
+    authState.refreshMembership
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ org: { id: 'org-1', name: 'Acme Restoration' } });
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: false });
+    vi.mocked(api.createOrg).mockResolvedValue({
+      org: { id: 'org-1', name: 'Acme Restoration', joinCode: '8F3A9C2B' },
+    });
+
+    renderSignup('/signup');
+    fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => expect(api.createOrg).toHaveBeenCalled());
+    expect(queueRedirect).not.toHaveBeenCalledWith('/welcome');
+    localStorage.clear();
+  });
+
   it('does not ask for company type when joining an existing workspace', async () => {
     renderSignup('/signup?step=2&intent=join');
 
