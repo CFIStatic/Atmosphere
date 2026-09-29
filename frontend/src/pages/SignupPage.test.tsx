@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -272,11 +272,18 @@ describe('SignupPage', () => {
       org: { id: 'org-1', name: 'Acme Restoration', joinCode: '8F3A9C2B' },
     });
 
-    renderSignup('/signup');
+    render(
+      <MemoryRouter initialEntries={['/signup']}>
+        <Routes>
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/welcome" element={<h1>Welcome page</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    );
     fireEvent.change(screen.getByLabelText('Company name'), { target: { value: 'Acme Restoration' } });
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await waitFor(() => expect(queueRedirect).toHaveBeenCalledWith('/welcome'));
+    expect(await screen.findByRole('heading', { name: 'Welcome page' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Set up billing' })).toBeNull();
   });
 
@@ -306,7 +313,7 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => expect(api.createOrg).toHaveBeenCalled());
-    expect(queueRedirect).not.toHaveBeenCalledWith('/welcome');
+    expect(await screen.findByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
     localStorage.clear();
   });
 

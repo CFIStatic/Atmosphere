@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
@@ -44,6 +44,7 @@ export function SignupPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
+  const navigate = useNavigate();
   const platformHome = PLATFORM_HOME[getPlatform()];
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
@@ -215,7 +216,8 @@ export function SignupPage() {
         // Value before payment: first job and first evidence, then plan and card.
         const org = (await refreshMembership())?.org ?? membership?.org ?? null;
         if (!readFirstRun(org?.id).evidenceSeen) {
-          queueRedirect(FIRST_RUN_WELCOME);
+          // The session is already set by now (signup or existing login).
+          navigate(FIRST_RUN_WELCOME, { replace: true });
           return;
         }
         goToStep(2);

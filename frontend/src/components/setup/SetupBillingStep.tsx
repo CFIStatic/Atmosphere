@@ -178,7 +178,7 @@ export function SetupBillingStep({
   }
 
   return (
-    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then start your first job.">
+    <SetupStepCard step={2} title="Set up billing" subtitle="Choose a plan, add a payment method, then invite your team from your job.">
       {error && (
         <div
           role="alert"
