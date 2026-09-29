@@ -81,7 +81,7 @@ describe('SetupBillingStep', () => {
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();
-    expect(screen.getByText(/30-day notice/)).toBeInTheDocument();
+    expect(screen.queryByText(/30-day notice/)).toBeNull();
     expect(screen.getByText('$399')).toBeInTheDocument();
     expect(screen.getByText('$849')).toBeInTheDocument();
     expect(screen.getByText('$1,999')).toBeInTheDocument();

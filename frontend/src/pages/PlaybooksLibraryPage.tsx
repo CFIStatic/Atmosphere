@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type PlaybookSourceJob,
   type PlaybookStatus,
   type TradePlaybook,
 } from '../lib/api';
@@ -30,21 +31,33 @@ export function PlaybooksLibraryPage() {
   const [statusFilter, setStatusFilter] = useState<PlaybookStatus | 'all'>('all');
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [creatorOpen, setCreatorOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await api.listPlaybooks({
-        status: statusFilter,
-        q: q.trim() || undefined,
-      });
-      setPlaybooks(res.playbooks);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load playbooks.');
-    } finally {
-      setLoaded(true);
-    }
-  }, [statusFilter, q]);
+  // Only the newest list request may paint: a slower, older (filtered)
+  // response must not replace the list after a create resets the filters.
+  const loadSeq = useRef(0);
+  const load = useCallback(
+    async (override?: { status: PlaybookStatus | 'all'; q: string }) => {
+      const seq = ++loadSeq.current;
+      const status = override?.status ?? statusFilter;
+      const query = override?.q ?? q;
+      setError(null);
+      try {
+        const res = await api.listPlaybooks({
+          status,
+          q: query.trim() || undefined,
+        });
+        if (seq === loadSeq.current) setPlaybooks(res.playbooks);
+      } catch (err) {
+        if (seq === loadSeq.current) {
+          setError(err instanceof ApiError ? err.message : 'Could not load playbooks.');
+        }
+      } finally {
+        if (seq === loadSeq.current) setLoaded(true);
+      }
+    },
+    [statusFilter, q],
+  );
 
   useEffect(() => {
     setLoaded(false);
@@ -77,6 +90,14 @@ export function PlaybooksLibraryPage() {
 
   function openPlaybook(id: string) {
     setParams({ id }, { replace: false });
+  }
+
+  async function onCreatedFromJob(playbook: TradePlaybook) {
+    setCreatorOpen(false);
+    setStatusFilter('all');
+    setQ('');
+    await load({ status: 'all', q: '' });
+    openPlaybook(playbook.id);
   }
 
   function clearSelection() {
@@ -133,13 +154,30 @@ export function PlaybooksLibraryPage() {
             analysis (for example roofing tear-off → dry-in). Foundation for a training corpus.
           </p>
         </div>
-        <Link
-          to="/settings?section=organization"
-          className="text-sm font-medium text-brand-700 hover:underline"
-        >
-          Organization settings
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/settings?section=organization"
+            className="text-sm font-medium text-brand-700 hover:underline"
+          >
+            Organization settings
+          </Link>
+          {playbooks.length > 0 && !creatorOpen && (
+            <button
+              type="button"
+              onClick={() => setCreatorOpen(true)}
+              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-brand-700"
+            >
+              Create from completed job
+            </button>
+          )}
+        </div>
       </header>
+
+      {creatorOpen && playbooks.length > 0 && (
+        <div className="mt-5">
+          <CreateFromJobPanel onCreated={onCreatedFromJob} onCancel={() => setCreatorOpen(false)} />
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <label className="text-xs font-medium text-ink-500">
@@ -171,18 +209,17 @@ export function PlaybooksLibraryPage() {
       )}
 
       {!playbooks.length ? (
-        <div className="mt-8 rounded-xl border border-dashed border-line bg-paper-0/60 px-5 py-10 text-center">
-          <p className="text-sm font-medium text-ink-800">No playbooks yet</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
-            Playbooks are ordered checklists your crew can reuse. Ask your admin to add the first
-            one for your trade, or create one from a completed job via the API.
-          </p>
-          <Link
-            to="/verifier-library"
-            className="mt-4 inline-block text-sm font-semibold text-brand-700 hover:underline"
-          >
-            Go to Dashboard
-          </Link>
+        <div className="mt-8" data-testid="playbooks-empty">
+          <div className="text-center">
+            <p className="text-sm font-medium text-ink-800">No playbooks yet</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
+              Playbooks are ordered checklists your crew can reuse. Turn a completed job into your
+              first one — the steps come from what its clips show was done.
+            </p>
+          </div>
+          <div className="mx-auto mt-5 max-w-xl">
+            <CreateFromJobPanel onCreated={onCreatedFromJob} />
+          </div>
         </div>
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_minmax(280px,360px)]">
@@ -309,6 +346,116 @@ export function PlaybooksLibraryPage() {
           </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Pick a job whose clips finished analysis and draft a playbook from it.
+ * The draft stays a draft until someone publishes it.
+ */
+function CreateFromJobPanel({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (playbook: TradePlaybook) => void | Promise<void>;
+  onCancel?: () => void;
+}) {
+  const [jobs, setJobs] = useState<PlaybookSourceJob[] | null>(null);
+  const [jobId, setJobId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .playbookSourceJobs()
+      .then((res) => {
+        if (cancelled) return;
+        const options = res.jobs;
+        setJobs(options);
+        setJobId((current) => current || options[0]?.jobId || '');
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setJobs([]);
+          setError('Could not load your completed jobs.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function create() {
+    if (!jobId || creating) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await api.createPlaybookFromJob(jobId);
+      await onCreated(res.playbook);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create the playbook.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl glass-card p-4 text-left" data-testid="playbook-from-job">
+      <h2 className="text-sm font-semibold text-ink-900">Create from completed job</h2>
+      {jobs === null ? (
+        <p className="mt-2 text-sm text-ink-500">Finding jobs with analyzed clips…</p>
+      ) : jobs.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-600">
+          No job has an analyzed clip yet. Once a clip on any job finishes analysis, you can turn
+          that job into a playbook here.{' '}
+          <Link to="/verifier-library" className="font-medium text-brand-700 hover:underline">
+            Go to Dashboard
+          </Link>
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-xs text-ink-500">
+            We draft the steps from the job’s analyzed clips. You can review it before publishing.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className="min-w-[14rem] flex-1 text-xs font-medium text-ink-600">
+              <span className="sr-only">Completed job</span>
+              <select
+                aria-label="Completed job"
+                value={jobId}
+                onChange={(e) => setJobId(e.target.value)}
+                className="w-full rounded-lg border border-line bg-paper-0 px-2.5 py-2 text-sm text-ink-800"
+              >
+                {jobs.map((job) => (
+                  <option key={job.jobId} value={job.jobId}>
+                    {job.label} · {job.analyzedClips} analyzed clip{job.analyzedClips === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!jobId || creating}
+              onClick={() => void create()}
+              className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900 hover:bg-brand-700 disabled:opacity-50"
+            >
+              {creating ? 'Creating…' : 'Create playbook'}
+            </button>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-lg px-2 py-2 text-sm text-ink-500 hover:text-ink-800"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {error && <p role="alert" className="mt-2 text-sm text-danger-600">{error}</p>}
     </div>
   );
 }

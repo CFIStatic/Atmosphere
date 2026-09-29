@@ -46,10 +46,10 @@ describe('AtmospherePlanPicker', () => {
     expect(note.textContent).toMatch(/Seats count Field Capture accounts only/);
     expect(note.textContent).toMatch(/office-only Global Admins do not use a seat/);
     expect(note.textContent).toMatch(/AI\/token usage is billed the day it is used/);
-    expect(note.textContent).toMatch(/Prices increase 10% annually on your plan anniversary \(30-day notice\)/);
+    expect(note.textContent).not.toMatch(/10%/);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getAllByText(/office-only Global Admins/)).toHaveLength(1);
-    expect(screen.getAllByText(/30-day notice/)).toHaveLength(1);
+    expect(screen.queryByText(/30-day notice/)).toBeNull();
     expect(screen.getByText('1 Field Capture account')).toBeInTheDocument();
     expect(screen.getByText('3 Field Capture accounts')).toBeInTheDocument();
     expect(screen.getByText('10 Field Capture accounts')).toBeInTheDocument();

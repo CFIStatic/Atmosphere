@@ -61,14 +61,13 @@ export function planPickerFootnote(interval: AtmosphereBillingInterval): string 
     return (
       'Extra Field Capture seats are $1,250/yr each. Seats count Field Capture accounts only — ' +
       'office-only Global Admins do not use a seat. AI/token usage is billed the day it is used. ' +
-      'The yearly prepay covers the plan and seats; the rate is locked for the term and the 10% increase applies at renewal (30-day notice). ' +
+      'The yearly prepay covers the plan and seats; the rate is locked for the term. ' +
       'Annual plans are non-refundable and cancel at the end of the term.'
     );
   }
   return (
     'Extra Field Capture seats are $125/mo each. Seats count Field Capture accounts only — ' +
-    'office-only Global Admins do not use a seat. AI/token usage is billed the day it is used. ' +
-    'Prices increase 10% annually on your plan anniversary (30-day notice).'
+    'office-only Global Admins do not use a seat. AI/token usage is billed the day it is used.'
   );
 }
 

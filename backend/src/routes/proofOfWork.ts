@@ -1,3 +1,4 @@
+import { servableSummary } from '../audio/summaryServe.js';
 import { refreshProofSummary, queueSummaryRefresh } from '../audio/summaryQueue.js';
 import { staleSummaryPatch } from '../audio/summaryFreshness.js';
 import { randomUUID } from 'node:crypto';
@@ -214,6 +215,7 @@ const PROOF_SELECT =
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, actions, ' +
   'transcript_status, transcript_text, transcript_segments, transcript_words, transcript_error, transcribed_at, ' +
+  'summary_status, summary_transcript_sha256, summary_generated_at, ' +
   'decided_at, decided_note, created_at, device_metadata';
 
 /**
@@ -248,14 +250,17 @@ export async function listAllVisibleProofs(
 
 function conversationPayloadFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
-  const details = conversationFromStored(row?.transcript_text, findings.conversation);
+  // Stale, failed or contradicting summaries are never served; the payload is
+  // then built from the transcript alone and says the summary is processing.
+  const servable = servableSummary(row);
+  const details = conversationFromStored(row?.transcript_text, servable.conversation);
   const transcriptText = typeof row?.transcript_text === 'string' ? row.transcript_text : null;
   const segments = parseVerbatimTranscript(transcriptText);
   if (!hasConversation(details) && !segments.length) return null;
   const people = resolvePeoplePresent({
     stored: findings.people,
     transcript: transcriptText,
-    conversationStored: findings.conversation,
+    conversationStored: servable.conversation,
     narrationText: row?.narration_text ?? null,
     summary: row?.ai_summary ?? findings.summary ?? null,
     visionPeople: findings.visionPeople,
@@ -263,6 +268,7 @@ function conversationPayloadFromRow(row: any) {
   const fields = publicConversationFields(details);
   return {
     ...fields,
+    summaryState: servable.state,
     conversationTurns: overlaySpeakerLabels(fields.conversationTurns ?? [], people),
     transcriptText,
     transcriptSegments: overlaySpeakerLabels(segments, people),
@@ -271,6 +277,7 @@ function conversationPayloadFromRow(row: any) {
 
 function evidenceLogFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const servable = servableSummary(row);
   const actions = Array.isArray(row.actions)
     ? row.actions
     : Array.isArray(findings.actions)
@@ -279,7 +286,8 @@ function evidenceLogFromRow(row: any) {
   const people = resolvePeoplePresent({
     stored: findings.people,
     transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
-    conversationStored: findings.conversation,
+    // Never label speakers from a summary this payload withholds.
+    conversationStored: servable.conversation,
     narrationText: row?.narration_text ?? null,
     summary: row?.ai_summary ?? findings.summary ?? null,
     visionPeople: findings.visionPeople,
@@ -289,7 +297,7 @@ function evidenceLogFromRow(row: any) {
   const childRanges = childPrivacyRedactionsFromStored(findings.childPrivacyRedactions);
   let entries = applyPrivacyToEvidenceEntries(
     buildEvidenceLog({
-      storedLog: findings.evidenceLog,
+      storedLog: servable.evidenceLog,
       storedEntries: row?.narration?.entries,
       narrationText: row?.narration_text ?? null,
       summary: row?.ai_summary ?? findings.summary ?? null,
@@ -298,7 +306,7 @@ function evidenceLogFromRow(row: any) {
       transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
       people: findings.people,
       visionPeople: findings.visionPeople,
-      conversation: conversationFromStored(row?.transcript_text, findings.conversation),
+      conversation: conversationFromStored(row?.transcript_text, servable.conversation),
     }),
     ranges,
   );
@@ -319,6 +327,7 @@ function childPrivacyRedactionsPayloadFromRow(row: any) {
 
 function peoplePayloadFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const servable = servableSummary(row);
   const actions = Array.isArray(row.actions)
     ? row.actions
     : Array.isArray(findings.actions)
@@ -327,7 +336,7 @@ function peoplePayloadFromRow(row: any) {
   const people = resolvePeoplePresent({
     stored: findings.people,
     transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
-    conversationStored: findings.conversation,
+    conversationStored: servable.conversation,
     narrationText: row?.narration_text ?? null,
     summary: row?.ai_summary ?? findings.summary ?? null,
     visionPeople: findings.visionPeople,
