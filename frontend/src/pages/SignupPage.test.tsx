@@ -51,6 +51,7 @@ vi.mock('../hooks/usePendingAuthRedirect', () => ({
 }));
 
 import { api } from '../lib/api';
+import { jobFilePath } from '../lib/jobFileAsk';
 import { SignupPage } from './SignupPage';
 
 function renderSignup(initialEntry = '/signup') {
@@ -420,6 +421,37 @@ describe('SignupPage', () => {
     await waitFor(() => {
       expect(queueRedirect).toHaveBeenCalledWith('/intake');
     });
+  });
+
+  it('returns a paid checkout to the job filed before payment', async () => {
+    localStorage.setItem(
+      'atmosphere.firstRun.org-1',
+      JSON.stringify({
+        jobId: 'job-1',
+        jobTitle: 'Smith kitchen leak',
+        jobNumber: 1,
+        evidenceSeen: true,
+      }),
+    );
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
+
+    renderSignup('/signup?step=2&checkout=success&next=%2Fverifier-library');
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalledWith(
+        jobFilePath('job-1', { title: 'Smith kitchen leak', number: 1 }),
+      );
+    });
+    localStorage.clear();
   });
 
   it('never shows plan or billing UI on a homeowner invitee signup', () => {

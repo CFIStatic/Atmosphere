@@ -12,8 +12,8 @@ import {
   writeFirstRun,
   type FirstRunState,
 } from '../lib/firstRun';
-import { jobFilePath } from '../lib/jobFileAsk';
 import { safeAuthRedirect } from '../lib/authRedirect';
+import { jobFilePath } from '../lib/jobFileAsk';
 import { firstClipPreview, posterClock, SAMPLE_EVIDENCE, type FirstClipPreview } from '../lib/firstEvidence';
 
 const POLL_MS = 5000;

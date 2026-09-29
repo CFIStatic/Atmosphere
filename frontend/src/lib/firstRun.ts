@@ -22,21 +22,20 @@ const GENERIC_POST_AUTH = new Set([
 ]);
 
 /**
- * After workspace + billing, prefer Start a job unless the user already had a
- * specific deep link (job file, settings section, etc.).
+ * After workspace + billing, open the job already filed on the welcome page.
+ * A generic office home used to mean "no job yet" and went to Start a job.
+ * A specific deep link (this job file, a settings section) still wins.
  */
 export function firstRunDestination(
   requested: string | null | undefined,
   platformHome: string,
+  state?: FirstRunState | null,
 ): string {
   const next = (requested ?? '').trim();
-  if (!next) return FIRST_RUN_HOME;
-  if (next === platformHome) return FIRST_RUN_HOME;
-  const pathOnly = next.split(/[?#]/)[0] ?? next;
-  if (GENERIC_POST_AUTH.has(pathOnly) || pathOnly.startsWith('/signup')) {
-    return FIRST_RUN_HOME;
-  }
-  return next;
+  const filed = filedFirstJobHref(state);
+  if (filed && replacesWithFiledJob(next, platformHome)) return filed;
+  if (!isGenericPostAuth(next, platformHome)) return next;
+  return FIRST_RUN_HOME;
 }
 
 /** Absolute Field Capture URL for a relative invite path or bare host. */
@@ -122,7 +121,8 @@ export function billingStepHref(next: string | null | undefined): string {
 
 /**
  * Where an unpaid workspace goes when it opens the office: the welcome page
- * until the first evidence has been seen, then plan and card.
+ * until the first evidence has been seen, then plan and card. Checkout returns
+ * to the job already filed — a generic home would open Start a job again.
  */
 export function unpaidWorkspaceTarget(state: FirstRunState, returnPath: string): string {
   if (!state.evidenceSeen) {
@@ -130,12 +130,30 @@ export function unpaidWorkspaceTarget(state: FirstRunState, returnPath: string):
   }
   // Checkout returns to the first job, not Start a job, when the blocked page
   // was only a generic landing (dashboard, jobs list, Start a job itself).
-  const pathOnly = returnPath.split(/[?#]/)[0] ?? returnPath;
-  const generic = GENERIC_POST_AUTH.has(pathOnly) || pathOnly === FIRST_RUN_HOME || pathOnly === FIRST_RUN_WELCOME;
-  if (state.jobId && generic) {
-    return billingStepHref(
-      jobFilePath(state.jobId, { title: state.jobTitle, number: state.jobNumber ?? null }),
-    );
-  }
-  return billingStepHref(returnPath);
+  const filed = filedFirstJobHref(state);
+  const next = filed && replacesWithFiledJob(returnPath) ? filed : returnPath;
+  return billingStepHref(next);
+}
+
+/** Dashboard, signup, and other homes that are not a job file or settings link. */
+function isGenericPostAuth(path: string, platformHome?: string): boolean {
+  const next = path.trim();
+  if (!next) return true;
+  if (platformHome && next === platformHome) return true;
+  const pathOnly = next.split(/[?#]/)[0] ?? next;
+  return GENERIC_POST_AUTH.has(pathOnly) || pathOnly.startsWith('/signup');
+}
+
+/** Generic homes, plus Start a job and the welcome page once a job is filed. */
+function replacesWithFiledJob(path: string, platformHome?: string): boolean {
+  if (isGenericPostAuth(path, platformHome)) return true;
+  const pathOnly = path.trim().split(/[?#]/)[0] ?? path;
+  return pathOnly === FIRST_RUN_HOME || pathOnly === FIRST_RUN_WELCOME;
+}
+
+/** Job file created on the welcome page, when this browser still has it. */
+function filedFirstJobHref(state: FirstRunState | null | undefined): string | null {
+  const jobId = state?.jobId?.trim();
+  if (!jobId) return null;
+  return jobFilePath(jobId, { title: state?.jobTitle, number: state?.jobNumber ?? null });
 }

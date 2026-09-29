@@ -118,6 +118,36 @@ describe('FirstRunPage (value before payment)', () => {
     expect(JSON.parse(localStorage.getItem('atmosphere.firstRun.org-1') ?? '{}').evidenceSeen).toBe(true);
   });
 
+  it('shows an unknown length when the clip header has no duration', async () => {
+    localStorage.setItem(
+      'atmosphere.firstRun.org-1',
+      JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith kitchen leak', path: 'field' }),
+    );
+    apiMocks.jobProofs.mockResolvedValue({
+      days: [],
+      videos: [
+        {
+          id: 'clip-1',
+          durationSeconds: 0,
+          analysisStatus: 'done',
+          transcriptStatus: 'done',
+          narrationStatus: 'done',
+          transcriptSegments: [{ tSec: 0, text: 'Started under the sink.' }],
+          aiSummary: 'Walkthrough.',
+        },
+      ],
+      counts: { days: 1, payable: 0, contradicted: 0 },
+    });
+    apiMocks.evidenceLibrary.mockResolvedValue({ items: [{ id: 'clip-1', title: 'First clip' }] });
+    renderPage();
+    const card = await screen.findByTestId('first-clip');
+    const badge = card.querySelector('span.absolute');
+    expect(badge).toHaveTextContent('—');
+    expect(badge).not.toHaveTextContent('0:00');
+    expect(card).toHaveTextContent('0:00');
+    expect(card).toHaveTextContent('Started under the sink.');
+  });
+
   it('sends a paid workspace straight to its job', async () => {
     apiMocks.getBillingOnboarding.mockResolvedValue({ required: true, complete: true });
     localStorage.setItem('atmosphere.firstRun.org-1', JSON.stringify({ jobId: 'job-1', jobTitle: 'Smith' }));

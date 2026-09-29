@@ -22,6 +22,8 @@ describe('first run gate (value before payment)', () => {
     const next = decodeURIComponent(href.split('next=')[1] ?? '');
     expect(next).toBe('/job-progress?job=job-1&title=Kitchen&number=1');
     expect(firstRunDestination(next, '/verifier-library')).toBe(next);
+    expect(firstRunDestination('/verifier-library', '/verifier-library', state)).toBe(next);
+    expect(firstRunDestination('/intake', '/verifier-library', state)).toBe(next);
     // A specific deep link is kept.
     expect(unpaidWorkspaceTarget(state, '/settings?section=team')).toBe(
       '/signup?step=2&next=%2Fsettings%3Fsection%3Dteam',

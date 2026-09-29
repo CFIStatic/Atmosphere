@@ -51,8 +51,12 @@ export function SignupPage() {
     (location.state as { from?: string } | null)?.from,
     platformHome,
   );
-  /** After billing, land on Start a job unless a specific deep link was requested. */
-  const afterSetupTo = firstRunDestination(redirectTo, platformHome);
+  /** After billing, open the job filed before payment, or Start a job. */
+  const afterSetupTo = firstRunDestination(
+    redirectTo,
+    platformHome,
+    readFirstRun(membership?.org?.id),
+  );
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
