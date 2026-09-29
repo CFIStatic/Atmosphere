@@ -88,6 +88,10 @@ export type ClipAskRecord = {
   transcript?: string | null;
   /** idle | queued | running | done | skipped | failed */
   transcriptStatus?: string | null;
+  /** job_proofs.narration_status. Same busy values as analysis. */
+  narrationStatus?: string | null;
+  /** job_proofs.state: uploaded | checked | analysed | accepted | rejected */
+  proofState?: string | null;
   conversationDetails?: string[];
   conversationAgreements?: string[];
   conversationConcerns?: string[];
@@ -228,7 +232,11 @@ export function clipRecordFromEvidenceItem(item: {
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
   transcriptStatus?: string | null;
-  analysis?: ClipAskRecord | null;
+  narrationStatus?: string | null;
+  proofState?: string | null;
+  /** job_proofs.state on a serialized evidence row. */
+  state?: string | null;
+  analysis?: (ClipAskRecord & { dictationStatus?: string | null }) | null;
 }): ClipAskRecord {
   const analysis = item.analysis ?? null;
   return {
@@ -252,6 +260,14 @@ export function clipRecordFromEvidenceItem(item: {
     mediaWindows: Array.isArray(analysis?.mediaWindows) ? analysis.mediaWindows : null,
     mediaUntimed: typeof analysis?.mediaUntimed === 'string' ? analysis.mediaUntimed : null,
     transcriptStatus: item.transcriptStatus ?? analysis?.transcriptStatus ?? null,
+    narrationStatus:
+      (typeof item.narrationStatus === 'string' ? item.narrationStatus : null) ??
+      (typeof analysis?.narrationStatus === 'string' ? analysis.narrationStatus : null) ??
+      (typeof analysis?.dictationStatus === 'string' ? analysis.dictationStatus : null),
+    proofState:
+      (typeof item.proofState === 'string' ? item.proofState : null) ??
+      (typeof item.state === 'string' ? item.state : null) ??
+      (typeof analysis?.proofState === 'string' ? analysis.proofState : null),
     privacyRedactions: analysis?.privacyRedactions ?? null,
     childPrivacyRedactions: analysis?.childPrivacyRedactions ?? null,
     conversationDetails: Array.isArray(analysis?.conversationDetails) ? analysis.conversationDetails : [],
@@ -1332,6 +1348,15 @@ function stateAnswer(question: string, rows: CorpusRow[], qTokens: string[]): st
   return null;
 }
 
+/** Statuses clipProcessing treats as a real analysis column. running and pending stay busy. */
+function modelAnalysisStatus(state: ClipAskAnalysisState): string | null {
+  const value = String(state ?? '').trim().toLowerCase();
+  if (value === 'queued' || value === 'running' || value === 'pending' || value === 'failed' || value === 'done') {
+    return value;
+  }
+  return null;
+}
+
 export function formatClipRecordForModel(record: ClipAskRecord): string {
   record = withAuthoritativeTranscript(speechSafeClipRecord(record));
   const lines: string[] = [];
@@ -1340,8 +1365,10 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if (record.company) lines.push(`Crew: ${record.company}`);
   if (record.durationSeconds != null) lines.push(`Duration: ${formatClipTime(record.durationSeconds) ?? record.durationSeconds}s`);
   const processing = clipProcessing({
-    analysisStatus: record.analysisState === 'queued' ? 'queued' : record.analysisState === 'failed' ? 'failed' : record.analysisState === 'done' ? 'done' : null,
+    proofState: record.proofState,
+    analysisStatus: modelAnalysisStatus(record.analysisState),
     transcriptStatus: record.transcriptStatus,
+    narrationStatus: record.narrationStatus,
     summaryState: record.summaryState,
   });
   lines.push(`Clip processing: ${processing.state} (${processing.label}). Use this status; do not describe the clip as analyzed while it says otherwise.`);

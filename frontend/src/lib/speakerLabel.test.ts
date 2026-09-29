@@ -37,4 +37,16 @@ describe('sanitizeSpeakerProse', () => {
     expect(cleaned).not.toMatch(/\(|Person \d|Seated/);
     expect(cleaned).toContain('**Bold**');
   });
+
+  it('does not rewrite quoted speech or a clip title named in the answer', () => {
+    const title = 'Person 1 Walks the Seated Man Through the Kitchen';
+    const out = sanitizeSpeakerProse(
+      `Person 1 (Seated said “Ask the seated man about Person 2.” in ${title}.\n- “Ask the seated man about Person 2.” (${title}, 0:04)`,
+      { protect: [title] },
+    );
+    expect(out).toMatch(/^Speaker 1 said “Ask the seated man about Person 2\.”/);
+    expect(out.split('“')[0] ?? '').not.toMatch(/\(|Seated|Person/);
+    expect(out.split(title).length - 1).toBe(2);
+    expect(out).toContain(`(${title}, 0:04)`);
+  });
 });

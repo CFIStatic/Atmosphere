@@ -1,4 +1,5 @@
 import { parseAskProseBlocks, type AskInline, type AskProseBlock } from '../lib/askProse';
+import { parseAskQuoteTrailer } from '../lib/askSources';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { MentionText } from './mentions/MentionText';
 
@@ -40,7 +41,9 @@ function Block({ block }: { block: AskProseBlock }) {
   if (block.kind === 'list') {
     const Tag = block.ordered ? 'ol' : 'ul';
     return (
-      <Tag className={block.ordered ? 'list-decimal space-y-0.5 pl-4' : 'list-disc space-y-0.5 pl-4'}>
+      <Tag
+        className={block.ordered ? 'list-decimal space-y-0.5 pl-4' : 'list-disc space-y-0.5 pl-4'}
+      >
         {block.items.map((item, index) => (
           <li key={index}>
             <InlineNodes nodes={item} />
@@ -82,8 +85,12 @@ function Block({ block }: { block: AskProseBlock }) {
   );
 }
 
-export function AskProseView({ text }: { text: string }) {
-  const blocks = parseAskProseBlocks(sanitizeSpeakerProse(text));
+export function AskProseView({ text, protect = [] }: { text: string; protect?: string[] }) {
+  const titles = [
+    ...protect,
+    ...parseAskQuoteTrailer(text).flatMap((quote) => (quote.clipTitle ? [quote.clipTitle] : [])),
+  ];
+  const blocks = parseAskProseBlocks(sanitizeSpeakerProse(text, { protect: titles }));
   if (!blocks.length) return <MentionText text={text} />;
   return (
     <div className="space-y-1.5" data-testid="ask-prose">

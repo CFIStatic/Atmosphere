@@ -805,7 +805,22 @@ export function buildJobTimeline(source: TimelineSource): TimelineEvent[] {
     if (event.sentence && REDACTION_MARK.test(event.sentence)) continue;
     unique.push(event);
   }
-  return unique;
+  // A summary rebuild is one live "still reading" row. The clustered custody
+  // line uses another id, so id-dedupe would show both.
+  const liveAnalysis = new Set(
+    unique
+      .filter((event) => event.live && event.kind === 'analysis' && event.proofId)
+      .map((event) => event.proofId),
+  );
+  if (!liveAnalysis.size) return unique;
+  return unique.filter((event) => {
+    if (event.live || event.kind !== 'analysis' || !event.proofId || !liveAnalysis.has(event.proofId)) {
+      return true;
+    }
+    const duplicateReading =
+      event.sentence.includes('still reading') && event.sentence.includes('Summary still processing');
+    return !duplicateReading;
+  });
 }
 
 export function filterTimeline(

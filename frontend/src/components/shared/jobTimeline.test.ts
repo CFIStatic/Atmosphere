@@ -259,6 +259,7 @@ describe('job timeline', () => {
       .filter((sentence) => /reading|Analyzed|processing/i.test(sentence));
     expect(reading.join('\n')).toContain('Summary still processing');
     expect(reading.join('\n')).not.toContain('finished reading');
+    expect(reading.filter((sentence) => /still reading/i.test(sentence))).toHaveLength(1);
   });
 
   it('keeps evidence-report exports and leaves claim packets out', () => {

@@ -340,7 +340,11 @@ function AskAnswerBody({
   const extracted = extractAskSources(text);
   const { quotes, followUps } = extracted;
   const { prose, artifact } = splitAskArtifact(extracted.body);
-  const blocks = parseAskProseBlocks(sanitizeSpeakerProse(prose));
+  const blocks = parseAskProseBlocks(
+    sanitizeSpeakerProse(prose, {
+      protect: quotes.flatMap((quote) => (quote.clipTitle ? [quote.clipTitle] : [])),
+    }),
+  );
   return (
     <div className="space-y-2.5 text-[15px] leading-relaxed text-ink-800" data-testid="ask-answer-body">
       {blocks.length ? (

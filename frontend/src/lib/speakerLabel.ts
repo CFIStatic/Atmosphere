@@ -20,7 +20,8 @@ export function diarizationLabel(raw: unknown): string | null {
   const zeroBased = text.match(/^SPEAKER_(\d{1,3})\b/);
   if (zeroBased) return `Speaker ${Number(zeroBased[1]) + 1}`;
   const plain = text.match(/^(?:speaker|spk)[\s_-]*(\d{1,3}|[a-z])\b/i);
-  if (plain) return `Speaker ${/^\d+$/.test(plain[1]!) ? Number(plain[1]) : plain[1]!.toUpperCase()}`;
+  if (plain)
+    return `Speaker ${/^\d+$/.test(plain[1]!) ? Number(plain[1]) : plain[1]!.toUpperCase()}`;
   const person = text.match(/^person\s*(\d{1,3})\b/i);
   if (person) return `Speaker ${Number(person[1])}`;
   return null;
@@ -38,7 +39,9 @@ export function isFabricatedSpeakerLabel(raw: unknown): boolean {
 
 /** The label a card, caption, or transcript row may show. */
 export function displaySpeakerLabel(raw: unknown): string {
-  const text = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  const text = String(raw ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const diarized = diarizationLabel(text);
   if (diarized) return diarized;
   if (!text || text.length > 40 || isFabricatedSpeakerLabel(text)) return UNIDENTIFIED_SPEAKER;
@@ -47,10 +50,13 @@ export function displaySpeakerLabel(raw: unknown): string {
 
 const SPEECH_AFTER =
   /^[\s,]*(?:\w+\s+){0,2}?(?:said|says|saying|asks|asked|asking|mentions|mentioned|replies|replied|told|tells|adds|added|answers|answered|responds|responded|commented|comments|remarks|remarked|notes|noted|explains|explained|speaks|spoke|is heard|was heard|committed|commits|agreed|agrees|promised|promises|volunteered|:|[-–—]\s*[“"])/i;
-const SPEECH_BEFORE = /(?:said by|spoken by|from|according to|quote from|line from|asked by|voice of)\s*$/i;
+const SPEECH_BEFORE =
+  /(?:said by|spoken by|from|according to|quote from|line from|asked by|voice of)\s*$/i;
 
 function replacement(before: string, after: string): string {
-  return SPEECH_AFTER.test(after) || SPEECH_BEFORE.test(before) ? UNIDENTIFIED_SPEAKER_PROSE : 'an unidentified person';
+  return SPEECH_AFTER.test(after) || SPEECH_BEFORE.test(before)
+    ? UNIDENTIFIED_SPEAKER_PROSE
+    : 'an unidentified person';
 }
 
 function articleFix(text: string): string {
@@ -62,8 +68,25 @@ function articleFix(text: string): string {
     );
 }
 
-/** Stored answer prose, normalized at render time. Does not touch quoted speech. */
-export function sanitizeSpeakerProse(input: string): string {
+/** Titles already named by this answer: "(Title, m:ss)" citations and clip= trailers. */
+function titlesNamedInAnswer(raw: string): string[] {
+  const found: string[] = [];
+  for (const match of raw.matchAll(/\(([^()\n]+),\s*\d{1,2}:\d{2}(?::\d{2})?\)/g)) {
+    const title = match[1]?.trim();
+    if (title) found.push(title);
+  }
+  for (const match of raw.matchAll(/(?:^|[|])clip=([^|⟧\n]+)/g)) {
+    const title = match[1]?.trim();
+    if (title) found.push(title);
+  }
+  return found;
+}
+
+/**
+ * Stored answer prose, normalized at render time. Quoted speech, timed
+ * citations, and clip titles are evidence text and are left alone.
+ */
+export function sanitizeSpeakerProse(input: string, opts?: { protect?: string[] }): string {
   const raw = String(input ?? '');
   if (!raw) return raw;
   const masked: string[] = [];
@@ -71,7 +94,20 @@ export function sanitizeSpeakerProse(input: string): string {
     masked.push(value);
     return `\uE000${masked.length - 1}\uE001`;
   };
-  let text = raw.replace(/⟦[^⟧]*⟧|“[^”\n]*”|"[^"\n]*"|\([^()\n]*,\s*\d{1,2}:\d{2}(?::\d{2})?\)/g, mask);
+  let text = raw.replace(
+    /⟦[^⟧]*⟧|“[^”\n]*”|"[^"\n]*"|\([^()\n]*,\s*\d{1,2}:\d{2}(?::\d{2})?\)/g,
+    mask,
+  );
+  const titles = [
+    ...new Set(
+      [...(opts?.protect ?? []), ...titlesNamedInAnswer(raw)]
+        .map((title) => String(title ?? '').trim())
+        .filter((title) => title.length >= 3),
+    ),
+  ].sort((a, b) => b.length - a.length);
+  for (const title of titles) {
+    text = text.split(title).join(mask(title));
+  }
   text = sanitizeUnmasked(text);
   return text.replace(/\uE000(\d+)\uE001/g, (_m, i: string) => masked[Number(i)] ?? '');
 }
