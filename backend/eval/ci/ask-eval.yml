@@ -1,0 +1,82 @@
+# To enable: copy this file to .github/workflows/ask-eval.yml (the push token used
+# for this PR has no `workflow` scope, so it could not add it there directly).
+
+name: Ask eval gate
+
+# Release gate for model / prompt / pipeline changes that affect what Ask and
+# clip summaries say. Fails on ANY false work-completed / price / commitment
+# assertion and ANY summary-transcript contradiction (see backend/eval/README.md).
+#
+# - Synthetic gold (in the repo) always runs, deterministic, no secrets.
+# - Private gold (real consented clips) runs when the EVAL_GOLD_URL secret is
+#   set; its report is redacted (no clip text) because Actions logs are public.
+# - Set repository variable EVAL_WITH_MODEL=1 (and the ANTHROPIC_API_KEY
+#   secret) to also score the model path, not just the deterministic path.
+on:
+  pull_request:
+    paths:
+      - 'backend/src/shared/clipAsk.ts'
+      - 'backend/src/shared/ask*.ts'
+      - 'backend/src/shared/jobFileAsk.ts'
+      - 'backend/src/shared/speechCount.ts'
+      - 'backend/src/shared/analysisTimeline.ts'
+      - 'backend/src/shared/mentions.ts'
+      - 'backend/src/audio/**'
+      - 'backend/src/lib/askModel.ts'
+      - 'backend/src/lib/anthropic.ts'
+      - 'backend/src/verifier/library.ts'
+      - 'backend/src/verifier/evidenceLog*.ts'
+      - 'backend/src/eval/**'
+      - 'backend/src/scripts/askEval.ts'
+      - 'backend/eval/**'
+      - '.github/workflows/ask-eval.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/shared/**'
+      - 'backend/src/audio/**'
+      - 'backend/src/lib/askModel.ts'
+      - 'backend/src/lib/anthropic.ts'
+      - 'backend/src/verifier/**'
+      - 'backend/src/eval/**'
+      - 'backend/eval/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ask-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Ask eval gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      HAS_PRIVATE_GOLD: ${{ secrets.EVAL_GOLD_URL != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Synthetic gold (deterministic)
+        run: npm run eval:ask
+      - name: Private gold (real consented clips, redacted report)
+        if: env.HAS_PRIVATE_GOLD == 'true'
+        env:
+          EVAL_GOLD_URL: ${{ secrets.EVAL_GOLD_URL }}
+          EVAL_GOLD_TOKEN: ${{ secrets.EVAL_GOLD_TOKEN }}
+        run: npm run eval:ask
+      - name: Private gold, model path
+        if: env.HAS_PRIVATE_GOLD == 'true' && vars.EVAL_WITH_MODEL == '1'
+        env:
+          EVAL_GOLD_URL: ${{ secrets.EVAL_GOLD_URL }}
+          EVAL_GOLD_TOKEN: ${{ secrets.EVAL_GOLD_TOKEN }}
+          EVAL_WITH_MODEL: '1'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run eval:ask

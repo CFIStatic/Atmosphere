@@ -1,0 +1,721 @@
+{
+ "version": 1,
+ "name": "synthetic-v1",
+ "clips": [
+  {
+   "id": "syn-walkthrough-stale-summary",
+   "categories": [
+    "synthetic",
+    "walkthrough",
+    "multiple_voices"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 44,
+    "dictation": "Handheld walkthrough of a furnished living room: recessed can lights, a wall clock with a printed maker's name on the dial, wicker chairs, a window with a roman shade.",
+    "actions": [
+     {
+      "atSeconds": 1,
+      "description": "Camera holds on the ceiling can light."
+     },
+     {
+      "atSeconds": 12,
+      "description": "Pan across the wall clock."
+     },
+     {
+      "atSeconds": 30,
+      "description": "Camera drops to the wicker chairs by the window."
+     }
+    ],
+    "transcript": "[0:00] We are starting in the living room.\n[0:11] That clock has been here forever.\n[0:30] Watch the chairs.\n[0:35] The shade sticks halfway.\n[0:38] Okay, next room.",
+    "conversationSummary": "The only speech captured in the entire recording is a single fragment, \"We are starting in the living room.\"",
+    "conversationStale": false
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines are in the transcript?",
+     "expect": {
+      "answerType": "answer",
+      "count": 5
+     }
+    },
+    {
+     "id": "q2",
+     "type": "quote_time",
+     "question": "What was said about the shade and when?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "The shade sticks halfway.",
+        "at": 35
+       }
+      ]
+     }
+    },
+    {
+     "id": "q3",
+     "type": "temporal_order",
+     "question": "List everything that was said, in order, with timestamps.",
+     "expect": {
+      "answerType": "answer",
+      "order": [
+       "starting in the living room",
+       "clock has been here forever",
+       "next room"
+      ]
+     }
+    },
+    {
+     "id": "q4",
+     "type": "negative",
+     "question": "Did anyone mention insurance?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q5",
+     "type": "false_premise",
+     "question": "At what timestamp does the worker install the new ceiling fan, and what brand is it?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "installed the",
+       "installs the"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "false_premise",
+     "question": "What brand is the wall clock?",
+     "expect": {
+      "answerType": "abstain"
+     }
+    },
+    {
+     "id": "q7",
+     "type": "speaker_source",
+     "question": "Who said \"Watch the chairs\"?",
+     "expect": {
+      "answerType": "answer",
+      "mustNotContain": [
+       "Speaker A",
+       "Speaker B",
+       "homeowner said"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-quiet-roofline",
+   "categories": [
+    "synthetic",
+    "quiet",
+    "no_work"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 24,
+    "dictation": "Slow pan along a roofline from the driveway; no people visible; wind noise only.",
+    "actions": [
+     {
+      "atSeconds": 0,
+      "description": "Camera pans along the gutter line."
+     },
+     {
+      "atSeconds": 12,
+      "description": "Camera holds on the ridge."
+     }
+    ],
+    "transcript": ""
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines are in the transcript?",
+     "expect": {
+      "answerType": "answer",
+      "count": 0
+     }
+    },
+    {
+     "id": "q2",
+     "type": "negative",
+     "question": "What did the crew say about the gutters?",
+     "expect": {
+      "answerType": "abstain"
+     }
+    },
+    {
+     "id": "q3",
+     "type": "false_premise",
+     "question": "When did they agree on the price for the roof?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "agreed to"
+      ]
+     }
+    },
+    {
+     "id": "q4",
+     "type": "negative",
+     "question": "Is anyone visible on the roof?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q5",
+     "type": "false_premise",
+     "question": "Did they finish replacing the shingles?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no",
+      "critical": [
+       "finished replacing",
+       "replaced the"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "speaker_source",
+     "question": "Who is talking in this clip?",
+     "expect": {
+      "answerType": "abstain",
+      "mustNotContain": [
+       "Speaker A"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-kitchen-tv-playback",
+   "categories": [
+    "synthetic",
+    "media_playback",
+    "damage_closeup"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 30,
+    "dictation": "Walkthrough of a kitchen with a swollen sink-base cabinet floor; a TV in the next room is playing a home-shopping show.",
+    "actions": [
+     {
+      "atSeconds": 0,
+      "description": "Close-up of the swollen cabinet floor under the sink."
+     },
+     {
+      "atSeconds": 10,
+      "description": "Camera pans to the living room; the TV is playing a home-shopping show with a presenter talking."
+     },
+     {
+      "atSeconds": 20,
+      "description": "Back to the cabinet; the tech points at the supply line."
+     }
+    ],
+    "mediaWindows": [
+     {
+      "startSeconds": 10,
+      "endSeconds": 20,
+      "device": "tv",
+      "evidence": "the TV is playing a home-shopping show with a presenter talking."
+     }
+    ],
+    "transcript": "[0:02] The floor is swollen right here.\n[0:12] Only four hundred dollars today, call now.\n[0:15] That price will not last.\n[0:22] The supply line is leaking at the nut."
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines are in the transcript?",
+     "expect": {
+      "answerType": "answer",
+      "count": 4,
+      "mustContain": [
+       "media"
+      ]
+     }
+    },
+    {
+     "id": "q2",
+     "type": "speaker_source",
+     "question": "Did anyone on site mention a price?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no",
+      "mustContain": [
+       "media"
+      ],
+      "critical": [
+       "the crew quoted",
+       "they quoted"
+      ]
+     }
+    },
+    {
+     "id": "q3",
+     "type": "quote_time",
+     "question": "What was said about the supply line and when?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "The supply line is leaking at the nut.",
+        "at": 22
+       }
+      ]
+     }
+    },
+    {
+     "id": "q4",
+     "type": "temporal_order",
+     "question": "Give me every line with timestamps.",
+     "expect": {
+      "answerType": "answer",
+      "order": [
+       "floor is swollen",
+       "four hundred dollars",
+       "supply line"
+      ]
+     }
+    },
+    {
+     "id": "q5",
+     "type": "false_premise",
+     "question": "When did the tech replace the supply line?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "replaced the supply",
+       "replaced the line"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "negative",
+     "question": "Did anyone mention mold?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-table-closeup-office-talk",
+   "categories": [
+    "synthetic",
+    "damage_closeup",
+    "multiple_voices"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 34,
+    "dictation": "Close survey of a whitewashed wood tabletop with a long dark scratch and a small chip near the left edge; a wall-mounted TV (screen black/off) behind.",
+    "actions": [
+     {
+      "atSeconds": 2,
+      "description": "Low raking pass shows a long dark scratch and a chip near the left edge."
+     },
+     {
+      "atSeconds": 25,
+      "description": "Camera tilts up to the wall-mounted TV (screen off/black)."
+     }
+    ],
+    "transcript": "[0:00] It is all on paper here.\n[0:03] You keep it in spreadsheets.\n[0:05] You have it on a table.\n[0:13] Well, we need to get that.\n[0:15] We need to switch to BooksApp online.\n[0:17] That is the main thing.\n[0:20] Do you think it will be in there?",
+    "conversationSummary": "Only one audible spoken line."
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "quote_time",
+     "question": "What was said about BooksApp and when?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "We need to switch to BooksApp online.",
+        "at": 15
+       }
+      ],
+      "mustNotContain": [
+       "It is all on paper here"
+      ]
+     }
+    },
+    {
+     "id": "q2",
+     "type": "transcript_count",
+     "question": "How many things were said in this clip?",
+     "expect": {
+      "answerType": "answer",
+      "count": 7
+     }
+    },
+    {
+     "id": "q3",
+     "type": "negative",
+     "question": "Is the TV on?",
+     "expect": {
+      "answerType": "answer",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q4",
+     "type": "false_premise",
+     "question": "Did they agree on a price for the table repair?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no",
+      "critical": [
+       "agreed to"
+      ]
+     }
+    },
+    {
+     "id": "q5",
+     "type": "false_premise",
+     "question": "When was the scratch repaired?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "repaired the scratch",
+       "fixed the scratch"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "temporal_order",
+     "question": "Was spreadsheets mentioned before BooksApp? Give the times.",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "You keep it in spreadsheets.",
+        "at": 3
+       },
+       {
+        "text": "We need to switch to BooksApp online.",
+        "at": 15
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-occluded-start",
+   "categories": [
+    "synthetic",
+    "occlusion",
+    "no_work"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 32,
+    "dictation": "Clip opens with about four seconds of black frames (lens covered). From 5s a fixed webcam view of a person seated at a desk in a small office.",
+    "actions": [
+     {
+      "atSeconds": 0,
+      "description": "Black frames; lens covered."
+     },
+     {
+      "atSeconds": 5,
+      "description": "Image resolves to a person seated at a desk."
+     }
+    ],
+    "transcript": "[0:06] Can you hear me okay?"
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines are in the transcript?",
+     "expect": {
+      "answerType": "answer",
+      "count": 1
+     }
+    },
+    {
+     "id": "q2",
+     "type": "quote_time",
+     "question": "What was said and when?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "Can you hear me okay?",
+        "at": 6
+       }
+      ]
+     }
+    },
+    {
+     "id": "q3",
+     "type": "false_premise",
+     "question": "What damage is shown in the first four seconds?",
+     "expect": {
+      "answerType": "abstain"
+     }
+    },
+    {
+     "id": "q4",
+     "type": "negative",
+     "question": "Did anyone talk about the roof?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q5",
+     "type": "false_premise",
+     "question": "When did the crew finish installing the drywall?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "finished installing",
+       "installed the drywall"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "speaker_source",
+     "question": "Who said \"Can you hear me okay?\"",
+     "expect": {
+      "answerType": "answer",
+      "mustNotContain": [
+       "Speaker A",
+       "the homeowner said",
+       "the crew said"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-parked-vehicle",
+   "categories": [
+    "synthetic",
+    "no_work",
+    "quiet"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 20,
+    "dictation": "Filmed from inside a parked vehicle: steering wheel, instrument cluster, then a residential street through the side window. No work activity.",
+    "actions": [
+     {
+      "atSeconds": 0,
+      "description": "Steering wheel and instrument cluster."
+     },
+     {
+      "atSeconds": 9,
+      "description": "Pan out the side window to a residential street."
+     }
+    ],
+    "transcript": "[0:03] Okay."
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines were spoken?",
+     "expect": {
+      "answerType": "answer",
+      "count": 1
+     }
+    },
+    {
+     "id": "q2",
+     "type": "false_premise",
+     "question": "What work was completed in this clip?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "was completed",
+       "finished the"
+      ]
+     }
+    },
+    {
+     "id": "q3",
+     "type": "negative",
+     "question": "Did anyone promise to come back tomorrow?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no",
+      "critical": [
+       "promised to come back",
+       "will come back"
+      ]
+     }
+    },
+    {
+     "id": "q4",
+     "type": "false_premise",
+     "question": "How much did the homeowner agree to pay?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "agreed to pay"
+      ]
+     }
+    },
+    {
+     "id": "q5",
+     "type": "quote_time",
+     "question": "When does the camera look out the side window?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": [
+       "0:09"
+      ]
+     }
+    },
+    {
+     "id": "q6",
+     "type": "speaker_source",
+     "question": "Who said okay?",
+     "expect": {
+      "answerType": "answer",
+      "mustNotContain": [
+       "Speaker A"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "syn-laptop-podcast",
+   "categories": [
+    "synthetic",
+    "media_playback",
+    "multiple_voices",
+    "no_work"
+   ],
+   "consent": {
+    "status": "synthetic"
+   },
+   "record": {
+    "analysisState": "done",
+    "transcriptStatus": "done",
+    "durationSeconds": 60,
+    "dictation": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
+    "mediaUntimed": "A laptop open on a table is playing a video podcast; the camera stays on the laptop screen the whole time.",
+    "actions": [
+     {
+      "atSeconds": 0,
+      "description": "Laptop screen playing a podcast video."
+     }
+    ],
+    "transcript": "[0:01] Welcome back to the show.\n[0:05] Today we talk about interest rates.\n[0:12] I think rates come down next year.\n[0:20] Stay tuned, coming up next."
+   },
+   "questions": [
+    {
+     "id": "q1",
+     "type": "transcript_count",
+     "question": "How many lines are in the transcript?",
+     "expect": {
+      "answerType": "answer",
+      "count": 4
+     }
+    },
+    {
+     "id": "q2",
+     "type": "speaker_source",
+     "question": "Is this a conversation between the crew and the homeowner?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q3",
+     "type": "quote_time",
+     "question": "What was said about interest rates and when?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       {
+        "text": "Today we talk about interest rates.",
+        "at": 5
+       }
+      ]
+     }
+    },
+    {
+     "id": "q4",
+     "type": "false_premise",
+     "question": "What price did the contractor quote?",
+     "expect": {
+      "answerType": "abstain",
+      "critical": [
+       "quoted"
+      ]
+     }
+    },
+    {
+     "id": "q5",
+     "type": "negative",
+     "question": "Did anyone mention water damage?",
+     "expect": {
+      "answerType": "abstain",
+      "yesNo": "no"
+     }
+    },
+    {
+     "id": "q6",
+     "type": "temporal_order",
+     "question": "What was said first and what was said last?",
+     "expect": {
+      "answerType": "answer",
+      "order": [
+       "Welcome back to the show",
+       "coming up next"
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

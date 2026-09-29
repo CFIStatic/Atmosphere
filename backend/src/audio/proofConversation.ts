@@ -64,6 +64,36 @@ function visionContextFromProof(proof: any): string | null {
   return [...new Set(parts)].join('\n\n').slice(0, 4000);
 }
 
+/**
+ * Validate before publishing: a summary that claims a different amount of
+ * speech than the transcript ("only one line" over five) is regenerated, then
+ * quarantined (emptied) if the second attempt says the same thing. Shared by
+ * the pipeline and the Ask eval release gate.
+ */
+export async function publishableConversation(
+  transcript: string | null | undefined,
+  opts?: { durationSeconds?: number | null; visionContext?: string | null },
+): Promise<{
+  details: ConversationDetails;
+  rejected: Array<{ conversation: unknown; contradictions: string[] }>;
+  quarantined: boolean;
+}> {
+  const analyze = () =>
+    analyzeConversation(transcript, { durationSeconds: opts?.durationSeconds ?? null, visionContext: opts?.visionContext ?? null });
+  let details = await analyze();
+  let rejected: Array<{ conversation: unknown; contradictions: string[] }> = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const problems = summaryClaimContradictions(details, transcript);
+    if (!problems.length) break;
+    rejected.push({ conversation: toStoredConversation(details), contradictions: problems });
+    if (attempt === 0) details = await analyze();
+  }
+  const quarantined = rejected.length > 0 && summaryClaimContradictions(details, transcript).length > 0;
+  if (quarantined) details = emptyConversationLike(details);
+  if (!quarantined) rejected = rejected.slice(0, 0);
+  return { details, rejected, quarantined };
+}
+
 export async function enrichProofConversation(
   admin: any,
   proofId: string,
@@ -93,20 +123,7 @@ export async function enrichProofConversation(
     if (visionContext == null) visionContext = visionContextFromProof(proof);
   }
 
-  // Validate before publishing: a summary that claims a different amount of
-  // speech than the transcript ("only one line" over five) is regenerated,
-  // then quarantined if the second attempt says the same thing.
-  let details = await analyzeConversation(transcript, { durationSeconds, visionContext });
-  let rejected: Array<{ conversation: unknown; contradictions: string[] }> = [];
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const problems = summaryClaimContradictions(details, transcript);
-    if (!problems.length) break;
-    rejected.push({ conversation: toStoredConversation(details), contradictions: problems });
-    if (attempt === 0) details = await analyzeConversation(transcript, { durationSeconds, visionContext });
-  }
-  const quarantined = rejected.length > 0 && summaryClaimContradictions(details, transcript).length > 0;
-  if (quarantined) details = emptyConversationLike(details);
-  if (!quarantined) rejected = rejected.slice(0, 0);
+  const { details, rejected, quarantined } = await publishableConversation(transcript, { durationSeconds, visionContext });
 
   const findings =
     proof?.ai_findings && typeof proof.ai_findings === 'object' && !Array.isArray(proof.ai_findings)

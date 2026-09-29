@@ -30,7 +30,8 @@
     "migrate:manifest": "node scripts/migration-manifest.mjs",
     "check:email-auth": "node scripts/checkEmailAuthDns.mjs",
     "stripe:sync": "tsx src/scripts/syncStripeCatalog.ts",
-    "test:vitest": "vitest run --passWithNoTests"
+    "test:vitest": "vitest run --passWithNoTests",
+    "eval:ask": "tsx src/scripts/askEval.ts"
   },
   "engines": {
     "node": ">=20"
