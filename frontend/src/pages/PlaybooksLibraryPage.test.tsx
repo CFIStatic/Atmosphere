@@ -1,10 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PlaybooksLibraryPage } from './PlaybooksLibraryPage';
 
 const listPlaybooks = vi.fn();
 const getPlaybook = vi.fn();
+const evidenceLibrary = vi.fn();
+const createPlaybookFromJob = vi.fn();
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -14,6 +17,8 @@ vi.mock('../lib/api', async () => {
       ...actual.api,
       listPlaybooks: (...args: unknown[]) => listPlaybooks(...args),
       getPlaybook: (...args: unknown[]) => getPlaybook(...args),
+      evidenceLibrary: (...args: unknown[]) => evidenceLibrary(...args),
+      createPlaybookFromJob: (...args: unknown[]) => createPlaybookFromJob(...args),
       publishPlaybook: vi.fn(),
       archivePlaybook: vi.fn(),
     },
@@ -28,6 +33,9 @@ describe('PlaybooksLibraryPage', () => {
   beforeEach(() => {
     listPlaybooks.mockReset();
     getPlaybook.mockReset();
+    evidenceLibrary.mockReset();
+    createPlaybookFromJob.mockReset();
+    evidenceLibrary.mockResolvedValue({ items: [] });
   });
 
   it('shows empty state when the org has no playbooks', async () => {
@@ -43,6 +51,54 @@ describe('PlaybooksLibraryPage', () => {
       expect(screen.getByText(/No playbooks yet/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/ordered checklists/i)).toBeInTheDocument();
+    // Never a dead end that sends a Global Admin to "the API".
+    expect(screen.queryByText(/via the API/i)).toBeNull();
+    expect(screen.queryByText(/Ask your admin/i)).toBeNull();
+    expect(await screen.findByText(/No job has an analyzed clip yet/i)).toBeInTheDocument();
+  });
+
+  it('creates the first playbook from a completed job and opens it', async () => {
+    const created = {
+      id: 'pb-new',
+      orgId: 'org',
+      title: 'Handyman — Tiffany & Co.',
+      trade: 'handyman',
+      summary: null,
+      status: 'draft',
+      sourceKind: 'job_analysis',
+      sourceJobId: 'job-12',
+      skillTags: [],
+      stepCount: 3,
+      createdBy: null,
+      createdAt: '2026-09-28T00:00:00Z',
+      updatedAt: '2026-09-28T00:00:00Z',
+    };
+    listPlaybooks.mockResolvedValueOnce({ playbooks: [] }).mockResolvedValue({ playbooks: [created] });
+    getPlaybook.mockResolvedValue({ playbook: { ...created, steps: [] } });
+    evidenceLibrary.mockResolvedValue({
+      items: [
+        { id: 'c-1', jobId: 'job-12', jobName: 'Tiffany & Co.', jobNumber: 12, analysisState: 'done' },
+        { id: 'c-2', jobId: 'job-13', jobName: 'Empty', jobNumber: 13, analysisState: 'pending' },
+      ],
+    });
+    createPlaybookFromJob.mockResolvedValue({ playbook: created });
+
+    render(
+      <MemoryRouter initialEntries={['/playbooks']}>
+        <Routes>
+          <Route path="/playbooks" element={<PlaybooksLibraryPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const select = await screen.findByRole('combobox', { name: 'Completed job' });
+    expect(select).toHaveTextContent('#12 Tiffany & Co. · 1 analyzed clip');
+    expect(select).not.toHaveTextContent('Empty');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Create playbook' }));
+    expect(createPlaybookFromJob).toHaveBeenCalledWith('job-12');
+    await waitFor(() => {
+      expect(screen.getByTestId('playbook-card-pb-new')).toBeInTheDocument();
+    });
   });
 
   it('lists playbook cards', async () => {
