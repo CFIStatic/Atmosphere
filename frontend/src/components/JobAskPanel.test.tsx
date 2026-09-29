@@ -489,7 +489,8 @@ describe('JobAskPanel', () => {
     await user.type(box, 'What happened to the tarp?');
     await user.click(screen.getByRole('button', { name: /ask this job/i }));
     expect(await screen.findByTestId('ask-answer-body')).toHaveTextContent(/the tarp came off/i);
-    expect(screen.getByTestId('ask-quote').textContent).toMatch(/Homeowner/);
+    expect(screen.getByTestId('ask-quote').textContent).toMatch(/Unidentified speaker/);
+    expect(screen.getByTestId('ask-quote').textContent).not.toMatch(/Homeowner|\(/);
     expect(screen.getByTestId('ask-quote').textContent).toMatch(/north slope/);
     const chip = await screen.findByTestId('ask-source-chip');
     expect(chip.textContent).toMatch(/0:18/);

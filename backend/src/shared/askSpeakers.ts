@@ -2,11 +2,13 @@
  * Speaker labels in Ask.
  *
  * Only diarization output names a speaker ("Speaker 1", "Speaker 2"), or a
- * name the file explicitly attaches to that diarized speaker. Nothing is ever
- * inferred: not a name from who filmed the clip, not a role, posture, or
- * relationship from the video reading. When a speaker is not identified the
- * label is "Unidentified speaker" and prose says "an unidentified speaker",
- * with nothing appended.
+ * name the file explicitly attaches to that diarized speaker. A stored
+ * "Person N" index is that diarization slot and renders as "Speaker N" —
+ * never with a role, posture, or parenthesis. Nothing is inferred: not a
+ * name from who filmed the clip, not a role, posture, or relationship from
+ * the video reading. When a speaker is not identified the label is
+ * "Unidentified speaker" and prose says "an unidentified speaker", with
+ * nothing appended.
  */
 
 export const UNIDENTIFIED_SPEAKER = 'Unidentified speaker';
@@ -14,15 +16,20 @@ export const UNIDENTIFIED_SPEAKER_PROSE = 'an unidentified speaker';
 
 /**
  * A diarization label as Ask shows it. Zero-based transcriber ids
- * (SPEAKER_00) become one-based. Anything else returns null.
+ * (SPEAKER_00) become one-based. A stored visual index ("Person 1", including
+ * "Person 1 (Seated, Unknown Role)" and the unclosed "Person 1 (Seated") is
+ * the same slot: the number is kept and every parenthesis, role, and posture
+ * is dropped. Anything else returns null.
  */
 export function diarizationLabel(raw: unknown): string | null {
   const text = String(raw ?? '').trim();
   if (!text) return null;
-  const zeroBased = text.match(/^SPEAKER_(\d{1,3})$/);
+  const zeroBased = text.match(/^SPEAKER_(\d{1,3})\b/);
   if (zeroBased) return `Speaker ${Number(zeroBased[1]) + 1}`;
-  const plain = text.match(/^(?:speaker|spk)[\s_-]*(\d{1,3}|[a-z])$/i);
+  const plain = text.match(/^(?:speaker|spk)[\s_-]*(\d{1,3}|[a-z])\b/i);
   if (plain) return `Speaker ${/^\d+$/.test(plain[1]!) ? Number(plain[1]) : plain[1]!.toUpperCase()}`;
+  const person = text.match(/^person\s*(\d{1,3})\b/i);
+  if (person) return `Speaker ${Number(person[1])}`;
   return null;
 }
 
@@ -87,9 +94,10 @@ function articleFix(text: string): string {
 
 /**
  * Replace fabricated speaker labels in answer prose. "Person 1 (Seated,
- * Unknown Role) said" and "the seated man said" become "an unidentified
- * speaker said". A dangling "Person 1 (Seated" (the old comma-split bug) is
- * removed whole, so no unclosed parenthesis survives.
+ * Unknown Role) said" and the unclosed "Person 1 (Seated said" become
+ * "Speaker 1 said". A posture or role with no diarization index ("the seated
+ * man said") becomes "an unidentified speaker said". No parenthesis or
+ * inferred role survives.
  */
 export function sanitizeSpeakerProse(input: string, opts?: { protect?: string[] }): string {
   const raw = String(input ?? '');
@@ -127,6 +135,8 @@ function sanitizeUnmasked(input: string): string {
       const whole = args[args.length - 1] as string;
       const before = whole.slice(Math.max(0, offset - 24), offset);
       const after = whole.slice(offset + match.length, offset + match.length + 40);
+      const person = match.match(/\bPerson\s+(\d+)/i);
+      if (person) return `Speaker ${Number(person[1])}`;
       if (/unknown speaker/i.test(match)) return UNIDENTIFIED_SPEAKER_PROSE;
       return replacement(before, after);
     });

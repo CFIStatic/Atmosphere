@@ -29,6 +29,12 @@ const people: ProofPeoplePresent = {
 };
 
 describe('speakerDisplayName', () => {
+  it('renders a stored visual index as Speaker N and ignores a fabricated name', () => {
+    expect(speakerDisplayName('Person 1 (Seated, Unknown Role)', null)).toBe('Speaker 1');
+    expect(speakerDisplayName('Person 1 (Seated', people)).toBe('Speaker 1');
+    expect(speakerDisplayName('Person 1 (Seated', null)).not.toMatch(/\(|Seated|Role/);
+  });
+
   it('returns displayName when known and keeps Speaker N otherwise', () => {
     expect(speakerDisplayName('Speaker A', people)).toBe('Lex Fridman');
     expect(speakerDisplayName('Speaker B', people)).toBe('Speaker B');

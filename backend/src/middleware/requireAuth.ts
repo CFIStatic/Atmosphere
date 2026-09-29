@@ -69,7 +69,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (refreshToken) {
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
       if (!error && data.session && data.user) {
-        setSessionCookies(res, data.session);
+        setSessionCookies(res, data.session, req.hostname);
         req.user = data.user;
         req.accessToken = data.session.access_token;
         await enforceTermsIfRequired(req);
@@ -84,7 +84,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     // Genuine auth failure — no valid token could be established.
-    clearSessionCookies(res);
+    clearSessionCookies(res, req.hostname);
     throw unauthorized();
   } catch (err) {
     next(err);

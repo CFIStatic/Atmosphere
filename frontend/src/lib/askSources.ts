@@ -3,6 +3,8 @@
  * into short chip labels that navigate the job file, plus optional web links.
  */
 
+import { displaySpeakerLabel } from './speakerLabel';
+
 export type AskSourceId =
   | 'job'
   | 'claim'
@@ -477,7 +479,7 @@ export function parseAskQuoteTrailer(raw: string): AskMomentQuote[] {
     const clipTitle = clipField.replace(/^clip=/, '').trim();
     out.push({
       sourceId: id,
-      speaker: trim(speaker) || 'Unidentified speaker',
+      speaker: displaySpeakerLabel(trim(speaker)),
       text: text.slice(0, 180),
       atSeconds: moment?.atSeconds ?? null,
       proofId: moment?.proofId,

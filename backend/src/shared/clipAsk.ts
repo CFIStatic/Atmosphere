@@ -16,6 +16,7 @@ import { answerQualityFailures, normalizeForMatch } from './askVerify.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
+import { clipProcessing } from './clipProcessing.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
   extractPeoplePresent,
@@ -1338,6 +1339,12 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   if (record.phase) lines.push(`Phase: ${record.phase}`);
   if (record.company) lines.push(`Crew: ${record.company}`);
   if (record.durationSeconds != null) lines.push(`Duration: ${formatClipTime(record.durationSeconds) ?? record.durationSeconds}s`);
+  const processing = clipProcessing({
+    analysisStatus: record.analysisState === 'queued' ? 'queued' : record.analysisState === 'failed' ? 'failed' : record.analysisState === 'done' ? 'done' : null,
+    transcriptStatus: record.transcriptStatus,
+    summaryState: record.summaryState,
+  });
+  lines.push(`Clip processing: ${processing.state} (${processing.label}). Use this status; do not describe the clip as analyzed while it says otherwise.`);
   // The raw transcript goes first and is labeled authoritative: it decides
   // what was said and how much, over any AI summary below.
   if (record.transcript) {

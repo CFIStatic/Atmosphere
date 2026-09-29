@@ -101,7 +101,8 @@ describe('ConversationPanel', () => {
     await user.click(screen.getByTestId('conversation-more-details').querySelector('summary')!);
     expect(screen.getByTestId('conversation-panel').textContent).toMatch(/Insurance & adjuster/i);
     await user.click(screen.getByTestId('conversation-turns-details').querySelector('summary')!);
-    expect(screen.getByTestId('conversation-turns').textContent).toMatch(/Homeowner/);
+    expect(screen.getByTestId('conversation-turns').textContent).toMatch(/Unidentified speaker/);
+    expect(screen.getByTestId('conversation-turns').textContent).not.toMatch(/Homeowner|Crew|\(/);
   });
 
   it('separates turn speaker labels from quote bodies', async () => {

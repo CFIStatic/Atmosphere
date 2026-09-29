@@ -1,4 +1,13 @@
 import type { ProofPeoplePresent } from './api';
+import { displaySpeakerLabel, isFabricatedSpeakerLabel } from './speakerLabel';
+
+function explicitSpeakerName(raw: string | null | undefined): string | null {
+  const text = String(raw ?? '').trim();
+  if (!text || isFabricatedSpeakerLabel(text)) return null;
+  const shown = displaySpeakerLabel(text);
+  if (shown === 'Unidentified speaker') return null;
+  return shown;
+}
 
 /**
  * Resolve a diarization label (Speaker A) to a confident displayName when
@@ -10,20 +19,22 @@ export function speakerDisplayName(
 ): string {
   const label = String(speakerLabel || '').trim();
   if (!label) return '';
-  if (!people) return label;
+  const fallback = displaySpeakerLabel(label);
+  if (!people) return fallback;
 
   const fromSpeaker = (people.peopleSpeakers ?? []).find(
     (s) => s.speakerLabel?.toLowerCase() === label.toLowerCase() && s.displayName?.trim(),
   );
-  if (fromSpeaker?.displayName?.trim()) return fromSpeaker.displayName.trim();
+  const named = explicitSpeakerName(fromSpeaker?.displayName);
+  if (named) return named;
 
   const fromPerson = (people.peoplePresent ?? []).find(
     (p) => p.speakerLabel?.toLowerCase() === label.toLowerCase() && p.displayName?.trim(),
   );
-  if (fromPerson?.displayName?.trim()) return fromPerson.displayName.trim();
+  const personName = explicitSpeakerName(fromPerson?.displayName);
+  if (personName) return personName;
 
-  // label itself may already be the display name after API overlay
-  return label;
+  return fallback;
 }
 
 export function overlaySpeakerDisplayName<T extends { speakerLabel?: string | null }>(

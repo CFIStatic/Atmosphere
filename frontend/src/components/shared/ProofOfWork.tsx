@@ -23,6 +23,7 @@ import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
 import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
 import { expandMentionTokens } from '../../lib/mentions';
+import { AskProseView } from '../AskProseView';
 import { MentionText } from '../mentions/MentionText';
 import { MentionTextarea } from '../mentions/MentionTextarea';
 import { loadOrgMentions } from '../mentions/useOrgMentions';
@@ -273,9 +274,9 @@ export function ProofOfWork({
                     <p className="text-[11px] font-medium text-ink-700">
                       <MentionText text={q.question} />
                     </p>
-                    <p className="mt-0.5 text-xs text-ink-800">
-                      <MentionText text={q.answer ?? ''} />
-                    </p>
+                    <div className="mt-0.5 text-xs text-ink-800">
+                      <AskProseView text={q.answer ?? ''} />
+                    </div>
                     <p className="mt-1 text-[10.5px] text-ink-400">
                       From {clipCount} clip
                       {clipCount === 1 ? '' : 's'} on file ·{' '}

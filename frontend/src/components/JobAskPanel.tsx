@@ -24,6 +24,7 @@ import {
   splitAnswerCites,
 } from '../lib/askSeek';
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
+import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -339,7 +340,7 @@ function AskAnswerBody({
   const extracted = extractAskSources(text);
   const { quotes, followUps } = extracted;
   const { prose, artifact } = splitAskArtifact(extracted.body);
-  const blocks = parseAskProseBlocks(prose);
+  const blocks = parseAskProseBlocks(sanitizeSpeakerProse(prose));
   return (
     <div className="space-y-2.5 text-[15px] leading-relaxed text-ink-800" data-testid="ask-answer-body">
       {blocks.length ? (

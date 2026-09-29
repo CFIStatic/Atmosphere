@@ -249,6 +249,10 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                   const status = evidenceStatus({
                     state: item.state,
                     failedChecks: failed,
+                    analysisStatus: item.analysisStatus,
+                    transcriptStatus: item.transcriptStatus,
+                    narrationStatus: item.narrationStatus,
+                    summaryState: item.summaryState,
                   });
                   return (
                     <tr

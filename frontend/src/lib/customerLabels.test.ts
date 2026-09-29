@@ -42,5 +42,13 @@ describe('evidenceStatus', () => {
       label: '2 checks failed',
       tone: 'bad',
     });
+    expect(evidenceStatus({ state: 'analysed', summaryState: 'updating' }).processing).toEqual({
+      label: 'Summary still processing',
+      tone: 'progress',
+    });
+    expect(evidenceStatus({ state: 'analysed', summaryState: 'quarantined' }).processing.label).toBe(
+      'Summary still processing',
+    );
+    expect(evidenceStatus({ state: 'analysed', summaryState: 'fresh' }).processing.label).toBe('Analyzed');
   });
 });

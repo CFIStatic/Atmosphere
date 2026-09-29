@@ -4258,9 +4258,43 @@
     return { cls: 'green', text: 'Recorded' };
   }
 
+  /**
+   * Same decision table as backend/src/shared/clipProcessing.ts.
+   * uploaded | transcribing | analyzing | ready | failed.
+   * Integrity check failures stay off this chip — a failed location check
+   * is not a failed reading.
+   */
+  function clipProcessingOf(e) {
+    e = e || {};
+    var a = e.analysis || {};
+    var summary = String(a.summaryState || e.summaryState || '').toLowerCase();
+    var transcript = String(e.transcriptStatus || a.transcriptStatus || '').toLowerCase();
+    var narration = String(a.dictationStatus || e.narrationStatus || '').toLowerCase();
+    var analysis = String(a.state || e.analysisStatus || '').toLowerCase();
+    function busy(v) { return v === 'queued' || v === 'running' || v === 'pending'; }
+    if (analysis === 'failed' || narration === 'failed' || summary === 'failed') {
+      if (summary === 'failed' && analysis !== 'failed' && narration !== 'failed') {
+        return { state: 'failed', label: 'Summary unavailable', tone: 'bad' };
+      }
+      return { state: 'failed', label: 'Needs attention', tone: 'bad' };
+    }
+    if (busy(transcript)) return { state: 'transcribing', label: 'Transcribing', tone: 'progress' };
+    if (busy(analysis) || busy(narration)) return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
+    if (summary === 'updating' || summary === 'quarantined') {
+      return { state: 'analyzing', label: 'Summary still processing', tone: 'progress' };
+    }
+    if (analysis === 'done' || analysis === 'analysed' || analysis === 'analyzed' || analysis === 'accepted' || analysis === 'rejected' || summary === 'fresh') {
+      return { state: 'ready', label: 'Analyzed', tone: 'good' };
+    }
+    if (analysis === 'uploaded') return { state: 'uploaded', label: 'Waiting to process', tone: 'neutral' };
+    return { state: 'uploaded', label: 'Recorded', tone: 'neutral' };
+  }
+
   function clipStatus(e) {
     if (isActiveRecording(e)) return { cls: 'yellow', text: 'Recording' };
-    return { cls: 'green', text: 'Recorded' };
+    var p = clipProcessingOf(e);
+    var cls = p.tone === 'bad' ? 'red' : p.tone === 'progress' ? 'yellow' : 'green';
+    return { cls: cls, text: p.label };
   }
 
   /**
@@ -7022,11 +7056,73 @@
   }
 
 
-  /** Diarization letters ("Speaker A") are not an identity; show them as unknown. */
+  /**
+   * Diarization only. "Person 1 (Seated, Unknown Role)" is Speaker 1.
+   * A role or posture with no index is Unidentified speaker.
+   */
   function speakerDisplay(label) {
-    var t = String(label || '').trim();
-    if (!t || /^unknown$/i.test(t) || /^speaker(?:[\s_-]*[a-z0-9]{1,2})?$/i.test(t)) return 'Unknown speaker';
+    var t = String(label || '').replace(/\s+/g, ' ').trim();
+    if (!t) return 'Unidentified speaker';
+    var zero = t.match(/^SPEAKER_(\d{1,3})\b/);
+    if (zero) return 'Speaker ' + (Number(zero[1]) + 1);
+    var plain = t.match(/^(?:speaker|spk)[\s_-]*(\d{1,3}|[a-z])\b/i);
+    if (plain) return 'Speaker ' + (/^\d+$/.test(plain[1]) ? String(Number(plain[1])) : plain[1].toUpperCase());
+    var person = t.match(/^person\s*(\d{1,3})\b/i);
+    if (person) return 'Speaker ' + String(Number(person[1]));
+    if (/[()]|\b(?:seated|standing|walking|kneeling|crouching|unknown(?:\s+role)?|crew-?like)\b/i.test(t)) return 'Unidentified speaker';
+    if (/^(?:(?:the|a|an)\s+)?(?:man|woman|person|guy|girl|speaker|voice|someone|homeowner|crew(?: member)?|worker|contractor|client|customer|adjuster|tech(?:nician)?)$/i.test(t)) {
+      return 'Unidentified speaker';
+    }
     return t;
+  }
+
+  function sanitizeAskSpeakerProse(input) {
+    return String(input || '')
+      .replace(/\bPerson\s+(\d+)\s*\([^)\n]*\)?/g, function (_m, n) { return 'Speaker ' + Number(n); })
+      .replace(/\bPerson\s+(\d+)\b/g, function (_m, n) { return 'Speaker ' + Number(n); })
+      .replace(/\b(?:(?:the|a|an|one)\s+)?(?:seated|standing|walking|kneeling|crouching)\s+(?:man|woman|person|guy|girl|speaker)\b/gi, 'an unidentified speaker');
+  }
+
+  /** Bold, lists, and headings. HTML is escaped before any tag is added. */
+  function renderAskMarkdown(raw) {
+    var lines = esc(sanitizeAskSpeakerProse(String(raw || ''))).split('\n');
+    var html = '';
+    var list = null;
+    function closeList() {
+      if (!list) return;
+      html += list === 'ol' ? '</ol>' : '</ul>';
+      list = null;
+    }
+    function inline(s) {
+      return s
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var bullet = line.match(/^\s*[-*]\s+(.*)$/);
+      var ordered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+      var heading = line.match(/^(#{1,3})\s+(.*)$/);
+      if (bullet) {
+        if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; }
+        html += '<li>' + inline(bullet[1]) + '</li>';
+        continue;
+      }
+      if (ordered) {
+        if (list !== 'ol') { closeList(); html += '<ol>'; list = 'ol'; }
+        html += '<li>' + inline(ordered[1]) + '</li>';
+        continue;
+      }
+      closeList();
+      if (!String(line).trim()) continue;
+      if (heading) {
+        html += '<p><strong>' + inline(heading[2]) + '</strong></p>';
+        continue;
+      }
+      html += '<p>' + inline(line) + '</p>';
+    }
+    closeList();
+    return html;
   }
 
   function renderConversationBlock(item) {
@@ -7515,7 +7611,7 @@
     } else {
       thread.forEach(function (m) {
         html += '<div class="ask-bubble ' + esc(m.role) + '">' +
-          (m.role === 'user' ? renderMentionHtml(m.text) : esc(m.text)) + '</div>';
+          (m.role === 'user' ? renderMentionHtml(m.text) : renderAskMarkdown(m.text)) + '</div>';
       });
     }
     html += '</div>' +

@@ -63,7 +63,9 @@ describe('job timeline', () => {
       'El Presidente renamed the job from Tiffany walkthrough to Project Tiffany & Co.',
     );
     expect(text).toContain('El Presidente is recording.');
-    expect(text).toContain("Analysis is still reading El Presidente's clip in the dining room.");
+    expect(text).toContain(
+      "Analysis is still reading El Presidente's clip in the dining room — Transcribing",
+    );
   });
 
   it('does not invent events, notes, or private text', () => {
@@ -174,6 +176,89 @@ describe('job timeline', () => {
       '/job-progress?section=timeline&job=job-1',
     );
     expect(packetTimelineLocation('job-1', '/jobs/job-1', '')).toBeNull();
+  });
+
+  it('shows one finished-reading line per clip and labels a later run', () => {
+    const base = tiffanyCustody.clips[0]!;
+    const clip = (id: string, times: string[]) => ({
+      ...base,
+      clip: { ...base.clip, id },
+      chainOfCustody: times.map((at) => ({
+        action: 'analysed',
+        by: 'Analysis',
+        role: null,
+        detail: null,
+        at,
+      })),
+    });
+    const source = tiffanySource({
+      proofs: { ...tiffanyProofs, videos: [], days: [] },
+      liveSessions: [],
+      custody: {
+        ...tiffanyCustody,
+        clips: [
+          clip('clip-a', ['2026-09-21T18:00:00.000Z', '2026-09-21T18:02:00.000Z']),
+          clip('clip-b', ['2026-09-21T18:05:00.000Z', '2026-09-21T18:06:00.000Z']),
+          clip('clip-c', ['2026-09-21T18:10:00.000Z', '2026-09-21T18:11:00.000Z', '2026-09-21T20:00:00.000Z']),
+        ],
+      },
+    });
+    const reading = buildJobTimeline(source)
+      .map((event) => event.sentence)
+      .filter((sentence) => /finished reading|re-analyzed|still reading/.test(sentence));
+    expect(reading.filter((sentence) => sentence.startsWith('Analysis finished reading'))).toHaveLength(3);
+    expect(reading.filter((sentence) => sentence.includes('re-analyzed'))).toEqual([
+      'Analysis re-analyzed the clip.',
+    ]);
+    expect(reading).toHaveLength(4);
+  });
+
+  it('does not say a clip finished reading while its summary is still processing', () => {
+    const base = tiffanyCustody.clips[0]!;
+    const id = 'clip-summary';
+    const source = tiffanySource({
+      proofs: {
+        ...tiffanyProofs,
+        videos: [
+          {
+            id,
+            partyId: 'party-el',
+            company: 'Atmosphere',
+            workDate: '2026-09-21',
+            phase: 'before',
+            durationSeconds: 10,
+            capturedAt: '2026-09-21T18:00:00.000Z',
+            receivedAt: '2026-09-21T18:01:00.000Z',
+            analysisStatus: 'done',
+            narrationStatus: 'done',
+            transcriptStatus: 'done',
+            transcriptError: null,
+            aiSummary: null,
+            heardOnMic: null,
+            conversation: { summaryState: 'updating' },
+          },
+        ],
+        days: [],
+      },
+      liveSessions: [],
+      custody: {
+        ...tiffanyCustody,
+        clips: [
+          {
+            ...base,
+            clip: { ...base.clip, id },
+            chainOfCustody: [
+              { action: 'analysed', by: 'Analysis', role: null, detail: null, at: '2026-09-21T18:05:00.000Z' },
+            ],
+          },
+        ],
+      },
+    });
+    const reading = buildJobTimeline(source)
+      .map((event) => event.sentence)
+      .filter((sentence) => /reading|Analyzed|processing/i.test(sentence));
+    expect(reading.join('\n')).toContain('Summary still processing');
+    expect(reading.join('\n')).not.toContain('finished reading');
   });
 
   it('keeps evidence-report exports and leaves claim packets out', () => {

@@ -218,6 +218,8 @@ test('verified quotes become cards that open the exact moment, and fabricated ca
   assert.equal(quotes.length, 1);
   assert.equal(quotes[0]!.atSeconds, 18.56);
   assert.equal(quotes[0]!.speaker, 'Unidentified speaker');
+  assert.doesNotMatch(quotes[0]!.speaker, /\(|Seated|Role/);
+  assert.doesNotMatch(answer, /Person \d|Seated|Unknown Role/);
   assert.equal(quotes[0]!.clipTitle, TABLE_TITLE);
   assert.doesNotMatch(answer, /migrating|Person 1/);
 });
@@ -232,11 +234,14 @@ test('a two-word term in quotes is not treated as a transcript quote', () => {
 test('only diarization labels are used as speakers', () => {
   assert.equal(diarizationLabel('SPEAKER_00'), 'Speaker 1');
   assert.equal(diarizationLabel('Speaker 2'), 'Speaker 2');
-  assert.equal(diarizationLabel('Person 1 (Seated, Unknown Role)'), null);
-  assert.equal(isFabricatedSpeakerLabel('Person 1 (Seated'), true);
-  assert.equal(isFabricatedSpeakerLabel('Person 1 (Unknown Role'), true);
+  assert.equal(diarizationLabel('Person 1 (Seated, Unknown Role)'), 'Speaker 1');
+  assert.equal(diarizationLabel('Person 1 (Seated'), 'Speaker 1');
   assert.equal(isFabricatedSpeakerLabel('Seated man'), true);
-  assert.equal(speakerLabelOrUnidentified('Person 1 (Seated, Unknown Role)'), 'Unidentified speaker');
+  assert.equal(isFabricatedSpeakerLabel('homeowner'), true);
+  assert.equal(speakerLabelOrUnidentified('Person 1 (Seated, Unknown Role)'), 'Speaker 1');
+  assert.equal(speakerLabelOrUnidentified('Person 1 (Seated'), 'Speaker 1');
+  assert.equal(speakerLabelOrUnidentified('Seated man'), 'Unidentified speaker');
+  assert.doesNotMatch(speakerLabelOrUnidentified('Person 1 (Seated, Unknown Role)'), /\(|Seated|Role|homeowner/i);
   assert.deepEqual(
     diarizedSpeakerLabels({
       people: {
@@ -244,7 +249,7 @@ test('only diarization labels are used as speakers', () => {
         speakers: [{ speakerLabel: 'Person 1', displayName: 'Seated man' }],
       },
     }),
-    [],
+    ['Speaker 1'],
   );
 });
 
@@ -252,8 +257,8 @@ test('fabricated labels and unclosed parens are removed from prose', () => {
   const cleaned = sanitizeSpeakerProse(
     'Person 1 (Seated said the binder is full. Then Person 1 (Unknown Role said “Watch your step.” and Person 2 (Standing, Homeowner) nodded.',
   );
-  assert.doesNotMatch(cleaned, /Person \d|Seated|Unknown Role|Standing|Homeowner/);
-  assert.match(cleaned, /^An unidentified speaker said the binder is full\./);
+  assert.doesNotMatch(cleaned, /Person \d|Seated|Unknown Role|Standing|Homeowner|\(/);
+  assert.match(cleaned, /^Speaker 1 said the binder is full\. Then Speaker 1 said “Watch your step\.” and Speaker 2 nodded\./);
   const opens = (cleaned.match(/\(/g) ?? []).length;
   const closes = (cleaned.match(/\)/g) ?? []).length;
   assert.equal(opens, closes);
@@ -291,7 +296,8 @@ test('the speaker sanitizer never rewrites quoted speech or clip titles', () => 
     `Person 1 (Seated said “Ask the seated man about Person 2.” in ${title}.\n- “Ask the seated man about Person 2.” (${title}, 0:04)`,
     { protect: [title] },
   );
-  assert.match(out, /^An unidentified speaker said “Ask the seated man about Person 2\.”/);
+  assert.match(out, /^Speaker 1 said “Ask the seated man about Person 2\.”/);
+  assert.doesNotMatch(out.split('“')[0] ?? '', /\(|Seated|Person/);
   assert.equal(out.split(title).length - 1, 2);
   assert.match(out, /\(Person 1 Walks the Seated Man Through the Kitchen, 0:04\)/);
 });

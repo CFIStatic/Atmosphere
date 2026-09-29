@@ -41,7 +41,7 @@ describe('verifier dashboard recording status', () => {
       checks: [{ verdict: 'fail', what: 'Filmed on site', detail: 'off site' }],
     };
 
-    expect(clipStatus(uploaded)).toEqual({ cls: 'green', text: 'Recorded' });
+    expect(clipStatus(uploaded)).toEqual({ cls: 'green', text: 'Analyzed' });
     expect(jobRecordingStatus([uploaded])).toEqual({ cls: 'green', text: 'Recorded' });
     expect(verifierHtml).not.toMatch(/function clipStatus[\s\S]*?text: 'Failed'/);
     expect(verifierHtml).not.toContain("text: 'Active recording'");
@@ -95,7 +95,13 @@ describe('verifier dashboard recording status', () => {
     };
 
     expect(isActiveRecording(queued)).toBe(false);
-    expect(clipStatus(queued)).toEqual({ cls: 'green', text: 'Recorded' });
+    expect(clipStatus(queued)).toEqual({ cls: 'yellow', text: 'Analyzing' });
+    expect(
+      clipStatus({
+        analysis: { state: 'done', summaryState: 'updating' },
+        uploadedAt: '2026-08-01T12:00:00Z',
+      }),
+    ).toEqual({ cls: 'yellow', text: 'Summary still processing' });
   });
 
   it('paints an in_progress job folder as Waiting for first clip on All videos', async () => {

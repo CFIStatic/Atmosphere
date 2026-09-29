@@ -41,8 +41,16 @@ describe('videoRowStatus', () => {
       tone: 'good',
     });
     expect(videoRowStatus({ analysisStatus: 'done', transcriptStatus: 'running', narrationStatus: null }).label).toBe(
-      'Processing',
+      'Transcribing',
     );
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        conversation: { summaryState: 'updating' },
+      }).label,
+    ).toBe('Summary still processing');
     expect(videoRowStatus({ analysisStatus: 'failed', transcriptStatus: null, narrationStatus: null }).label).toBe(
       'Needs attention',
     );
