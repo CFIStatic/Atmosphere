@@ -1026,6 +1026,175 @@
     );
   }
 
+  /* ---- Field status card (the phone's view of a job — not the office dashboard) ---- */
+
+  /** One word per filed clip, the same rule as the office Videos tab. */
+  function clipProcessingState(video) {
+    var v = video || {};
+    function busy(x) {
+      return x === 'queued' || x === 'running' || x === 'pending';
+    }
+    if (v.analysisStatus === 'failed') return 'attention';
+    if (busy(v.analysisStatus) || busy(v.transcriptStatus) || busy(v.narrationStatus)) return 'processing';
+    if (v.analysisStatus === 'done') return 'ready';
+    return 'filed';
+  }
+
+  function plural(n, one, many) {
+    return n + ' ' + (n === 1 ? one : many);
+  }
+
+  /**
+   * What a crew member needs on a phone for one job: is it captured, has it
+   * reached the office, is it still processing, who can see it, and what to
+   * do next. `films` are this phone's pending films; `videos` the office's
+   * filed clips (null when this account cannot read them); `people` the
+   * job's access roster (null when not available to this account).
+   */
+  function fieldJobStatus(input) {
+    input = input || {};
+    var jobId = input.jobId || '';
+    var films = (Array.isArray(input.films) ? input.films : []).filter(function (f) {
+      return f && f.status !== 'filed' && (!jobId || f.jobId === jobId);
+    });
+    var videos = Array.isArray(input.videos) ? input.videos : null;
+    var onPhone = films.length;
+    var uploading = films.filter(function (f) {
+      return f.status === 'uploading';
+    }).length;
+    var filed = videos ? videos.length : 0;
+    var processing = 0;
+    var attention = 0;
+    var ready = 0;
+    (videos || []).forEach(function (v) {
+      var st = clipProcessingState(v);
+      if (st === 'processing') processing += 1;
+      else if (st === 'attention') attention += 1;
+      else ready += 1;
+    });
+    var captured = onPhone + filed;
+
+    var steps = [
+      {
+        key: 'captured',
+        label: 'Captured',
+        done: captured > 0,
+        detail: captured ? plural(captured, 'clip', 'clips') : 'Nothing yet',
+      },
+      {
+        key: 'uploaded',
+        label: 'Uploaded',
+        done: captured > 0 && onPhone === 0 && (videos ? filed > 0 : true),
+        detail: onPhone
+          ? plural(onPhone, 'clip', 'clips') + (uploading ? ' uploading now' : ' still on this phone')
+          : videos
+            ? filed
+              ? plural(filed, 'clip', 'clips') + ' at the office'
+              : 'Nothing yet'
+            : captured
+              ? 'Nothing waiting on this phone'
+              : 'Nothing yet',
+      },
+      {
+        key: 'processing',
+        label: 'Processed',
+        done: filed > 0 && processing === 0 && attention === 0,
+        detail: !videos
+          ? 'The office sees results once clips upload'
+          : !filed
+            ? 'Starts after upload'
+            : processing
+              ? plural(processing, 'clip', 'clips') + ' processing'
+              : attention
+                ? plural(attention, 'clip needs', 'clips need') + ' the office'
+                : 'Transcripts and summaries ready',
+      },
+    ];
+
+    var next;
+    if (!captured) {
+      next = { action: 'record', label: 'Record the first clip', hint: 'Nothing has been filmed for this job yet.' };
+    } else if (onPhone) {
+      next = {
+        action: 'wait',
+        label: 'Keep the app open',
+        hint:
+          input.online === false
+            ? 'No signal. Clips upload when the phone is back online.'
+            : 'Clips on this phone are uploading to the office.',
+      };
+    } else if (processing) {
+      next = {
+        action: 'record',
+        label: 'Record another clip',
+        hint: 'Nothing to do while the office processes. Keep filming if the work goes on.',
+      };
+    } else {
+      next = { action: 'record', label: 'Record another clip', hint: 'Everything filmed has reached the office.' };
+    }
+
+    var audience = [];
+    audience.push(input.orgName ? 'Your team at ' + input.orgName : 'Your office team');
+    var people = Array.isArray(input.people) ? input.people : null;
+    (people || []).forEach(function (p) {
+      if (!p || (p.state && p.state !== 'live' && p.state !== 'claimed')) return;
+      var who = p.name || p.email || '';
+      var role = p.kind === 'homeowner' ? 'Homeowner' : p.displayLabel || p.serviceTitle || 'Field crew';
+      audience.push(who && who !== role ? who + ' · ' + role : role);
+    });
+
+    return {
+      jobId: jobId,
+      name: input.jobName || 'Job',
+      steps: steps,
+      counts: {
+        captured: captured,
+        onPhone: onPhone,
+        uploading: uploading,
+        filed: filed,
+        processing: processing,
+        attention: attention,
+        ready: ready,
+      },
+      audience: audience,
+      audienceKnown: Boolean(people),
+      next: next,
+    };
+  }
+
+  /**
+   * Office facts for the status card. Each source may be closed to this
+   * account (an invited crew member is not in the org): that source is null
+   * and the card says what the phone itself knows.
+   */
+  function loadFieldJobStatusSources(apiBase, accessToken, jobId) {
+    var base = origin(apiBase) + '/api/operations/shared/' + encodeURIComponent(jobId);
+    function soft(p) {
+      return p.then(
+        function (v) {
+          return v;
+        },
+        function () {
+          return null;
+        },
+      );
+    }
+    return Promise.all([
+      soft(
+        apiJson(base + '/proof', { accessToken: accessToken }).then(function (body) {
+          return Array.isArray(body && body.videos) ? body.videos : null;
+        }),
+      ),
+      soft(
+        apiJson(base + '/access-roster', { accessToken: accessToken }).then(function (body) {
+          return Array.isArray(body && body.people) ? body.people : null;
+        }),
+      ),
+    ]).then(function (both) {
+      return { videos: both[0], people: both[1] };
+    });
+  }
+
   /**
    * Signed-in Field Capture: create a job from the phone form, then film it.
    */
@@ -3794,6 +3963,9 @@
     shouldMultipartUpload: shouldMultipartUpload,
     normalizeJobTitle: normalizeJobTitle,
     findOfficeJobByTitle: findOfficeJobByTitle,
+    clipProcessingState: clipProcessingState,
+    fieldJobStatus: fieldJobStatus,
+    loadFieldJobStatusSources: loadFieldJobStatusSources,
     WHOLE_BODY_MAX_BYTES: WHOLE_BODY_MAX_BYTES,
     PROOF_STILL_COUNT: PROOF_STILL_COUNT,
     PROOF_STILL_MAX_EDGE: PROOF_STILL_MAX_EDGE,
