@@ -580,12 +580,14 @@
 
   function refreshAccess(bound) {
     if (!sessionStillOpen(bound)) return Promise.resolve(null);
-    if (!state.refreshToken || !Core.refreshSession) {
+    if (!Core.refreshSession) {
       if (state.account) sessionExpired();
       return Promise.resolve(null);
     }
     if (!state.refreshing) {
-      var refreshToken = state.refreshToken;
+      // No refresh token in this tab (the session came from the Platform's
+      // cookie): the office API renews from that same-site cookie instead.
+      var refreshToken = state.refreshToken || null;
       state.refreshing = Core.refreshSession(API_BASE, refreshToken).then(
         function (session) {
           state.refreshing = null;
@@ -1543,7 +1545,7 @@
         bootBlocked();
       });
     });
-    if (state.accessToken) {
+    function connectStoredSession(renewed) {
       var bootCacheOk = Core.fieldCacheMatchesSession
         ? Core.fieldCacheMatchesSession(state.accessToken)
         : false;
@@ -1560,8 +1562,51 @@
           if (TOKEN) return openInviteAfterAccountSignIn();
           return joinOfficeByInvite().catch(failJoinOffice);
         }
+        // A reload after the one-hour access token lapsed is not a sign-out:
+        // renew once (this tab's refresh token, else the Platform cookie).
+        if (!renewed && err && err.status === 401) {
+          return renewBootSession().then(function (token) {
+            if (token) return connectStoredSession(true);
+            writeStoredSession(null, null);
+            bootBlocked();
+          });
+        }
         writeStoredSession(null, null);
         bootBlocked();
+      });
+    }
+
+    function renewBootSession() {
+      if (!Core.refreshSession) return Promise.resolve(null);
+      return Core.refreshSession(API_BASE, state.refreshToken || null).then(
+        function (session) {
+          if (!session || !session.accessToken) return null;
+          writeStoredSession(session.accessToken, session.refreshToken || state.refreshToken);
+          return session.accessToken;
+        },
+        function () {
+          return null;
+        },
+      );
+    }
+
+    if (state.accessToken) {
+      connectStoredSession(false);
+      return;
+    }
+    // Signed in on the Platform already? Take that session (same-site cookie)
+    // rather than a second login. An invite link only takes it when it is the
+    // invited email; otherwise the invite's own sign-in form is shown.
+    if (Core.adoptPlatformSession) {
+      Core.adoptPlatformSession(API_BASE).then(function (session) {
+        var invited = INVITE_EMAIL.toLowerCase();
+        var sameInvitee = !invited || String((session && session.email) || '').toLowerCase() === invited;
+        if (!session || !session.accessToken || !sameInvitee) {
+          bootBlocked();
+          return;
+        }
+        writeStoredSession(session.accessToken, session.refreshToken || null);
+        connectStoredSession(true);
       });
       return;
     }
@@ -2656,6 +2701,9 @@
         if (!ok) return;
       }
       if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
+      // One session across the Platform and this app: signing out here signs
+      // out there too, or the shared cookie would sign this tab straight back in.
+      if (Core.signOutPlatform) Core.signOutPlatform(API_BASE, state.refreshToken);
       writeStoredSession(null, null);
       state.account = false;
       state.owner = '';

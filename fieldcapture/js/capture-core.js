@@ -996,8 +996,51 @@
       method: 'POST',
       body: refreshToken ? { refreshToken: refreshToken } : {},
     }).then(function (body) {
-      return body && body.session && body.session.accessToken ? body.session : null;
+      if (!body || !body.session || !body.session.accessToken) return null;
+      var session = {
+        accessToken: body.session.accessToken,
+        refreshToken: body.session.refreshToken || null,
+        expiresAt: body.session.expiresAt || null,
+      };
+      // Who the session belongs to — an invite link checks it is the invited email.
+      if (body.user && typeof body.user.email === 'string') session.email = body.user.email;
+      return session;
     });
+  }
+
+  /**
+   * Single sign-on with the Platform. platform.atmosphereteam.com keeps the
+   * session in httpOnly, SameSite=Lax cookies on its own host; this app is on
+   * the same site (app.atmosphereteam.com), so a credentialed call to the
+   * office API carries them. With no token in this tab, trade the Platform's
+   * refresh cookie for a session instead of asking for a second login. The
+   * cookie never becomes readable here, is never widened to the parent
+   * domain, and CORS only lets the listed Atmosphere origins read the reply.
+   */
+  function adoptPlatformSession(apiBase) {
+    return refreshSession(apiBase, null).then(
+      function (session) {
+        return session;
+      },
+      function () {
+        return null;
+      },
+    );
+  }
+
+  /** Sign out everywhere this browser is signed in: clears the Platform's session cookies too. */
+  function signOutPlatform(apiBase, refreshToken) {
+    return apiJson(origin(apiBase) + '/api/auth/logout', {
+      method: 'POST',
+      body: refreshToken ? { refreshToken: refreshToken } : {},
+    }).then(
+      function () {
+        return true;
+      },
+      function () {
+        return false;
+      },
+    );
   }
 
   /** Signed-in Field Capture user — join by pending invite, or start an office. */
@@ -3766,6 +3809,8 @@
     nextUploadBackoffMs: nextUploadBackoffMs,
     PROOF_UPLOAD_ATTEMPTS: PROOF_UPLOAD_ATTEMPTS,
     refreshSession: refreshSession,
+    adoptPlatformSession: adoptPlatformSession,
+    signOutPlatform: signOutPlatform,
     localDateISO: localDateISO,
     newClipId: newClipId,
     CLIP_ID: CLIP_ID,
