@@ -80,14 +80,37 @@ describe('Field Capture single sign-on with the Platform', () => {
     expect(fn).toContain('connectStoredSession(true)');
   });
 
-  it('renews mid-session from the cookie when this tab holds no refresh token', () => {
+  it('renews mid-session from the cookie and never stores a cookie-backed refresh token', () => {
     const fn = fieldApp.slice(fieldApp.indexOf('function refreshAccess('), fieldApp.indexOf('function sessionExpired('));
     expect(fn).toContain('state.refreshToken || null');
-    expect(fn).not.toContain('!state.refreshToken ||');
+    expect(fn).toContain('refreshToken ? session.refreshToken || refreshToken : null');
   });
 
-  it('signs out of the Platform when signing out here', () => {
-    const fn = fieldApp.slice(fieldApp.indexOf('Core.clearFieldLocalCache) Core.clearFieldLocalCache();\n      // One session'));
-    expect(fn.slice(0, 400)).toContain('Core.signOutPlatform(API_BASE, state.refreshToken)');
+  it('an adopted Platform session keeps its refresh token in the httpOnly cookie only (security review)', () => {
+    const boot = fieldApp.slice(fieldApp.indexOf('Core.adoptPlatformSession(API_BASE)'));
+    expect(boot.slice(0, 900)).toContain('writeStoredSession(session.accessToken, null)');
+  });
+
+  it('boot renewal shares the single-flight refresh with the film queue (no double rotation)', () => {
+    const fn = fieldApp.slice(fieldApp.indexOf('function renewBootSession('), fieldApp.indexOf('function renewBootSession(') + 300);
+    expect(fn).toContain('refreshAccess(captureSession())');
+  });
+
+  it('sign-out waits for the Platform logout and blocks re-adoption in this tab', () => {
+    const helper = fieldApp.slice(fieldApp.indexOf('function signOutEverywhere('), fieldApp.indexOf('function writeStoredSession('));
+    expect(helper).toContain("sessionStorage.setItem(NO_ADOPT_KEY, '1')");
+    expect(helper).toContain('Core.signOutPlatform(API_BASE, refreshToken)');
+    const signOut = fieldApp.slice(fieldApp.indexOf('function signOutFieldAccount('), fieldApp.indexOf('function signOutFieldAccount(') + 2000);
+    expect(signOut).toContain('signOutEverywhere().then(');
+    expect(fieldApp).toContain('Core.adoptPlatformSession && platformAdoptionAllowed()');
+    // Terms-gate sign-out and a failed office join sign out everywhere too.
+    const terms = fieldApp.slice(fieldApp.indexOf("when('#terms-sign-out'"), fieldApp.indexOf("when('#terms-sign-out'") + 500);
+    expect(terms).toContain('signOutEverywhere()');
+    const failJoin = fieldApp.slice(fieldApp.indexOf('function failJoinOffice('), fieldApp.indexOf('function failJoinOffice(') + 300);
+    expect(failJoin).toContain('signOutEverywhere()');
+  });
+
+  it('a password sign-in re-allows Platform adoption', () => {
+    expect((fieldApp.match(/allowPlatformAdoption\(\);\n\s+writeStoredSession\(session\.accessToken, session\.refreshToken\)/g) || []).length).toBe(2);
   });
 });

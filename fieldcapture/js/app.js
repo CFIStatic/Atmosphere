@@ -354,6 +354,41 @@
     }
   }
 
+  /* ---- Single sign-on with the Platform ---- */
+  var NO_ADOPT_KEY = 'atm.field.noPlatformAdopt';
+  var SIGN_OUT_INCOMPLETE =
+    'Signed out here, but the office session could not be closed. Sign out again when online, or close this browser.';
+
+  /** Signed out in this tab: do not sign back in from the Platform cookie until a password sign-in. */
+  function platformAdoptionAllowed() {
+    try {
+      return sessionStorage.getItem(NO_ADOPT_KEY) !== '1';
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function allowPlatformAdoption() {
+    try {
+      sessionStorage.removeItem(NO_ADOPT_KEY);
+    } catch (e) {
+      /* private mode */
+    }
+  }
+
+  /** Clear this tab and the Platform session. Resolves true when the office confirmed the logout. */
+  function signOutEverywhere() {
+    var refreshToken = state.refreshToken;
+    try {
+      sessionStorage.setItem(NO_ADOPT_KEY, '1');
+    } catch (e) {
+      /* private mode */
+    }
+    writeStoredSession(null, null);
+    if (!Core.signOutPlatform) return Promise.resolve(true);
+    return Core.signOutPlatform(API_BASE, refreshToken);
+  }
+
   function writeStoredSession(accessToken, refreshToken) {
     state.accessToken = accessToken || null;
     state.refreshToken = refreshToken || null;
@@ -596,7 +631,9 @@
             sessionExpired();
             return null;
           }
-          writeStoredSession(session.accessToken, session.refreshToken || refreshToken);
+          // Cookie-backed sessions keep the refresh token in the httpOnly
+          // cookie only; never copy it into script-readable storage.
+          writeStoredSession(session.accessToken, refreshToken ? session.refreshToken || refreshToken : null);
           return session.accessToken;
         },
         function (err) {
@@ -1157,9 +1194,11 @@
   }
 
   function failJoinOffice(err) {
-    writeStoredSession(null, null);
-    showLoginError(err.message || 'Ask your Global Admin to invite this email.');
-    bootBlocked();
+    var message = err.message || 'Ask your Global Admin to invite this email.';
+    signOutEverywhere().then(function () {
+      showLoginError(message);
+      bootBlocked();
+    });
   }
 
   function showTermsError(message) {
@@ -1414,6 +1453,7 @@
             if (!session.accessToken) {
               throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
             }
+            allowPlatformAdoption();
             writeStoredSession(session.accessToken, session.refreshToken);
             if (TOKEN) {
               return openInviteAfterAccountSignIn();
@@ -1476,6 +1516,7 @@
             if (!session.accessToken) {
               throw new Error('Account created. Sign in with that email and password.');
             }
+            allowPlatformAdoption();
             writeStoredSession(session.accessToken, session.refreshToken);
             if (TOKEN) return openInviteAfterAccountSignIn();
             return finishAccountConnect();
@@ -1540,9 +1581,11 @@
     when('#terms-sign-out', function (link) {
       link.addEventListener('click', function (event) {
         event.preventDefault();
-        writeStoredSession(null, null);
         showTermsError('');
-        bootBlocked();
+        signOutEverywhere().then(function (ok) {
+          showLoginError(ok ? '' : SIGN_OUT_INCOMPLETE);
+          bootBlocked();
+        });
       });
     });
     function connectStoredSession(renewed) {
@@ -1577,17 +1620,9 @@
     }
 
     function renewBootSession() {
-      if (!Core.refreshSession) return Promise.resolve(null);
-      return Core.refreshSession(API_BASE, state.refreshToken || null).then(
-        function (session) {
-          if (!session || !session.accessToken) return null;
-          writeStoredSession(session.accessToken, session.refreshToken || state.refreshToken);
-          return session.accessToken;
-        },
-        function () {
-          return null;
-        },
-      );
+      // Same single-flight renewal the film queue uses: two concurrent
+      // refreshes would spend the rotated refresh token twice.
+      return refreshAccess(captureSession());
     }
 
     if (state.accessToken) {
@@ -1597,7 +1632,7 @@
     // Signed in on the Platform already? Take that session (same-site cookie)
     // rather than a second login. An invite link only takes it when it is the
     // invited email; otherwise the invite's own sign-in form is shown.
-    if (Core.adoptPlatformSession) {
+    if (Core.adoptPlatformSession && platformAdoptionAllowed()) {
       Core.adoptPlatformSession(API_BASE).then(function (session) {
         var invited = INVITE_EMAIL.toLowerCase();
         var sameInvitee = !invited || String((session && session.email) || '').toLowerCase() === invited;
@@ -1605,7 +1640,8 @@
           bootBlocked();
           return;
         }
-        writeStoredSession(session.accessToken, session.refreshToken || null);
+        // Access token only: the refresh token stays in the Platform's httpOnly cookie.
+        writeStoredSession(session.accessToken, null);
         connectStoredSession(true);
       });
       return;
@@ -2703,16 +2739,18 @@
       if (Core.clearFieldLocalCache) Core.clearFieldLocalCache();
       // One session across the Platform and this app: signing out here signs
       // out there too, or the shared cookie would sign this tab straight back in.
-      if (Core.signOutPlatform) Core.signOutPlatform(API_BASE, state.refreshToken);
-      writeStoredSession(null, null);
-      state.account = false;
-      state.owner = '';
-      state.jobs = [];
-      state.activeJobId = null;
-      showJobAdd(false);
-      if (frame) frame.setAttribute('src', 'about:blank');
-      showLoginError('');
-      bootBlocked();
+      // Wait for it before showing sign-in, so a quick second sign-in is not
+      // undone by the logout response.
+      signOutEverywhere().then(function (ok) {
+        state.account = false;
+        state.owner = '';
+        state.jobs = [];
+        state.activeJobId = null;
+        showJobAdd(false);
+        if (frame) frame.setAttribute('src', 'about:blank');
+        showLoginError(ok ? '' : SIGN_OUT_INCOMPLETE);
+        bootBlocked();
+      });
     }
 
     var whoBtn = document.getElementById('who-btn');
