@@ -145,8 +145,7 @@ export function BillingSection() {
             )}
             {!complimentary ? (
               <p className="mt-2 text-xs text-ink-500">
-                Prices increase 10% annually on your plan anniversary (30-day notice). Includes seats and
-                usage.
+                Includes seats and usage.
               </p>
             ) : null}
           </div>

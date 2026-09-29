@@ -93,13 +93,28 @@ function ensureSpace(doc: PDFKit.PDFDocument, need: number) {
   }
 }
 
+/** An enum word ("before", "after", "punch_list") as a customer reads it in the proof pack. */
+export function phaseLabel(phase: string | null | undefined): string {
+  const word = String(phase ?? '').trim().toLowerCase();
+  if (word === 'before') return 'Before';
+  if (word === 'after') return 'After';
+  return word ? word[0].toUpperCase() + word.slice(1).replace(/_/g, ' ') : '';
+}
+
+/** A work day's review decision in customer words. */
+export function decisionLabel(decision: string | null | undefined): string {
+  if (decision === 'accepted') return 'Accepted';
+  if (decision === 'rejected') return 'Rejected';
+  return 'Not reviewed';
+}
+
 function drawClip(doc: PDFKit.PDFDocument, clip: ProofPackClip) {
   ensureSpace(doc, 80);
   doc
     .font('Helvetica-Bold')
     .fontSize(10)
     .fillColor(ATMOSPHERE_INK)
-    .text(`${clip.workDate} · ${clip.company} · ${clip.phase}`);
+    .text(`${clip.workDate} · ${clip.company} · ${phaseLabel(clip.phase)}`);
   if (clip.person) {
     doc.font('Helvetica').fontSize(8).fillColor('#57534E').text(`Filmed by ${clip.person}`);
   }
@@ -277,7 +292,7 @@ export async function renderJobProofPackPdf(pack: JobProofPack): Promise<Buffer>
           .font('Helvetica-Bold')
           .fontSize(9)
           .fillColor(ATMOSPHERE_INK)
-          .text(`${day.workDate} · ${day.company} · ${day.decision}`);
+          .text(`${day.workDate} · ${day.company} · ${decisionLabel(day.decision)}`);
         const line = day.aiSummary ?? day.summary;
         if (line) {
           doc.font('Helvetica').fontSize(8).fillColor('#44403C').text(line, {
@@ -301,7 +316,7 @@ export async function renderJobProofPackPdf(pack: JobProofPack): Promise<Buffer>
         ensureSpace(doc, 36);
         const clock =
           item.seekSeconds != null ? `[${formatProofPackClock(item.seekSeconds)}] ` : '';
-        const meta = [item.workDate, item.company, item.ownerLabel, item.source]
+        const meta = [item.workDate, item.company, item.ownerLabel, phaseLabel(item.source)]
           .filter(Boolean)
           .join(' · ');
         doc

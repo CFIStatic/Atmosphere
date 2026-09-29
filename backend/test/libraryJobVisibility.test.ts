@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { libraryJobCaptureStatus } from '../src/lib/proofUploadChunks.js';
 
+test('a job-scoped library read filters that job before the newest-500 window', () => {
+  const src = readFileSync(new URL('../src/routes/evidencePortal.ts', import.meta.url), 'utf8');
+  const start = src.indexOf("evidencePortalRouter.get('/library'");
+  const end = src.indexOf("evidencePortalRouter.get(\n  '/evidence/:proofId'");
+  const handler = src.slice(start, end);
+  assert.match(handler, /jobId: z\.string\(\)\.uuid\(\)\.optional\(\)/);
+  const eqAt = handler.indexOf(".eq('job_id', jobId)");
+  const limitAt = handler.indexOf('.limit(500)');
+  assert.ok(eqAt !== -1, 'job-scoped library query filters job_id');
+  assert.ok(limitAt !== -1, 'org library feed still caps at 500');
+  assert.ok(eqAt < limitAt, 'job_id filter runs before the newest-500 cap');
+});
+
 test('the office library ships job files before any clip lands', () => {
   const src = readFileSync(new URL('../src/routes/evidencePortal.ts', import.meta.url), 'utf8');
   assert.match(src, /from\('crm_jobs'\)/);
