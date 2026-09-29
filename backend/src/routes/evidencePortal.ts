@@ -612,13 +612,23 @@ evidencePortalRouter.use(requireAuth);
 /** GET /api/evidence-portal/library — every job file, plus every clip, newest first. */
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { q } = z.object({ q: z.string().max(120).optional() }).parse(req.query);
+    const { q, jobId } = z
+      .object({
+        q: z.string().max(120).optional(),
+        // The job file names every clip already on that job. Apply this before
+        // the newest-500 cap so an older file is not dropped once the office
+        // has filmed past the org-wide window. Search (`q`) stays in memory.
+        jobId: z.string().uuid().optional(),
+      })
+      .parse(req.query);
     const { supabase, orgId, role } = await requireOrgContext(req);
-    const { data, error } = await supabase
+    let proofsQuery = supabase
       .from('job_proofs')
       .select(PORTAL_PROOF_SELECT)
       .eq('org_id', orgId)
-      .is('deleted_at', null)
+      .is('deleted_at', null);
+    if (jobId) proofsQuery = proofsQuery.eq('job_id', jobId);
+    const { data, error } = await proofsQuery
       .order('received_at', { ascending: false })
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');

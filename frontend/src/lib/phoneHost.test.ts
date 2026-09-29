@@ -99,13 +99,14 @@ describe('phone home-screen manifests', () => {
     );
     expect(app).toContain('Core.loginWithPassword');
     expect(app).not.toContain('Core.joinCrew');
-    expect(app).toContain("Core.resolveOfficePlatformHref('/verifier-library')");
+    expect(app).not.toContain("Core.resolveOfficePlatformHref('/verifier-library')");
+    expect(app).toContain("Core.resolveOfficeHref('/verifier-library')");
     expect(app).toContain("Core.resolveOfficeHref('/forgot-password')");
     expect(app).toContain("Core.resolveOfficeHref('/signup')");
     expect(app).toContain('openPlatformInFrame');
     expect(app).toContain('request-field-session');
     expect(app).toContain('field-session-missing');
-    expect(app).toContain('warmPlatformFrame');
+    expect(app).not.toContain('warmPlatformFrame');
     expect(app).toContain('notifyOfficeLibraryChanged');
     expect(app).toContain("atmosphere: 'library-changed'");
     expect(app).toContain('applyOfficeTheme');
@@ -122,7 +123,7 @@ describe('phone home-screen manifests', () => {
     expect(core).toContain('function localOfficeOrigin');
     expect(core).toContain('embed=field');
     expect(core).toContain('v=no-overview-back-2');
-    expect(htmlFromField).toContain('v=no-overview-back-2');
+    expect(htmlFromField).not.toContain('verifier-library?embed=field');
   });
 
   it('does not show a shared-account note on the Field Capture sign-in screen', () => {

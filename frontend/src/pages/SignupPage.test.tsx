@@ -134,7 +134,7 @@ describe('SignupPage', () => {
     expect(screen.getAllByText(/office-only Global Admins do not use a seat/)).toHaveLength(1);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getByText(/AI\/token usage is billed the day it is used/)).toBeInTheDocument();
-    expect(screen.getByText(/30-day notice/)).toBeInTheDocument();
+    expect(screen.queryByText(/30-day notice/)).toBeNull();
     expect(screen.queryByLabelText(/I acknowledge and agree to the/i)).toBeNull();
     expect(screen.queryByLabelText('Company name')).toBeNull();
 

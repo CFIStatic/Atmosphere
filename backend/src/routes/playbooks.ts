@@ -2,6 +2,7 @@
  * Trade playbook library API — org-scoped checklist / skill cards.
  *
  *   GET    /api/playbooks
+ *   GET    /api/playbooks/source-jobs
  *   GET    /api/playbooks/:id
  *   POST   /api/playbooks
  *   POST   /api/playbooks/from-job
@@ -24,6 +25,7 @@ import {
   generatePlaybookFromAnalysis,
   getPlaybook,
   listPlaybooks,
+  playbookSourceJobs,
   updatePlaybook,
   type ProofForGenerate,
 } from '../playbooks/index.js';
@@ -136,6 +138,43 @@ playbooksRouter.post('/from-job', async (req: Request, res: Response, next: Next
   }
 });
 
+
+/** Jobs the "Create from completed job" picker may offer (what /from-job accepts). */
+playbooksRouter.get('/source-jobs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = await requireOrgContext(req);
+    const admin = adminOrThrow();
+    const { data: proofs, error: proofErr } = await admin
+      .from('job_proofs')
+      .select('id, job_id, phase, analysis_status, ai_summary, ai_findings, work_date, captured_at')
+      .eq('org_id', ctx.orgId)
+      .eq('analysis_status', 'done')
+      .is('deleted_at', null)
+      .order('captured_at', { ascending: false })
+      .limit(1000);
+    if (proofErr) throw new HttpError(500, proofErr.message, 'proofs_load_failed');
+    const jobIds = [...new Set(((proofs ?? []) as Array<{ job_id?: string | null }>).map((p) => p.job_id).filter(Boolean))] as string[];
+    if (!jobIds.length) {
+      res.json({ jobs: [] });
+      return;
+    }
+    const { data: jobs, error: jobErr } = await admin
+      .from('crm_jobs')
+      .select('id, title, job_number, work_type')
+      .eq('org_id', ctx.orgId)
+      .in('id', jobIds)
+      .is('deleted_at', null);
+    if (jobErr) throw new HttpError(500, jobErr.message, 'job_load_failed');
+    res.json({
+      jobs: playbookSourceJobs({
+        jobs: (jobs ?? []) as Array<{ id: string; title?: string | null; job_number?: number | null; work_type?: string | null }>,
+        proofs: (proofs ?? []) as Array<ProofForGenerate & { job_id?: string | null }>,
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 playbooksRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

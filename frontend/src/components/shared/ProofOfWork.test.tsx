@@ -10,6 +10,7 @@ const askAboutProofs = vi.fn();
 const jobProofs = vi.fn();
 const proofQuestions = vi.fn();
 const jobEpisodes = vi.fn();
+const evidenceLibrary = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   api: {
@@ -18,6 +19,7 @@ vi.mock('../../lib/api', () => ({
     jobProofs: (...args: unknown[]) => jobProofs(...args),
     proofQuestions: (...args: unknown[]) => proofQuestions(...args),
     jobEpisodes: (...args: unknown[]) => jobEpisodes(...args),
+    evidenceLibrary: (...args: unknown[]) => evidenceLibrary(...args),
     episodePhysicalWork: vi.fn(),
     decideProofDay: vi.fn(),
     reanalyseProofDay: vi.fn(),
@@ -46,7 +48,9 @@ const catalog: ProofResponse = {
       aiSummary: 'Empty hall before the crew started.',
       heardOnMic: 'We have not started the subfloor yet.',
       transcriptText: '[0:08] We have not started the subfloor yet.',
-      transcriptSegments: [{ tSec: 8, text: 'We have not started the subfloor yet.', speakerLabel: null }],
+      transcriptSegments: [
+        { tSec: 8, text: 'We have not started the subfloor yet.', speakerLabel: null },
+      ],
     },
     {
       id: 'proof-day',
@@ -88,9 +92,11 @@ describe('ProofOfWork video collection', () => {
     });
     proofQuestions.mockResolvedValue({ questions: [] });
     jobEpisodes.mockResolvedValue({ episodes: [] });
+    evidenceLibrary.mockReset();
+    evidenceLibrary.mockResolvedValue({ items: [] });
   });
 
-  it('lists every uploaded video once with mic status — no separate transcripts section', async () => {
+  it('lists every uploaded video once with duration and status — no separate transcripts section', async () => {
     render(<ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} />);
 
     expect(screen.getByRole('heading', { name: 'Videos' })).toBeInTheDocument();
@@ -98,19 +104,20 @@ describe('ProofOfWork video collection', () => {
     expect(screen.queryByText(/None on this (clip|file)/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('job-video-list')).toBeInTheDocument();
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /Transcripts and analysis/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Transcripts and analysis/i }),
+    ).not.toBeInTheDocument();
     // Dense Glance / Scan / Full evidence walls are off the job file.
     expect(screen.queryByTestId('full-evidence')).not.toBeInTheDocument();
     expect(screen.queryByTestId('verbatim-transcript')).not.toBeInTheDocument();
     expect(screen.queryByTestId('evidence-log')).not.toBeInTheDocument();
     expect(screen.queryByTestId('punch-list-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('save-as-playbook')).not.toBeInTheDocument();
-    expect(
-      screen.getByText((_, el) => el?.textContent === '42 seconds · Mic: heard'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText((_, el) => el?.textContent === '10 minutes · Mic: skipped'),
-    ).toBeInTheDocument();
+    const statuses = screen.getAllByTestId('job-video-status').map((el) => el.textContent);
+    expect(statuses).toEqual(['Analyzed', 'Processing']);
+    expect(screen.getByText('42 seconds')).toBeInTheDocument();
+    expect(screen.getByText('10 minutes')).toBeInTheDocument();
+    expect(screen.queryByText(/Field Capture/)).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Ask the video collection/i)).toBeInTheDocument();
     // Hear-the-mic lives in the expanded row, not the collapsed list.
     expect(screen.queryByTestId('hear-the-mic')).not.toBeInTheDocument();
@@ -263,6 +270,80 @@ describe('ProofOfWork video collection', () => {
     vi.useRealTimers();
   });
 
+  it('picks up the Dashboard title and poster when analysis finishes on an existing clip', async () => {
+    vi.useFakeTimers();
+    const processing = {
+      id: 'proof-morning',
+      partyId: 'party-1',
+      company: 'Acme Drywall',
+      workDate: '2026-08-20',
+      phase: 'before',
+      durationSeconds: 42,
+      analysisStatus: 'queued',
+      narrationStatus: 'running',
+      transcriptStatus: 'queued',
+      transcriptError: null,
+      aiSummary: null,
+      heardOnMic: null,
+    };
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [processing],
+      counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 1 },
+      siteKnown: true,
+    });
+    evidenceLibrary.mockResolvedValue({ items: [] });
+
+    render(<ProofOfWork jobId="job-1" heading="Videos" />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('job-video-status')).toHaveTextContent('Processing');
+    expect(screen.getByTestId('job-video-title')).toHaveTextContent(/Video ·/);
+    expect(screen.getByTestId('job-video-thumb').querySelector('img')).toBeNull();
+    const libraryCalls = evidenceLibrary.mock.calls.length;
+    expect(libraryCalls).toBeGreaterThan(0);
+
+    jobProofs.mockResolvedValue({
+      days: [],
+      videos: [
+        {
+          ...processing,
+          analysisStatus: 'done',
+          narrationStatus: 'done',
+          transcriptStatus: 'done',
+        },
+      ],
+      counts: { days: 0, videos: 1, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
+      siteKnown: true,
+    });
+    evidenceLibrary.mockResolvedValue({
+      items: [
+        {
+          id: 'proof-morning',
+          jobId: 'job-1',
+          title: 'Empty hall before drywall',
+          aiTitle: 'Empty hall before drywall',
+          posterUrl: 'https://storage.test/poster-morning.jpg',
+        },
+      ],
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+
+    expect(evidenceLibrary.mock.calls.length).toBeGreaterThan(libraryCalls);
+    expect(screen.getByTestId('job-video-status')).toHaveTextContent('Analyzed');
+    expect(screen.getByTestId('job-video-title')).toHaveTextContent('Empty hall before drywall');
+    expect(screen.getByTestId('job-video-thumb').querySelector('img')?.getAttribute('src')).toBe(
+      'https://storage.test/poster-morning.jpg',
+    );
+    vi.useRealTimers();
+  });
+
   it('opens the cited clip and seeks to the Analysis second', async () => {
     function FireSeek() {
       const { seek } = useVideoSeek();
@@ -352,5 +433,49 @@ describe('ProofOfWork video collection', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(String(writeText.mock.calls[0]![0])).toMatch(/We have not started the subfloor yet/);
     expect(screen.getByTestId('copy-transcript')).toHaveTextContent('Copied');
+  });
+
+  it('names each row and shows its thumbnail exactly as the Dashboard does', async () => {
+    evidenceLibrary.mockResolvedValue({
+      items: [
+        {
+          id: 'proof-morning',
+          jobId: 'job-1',
+          title: 'Empty hall before drywall',
+          customTitle: null,
+          aiTitle: 'Empty hall before drywall',
+          posterUrl: 'https://storage.test/poster-morning.jpg',
+        },
+        { id: 'other-job-clip', jobId: 'job-2', title: 'Not this job', posterUrl: null },
+      ],
+    });
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('job-video-title')[0]).toHaveTextContent(
+        'Empty hall before drywall',
+      );
+    });
+    expect(evidenceLibrary).toHaveBeenCalledWith('job-1');
+    expect(screen.getAllByTestId('job-video-title')[1]).toHaveTextContent('Video · proofday');
+    const thumbs = screen.getAllByTestId('job-video-thumb');
+    expect(thumbs[0].querySelector('img')?.getAttribute('src')).toBe(
+      'https://storage.test/poster-morning.jpg',
+    );
+    expect(thumbs[0]).toHaveTextContent('0:42');
+    expect(thumbs[1].querySelector('img')).toBeNull();
+    expect(thumbs[1]).toHaveTextContent('10:00');
+  });
+
+  it('jumps to a moment from the row', async () => {
+    const user = userEvent.setup();
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={catalog} />);
+    const moments = screen.getAllByTestId('job-video-moments');
+    expect(moments).toHaveLength(1);
+    const chip = screen.getByRole('button', {
+      name: 'Jump to 0:08: We have not started the subfloor yet.',
+    });
+    await user.click(chip);
+    expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
   });
 });

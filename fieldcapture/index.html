@@ -241,6 +241,30 @@
     background: var(--bg);
   }
   body[data-screen="s-platform"] .top { display: none; }
+  /* Field status card: the phone's view of a job — never the desktop dashboard. */
+  .fstat-job { margin-top: 14px; }
+  .fstat-job label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; margin-bottom: 6px; }
+  .fstat-job select { width: 100%; font: inherit; font-size: 15px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .fstat-card { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .fstat-card h2 { font-size: 17px; font-weight: 750; letter-spacing: -0.01em; margin: 0; }
+  .fstat-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+  .fstat-step { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .fstat-mark { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; margin-top: 1px; }
+  .fstat-step[data-done="1"] .fstat-mark { border-color: var(--pass); background: var(--pass); box-shadow: inset 0 0 0 3px var(--panel); }
+  .fstat-step[data-busy="1"] .fstat-mark { border-color: var(--accent); border-right-color: transparent; animation: fstat-spin 1s linear infinite; }
+  @keyframes fstat-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .fstat-step[data-busy="1"] .fstat-mark { animation: none; border-right-color: var(--accent); } }
+  .fstat-step b { display: block; font-size: 14px; font-weight: 700; }
+  .fstat-step span { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .fstat-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+  .fstat-section h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; margin: 0 0 8px; }
+  .fstat-audience { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+  .fstat-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .fstat-next p { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .fstat-next .daybtn { width: 100%; }
+  .fstat-office { display: block; margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+  .fstat-office a { color: var(--accent); font-weight: 650; }
+  .fstat-empty { margin-top: 14px; font-size: 14px; color: var(--muted); }
   /* Sign-in / terms: product chrome stays off — no Field Capture / Platform dock,
      no Field Capture subtitle. Login is Atmosphere only. */
   body[data-screen="s-blocked"] .switchbar,
@@ -1138,6 +1162,36 @@
     </div>
   </div>
 
+  <!-- ================= STATUS: field-first job status (not the office dashboard) ================= -->
+  <div class="screen" id="s-status" data-on="0">
+    <div class="home-scroll">
+    <div class="pad">
+      <div class="daterow mono">Job status</div>
+      <h1 class="h1" id="fstat-title">Your jobs</h1>
+      <div class="fstat-job" id="fstat-job-row" hidden>
+        <label for="fstat-job">Job</label>
+        <select id="fstat-job"></select>
+      </div>
+      <p class="fstat-empty" id="fstat-empty" hidden>No jobs yet. Start one from Field Capture.</p>
+      <section class="fstat-card" id="fstat-card" hidden aria-live="polite">
+        <h2 id="fstat-name"></h2>
+        <ol class="fstat-steps" id="fstat-steps"></ol>
+        <div class="fstat-section">
+          <h3>Who can see this job</h3>
+          <ul class="fstat-audience" id="fstat-audience"></ul>
+          <p class="fstat-note" id="fstat-audience-note" hidden>The office manages who else is invited.</p>
+        </div>
+        <div class="fstat-section fstat-next">
+          <h3>Next</h3>
+          <p id="fstat-next-hint"></p>
+          <button type="button" class="daybtn" id="fstat-next-btn"></button>
+        </div>
+      </section>
+      <p class="fstat-office">Full job file, Ask and reports: <a id="fstat-office-link" href="https://platform.atmosphereteam.com/verifier-library" target="_blank" rel="noopener">open the dashboard on a computer</a></p>
+    </div>
+    </div>
+  </div>
+
   <!-- ================= PLATFORM: office console, still in this phone frame ================= -->
   <div class="screen" id="s-platform" data-on="0">
     <iframe
@@ -1150,7 +1204,7 @@
 
   <nav class="switchbar" id="product-switch" aria-label="Product" hidden>
     <a href="#today" aria-current="page">Field Capture</a>
-    <a id="platform-link" href="https://platform.atmosphereteam.com/verifier-library?embed=field&amp;v=no-overview-back-2">Dashboard</a>
+    <a id="platform-link" href="#status">Status</a>
   </nav>
 
   <!-- Connect → Today: slam the mark, sit four seconds, dissolve into the day. -->

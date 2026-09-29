@@ -317,3 +317,42 @@ export function generatePlaybookFromAnalysis(input: {
     proofIds: merged.proofIds,
   };
 }
+
+export type PlaybookSourceJob = {
+  jobId: string;
+  label: string;
+  /** Clips the draft would be built from. */
+  analyzedClips: number;
+};
+
+/**
+ * Jobs that POST /from-job would accept: the same selection and the same
+ * "nothing usable" rule as generatePlaybookFromAnalysis, so the picker never
+ * offers a job the create call then rejects.
+ */
+export function playbookSourceJobs(input: {
+  jobs: Array<{ id: string; title?: string | null; job_number?: number | null; work_type?: string | null }>;
+  proofs: Array<ProofForGenerate & { job_id?: string | null }>;
+}): PlaybookSourceJob[] {
+  const byJob = new Map<string, ProofForGenerate[]>();
+  for (const proof of input.proofs) {
+    const jobId = proof.job_id ?? null;
+    if (!jobId) continue;
+    const list = byJob.get(jobId) ?? [];
+    list.push(proof);
+    byJob.set(jobId, list);
+  }
+  const out: PlaybookSourceJob[] = [];
+  for (const job of input.jobs) {
+    const proofs = byJob.get(job.id);
+    if (!proofs?.length) continue;
+    if (!generatePlaybookFromAnalysis({ job, proofs })) continue;
+    const name = job.title?.trim() || 'Untitled job';
+    out.push({
+      jobId: job.id,
+      label: job.job_number != null ? `#${job.job_number} ${name}` : name,
+      analyzedClips: selectProofsForPlaybook(proofs).length,
+    });
+  }
+  return out.sort((a, b) => a.label.localeCompare(b.label));
+}
