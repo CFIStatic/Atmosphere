@@ -110,6 +110,15 @@ describe('Field Capture single sign-on with the Platform', () => {
     expect(failJoin).toContain('signOutEverywhere()');
   });
 
+  it('an unconfirmed Platform logout blocks re-adoption in new tabs too (shared browsers)', () => {
+    const helper = fieldApp.slice(fieldApp.indexOf('function signOutEverywhere('), fieldApp.indexOf('function writeStoredSession('));
+    expect(helper).toMatch(/if \(!ok\) \{[\s\S]*localStorage\.setItem\(NO_ADOPT_KEY, '1'\)/);
+    const allowed = fieldApp.slice(fieldApp.indexOf('function platformAdoptionAllowed('), fieldApp.indexOf('function allowPlatformAdoption('));
+    expect(allowed).toContain('localStorage.getItem(NO_ADOPT_KEY)');
+    const allow = fieldApp.slice(fieldApp.indexOf('function allowPlatformAdoption('), fieldApp.indexOf('function signOutEverywhere('));
+    expect(allow).toContain('localStorage.removeItem(NO_ADOPT_KEY)');
+  });
+
   it('a password sign-in re-allows Platform adoption', () => {
     expect((fieldApp.match(/allowPlatformAdoption\(\);\n\s+writeStoredSession\(session\.accessToken, session\.refreshToken\)/g) || []).length).toBe(2);
   });

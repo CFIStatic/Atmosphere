@@ -359,18 +359,35 @@
   var SIGN_OUT_INCOMPLETE =
     'Signed out here, but the office session could not be closed. Sign out again when online, or close this browser.';
 
-  /** Signed out in this tab: do not sign back in from the Platform cookie until a password sign-in. */
+  /**
+   * Signed out here: do not sign back in from the Platform cookie until a
+   * password sign-in. The tab flag covers a normal sign-out; when the office
+   * logout could not be confirmed the cookie may still be live, so the flag
+   * is also kept in localStorage and a new tab on a shared browser will not
+   * silently sign the last person back in.
+   */
   function platformAdoptionAllowed() {
     try {
-      return sessionStorage.getItem(NO_ADOPT_KEY) !== '1';
+      if (sessionStorage.getItem(NO_ADOPT_KEY) === '1') return false;
     } catch (e) {
-      return true;
+      /* private mode */
     }
+    try {
+      if (localStorage.getItem(NO_ADOPT_KEY) === '1') return false;
+    } catch (e) {
+      /* private mode */
+    }
+    return true;
   }
 
   function allowPlatformAdoption() {
     try {
       sessionStorage.removeItem(NO_ADOPT_KEY);
+    } catch (e) {
+      /* private mode */
+    }
+    try {
+      localStorage.removeItem(NO_ADOPT_KEY);
     } catch (e) {
       /* private mode */
     }
@@ -386,7 +403,16 @@
     }
     writeStoredSession(null, null);
     if (!Core.signOutPlatform) return Promise.resolve(true);
-    return Core.signOutPlatform(API_BASE, refreshToken);
+    return Core.signOutPlatform(API_BASE, refreshToken).then(function (ok) {
+      if (!ok) {
+        try {
+          localStorage.setItem(NO_ADOPT_KEY, '1');
+        } catch (e) {
+          /* private mode */
+        }
+      }
+      return ok;
+    });
   }
 
   function writeStoredSession(accessToken, refreshToken) {
