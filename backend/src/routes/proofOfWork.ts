@@ -286,7 +286,8 @@ function evidenceLogFromRow(row: any) {
   const people = resolvePeoplePresent({
     stored: findings.people,
     transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
-    conversationStored: findings.conversation,
+    // Never label speakers from a summary this payload withholds.
+    conversationStored: servable.conversation,
     narrationText: row?.narration_text ?? null,
     summary: row?.ai_summary ?? findings.summary ?? null,
     visionPeople: findings.visionPeople,
@@ -326,6 +327,7 @@ function childPrivacyRedactionsPayloadFromRow(row: any) {
 
 function peoplePayloadFromRow(row: any) {
   const findings = row?.ai_findings && typeof row.ai_findings === 'object' ? row.ai_findings : {};
+  const servable = servableSummary(row);
   const actions = Array.isArray(row.actions)
     ? row.actions
     : Array.isArray(findings.actions)
@@ -334,7 +336,7 @@ function peoplePayloadFromRow(row: any) {
   const people = resolvePeoplePresent({
     stored: findings.people,
     transcript: typeof row?.transcript_text === 'string' ? row.transcript_text : null,
-    conversationStored: findings.conversation,
+    conversationStored: servable.conversation,
     narrationText: row?.narration_text ?? null,
     summary: row?.ai_summary ?? findings.summary ?? null,
     visionPeople: findings.visionPeople,

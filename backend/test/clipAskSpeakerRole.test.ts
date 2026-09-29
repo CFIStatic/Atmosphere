@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   groundedAnswerFromClip,
@@ -63,4 +63,36 @@ describe('Ask never invents a speaker role', () => {
     };
     assert.equal(speakerRoleEstablished(guessed, 'homeowner'), false);
   });
+});
+
+test('summary turn labels and guessed roles do not establish a speaker (Bugbot #587)', async () => {
+  const { withUnprovenSpeakerCaveat } = await import('../src/shared/clipAsk.ts');
+  const out = withUnprovenSpeakerCaveat(
+    'What did the homeowner say?',
+    {
+      conversationTurns: [{ tSec: 1, text: 'x', speakerLabel: 'Homeowner' }],
+      peoplePresent: [{ label: 'Person', role: 'homeowner', speakerLabel: 'Speaker 1' }],
+    } as never,
+    '“x” [0:01]',
+  );
+  assert.match(out, /unknown speaker/);
+});
+
+test('paraphrased role attributions are neutralized, not only quoted ones', async () => {
+  const { withUnprovenSpeakerCaveat } = await import('../src/shared/clipAsk.ts');
+  const out = withUnprovenSpeakerCaveat(
+    'What did the homeowner say?',
+    {} as never,
+    'The homeowner asked that the skylights be left alone.',
+  );
+  assert.match(out, /^The recording doesn't identify who is speaking/);
+  assert.match(out, /An unknown speaker asked that the skylights be left alone\./);
+  assert.doesNotMatch(out, /The homeowner asked/);
+});
+
+test('a role as the topic is not a presumed speaker', async () => {
+  const { presumedSpeakerRole } = await import('../src/shared/clipAsk.ts');
+  assert.equal(presumedSpeakerRole('What was said about the homeowner?'), null);
+  assert.equal(presumedSpeakerRole('What did they say to the homeowner?'), null);
+  assert.equal(presumedSpeakerRole('What did the adjuster ask about the roof?'), 'adjuster');
 });
