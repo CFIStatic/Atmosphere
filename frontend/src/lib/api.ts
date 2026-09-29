@@ -974,6 +974,12 @@ export interface ProofPeoplePresent {
 
 /** Structured mic conversation for Analysis — null when silent / noise-only. */
 export interface ProofConversation {
+  /**
+   * Summary freshness (fresh | updating | quarantined | failed | untracked | none).
+   * While updating / quarantined / failed the server withholds the summary
+   * and the UI says "Summary still processing".
+   */
+  summaryState?: string | null;
   conversationSummary?: string | null;
   conversationExecutiveSummary?: string | null;
   conversationDetails?: string[];

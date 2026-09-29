@@ -1072,8 +1072,86 @@ function mediaSourceAnswer(q: string, record: ClipAskRecord, rows: Array<{ at: n
  * Deterministic answer from the clip's reading. Used when no model is
  * configured, and as a fallback if the model call fails.
  */
+
+const SPEECH_VERBS =
+  'say|says|said|saying|ask|asks|asked|tell|tells|told|mention|mentions|mentioned|want|wants|wanted|agree|agreed|talk|talked|request|requested|complain|complained';
+const ROLE_WORDS =
+  'home ?owners?|owners?|customers?|clients?|adjusters?|contractors?|crew|workers?|technicians?|techs?|foreman|inspectors?|tenants?|landlords?|subs?|subcontractors?';
+// The role is the one speaking: "did the homeowner say", "what the adjuster asked",
+// "the crew said". Not "what was said about the homeowner" (a topic).
+const ROLE_AS_SPEAKER = new RegExp(
+  `(?:\\b(?:did|does|do|has|have|had|will|would|was|were|is|are)\\s+(?:the|a|an|our|their|my)?\\s*(${ROLE_WORDS})\\b(?:\\s+\\w+){0,2}?\\s+(?:${SPEECH_VERBS})\\b)|(?:(?<!\\b(?:about|regarding|concerning|for|to|with|of|from|by)\\s+(?:the|a|an|our|their|my)\\s+)(?<!\\b(?:about|regarding|concerning|for|to|with|of|from|by)\\s+)\\b(${ROLE_WORDS})\\s+(?:${SPEECH_VERBS})\\b)`,
+);
+
+function normalizeRole(word: string): string {
+  const w = word.toLowerCase().replace(/\s+/g, '').replace(/s$/, '');
+  return w === 'tech' ? 'technician' : w === 'sub' ? 'subcontractor' : w;
+}
+
+/**
+ * The speaker role a question takes for granted — "What did the homeowner
+ * say?" presumes the homeowner is on the mic. Null when the question names
+ * no speaking role ("What was said about the homeowner?" is a topic).
+ */
+export function presumedSpeakerRole(question: string): string | null {
+  const m = question.toLowerCase().match(ROLE_AS_SPEAKER);
+  if (!m) return null;
+  const word = m[1] ?? m[2];
+  return word ? normalizeRole(word) : null;
+}
+
+/**
+ * Is a speaker in this role proven on the clip? Only a speaker identified by
+ * a real method (roster, on-screen text, voice, web) with that service title,
+ * or a transcript line that itself carries the label. Summary turn labels and
+ * guessed roles never count — they are what this check guards against.
+ */
+export function speakerRoleEstablished(record: ClipAskRecord, role: string): boolean {
+  const matches = (value: unknown) => {
+    const text = String(value ?? '').toLowerCase().replace(/\s+/g, '');
+    return Boolean(text) && text.includes(role);
+  };
+  for (const speaker of record.peopleSpeakers ?? []) {
+    if (!speaker || !speaker.identityMethod || speaker.identityMethod === 'unknown') continue;
+    if (matches(speaker.serviceTitle)) return true;
+  }
+  for (const line of String(record.transcript ?? '').split('\n')) {
+    const label = line.replace(/^\s*\[[0-9:.]+\]\s*/, '').match(/^([A-Za-z][A-Za-z ]{1,30}):/)?.[1];
+    if (label && matches(label)) return true;
+  }
+  return false;
+}
+
+/** Answers that report no speech at all need no speaker caveat. */
+const NO_SPEECH_ANSWER =
+  /^(?:not established|nothing (?:was |is )?(?:said|spoken)|no (?:speech|transcript)|the (?:raw )?transcript (?:never|does not|doesn't)|there is no)/i;
+
+/**
+ * When the question presumed a role the clip does not establish: lead with
+ * "who is talking is not established" and turn "the homeowner said/asked…"
+ * in the answer into "an unknown speaker said/asked…". Quoted or paraphrased.
+ */
+export function withUnprovenSpeakerCaveat(question: string, record: ClipAskRecord, answer: string): string {
+  const role = presumedSpeakerRole(question);
+  if (!role || speakerRoleEstablished(record, role)) return answer;
+  const text = answer.trim();
+  if (!text || NO_SPEECH_ANSWER.test(text)) return answer;
+  const attributed = new RegExp(
+    `\\b(?:the|a|an|our|their)\\s+(?:${ROLE_WORDS})(?=\\s+(?:\\w+\\s+)?(?:${SPEECH_VERBS})\\b)`,
+    'gi',
+  );
+  const neutral = text.replace(attributed, (m) => (/^[A-Z]/.test(m) ? 'An unknown speaker' : 'an unknown speaker'));
+  if (/not (identify|identified|established)|unknown speaker/i.test(text)) return neutral;
+  const article = /^[aeiou]/.test(role) ? 'an' : 'a';
+  return `The recording doesn't identify who is speaking, so these words can't be attributed to ${article} ${role} (unknown speaker). ${neutral}`;
+}
+
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
   record = withAuthoritativeTranscript(speechSafeClipRecord(record));
+  return withUnprovenSpeakerCaveat(question, record, groundedAnswerCore(question, record));
+}
+
+function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
   const heardRows = splitTranscript(record.transcript);
@@ -1579,6 +1657,6 @@ export async function answerFromClip(input: {
       }
     }
   }
-  const answer = normalizeAskProse(completed.text);
+  const answer = withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text));
   return { answer, model: completed.model, usage: completed.usage };
 }

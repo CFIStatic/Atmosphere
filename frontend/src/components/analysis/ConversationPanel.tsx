@@ -22,6 +22,11 @@ function hasTalk(conversation: ProofConversation | null | undefined): boolean {
   );
 }
 
+/** The server withholds the summary in these states; say so instead of a brief. */
+function summaryWithheld(state: string | null | undefined): boolean {
+  return state === 'updating' || state === 'quarantined' || state === 'failed';
+}
+
 function asFacts(
   rich: ConversationQuotedFact[] | undefined,
   plain: string[] | undefined,
@@ -210,7 +215,25 @@ export function ConversationPanel({
 
       <section className="mt-2" data-testid="analysis-glance" aria-label="Glance">
         <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-400">Glance</p>
-        {brief ? (
+        {summaryWithheld(c.summaryState) ? (
+          <p
+            role="status"
+            data-testid="summary-processing"
+            className="mt-1.5 rounded-lg bg-brand-50 px-2.5 py-2 text-[12.5px] leading-snug text-ink-800"
+          >
+            {c.summaryState === 'failed' ? (
+              <>
+                <span className="font-semibold">Summary unavailable.</span> It could not be rebuilt
+                from the latest transcript; the transcript is current.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">Summary still processing.</span> The transcript is
+                current.
+              </>
+            )}
+          </p>
+        ) : brief ? (
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-900" data-testid="conversation-brief">
             {brief}
           </p>

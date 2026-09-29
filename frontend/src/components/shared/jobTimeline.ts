@@ -22,6 +22,7 @@ import { formatClipLength } from '../../lib/clipDuration';
 import { formatViewerDay, viewerDayKey } from '../../lib/viewerTime';
 import { scrubHomeownerText } from '../../lib/privacyText';
 import { dayIsOnSite } from './jobProgressStory';
+import { tradeLabel } from '../../lib/customerLabels';
 
 export type TimelineKind =
   | 'job'
@@ -541,7 +542,7 @@ function accessEvents(source: TimelineSource, out: TimelineEvent[]) {
     const member = source.members.find(
       (row) => granter && text(row.fullName).toLowerCase() === granter.toLowerCase(),
     );
-    const accessWord = text(person.displayLabel) || text(person.accessType) || 'access';
+    const accessWord = text(person.displayLabel) || tradeLabel(text(person.accessType)).toLowerCase() || 'access';
     push(out, {
       id: `access:${person.id}`,
       at,
@@ -568,7 +569,7 @@ function recordEvents(source: TimelineSource, out: TimelineEvent[]) {
     );
     const created = stamp(rowField(party, 'created_at'));
     if (created) {
-      const trade = text(party.trade);
+      const trade = tradeLabel(text(party.trade));
       push(out, {
         id: `party:${party.id}:added`,
         at: created,
