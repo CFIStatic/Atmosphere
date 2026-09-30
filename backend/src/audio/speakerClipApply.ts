@@ -53,14 +53,50 @@ export async function matchProofSpeakers(admin: any, proofId: string): Promise<v
   if (confirmed.length) await stampConfirmedSpeakers(admin, String(proof.org_id), confirmed);
 }
 
-/** How much of the film to score. Timed speech sets the end; an untimed transcript uses the whole clip. */
+/** Ten-minute windows. A day-long film is sampled, not decoded end to end. */
+const MAX_SPEAKER_MATCH_WINDOWS = 12;
+
+/** How much of the film to score: the stored duration, or the last spoken line when duration is missing. */
 function matchSpanSeconds(durationSeconds: unknown, lines: TranscriptLine[]): number {
   const duration = Number(durationSeconds);
   const known = Number.isFinite(duration) && duration > 0 ? Math.min(duration, MAX_TRANSCRIPT_SECONDS) : 0;
-  const timed = lines.filter((line) => line.tSec != null);
-  if (!timed.length || timed.length !== lines.length) return known || TRANSCRIPT_CHUNK_SECONDS;
-  const last = timed.reduce((max, line) => Math.max(max, line.tSec ?? 0), 0);
-  return Math.min(MAX_TRANSCRIPT_SECONDS, Math.max(last + 4, 1));
+  const last = lines.reduce((max, line) => Math.max(max, line.tSec ?? 0), 0);
+  const speechEnd = last > 0 ? last + 4 : 0;
+  return Math.min(MAX_TRANSCRIPT_SECONDS, Math.max(known, speechEnd, 1));
+}
+
+function evenSample(starts: number[], count: number): number[] {
+  if (starts.length <= count) return starts;
+  const picked: number[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const idx = Math.round((i * (starts.length - 1)) / (count - 1));
+    const start = starts[idx]!;
+    if (picked.at(-1) !== start) picked.push(start);
+  }
+  return picked;
+}
+
+/**
+ * Windows covering the whole clip. Speech windows are kept. Past a dozen
+ * slices, the rest of the duration is sampled evenly instead of decoded.
+ */
+export function speakerMatchWindowStarts(durationSeconds: unknown, lines: TranscriptLine[]): number[] {
+  const all = planAudioChunks(matchSpanSeconds(durationSeconds, lines));
+  const starts = all.length ? all : [0];
+  const speech = new Set<number>();
+  for (const line of lines) {
+    if (line.tSec == null) continue;
+    const start = Math.floor(line.tSec / TRANSCRIPT_CHUNK_SECONDS) * TRANSCRIPT_CHUNK_SECONDS;
+    if (starts.includes(start)) speech.add(start);
+  }
+  const required = [...speech].sort((a, b) => a - b);
+  if (starts.length <= MAX_SPEAKER_MATCH_WINDOWS) return starts;
+  if (required.length >= MAX_SPEAKER_MATCH_WINDOWS) return evenSample(required, MAX_SPEAKER_MATCH_WINDOWS);
+  const rest = evenSample(
+    starts.filter((start) => !speech.has(start)),
+    MAX_SPEAKER_MATCH_WINDOWS - required.length,
+  );
+  return [...required, ...rest].sort((a, b) => a - b);
 }
 
 /**
@@ -75,24 +111,23 @@ async function matchSpeakersAcrossClip(
   uploaderOrgId: string,
   thresholds: MatchThresholds,
 ): Promise<TimedVoiceMatch[]> {
-  const span = matchSpanSeconds(durationSeconds, lines);
-  const starts = planAudioChunks(span);
+  const starts = speakerMatchWindowStarts(durationSeconds, lines);
   const best = new Map<string, TimedVoiceMatch>();
-  for (const start of starts.length ? starts : [0]) {
+  for (const start of starts) {
     const chunkLines = lines.flatMap((line) => {
-      if (line.tSec == null) return start === 0 ? [line] : [];
+      if (line.tSec == null) return [line];
       const tSec = line.tSec - start;
       if (tSec < 0 || tSec >= TRANSCRIPT_CHUNK_SECONDS) return [];
       return [{ ...line, tSec }];
     });
-    if (!chunkLines.length && (lines.length > 0 || start !== 0)) continue;
+    if (!chunkLines.length && lines.length > 0) continue;
     let wav: Buffer;
     try {
       wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
     } catch {
       continue;
     }
-    if (wav.length < 1000) break;
+    if (wav.length < 1000) continue;
     const found = matchSpeakersInWav(wav, chunkLines, prints, uploaderOrgId, thresholds);
     for (const match of found) {
       const key = match.speakerLabel.toLowerCase();

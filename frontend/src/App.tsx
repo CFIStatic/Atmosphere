@@ -389,7 +389,7 @@ export default function App() {
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}
-          {SpeakerIdPreviewPage ? (
+          {import.meta.env.DEV && SpeakerIdPreviewPage ? (
             <Route
               path="/dev/speaker-identification"
               element={

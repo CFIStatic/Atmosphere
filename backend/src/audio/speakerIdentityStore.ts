@@ -14,34 +14,33 @@ function missing(error: { message?: string; code?: string } | null | undefined):
   return error?.code === '42P01' || /does not exist|schema cache/i.test(message);
 }
 
+/**
+ * Matching reads only the service-role function, which already drops other
+ * companies who did not opt in. A failed call matches nothing. It must not
+ * fall back to a table scan: that scan would load every company's embeddings.
+ */
 export async function loadMatchableVoiceprints(admin: any, orgId: string): Promise<VoiceprintCandidate[]> {
-  if (typeof admin?.rpc === 'function') {
-    const rpc = await admin.rpc('voiceprints_matchable', { p_org: orgId });
-    if (!rpc.error && Array.isArray(rpc.data)) {
-      return candidatesFromMatchableRpc(rpc.data, orgId);
-    }
+  if (typeof admin?.rpc !== 'function') {
+    console.error('[speaker-identity] voiceprints_matchable is unavailable; matching nothing');
+    return [];
   }
-  const { data, error } = await admin
-    .from('voiceprints')
-    .select('id, user_id, org_id, consent_text, consented_at, cross_company_opt_in, profiles(full_name), voiceprint_embeddings(embedding)');
-  if (error || !Array.isArray(data)) return [];
-  return eligibleVoiceprints(data.map(rowFromTable), orgId);
-}
-
-function rowFromTable(row: any): VoiceprintCandidate {
-  const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-  const embeddingRow = Array.isArray(row.voiceprint_embeddings) ? row.voiceprint_embeddings[0] : row.voiceprint_embeddings;
-  const embedding = Array.isArray(embeddingRow?.embedding) ? embeddingRow.embedding.map(Number) : [];
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    orgId: String(row.org_id),
-    displayName: String(profile?.full_name ?? '').trim(),
-    embedding,
-    consentText: row.consent_text ?? null,
-    consentedAt: row.consented_at ?? null,
-    crossCompanyOptIn: Boolean(row.cross_company_opt_in),
-  };
+  try {
+    const rpc = await admin.rpc('voiceprints_matchable', { p_org: orgId });
+    if (rpc?.error || !Array.isArray(rpc?.data)) {
+      console.error(
+        '[speaker-identity] voiceprints_matchable failed; matching nothing:',
+        rpc?.error?.message ?? rpc?.error ?? 'empty result',
+      );
+      return [];
+    }
+    return candidatesFromMatchableRpc(rpc.data, orgId);
+  } catch (err) {
+    console.error(
+      '[speaker-identity] voiceprints_matchable failed; matching nothing:',
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }
 
 /**

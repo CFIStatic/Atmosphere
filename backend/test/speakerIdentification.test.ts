@@ -8,13 +8,17 @@ import { guessSpeakerRoles, parseRoleGuessResponse } from '../src/audio/speakerR
 import {
   factSpeakerLabel,
   pendingQuestions,
+  planIdentities,
   resolveSpeakerAnswer,
   uiSpeakerLabel,
   verificationQuestion,
   type SpeakerIdentityRow,
 } from '../src/audio/speakerVerification.js';
 import { VOICE_CONSENT_TEXT, canConfirmEnrollment, canStoreVoiceprint, consentAccepted } from '../src/audio/speakerEnrollment.js';
-import { candidatesFromMatchableRpc } from '../src/audio/speakerIdentityStore.js';
+import { candidatesFromMatchableRpc, insertIdentityRows, loadMatchableVoiceprints } from '../src/audio/speakerIdentityStore.js';
+import { applyConfirmedNames } from '../src/audio/speakerPlan.js';
+import { speakerMatchWindowStarts } from '../src/audio/speakerClipApply.js';
+import { peopleFromStored, toStoredPeople, type PeoplePresent } from '../src/audio/peoplePresent.js';
 import { sanitizeSpeakerProse } from '../src/shared/askSpeakers.js';
 
 function tone(freq: number, seconds = 1.2, rate = 16_000): Float32Array {
@@ -116,6 +120,53 @@ test('cross-company matching ignores people who did not opt in', () => {
   assert.equal(bestVoiceMatch([1, 0], [print({ consentText: '   ', consentedAt: '2026-09-29T00:00:00Z' })], 'org-a'), null);
 });
 
+test('a failed voiceprint query matches nothing and does not scan the table', async () => {
+  let scanned = false;
+  const admin = {
+    rpc: async () => ({ data: null, error: { message: 'permission denied' } }),
+    from: () => {
+      scanned = true;
+      return {
+        select: () => ({
+          then: (resolve: (value: unknown) => void) =>
+            resolve({
+              data: [
+                {
+                  id: 'secret',
+                  user_id: 'other',
+                  org_id: 'org-b',
+                  consent_text: 'I consent',
+                  consented_at: '2026-09-29T00:00:00Z',
+                  cross_company_opt_in: false,
+                  profiles: { full_name: 'Other Company' },
+                  voiceprint_embeddings: { embedding: [1, 0, 0] },
+                },
+              ],
+              error: null,
+            }),
+        }),
+      };
+    },
+  };
+  const rows = await loadMatchableVoiceprints(admin, 'org-a');
+  assert.deepEqual(rows, []);
+  assert.equal(scanned, false);
+  const thrown = await loadMatchableVoiceprints(
+    {
+      rpc: async () => {
+        throw new Error('connection reset');
+      },
+      from: () => {
+        scanned = true;
+        return {};
+      },
+    },
+    'org-a',
+  );
+  assert.deepEqual(thrown, []);
+  assert.equal(scanned, false);
+});
+
 test('the matchable query result is filtered again before a score is used', () => {
   const rows = candidatesFromMatchableRpc(
     [
@@ -141,6 +192,122 @@ test('a confirmed name applies across clips that picked up the same name', () =>
   const no = resolveSpeakerAnswer(identities, { id: 'a', answer: 'no' });
   assert.equal(no.find((item) => item.id === 'a')?.status, 'rejected');
   assert.equal(no.find((item) => item.id === 'b')?.status, 'pending');
+});
+
+test('a rebuilt people list keeps a confirmed name', () => {
+  const rebuilt: PeoplePresent = {
+    count: 1,
+    source: 'deterministic',
+    model: null,
+    people: [
+      {
+        id: 'person-1',
+        label: 'Speaker 2',
+        role: 'unknown',
+        appearance: null,
+        appearMoments: [],
+        speakerLabel: 'Speaker 2',
+        serviceTitle: null,
+      },
+    ],
+    speakers: [{ speakerLabel: 'Speaker 2', personId: 'person-1', turnCount: 2, serviceTitle: null }],
+  };
+  const named = applyConfirmedNames(rebuilt, [
+    row({
+      id: 'confirmed',
+      proofId: 'clip-1',
+      speakerLabel: 'Speaker 2',
+      status: 'confirmed',
+      method: 'user',
+      displayName: 'Marco',
+      confidence: null,
+    }),
+  ]);
+  const stored = peopleFromStored(toStoredPeople(named));
+  assert.equal(stored.people[0]?.displayName, 'Marco');
+  assert.equal(stored.speakers[0]?.displayName, 'Marco');
+  assert.ok((stored.people[0]?.identityConfidence ?? 0) >= 0.7);
+});
+
+test('a high voice match is not asked again and Yes does not replace it', () => {
+  const identities = [
+    row({
+      id: 'voice',
+      proofId: 'clip-1',
+      speakerLabel: 'Speaker 2',
+      status: 'confirmed',
+      method: 'voice_high',
+      displayName: 'Alex',
+      confidence: 0.91,
+      voiceprintId: 'vp-alex',
+    }),
+    row({ id: 'heard', proofId: 'clip-1', speakerLabel: 'Speaker 2', displayName: 'Marco', status: 'pending' }),
+    row({ id: 'other-clip', proofId: 'clip-2', speakerLabel: 'Speaker 1', displayName: 'Marco', status: 'pending' }),
+  ];
+  const questions = pendingQuestions(identities);
+  assert.equal(questions.some((question) => question.id === 'heard'), false);
+  assert.equal(questions.some((question) => question.id === 'voice'), false);
+  assert.equal(questions.some((question) => question.id === 'other-clip'), true);
+  const planned = planIdentities({
+    jobId: 'job-1',
+    proofId: 'clip-1',
+    clipTitle: 'North slope walkthrough',
+    names: [{ speakerLabel: 'Speaker 2', name: 'Marco', kind: 'self_introduction', tSec: 42, quote: "I'm Marco" }],
+    matches: [],
+    existing: identities.filter((item) => item.proofId === 'clip-1'),
+  });
+  assert.equal(planned.some((item) => item.speakerLabel === 'Speaker 2' && item.status === 'pending'), false);
+  const yes = resolveSpeakerAnswer(identities, { id: 'heard', answer: 'yes' });
+  assert.equal(yes.find((item) => item.id === 'voice')?.displayName, 'Alex');
+  assert.equal(yes.find((item) => item.id === 'voice')?.method, 'voice_high');
+  assert.equal(yes.find((item) => item.id === 'other-clip')?.status, 'confirmed');
+  const corrected = resolveSpeakerAnswer(identities, { id: 'heard', answer: 'other', displayName: 'Priya' });
+  assert.equal(corrected.find((item) => item.id === 'voice')?.displayName, 'Priya');
+  assert.equal(corrected.find((item) => item.id === 'voice')?.method, 'user');
+});
+
+test('inserting a pending name does not reopen a high voice match', async () => {
+  const updates: string[] = [];
+  const upserts: unknown[] = [];
+  const admin = {
+    from: () => ({
+      select: () => ({
+        eq: async () => ({
+          data: [
+            { id: 'voice', speaker_label: 'Speaker 2', method: 'voice_high', status: 'confirmed' },
+            { id: 'heard', speaker_label: 'Speaker 2', method: 'name_pickup', status: 'pending' },
+          ],
+          error: null,
+        }),
+      }),
+      update: () => ({
+        in: async (_column: string, ids: string[]) => {
+          updates.push(...ids);
+          return { error: null };
+        },
+      }),
+      upsert: async (payload: unknown) => {
+        upserts.push(payload);
+        return { error: null };
+      },
+    }),
+  };
+  await insertIdentityRows(admin, 'org-a', [
+    row({ id: 'new', proofId: 'clip-1', speakerLabel: 'Speaker 2', status: 'pending', method: 'name_pickup' }),
+  ]);
+  assert.deepEqual(upserts, []);
+  assert.deepEqual(updates, ['heard']);
+});
+
+test('voice match windows cover a late speaker, not only the first minute', () => {
+  const late = 80 * 60;
+  const starts = speakerMatchWindowStarts(90 * 60, [{ speakerLabel: 'Speaker 2', tSec: late, text: 'later on the roof' }]);
+  assert.ok(starts.some((start) => start > 60));
+  assert.ok(starts.some((start) => start <= late && late < start + 600));
+  assert.ok(starts.length <= 12);
+  const long = speakerMatchWindowStarts(6 * 60 * 60, [{ speakerLabel: 'Speaker 1', tSec: 5 * 60 * 60, text: 'hours later' }]);
+  assert.ok(long.length <= 12);
+  assert.ok(long.includes(Math.floor((5 * 60 * 60) / 600) * 600));
 });
 
 test('someone else stores the typed name on that speaker', () => {

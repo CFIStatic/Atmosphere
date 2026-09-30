@@ -15,6 +15,7 @@ const askAboutProofs = vi.fn();
 const askAboutProofsStream = vi.fn();
 const askThreads = vi.fn();
 const createAskThread = vi.fn();
+const answerSpeakerVerification = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
@@ -26,6 +27,7 @@ vi.mock('../lib/api', () => ({
     askAboutProofsStream: (...args: unknown[]) => askAboutProofsStream(...args),
     askThreads: (...args: unknown[]) => askThreads(...args),
     createAskThread: (...args: unknown[]) => createAskThread(...args),
+    answerSpeakerVerification: (...args: unknown[]) => answerSpeakerVerification(...args),
   },
 }));
 
@@ -100,6 +102,7 @@ describe('JobAskPanel', () => {
     askAboutProofsStream.mockReset();
     askThreads.mockReset();
     createAskThread.mockReset();
+    answerSpeakerVerification.mockReset();
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
     askThreads.mockResolvedValue({
       threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
@@ -666,6 +669,52 @@ describe('JobAskPanel', () => {
     expect(screen.queryByText('Was the tarp removed?')).not.toBeInTheDocument();
     expect(screen.queryByTestId('ask-error')).not.toBeInTheDocument();
     expect(screen.getByText('Any do-nots?')).toBeInTheDocument();
+  });
+
+  it('replaces the queue with the server response so a later No still applies', async () => {
+    const user = userEvent.setup();
+    const marco = {
+      id: 'v-marco',
+      question: 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
+      speakerLabel: 'Speaker 2',
+      clipTitle: 'North slope walkthrough',
+      tSec: 42,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const priya = {
+      id: 'v-priya',
+      question: 'Is Speaker 4 in South wall at 1:10 Priya?',
+      speakerLabel: 'Speaker 4',
+      clipTitle: 'South wall',
+      tSec: 70,
+      candidateName: 'Priya',
+      role: null,
+      quote: 'Priya here',
+    };
+    answerSpeakerVerification
+      .mockResolvedValueOnce({ verifications: [priya] })
+      .mockResolvedValueOnce({ verifications: [] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[marco, priya]} />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-yes'));
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Priya');
+    expect(screen.queryByText(/Marco/)).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('speaker-verify-no'));
+    await waitFor(() => {
+      expect(answerSpeakerVerification).toHaveBeenLastCalledWith('job-1038', 'v-priya', {
+        id: 'v-priya',
+        answer: 'no',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('speaker-verification')).not.toBeInTheDocument();
+    });
   });
 
 });

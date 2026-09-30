@@ -212,6 +212,9 @@ export function resolveSpeakerAnswer(
   return identities.map((row) => {
     if (row.status === 'rejected') return row;
     if (input.answer === 'yes') {
+      // A high-confidence voice match is already an identity. Yes confirms the
+      // pending question; it does not replace that name. Someone else does.
+      if (row.method === 'voice_high') return row;
       if (!sameCluster(anchor, row, name)) return row;
       return {
         ...row,
@@ -221,8 +224,10 @@ export function resolveSpeakerAnswer(
         confidence: row.confidence != null && row.confidence >= 0.7 ? row.confidence : 1,
       };
     }
+    const sameSpeaker =
+      row.proofId === anchor.proofId && row.speakerLabel.toLowerCase() === anchor.speakerLabel.toLowerCase();
     const sameVoice = Boolean(anchor.voiceprintId && row.voiceprintId === anchor.voiceprintId);
-    if (row.id !== anchor.id && !sameVoice) return row;
+    if (row.id !== anchor.id && !sameVoice && !sameSpeaker) return row;
     return { ...row, displayName: name, status: 'confirmed', method: 'user', confidence: 1 };
   });
 }
@@ -267,8 +272,14 @@ export function pendingQuestions(identities: SpeakerIdentityRow[], guesses: Role
   quote: string | null;
   question: string;
 }> {
+  const settled = new Set(
+    identities
+      .filter((row) => row.status === 'confirmed' || row.method === 'voice_high')
+      .map((row) => `${row.proofId}|${row.speakerLabel.toLowerCase()}`),
+  );
   const questions = identities
     .filter((row) => row.status === 'pending' && row.displayName?.trim())
+    .filter((row) => !settled.has(`${row.proofId}|${row.speakerLabel.toLowerCase()}`))
     .map((row) => ({
       id: row.id,
       speakerLabel: row.speakerLabel,
