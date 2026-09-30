@@ -50,6 +50,8 @@ import { eventsSha256, transcriptSha256 } from './summaryFreshness.js';
 import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
 import { transcriptLineCount } from '../shared/speechCount.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
+import { planClipSpeakers } from './speakerPlan.js';
+import { insertIdentityRows, insertRoleGuesses } from './speakerIdentityStore.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -127,7 +129,7 @@ export async function enrichProofConversation(
   {
     const { data } = await admin
       .from('job_proofs')
-      .select('org_id, transcript_text, duration_seconds, ai_findings, ai_summary, narration_text, narration, actions')
+      .select('org_id, job_id, title, custom_title, transcript_text, duration_seconds, ai_findings, ai_summary, narration_text, narration, actions')
       .eq('id', proofId)
       .maybeSingle();
     proof = data;
@@ -305,6 +307,22 @@ export async function enrichProofConversation(
   if (quarantined) {
     // The queue retries; after the last attempt the row is marked failed.
     throw new SummaryContradictionError(rejected[rejected.length - 1]?.contradictions ?? []);
+  }
+
+  try {
+    if (proof?.org_id && proof?.job_id) {
+      const clipTitle = String(proof.custom_title || proof.title || 'this clip');
+      const plan = await planClipSpeakers({
+        jobId: String(proof.job_id),
+        proofId,
+        clipTitle,
+        transcript: typeof transcript === 'string' ? transcript : null,
+      });
+      await insertIdentityRows(admin, String(proof.org_id), plan.identities);
+      await insertRoleGuesses(admin, String(proof.org_id), String(proof.job_id), plan.roleGuesses);
+    }
+  } catch (err) {
+    console.warn('[speaker-identity] plan failed:', err instanceof Error ? err.message : err);
   }
 
   return hasConversation(details) ? details : null;

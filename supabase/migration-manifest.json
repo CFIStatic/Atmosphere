@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 171,
+    "migrationCount": 172,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -185,7 +185,8 @@
     "20260928120000_ask_thread_memory.sql",
     "20260928143000_ask_job_notes_insert_scope.sql",
     "20260928190000_job_proofs_summary_provenance.sql",
-    "20260929160000_ask_transcript_chunks.sql"
+    "20260929160000_ask_transcript_chunks.sql",
+    "20260929203000_speaker_identification.sql"
   ],
   "migrations": [
     {
@@ -5711,6 +5712,44 @@
         "index|public.ask_transcript_chunks.ask_transcript_chunks_fts_idx",
         "policy|public.ask_transcript_chunks.ask_transcript_chunks_select",
         "rls|public.ask_transcript_chunks"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260929203000_speaker_identification",
+      "file": "20260929203000_speaker_identification.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.voiceprints",
+        "index|public.voiceprints.voiceprints_pkey",
+        "index|public.voiceprints.voiceprints_user_id_key",
+        "table|public.voiceprint_embeddings",
+        "index|public.voiceprint_embeddings.voiceprint_embeddings_pkey",
+        "table|public.voice_consent_events",
+        "index|public.voice_consent_events.voice_consent_events_pkey",
+        "index|public.voice_consent_events.voice_consent_events_user_idx",
+        "table|public.voice_enrollment_requests",
+        "index|public.voice_enrollment_requests.voice_enrollment_requests_pkey",
+        "index|public.voice_enrollment_requests.voice_enrollment_requests_one_pending_idx",
+        "table|public.speaker_identities",
+        "index|public.speaker_identities.speaker_identities_pkey",
+        "index|public.speaker_identities.speaker_identities_proof_id_speaker_label_method_key",
+        "index|public.speaker_identities.speaker_identities_job_idx",
+        "table|public.speaker_role_guesses",
+        "index|public.speaker_role_guesses.speaker_role_guesses_pkey",
+        "index|public.speaker_role_guesses.speaker_role_guesses_proof_id_speaker_label_key",
+        "function|public.voiceprints_matchable",
+        "policy|public.voiceprints.voiceprints_select",
+        "policy|public.voiceprint_embeddings.voiceprint_embeddings_select",
+        "policy|public.speaker_identities.speaker_identities_select",
+        "policy|public.speaker_role_guesses.speaker_role_guesses_select",
+        "rls|public.voiceprints",
+        "rls|public.voiceprint_embeddings",
+        "rls|public.speaker_identities",
+        "rls|public.speaker_role_guesses"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

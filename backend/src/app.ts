@@ -37,6 +37,7 @@ import { motionClipsRouter } from './routes/motionClips.js';
 import { dailyReportRouter } from './routes/dailyReport.js';
 import { childPrivacyRouter } from './routes/childPrivacy.js';
 import { crmCredentialsRouter } from './routes/crmCredentials.js';
+import { speakerIdentityRouter } from './routes/speakerIdentity.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
 import { userActivityMonitor } from './middleware/userActivityMonitor.js';
@@ -143,6 +144,7 @@ export function createApp(): Express {
   // reached — the global cap would already have rejected the upload with 413.
   // Every raised limit therefore has to be declared in this one place.
   const avatarPath = /^\/api\/profile\/avatar\/?$/;
+  const voiceSamplePath = /^\/api\/speaker-identity\/(?:voiceprint|enrollment-requests\/[^/]+\/confirm)\/?$/;
   // Near-real-time safety samples carry 1–3 small JPEGs while recording.
   const safetySamplePath =
     /\/proof\/safety-sample\/?$/;
@@ -155,13 +157,16 @@ export function createApp(): Express {
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
   const avatarJson = express.json({ limit: '3mb' });
+  const voiceSampleJson = express.json({ limit: '2mb' });
   const safetySampleJson = express.json({ limit: '1.5mb' });
   const proofRecordJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {
     const parse = avatarPath.test(req.path)
       ? avatarJson
-      : safetySamplePath.test(req.path)
+      : voiceSamplePath.test(req.path) && (req.method === 'POST' || req.method === 'PUT')
+        ? voiceSampleJson
+        : safetySamplePath.test(req.path)
         ? safetySampleJson
         : proofRecordPath.test(req.path) && req.method === 'POST'
           ? proofRecordJson
@@ -186,6 +191,7 @@ export function createApp(): Express {
   app.use('/api/playbooks', playbooksRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
+  app.use('/api/speaker-identity', speakerIdentityRouter);
   // /api/audit unmounted — agent_runs ledger dropped (non-sold-path).
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);

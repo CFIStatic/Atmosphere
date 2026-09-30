@@ -76,6 +76,15 @@ export async function refreshProofSummary(admin: any, proofId: string, deps?: Su
     .select('id')
     .maybeSingle();
   if (stampError || !stamped?.id) throw new TranscriptMovedError();
+
+  // Voice match is separate from the summary. A missing sample or table must
+  // not send the summary back through the retry queue.
+  try {
+    const { matchProofSpeakers } = await import('./speakerClipApply.js');
+    await matchProofSpeakers(admin, proofId);
+  } catch (err) {
+    console.warn('[speaker-identity] voice match failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 async function adminForProof(proofId: string) {
