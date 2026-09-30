@@ -44,6 +44,8 @@ import { parseDeviceMetadata } from '../shared/deviceIdentity.js';
 import { deriveProofClipTitle, normalizeCustomClipTitle } from './proofClipTitle.js';
 import { clipIdOfStoragePath } from '../shared/proofStoragePath.js';
 import { clipAudioSource, provenSpeakerLabel, readMediaAudio, tagSegmentSources, type MediaAudioReading } from '../audio/audioSource.js';
+import { clipProcessing } from '../shared/clipProcessing.js';
+import { clipProcessingInputOfProof } from '../shared/clipStatusOfProof.js';
 
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
@@ -300,6 +302,8 @@ export function serializeEvidence(input: {
   });
   const integrity = integrityOf(checks);
   const materialChange = proof.ai_material_change ?? findings.materialChange ?? null;
+  const processingInput = clipProcessingInputOfProof(proof);
+  const processing = clipProcessing(processingInput);
   // The office product is video + AI dictation. Dictation is the per-clip
   // narrated report; summary is the shorter day-comparison headline.
   const dictation =
@@ -380,6 +384,22 @@ export function serializeEvidence(input: {
     // Labels attached here so every consumer prints the same sentence.
     checks: checks.map((c) => ({ verdict: c.verdict, what: labelForCheck(c.key), detail: c.detail })),
     analysisState: analysis,
+    /**
+     * One status for this clip — the same clipProcessing() result the job file
+     * and the evidence report use. The Videos list prints `processing.label`.
+     */
+    processing,
+    analysisStatus: processingInput.analysisStatus ?? null,
+    narrationStatus: processingInput.narrationStatus ?? null,
+    summaryState: processingInput.summaryState ?? null,
+    hasSummary: processingInput.hasSummary === true,
+    noSpeech: processingInput.noSpeech === true,
+    uploading: processingInput.uploading === true,
+    retrying: processingInput.retrying === true,
+    transcriptActive: processingInput.transcriptActive === true,
+    analysisActive: processingInput.analysisActive === true,
+    narrationActive: processingInput.narrationActive === true,
+    summaryActive: processingInput.summaryActive === true,
     transcriptStatus: typeof proof.transcript_status === 'string' ? proof.transcript_status : null,
     transcriptWords: apiTranscriptWords(proof.transcript_words),
     analysisError:

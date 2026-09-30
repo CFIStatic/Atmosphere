@@ -364,10 +364,19 @@ function clipEvents(source: TimelineSource, out: TimelineEvent[]) {
     });
 
     const processing = clipProcessing({
+      proofState: video.proofState,
       analysisStatus: video.analysisStatus,
       transcriptStatus: video.transcriptStatus,
       narrationStatus: video.narrationStatus,
-      summaryState: video.conversation?.summaryState,
+      summaryState: video.conversation?.summaryState ?? video.summaryState,
+      hasSummary: video.hasSummary,
+      noSpeech: video.noSpeech,
+      uploading: video.uploading,
+      retrying: video.retrying,
+      transcriptActive: video.transcriptActive,
+      analysisActive: video.analysisActive,
+      narrationActive: video.narrationActive,
+      summaryActive: video.summaryActive,
     });
     const reading = processing.state === 'transcribing' || processing.state === 'analyzing';
     if (reading) {
@@ -524,10 +533,19 @@ function emitAnalysedRuns(
     else current.push(row);
   }
   const processing = clipProcessing({
+    proofState: video?.proofState,
     analysisStatus: video?.analysisStatus,
     transcriptStatus: video?.transcriptStatus,
     narrationStatus: video?.narrationStatus,
-    summaryState: video?.conversation?.summaryState,
+    summaryState: video?.conversation?.summaryState ?? video?.summaryState,
+    hasSummary: video?.hasSummary,
+    noSpeech: video?.noSpeech,
+    uploading: video?.uploading,
+    retrying: video?.retrying,
+    transcriptActive: video?.transcriptActive,
+    analysisActive: video?.analysisActive,
+    narrationActive: video?.narrationActive,
+    summaryActive: video?.summaryActive,
   });
   const unfinished =
     processing.label === 'Summary still processing' ||

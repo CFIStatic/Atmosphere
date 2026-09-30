@@ -976,8 +976,9 @@ export interface ProofPeoplePresent {
 export interface ProofConversation {
   /**
    * Summary freshness (fresh | updating | quarantined | failed | untracked | none).
-   * While updating / quarantined / failed the server withholds the summary
-   * and the UI says "Summary still processing".
+   * While updating / quarantined / failed the server withholds the stored brief.
+   * The clip status says "Summary still processing" only when no summary is
+   * stored yet and a summary job is still live.
    */
   summaryState?: string | null;
   conversationSummary?: string | null;
@@ -1122,6 +1123,17 @@ export interface ProofVideoRecord {
   analysisStatus: string | null;
   narrationStatus: string | null;
   transcriptStatus: string | null;
+  /** job_proofs.state, so the Videos tab uses the same status inputs as the library. */
+  proofState?: string | null;
+  summaryState?: string | null;
+  hasSummary?: boolean | null;
+  noSpeech?: boolean | null;
+  uploading?: boolean | null;
+  retrying?: boolean | null;
+  transcriptActive?: boolean | null;
+  analysisActive?: boolean | null;
+  narrationActive?: boolean | null;
+  summaryActive?: boolean | null;
   transcriptError: string | null;
   aiSummary: string | null;
   /** Full Whisper transcript — exact words. */
@@ -1383,6 +1395,14 @@ export interface EvidenceItem {
   transcriptStatus?: string | null;
   narrationStatus?: string | null;
   summaryState?: string | null;
+  hasSummary?: boolean | null;
+  noSpeech?: boolean | null;
+  uploading?: boolean | null;
+  retrying?: boolean | null;
+  transcriptActive?: boolean | null;
+  analysisActive?: boolean | null;
+  narrationActive?: boolean | null;
+  summaryActive?: boolean | null;
   checks: ProofCheck[];
   aiSummary: string | null;
   legalHold: boolean;

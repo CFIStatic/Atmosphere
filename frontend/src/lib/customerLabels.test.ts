@@ -50,5 +50,29 @@ describe('evidenceStatus', () => {
       'Summary still processing',
     );
     expect(evidenceStatus({ state: 'analysed', summaryState: 'fresh' }).processing.label).toBe('Analyzed');
+    expect(
+      evidenceStatus({
+        state: 'checked',
+        analysisStatus: 'done',
+        summaryState: 'fresh',
+        hasSummary: true,
+        summaryActive: false,
+      }).processing.label,
+    ).toBe('Analyzed');
+    expect(
+      evidenceStatus({
+        state: 'analysed',
+        analysisStatus: 'done',
+        summaryState: 'updating',
+        hasSummary: true,
+      }).processing.label,
+    ).toBe('Analyzed');
+    expect(
+      evidenceStatus({
+        state: 'uploaded',
+        transcriptStatus: 'skipped',
+        noSpeech: true,
+      }).processing.label,
+    ).toBe('No speech');
   });
 });

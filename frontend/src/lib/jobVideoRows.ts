@@ -51,13 +51,38 @@ export type VideoRowTone = 'good' | 'progress' | 'bad' | 'neutral';
 
 /** One status word per clip, from the shared clip-processing model. */
 export function videoRowStatus(
-  video: Pick<ProofVideoRecord, 'analysisStatus' | 'transcriptStatus' | 'narrationStatus' | 'conversation'>,
+  video: Pick<
+    ProofVideoRecord,
+    | 'analysisStatus'
+    | 'transcriptStatus'
+    | 'narrationStatus'
+    | 'conversation'
+    | 'proofState'
+    | 'summaryState'
+    | 'hasSummary'
+    | 'noSpeech'
+    | 'uploading'
+    | 'retrying'
+    | 'transcriptActive'
+    | 'analysisActive'
+    | 'narrationActive'
+    | 'summaryActive'
+  >,
 ): { label: string; tone: VideoRowTone } {
   const derived = clipProcessing({
+    proofState: video.proofState,
     analysisStatus: video.analysisStatus,
     transcriptStatus: video.transcriptStatus,
     narrationStatus: video.narrationStatus,
-    summaryState: video.conversation?.summaryState,
+    summaryState: video.conversation?.summaryState ?? video.summaryState,
+    hasSummary: video.hasSummary,
+    noSpeech: video.noSpeech,
+    uploading: video.uploading,
+    retrying: video.retrying,
+    transcriptActive: video.transcriptActive,
+    analysisActive: video.analysisActive,
+    narrationActive: video.narrationActive,
+    summaryActive: video.summaryActive,
   });
   return { label: derived.label, tone: derived.tone };
 }

@@ -58,6 +58,99 @@ describe('videoRowStatus', () => {
       'Recorded',
     );
   });
+
+  it('matches the library on finished clips that used to look stuck', () => {
+    expect(
+      videoRowStatus({
+        proofState: 'checked',
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: false,
+        conversation: { summaryState: 'fresh' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: true,
+        conversation: { summaryState: 'updating' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'running',
+        transcriptActive: false,
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: false,
+        conversation: { summaryState: 'none' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: null,
+        transcriptStatus: 'skipped',
+        narrationStatus: null,
+        noSpeech: true,
+        proofState: 'uploaded',
+      }).label,
+    ).toBe('No speech');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'running',
+        transcriptStatus: null,
+        narrationStatus: null,
+        analysisActive: true,
+        retrying: true,
+      }).label,
+    ).toBe('Retrying');
+    expect(
+      videoRowStatus({
+        analysisStatus: null,
+        transcriptStatus: null,
+        narrationStatus: null,
+        uploading: true,
+      }).label,
+    ).toBe('Uploading');
+  });
+
+  it('uses summaryState when the clip has no conversation payload', () => {
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        summaryState: 'updating',
+        hasSummary: false,
+        summaryActive: true,
+      }).label,
+    ).toBe('Summary still processing');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        summaryState: 'failed',
+        hasSummary: false,
+      }).label,
+    ).toBe('Summary unavailable');
+    expect(
+      videoRowStatus({
+        proofState: 'checked',
+        analysisStatus: 'running',
+        analysisActive: false,
+        narrationStatus: 'queued',
+        narrationActive: false,
+        transcriptStatus: null,
+      }).label,
+    ).toBe('Recorded');
+  });
 });
 
 describe('clipMoments', () => {
