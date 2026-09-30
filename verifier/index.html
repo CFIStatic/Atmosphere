@@ -4300,9 +4300,8 @@
     }
     var analysisSettled = analysis === 'done' || analysis === 'skipped';
     var narrationSettled = narration === 'done' || narration === 'skipped';
-    // Checked is filed before vision is queued. A busy column was already
-    // decided above: a live lease is Analyzing, a dead lease is not.
-    if (proof === 'checked' && !analysisSettled && !narrationSettled && !busy(analysis) && !busy(narration)) {
+    var leasesKnownDead = e.analysisActive === false && e.narrationActive === false;
+    if (proof === 'checked' && !analysisSettled && !narrationSettled && !leasesKnownDead) {
       return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
     }
     var summaryLive = e.summaryActive !== false && a.summaryActive !== false;

@@ -88,18 +88,10 @@ export function clipProcessing(input: ClipProcessingInput = {}): ClipProcessing 
     if (input.retrying) return { state: 'analyzing', label: 'Retrying', tone: 'progress' };
     return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
   }
-  // Checked is filed before vision is queued. That gap is Analyzing.
-  // A queued/running column was already decided above: a live lease is
-  // Analyzing, and a dead lease must not stick there.
   const analysisSettled = analysis === 'done' || analysis === 'skipped';
   const narrationSettled = narration === 'done' || narration === 'skipped';
-  if (
-    proof === 'checked' &&
-    !analysisSettled &&
-    !narrationSettled &&
-    !busy(analysis) &&
-    !busy(narration)
-  ) {
+  const leasesKnownDead = input.analysisActive === false && input.narrationActive === false;
+  if (proof === 'checked' && !analysisSettled && !narrationSettled && !leasesKnownDead) {
     return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
   }
   const summaryLive = input.summaryActive !== false;

@@ -126,6 +126,14 @@ describe('verifier dashboard recording status', () => {
       { proofState: 'checked' },
       {
         proofState: 'checked',
+        analysisStatus: 'running',
+        analysisActive: false,
+        narrationStatus: 'queued',
+        narrationActive: false,
+      },
+      { proofState: 'checked', analysisStatus: 'running', analysisActive: true },
+      {
+        proofState: 'checked',
         analysisStatus: 'done',
         narrationStatus: 'done',
         transcriptStatus: 'done',

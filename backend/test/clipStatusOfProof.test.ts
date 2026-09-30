@@ -107,13 +107,13 @@ test('proof rows match the library mismatches seen in production', () => {
 
   assert.equal(clipStatusOfProof({ uploading: true, state: 'uploaded' }).label, 'Uploading');
 
-  // Filed as checked. A queued/running reading whose lease has lapsed is not Analyzing.
+  // Filed as checked. The worker's lease expired and nothing finished.
   assert.equal(
     clipStatusOfProof({
       state: 'checked',
-      analysis_status: 'queued',
+      analysis_status: 'running',
       analysis_lease_until: PAST,
-      narration_status: 'running',
+      narration_status: 'queued',
       narration_lease_until: PAST,
     }).label,
     'Recorded',
@@ -122,17 +122,17 @@ test('proof rows match the library mismatches seen in production', () => {
     clipStatusOfProof({
       state: 'checked',
       analysis_status: 'running',
-      analysis_lease_until: PAST,
+      analysis_lease_until: FUTURE,
     }).label,
-    'Recorded',
+    'Analyzing',
   );
   assert.equal(
     clipStatusOfProof({
       state: 'checked',
-      analysis_status: 'queued',
-      analysis_lease_until: FUTURE,
+      analysis_status: 'failed',
+      analysis_lease_until: PAST,
     }).label,
-    'Analyzing',
+    'Needs attention',
   );
 
   // First summary, worker still holds the lease, nothing stored yet.

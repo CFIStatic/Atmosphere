@@ -113,6 +113,7 @@ test('library mismatches: a finished clip is not stuck on summary or Recorded', 
       proofState: 'checked',
       analysisStatus: 'running',
       analysisActive: false,
+      narrationActive: false,
     }).label,
     'Recorded',
   );
@@ -152,6 +153,44 @@ test('library mismatches: a finished clip is not stuck on summary or Recorded', 
     'Retrying',
   );
   assert.equal(clipProcessing({ analysisStatus: 'failed', retrying: false }).label, 'Needs attention');
+  // A new clip is filed as checked. An expired lease is not Analyzing forever.
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'running',
+      analysisActive: false,
+      narrationStatus: 'queued',
+      narrationActive: false,
+    }).label,
+    'Recorded',
+  );
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'running',
+      analysisActive: false,
+      narrationActive: false,
+      retrying: true,
+    }).label,
+    'Recorded',
+  );
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'running',
+      analysisActive: true,
+    }).label,
+    'Analyzing',
+  );
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'failed',
+      analysisActive: false,
+      narrationActive: false,
+    }).label,
+    'Needs attention',
+  );
   assert.equal(
     clipProcessing({
       summaryState: 'updating',

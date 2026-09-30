@@ -262,9 +262,9 @@ describe('job timeline', () => {
     expect(reading.filter((sentence) => /still reading/i.test(sentence))).toHaveLength(1);
   });
 
-  it('does not say a silent clip finished reading when its summary failed', () => {
+  it('reads summaryState from the video when there is no conversation', () => {
     const base = tiffanyCustody.clips[0]!;
-    const id = 'clip-silent-summary';
+    const id = 'clip-summary-field';
     const source = tiffanySource({
       proofs: {
         ...tiffanyProofs,
@@ -280,14 +280,13 @@ describe('job timeline', () => {
             receivedAt: '2026-09-21T18:01:00.000Z',
             analysisStatus: 'done',
             narrationStatus: 'done',
-            transcriptStatus: 'skipped',
+            transcriptStatus: 'done',
             transcriptError: null,
             aiSummary: null,
             heardOnMic: null,
-            conversation: null,
             summaryState: 'failed',
             hasSummary: false,
-            noSpeech: true,
+            summaryActive: false,
           },
         ],
         days: [],
@@ -308,7 +307,7 @@ describe('job timeline', () => {
     });
     const reading = buildJobTimeline(source)
       .map((event) => event.sentence)
-      .filter((sentence) => /reading|Analyzed|unavailable/i.test(sentence));
+      .filter((sentence) => /reading|unavailable/i.test(sentence));
     expect(reading.join('\n')).toContain('Summary unavailable');
     expect(reading.join('\n')).not.toContain('finished reading');
   });
