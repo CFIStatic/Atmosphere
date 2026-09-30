@@ -97,6 +97,33 @@ test('library mismatches: a finished clip is not stuck on summary or Recorded', 
     }).label,
     'Waiting to process',
   );
+  // Production default: filed as checked, then vision sits queued/running after the lease dies.
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'queued',
+      analysisActive: false,
+      narrationStatus: 'running',
+      narrationActive: false,
+    }).label,
+    'Recorded',
+  );
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'running',
+      analysisActive: false,
+    }).label,
+    'Recorded',
+  );
+  assert.equal(
+    clipProcessing({
+      proofState: 'checked',
+      analysisStatus: 'queued',
+      analysisActive: true,
+    }).label,
+    'Analyzing',
+  );
   // No speech is done, not Recorded.
   assert.equal(
     clipProcessing({

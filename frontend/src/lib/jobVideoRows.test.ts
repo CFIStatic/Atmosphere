@@ -119,6 +119,32 @@ describe('videoRowStatus', () => {
       }).label,
     ).toBe('Uploading');
   });
+
+  it('reads a summary the server could not attach to a conversation', () => {
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'skipped',
+        narrationStatus: 'done',
+        conversation: null,
+        summaryState: 'updating',
+        hasSummary: false,
+        summaryActive: true,
+        noSpeech: true,
+      }).label,
+    ).toBe('Summary still processing');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'skipped',
+        narrationStatus: 'done',
+        conversation: null,
+        summaryState: 'failed',
+        hasSummary: false,
+        noSpeech: true,
+      }).label,
+    ).toBe('Summary unavailable');
+  });
 });
 
 describe('clipMoments', () => {

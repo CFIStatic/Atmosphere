@@ -18,7 +18,8 @@
  * A queued/running status whose lease has expired is not an active job: it
  * must not sit on Transcribing / Analyzing / Summary still processing.
  * `proof.state = checked` means integrity checks ran, not that vision is
- * still going. A finished analysis wins.
+ * still going. A finished analysis wins. Checked is Analyzing only before
+ * vision is queued; a queued or running column counts only on a live lease.
  *
  * The office UI mirrors this function in frontend/src/lib/clipProcessing.ts.
  * The verifier dashboard mirrors it in clipProcessingOf() in verifier/index.html.
@@ -121,10 +122,18 @@ export function clipProcessing(input: ClipProcessingInput = {}): ClipProcessing 
     if (input.retrying) return { state: 'analyzing', label: 'Retrying', tone: 'progress' };
     return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
   }
-  // Integrity "checked" is not a vision job. A finished reading is not Analyzing.
+  // Checked is filed before vision is queued. That gap is Analyzing.
+  // A queued/running column was already decided above: a live lease is
+  // Analyzing, and a dead lease must not stick there.
   const analysisSettled = analysis === 'done' || analysis === 'skipped';
   const narrationSettled = narration === 'done' || narration === 'skipped';
-  if (proof === 'checked' && !analysisSettled && !narrationSettled) {
+  if (
+    proof === 'checked' &&
+    !analysisSettled &&
+    !narrationSettled &&
+    !busy(analysis) &&
+    !busy(narration)
+  ) {
     return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
   }
   // A stored summary is never "still processing". A rebuild flag with no live

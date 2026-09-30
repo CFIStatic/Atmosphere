@@ -2517,6 +2517,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       narrationStatus: row.narration_status ?? null,
       transcriptStatus: row.transcript_status ?? null,
       proofState: row.state ?? null,
+      summaryState: clipStatus.summaryState ?? null,
       hasSummary: clipStatus.hasSummary === true,
       noSpeech: clipStatus.noSpeech === true,
       uploading: clipStatus.uploading === true,
