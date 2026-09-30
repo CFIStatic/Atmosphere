@@ -420,6 +420,25 @@ export type JobAskFn = (
 }>;
 
 /**
+ * Someone else with a role and no name closes the tentative role guess.
+ * The server can still return that card. Drop it, and any other role-only
+ * card for the same speaker on the same clip, so Ask does not ask again.
+ */
+function dropStaleRoleGuess(
+  verifications: SpeakerVerification[],
+  input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string },
+  answered: SpeakerVerification | undefined,
+): SpeakerVerification[] {
+  const roleOnly = input.answer === 'other' && !input.displayName?.trim() && Boolean(input.role);
+  if (!roleOnly) return verifications;
+  return verifications.filter((row) => {
+    if (row.id === input.id) return false;
+    if (row.candidateName || !row.role || !answered) return true;
+    return row.speakerLabel !== answered.speakerLabel || row.clipTitle !== answered.clipTitle;
+  });
+}
+
+/**
  * Ask the clips from inside a job profile — not a full-page chat shell.
  *
  * The parent can pass the file it already loaded so the page and this panel
@@ -493,11 +512,14 @@ export function JobAskPanel({
   async function answerVerification(input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string }) {
     if (answeringRef.current) return;
     answeringRef.current = true;
+    const answered = verifications.find((row) => row.id === input.id);
     try {
       const res = await api.answerSpeakerVerification(jobId, input.id, input);
       // Yes confirms every same-name and same-voiceprint row. The response is
       // the queue that is still open; dropping only this id leaves those cards up.
-      setVerifications(res.verifications ?? []);
+      // Someone else with only a role also drops a stale tentative role guess
+      // the server may still echo, so that guess is not asked again.
+      setVerifications(dropStaleRoleGuess(res.verifications ?? [], input, answered));
     } catch {
       /* keep the card; a failed save must not look like the question was resolved */
     } finally {

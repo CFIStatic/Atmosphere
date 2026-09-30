@@ -18,6 +18,9 @@ import { VOICE_CONSENT_TEXT, canConfirmEnrollment, canStoreVoiceprint, consentAc
 import { candidatesFromMatchableRpc, insertIdentityRows, loadMatchableVoiceprints } from '../src/audio/speakerIdentityStore.js';
 import { applyConfirmedNames } from '../src/audio/speakerPlan.js';
 import { speakerMatchWindowStarts, speakerMatchWindows } from '../src/audio/speakerClipApply.js';
+import { requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../src/audio/speakerAccess.js';
+import { HttpError } from '../src/lib/errors.js';
+import { resolveRoleAnswer, type RoleGuessRow } from '../src/audio/speakerVerification.js';
 import { peopleFromStored, toStoredPeople, type PeoplePresent } from '../src/audio/peoplePresent.js';
 import { sanitizeSpeakerProse } from '../src/shared/askSpeakers.js';
 
@@ -385,6 +388,119 @@ test('a coworker cannot store a voiceprint until they confirm as themselves', ()
   assert.equal(consentAccepted(VOICE_CONSENT_TEXT, true), true);
   assert.equal(consentAccepted('I agree', true), false);
   assert.equal(consentAccepted(VOICE_CONSENT_TEXT, false), false);
+});
+
+type CompanyRow = { id: string; org_id: string; job_id?: string };
+
+/** User-scoped lookup. A speaker table access is a write-or-read that must not happen for another company. */
+function companyClient(input: { jobs: CompanyRow[]; proofs: CompanyRow[] }) {
+  const speakerTables: string[] = [];
+  const client = {
+    speakerTables,
+    from(table: string) {
+      if (table === 'speaker_identities' || table === 'speaker_role_guesses') {
+        speakerTables.push(table);
+        throw new Error(`speaker table ${table} was touched`);
+      }
+      const rows = table === 'crm_jobs' ? input.jobs : input.proofs;
+      const filters: Array<{ column: string; value: string }> = [];
+      const query = {
+        select() {
+          return query;
+        },
+        eq(column: string, value: string) {
+          filters.push({ column, value });
+          return query;
+        },
+        in(column: string, values: string[]) {
+          filters.push({ column, value: values.join(',') });
+          return query;
+        },
+        maybeSingle: async () => {
+          const match = rows.find((row) =>
+            filters.every((filter) => {
+              if (filter.column === 'id' && filter.value.includes(',')) return filter.value.split(',').includes(row.id);
+              return String((row as Record<string, unknown>)[filter.column] ?? '') === filter.value;
+            }),
+          );
+          return { data: match ?? null, error: null };
+        },
+        then(resolve: (value: { data: CompanyRow[]; error: null }) => void) {
+          const idFilter = filters.find((filter) => filter.column === 'id');
+          const ids = idFilter ? idFilter.value.split(',') : null;
+          const match = rows.filter((row) =>
+            filters.every((filter) => {
+              if (filter.column === 'id') return ids?.includes(row.id) ?? false;
+              return String((row as Record<string, unknown>)[filter.column] ?? '') === filter.value;
+            }),
+          );
+          resolve({ data: match, error: null });
+        },
+      };
+      return query;
+    },
+  };
+  return client;
+}
+
+test('a cross-company job or clip is rejected before any speaker read or write', async () => {
+  const db = companyClient({
+    jobs: [
+      { id: 'job-a', org_id: 'org-a' },
+      { id: 'job-b', org_id: 'org-b' },
+    ],
+    proofs: [
+      { id: 'clip-a', org_id: 'org-a', job_id: 'job-a' },
+      { id: 'clip-b', org_id: 'org-b', job_id: 'job-b' },
+      { id: 'clip-other-job', org_id: 'org-a', job_id: 'job-other' },
+    ],
+  });
+  await requireCompanyClip(db, 'org-a', 'job-a', 'clip-a');
+  await requireCompanyClips(db, 'org-a', 'job-a', ['clip-a']);
+  await assert.rejects(
+    () => requireCompanyJob(db, 'org-a', 'job-b'),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'job_missing',
+  );
+  await assert.rejects(
+    () => requireCompanyClip(db, 'org-a', 'job-a', 'clip-b'),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
+  );
+  await assert.rejects(
+    () => requireCompanyClip(db, 'org-a', 'job-b', 'clip-b'),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'job_missing',
+  );
+  await assert.rejects(
+    () => requireCompanyClips(db, 'org-a', 'job-a', ['clip-a', 'clip-other-job']),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
+  );
+  assert.deepEqual(db.speakerTables, []);
+});
+
+test('a role-only correction does not leave the tentative guess pending', () => {
+  const identities = [row({ id: 'name', proofId: 'clip-1', speakerLabel: 'Speaker 3' })];
+  const guesses: RoleGuessRow[] = [
+    {
+      id: 'guess-1',
+      proofId: 'clip-1',
+      speakerLabel: 'Speaker 3',
+      role: 'homeowner',
+      confidence: 0.8,
+      tSec: 65,
+      quote: 'The deductible on my house is still open.',
+      clipTitle: 'North slope walkthrough',
+      status: 'tentative',
+    },
+  ];
+  const nextRows = resolveSpeakerAnswer(identities, { id: 'name', answer: 'no' });
+  const nextGuesses = resolveRoleAnswer(guesses, {
+    speakerLabel: 'Speaker 3',
+    proofId: 'clip-1',
+    answer: 'other',
+    role: 'crew',
+  });
+  const questions = pendingQuestions(nextRows, nextGuesses);
+  assert.equal(questions.some((question) => question.id === 'guess-1'), false);
+  assert.equal(questions.some((question) => question.role === 'homeowner'), false);
 });
 
 test('speaker identity routes require a session', async () => {

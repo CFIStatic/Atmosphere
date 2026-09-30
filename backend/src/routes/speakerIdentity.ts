@@ -22,6 +22,7 @@ import {
 } from '../audio/speakerEnrollment.js';
 import { SPEAKER_EMBEDDING_MODEL, decodeWavPcm, embedPcm, SpeakerEmbeddingError } from '../audio/speakerEmbedding.js';
 import { stampConfirmedSpeakers } from '../audio/speakerClipApply.js';
+import { requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../audio/speakerAccess.js';
 import {
   factSpeakerLabel,
   pendingQuestions,
@@ -392,10 +393,10 @@ function mapGuess(row: Record<string, unknown>): RoleGuessRow {
 const IDENTITY_COLUMNS =
   'id, job_id, proof_id, speaker_label, display_name, status, method, confidence, voiceprint_id, subject_user_id, source_proof_id, source_t_sec, source_quote, clip_title';
 
-async function loadJobSpeakers(supabase: ReturnType<typeof userClient>, jobId: string) {
+async function loadJobSpeakers(supabase: ReturnType<typeof userClient>, orgId: string, jobId: string) {
   const [{ data: identities, error: identityError }, { data: guesses, error: guessError }] = await Promise.all([
-    supabase.from('speaker_identities').select(IDENTITY_COLUMNS).eq('job_id', jobId),
-    supabase.from('speaker_role_guesses').select('id, proof_id, speaker_label, role, confidence, source_t_sec, source_quote, clip_title, status, job_id').eq('job_id', jobId),
+    supabase.from('speaker_identities').select(IDENTITY_COLUMNS).eq('job_id', jobId).eq('org_id', orgId),
+    supabase.from('speaker_role_guesses').select('id, proof_id, speaker_label, role, confidence, source_t_sec, source_quote, clip_title, status, job_id').eq('job_id', jobId).eq('org_id', orgId),
   ]);
   if (identityError) throw new HttpError(500, identityError.message, 'speakers_failed');
   if (guessError) throw new HttpError(500, guessError.message, 'speakers_failed');
@@ -434,7 +435,10 @@ async function saveIdentities(supabase: ReturnType<typeof userClient>, rows: Spe
 speakerIdentityRouter.get('/jobs/:jobId/verifications', async (req, res, next) => {
   try {
     const supabase = userClient(req);
-    const { identities, guesses } = await loadJobSpeakers(supabase, req.params.jobId);
+    const orgId = req.orgId!;
+    const jobId = req.params.jobId;
+    await requireCompanyJob(supabase, orgId, jobId);
+    const { identities, guesses } = await loadJobSpeakers(supabase, orgId, jobId);
     res.json({ verifications: pendingQuestions(identities, guesses) });
   } catch (err) {
     next(err);
@@ -448,37 +452,45 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
       throw badRequest('Say who it is, or pick a role.', 'speaker_name_required');
     }
     const supabase = userClient(req);
-    const { identities, guesses } = await loadJobSpeakers(supabase, req.params.jobId);
+    const orgId = req.orgId!;
+    const jobId = req.params.jobId;
+    await requireCompanyJob(supabase, orgId, jobId);
+    const { identities, guesses } = await loadJobSpeakers(supabase, orgId, jobId);
     const identity = identities.find((row) => row.id === req.params.id);
     if (identity) {
+      const roleOnly = body.answer === 'other' && Boolean(body.role) && !body.displayName?.trim();
       const nextRows = resolveSpeakerAnswer(identities, {
         id: identity.id,
-        answer: body.answer === 'other' && body.role && !body.displayName ? 'no' : body.answer,
+        answer: roleOnly ? 'no' : body.answer,
         displayName: body.displayName,
       });
-      let nextGuesses = guesses;
-      if (body.answer === 'other' && body.role && !body.displayName) {
-        nextGuesses = resolveRoleAnswer(guesses, {
-          speakerLabel: identity.speakerLabel,
-          proofId: identity.proofId,
-          answer: 'other',
-          role: body.role,
-        });
-        await saveGuesses(supabase, nextGuesses);
-      }
+      const nextGuesses = roleOnly
+        ? resolveRoleAnswer(guesses, {
+            speakerLabel: identity.speakerLabel,
+            proofId: identity.proofId,
+            answer: 'other',
+            role: body.role,
+          })
+        : guesses;
+      await requireCompanyClips(supabase, orgId, jobId, [
+        ...nextRows.map((row) => row.proofId),
+        ...nextGuesses.map((row) => row.proofId),
+      ]);
+      if (roleOnly) await saveGuesses(supabase, nextGuesses);
       await saveIdentities(supabase, nextRows);
-      await publishConfirmedNames(req.orgId!, nextRows);
+      await publishConfirmedNames(orgId, nextRows);
       res.json({ verifications: pendingQuestions(nextRows, nextGuesses) });
       return;
     }
     const guess = guesses.find((row) => row.id === req.params.id);
     if (!guess) throw notFound('That question is no longer open.', 'verification_missing');
+    await requireCompanyClips(supabase, orgId, jobId, guesses.map((row) => row.proofId));
     if (body.answer === 'other' && body.displayName?.trim()) {
       const created = await supabase
         .from('speaker_identities')
         .insert({
-          org_id: req.orgId!,
-          job_id: req.params.jobId,
+          org_id: orgId,
+          job_id: jobId,
           proof_id: guess.proofId,
           speaker_label: guess.speakerLabel,
           display_name: body.displayName.trim(),
@@ -500,7 +512,7 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
       });
       await saveGuesses(supabase, nextGuesses);
       const named = mapIdentity(created.data as Record<string, unknown>);
-      await publishConfirmedNames(req.orgId!, [named]);
+      await publishConfirmedNames(orgId, [named]);
       res.json({ verifications: pendingQuestions([...identities, named], nextGuesses) });
       return;
     }
@@ -530,7 +542,10 @@ async function saveGuesses(supabase: ReturnType<typeof userClient>, rows: RoleGu
 speakerIdentityRouter.get('/jobs/:jobId/clips/:proofId/speakers', async (req, res, next) => {
   try {
     const supabase = userClient(req);
-    const { identities, guesses } = await loadJobSpeakers(supabase, req.params.jobId);
+    const orgId = req.orgId!;
+    const jobId = req.params.jobId;
+    await requireCompanyClip(supabase, orgId, jobId, req.params.proofId);
+    const { identities, guesses } = await loadJobSpeakers(supabase, orgId, jobId);
     const proofId = req.params.proofId;
     const labels = new Set<string>();
     for (const row of identities) if (row.proofId === proofId) labels.add(row.speakerLabel);
@@ -568,20 +583,24 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
   try {
     const body = renameSchema.parse(req.body);
     const supabase = userClient(req);
+    const orgId = req.orgId!;
+    const jobId = req.params.jobId;
     const proofId = req.params.proofId;
+    await requireCompanyClip(supabase, orgId, jobId, proofId);
     if (body.displayName) {
-      const { identities } = await loadJobSpeakers(supabase, req.params.jobId);
+      const { identities } = await loadJobSpeakers(supabase, orgId, jobId);
       const pending = identities.find(
         (row) => row.proofId === proofId && row.speakerLabel.toLowerCase() === body.speakerLabel.toLowerCase() && row.status === 'pending',
       );
       if (pending) {
         const nextRows = resolveSpeakerAnswer(identities, { id: pending.id, answer: 'other', displayName: body.displayName });
+        await requireCompanyClips(supabase, orgId, jobId, nextRows.map((row) => row.proofId));
         await saveIdentities(supabase, nextRows);
-        await publishConfirmedNames(req.orgId!, nextRows);
+        await publishConfirmedNames(orgId, nextRows);
       } else {
         const { error } = await supabase.from('speaker_identities').insert({
-          org_id: req.orgId!,
-          job_id: req.params.jobId,
+          org_id: orgId,
+          job_id: jobId,
           proof_id: proofId,
           speaker_label: body.speakerLabel,
           display_name: body.displayName,
@@ -592,10 +611,10 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
           clip_title: null,
         });
         if (error) throw new HttpError(500, error.message, 'speakers_failed');
-        await publishConfirmedNames(req.orgId!, [
+        await publishConfirmedNames(orgId, [
         {
           id: '',
-          jobId: req.params.jobId,
+          jobId,
           proofId,
           speakerLabel: body.speakerLabel,
           displayName: body.displayName,
@@ -615,8 +634,8 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
     if (body.role) {
       const { error } = await supabase.from('speaker_role_guesses').upsert(
         {
-          org_id: req.orgId!,
-          job_id: req.params.jobId,
+          org_id: orgId,
+          job_id: jobId,
           proof_id: proofId,
           speaker_label: body.speakerLabel,
           role: body.role as SpeakerRole,

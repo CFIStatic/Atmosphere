@@ -717,4 +717,47 @@ describe('JobAskPanel', () => {
     });
   });
 
+  it('clears a stale tentative role guess after Someone else with only a role', async () => {
+    const user = userEvent.setup();
+    const nameGuess = {
+      id: 'v-name',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 Marco?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const roleGuess = {
+      id: 'v-role',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'The deductible on my house is still open.',
+    };
+    answerSpeakerVerification.mockResolvedValue({ verifications: [roleGuess] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[nameGuess, roleGuess]} />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-other'));
+    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'crew');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('speaker-verification')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText(/homeowner/i)).not.toBeInTheDocument();
+    expect(answerSpeakerVerification).toHaveBeenCalledWith(
+      'job-1038',
+      'v-name',
+      expect.objectContaining({ id: 'v-name', answer: 'other', role: 'crew' }),
+    );
+  });
+
 });
