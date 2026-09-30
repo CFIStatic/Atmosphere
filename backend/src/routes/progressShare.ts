@@ -340,7 +340,7 @@ progressShareRouter.get(
       const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
       let q = admin
         .from('job_proof_questions')
-        .select('id, question, answer, model, grounded_on, created_at, thread_id')
+        .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
         .eq('org_id', share.org_id)
         .eq('job_id', share.job_id);
       if (threadId) q = q.eq('thread_id', threadId);

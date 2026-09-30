@@ -98,6 +98,7 @@ import {
   isAskWebSearchConfigured,
   plainWebModelText,
   searchAskWebDetailed,
+  scrubWebDerivedAskAnswer,
   stripExternalAskLinks,
   webSearchModelPayload,
 } from './askWebSearch.js';
@@ -212,11 +213,16 @@ export function finalizeLookupAnswer(
   trace: AskLookupTraceStep[],
   catalog: AskLookupCatalog,
   question: string,
+  opts?: { modelProduced?: boolean },
 ): { answer: string; followUps: string[] } {
+  const modelProduced = opts?.modelProduced !== false;
+  // No-model and model-failure prose is not a place to parse control markers.
+  // Web text that leaked into that prose is stripped before any trailer parse.
+  const sourceProse = modelProduced ? prose : scrubWebDerivedAskAnswer(prose);
   const allowed = new Set(collectMomentSourceIds(trace));
-  let text = stripMomentTrailers(prose);
+  let text = stripMomentTrailers(sourceProse);
   text = normalizeAskSources(text);
-  const cited = parseSourceTrailerIds(text).filter((id) => {
+  const cited = (modelProduced ? parseSourceTrailerIds(text) : []).filter((id) => {
     const moment = parseMomentSource(id);
     if (!moment) return true;
     if (!allowed.size) return false;
@@ -246,7 +252,7 @@ export function finalizeLookupAnswer(
       return parsed?.proofId === moment.proofId;
     }) || allowed.has(quote.sourceId);
   });
-  const modelFollows = parseFollowupTrailer(prose).filter((item) => {
+  const modelFollows = (modelProduced ? parseFollowupTrailer(sourceProse) : []).filter((item) => {
     const hay = JSON.stringify(trace).toLowerCase();
     const words = item
       .toLowerCase()
@@ -1049,7 +1055,9 @@ export async function answerFromAskLookup(input: {
   }
 
   if (topicQuestion) trace.unshift(evidenceTraceStep(evidence, input.catalog));
-  const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved);
+  const finalized = finalizeLookupAnswer(prose, trace, input.catalog, resolved, {
+    modelProduced: Boolean(model),
+  });
   let answer = scrubStoredAskText(finalized.answer, input.catalog.clips);
   if (model) {
     // A model wrote this. Check it against the file before it is stored or sent.

@@ -683,9 +683,9 @@ function pushHit(hits: AskWebHit[], next: AskWebHit | null) {
   if (!/^https?:\/\//i.test(url)) return;
   if (hits.some((h) => h.url === url)) return;
   hits.push({
-    title: titleForHit(next.title, url).slice(0, 160),
+    title: plainWebText(titleForHit(next.title, url)).slice(0, 160) || 'Source',
     url: url.slice(0, 500),
-    snippet: trim(next.snippet).slice(0, 400),
+    snippet: plainWebText(next.snippet).slice(0, 400),
   });
 }
 
@@ -749,7 +749,7 @@ async function searchTavily(
     });
     if (hits.length >= maxResults) break;
   }
-  return { hits, answer: trim(payload.answer).slice(0, 1200) };
+  return { hits, answer: plainWebText(trim(payload.answer).slice(0, 1200)) };
 }
 
 /** Prefer ASK_WEB_SEARCH_MODEL; never inherit verification models that may lack google_search. */
@@ -874,7 +874,7 @@ function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number):
         if (!web?.uri) continue;
         const existing = hits.find((h) => h.url === trim(web.uri));
         if (existing && !existing.snippet && segmentText) {
-          existing.snippet = segmentText.slice(0, 400);
+          existing.snippet = plainWebText(segmentText).slice(0, 400);
         } else if (!existing) {
           pushHit(hits, {
             title: trim(web.title),
@@ -1277,12 +1277,42 @@ export function joinWebResultsSection(body: string, section: string): string {
 }
 
 /**
- * Untrusted web prose. Markdown links and images become their label, bare URLs
- * and angle-bracket autolinks are removed, and HTML is stripped. The only
- * clickable links Ask emits are built separately from Tavily result URLs.
+ * Ask control markers. Web text must never carry these: the chat parser treats
+ * them as quotes, sources, follow-ups, actions, or an artifact the model wrote.
+ */
+const ASK_CONTROL_MARKER_RE =
+  /⟦\s*\/?\s*(?:quotes|sources|followups|actions|artifact|web-evidence|web)\b[^⟧]*⟧?/gi;
+
+/** Drop marker sequences and every ⟦ ⟧ so web prose cannot close or open a control trailer. */
+export function stripWebControlMarkers(text: string): string {
+  return String(text ?? '')
+    .replace(ASK_CONTROL_MARKER_RE, ' ')
+    .replace(/[⟦⟧]/g, '');
+}
+
+/**
+ * Web-derived answer text, before it is stored. A server-appended actions
+ * trailer is kept. Markers inside the web prose are removed, so the quote and
+ * source parsers never see them.
+ */
+export function scrubWebDerivedAskAnswer(answer: string): string {
+  const raw = String(answer ?? '');
+  const actions = raw.match(/\n*⟦actions:\s*[^⟧]*⟧\s*$/i);
+  const body = actions ? raw.slice(0, actions.index) : raw;
+  const cleaned = stripWebControlMarkers(body)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+  return actions ? `${cleaned}\n\n${actions[0].trim()}` : cleaned;
+}
+
+/**
+ * Untrusted web prose. Control markers, markdown links, bare URLs, and HTML
+ * are removed. Clickable web links are built separately from result URLs.
  */
 function plainWebText(text: string, limit?: number): string {
-  let value = String(text ?? '');
+  let value = stripWebControlMarkers(String(text ?? ''));
   for (let pass = 0; pass < 4; pass++) {
     const next = value
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -1418,6 +1448,20 @@ export function composeAskWebAnswer(input: {
   const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
   const prose = asksAboutJobFile(input.question) && jobUseful ? job : webLead || job;
   return ensureWebResultsSection(prose);
+}
+
+/** True when composeAskWebAnswer's prose is the web answer or snippet, not the job file. */
+export function composedAnswerIsWebProse(input: {
+  question: string;
+  jobAnswer?: string | null;
+  webAnswer?: string | null;
+  hits: AskWebHit[];
+}): boolean {
+  const job = trim(input.jobAnswer);
+  const jobUseful = Boolean(job) && !/does not have that|nothing is on this job file/i.test(job);
+  if (asksAboutJobFile(input.question) && jobUseful) return false;
+  const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
+  return Boolean(trim(webLead));
 }
 
 export function formatWebTrailer(hits: AskWebHit[]): string {

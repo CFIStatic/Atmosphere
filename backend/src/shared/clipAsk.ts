@@ -20,12 +20,17 @@ import {
   askClockSystemRules,
   askWebCapabilityRules,
   composeAskWebAnswer,
+  composedAnswerIsWebProse,
   ensureWebResultsSection,
   formatAskWebContext,
   includeDomainsForAsk,
+  scrubWebDerivedAskAnswer,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
   asksAboutJobFile,
+  webSourcesFromHits,
+  type AskWebHit,
+  type AskWebSource,
 } from './askWebSearch.js';
 import { clipProcessing } from './clipProcessing.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
@@ -1608,34 +1613,40 @@ export async function answerFromClip(input: {
   supplement?: string | null;
   fetchFn?: typeof fetch;
   now?: Date;
-}): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
+}): Promise<{
+  answer: string;
+  model: string | null;
+  usage: MeasuredUsage | null;
+  webSources: AskWebSource[];
+  webDerivedAnswer: boolean;
+}> {
   input = { ...input, record: withAuthoritativeTranscript(speechSafeClipRecord(input.record)) };
   const grounded = groundedAnswerFromClip(input.question, input.record);
   const supplement = String(input.supplement ?? '').trim();
   if (!supplement && /still hearing the mic/i.test(grounded)) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
   }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
   const wantsWeb = !supplement && shouldSupplementWithWebSearch(input.question, grounded);
   if (!wantsWeb && !supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
   }
   // Topic/explain talk questions: without a model, serve the grounded transcript.
   if (!wantsWeb && !supplement && talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
   }
   if (!wantsWeb && !isAskModelConfigured()) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
   }
 
   const reading = formatClipRecordForModel(input.record).trim();
   if (!wantsWeb && !reading && !supplement) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
   }
 
   const history = (input.history ?? [])
@@ -1659,14 +1670,22 @@ export async function answerFromClip(input: {
     webAnswer = outcome.answer;
   }
   if (!isAskModelConfigured() && (webHits.length || webAnswer)) {
-    const answer = composeAskWebAnswer({
+    const composed = {
       question: input.question,
       jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
       webAnswer,
       hits: webHits,
-    });
+    };
+    const webDerived = composedAnswerIsWebProse(composed);
+    const answer = webDerived ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed)) : composeAskWebAnswer(composed);
     input.onToken?.(answer);
-    return { answer, model: null, usage: null };
+    return {
+      answer,
+      model: null,
+      usage: null,
+      webSources: webSourcesFromHits(webHits),
+      webDerivedAnswer: webDerived,
+    };
   }
 
   const webUsable = webHits.length > 0 || Boolean(webAnswer.trim());
@@ -1699,16 +1718,26 @@ export async function answerFromClip(input: {
     onToken: input.onToken,
   });
   if (!completed) {
+    const composed = {
+      question: input.question,
+      jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+      webAnswer,
+      hits: webHits,
+    };
+    const webDerived = webUsable && composedAnswerIsWebProse(composed);
     const answer = webUsable
-      ? composeAskWebAnswer({
-          question: input.question,
-          jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
-          webAnswer,
-          hits: webHits,
-        })
+      ? webDerived
+        ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed))
+        : composeAskWebAnswer(composed)
       : grounded;
     input.onToken?.(answer);
-    return { answer, model: null, usage: null };
+    return {
+      answer,
+      model: null,
+      usage: null,
+      webSources: webSourcesFromHits(webHits),
+      webDerivedAnswer: webDerived,
+    };
   }
   // If the model wrongly denies on-file speech, keep the grounded transcript answer.
   if (
@@ -1718,7 +1747,13 @@ export async function answerFromClip(input: {
     !/does not (show that|include usable speech)/i.test(grounded)
   ) {
     input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    return {
+      answer: grounded,
+      model: null,
+      usage: null,
+      webSources: webSourcesFromHits(webHits),
+      webDerivedAnswer: false,
+    };
   }
   // A model answer that states a different amount of speech than the raw
   // transcript ("only one fragment" over five lines) is not shown.
@@ -1728,7 +1763,13 @@ export async function answerFromClip(input: {
     // gets the evidence-first answer instead of a transcript dump.
     const fixed = isSpeechCountQuestion(input.question) ? speechCountAnswer(input.record) : grounded;
     input.onToken?.(`\n\n${fixed}`);
-    return { answer: fixed, model: completed.model, usage: completed.usage };
+    return {
+      answer: fixed,
+      model: completed.model,
+      usage: completed.usage,
+      webSources: webSourcesFromHits(webHits),
+      webDerivedAnswer: false,
+    };
   }
   // Post-generation shape and support checks. A model answer that contradicts
   // itself, skips the number or the time, dumps the whole transcript, or claims
@@ -1742,20 +1783,32 @@ export async function answerFromClip(input: {
       const groundedIssues = answerQualityFailures({ question: input.question, answer: grounded, transcripts, evidenceNorm });
       if (groundedIssues.length < modelIssues.length) {
         input.onToken?.(`\n\n${grounded}`);
-        return { answer: grounded, model: completed.model, usage: completed.usage };
+        return {
+          answer: grounded,
+          model: completed.model,
+          usage: completed.usage,
+          webSources: webSourcesFromHits(webHits),
+          webDerivedAnswer: false,
+        };
       }
     }
   }
   const shaped = ensureWebResultsSection(
     withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
   );
-  const answer = webUsable && !shaped.trim()
-    ? composeAskWebAnswer({
-        question: input.question,
-        jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
-        webAnswer,
-        hits: webHits,
-      })
-    : shaped;
-  return { answer, model: completed.model, usage: completed.usage };
+  const composed = {
+    question: input.question,
+    jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+    webAnswer,
+    hits: webHits,
+  };
+  const webDerived = webUsable && !shaped.trim() && composedAnswerIsWebProse(composed);
+  const answer = webDerived ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed)) : shaped;
+  return {
+    answer,
+    model: completed.model,
+    usage: completed.usage,
+    webSources: webSourcesFromHits(webHits as AskWebHit[]),
+    webDerivedAnswer: webDerived,
+  };
 }

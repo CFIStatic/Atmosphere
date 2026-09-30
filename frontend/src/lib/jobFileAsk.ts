@@ -5,6 +5,7 @@ import type {
   ProofResponse,
   SharedJobRecord,
 } from './api';
+import { displayAskWebSources } from './askWebSources';
 
 /** Office path for the job file — briefs, proofs, invites, readiness. */
 export function jobFilePath(
@@ -272,6 +273,7 @@ export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
           groundedOn: question.grounded_on?.length,
           groundedIds: question.grounded_on,
           model: question.model,
+          webSources: displayAskWebSources(question.web_sources),
           at: question.created_at,
         });
       }

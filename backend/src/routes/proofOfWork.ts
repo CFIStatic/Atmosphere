@@ -57,7 +57,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
-import { stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
+import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
 import {
@@ -3280,6 +3280,7 @@ export async function runProofAsk(input: {
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
           answeredFromLookup: false,
+          webDerivedAnswer: false,
         }
       : await answerFromJobFile({
       question: input.question,
@@ -3324,6 +3325,7 @@ export async function runProofAsk(input: {
       !result.answeredFromLookup
     ) {
       result.answer = mentionPrep.fallbackAnswer;
+      result.webDerivedAnswer = false;
       onToken(mentionPrep.fallbackAnswer);
     }
 
@@ -3347,7 +3349,8 @@ export async function runProofAsk(input: {
       ...((file.documents ?? []).length ? ['documents'] : []),
     ];
     const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
-    const storedAnswer = stripExternalAskLinks(scrubStoredAskText(result.answer, lookup.clips));
+    let storedAnswer = stripExternalAskLinks(scrubStoredAskText(result.answer, lookup.clips));
+    if (result.webDerivedAnswer) storedAnswer = scrubWebDerivedAskAnswer(storedAnswer);
     const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
     if (input.signal?.aborted) {
@@ -3371,10 +3374,11 @@ export async function runProofAsk(input: {
         answer: storedAnswer,
         model: result.model,
         grounded_on: groundedOn,
+        web_sources: webSources,
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
       })
-      .select('id, question, answer, model, grounded_on, created_at, thread_id')
+      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
       .single();
 
     if (mentionPrep?.mentions.length && stored?.id) {
@@ -3583,7 +3587,7 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
     let q = supabase
       .from('job_proof_questions')
-      .select('id, question, answer, model, grounded_on, created_at, thread_id')
+      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
       .eq('org_id', orgId)
       .eq('job_id', req.params.jobId);
     if (threadId) q = q.eq('thread_id', threadId);

@@ -198,6 +198,29 @@ describe('turnsFromQuestions', () => {
       'gemini-3.6-flash',
     ]);
   });
+
+  it('restores web sources stored with the assistant message', () => {
+    const turns = turnsFromQuestions([
+      {
+        id: 'q-web',
+        question: 'what NFL game is Thursday',
+        answer: 'Packers at Lions.',
+        model: null,
+        grounded_on: [],
+        web_sources: [
+          { title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' },
+          { title: 'Bad', url: 'javascript:alert(1)', snippet: 'no' },
+          { title: 'Evil host', url: 'https://evil.example/job-progress', snippet: 'no' },
+        ],
+        created_at: '2026-09-30T12:00:00Z',
+      },
+    ]);
+    const assistant = turns.find((turn) => turn.role === 'assistant');
+    expect(assistant?.webSources).toEqual([
+      { title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' },
+      { title: 'Evil host', url: 'https://evil.example/job-progress', snippet: 'no' },
+    ]);
+  });
 });
 
 
