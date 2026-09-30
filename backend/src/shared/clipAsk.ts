@@ -1803,7 +1803,10 @@ export async function answerFromClip(input: {
   const shaped = ensureWebResultsSection(
     withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
   );
-  const fallback = shaped.trim() ? null : jobFileFallback(webUsable);
+  // normalizeAskProse reattaches ⟦sources:…⟧ even when that marker is the whole
+  // reply. The UI strips it, so a sources-only answer is empty.
+  const prose = shaped.replace(/(?:\n|^)\s*⟦sources:\s*[^⟧]*⟧\s*/gi, '').trim();
+  const fallback = prose ? null : jobFileFallback(webUsable);
   return {
     answer: fallback ? fallback.answer : shaped,
     model: completed.model,
