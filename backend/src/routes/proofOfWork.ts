@@ -3326,6 +3326,7 @@ export async function runProofAsk(input: {
     ) {
       result.answer = mentionPrep.fallbackAnswer;
       result.webDerivedAnswer = false;
+      result.webHits = [];
       onToken(mentionPrep.fallbackAnswer);
     }
 

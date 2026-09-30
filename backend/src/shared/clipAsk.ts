@@ -1803,7 +1803,12 @@ export async function answerFromClip(input: {
     hits: webHits,
   };
   const webDerived = webUsable && !shaped.trim() && composedAnswerIsWebProse(composed);
-  const answer = webDerived ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed)) : shaped;
+  const answer =
+    webUsable && !shaped.trim()
+      ? webDerived
+        ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed))
+        : composeAskWebAnswer(composed)
+      : shaped;
   return {
     answer,
     model: completed.model,
