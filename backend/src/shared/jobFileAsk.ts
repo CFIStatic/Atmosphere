@@ -34,6 +34,7 @@ import {
   includeDomainsForAsk,
   looksLikePureWebCapabilityAsk,
   professionalWebCapabilityAnswer,
+  restrictAskMarkdownLinks,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
   asksAboutJobFile,
@@ -543,7 +544,8 @@ export function assembleMentionModelPrompt(input: {
 }
 
 function applyWebResults(answer: string, question: string, hits: AskWebHit[], webAnswer: string): string {
-  if (!hits.length && !trim(webAnswer)) return answer;
+  const restricted = restrictAskMarkdownLinks(answer, hits.map((hit) => hit.url));
+  if (!hits.length && !trim(webAnswer)) return restricted;
   const refused =
     /does not have that|not on (this )?file|cannot search|can't search|unable to search|do not have (web|internet) access|aren'?t connected/i.test(
       answer,
@@ -551,7 +553,7 @@ function applyWebResults(answer: string, question: string, hits: AskWebHit[], we
   if (!asksAboutJobFile(question) && refused) {
     return composeAskWebAnswer({ question, jobAnswer: '', webAnswer, hits });
   }
-  return ensureWebResultsSection(answer, hits);
+  return ensureWebResultsSection(restricted, hits);
 }
 
 export async function answerFromJobFile(input: {

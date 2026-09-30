@@ -9,6 +9,9 @@ import {
   asksAboutJobFile,
   composeAskWebAnswer,
   formatWebResultsSection,
+  restrictAskMarkdownLinks,
+  webSearchModelPayload,
+  wrapWebEvidence,
   filterWebHitsToAllowed,
   formatWebTrailer,
   geminiWebSearchModel,
@@ -35,6 +38,7 @@ import {
   stripWebTrailer,
   unwrapDuckDuckGoUrl,
 } from '../src/shared/askWebSearch.js';
+import { formatAskToolResultsForModel } from '../src/shared/askTools.js';
 
 function withEnv(vars: Record<string, string | undefined>, fn: () => void | Promise<void>) {
   const prev: Record<string, string | undefined> = {};
@@ -1103,4 +1107,58 @@ test('poisoned Tavily answer and snippet text cannot add a clickable link', () =
   });
   assert.equal(answerOnly, 'Packers play');
   assert.doesNotMatch(answerOnly, /https?:\/\/|\[[^\]]+\]\(/);
+});
+
+test('web_search tool output is plain text before the model sees it', () => {
+  const payload = webSearchModelPayload({
+    answer: 'Packers [play](https://attacker.example) <https://auto.example> <b>tonight</b>',
+    results: [
+      {
+        title: 'NFL [schedule](https://attacker.example)',
+        url: 'https://example.com/nfl',
+        snippet: 'See https://bare.example and <a href="https://html.example">click</a>',
+      },
+      { title: 'bad', url: 'javascript:alert(1)', snippet: 'nope' },
+    ],
+  });
+  const encoded = JSON.stringify(payload);
+  assert.equal(payload.answer, 'Packers play tonight');
+  assert.equal(payload.results[0]?.url, 'https://example.com/nfl');
+  assert.equal(payload.results[0]?.title, 'NFL schedule');
+  assert.match(payload.results[0]?.snippet ?? '', /click/);
+  assert.equal(payload.results.some((hit) => hit.url.startsWith('javascript:')), false);
+  assert.doesNotMatch(encoded, /attacker\.example|bare\.example|auto\.example|html\.example/);
+
+  const shown = formatAskToolResultsForModel([
+    {
+      ok: true,
+      tool: 'web_search',
+      summary: 'Packers [play](https://attacker.example)',
+      data: {
+        answer: 'Packers [play](https://attacker.example)',
+        results: [{ title: 'NFL', url: 'https://example.com/nfl', snippet: 'Thursday night' }],
+      },
+    },
+  ]);
+  assert.match(shown, /⟦web-evidence⟧/);
+  assert.match(shown, /Packers play/);
+  assert.match(shown, /https:\/\/example\.com\/nfl/);
+  assert.doesNotMatch(shown, /attacker\.example/);
+  assert.equal(wrapWebEvidence(shown).includes('⟦web-evidence⟧'), true);
+});
+
+test('only returned web URLs and job-file paths stay clickable', () => {
+  const out = restrictAskMarkdownLinks(
+    'See [evil](https://attacker.example) and [NFL schedule](https://example.com/nfl) and [the job](/job-progress?job=job-1).',
+    ['https://example.com/nfl'],
+  );
+  assert.equal(
+    out,
+    'See evil and [NFL schedule](https://example.com/nfl) and [the job](/job-progress?job=job-1).',
+  );
+  assert.equal(
+    restrictAskMarkdownLinks('[open](https://app.example/job-progress?job=job-1)', []),
+    '[open](https://app.example/job-progress?job=job-1)',
+  );
+  assert.equal(restrictAskMarkdownLinks('[phish](https://app.example/login)', []), 'phish');
 });

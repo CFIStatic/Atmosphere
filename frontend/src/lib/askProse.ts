@@ -112,7 +112,33 @@ export function normalizeAskProse(input: string): string {
   return text.replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function parseInline(input: string): AskInline[] {
+function isKnownAskAppLink(url: string): boolean {
+  const value = url.trim();
+  if (/^\/(?:job-progress|jobs)(?:[/?#]|$)/.test(value)) return true;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return /^\/(?:job-progress|jobs)(?:\/|$)/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** URLs in this answer's Web results section. Those are the links our code built. */
+function webResultHrefs(input: string): Set<string> {
+  const parts = input.split(/\*\*Web results\*\*/i);
+  const section = parts.length > 1 ? parts.slice(1).join('\n') : '';
+  const hrefs = new Set<string>();
+  for (const match of section.matchAll(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g)) {
+    const href = match[2] ?? '';
+    if (href) hrefs.add(href);
+  }
+  return hrefs;
+}
+
+const ASK_LINK_RE = /^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|\/(?:job-progress|jobs)(?:[/?#][^\s)]*)?)\)/;
+
+function parseInline(input: string, allowed: ReadonlySet<string>): AskInline[] {
   const nodes: AskInline[] = [];
   let i = 0;
   let buf = '';
@@ -125,10 +151,16 @@ function parseInline(input: string): AskInline[] {
 
   while (i < input.length) {
     if (input[i] === '[') {
-      const link = input.slice(i).match(/^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
+      const link = input.slice(i).match(ASK_LINK_RE);
       if (link) {
         flush();
-        nodes.push({ kind: 'link', text: link[1] ?? '', href: link[2] ?? '' });
+        const href = link[2] ?? '';
+        const label = link[1] ?? '';
+        if (allowed.has(href) || isKnownAskAppLink(href)) {
+          nodes.push({ kind: 'link', text: label, href });
+        } else {
+          nodes.push({ kind: 'text', text: label });
+        }
         i += link[0].length;
         continue;
       }
@@ -137,7 +169,7 @@ function parseInline(input: string): AskInline[] {
       const end = input.indexOf('**', i + 2);
       if (end > i + 2) {
         flush();
-        nodes.push({ kind: 'bold', children: parseInline(input.slice(i + 2, end)) });
+        nodes.push({ kind: 'bold', children: parseInline(input.slice(i + 2, end), allowed) });
         i = end + 2;
         continue;
       }
@@ -149,7 +181,7 @@ function parseInline(input: string): AskInline[] {
       const end = input.indexOf('*', i + 1);
       if (end > i + 1 && input[end + 1] !== '*') {
         flush();
-        nodes.push({ kind: 'italic', children: parseInline(input.slice(i + 1, end)) });
+        nodes.push({ kind: 'italic', children: parseInline(input.slice(i + 1, end), allowed) });
         i = end + 1;
         continue;
       }
@@ -161,7 +193,7 @@ function parseInline(input: string): AskInline[] {
       const end = input.indexOf('__', i + 2);
       if (end > i + 2) {
         flush();
-        nodes.push({ kind: 'bold', children: parseInline(input.slice(i + 2, end)) });
+        nodes.push({ kind: 'bold', children: parseInline(input.slice(i + 2, end), allowed) });
         i = end + 2;
         continue;
       }
@@ -172,7 +204,7 @@ function parseInline(input: string): AskInline[] {
       const end = input.indexOf('_', i + 1);
       if (end > i + 1 && input[end + 1] !== '_') {
         flush();
-        nodes.push({ kind: 'italic', children: parseInline(input.slice(i + 1, end)) });
+        nodes.push({ kind: 'italic', children: parseInline(input.slice(i + 1, end), allowed) });
         i = end + 1;
         continue;
       }
@@ -189,9 +221,13 @@ function parseInline(input: string): AskInline[] {
 /**
  * Parse assistant prose into blocks the Ask bubble can render like peer chat UIs.
  */
-export function parseAskProseBlocks(input: string): AskProseBlock[] {
+export function parseAskProseBlocks(input: string, options?: { allowedHrefs?: readonly string[] }): AskProseBlock[] {
   const text = normalizeAskProse(input);
   if (!text) return [];
+  const allowed = new Set<string>(
+    options?.allowedHrefs?.map((href) => href.trim()).filter(Boolean) ?? [...webResultHrefs(text)],
+  );
+  const inline = (value: string) => parseInline(value, allowed);
 
   const blocks: AskProseBlock[] = [];
   let paragraphLines: string[] = [];
@@ -202,14 +238,14 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
     if (!paragraphLines.length) return;
     const body = paragraphLines.join('\n').trim();
     paragraphLines = [];
-    if (body) blocks.push({ kind: 'paragraph', children: parseInline(body) });
+    if (body) blocks.push({ kind: 'paragraph', children: inline(body) });
   };
   const flushList = () => {
     if (!listItems.length) return;
     blocks.push({
       kind: 'list',
       ordered: listOrdered,
-      items: listItems.map((item) => parseInline(item)),
+      items: listItems.map((item) => inline(item)),
     });
     listItems = [];
     listOrdered = false;
@@ -230,7 +266,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
     if (heading) {
       flushAll();
       const level = (heading[1] ?? '').length >= 3 ? 3 : 2;
-      blocks.push({ kind: 'heading', level, children: parseInline((heading[2] ?? '').trim()) });
+      blocks.push({ kind: 'heading', level, children: inline((heading[2] ?? '').trim()) });
       continue;
     }
     if (/^\s*\|.+\|\s*$/.test(line)) {
@@ -248,7 +284,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
             .replace(/^\|/, '')
             .replace(/\|$/, '')
             .split('|')
-            .map((cell) => parseInline(cell.trim())),
+            .map((cell) => inline(cell.trim())),
         );
       if (parsed.length) {
         blocks.push({ kind: 'table', headers: parsed[0] ?? [], rows: parsed.slice(1) });

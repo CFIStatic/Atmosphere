@@ -1242,17 +1242,41 @@ export async function searchAskWeb(question: string, opts?: AskWebSearchOptions)
   return outcome.hits;
 }
 
+/** Wraps untrusted web prose so the quote verifier can drop it in any surrounding format. */
+export const WEB_EVIDENCE_OPEN = '⟦web-evidence⟧';
+export const WEB_EVIDENCE_CLOSE = '⟦/web-evidence⟧';
+
+export function wrapWebEvidence(text: string): string {
+  const body = trim(text);
+  if (!body) return '';
+  if (body.includes(WEB_EVIDENCE_OPEN)) return body;
+  return `${WEB_EVIDENCE_OPEN}\n${body}\n${WEB_EVIDENCE_CLOSE}`;
+}
+
+/** Pull every tagged web block out of a prompt. What remains is job evidence. */
+export function splitWebEvidenceMarkers(text: string): { record: string; web: string } {
+  const webs: string[] = [];
+  const record = String(text ?? '').replace(/⟦web-evidence⟧[\s\S]*?⟦\/web-evidence⟧/g, (block) => {
+    webs.push(block);
+    return '';
+  });
+  return { record, web: webs.join('\n') };
+}
+
 export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
   if (!hits.length && !trim(answer)) return '';
   const lines = hits
     .map((hit, i) => {
       const title = plainWebText(hit.title) || 'Source';
       const snippet = plainWebText(hit.snippet) || '(no snippet)';
-      return `${i + 1}. ${title}\n   URL: ${hit.url}\n   ${snippet}`;
+      const url = safeHttpResultUrl(hit.url);
+      return url
+        ? `${i + 1}. ${title}\n   URL: ${url}\n   ${snippet}`
+        : `${i + 1}. ${title}\n   ${snippet}`;
     })
     .join('\n');
   const lead = trim(answer) ? `Tavily answer: ${plainWebText(answer)}\n` : '';
-  return `${lead}${lines}`.trim();
+  return wrapWebEvidence(`${lead}${lines}`.trim());
 }
 
 const WEB_SECTION_RE = /(?:^|\n+)(\*\*Web results\*\*[\s\S]*)$/i;
@@ -1302,6 +1326,57 @@ function safeHttpResultUrl(url: string): string {
   const value = trim(url);
   if (!/^https?:\/\/[^\s<>()[\]"'`\\]+$/i.test(value)) return '';
   return value;
+}
+
+/** Prose the model may see. Same stripping as snippets: no links, URLs, or HTML. */
+export function plainWebModelText(text: string): string {
+  return plainWebText(text);
+}
+
+/**
+ * Tool payload for the model. Answer, title, and snippet are plain text.
+ * Only an http(s) result URL is kept, and it is the URL our code may link.
+ */
+export function webSearchModelPayload(data: unknown): { answer: string; results: Array<{ title: string; url: string; snippet: string }> } {
+  const rec = data && typeof data === 'object' ? (data as { answer?: unknown; results?: unknown }) : {};
+  const results = Array.isArray(rec.results) ? rec.results : [];
+  return {
+    answer: plainWebText(typeof rec.answer === 'string' ? rec.answer : ''),
+    results: results.flatMap((row) => {
+      const hit = row && typeof row === 'object' ? (row as { title?: unknown; url?: unknown; snippet?: unknown; content?: unknown }) : {};
+      const url = safeHttpResultUrl(typeof hit.url === 'string' ? hit.url : '');
+      const title = plainWebText(typeof hit.title === 'string' ? hit.title : '');
+      const snippet = plainWebText(typeof (hit.snippet ?? hit.content) === 'string' ? String(hit.snippet ?? hit.content) : '');
+      if (!url && !title && !snippet) return [];
+      return [{ title, url, snippet }];
+    }),
+  };
+}
+
+/** In-app job file paths. These may stay clickable; other origins may not. */
+export function isKnownAskAppLink(url: string): boolean {
+  const value = trim(url);
+  if (/^\/(?:job-progress|jobs)(?:[/?#]|$)/.test(value)) return true;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return /^\/(?:job-progress|jobs)(?:\/|$)/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Markdown links stay clickable only when the URL is one this turn's search
+ * returned, or a job-file path. Every other link becomes its label.
+ */
+export function restrictAskMarkdownLinks(text: string, allowedUrls: readonly string[]): string {
+  const allowed = new Set(allowedUrls.map((url) => trim(url)).filter(Boolean));
+  return String(text ?? '').replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, (full, label: string, url: string) => {
+    const href = trim(url);
+    if (allowed.has(href) || isKnownAskAppLink(href)) return full;
+    return label;
+  });
 }
 
 function plainWebSnippet(snippet: string): string {

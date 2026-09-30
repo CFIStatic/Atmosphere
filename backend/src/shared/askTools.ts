@@ -13,8 +13,11 @@ import {
   includeDomainsForAsk,
   isAskWebSearchConfigured,
   looksLikeExplicitWebSearchRequest,
+  plainWebModelText,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
+  webSearchModelPayload,
+  wrapWebEvidence,
   type AskWebHit,
 } from './askWebSearch.js';
 import type { JobFileAskContext } from './jobFileAsk.js';
@@ -472,7 +475,7 @@ export async function executeAskTool(
           ok: true,
           tool: name,
           summary: outcome.answer
-            ? `Web search answer: ${outcome.answer}`
+            ? `Web search answer: ${plainWebModelText(outcome.answer)}`
             : `Found ${hits.length} web result(s). Job evidence still wins for this job.`,
           data: {
             answer: outcome.answer,
@@ -959,11 +962,14 @@ export function formatAskToolResultsForModel(results: AskToolResult[]): string {
   if (!results.length) return '';
   return results
     .map((r) => {
-      const payload = r.data != null ? `\n${JSON.stringify(r.data, null, 0).slice(0, 3500)}` : '';
+      const modelData = r.tool === 'web_search' ? webSearchModelPayload(r.data) : r.data;
+      const payload = modelData != null ? `\n${JSON.stringify(modelData, null, 0).slice(0, 3500)}` : '';
       const confirm = r.needsConfirmation
         ? `\nNEEDS CONFIRMATION: ${r.needsConfirmation.detail}`
         : '';
-      return `### Tool ${r.tool} (${r.ok ? 'ok' : 'failed'})\n${r.summary}${confirm}${payload}`;
+      const summary = r.tool === 'web_search' ? plainWebModelText(r.summary) : r.summary;
+      const block = `### Tool ${r.tool} (${r.ok ? 'ok' : 'failed'})\n${summary}${confirm}${payload}`;
+      return r.tool === 'web_search' ? wrapWebEvidence(block) : block;
     })
     .join('\n\n');
 }

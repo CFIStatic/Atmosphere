@@ -22,6 +22,7 @@ import {
   composeAskWebAnswer,
   ensureWebResultsSection,
   formatAskWebContext,
+  restrictAskMarkdownLinks,
   includeDomainsForAsk,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
@@ -1746,7 +1747,10 @@ export async function answerFromClip(input: {
       }
     }
   }
-  const shaped = withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text));
+  const shaped = restrictAskMarkdownLinks(
+    withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
+    webHits.map((hit) => hit.url),
+  );
   const answer = webUsable ? ensureWebResultsSection(shaped, webHits) : shaped;
   return { answer, model: completed.model, usage: completed.usage };
 }

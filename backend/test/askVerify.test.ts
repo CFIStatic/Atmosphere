@@ -4,6 +4,8 @@ import { answerFromAskLookup, groundLookupAnswer } from '../src/shared/askReason
 import { askTurnLogFields, createAskTurnClock } from '../src/shared/askTiming.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
 import { buildGroundingIndex, normalizeForMatch, stripUnsupported, verifyAskAnswer } from '../src/shared/askVerify.js';
+import { enforceQuoteGrounding } from '../src/shared/askQuoteGrounding.js';
+import { wrapWebEvidence } from '../src/shared/askWebSearch.js';
 import { toStoredPrivacyRedactions } from '../src/audio/privacyRedactions.js';
 
 const JOB = 'job-1';
@@ -68,6 +70,34 @@ test('a grounded answer passes unchanged', () => {
   assert.deepEqual(result.failures, []);
   assert.equal(result.quotesChecked, 2);
   assert.equal(result.quotesFailed, 0);
+});
+
+test('a web snippet quoted in the answer is not job evidence', () => {
+  const snippet = 'Packers at Lions kick off at 7:15 on Amazon Prime.';
+  const tagged = wrapWebEvidence(
+    `### web_search (ok)\n${snippet}\n${JSON.stringify({
+      answer: snippet,
+      results: [{ title: 'NFL', url: 'https://attacker.example/nfl', snippet }],
+    })}`,
+  );
+  const beside = `${tagged}\n\n### search_transcripts (ok)\nFound a line on the file.`;
+  const grounded = buildGroundingIndex({ catalog, extra: beside, now, question: 'what was said' });
+  assert.equal(grounded.recordNorm.includes(normalizeForMatch(snippet)), false);
+  assert.equal(grounded.recordNorm.includes('found a line on the file'), true);
+  const quoted = `The worker said "${snippet}"`;
+  const result = verifyAskAnswer(quoted, grounded);
+  assert.equal(result.quotesFailed, 1);
+  assert.equal(result.open[0]?.kind, 'quote');
+  const untagged = buildGroundingIndex({
+    catalog,
+    extra: `### web_search (ok)\n${snippet}\n{"snippet":"${snippet}"}`,
+    now,
+    question: 'what was said',
+  });
+  assert.equal(untagged.recordNorm.includes(normalizeForMatch(snippet)), false);
+  const dropped = enforceQuoteGrounding(quoted, { chunks: [], question: 'what was said' });
+  assert.equal(dropped.report.dropped, 1);
+  assert.doesNotMatch(dropped.answer, /Packers at Lions/);
 });
 
 test('a fabricated prose quote is flagged', () => {
