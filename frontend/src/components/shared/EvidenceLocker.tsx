@@ -253,6 +253,14 @@ export function EvidenceLocker({ jobId }: { jobId: string }) {
                     transcriptStatus: item.transcriptStatus,
                     narrationStatus: item.narrationStatus,
                     summaryState: item.summaryState,
+                    hasSummary: item.hasSummary,
+                    noSpeech: item.noSpeech,
+                    uploading: item.uploading,
+                    retrying: item.retrying,
+                    transcriptActive: item.transcriptActive,
+                    analysisActive: item.analysisActive,
+                    narrationActive: item.narrationActive,
+                    summaryActive: item.summaryActive,
                   });
                   return (
                     <tr
