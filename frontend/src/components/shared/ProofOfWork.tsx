@@ -22,6 +22,7 @@ import { SpinnerIcon } from '../icons';
 import { useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { ShowDispute } from '../analysis/ShowDispute';
 import { VerbatimTranscript } from '../analysis/VerbatimTranscript';
+import { SpeakerRenameControl, type ClipSpeaker } from '../analysis/SpeakerRenameControl';
 import { expandMentionTokens } from '../../lib/mentions';
 import { AskProseView } from '../AskProseView';
 import { MentionText } from '../mentions/MentionText';
@@ -448,6 +449,55 @@ function useLibraryClipMeta(jobId: string | undefined, videos: ProofVideoRecord[
   return meta;
 }
 
+function ClipSpeakerList({ jobId, proofId }: { jobId: string; proofId: string }) {
+  const [speakers, setSpeakers] = useState<ClipSpeaker[]>([]);
+  useEffect(() => {
+    const load = (api as { clipSpeakers?: (job: string, proof: string) => Promise<{ speakers: ClipSpeaker[] }> }).clipSpeakers;
+    if (!load) return;
+    void load(jobId, proofId)
+      .then((res) =>
+        setSpeakers(
+          (res.speakers ?? []).map((row) => ({
+            speakerLabel: row.speakerLabel,
+            confirmedName: row.confirmedName,
+            role: row.role,
+            roleStatus: row.roleStatus,
+            quote: row.quote,
+            tSec: row.tSec,
+          })),
+        ),
+      )
+      .catch(() => undefined);
+  }, [jobId, proofId]);
+  if (!speakers.length) return null;
+  return (
+    <div className="space-y-2" data-testid="clip-speakers">
+      {speakers.map((speaker) => (
+        <SpeakerRenameControl
+          key={speaker.speakerLabel}
+          speaker={speaker}
+          onSave={(input) => {
+            const save = (api as { correctClipSpeaker?: (job: string, proof: string, body: typeof input) => Promise<unknown> }).correctClipSpeaker;
+            setSpeakers((rows) =>
+              rows.map((row) =>
+                row.speakerLabel === input.speakerLabel
+                  ? {
+                      ...row,
+                      confirmedName: input.displayName ?? row.confirmedName,
+                      role: input.role ?? row.role,
+                      roleStatus: input.role ? 'corrected' : row.roleStatus,
+                    }
+                  : row,
+              ),
+            );
+            if (save) void save(jobId, proofId, input).catch(() => undefined);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function VideoCatalog({
   jobId,
   videos,
@@ -643,6 +693,7 @@ function VideoCatalog({
                       <HearMicButton jobId={jobId} proofId={video.id} status={video.transcriptStatus} />
                     ) : null}
                   </div>
+                  {jobId ? <ClipSpeakerList jobId={jobId} proofId={video.id} /> : null}
                   {hasTranscript ? (
                     <div className="-mt-1">
                       <VerbatimTranscript

@@ -133,5 +133,7 @@ function sanitizeUnmasked(input: string): string {
     });
   }
   text = text.replace(/\s*\((?:an unidentified speaker|unidentified speaker)\)/gi, '');
+  // A tentative role is a guess. Evidence, quotes, and exports keep Speaker N.
+  text = text.replace(/\s+\((?:likely\s+)?(?:homeowner|subcontractor|crew|adjuster|other)\)/gi, '');
   return articleFix(text);
 }

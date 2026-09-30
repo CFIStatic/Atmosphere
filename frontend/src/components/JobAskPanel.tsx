@@ -25,6 +25,7 @@ import {
 } from '../lib/askSeek';
 import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlock } from '../lib/askProse';
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
+import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
@@ -435,6 +436,7 @@ export function JobAskPanel({
   createThread,
   renameThread,
   onOpenHref,
+  initialVerifications,
 }: {
   jobId: string;
   file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
@@ -447,6 +449,7 @@ export function JobAskPanel({
   renameThread?: (threadId: string, title: string) => Promise<{ thread: AskThread }>;
   /** Open a cited job or video. Present when the panel sits inside the router. */
   onOpenHref?: (href: string) => void;
+  initialVerifications?: SpeakerVerification[];
 }) {
   const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
   const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
@@ -459,6 +462,7 @@ export function JobAskPanel({
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
+  const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -475,6 +479,26 @@ export function JobAskPanel({
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
   }, [activeThreadId]);
+
+  useEffect(() => {
+    if (initialVerifications) return;
+    const load = (api as { speakerVerifications?: (id: string) => Promise<{ verifications: SpeakerVerification[] }> }).speakerVerifications;
+    if (!load) return;
+    void load(jobId)
+      .then((res) => setVerifications(res.verifications ?? []))
+      .catch(() => undefined);
+  }, [jobId, initialVerifications]);
+
+  async function answerVerification(input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string }) {
+    setVerifications((rows) => rows.filter((row) => row.id !== input.id));
+    const answer = (api as { answerSpeakerVerification?: (...args: unknown[]) => Promise<unknown> }).answerSpeakerVerification;
+    if (!answer) return;
+    try {
+      await answer(jobId, input.id, input);
+    } catch {
+      /* the question leaves the thread either way; a refresh brings it back if the save failed */
+    }
+  }
 
   useEffect(() => {
     publishAskHistory({
@@ -852,6 +876,11 @@ export function JobAskPanel({
             : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
         }
       >
+        {verifications[0] ? (
+          <div className="mb-4">
+            <SpeakerVerificationPrompt verification={verifications[0]} onAnswer={(input) => void answerVerification(input)} />
+          </div>
+        ) : null}
         {loading && turns.length === 0 ? (
           <p className="flex items-center gap-2 py-10 text-sm text-ink-500">
             <SpinnerIcon className="animate-spin" width={14} height={14} />

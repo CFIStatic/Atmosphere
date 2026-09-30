@@ -38,6 +38,13 @@ describe('sanitizeSpeakerProse', () => {
     expect(cleaned).toContain('**Bold**');
   });
 
+  it('drops a role guess so evidence prose keeps Speaker N', () => {
+    expect(sanitizeSpeakerProse('Speaker 3 (likely homeowner) said the roof leaks.')).toBe(
+      'Speaker 3 said the roof leaks.',
+    );
+    expect(displaySpeakerLabel('Speaker 3 (likely homeowner)')).toBe('Speaker 3');
+  });
+
   it('does not rewrite quoted speech or a clip title named in the answer', () => {
     const title = 'Person 1 Walks the Seated Man Through the Kitchen';
     const out = sanitizeSpeakerProse(
