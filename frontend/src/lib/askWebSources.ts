@@ -15,7 +15,8 @@ export function safeAskWebSourceUrl(url: string): string {
 
 export function displayAskWebSources(sources: readonly AskWebSource[] | null | undefined): AskWebSource[] {
   const out: AskWebSource[] = [];
-  for (const source of sources ?? []) {
+  const list = Array.isArray(sources) ? sources : [];
+  for (const source of list) {
     const url = safeAskWebSourceUrl(source?.url ?? '');
     if (!url || out.some((row) => row.url === url)) continue;
     out.push({

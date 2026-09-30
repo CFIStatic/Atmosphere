@@ -29,7 +29,9 @@ import {
   askClockSystemRules,
   askWebCapabilityRules,
   composeAskWebAnswer,
+  composedAnswerIsWebProse,
   ensureWebResultsSection,
+  scrubWebDerivedAskAnswer,
   formatAskWebContext,
   includeDomainsForAsk,
   looksLikePureWebCapabilityAsk,
@@ -542,17 +544,33 @@ export function assembleMentionModelPrompt(input: {
   return { system, user };
 }
 
-function applyWebResults(answer: string, question: string, hits: AskWebHit[], webAnswer: string): string {
+function webFallbackAnswer(input: {
+  question: string;
+  jobAnswer?: string | null;
+  webAnswer?: string | null;
+  hits: AskWebHit[];
+}): { answer: string; webDerived: boolean } {
+  const answer = composeAskWebAnswer(input);
+  const webDerived = composedAnswerIsWebProse(input);
+  return { answer: webDerived ? scrubWebDerivedAskAnswer(answer) : answer, webDerived };
+}
+
+function applyWebResults(
+  answer: string,
+  question: string,
+  hits: AskWebHit[],
+  webAnswer: string,
+): { answer: string; webDerived: boolean } {
   const stripped = ensureWebResultsSection(answer);
-  if (!hits.length && !trim(webAnswer)) return stripped;
+  if (!hits.length && !trim(webAnswer)) return { answer: stripped, webDerived: false };
   const refused =
     /does not have that|not on (this )?file|cannot search|can't search|unable to search|do not have (web|internet) access|aren'?t connected/i.test(
       answer,
     );
   if (!asksAboutJobFile(question) && (refused || !trim(stripped))) {
-    return composeAskWebAnswer({ question, jobAnswer: '', webAnswer, hits });
+    return webFallbackAnswer({ question, jobAnswer: '', webAnswer, hits });
   }
-  return stripped;
+  return { answer: stripped, webDerived: false };
 }
 
 export async function answerFromJobFile(input: {
@@ -592,6 +610,8 @@ export async function answerFromJobFile(input: {
   toolResults: AskToolResult[];
   /** True when the reply came from the lookup tools, including a failed-model grounding. */
   answeredFromLookup?: boolean;
+  /** The stored prose is web text. Marker parsing must not treat it as a model answer. */
+  webDerivedAnswer?: boolean;
 }> {
   const emit = (text: string) => {
     if (text) input.timing?.markFirstToken();
@@ -710,16 +730,17 @@ export async function answerFromJobFile(input: {
       const jobAnswer = toolOnly.length && asksAboutJobFile(input.question)
         ? toolOnly.map((r) => r.summary).join(' ')
         : grounded;
-      let answer = composeAskWebAnswer({
+      const fallback = webFallbackAnswer({
         question: input.question,
         jobAnswer,
         webAnswer,
         hits: webHits,
       });
+      let answer = fallback.answer;
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits };
+      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
     }
     if (toolOnly.length) {
       const prose =
@@ -794,7 +815,8 @@ export async function answerFromJobFile(input: {
     let answer = normalizeAskProse(looked.answer);
     // Final check before render: every quote is a retrieved transcript line.
     answer = enforceQuoteGrounding(answer, { chunks: looked.retrievedChunks, question: input.question }).answer;
-    answer = applyWebResults(answer, input.question, webHits, webAnswer);
+    const applied = applyWebResults(answer, input.question, webHits, webAnswer);
+    answer = applied.answer;
     const actions = formatActionsTrailer(toolResults);
     if (actions && !/⟦actions:/i.test(answer)) {
       answer = `${answer.trimEnd()}\n\n${actions}`;
@@ -807,6 +829,7 @@ export async function answerFromJobFile(input: {
       webHits,
       toolResults,
       answeredFromLookup: true,
+      webDerivedAnswer: applied.webDerived,
     };
   }
 
@@ -845,16 +868,17 @@ export async function answerFromJobFile(input: {
           ? toolOnly.map((r) => r.summary).join(' ')
           : grounded
         : '';
-      let answer = composeAskWebAnswer({
+      const fallback = webFallbackAnswer({
         question: input.question,
         jobAnswer,
         webAnswer,
         hits: webHits,
       });
+      let answer = fallback.answer;
       const trailer = formatActionsTrailer(toolResults);
       if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
       emit(answer);
-      return { ...empty, answer, groundedOn, toolResults, webHits };
+      return { ...empty, answer, groundedOn, toolResults, webHits, webDerivedAnswer: fallback.webDerived };
     }
     const toolOnly = toolResults.filter((r) => r.ok);
     const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : grounded;
@@ -864,7 +888,8 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
   let answer = normalizeAskProse(completed.text);
-  answer = applyWebResults(answer, input.question, webHits, webAnswer);
+  const applied = applyWebResults(answer, input.question, webHits, webAnswer);
+  answer = applied.answer;
   const actions = formatActionsTrailer(toolResults);
   if (actions && !/⟦actions:/i.test(answer)) {
     answer = `${answer.trimEnd()}\n\n${actions}`;
@@ -876,5 +901,6 @@ export async function answerFromJobFile(input: {
     usage: completed.usage,
     webHits,
     toolResults,
+    webDerivedAnswer: applied.webDerived,
   };
 }

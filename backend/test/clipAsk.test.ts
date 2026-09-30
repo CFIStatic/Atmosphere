@@ -562,3 +562,42 @@ test('Ask skips verbatim audio from privacy-redacted ranges', () => {
   const answer = groundedAnswerFromClip('What did they say in the bathroom?', record);
   assert.doesNotMatch(answer, /give me a minute/i);
 });
+
+test('clip Ask returns webSources for the shared Web results list', async () => {
+  const prev = {
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+    ASK_WEB_SEARCH_PROVIDER: process.env.ASK_WEB_SEARCH_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+  };
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  try {
+    const result = await answerFromClip({
+      question: 'search the web for plywood prices',
+      record: cedarAfter,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            answer: 'Plywood is about $40 a sheet.',
+            results: [{ title: 'Plywood', url: 'https://example.com/plywood', content: 'About $40 a sheet.' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+    assert.equal(result.webSources.length, 1);
+    assert.equal(result.webSources[0]?.url, 'https://example.com/plywood');
+    assert.equal(result.webSources[0]?.title, 'Plywood');
+    assert.match(result.answer, /\$40/);
+    assert.equal(result.webDerivedAnswer, true);
+  } finally {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

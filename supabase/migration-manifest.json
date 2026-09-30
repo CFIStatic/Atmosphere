@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 172,
+    "migrationCount": 173,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3603
+    "finalObjects": 3604
   },
   "outOfOrder": [
     {
@@ -186,7 +186,8 @@
     "20260928143000_ask_job_notes_insert_scope.sql",
     "20260928190000_job_proofs_summary_provenance.sql",
     "20260929160000_ask_transcript_chunks.sql",
-    "20260929203000_speaker_identification.sql"
+    "20260929203000_speaker_identification.sql",
+    "20260930180000_ask_web_sources.sql"
   ],
   "migrations": [
     {
@@ -5750,6 +5751,18 @@
         "rls|public.voiceprint_embeddings",
         "rls|public.speaker_identities",
         "rls|public.speaker_role_guesses"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20260930180000_ask_web_sources",
+      "file": "20260930180000_ask_web_sources.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proof_questions.web_sources"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
