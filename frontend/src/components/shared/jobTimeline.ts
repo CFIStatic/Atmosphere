@@ -364,10 +364,19 @@ function clipEvents(source: TimelineSource, out: TimelineEvent[]) {
     });
 
     const processing = clipProcessing({
+      proofState: video.proofState,
       analysisStatus: video.analysisStatus,
       transcriptStatus: video.transcriptStatus,
       narrationStatus: video.narrationStatus,
-      summaryState: video.conversation?.summaryState,
+      summaryState: video.conversation?.summaryState ?? video.summaryState,
+      hasSummary: video.hasSummary,
+      noSpeech: video.noSpeech,
+      uploading: video.uploading,
+      retrying: video.retrying,
+      transcriptActive: video.transcriptActive,
+      analysisActive: video.analysisActive,
+      narrationActive: video.narrationActive,
+      summaryActive: video.summaryActive,
     });
     const reading = processing.state === 'transcribing' || processing.state === 'analyzing';
     if (reading) {
@@ -524,10 +533,19 @@ function emitAnalysedRuns(
     else current.push(row);
   }
   const processing = clipProcessing({
+    proofState: video?.proofState,
     analysisStatus: video?.analysisStatus,
     transcriptStatus: video?.transcriptStatus,
     narrationStatus: video?.narrationStatus,
-    summaryState: video?.conversation?.summaryState,
+    summaryState: video?.conversation?.summaryState ?? video?.summaryState,
+    hasSummary: video?.hasSummary,
+    noSpeech: video?.noSpeech,
+    uploading: video?.uploading,
+    retrying: video?.retrying,
+    transcriptActive: video?.transcriptActive,
+    analysisActive: video?.analysisActive,
+    narrationActive: video?.narrationActive,
+    summaryActive: video?.summaryActive,
   });
   const unfinished =
     processing.label === 'Summary still processing' ||
@@ -689,8 +707,8 @@ function recordEvents(source: TimelineSource, out: TimelineEvent[]) {
     if (created) {
       const line =
         item.state === 'excluded'
-          ? `Marked “${title}” as out of scope`
-          : `Added “${title}” to the scope`;
+          ? `Marked \u201c${title}\u201d as out of scope`
+          : `Added \u201c${title}\u201d to the scope`;
       push(out, {
         id: `scope:${item.id}`,
         at: created,
@@ -708,7 +726,7 @@ function recordEvents(source: TimelineSource, out: TimelineEvent[]) {
         id: `scope:${item.id}:${item.state}`,
         at: decided,
         kind: 'history',
-        sentence: item.state === 'approved' ? `Approved “${title}”` : `Declined “${title}”`,
+        sentence: item.state === 'approved' ? `Approved \u201c${title}\u201d` : `Declined \u201c${title}\u201d`,
         actorName: null,
         actorEmail: null,
         avatarUrl: null,
