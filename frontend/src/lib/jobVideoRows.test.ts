@@ -58,6 +58,67 @@ describe('videoRowStatus', () => {
       'Recorded',
     );
   });
+
+  it('matches the library on finished clips that used to look stuck', () => {
+    expect(
+      videoRowStatus({
+        proofState: 'checked',
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: false,
+        conversation: { summaryState: 'fresh' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'done',
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: true,
+        conversation: { summaryState: 'updating' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'done',
+        transcriptStatus: 'running',
+        transcriptActive: false,
+        narrationStatus: 'done',
+        hasSummary: true,
+        summaryActive: false,
+        conversation: { summaryState: 'none' },
+      }).label,
+    ).toBe('Analyzed');
+    expect(
+      videoRowStatus({
+        analysisStatus: null,
+        transcriptStatus: 'skipped',
+        narrationStatus: null,
+        noSpeech: true,
+        proofState: 'uploaded',
+      }).label,
+    ).toBe('No speech');
+    expect(
+      videoRowStatus({
+        analysisStatus: 'running',
+        transcriptStatus: null,
+        narrationStatus: null,
+        analysisActive: true,
+        retrying: true,
+      }).label,
+    ).toBe('Retrying');
+    expect(
+      videoRowStatus({
+        analysisStatus: null,
+        transcriptStatus: null,
+        narrationStatus: null,
+        uploading: true,
+      }).label,
+    ).toBe('Uploading');
+  });
 });
 
 describe('clipMoments', () => {
