@@ -732,7 +732,7 @@ describe('JobAskPanel', () => {
       role: null,
       quote: "I'm Marco",
     };
-    const roleGuess = {
+    const sameClip = {
       id: 'v-role',
       proofId: 'clip-north',
       question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
@@ -743,24 +743,33 @@ describe('JobAskPanel', () => {
       role: 'homeowner' as const,
       quote: 'The deductible on my house is still open.',
     };
-    answerSpeakerVerification.mockResolvedValue({ verifications: [roleGuess] });
+    const otherClipSameTitle = {
+      id: 'v-other-clip',
+      proofId: 'clip-b',
+      question: 'Is Speaker 3 in North slope walkthrough at 2:10 the crew?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 130,
+      candidateName: null,
+      role: 'crew' as const,
+      quote: 'Meet me at the garage door.',
+    };
+    answerSpeakerVerification.mockResolvedValue({ verifications: [sameClip, otherClipSameTitle] });
     render(
       <JobFileFocusProvider>
-        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[nameGuess, roleGuess]} />
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[nameGuess]} />
       </JobFileFocusProvider>,
     );
     expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
     await user.click(screen.getByTestId('speaker-verify-other'));
-    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'crew');
+    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'adjuster');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('speaker-verification')).not.toBeInTheDocument();
-    });
-    expect(screen.queryByText(/homeowner/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/garage door/)).toBeInTheDocument();
+    expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
     expect(answerSpeakerVerification).toHaveBeenCalledWith(
       'job-1038',
       'v-name',
-      expect.objectContaining({ id: 'v-name', answer: 'other', role: 'crew' }),
+      expect.objectContaining({ id: 'v-name', answer: 'other', role: 'adjuster' }),
     );
   });
 

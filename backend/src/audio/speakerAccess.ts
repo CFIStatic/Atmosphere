@@ -1,8 +1,9 @@
 /**
- * Speaker reads and writes take job and clip ids from the URL. Row level
- * security on speaker_identities only checks that the caller belongs to the
- * row's company, so a member can point their own org at another company's
- * job or clip. These lookups reject that before any read or write.
+ * Speaker routes take job and clip ids from the URL. These lookups reject a
+ * job or clip that is not in the caller's company before any read or write.
+ * When skipDeleted is set, the client must be able to see soft-deleted clips
+ * (the service role). A deleted clip in this company is skipped. A clip in
+ * another company is still a 404.
  */
 
 import { HttpError, notFound } from '../lib/errors.js';
@@ -52,19 +53,40 @@ export async function requireCompanyClip(
   }
 }
 
-/** Every clip a speaker write will touch must sit on this job in this company. */
+/** Clip ids whose rows an answer actually changed. Unchanged clips are not checked. */
+export function changedClipIds<T extends { id: string; proofId: string }>(
+  before: readonly T[],
+  after: readonly T[],
+  unchanged: (prev: T, next: T) => boolean,
+): string[] {
+  const prior = new Map(before.map((row) => [row.id, row]));
+  const ids: string[] = [];
+  for (const row of after) {
+    const prev = prior.get(row.id);
+    if (prev && unchanged(prev, row)) continue;
+    if (row.proofId) ids.push(row.proofId);
+  }
+  return [...new Set(ids)];
+}
+
+/**
+ * Every clip a speaker write will touch must sit on this job in this company.
+ * Soft-deleted clips are skipped when skipDeleted is set, so an answer that
+ * also touches a hidden clip does not fail with clip_missing.
+ */
 export async function requireCompanyClips(
   supabase: UserDb,
   orgId: string,
   jobId: string,
   proofIds: string[],
+  options?: { skipDeleted?: boolean },
 ): Promise<void> {
   await requireCompanyJob(supabase, orgId, jobId);
   const ids = [...new Set(proofIds.filter(Boolean))];
   if (!ids.length) return;
   const { data, error } = await supabase
     .from('job_proofs')
-    .select('id, org_id, job_id')
+    .select('id, org_id, job_id, deleted_at')
     .eq('org_id', orgId)
     .in('id', ids);
   if (error) throw new HttpError(500, error.message, 'clip_load_failed');
@@ -74,5 +96,9 @@ export async function requireCompanyClips(
     if (!row || !sameId(row.org_id, orgId) || !sameId(row.job_id, jobId)) {
       throw notFound('Clip not found.', 'clip_missing');
     }
+    const deleted = row.deleted_at != null && String(row.deleted_at) !== '';
+    if (!deleted) continue;
+    if (options?.skipDeleted) continue;
+    throw notFound('Clip not found.', 'clip_missing');
   }
 }

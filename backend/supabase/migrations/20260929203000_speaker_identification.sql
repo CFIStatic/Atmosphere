@@ -142,8 +142,39 @@ as $$
     );
 $$;
 
-revoke all on function public.voiceprints_matchable(uuid) from public, anon, authenticated;
+-- Embeddings. Callable by the service role only. anon and authenticated have no execute.
+revoke all on function public.voiceprints_matchable(uuid) from public;
+revoke all on function public.voiceprints_matchable(uuid) from anon;
+revoke all on function public.voiceprints_matchable(uuid) from authenticated;
 grant execute on function public.voiceprints_matchable(uuid) to service_role;
+
+-- True when this job and this clip belong to this company, including a clip
+-- that has been soft-deleted. security definer so the check does not depend on
+-- whether the caller can still see that clip. The caller must belong to the company.
+create or replace function private.speaker_job_clip_owned(p_org uuid, p_job uuid, p_proof uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select private.is_org_member(p_org)
+    and exists (
+      select 1
+      from public.crm_jobs j
+      join public.job_proofs p
+        on p.id = p_proof
+       and p.job_id = j.id
+       and p.org_id = j.org_id
+      where j.id = p_job
+        and j.org_id = p_org
+    );
+$$;
+
+revoke all on function private.speaker_job_clip_owned(uuid, uuid, uuid) from public;
+revoke all on function private.speaker_job_clip_owned(uuid, uuid, uuid) from anon;
+grant execute on function private.speaker_job_clip_owned(uuid, uuid, uuid) to authenticated;
+grant execute on function private.speaker_job_clip_owned(uuid, uuid, uuid) to service_role;
 
 alter table public.voiceprints enable row level security;
 alter table public.voiceprint_embeddings enable row level security;
@@ -152,26 +183,19 @@ alter table public.voice_enrollment_requests enable row level security;
 alter table public.speaker_identities enable row level security;
 alter table public.speaker_role_guesses enable row level security;
 
+-- The office does not write these tables from the browser. Reads stay on the
+-- caller's JWT. Inserts, updates, and deletes are service_role only, after the
+-- API has checked the caller. A membership check alone is not enough: a member
+-- could otherwise point their company at another company's job or clip.
+
 drop policy if exists voiceprints_select on public.voiceprints;
 create policy voiceprints_select on public.voiceprints
   for select to authenticated
   using (private.is_org_member(org_id));
 
 drop policy if exists voiceprints_insert on public.voiceprints;
-create policy voiceprints_insert on public.voiceprints
-  for insert to authenticated
-  with check (user_id = auth.uid() and private.is_org_member(org_id));
-
 drop policy if exists voiceprints_update on public.voiceprints;
-create policy voiceprints_update on public.voiceprints
-  for update to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid() and private.is_org_member(org_id));
-
 drop policy if exists voiceprints_delete on public.voiceprints;
-create policy voiceprints_delete on public.voiceprints
-  for delete to authenticated
-  using (user_id = auth.uid());
 
 drop policy if exists voiceprint_embeddings_select on public.voiceprint_embeddings;
 create policy voiceprint_embeddings_select on public.voiceprint_embeddings
@@ -185,44 +209,8 @@ create policy voiceprint_embeddings_select on public.voiceprint_embeddings
   );
 
 drop policy if exists voiceprint_embeddings_insert on public.voiceprint_embeddings;
-create policy voiceprint_embeddings_insert on public.voiceprint_embeddings
-  for insert to authenticated
-  with check (
-    exists (
-      select 1 from public.voiceprints v
-      where v.id = voiceprint_embeddings.voiceprint_id
-        and v.user_id = auth.uid()
-    )
-  );
-
 drop policy if exists voiceprint_embeddings_update on public.voiceprint_embeddings;
-create policy voiceprint_embeddings_update on public.voiceprint_embeddings
-  for update to authenticated
-  using (
-    exists (
-      select 1 from public.voiceprints v
-      where v.id = voiceprint_embeddings.voiceprint_id
-        and v.user_id = auth.uid()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.voiceprints v
-      where v.id = voiceprint_embeddings.voiceprint_id
-        and v.user_id = auth.uid()
-    )
-  );
-
 drop policy if exists voiceprint_embeddings_delete on public.voiceprint_embeddings;
-create policy voiceprint_embeddings_delete on public.voiceprint_embeddings
-  for delete to authenticated
-  using (
-    exists (
-      select 1 from public.voiceprints v
-      where v.id = voiceprint_embeddings.voiceprint_id
-        and v.user_id = auth.uid()
-    )
-  );
 
 drop policy if exists voice_consent_events_select on public.voice_consent_events;
 create policy voice_consent_events_select on public.voice_consent_events
@@ -230,9 +218,8 @@ create policy voice_consent_events_select on public.voice_consent_events
   using (private.is_org_member(org_id));
 
 drop policy if exists voice_consent_events_insert on public.voice_consent_events;
-create policy voice_consent_events_insert on public.voice_consent_events
-  for insert to authenticated
-  with check (user_id = auth.uid() and private.is_org_member(org_id));
+drop policy if exists voice_consent_events_update on public.voice_consent_events;
+drop policy if exists voice_consent_events_delete on public.voice_consent_events;
 
 drop policy if exists voice_enrollment_requests_select on public.voice_enrollment_requests;
 create policy voice_enrollment_requests_select on public.voice_enrollment_requests
@@ -240,85 +227,52 @@ create policy voice_enrollment_requests_select on public.voice_enrollment_reques
   using (private.is_org_member(org_id));
 
 drop policy if exists voice_enrollment_requests_insert on public.voice_enrollment_requests;
-create policy voice_enrollment_requests_insert on public.voice_enrollment_requests
-  for insert to authenticated
-  with check (
-    requester_user_id = auth.uid()
-    and requester_user_id <> subject_user_id
-    and private.is_org_member(org_id)
-    and exists (
-      select 1 from public.org_members m
-      where m.org_id = voice_enrollment_requests.org_id
-        and m.user_id = voice_enrollment_requests.subject_user_id
-    )
-  );
-
--- Only the subject can confirm or decline, and only while the request is pending.
--- The requester can cancel. They cannot mark the request confirmed.
 drop policy if exists voice_enrollment_requests_update on public.voice_enrollment_requests;
 drop policy if exists voice_enrollment_requests_subject_update on public.voice_enrollment_requests;
-create policy voice_enrollment_requests_subject_update on public.voice_enrollment_requests
-  for update to authenticated
-  using (subject_user_id = auth.uid() and status = 'pending')
-  with check (
-    subject_user_id = auth.uid()
-    and status in ('confirmed', 'declined')
-    and private.is_org_member(org_id)
-  );
-
 drop policy if exists voice_enrollment_requests_requester_cancel on public.voice_enrollment_requests;
-create policy voice_enrollment_requests_requester_cancel on public.voice_enrollment_requests
-  for update to authenticated
-  using (requester_user_id = auth.uid() and status = 'pending')
-  with check (
-    requester_user_id = auth.uid()
-    and status = 'cancelled'
-    and private.is_org_member(org_id)
-  );
+drop policy if exists voice_enrollment_requests_delete on public.voice_enrollment_requests;
 
 drop policy if exists speaker_identities_select on public.speaker_identities;
 create policy speaker_identities_select on public.speaker_identities
   for select to authenticated
-  using (private.is_org_member(org_id));
+  using (
+    private.is_org_member(org_id)
+    and private.speaker_job_clip_owned(org_id, job_id, proof_id)
+  );
 
 drop policy if exists speaker_identities_insert on public.speaker_identities;
-create policy speaker_identities_insert on public.speaker_identities
-  for insert to authenticated
-  with check (private.is_org_member(org_id));
-
 drop policy if exists speaker_identities_update on public.speaker_identities;
-create policy speaker_identities_update on public.speaker_identities
-  for update to authenticated
-  using (private.is_org_member(org_id))
-  with check (private.is_org_member(org_id));
+drop policy if exists speaker_identities_delete on public.speaker_identities;
 
 drop policy if exists speaker_role_guesses_select on public.speaker_role_guesses;
 create policy speaker_role_guesses_select on public.speaker_role_guesses
   for select to authenticated
-  using (private.is_org_member(org_id));
+  using (
+    private.is_org_member(org_id)
+    and private.speaker_job_clip_owned(org_id, job_id, proof_id)
+  );
 
 drop policy if exists speaker_role_guesses_insert on public.speaker_role_guesses;
-create policy speaker_role_guesses_insert on public.speaker_role_guesses
-  for insert to authenticated
-  with check (private.is_org_member(org_id));
-
 drop policy if exists speaker_role_guesses_update on public.speaker_role_guesses;
-create policy speaker_role_guesses_update on public.speaker_role_guesses
-  for update to authenticated
-  using (private.is_org_member(org_id))
-  with check (private.is_org_member(org_id));
+drop policy if exists speaker_role_guesses_delete on public.speaker_role_guesses;
 
-revoke all on public.voiceprints from anon;
-revoke all on public.voiceprint_embeddings from anon;
-revoke all on public.voice_consent_events from anon;
-revoke all on public.voice_enrollment_requests from anon;
-revoke all on public.speaker_identities from anon;
-revoke all on public.speaker_role_guesses from anon;
+revoke all on public.voiceprints from public, anon, authenticated;
+revoke all on public.voiceprint_embeddings from public, anon, authenticated;
+revoke all on public.voice_consent_events from public, anon, authenticated;
+revoke all on public.voice_enrollment_requests from public, anon, authenticated;
+revoke all on public.speaker_identities from public, anon, authenticated;
+revoke all on public.speaker_role_guesses from public, anon, authenticated;
 
-grant select, insert, update, delete on public.voiceprints to authenticated, service_role;
-grant select, insert, update, delete on public.voiceprint_embeddings to authenticated, service_role;
-grant select, insert on public.voice_consent_events to authenticated;
+grant select on public.voiceprints to authenticated;
+grant select on public.voiceprint_embeddings to authenticated;
+grant select on public.voice_consent_events to authenticated;
+grant select on public.voice_enrollment_requests to authenticated;
+grant select on public.speaker_identities to authenticated;
+grant select on public.speaker_role_guesses to authenticated;
+
+grant select, insert, update, delete on public.voiceprints to service_role;
+grant select, insert, update, delete on public.voiceprint_embeddings to service_role;
 grant select, insert, update, delete on public.voice_consent_events to service_role;
-grant select, insert, update, delete on public.voice_enrollment_requests to authenticated, service_role;
-grant select, insert, update, delete on public.speaker_identities to authenticated, service_role;
-grant select, insert, update, delete on public.speaker_role_guesses to authenticated, service_role;
+grant select, insert, update, delete on public.voice_enrollment_requests to service_role;
+grant select, insert, update, delete on public.speaker_identities to service_role;
+grant select, insert, update, delete on public.speaker_role_guesses to service_role;

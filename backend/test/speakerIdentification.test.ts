@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
 import { linesFromTranscript, pickupSpeakerNames } from '../src/audio/speakerNamePickup.js';
 import { cosineSimilarity, embedPcm, encodePcm16Wav, embedWav, SpeakerEmbeddingError } from '../src/audio/speakerEmbedding.js';
@@ -18,7 +21,7 @@ import { VOICE_CONSENT_TEXT, canConfirmEnrollment, canStoreVoiceprint, consentAc
 import { candidatesFromMatchableRpc, insertIdentityRows, loadMatchableVoiceprints } from '../src/audio/speakerIdentityStore.js';
 import { applyConfirmedNames } from '../src/audio/speakerPlan.js';
 import { speakerMatchWindowStarts, speakerMatchWindows } from '../src/audio/speakerClipApply.js';
-import { requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../src/audio/speakerAccess.js';
+import { changedClipIds, requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../src/audio/speakerAccess.js';
 import { guessRewritten, identityRewritten, rewrittenProofIds } from '../src/routes/speakerIdentity.js';
 import { HttpError } from '../src/lib/errors.js';
 import { resolveRoleAnswer, type RoleGuessRow } from '../src/audio/speakerVerification.js';
@@ -392,7 +395,7 @@ test('a coworker cannot store a voiceprint until they confirm as themselves', ()
   assert.equal(consentAccepted(VOICE_CONSENT_TEXT, false), false);
 });
 
-type CompanyRow = { id: string; org_id: string; job_id?: string };
+type CompanyRow = { id: string; org_id: string; job_id?: string; deleted_at?: string | null };
 
 /** User-scoped lookup. A speaker table access is a write-or-read that must not happen for another company. */
 function companyClient(input: { jobs: CompanyRow[]; proofs: CompanyRow[] }) {
@@ -485,6 +488,7 @@ test('an answer checks only the clips it rewrites, not every speaker row', () =>
   ];
   const rejected = resolveSpeakerAnswer(identities, { id: 'live', answer: 'no' });
   assert.deepEqual(rewrittenProofIds(identities, rejected, identityRewritten), ['clip-live']);
+  assert.deepEqual(changedClipIds(identities, rejected, (prev, next) => !identityRewritten(prev, next)), ['clip-live']);
 
   const guesses: RoleGuessRow[] = [
     {
@@ -517,6 +521,88 @@ test('an answer checks only the clips it rewrites, not every speaker row', () =>
   });
   assert.deepEqual(rewrittenProofIds(guesses, dismissed, guessRewritten), ['clip-live']);
   assert.deepEqual(rewrittenProofIds(guesses, guesses, guessRewritten), []);
+});
+
+test('an answer checks only clips it changes and skips a soft-deleted clip', async () => {
+  const db = companyClient({
+    jobs: [{ id: 'job-a', org_id: 'org-a' }],
+    proofs: [
+      { id: 'clip-live', org_id: 'org-a', job_id: 'job-a', deleted_at: null },
+      { id: 'clip-hidden', org_id: 'org-a', job_id: 'job-a', deleted_at: '2026-09-01T00:00:00Z' },
+      { id: 'clip-other', org_id: 'org-b', job_id: 'job-b', deleted_at: '2026-09-01T00:00:00Z' },
+    ],
+  });
+  const before = [
+    { id: 'keep', proofId: 'clip-live' },
+    { id: 'drop', proofId: 'clip-hidden' },
+  ];
+  const after = [
+    { id: 'keep', proofId: 'clip-live' },
+    { id: 'drop', proofId: 'clip-hidden' },
+  ];
+  assert.deepEqual(
+    changedClipIds(before, after, (prev, next) => prev.proofId === next.proofId),
+    [],
+  );
+  const changed = changedClipIds(
+    before,
+    [{ id: 'keep', proofId: 'clip-live' }, { id: 'drop', proofId: 'clip-hidden' }],
+    (prev, next) => prev.id === 'keep' && next.id === 'keep',
+  );
+  assert.deepEqual(changed, ['clip-hidden']);
+  await assert.rejects(
+    () => requireCompanyClips(db, 'org-a', 'job-a', changed),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
+  );
+  await requireCompanyClips(db, 'org-a', 'job-a', changed, { skipDeleted: true });
+  await requireCompanyClips(db, 'org-a', 'job-a', ['clip-live'], { skipDeleted: true });
+  await assert.rejects(
+    () => requireCompanyClips(db, 'org-a', 'job-a', ['clip-other'], { skipDeleted: true }),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
+  );
+  await assert.rejects(
+    () => requireCompanyClips(db, 'org-a', 'job-a', ['clip-missing'], { skipDeleted: true }),
+    (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
+  );
+  assert.deepEqual(db.speakerTables, []);
+});
+
+test('speaker tables are not writable by the browser and matching is service role only', () => {
+  const name = '20260929203000_speaker_identification.sql';
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const backendSql = fs.readFileSync(path.join(here, '../supabase/migrations', name), 'utf8');
+  const rootSql = fs.readFileSync(path.join(here, '../../supabase/migrations', name), 'utf8');
+  assert.equal(backendSql, rootSql);
+  const tables = [
+    'voiceprints',
+    'voiceprint_embeddings',
+    'voice_consent_events',
+    'voice_enrollment_requests',
+    'speaker_identities',
+    'speaker_role_guesses',
+  ];
+  assert.doesNotMatch(backendSql, /for insert to authenticated/i);
+  assert.doesNotMatch(backendSql, /for update to authenticated/i);
+  assert.doesNotMatch(backendSql, /for delete to authenticated/i);
+  assert.doesNotMatch(backendSql, /for all to authenticated/i);
+  for (const table of tables) {
+    assert.match(backendSql, new RegExp(`grant select on public\\.${table} to authenticated`));
+    assert.match(backendSql, new RegExp(`grant select, insert, update, delete on public\\.${table} to service_role`));
+    assert.match(backendSql, new RegExp(`revoke all on public\\.${table} from public, anon, authenticated`));
+    assert.doesNotMatch(backendSql, new RegExp(`grant select, insert, update, delete on public\\.${table} to authenticated`));
+    assert.match(backendSql, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(backendSql, new RegExp(`create policy ${table}_select on public\\.${table}`));
+  }
+  assert.match(backendSql, /private\.speaker_job_clip_owned\(org_id, job_id, proof_id\)/);
+  assert.match(backendSql, /p\.org_id = j\.org_id/);
+  assert.match(backendSql, /p\.job_id = j\.id/);
+  assert.match(backendSql, /revoke all on function public\.voiceprints_matchable\(uuid\) from public/);
+  assert.match(backendSql, /revoke all on function public\.voiceprints_matchable\(uuid\) from anon/);
+  assert.match(backendSql, /revoke all on function public\.voiceprints_matchable\(uuid\) from authenticated/);
+  assert.match(backendSql, /grant execute on function public\.voiceprints_matchable\(uuid\) to service_role/);
+  assert.doesNotMatch(backendSql, /grant execute on function public\.voiceprints_matchable\(uuid\) to (anon|authenticated|public)/);
+  assert.match(backendSql, /revoke all on function private\.speaker_job_clip_owned\(uuid, uuid, uuid\) from anon/);
+  assert.doesNotMatch(backendSql, /grant execute on function private\.speaker_job_clip_owned\(uuid, uuid, uuid\) to anon/);
 });
 
 test('a role-only correction does not leave the tentative guess pending', () => {

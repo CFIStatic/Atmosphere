@@ -61,6 +61,35 @@ function userClient(req: Request) {
   return createUserClient(req.accessToken!);
 }
 
+/** Writes go through the service role. Authenticated clients have no insert or update grant. */
+function writerOrThrow() {
+  const admin = createAdminClient();
+  if (!admin) throw new HttpError(503, 'Speaker storage is unavailable.', 'speaker_storage_unavailable');
+  return admin;
+}
+
+type Db = ReturnType<typeof userClient>;
+
+function identityUnchanged(prev: SpeakerIdentityRow, next: SpeakerIdentityRow): boolean {
+  return (
+    prev.displayName === next.displayName &&
+    prev.status === next.status &&
+    prev.method === next.method &&
+    prev.confidence === next.confidence &&
+    prev.proofId === next.proofId
+  );
+}
+
+function guessUnchanged(prev: RoleGuessRow, next: RoleGuessRow): boolean {
+  return prev.role === next.role && prev.status === next.status && prev.proofId === next.proofId;
+}
+
+/** Ownership for clips this answer changes. A soft-deleted clip in this company is not clip_missing. */
+async function requireChangedClips(user: Db, orgId: string, jobId: string, proofIds: string[]): Promise<void> {
+  const admin = createAdminClient() ?? user;
+  await requireCompanyClips(admin, orgId, jobId, proofIds, { skipDeleted: true });
+}
+
 function wavBytes(wavBase64: string): Uint8Array {
   const bytes = Buffer.from(wavBase64, 'base64');
   if (bytes.length < 1000 || bytes.length > 800_000) {
@@ -163,8 +192,7 @@ speakerIdentityRouter.post('/voiceprint', async (req, res, next) => {
       throw badRequest('Consent to the voiceprint wording before enrolling.', 'consent_required');
     }
     const sample = embedOrReject(wavBytes(body.wavBase64));
-    const supabase = userClient(req);
-    const saved = await writeVoiceprint(supabase, {
+    const saved = await writeVoiceprint(writerOrThrow(), {
       userId: req.user!.id,
       orgId: req.orgId!,
       consentText: body.consentText.trim(),
@@ -183,8 +211,7 @@ speakerIdentityRouter.post('/voiceprint', async (req, res, next) => {
 speakerIdentityRouter.patch('/voiceprint', async (req, res, next) => {
   try {
     const body = optInSchema.parse(req.body);
-    const supabase = userClient(req);
-    const { data, error } = await supabase
+    const { data, error } = await writerOrThrow()
       .from('voiceprints')
       .update({ cross_company_opt_in: body.crossCompanyOptIn, updated_at: new Date().toISOString() })
       .eq('user_id', req.user!.id)
@@ -203,16 +230,16 @@ speakerIdentityRouter.delete('/voiceprint', async (req, res, next) => {
     const supabase = userClient(req);
     const userId = req.user!.id;
     const { data: existing } = await supabase.from('voiceprints').select('id').eq('user_id', userId).maybeSingle();
-    const { error } = await supabase.from('voiceprints').delete().eq('user_id', userId);
+    const admin = writerOrThrow();
+    const { error } = await admin.from('voiceprints').delete().eq('user_id', userId);
     if (error) throw new HttpError(500, error.message, 'voiceprint_failed');
-    await supabase.from('voice_consent_events').insert({
+    await admin.from('voice_consent_events').insert({
       user_id: userId,
       org_id: req.orgId!,
       action: 'revoked',
       consent_text: null,
     });
-    const admin = createAdminClient();
-    if (admin && existing?.id) {
+    if (existing?.id) {
       await admin
         .from('speaker_identities')
         .update({ status: 'rejected', voiceprint_id: null })
@@ -281,7 +308,7 @@ speakerIdentityRouter.post('/enrollment-requests', async (req, res, next) => {
       .eq('user_id', body.subjectUserId)
       .maybeSingle();
     if (!member) throw notFound('That person is not in this company.', 'not_in_org');
-    const { data, error } = await supabase
+    const { data, error } = await writerOrThrow()
       .from('voice_enrollment_requests')
       .insert({
         org_id: req.orgId!,
@@ -320,7 +347,8 @@ speakerIdentityRouter.post('/enrollment-requests/:id/confirm', async (req, res, 
       throw badRequest('A coworker has to confirm enrollment from their own account.', 'coworker_must_confirm');
     }
     const sample = embedOrReject(wavBytes(body.wavBase64));
-    await writeVoiceprint(supabase, {
+    const admin = writerOrThrow();
+    await writeVoiceprint(admin, {
       userId: req.user!.id,
       orgId: req.orgId!,
       consentText: body.consentText.trim(),
@@ -328,10 +356,12 @@ speakerIdentityRouter.post('/enrollment-requests/:id/confirm', async (req, res, 
       embedding: sample.embedding,
       durationSeconds: sample.durationSeconds,
     });
-    await supabase
+    await admin
       .from('voice_enrollment_requests')
       .update({ status: 'confirmed', resolved_at: new Date().toISOString() })
-      .eq('id', request.id);
+      .eq('id', request.id)
+      .eq('subject_user_id', req.user!.id)
+      .eq('status', 'pending');
     res.json({ request: { id: request.id, status: 'confirmed' } });
   } catch (err) {
     next(err);
@@ -340,8 +370,7 @@ speakerIdentityRouter.post('/enrollment-requests/:id/confirm', async (req, res, 
 
 speakerIdentityRouter.post('/enrollment-requests/:id/decline', async (req, res, next) => {
   try {
-    const supabase = userClient(req);
-    const { data, error } = await supabase
+    const { data, error } = await writerOrThrow()
       .from('voice_enrollment_requests')
       .update({ status: 'declined', resolved_at: new Date().toISOString() })
       .eq('id', req.params.id)
@@ -417,21 +446,17 @@ async function publishConfirmedNames(orgId: string, rows: SpeakerIdentityRow[]) 
 }
 
 export function identityRewritten(prior: SpeakerIdentityRow, next: SpeakerIdentityRow): boolean {
-  return (
-    prior.displayName !== next.displayName ||
-    prior.status !== next.status ||
-    prior.method !== next.method ||
-    prior.confidence !== next.confidence
-  );
+  return !identityUnchanged(prior, next);
 }
 
 export function guessRewritten(prior: RoleGuessRow, next: RoleGuessRow): boolean {
-  return prior.role !== next.role || prior.status !== next.status;
+  return !guessUnchanged(prior, next);
 }
 
 /**
- * Proof ids an answer rewrites. Soft-deleted clips stay on untouched speaker
- * rows, and job_proofs RLS hides them from everyone except the deleter.
+ * Proof ids an answer rewrites. Untouched speaker rows are left alone, including
+ * rows whose clip was soft-deleted. job_proofs RLS hides those clips from
+ * everyone except the deleter, so the ownership check must not load them.
  */
 export function rewrittenProofIds<T extends { proofId: string }>(
   before: readonly T[],
@@ -448,9 +473,9 @@ export function rewrittenProofIds<T extends { proofId: string }>(
   return ids;
 }
 
-async function saveIdentities(supabase: ReturnType<typeof userClient>, rows: SpeakerIdentityRow[]) {
+async function saveIdentities(db: Db, orgId: string, rows: SpeakerIdentityRow[]) {
   for (const row of rows) {
-    const { error } = await supabase
+    const { error } = await db
       .from('speaker_identities')
       .update({
         display_name: row.displayName,
@@ -459,9 +484,18 @@ async function saveIdentities(supabase: ReturnType<typeof userClient>, rows: Spe
         confidence: row.confidence,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', row.id);
+      .eq('id', row.id)
+      .eq('org_id', orgId);
     if (error) throw new HttpError(500, error.message, 'speakers_failed');
   }
+}
+
+function rowsChanged<T extends { id: string }>(before: T[], after: T[], unchanged: (prev: T, next: T) => boolean): T[] {
+  const prior = new Map(before.map((row) => [row.id, row]));
+  return after.filter((row) => {
+    const prev = prior.get(row.id);
+    return !prev || !unchanged(prev, row);
+  });
 }
 
 speakerIdentityRouter.get('/jobs/:jobId/verifications', async (req, res, next) => {
@@ -504,21 +538,35 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
             role: body.role,
           })
         : guesses;
-      await requireCompanyClips(supabase, orgId, jobId, [
+      const identityWrites = rowsChanged(identities, nextRows, identityUnchanged);
+      const guessWrites = roleOnly ? rowsChanged(guesses, nextGuesses, guessUnchanged) : [];
+      await requireChangedClips(supabase, orgId, jobId, [
         ...rewrittenProofIds(identities, nextRows, identityRewritten),
         ...rewrittenProofIds(guesses, nextGuesses, guessRewritten),
+        ...identityWrites.map((row) => row.proofId),
+        ...guessWrites.map((row) => row.proofId),
       ]);
-      if (roleOnly) await saveGuesses(supabase, nextGuesses);
-      await saveIdentities(supabase, nextRows);
+      if (identityWrites.length || guessWrites.length) {
+        const admin = writerOrThrow();
+        if (guessWrites.length) await saveGuesses(admin, orgId, guessWrites);
+        if (identityWrites.length) await saveIdentities(admin, orgId, identityWrites);
+      }
       await publishConfirmedNames(orgId, nextRows);
       res.json({ verifications: pendingQuestions(nextRows, nextGuesses) });
       return;
     }
     const guess = guesses.find((row) => row.id === req.params.id);
     if (!guess) throw notFound('That question is no longer open.', 'verification_missing');
-    await requireCompanyClips(supabase, orgId, jobId, [guess.proofId]);
     if (body.answer === 'other' && body.displayName?.trim()) {
-      const created = await supabase
+      const nextGuesses = resolveRoleAnswer(guesses, {
+        speakerLabel: guess.speakerLabel,
+        proofId: guess.proofId,
+        answer: 'no',
+      });
+      const guessWrites = rowsChanged(guesses, nextGuesses, guessUnchanged);
+      await requireChangedClips(supabase, orgId, jobId, [guess.proofId, ...guessWrites.map((row) => row.proofId)]);
+      const admin = writerOrThrow();
+      const created = await admin
         .from('speaker_identities')
         .insert({
           org_id: orgId,
@@ -537,12 +585,7 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
         .select(IDENTITY_COLUMNS)
         .single();
       if (created.error) throw new HttpError(500, created.error.message, 'speakers_failed');
-      const nextGuesses = resolveRoleAnswer(guesses, {
-        speakerLabel: guess.speakerLabel,
-        proofId: guess.proofId,
-        answer: 'no',
-      });
-      await saveGuesses(supabase, nextGuesses);
+      if (guessWrites.length) await saveGuesses(admin, orgId, guessWrites);
       const named = mapIdentity(created.data as Record<string, unknown>);
       await publishConfirmedNames(orgId, [named]);
       res.json({ verifications: pendingQuestions([...identities, named], nextGuesses) });
@@ -554,19 +597,22 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
       answer: body.answer,
       role: body.role ?? null,
     });
-    await saveGuesses(supabase, nextGuesses);
+    const guessWrites = rowsChanged(guesses, nextGuesses, guessUnchanged);
+    await requireChangedClips(supabase, orgId, jobId, guessWrites.map((row) => row.proofId));
+    if (guessWrites.length) await saveGuesses(writerOrThrow(), orgId, guessWrites);
     res.json({ verifications: pendingQuestions(identities, nextGuesses) });
   } catch (err) {
     next(err);
   }
 });
 
-async function saveGuesses(supabase: ReturnType<typeof userClient>, rows: RoleGuessRow[]) {
+async function saveGuesses(db: Db, orgId: string, rows: RoleGuessRow[]) {
   for (const row of rows) {
-    const { error } = await supabase
+    const { error } = await db
       .from('speaker_role_guesses')
       .update({ role: row.role, status: row.status, updated_at: new Date().toISOString() })
-      .eq('id', row.id);
+      .eq('id', row.id)
+      .eq('org_id', orgId);
     if (error) throw new HttpError(500, error.message, 'speakers_failed');
   }
 }
@@ -626,11 +672,15 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
       );
       if (pending) {
         const nextRows = resolveSpeakerAnswer(identities, { id: pending.id, answer: 'other', displayName: body.displayName });
-        await requireCompanyClips(supabase, orgId, jobId, rewrittenProofIds(identities, nextRows, identityRewritten));
-        await saveIdentities(supabase, nextRows);
+        const identityWrites = rowsChanged(identities, nextRows, identityUnchanged);
+        await requireChangedClips(supabase, orgId, jobId, [
+          ...rewrittenProofIds(identities, nextRows, identityRewritten),
+          ...identityWrites.map((row) => row.proofId),
+        ]);
+        if (identityWrites.length) await saveIdentities(writerOrThrow(), orgId, identityWrites);
         await publishConfirmedNames(orgId, nextRows);
       } else {
-        const { error } = await supabase.from('speaker_identities').insert({
+        const { error } = await writerOrThrow().from('speaker_identities').insert({
           org_id: orgId,
           job_id: jobId,
           proof_id: proofId,
@@ -664,7 +714,7 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
       }
     }
     if (body.role) {
-      const { error } = await supabase.from('speaker_role_guesses').upsert(
+      const { error } = await writerOrThrow().from('speaker_role_guesses').upsert(
         {
           org_id: orgId,
           job_id: jobId,

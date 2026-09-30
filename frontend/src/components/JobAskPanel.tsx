@@ -423,7 +423,7 @@ export type JobAskFn = (
  * Someone else with a role and no name closes the tentative role guess.
  * The server can still return that card. Drop it, and any other role-only
  * card for the same speaker on the same clip, so Ask does not ask again.
- * Titles repeat, so the clip is the proof id.
+ * Titles repeat, so the clip is the proof id. A card with no proof id stays.
  */
 function dropStaleRoleGuess(
   verifications: SpeakerVerification[],
@@ -434,7 +434,7 @@ function dropStaleRoleGuess(
   if (!roleOnly) return verifications;
   return verifications.filter((row) => {
     if (row.id === input.id) return false;
-    if (row.candidateName || !row.role || !answered) return true;
+    if (row.candidateName || !row.role || !answered?.proofId || !row.proofId) return true;
     return row.speakerLabel !== answered.speakerLabel || row.proofId !== answered.proofId;
   });
 }
