@@ -377,31 +377,6 @@ function longDate(ymd: ZonedYmd): string {
   }).format(utc);
 }
 
-function daysInMonth(month: number): number {
-  return [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month] ?? 0;
-}
-
-function plausibleMonthDay(month: number, day: number): boolean {
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(month);
-}
-
-/** A weekday or "on"/"dated" makes 10/8 a date. "3/4 inch" stays a size. */
-function numericDateContext(query: string, index: number, length: number): boolean {
-  const before = query.slice(Math.max(0, index - 32), index);
-  const after = query.slice(index + length, index + length + 24);
-  if (
-    /^(?:\s*["″]|[\s-]*(?:inch(?:es)?|in\.?|ft|foot|feet|mm|cm|plywood|osb|drywall|shingle|board|sheet|lumber|thick|gauge|pitch|tab)\b)/i.test(
-      after,
-    )
-  ) {
-    return false;
-  }
-  return (
-    /\b(?:on|dated|date|due|scheduled)\s*$/i.test(before) ||
-    /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b\s*,?\s*$/i.test(before)
-  );
-}
-
 function weekdayIndex(name: string): number {
   return WEEKDAYS.indexOf(name.toLowerCase() as (typeof WEEKDAYS)[number]);
 }
@@ -446,58 +421,10 @@ Resolve relative days against this clock before you answer or search. "Thursday"
 }
 
 /**
- * Rewrite a search query so "Thursday" / "this Sunday" / "tomorrow" include the
- * calendar date in the user's timezone (America/Chicago by default).
+ * Leave the question text untouched. Relative days are explained in a suffix
+ * ("today is Wednesday, September 30, 2026, America/Chicago"). Numbers in the
+ * question are never read as dates and never rewritten.
  */
-/** A calendar date already written in the query. Bare weekdays, fractions, and ranges are not dates. */
-function hasExplicitCalendarDate(query: string): boolean {
-  if (
-    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b/i.test(
-      query,
-    )
-  ) {
-    return true;
-  }
-  for (const match of query.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-    if (plausibleMonthDay(Number(match[2]), Number(match[3]))) return true;
-  }
-  // M/D/YYYY or M-D-YYYY. A hyphen pair with no year (2-3) is a range.
-  for (const match of query.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/g)) {
-    const yearRaw = match[3] ?? '';
-    const year = Number(yearRaw);
-    const yearOk = yearRaw.length === 4 ? year >= 1900 && year <= 2100 : yearRaw.length === 2;
-    if (yearOk && plausibleMonthDay(Number(match[1]), Number(match[2]))) return true;
-  }
-  // Bare M/D. 3/4 and 5/8 are sizes unless the words around them are a date.
-  for (const match of query.matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)) {
-    const month = Number(match[1]);
-    const day = Number(match[2]);
-    if (!plausibleMonthDay(month, day)) continue;
-    if (day <= 12 && !numericDateContext(query, match.index ?? 0, match[0].length)) continue;
-    return true;
-  }
-  return false;
-}
-
-/**
- * The weekday or relative day is already tied to a calendar date
- * ("Thursday, October 8, 2026", "Thursday night, October 8").
- * A size such as 3/4 does not count.
- */
-function relativeDayAlreadyDated(text: string, index: number, length: number): boolean {
-  const after = text.slice(index + length, index + length + 64);
-  const before = text.slice(Math.max(0, index - 64), index);
-  const afterCore = after.replace(
-    /^\s*(?:(?:,|\(|-|–|—|:)\s*)?(?:(?:on|night|morning|evening|afternoon|game|games)\b\s*,?\s*){0,2}/i,
-    '',
-  );
-  const beforeCore = before.replace(
-    /(?:\s*,?\s*(?:on|night|morning|evening|afternoon|game|games)\b){0,2}\s*(?:(?:,|\)|-|–|—|:)\s*)?$/i,
-    '',
-  );
-  return hasExplicitCalendarDate(afterCore) || hasExplicitCalendarDate(beforeCore);
-}
-
 export function resolveAskSearchQuery(
   query: string,
   now: Date = new Date(),
@@ -505,8 +432,6 @@ export function resolveAskSearchQuery(
 ): string {
   const original = trim(query);
   if (!original) return original;
-  // An explicit date stays as written. Do not append a weekday's next occurrence.
-  if (hasExplicitCalendarDate(original)) return original;
   const zone = trim(timeZone) || ASK_USER_TIME_ZONE;
   let today: ZonedYmd;
   try {
@@ -515,32 +440,37 @@ export function resolveAskSearchQuery(
     return original;
   }
   const notes: string[] = [];
-  const add = (ymd: ZonedYmd) => {
-    const label = longDate(ymd);
-    if (!original.includes(label) && !notes.includes(label)) notes.push(label);
-  };
-
+  const seen = new Set<string>();
   const rel =
     /\b(today|tonight|tomorrow|yesterday)\b|\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
   let match: RegExpExecArray | null;
   while ((match = rel.exec(original)) !== null) {
-    if (relativeDayAlreadyDated(original, match.index, match[0].length)) continue;
+    let phrase = '';
+    let ymd: ZonedYmd;
     if (match[1]) {
-      const word = match[1].toLowerCase();
+      phrase = match[1];
+      const word = phrase.toLowerCase();
       const delta = word === 'tomorrow' ? 1 : word === 'yesterday' ? -1 : 0;
-      add(addCalendarDays(today, delta));
+      ymd = addCalendarDays(today, delta);
+    } else if (match[2] && match[3]) {
+      phrase = `${match[2]} ${match[3]}`;
+      ymd = addCalendarDays(
+        today,
+        daysUntilWeekday(today.weekday, match[3], match[2].toLowerCase() === 'next' ? 'next' : 'this'),
+      );
+    } else if (match[4]) {
+      phrase = match[4];
+      ymd = addCalendarDays(today, daysUntilWeekday(today.weekday, match[4], 'this'));
+    } else {
       continue;
     }
-    if (match[2] && match[3]) {
-      add(addCalendarDays(today, daysUntilWeekday(today.weekday, match[3], match[2].toLowerCase() === 'next' ? 'next' : 'this')));
-      continue;
-    }
-    if (match[4]) {
-      add(addCalendarDays(today, daysUntilWeekday(today.weekday, match[4], 'this')));
-    }
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    notes.push(`${phrase} is ${longDate(ymd)}`);
   }
   if (!notes.length) return original;
-  return `${original} (${notes.join('; ')})`.slice(0, 400);
+  return `${original} (${notes.join('; ')}, ${zone})`;
 }
 
 /** Hostnames the user named, plus any the model passed. Empty when none. */
@@ -1315,9 +1245,13 @@ export async function searchAskWeb(question: string, opts?: AskWebSearchOptions)
 export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
   if (!hits.length && !trim(answer)) return '';
   const lines = hits
-    .map((hit, i) => `${i + 1}. ${hit.title}\n   URL: ${hit.url}\n   ${hit.snippet || '(no snippet)'}`)
+    .map((hit, i) => {
+      const title = plainWebText(hit.title) || 'Source';
+      const snippet = plainWebText(hit.snippet) || '(no snippet)';
+      return `${i + 1}. ${title}\n   URL: ${hit.url}\n   ${snippet}`;
+    })
     .join('\n');
-  const lead = trim(answer) ? `Tavily answer: ${trim(answer).replace(/[“”"]/g, '')}\n` : '';
+  const lead = trim(answer) ? `Tavily answer: ${plainWebText(answer)}\n` : '';
   return `${lead}${lines}`.trim();
 }
 
@@ -1335,19 +1269,58 @@ export function joinWebResultsSection(body: string, section: string): string {
   return [trim(body), trim(section)].filter(Boolean).join('\n\n');
 }
 
+/**
+ * Untrusted web prose. Markdown links and images become their label, bare URLs
+ * and angle-bracket autolinks are removed, and HTML is stripped. The only
+ * clickable links Ask emits are built separately from Tavily result URLs.
+ */
+function plainWebText(text: string, limit?: number): string {
+  let value = String(text ?? '');
+  for (let pass = 0; pass < 4; pass++) {
+    const next = value
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/!\[([^\]]*)\]\[[^\]]*\]/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1');
+    if (next === value) break;
+    value = next;
+  }
+  value = value.replace(/<https?:\/\/[^>\s]*>/gi, '');
+  value = value.replace(/https?:\/\/[^\s<>"'`)\\]+/gi, '');
+  value = value.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>');
+  value = value.replace(/&#0*60;?/gi, '<').replace(/&#0*62;?/gi, '>');
+  value = value.replace(/&#x0*3c;?/gi, '<').replace(/&#x0*3e;?/gi, '>');
+  value = value.replace(/<[^>]*>/g, ' ');
+  value = value.replace(/[<>]/g, '');
+  value = value.replace(/[“”"]/g, '');
+  value = value.replace(/\s+/g, ' ').trim();
+  return limit ? value.slice(0, limit) : value;
+}
+
+/** Result URLs we will turn into a markdown link. Rejects breakout characters. */
+function safeHttpResultUrl(url: string): string {
+  const value = trim(url);
+  if (!/^https?:\/\/[^\s<>()[\]"'`\\]+$/i.test(value)) return '';
+  return value;
+}
+
 function plainWebSnippet(snippet: string): string {
-  return trim(snippet).replace(/[“”"]/g, '').replace(/\s+/g, ' ').slice(0, 280);
+  return plainWebText(snippet, 280);
 }
 
 /** Markdown links in a section kept separate from job evidence. */
 export function formatWebResultsSection(hits: AskWebHit[]): string {
-  if (!hits.length) return '';
-  const lines = hits.slice(0, TAVILY_MAX_RESULTS).map((hit) => {
-    const title = (hit.title || 'Source').replace(/[\[\]]/g, '').trim() || 'Source';
-    const snippet = plainWebSnippet(hit.snippet);
-    const link = `[${title}](${hit.url})`;
-    return snippet ? `- ${link} — ${snippet}` : `- ${link}`;
-  });
+  const lines = hits
+    .map((hit) => ({ hit, url: safeHttpResultUrl(hit.url) }))
+    .filter((row) => row.url)
+    .slice(0, TAVILY_MAX_RESULTS)
+    .map(({ hit, url }) => {
+      const title = plainWebText(hit.title).replace(/[\[\]()]/g, '').trim() || 'Source';
+      const snippet = plainWebSnippet(hit.snippet);
+      const link = `[${title}](${url})`;
+      return snippet ? `- ${link} — ${snippet}` : `- ${link}`;
+    });
+  if (!lines.length) return '';
   return `**Web results**\n${lines.join('\n')}`;
 }
 
@@ -1360,7 +1333,7 @@ export function ensureWebResultsSection(answer: string, hits: AskWebHit[]): stri
 }
 
 function plainWebAnswer(text: string): string {
-  return trim(text).replace(/[“”"]/g, '').replace(/\s+/g, ' ');
+  return plainWebText(text);
 }
 
 /**

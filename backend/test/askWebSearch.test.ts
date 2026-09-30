@@ -8,6 +8,7 @@ import {
   askWebSearchProvider,
   asksAboutJobFile,
   composeAskWebAnswer,
+  formatWebResultsSection,
   filterWebHitsToAllowed,
   formatWebTrailer,
   geminiWebSearchModel,
@@ -494,14 +495,51 @@ test('relative days resolve in America/Chicago and the Tavily query includes tha
   assert.match(clock, /Thursday/);
   assert.match(clock, /this Sunday/);
 
-  assert.match(resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago'), /Thursday, October 1, 2026/);
-  assert.match(resolveAskSearchQuery('what is on this Sunday?', ASK_NOW, 'America/Chicago'), /Sunday, October 4, 2026/);
-  assert.match(resolveAskSearchQuery('games tomorrow', ASK_NOW, 'America/Chicago'), /Thursday, October 1, 2026/);
-  assert.match(resolveAskSearchQuery('next Wednesday night', ASK_NOW, 'America/Chicago'), /Wednesday, October 7, 2026/);
   assert.equal(
-    resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago').includes('Thursday, October 1, 2026'),
-    true,
+    resolveAskSearchQuery('3/4 plywood price today', ASK_NOW, 'America/Chicago'),
+    '3/4 plywood price today (today is Wednesday, September 30, 2026, America/Chicago)',
   );
+  assert.equal(
+    resolveAskSearchQuery('7/16 OSB tomorrow', ASK_NOW, 'America/Chicago'),
+    '7/16 OSB tomorrow (tomorrow is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('10/8 today', ASK_NOW, 'America/Chicago'),
+    '10/8 today (today is Wednesday, September 30, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('what NFL game is Thursday', ASK_NOW, 'America/Chicago'),
+    'what NFL game is Thursday (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago'),
+    'what NFL game is Thursday? (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('what is on this Sunday?', ASK_NOW, 'America/Chicago'),
+    'what is on this Sunday? (this Sunday is Sunday, October 4, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('games tomorrow', ASK_NOW, 'America/Chicago'),
+    'games tomorrow (tomorrow is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('next Wednesday night', ASK_NOW, 'America/Chicago'),
+    'next Wednesday night (next Wednesday is Wednesday, October 7, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('games tonight', ASK_NOW, 'America/Chicago'),
+    'games tonight (tonight is Wednesday, September 30, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('score yesterday', ASK_NOW, 'America/Chicago'),
+    'score yesterday (yesterday is Tuesday, September 29, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('games today and Thursday', ASK_NOW, 'America/Chicago'),
+    'games today and Thursday (today is Wednesday, September 30, 2026; Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(resolveAskSearchQuery('IRC R905 underlayment', ASK_NOW, 'America/Chicago'), 'IRC R905 underlayment');
 
   await withEnv(TAVILY_ON, async () => {
     let query = '';
@@ -525,8 +563,10 @@ test('relative days resolve in America/Chicago and the Tavily query includes tha
         );
       },
     });
-    assert.match(query, /October 1, 2026/);
-    assert.match(query, /what NFL game is Thursday/i);
+    assert.equal(
+      query,
+      'what NFL game is Thursday? (Thursday is Thursday, October 1, 2026, America/Chicago)',
+    );
     assert.equal(hits[0]?.url, 'https://example.com/nfl-thursday');
   });
 });
@@ -802,47 +842,46 @@ test('shared words do not hide a public question from web search', async () => {
   });
 });
 
-test('an explicit date is not rewritten into a conflicting weekday date', async () => {
+test('relative days are explained in a suffix and the question text is never rewritten', async () => {
   const dated = 'NFL game Thursday, October 8, 2026';
-  assert.equal(resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'), dated);
-  assert.doesNotMatch(resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'), /October 1, 2026/);
+  assert.equal(
+    resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'),
+    'NFL game Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
   assert.equal(
     resolveAskSearchQuery('games today October 8, 2026', ASK_NOW, 'America/Chicago'),
-    'games today October 8, 2026',
+    'games today October 8, 2026 (today is Wednesday, September 30, 2026, America/Chicago)',
   );
-  assert.match(
-    resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago'),
-    /October 1, 2026/,
-  );
-  assert.match(
+  assert.equal(
     resolveAskSearchQuery('2-3 tab shingles Thursday', ASK_NOW, 'America/Chicago'),
-    /Thursday, October 1, 2026/,
+    '2-3 tab shingles Thursday (Thursday is Thursday, October 1, 2026, America/Chicago)',
   );
-  assert.match(
+  assert.equal(
     resolveAskSearchQuery('3/4 inch plywood today', ASK_NOW, 'America/Chicago'),
-    /Wednesday, September 30, 2026/,
+    '3/4 inch plywood today (today is Wednesday, September 30, 2026, America/Chicago)',
   );
-  assert.match(
+  assert.equal(
     resolveAskSearchQuery('5/8 drywall tomorrow', ASK_NOW, 'America/Chicago'),
-    /Thursday, October 1, 2026/,
+    '5/8 drywall tomorrow (tomorrow is Thursday, October 1, 2026, America/Chicago)',
   );
   assert.equal(
     resolveAskSearchQuery('NFL game Thursday 10/8/2026', ASK_NOW, 'America/Chicago'),
-    'NFL game Thursday 10/8/2026',
+    'NFL game Thursday 10/8/2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
   );
   assert.equal(
     resolveAskSearchQuery('change order today 10/19', ASK_NOW, 'America/Chicago'),
-    'change order today 10/19',
+    'change order today 10/19 (today is Wednesday, September 30, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('5/8 OSB Thursday, October 8, 2026', ASK_NOW, 'America/Chicago'),
+    '5/8 OSB Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
   );
   for (const question of [
     '3/4 inch plywood on October 8, 2026',
-    '5/8 OSB Thursday, October 8, 2026',
     '2-3 bundles due 10/8/2026',
     '3/4 inch plywood on 2026-10-08',
   ]) {
     assert.equal(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), question, question);
-    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /September 30, 2026/);
-    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /October 1, 2026/);
   }
 
   await withEnv(TAVILY_ON, async () => {
@@ -858,8 +897,10 @@ test('an explicit date is not rewritten into a conflicting weekday date', async 
         });
       },
     });
-    assert.equal(query, dated);
-    assert.doesNotMatch(query, /October 1, 2026/);
+    assert.equal(
+      query,
+      'NFL game Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+    );
   });
 });
 
@@ -964,4 +1005,62 @@ test('Tavily answer with no result links is kept and no links are invented', asy
     assert.doesNotMatch(composed, /\*\*Web results\*\*/);
     assert.doesNotMatch(composed, /https?:\/\//);
   });
+});
+
+test('poisoned Tavily answer and snippet text cannot add a clickable link', () => {
+  const poisoned =
+    'See [evil](https://attacker.example/phish) and https://bare.example and <https://auto.example> <a href="https://html.example">click</a> ![img](https://img.example/x.png)';
+  const section = formatWebResultsSection([
+    {
+      title: 'NFL [schedule](https://attacker.example)',
+      url: 'https://example.com/nfl',
+      snippet: poisoned,
+    },
+    {
+      title: 'script',
+      url: 'javascript:alert(1)',
+      snippet: 'nope [click](https://attacker.example)',
+    },
+  ]);
+  const sectionLinks = section.match(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g) ?? [];
+  assert.deepEqual(sectionLinks, ['[NFL schedule](https://example.com/nfl)']);
+  assert.match(section, /See evil/);
+  assert.match(section, /\bclick\b/);
+  assert.doesNotMatch(section, /attacker\.example|bare\.example|auto\.example|html\.example|img\.example|javascript:/i);
+  assert.doesNotMatch(section, /<a\b|<\/?[a-z]/i);
+
+  const composed = composeAskWebAnswer({
+    question: 'what NFL game is Thursday',
+    webAnswer:
+      'Packers [play](https://attacker.example) <https://auto.example> <b>tonight</b> &lt;a href="https://html.example"&gt;here&lt;/a&gt;',
+    hits: [
+      {
+        title: 'NFL schedule',
+        url: 'https://example.com/nfl',
+        snippet: poisoned,
+      },
+    ],
+  });
+  const composedLinks = composed.match(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g) ?? [];
+  assert.deepEqual(composedLinks, ['[NFL schedule](https://example.com/nfl)']);
+  assert.match(composed, /Packers play tonight here/);
+  assert.doesNotMatch(composed, /attacker\.example|auto\.example|bare\.example|html\.example|img\.example/);
+  assert.doesNotMatch(composed, /<b\b|<a\b|&lt;/i);
+
+  const breakout = formatWebResultsSection([
+    {
+      title: 'NFL schedule',
+      url: 'https://example.com/ok) [phish](https://attacker.example)',
+      snippet: 'score',
+    },
+  ]);
+  assert.equal(breakout, '');
+
+  const answerOnly = composeAskWebAnswer({
+    question: 'what NFL game is Thursday',
+    webAnswer: 'Packers [play](https://attacker.example) https://bare.example',
+    hits: [],
+  });
+  assert.equal(answerOnly, 'Packers play');
+  assert.doesNotMatch(answerOnly, /https?:\/\/|\[[^\]]+\]\(/);
 });
