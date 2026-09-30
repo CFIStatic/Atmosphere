@@ -3327,6 +3327,125 @@ export const api = {
 
   removeAvatar: () => request<{ profile: Profile }>('/api/profile/avatar', { method: 'DELETE' }),
 
+  getVoiceEnrollment: () =>
+    request<{
+      consentText: string;
+      voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean; durationSeconds: number | null };
+      pendingRequests: Array<{ id: string; requester_user_id: string; subject_user_id: string; status: string }>;
+    }>('/api/speaker-identity/voiceprint'),
+
+  enrollVoiceprint: (body: { consentText: string; consented: true; wavBase64: string; crossCompanyOptIn?: boolean }) =>
+    request<{ voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean } }>(
+      '/api/speaker-identity/voiceprint',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  setVoiceCrossCompanyOptIn: (crossCompanyOptIn: boolean) =>
+    request<{ voiceprint: { enrolled: boolean; consentedAt: string | null; crossCompanyOptIn: boolean } }>(
+      '/api/speaker-identity/voiceprint',
+      { method: 'PATCH', body: JSON.stringify({ crossCompanyOptIn }) },
+    ),
+
+  revokeVoiceprint: () =>
+    request<{ voiceprint: { enrolled: boolean; consentedAt: null; crossCompanyOptIn: boolean } }>(
+      '/api/speaker-identity/voiceprint',
+      { method: 'DELETE' },
+    ),
+
+  voiceTeam: () =>
+    request<{
+      people: Array<{
+        userId: string;
+        fullName: string | null;
+        email: string | null;
+        consentStatus: 'enrolled' | 'pending' | 'revoked' | 'none';
+        consentedAt: string | null;
+        crossCompanyOptIn: boolean;
+        pendingRequestId: string | null;
+      }>;
+    }>('/api/speaker-identity/team'),
+
+  requestVoiceEnrollment: (subjectUserId: string) =>
+    request<{ request: { id: string; status: string } }>('/api/speaker-identity/enrollment-requests', {
+      method: 'POST',
+      body: JSON.stringify({ subjectUserId }),
+    }),
+
+  confirmVoiceEnrollment: (
+    id: string,
+    body: { consentText: string; consented: true; wavBase64: string; crossCompanyOptIn?: boolean },
+  ) =>
+    request<{ request: { id: string; status: string } }>(`/api/speaker-identity/enrollment-requests/${id}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  declineVoiceEnrollment: (id: string) =>
+    request<{ request: { id: string; status: string } }>(`/api/speaker-identity/enrollment-requests/${id}/decline`, {
+      method: 'POST',
+    }),
+
+  speakerVerifications: (jobId: string) =>
+    request<{
+      verifications: Array<{
+        id: string;
+        proofId: string;
+        question: string;
+        speakerLabel: string;
+        clipTitle: string;
+        tSec: number | null;
+        candidateName: string | null;
+        role: 'homeowner' | 'subcontractor' | 'crew' | 'adjuster' | 'other' | null;
+        quote: string | null;
+      }>;
+    }>(`/api/speaker-identity/jobs/${jobId}/verifications`),
+
+  answerSpeakerVerification: (
+    jobId: string,
+    id: string,
+    body: { answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string },
+  ) =>
+    request<{
+      verifications: Array<{
+        id: string;
+        proofId: string;
+        question: string;
+        speakerLabel: string;
+        clipTitle: string;
+        tSec: number | null;
+        candidateName: string | null;
+        role: 'homeowner' | 'subcontractor' | 'crew' | 'adjuster' | 'other' | null;
+        quote: string | null;
+      }>;
+    }>(`/api/speaker-identity/jobs/${jobId}/verifications/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  clipSpeakers: (jobId: string, proofId: string) =>
+    request<{
+      speakers: Array<{
+        speakerLabel: string;
+        confirmedName: string | null;
+        role: 'homeowner' | 'subcontractor' | 'crew' | 'adjuster' | 'other' | null;
+        roleStatus: 'tentative' | 'confirmed' | 'corrected' | 'dismissed' | null;
+        quote: string | null;
+        tSec: number | null;
+        uiLabel: string;
+        factLabel: string;
+      }>;
+    }>(`/api/speaker-identity/jobs/${jobId}/clips/${proofId}/speakers`),
+
+  correctClipSpeaker: (
+    jobId: string,
+    proofId: string,
+    body: { speakerLabel: string; displayName?: string; role?: string },
+  ) =>
+    request<{ ok: boolean }>(`/api/speaker-identity/jobs/${jobId}/clips/${proofId}/speakers`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   // ---- Organization / onboarding ----
   getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),
 

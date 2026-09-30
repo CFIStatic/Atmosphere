@@ -40,6 +40,8 @@ import {
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { CrmConnectPanel } from './CrmConnectPage';
+import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
+import { TeamVoiceList } from '../components/settings/TeamVoiceList';
 
 type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'support' | 'connect';
 
@@ -59,7 +61,7 @@ function isSectionId(value: string | null): value is SectionId {
 export function SettingsPage() {
   useFeatureTimer('settings');
   const t = useT();
-  const { membership } = useAuth();
+  const { membership, user } = useAuth();
   const showBilling = canManageBilling(membership?.role);
   const ALL_SECTIONS: SettingsSection[] = [
     { id: 'profile', label: t('settings.section.profile'), blurb: t('settings.section.profileBlurb'), icon: UserIcon },
@@ -156,6 +158,7 @@ export function SettingsPage() {
             <>
               <InvitePanel />
               <LinkedAccountsCard />
+              <TeamVoiceList currentUserId={user?.id} />
               <section className="rounded-xl glass-card p-5 sm:p-6" data-testid="settings-playbooks-card">
                 <h2 className="text-base font-semibold text-ink-900">Playbooks</h2>
                 <p className="mt-1 text-sm text-ink-600">
@@ -508,6 +511,8 @@ function ProfileSection() {
           <ErrorText message={error} />
         </div>
       </Card>
+
+      <VoiceEnrollmentCard />
 
       <Card title={t('settings.account.title')} description={t('settings.account.description')}>
         <ReadOnlyRow label={t('settings.account.email')} value={user?.email ?? '—'} />

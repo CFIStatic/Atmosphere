@@ -47,6 +47,9 @@ import { resolveNoOrgDestination } from './lib/postAuth';
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
+const SpeakerIdPreviewPage = import.meta.env.DEV
+  ? lazy(() => import('./pages/SpeakerIdPreviewPage').then((m) => ({ default: m.SpeakerIdPreviewPage })))
+  : null;
 const PlaybooksLibraryPage = lazy(() =>
   import('./pages/PlaybooksLibraryPage').then((m) => ({ default: m.PlaybooksLibraryPage })),
 );
@@ -386,6 +389,16 @@ export default function App() {
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}
+          {import.meta.env.DEV && SpeakerIdPreviewPage ? (
+            <Route
+              path="/dev/speaker-identification"
+              element={
+                <Suspense fallback={null}>
+                  <SpeakerIdPreviewPage />
+                </Suspense>
+              }
+            />
+          ) : null}
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 

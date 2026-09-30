@@ -15,6 +15,7 @@ const askAboutProofs = vi.fn();
 const askAboutProofsStream = vi.fn();
 const askThreads = vi.fn();
 const createAskThread = vi.fn();
+const answerSpeakerVerification = vi.fn();
 
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
@@ -26,6 +27,7 @@ vi.mock('../lib/api', () => ({
     askAboutProofsStream: (...args: unknown[]) => askAboutProofsStream(...args),
     askThreads: (...args: unknown[]) => askThreads(...args),
     createAskThread: (...args: unknown[]) => createAskThread(...args),
+    answerSpeakerVerification: (...args: unknown[]) => answerSpeakerVerification(...args),
   },
 }));
 
@@ -100,6 +102,7 @@ describe('JobAskPanel', () => {
     askAboutProofsStream.mockReset();
     askThreads.mockReset();
     createAskThread.mockReset();
+    answerSpeakerVerification.mockReset();
     askAboutProofsStream.mockRejectedValue(new Error('no stream in unit test'));
     askThreads.mockResolvedValue({
       threads: [{ id: 'thr-1', title: 'New chat', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastMessageAt: null }],
@@ -666,6 +669,161 @@ describe('JobAskPanel', () => {
     expect(screen.queryByText('Was the tarp removed?')).not.toBeInTheDocument();
     expect(screen.queryByTestId('ask-error')).not.toBeInTheDocument();
     expect(screen.getByText('Any do-nots?')).toBeInTheDocument();
+  });
+
+  it('replaces the queue with the server response so a later No still applies', async () => {
+    const user = userEvent.setup();
+    const marco = {
+      id: 'v-marco',
+      proofId: 'clip-north',
+      question: 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
+      speakerLabel: 'Speaker 2',
+      clipTitle: 'North slope walkthrough',
+      tSec: 42,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const priya = {
+      id: 'v-priya',
+      proofId: 'clip-south',
+      question: 'Is Speaker 4 in South wall at 1:10 Priya?',
+      speakerLabel: 'Speaker 4',
+      clipTitle: 'South wall',
+      tSec: 70,
+      candidateName: 'Priya',
+      role: null,
+      quote: 'Priya here',
+    };
+    answerSpeakerVerification
+      .mockResolvedValueOnce({ verifications: [priya] })
+      .mockResolvedValueOnce({ verifications: [] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[marco, priya]} />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-yes'));
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Priya');
+    expect(screen.queryByText(/Marco/)).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('speaker-verify-no'));
+    await waitFor(() => {
+      expect(answerSpeakerVerification).toHaveBeenLastCalledWith('job-1038', 'v-priya', {
+        id: 'v-priya',
+        answer: 'no',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('speaker-verification')).not.toBeInTheDocument();
+    });
+  });
+
+  it('clears a stale tentative role guess after Someone else with only a role', async () => {
+    const user = userEvent.setup();
+    const nameGuess = {
+      id: 'v-name',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 Marco?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const sameClip = {
+      id: 'v-role',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'The deductible on my house is still open.',
+    };
+    const otherClipSameTitle = {
+      id: 'v-other-clip',
+      proofId: 'clip-b',
+      question: 'Is Speaker 3 in North slope walkthrough at 2:10 the crew?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 130,
+      candidateName: null,
+      role: 'crew' as const,
+      quote: 'Meet me at the garage door.',
+    };
+    answerSpeakerVerification.mockResolvedValue({ verifications: [sameClip, otherClipSameTitle] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel jobId="job-1038" file={{ record, proofs }} initialVerifications={[nameGuess]} />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-other'));
+    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'adjuster');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/garage door/)).toBeInTheDocument();
+    expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
+    expect(answerSpeakerVerification).toHaveBeenCalledWith(
+      'job-1038',
+      'v-name',
+      expect.objectContaining({ id: 'v-name', answer: 'other', role: 'adjuster' }),
+    );
+  });
+
+  it('keeps a role question on another clip that shares the title', async () => {
+    const user = userEvent.setup();
+    const nameGuess = {
+      id: 'v-name',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 Marco?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const sameClipRole = {
+      id: 'v-role',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'The deductible on my house is still open.',
+    };
+    const otherClipRole = {
+      id: 'v-role-other',
+      proofId: 'clip-east',
+      question: 'Is Speaker 3 in North slope walkthrough at 2:00 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 120,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'This other roof still needs a look.',
+    };
+    answerSpeakerVerification.mockResolvedValue({ verifications: [sameClipRole, otherClipRole] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel
+          jobId="job-1038"
+          file={{ record, proofs }}
+          initialVerifications={[nameGuess, sameClipRole, otherClipRole]}
+        />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-other'));
+    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'crew');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('at 2:00');
+    expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
   });
 
 });
