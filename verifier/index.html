@@ -1907,6 +1907,11 @@
     border-bottom-left-radius: 4px;
   }
   .ask-bubble.pending { color: var(--muted); font-style: italic; }
+  .ask-web-results { margin-top: 8px; white-space: normal; }
+  .ask-web-results p { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .ask-web-results ul { margin: 0; padding-left: 1.15em; }
+  .ask-web-results li { margin: 2px 0; }
+  .ask-web-results a { color: inherit; font-weight: 650; }
   .ask-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
   .ask-suggest button {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
@@ -7548,15 +7553,49 @@
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
         var remote = body.answer || local;
+        var sources = body && body.webSources;
         if (/does not (show that|include usable speech)/i.test(remote) && local && !/does not (show that|include usable speech)/i.test(local)) {
-          cb(null, local);
+          cb(null, local, sources);
         } else {
-          cb(null, remote);
+          cb(null, remote, sources);
         }
       });
     }).catch(function () {
-      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
+      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.', null);
     });
+  }
+
+  function safeAskWebUrl(url) {
+    var value = String(url || '').trim();
+    if (!/^https?:\/\/[^\s<>()[\]"'`\\]+$/i.test(value)) return '';
+    try {
+      var parsed = new URL(value, window.location.href);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      if (parsed.origin === 'null') return '';
+      return value;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function renderAskWebResults(sources) {
+    var rows = [];
+    var seen = {};
+    var list = sources && sources.length ? sources : [];
+    for (var i = 0; i < list.length && rows.length < 5; i++) {
+      var source = list[i] || {};
+      var url = safeAskWebUrl(source.url);
+      if (!url || seen[url]) continue;
+      seen[url] = true;
+      var title = String(source.title || '').replace(/[<>]/g, '').trim() || 'Source';
+      var snippet = String(source.snippet || '').replace(/[<>]/g, '').trim();
+      rows.push(
+        '<li><a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(title) + '</a>' +
+        (snippet ? ' — ' + esc(snippet) : '') + '</li>'
+      );
+    }
+    if (!rows.length) return '';
+    return '<div class="ask-web-results" data-ask-web-results="1"><p>Web results</p><ul>' + rows.join('') + '</ul></div>';
   }
 
   function mentionName(member) {
@@ -7669,7 +7708,7 @@
     } else {
       thread.forEach(function (m) {
         html += '<div class="ask-bubble ' + esc(m.role) + '">' +
-          (m.role === 'user' ? renderMentionHtml(m.text) : renderAskMarkdown(m.text, [item.customTitle, item.aiTitle, item.title])) + '</div>';
+          (m.role === 'user' ? renderMentionHtml(m.text) : renderAskMarkdown(m.text, [item.customTitle, item.aiTitle, item.title]) + renderAskWebResults(m.webSources)) + '</div>';
       });
     }
     html += '</div>' +
@@ -7707,14 +7746,14 @@
         pending.id = 'ask-pending';
         host.appendChild(pending);
       }
-      askClip(item, q, history, function (_err, answer) {
+      askClip(item, q, history, function (_err, answer, webSources) {
         item._askBusy = false;
         if (submitBtn) submitBtn.disabled = false;
         if (input) {
           input.disabled = false;
           input.focus();
         }
-        thread.push({ role: 'assistant', text: answer });
+        thread.push({ role: 'assistant', text: answer, webSources: webSources || [] });
         ASK_THREADS[item.id] = thread;
         if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
       });

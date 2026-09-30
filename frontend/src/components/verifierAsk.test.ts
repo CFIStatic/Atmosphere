@@ -452,6 +452,99 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
+  it('renders Web results on the clip screen from webSources', async () => {
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/?share=tok',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+        const jsonResponse = (body: unknown, status = 200) =>
+          Promise.resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            json: () => Promise.resolve(body),
+            text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
+          });
+        window.fetch = ((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/evidence/') && url.endsWith('/video')) {
+            return jsonResponse({ url: '', expiresInSeconds: 60 });
+          }
+          if (url.includes('/evidence/') && !url.endsWith('/ask')) {
+            return jsonResponse({
+              item: {
+                id: 'clip-web',
+                workDate: '2026-08-05',
+                analysisState: 'done',
+                analysis: { summary: 'A roof slope.', dictation: 'Looking at the roof.' },
+              },
+            });
+          }
+          if (url.includes('/evidence/') && url.endsWith('/ask')) {
+            return jsonResponse({
+              answer: 'Plywood is about $40 a sheet.',
+              model: null,
+              webSources: [
+                { title: 'Plywood', url: 'https://example.com/plywood', snippet: 'About $40 a sheet.' },
+                { title: 'Bad', url: 'javascript:alert(1)', snippet: 'no' },
+              ],
+            }, 201);
+          }
+          if (url.includes('/api/verifier-share/tok') && !url.includes('/evidence/')) {
+            return jsonResponse({
+              job: { title: 'Shared roof', number: 1, claimNumber: '' },
+              share: { label: 'Alex', expiresAt: null },
+              items: [
+                {
+                  id: 'clip-web',
+                  workDate: '2026-08-05',
+                  uploadedAt: '2026-08-05T12:00:00Z',
+                  durationSeconds: 20,
+                  byteSize: 1000,
+                  phase: 'after',
+                  company: 'Crew',
+                  analysisState: 'done',
+                  analysis: { summary: 'A roof slope.', dictation: 'Looking at the roof.' },
+                },
+              ],
+            });
+          }
+          return jsonResponse({}, 404);
+        }) as typeof window.fetch;
+      },
+    });
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="clip-web"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
+    askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const input = document.getElementById('ask-input') as HTMLTextAreaElement | null;
+    expect(input).not.toBeNull();
+    input!.value = 'search the web for plywood prices';
+    document.getElementById('ask-form')?.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    document.querySelector('[data-tab="ask"]')?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const results = document.querySelector('[data-ask-web-results="1"]');
+    expect(results).not.toBeNull();
+    expect(results?.querySelector('a')?.getAttribute('href')).toBe('https://example.com/plywood');
+    expect(results?.textContent).toContain('About $40 a sheet.');
+    expect(results?.textContent).not.toContain('javascript:');
+    dom.window.close();
+  });
+
   it('exports clip custody as versioned JSON with filmedBy, time, job, device, integrity', () => {
     expect(verifierHtml).toContain("schema: 'atmosphere.clip_custody.v1'");
     expect(verifierHtml).toContain('filmedBy');

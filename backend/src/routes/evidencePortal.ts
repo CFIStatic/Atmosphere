@@ -25,6 +25,7 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
+import { scrubWebDerivedAskAnswer } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { displayMentionText } from '../shared/mentions.js';
 import {
@@ -529,7 +530,7 @@ async function settleClipQuestion(opts: {
   orgMentions?: boolean;
   actorLabel: string;
   actorRole: string;
-}): Promise<{ answer: string; model: string | null }> {
+}): Promise<{ answer: string; model: string | null; webSources: Array<{ title: string; url: string; snippet: string }> }> {
   const record = clipRecordFromEvidenceItem(opts.item);
   const mentionPrep =
     opts.orgMentions && opts.askedBy
@@ -542,16 +543,21 @@ async function settleClipQuestion(opts: {
         }).catch(() => null)
       : null;
   const result = mentionPrep?.directAnswer
-    ? { answer: mentionPrep.directAnswer, model: null, usage: null }
+    ? { answer: mentionPrep.directAnswer, model: null, usage: null, webSources: [], webDerivedAnswer: false }
     : await answerFromClip({
         question: opts.question,
         record,
         history: opts.history,
         supplement: mentionPrep?.supplement,
       });
+  let webDerived = result.webDerivedAnswer;
+  let webSources = result.webSources ?? [];
   if (mentionPrep?.fallbackAnswer && mentionPrep.mentions.length && !mentionPrep.directAnswer && !result.model) {
     result.answer = mentionPrep.fallbackAnswer;
+    webDerived = false;
+    webSources = [];
   }
+  if (webDerived) result.answer = scrubWebDerivedAskAnswer(result.answer);
 
   recordMeasuredTokenUsage(opts.client, {
     orgId: opts.orgId,
@@ -574,6 +580,7 @@ async function settleClipQuestion(opts: {
         answer: result.answer,
         model: result.model,
         grounded_on: opts.item.workDate ? [opts.item.workDate] : [],
+        web_sources: webSources,
         asked_by: opts.askedBy ?? null,
       })
       .select('id')
@@ -602,7 +609,7 @@ async function settleClipQuestion(opts: {
     detail: opts.question.slice(0, 240),
   });
 
-  return result;
+  return { answer: result.answer, model: result.model, webSources };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1011,7 +1018,7 @@ evidencePortalRouter.post(
         actorRole: 'general_contractor',
       });
 
-      res.status(201).json({ answer: result.answer, model: result.model });
+      res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });
     } catch (err) {
       next(err);
     }
@@ -1641,7 +1648,7 @@ evidenceShareRouter.post(
         actorRole: 'external_reviewer',
       });
 
-      res.status(201).json({ answer: result.answer, model: result.model });
+      res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });
     } catch (err) {
       next(err);
     }

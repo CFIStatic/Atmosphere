@@ -395,6 +395,36 @@ describe('JobAskPanel', () => {
     expect(askAboutProofs).not.toHaveBeenCalled();
   });
 
+  it('keeps Web results after the thread is loaded again', async () => {
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-web',
+          question: 'what NFL game is Thursday',
+          answer: 'Packers at Lions.\n\n**Web results**\n- [steal](https://attacker.example/nfl)',
+          model: null,
+          grounded_on: [],
+          web_sources: [{ title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' }],
+          created_at: '2026-09-30T12:00:00Z',
+        },
+      ],
+    });
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const results = await screen.findByTestId('ask-web-results');
+    expect(results.querySelector('a')?.getAttribute('href')).toBe('https://example.com/nfl');
+    expect(results.textContent).toContain('Thursday night game.');
+    const body = screen.getByTestId('ask-answer-body');
+    expect([...body.querySelectorAll('a')].map((node) => node.getAttribute('href'))).not.toContain(
+      'https://attacker.example/nfl',
+    );
+  });
+
   it('renders Web results from webSources and not from answer markdown', async () => {
     askAboutProofsStream.mockResolvedValue({
       answer:

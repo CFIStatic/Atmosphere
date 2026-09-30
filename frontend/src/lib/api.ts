@@ -1267,6 +1267,7 @@ export interface ProofQuestion {
   answer: string | null;
   model?: string | null;
   grounded_on: string[];
+  web_sources?: Array<{ title: string; url: string; snippet: string }> | null;
   created_at: string;
   thread_id?: string | null;
 }
