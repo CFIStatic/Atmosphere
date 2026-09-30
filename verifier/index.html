@@ -7545,10 +7545,17 @@
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/ask'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/ask';
+    var timeZone;
+    try {
+      timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (e) {
+      timeZone = '';
+    }
+    if (!timeZone || timeZone.length > 64) timeZone = undefined;
     apiFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question, history: history || [] })
+      body: JSON.stringify({ question: question, history: history || [], timeZone: timeZone })
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');

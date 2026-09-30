@@ -536,7 +536,8 @@ function looksLikeOutsideKnowledgeSubject(question: string): boolean {
       q,
     ) ||
     /\b(prices?|pricing|cost|costs)\s+(for|of)\s+\w+/i.test(q) ||
-    /\bhow\s+much\s+(does|do|is|are)\b/i.test(q) ||
+    // "how much does tile cost" is a market question. "how much does this job cost" is this file.
+    (/\bhow\s+much\s+(does|do|is|are)\b/i.test(q) && !mentionsThisJobRecord(q)) ||
     /\b(market|retail|wholesale)\s+(price|cost|rate)\b/i.test(q) ||
     /\b(going\s+rate|price\s+check)\b/i.test(q)
   );
@@ -1181,9 +1182,10 @@ export type AskWebSearchOptions = {
 };
 
 /**
- * Public web search for Ask. Tavily when TAVILY_API_KEY is set. Otherwise
- * Gemini Google Search grounding, then DuckDuckGo. A missing Tavily key does
- * not turn search off. ASK_WEB_SEARCH_PROVIDER=off does.
+ * Public web search for Ask. Tavily when TAVILY_API_KEY is set. A Tavily
+ * timeout or HTTP error falls through to Gemini Google Search grounding, then
+ * DuckDuckGo. A missing Tavily key does the same. ASK_WEB_SEARCH_PROVIDER=off
+ * turns search off.
  */
 export async function searchAskWebDetailed(
   question: string,
@@ -1212,7 +1214,6 @@ export async function searchAskWebDetailed(
     } catch (err) {
       const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
       logger.warn('ask_web_search_failed', { searches, detail });
-      return empty;
     }
   }
 

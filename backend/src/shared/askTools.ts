@@ -47,6 +47,10 @@ export type AskToolContext = {
   propertyId?: string | null;
   /** Formatted site address already loaded for this turn. */
   address?: string | null;
+  /** Viewer IANA zone. Relative days in web search use this. */
+  timeZone?: string | null;
+  /** Pins relative dates such as "Thursday" in tests. */
+  now?: Date;
 };
 
 export type AskToolResult = {
@@ -460,6 +464,8 @@ export async function executeAskTool(
           fetchFn: ctx.fetchFn,
           limit: 5,
           includeDomains: domains,
+          now: ctx.now,
+          timeZone: ctx.timeZone || undefined,
         });
         const hits = outcome.hits;
         if (!hits.length && !outcome.answer) {

@@ -590,7 +590,7 @@ test('relative days resolve in America/Chicago and the Tavily query includes tha
   });
 });
 
-test('searchAskWeb soft-fails on Tavily HTTP errors and does not call another provider', async () => {
+test('searchAskWeb soft-fails when Tavily and the fallback providers error', async () => {
   await withEnv(TAVILY_ON, async () => {
     const urls: string[] = [];
     const hits = await searchAskWeb('IRC R905', {
@@ -600,7 +600,8 @@ test('searchAskWeb soft-fails on Tavily HTTP errors and does not call another pr
       },
     });
     assert.deepEqual(hits, []);
-    assert.deepEqual(urls, ['https://api.tavily.com/search']);
+    assert.equal(urls[0], 'https://api.tavily.com/search');
+    assert.equal(urls.some((url) => url.includes('duckduckgo.com')), true);
   });
 });
 
@@ -858,6 +859,20 @@ test('shared words do not hide a public question from web search', async () => {
     assert.doesNotMatch(shared, /\*\*Web results\*\*/);
     assert.doesNotMatch(shared, /https?:\/\//);
     assert.doesNotMatch(shared, /Carrier approved/);
+
+    assert.equal(asksAboutJobFile('how much does this job cost'), true);
+    assert.equal(asksAboutJobFile('how much does the job cost'), true);
+    assert.equal(asksAboutJobFile('how much does tile cost'), false);
+    assert.equal(shouldSupplementWithWebSearch('how much does this job cost', 'brief · Approved cost: $18,400'), false);
+    assert.equal(shouldSupplementWithWebSearch('how much does tile cost', 'brief · Approved cost: $18,400'), true);
+    const jobCost = composeAskWebAnswer({
+      question: 'how much does this job cost',
+      jobAnswer: 'brief · Approved cost: $18,400',
+      webAnswer: 'A typical roof costs $12,000.',
+      hits: [{ title: 'Roof cost', url: 'https://example.com/roof', snippet: 'A typical roof costs $12,000.' }],
+    });
+    assert.match(jobCost, /\$18,400/);
+    assert.doesNotMatch(jobCost, /\$12,000/);
   });
 });
 
@@ -971,6 +986,67 @@ test('a single newline still splits the Web results section', () => {
   assert.match(split.section, /^\*\*Web results\*\*/);
   assert.match(split.section, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
   assert.doesNotMatch(split.body, /Web results/);
+});
+
+test('a Tavily timeout or HTTP error falls through to Gemini, then DuckDuckGo', async () => {
+  await withEnv(
+    {
+      ...TAVILY_ON,
+      GEMINI_API_KEY: 'gemini-test-key',
+    },
+    async () => {
+      const urls: string[] = [];
+      const hits = await searchAskWeb('IRC R905 underlayment', {
+        fetchFn: async (input) => {
+          const url = String(input);
+          urls.push(url);
+          if (url.includes('api.tavily.com')) {
+            return new Response('unavailable', { status: 503 });
+          }
+          return new Response(
+            JSON.stringify({
+              candidates: [
+                {
+                  groundingMetadata: {
+                    groundingChunks: [
+                      { web: { uri: 'https://codes.iccsafe.org/r905', title: 'IRC R905', snippet: 'Asphalt shingles' } },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+      });
+      assert.equal(hits[0]?.url, 'https://codes.iccsafe.org/r905');
+      assert.equal(urls.some((url) => url.includes('api.tavily.com')), true);
+      assert.equal(urls.some((url) => url.includes('generativelanguage.googleapis.com')), true);
+      assert.equal(urls.some((url) => url.includes('duckduckgo.com')), false);
+    },
+  );
+
+  await withEnv(TAVILY_ON, async () => {
+    const urls: string[] = [];
+    const outcome = await searchAskWebDetailed('IRC R905 underlayment', {
+      fetchFn: async (input) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.includes('api.tavily.com')) throw new Error('The operation was aborted due to timeout');
+        if (url.includes('api.duckduckgo.com')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(
+          `<a class="result__a" href="https://codes.iccsafe.org/r905">IRC R905</a><a class="result__snippet" href="#">Asphalt shingles</a>`,
+          { status: 200, headers: { 'Content-Type': 'text/html' } },
+        );
+      },
+    });
+    assert.equal(outcome.hits[0]?.url, 'https://codes.iccsafe.org/r905');
+    assert.equal(outcome.answer, '');
+    assert.equal(urls.some((url) => url.includes('api.tavily.com')), true);
+    assert.equal(urls.some((url) => url.includes('duckduckgo.com')), true);
+  });
 });
 
 test('a missing Tavily key falls back to Gemini grounding, then DuckDuckGo', async () => {

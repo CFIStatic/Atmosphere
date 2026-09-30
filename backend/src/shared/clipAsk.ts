@@ -17,6 +17,7 @@ import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import {
+  ASK_USER_TIME_ZONE,
   askClockSystemRules,
   askWebCapabilityRules,
   composeAskWebAnswer,
@@ -1613,6 +1614,8 @@ export async function answerFromClip(input: {
   supplement?: string | null;
   fetchFn?: typeof fetch;
   now?: Date;
+  /** Viewer IANA zone. Relative days in web search use this. */
+  timeZone?: string | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -1658,13 +1661,14 @@ export async function answerFromClip(input: {
   let webHits: Array<{ title: string; url: string; snippet: string }> = [];
   let webAnswer = '';
   const groundedForWeb = grounded;
+  const zone = String(input.timeZone ?? '').trim() || ASK_USER_TIME_ZONE;
   if (!supplement && shouldSupplementWithWebSearch(input.question, groundedForWeb)) {
     const outcome = await searchAskWebDetailed(input.question, {
       fetchFn: input.fetchFn,
       limit: 5,
       includeDomains: includeDomainsForAsk(input.question),
       now: input.now,
-      timeZone: 'America/Chicago',
+      timeZone: zone,
     });
     webHits = outcome.hits;
     webAnswer = outcome.answer;
@@ -1696,7 +1700,7 @@ export async function answerFromClip(input: {
   const completed = await completeAskText({
     system:
       CLIP_QA_SYSTEM +
-      `\n\n${askClockSystemRules(input.now ?? new Date(), 'America/Chicago')}` +
+      `\n\n${askClockSystemRules(input.now ?? new Date(), zone)}` +
       `\n\n${askWebCapabilityRules()}` +
       (supplement
         ? activitySystemAddendum(supplement) ??

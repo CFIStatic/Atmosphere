@@ -124,6 +124,7 @@ const askBody = z.object({
     )
     .max(20)
     .optional(),
+  timeZone: z.string().trim().min(1).max(64).optional(),
 });
 
 /* ------------------------------------------------------------------ *
@@ -530,6 +531,8 @@ async function settleClipQuestion(opts: {
   orgMentions?: boolean;
   actorLabel: string;
   actorRole: string;
+  /** Viewer IANA zone, when the client sends one. */
+  timeZone?: string | null;
 }): Promise<{ answer: string; model: string | null; webSources: Array<{ title: string; url: string; snippet: string }> }> {
   const record = clipRecordFromEvidenceItem(opts.item);
   const mentionPrep =
@@ -549,6 +552,7 @@ async function settleClipQuestion(opts: {
         record,
         history: opts.history,
         supplement: mentionPrep?.supplement,
+        timeZone: opts.timeZone,
       });
   let webDerived = result.webDerivedAnswer;
   let webSources = result.webSources ?? [];
@@ -1016,6 +1020,7 @@ evidencePortalRouter.post(
         orgMentions: true,
         actorLabel: await actorLabelFor(supabase, userId),
         actorRole: 'general_contractor',
+        timeZone: input.timeZone ?? null,
       });
 
       res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });
@@ -1646,6 +1651,7 @@ evidenceShareRouter.post(
         orgMentions: false,
         actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
+        timeZone: input.timeZone ?? null,
       });
 
       res.status(201).json({ answer: result.answer, model: result.model, webSources: result.webSources });

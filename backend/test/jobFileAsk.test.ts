@@ -141,6 +141,7 @@ test('preferJobFileGroundedFastPath refuses web / capability / price / live topi
   assert.equal(preferJobFileGroundedFastPath('what can you search for', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('tile prices', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('how much does tile cost', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('how much does this job cost', 'brief · Approved cost: $18,400'), true);
   assert.equal(preferJobFileGroundedFastPath('what NFL Games are on today', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath("what's the weather today", briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('latest news headlines', briefHit), false);
@@ -412,6 +413,98 @@ test('no-model web fallback drops control markers from poisoned Tavily text', as
     assert.doesNotMatch(result.answer, /lockbox code|tarp came off|Changed the title/i);
     assert.doesNotMatch(result.webHits[0]?.snippet ?? '', /⟦|⟧/);
     assert.doesNotMatch(result.webHits[0]?.title ?? '', /⟦|⟧/);
+
+    const priced: JobFileAskContext = {
+      ...file,
+      facts: { ...file.facts, 'Approved cost': 'The approved cost is $18,400, much of it for the roof.' },
+    };
+    let searched = false;
+    const jobCost = await answerFromJobFile({
+      question: 'how much does this job cost',
+      file: priced,
+      apiKey: null,
+      toolContext: {
+        orgId: 'org',
+        jobId: 'job',
+        supabase: {},
+        access: 'org',
+        file: priced,
+      },
+      fetchFn: async () => {
+        searched = true;
+        return new Response(
+          JSON.stringify({
+            answer: 'A typical roof costs $12,000.',
+            results: [{ title: 'Roof cost', url: 'https://example.com/roof', content: 'A typical roof costs $12,000.' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    });
+    assert.equal(searched, false, 'on-file cost questions are not sent to the web');
+    assert.match(jobCost.answer, /\$18,400/);
+    assert.doesNotMatch(jobCost.answer, /\$12,000/);
+  } finally {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('heuristic web search uses the viewer timezone, not America/Chicago', async () => {
+  const prev = {
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+    ASK_WEB_SEARCH_PROVIDER: process.env.ASK_WEB_SEARCH_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+  };
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  const now = new Date('2026-09-30T15:00:00.000Z');
+  try {
+    let calls = 0;
+    let query = '';
+    const result = await answerFromJobFile({
+      question: 'games today',
+      file,
+      apiKey: null,
+      now,
+      lookup: {
+        orgId: 'org',
+        jobId: 'job',
+        access: 'org',
+        clips: [],
+        timeZone: 'Asia/Tokyo',
+      },
+      toolContext: {
+        orgId: 'org',
+        jobId: 'job',
+        supabase: {},
+        access: 'org',
+        file,
+      },
+      fetchFn: async (_input, init) => {
+        calls += 1;
+        query = String((JSON.parse(String(init?.body ?? '{}')) as { query?: string }).query ?? '');
+        return new Response(
+          JSON.stringify({
+            answer: 'Thursday in Tokyo.',
+            results: [{ title: 'Schedule', url: 'https://example.com/today', content: 'Thursday.' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    });
+    assert.equal(calls, 1);
+    assert.match(query, /Asia\/Tokyo/);
+    assert.match(query, /October 1, 2026/);
+    assert.doesNotMatch(query, /America\/Chicago/);
+    assert.match(result.answer, /Thursday in Tokyo/);
   } finally {
     for (const [key, value] of Object.entries(prev)) {
       if (value === undefined) delete process.env[key];

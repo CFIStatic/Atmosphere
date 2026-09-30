@@ -638,6 +638,7 @@ export async function answerFromJobFile(input: {
   }
 
   // Run safe tools first so field updates apply before the model writes prose.
+  const zone = input.lookup?.timeZone || 'America/Chicago';
   let toolResults: AskToolResult[] = [];
   let webHits: AskWebHit[] = [];
   if (input.toolContext) {
@@ -665,6 +666,8 @@ export async function answerFromJobFile(input: {
         ...input.toolContext!,
         fetchFn: input.fetchFn ?? input.toolContext!.fetchFn,
         file: input.file,
+        timeZone: zone,
+        now: input.now,
       });
       input.timing?.addTool(name, performance.now() - started);
       return result;
@@ -674,7 +677,6 @@ export async function answerFromJobFile(input: {
     webHits = collectWebHitsFromToolResults(toolResults);
   }
 
-  const zone = input.lookup?.timeZone || 'America/Chicago';
   let webAnswer = toolResults
     .map((result) => {
       const data = result.data;

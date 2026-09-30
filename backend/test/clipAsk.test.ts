@@ -594,6 +594,27 @@ test('clip Ask returns webSources for the shared Web results list', async () => 
     assert.equal(result.webSources[0]?.title, 'Plywood');
     assert.match(result.answer, /\$40/);
     assert.equal(result.webDerivedAnswer, true);
+
+    let query = '';
+    await answerFromClip({
+      question: 'games today',
+      record: cedarAfter,
+      now: new Date('2026-09-30T15:00:00.000Z'),
+      timeZone: 'Asia/Tokyo',
+      fetchFn: async (_input, init) => {
+        query = String((JSON.parse(String(init?.body ?? '{}')) as { query?: string }).query ?? '');
+        return new Response(
+          JSON.stringify({
+            answer: 'Thursday in Tokyo.',
+            results: [{ title: 'Schedule', url: 'https://example.com/today', content: 'Thursday.' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    });
+    assert.match(query, /Asia\/Tokyo/);
+    assert.match(query, /October 1, 2026/);
+    assert.doesNotMatch(query, /America\/Chicago/);
   } finally {
     for (const [key, value] of Object.entries(prev)) {
       if (value === undefined) delete process.env[key];
