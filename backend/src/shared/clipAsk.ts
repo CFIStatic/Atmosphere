@@ -16,6 +16,17 @@ import { answerQualityFailures, normalizeForMatch } from './askVerify.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
+import {
+  askClockSystemRules,
+  askWebCapabilityRules,
+  composeAskWebAnswer,
+  ensureWebResultsSection,
+  formatAskWebContext,
+  includeDomainsForAsk,
+  searchAskWebDetailed,
+  shouldSupplementWithWebSearch,
+  asksAboutJobFile,
+} from './askWebSearch.js';
 import { clipProcessing } from './clipProcessing.js';
 import { type MeasuredUsage } from '../lib/anthropic.js';
 import {
@@ -1595,6 +1606,8 @@ export async function answerFromClip(input: {
   onToken?: (text: string) => void;
   /** Org-scoped dossier for people @mentioned in the question. */
   supplement?: string | null;
+  fetchFn?: typeof fetch;
+  now?: Date;
 }): Promise<{ answer: string; model: string | null; usage: MeasuredUsage | null }> {
   input = { ...input, record: withAuthoritativeTranscript(speechSafeClipRecord(input.record)) };
   const grounded = groundedAnswerFromClip(input.question, input.record);
@@ -1604,22 +1617,23 @@ export async function answerFromClip(input: {
     return { answer: grounded, model: null, usage: null };
   }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
-  if (!supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
+  const wantsWeb = !supplement && shouldSupplementWithWebSearch(input.question, grounded);
+  if (!wantsWeb && !supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
   // Topic/explain talk questions: without a model, serve the grounded transcript.
-  if (!supplement && talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
+  if (!wantsWeb && !supplement && talkQuestion && !isAskModelConfigured() && !/does not (show that|include usable speech)/i.test(grounded)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
-  if (!isAskModelConfigured()) {
+  if (!wantsWeb && !isAskModelConfigured()) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
 
   const reading = formatClipRecordForModel(input.record).trim();
-  if (!reading && !supplement) {
+  if (!wantsWeb && !reading && !supplement) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null };
   }
@@ -1630,9 +1644,41 @@ export async function answerFromClip(input: {
     .map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}: ${turn.text.trim()}`)
     .join('\n');
 
+  let webHits: Array<{ title: string; url: string; snippet: string }> = [];
+  let webAnswer = '';
+  const groundedForWeb = grounded;
+  if (!supplement && shouldSupplementWithWebSearch(input.question, groundedForWeb)) {
+    const outcome = await searchAskWebDetailed(input.question, {
+      fetchFn: input.fetchFn,
+      limit: 5,
+      includeDomains: includeDomainsForAsk(input.question),
+      now: input.now,
+      timeZone: 'America/Chicago',
+    });
+    webHits = outcome.hits;
+    webAnswer = outcome.answer;
+  }
+  if (!isAskModelConfigured() && (webHits.length || webAnswer)) {
+    const answer = composeAskWebAnswer({
+      question: input.question,
+      jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+      webAnswer,
+      hits: webHits,
+    });
+    input.onToken?.(answer);
+    return { answer, model: null, usage: null };
+  }
+
+  const webUsable = webHits.length > 0 || Boolean(webAnswer.trim());
+  const webNote = webUsable
+    ? `\n\nWEB SEARCH RESULTS (public web — this clip's evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
+    : '';
+
   const completed = await completeAskText({
     system:
       CLIP_QA_SYSTEM +
+      `\n\n${askClockSystemRules(input.now ?? new Date(), 'America/Chicago')}` +
+      `\n\n${askWebCapabilityRules()}` +
       (supplement
         ? activitySystemAddendum(supplement) ??
           `\n\nThe question may @mention a coworker. When it does, answer from MENTIONED PEOPLE using their full name. That list is their complete set of clips, not a sample. Cite jobs and videos with ⟦sources: job/<jobId>/<slug>, video/<jobId>/<proofId>/<slug>⟧. If the asked detail is not on file, say so in a natural sentence and list what is on file. Never write [[web:…]].`
@@ -1647,13 +1693,22 @@ export async function answerFromClip(input: {
       `Reading of this clip:\n\n${reading}` +
       (supplement ? `\n\n${supplement}` : '') +
       (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
+      webNote +
       `\n\nQuestion: ${input.question}`,
     mode: 'interactive',
     onToken: input.onToken,
   });
   if (!completed) {
-    input.onToken?.(grounded);
-    return { answer: grounded, model: null, usage: null };
+    const answer = webUsable
+      ? composeAskWebAnswer({
+          question: input.question,
+          jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+          webAnswer,
+          hits: webHits,
+        })
+      : grounded;
+    input.onToken?.(answer);
+    return { answer, model: null, usage: null };
   }
   // If the model wrongly denies on-file speech, keep the grounded transcript answer.
   if (
@@ -1679,7 +1734,7 @@ export async function answerFromClip(input: {
   // itself, skips the number or the time, dumps the whole transcript, or claims
   // work / prices / commitments the reading does not support is replaced by the
   // grounded answer when that one checks out better.
-  if (!supplement) {
+  if (!supplement && !(webUsable && !asksAboutJobFile(input.question))) {
     const evidenceNorm = normalizeForMatch(reading);
     const transcripts = [transcriptLines(input.record.transcript)];
     const modelIssues = answerQualityFailures({ question: input.question, answer: completed.text, transcripts, evidenceNorm });
@@ -1691,6 +1746,16 @@ export async function answerFromClip(input: {
       }
     }
   }
-  const answer = withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text));
+  const shaped = ensureWebResultsSection(
+    withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
+  );
+  const answer = webUsable && !shaped.trim()
+    ? composeAskWebAnswer({
+        question: input.question,
+        jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+        webAnswer,
+        hits: webHits,
+      })
+    : shaped;
   return { answer, model: completed.model, usage: completed.usage };
 }

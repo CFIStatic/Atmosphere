@@ -87,6 +87,39 @@ describe('parseAskProseBlocks', () => {
     expect(split.artifact).toBe('**Homeowner summary**');
   });
 
+  it('keeps only relative job paths as links and ignores a Web results heading', () => {
+    const blocks = parseAskProseBlocks(
+      'See [evil](https://attacker.example) and [the same game](https://example.com/nfl).\n\n**Web results**\n- [NFL schedule](https://example.com/nfl) — Thursday night.\n- [phish](https://attacker.example/phish)\n- [steal](https://evil.example/job-progress?job=steal)\n- [jobs](https://evil.example/jobs/job-1)\n- [proto](//evil.example/jobs/job-1)',
+    );
+    const links = blocks.flatMap((block) => {
+      if (block.kind === 'paragraph' || block.kind === 'heading') return block.children;
+      if (block.kind === 'list') return block.items.flat();
+      return [];
+    });
+    expect(links.some((node) => node.kind === 'link')).toBe(false);
+    expect(links).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'text', text: 'evil' }),
+        expect.objectContaining({ kind: 'text', text: 'NFL schedule' }),
+        expect.objectContaining({ kind: 'text', text: 'phish' }),
+        expect.objectContaining({ kind: 'text', text: 'steal' }),
+      ]),
+    );
+
+    const job = parseAskProseBlocks(
+      'Open [the job](/job-progress?job=job-1) or [clips](/jobs/job-1) or [login](https://attacker.example/login).',
+    );
+    expect(job[0]?.kind).toBe('paragraph');
+    if (job[0]?.kind !== 'paragraph') throw new Error('expected paragraph');
+    expect(job[0].children.filter((node) => node.kind === 'link')).toEqual([
+      expect.objectContaining({ kind: 'link', href: '/job-progress?job=job-1' }),
+      expect.objectContaining({ kind: 'link', href: '/jobs/job-1' }),
+    ]);
+    expect(job[0].children).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'text', text: 'login' })]),
+    );
+  });
+
   it('never renders unmatched stars as literal text', () => {
     const blocks = parseAskProseBlocks('Yes *** I can ** search');
     expect(blocks).toHaveLength(1);

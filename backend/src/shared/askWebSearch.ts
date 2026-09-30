@@ -1,19 +1,21 @@
 /**
- * Ask web search — optional public-web supplement for job-file Ask.
+ * Ask web search — optional public-web supplement for job chat and general Ask.
  *
- * Job evidence (proofs, transcripts, brief, scope, …) always wins. The web is
- * only for outside knowledge: codes, products, manufacturers, standards, and
- * general how-to. Soft-fails when no provider key is configured.
+ * The job file always wins. Questions about the job, its videos, people,
+ * findings, or records are answered from that file. Web search is for anything
+ * the file cannot answer. The model chooses when a search would help. If the
+ * user explicitly asks to search or look something up, the search always runs.
  *
- * Providers: Brave / Serper / Tavily search APIs, or Gemini Google Search
- * grounding via GEMINI_API_KEY (auto-detected when dedicated search keys are
- * absent). Honor ASK_WEB_SEARCH_PROVIDER=gemini|brave|serper|tavily|off.
- * When the configured provider throws or returns no hits, fall back to
- * DuckDuckGo HTML scrape (no extra API key).
+ * The tool calls Tavily (POST https://api.tavily.com/search, Bearer
+ * TAVILY_API_KEY) when that key is set. The key is read only from
+ * TAVILY_API_KEY. When it is missing, Ask falls back to Gemini Google Search
+ * grounding, then DuckDuckGo, so a missing key does not turn search off.
+ * ASK_WEB_SEARCH_PROVIDER=off disables search. Queries are sanitized so
+ * lockbox codes, claim numbers, and street addresses are not sent upstream.
+ * The API key is never logged.
  *
  * Privacy: never reverse-image-search; never identify children; never identify
- * private job-site people from photos/video. Search queries are sanitized so
- * lockbox codes, claim numbers, and street addresses are not sent upstream.
+ * private job-site people from photos/video.
  */
 
 import { logger } from '../lib/logger.js';
@@ -43,36 +45,28 @@ export const ASK_WEB_EMPTY_RESULTS_NOTE = `WEB SEARCH ATTEMPTED (no usable resul
 - Say clearly that no web results were found for this query, then answer only from the job file if anything applies.
 - Never claim you lack a web search tool — the tool ran; it just found nothing useful.`;
 
-export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided below):
-- Use them for outside knowledge: building codes, product/manufacturer specs, standards, general how-to, current events, sports schedules/scores, news, weather, prices, and public product lookups.
-- Job-file evidence always wins over the web. Never invent what happened on this job from a webpage.
+export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided, or you called web_search):
+- The job file wins. Never replace or override a job fact, video, person, finding, or record with a web page. Never invent what happened on this job from the web.
+- Use the web for anything the job file cannot answer. Do not limit yourself to a topic list.
 - Never reverse-image-search, identify children, or identify private job-site people from photos/video.
-- Do not paste raw URLs in the prose. After the human answer, on its OWN line (never mid-sentence / never glued to the last word), append exactly one machine line the UI strips:
-  ⟦web: Title One|https://example.com/a, Title Two|https://example.com/b⟧
-- Never write ASCII [[web: …]] or [web: …] — only the unicode form ⟦web: …⟧.
-- Cite only URLs that appear in WEB SEARCH RESULTS. Skip the web line when you did not use the web, or when the user only asked whether you can search.`;
+- Never put web text in quotation marks and never attribute it to a speaker. Quotation marks are only for an exact transcript substring, followed by the clip name and timestamp.
+- Do not write markdown links, bare URLs, or a Web results heading. The app attaches sources separately from the answer. Never invent a URL.
+- Do not write ⟦web: …⟧, [[web: …]], or [web: …]. Skip web commentary when you did not use the web, or when the user only asked whether you can search.`;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function askWebSearchProvider(): AskWebSearchProvider | null {
+function askWebSearchDisabled(): boolean {
   const forced = trim(process.env.ASK_WEB_SEARCH_PROVIDER).toLowerCase();
-  if (forced === 'off' || forced === 'none' || forced === 'false') return null;
-  if (
-    forced === 'brave' ||
-    forced === 'serper' ||
-    forced === 'tavily' ||
-    forced === 'gemini'
-  ) {
-    return forced;
-  }
-  // Auto-detect: dedicated search keys first, then Gemini Google Search grounding
-  // (GEMINI_API_KEY / usable GOOGLE generative key already on Railway).
-  if (trim(process.env.BRAVE_SEARCH_API_KEY)) return 'brave';
-  if (trim(process.env.SERPER_API_KEY)) return 'serper';
+  return forced === 'off' || forced === 'none' || forced === 'false';
+}
+
+export function askWebSearchProvider(): AskWebSearchProvider | null {
+  if (askWebSearchDisabled()) return null;
+  // Tavily when its own key is set. Otherwise Gemini grounding. DuckDuckGo
+  // needs no key and is not a named provider.
   if (trim(process.env.TAVILY_API_KEY)) return 'tavily';
-  if (trim(process.env.ASK_WEB_SEARCH_API_KEY)) return 'brave';
   if (googleVisionApiKey()) return 'gemini';
   return null;
 }
@@ -88,25 +82,27 @@ export function askWebSearchApiKey(provider: AskWebSearchProvider = askWebSearch
   if (provider === 'serper') {
     return trim(process.env.SERPER_API_KEY) || generic;
   }
-  return trim(process.env.TAVILY_API_KEY) || generic;
+  // Tavily's key is only TAVILY_API_KEY — never ASK_WEB_SEARCH_API_KEY.
+  return trim(process.env.TAVILY_API_KEY);
 }
 
+/** True unless search is explicitly off. A missing Tavily key still searches. */
 export function isAskWebSearchConfigured(): boolean {
-  const provider = askWebSearchProvider();
-  if (!provider) return false;
-  return Boolean(askWebSearchApiKey(provider));
+  return !askWebSearchDisabled();
 }
 
 /** Prompt rules when web search is wired (Gemini grounding or Brave/Serper/Tavily). */
 export function askWebCapabilityRules(): string {
   if (isAskWebSearchConfigured()) {
     return `INTERNET / WEB ACCESS:
-- You CAN look up public web information for outside knowledge (codes, products, manufacturers, standards, prices/costs, general how-to, current events, sports schedules/scores, news, weather, and product lookups) when WEB SEARCH RESULTS are provided or the user asks you to search online.
-- Never claim you lack a live web search tool, cannot query prices, cannot access live sports schedules/scores, weather, or news, are offline, not connected to the internet, or unable to search the web.
-- When WEB SEARCH RESULTS are provided for live topical asks (games on today, weather, headlines, prices), answer helpfully from those results — do not soft-refuse or pivot to the job file only.
-- When the user asks to search the web/Google/internet *for a topic*, results are fetched for outside knowledge — say that clearly. Do not hedge that you cannot search.
-- If asked ONLY whether you are connected to the internet or can search the web/Google (no specific topic), answer briefly yes — Ask can search the public web for outside knowledge; job-file evidence still always wins for on-job facts. Do NOT append a ⟦web: …⟧ trailer and do not cite google.com, search.google, wikiHow "how to search Google", or similar junk.
-- Never write ASCII [[web: …]] — only unicode ⟦web: …⟧ on its own line after the answer when you actually used WEB SEARCH RESULTS.
+- You CAN search the public web for anything the job file cannot answer. Topics are not restricted.
+- The job file comes first. Questions about this job, its videos, people, findings, or records are answered from the job file. Web search never replaces or overrides that evidence.
+- If the user asks you to search or look something up, call web_search (or use WEB SEARCH RESULTS when they are already in the prompt). Otherwise call web_search when a public fact would help and the file does not have it.
+- When you search, resolve relative days ("Thursday", "this Sunday", "tomorrow", "tonight") against CURRENT DATE AND TIME and put that calendar date in the query. Pass include_domains when the user names a site (homedepot.com, lowes.com).
+- Never claim you lack a live web search tool, cannot query prices, cannot access schedules, weather, or news, are offline, or unable to search the web.
+- When WEB SEARCH RESULTS are provided, answer from them. Do not soft-refuse or pretend the job file is the only source for a public question.
+- If asked ONLY whether you are connected to the internet or can search the web (no specific topic), answer briefly yes — job-file evidence still wins for on-job facts. Do NOT add a Web results section and do not cite google.com or how-to-search pages.
+- Do not write markdown links, bare URLs, or a Web results heading. The app attaches sources separately. Never quote a web page as a speaker.
 - Still never reverse-image-search, identify children, or identify private job-site people from photos/video.`;
   }
   return `INTERNET / WEB ACCESS:
@@ -225,17 +221,14 @@ export function looksLikePureWebCapabilityAsk(question: string): boolean {
     }
   }
 
-  // Bare capability: can/could/are you able / do you + search/google…
+  // Questions about ability ("can you search the web?"). An imperative
+  // ("search the web", "look it up online", "google it") is a real request.
   return (
     /\b(can|could)\s+(you|u|ya)\s+(search|browse|look\s*up|google|use)\b/i.test(q) ||
     /\b(are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)?\b/i.test(
       q,
     ) ||
-    /\b(search|look\s*(this|it|that)?\s*up|find)\s+(online|on the web|on the internet|via google)\s*[?.!]*$/i.test(
-      q,
-    ) ||
-    /\bweb[\s-]?search\s*[?.!]*$/i.test(q) ||
-    /\bsearch\s+(the\s+)?(web|internet|google|online)\s*[?.!]*$/i.test(q)
+    /\bweb[\s-]?search\s*[?.!]*$/i.test(q)
   );
 }
 
@@ -328,6 +321,207 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   if (!q) return false;
   if (looksLikeWebCapabilityAsk(q)) return true;
   if (looksLikeLiveTopicalAsk(q)) return true;
+  return looksLikeOutsideKnowledgeSubject(q);
+}
+
+/** @deprecated alias — prefer shouldSupplementWithWebSearch */
+export function shouldSearchAskWeb(question: string, grounded: string): boolean {
+  return shouldSupplementWithWebSearch(question, grounded);
+}
+
+/** Ask resolves relative days in this zone unless the caller passes another IANA zone. */
+export const ASK_USER_TIME_ZONE = 'America/Chicago';
+
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+type ZonedYmd = { year: number; month: number; day: number; weekday: string };
+
+function zonedYmd(now: Date, timeZone: string): ZonedYmd {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'long',
+  });
+  const bag = Object.fromEntries(fmt.formatToParts(now).map((part) => [part.type, part.value]));
+  return {
+    year: Number(bag.year),
+    month: Number(bag.month),
+    day: Number(bag.day),
+    weekday: String(bag.weekday ?? '').toLowerCase(),
+  };
+}
+
+function addCalendarDays(ymd: ZonedYmd, days: number): ZonedYmd {
+  const utc = new Date(Date.UTC(ymd.year, ymd.month - 1, ymd.day + days, 18, 0, 0));
+  return zonedYmd(utc, 'UTC');
+}
+
+function longDate(ymd: ZonedYmd): string {
+  const utc = new Date(Date.UTC(ymd.year, ymd.month - 1, ymd.day, 18, 0, 0));
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(utc);
+}
+
+function weekdayIndex(name: string): number {
+  return WEEKDAYS.indexOf(name.toLowerCase() as (typeof WEEKDAYS)[number]);
+}
+
+/**
+ * Days until the named weekday. "this"/bare means the upcoming one, including
+ * today. "next" means the same, except when today is that weekday, then +7.
+ */
+function daysUntilWeekday(today: string, target: string, mode: 'this' | 'next'): number {
+  const from = weekdayIndex(today);
+  const to = weekdayIndex(target);
+  if (from < 0 || to < 0) return 0;
+  let delta = (to - from + 7) % 7;
+  if (mode === 'next' && delta === 0) delta = 7;
+  return delta;
+}
+
+/** Clock line for the system prompt. Defaults to America/Chicago. */
+export function askClockSystemRules(now: Date = new Date(), timeZone: string = ASK_USER_TIME_ZONE): string {
+  const zone = trim(timeZone) || ASK_USER_TIME_ZONE;
+  let when = '';
+  try {
+    const date = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(now);
+    const time = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(now);
+    when = `${date}, ${time}`;
+  } catch {
+    when = now.toISOString();
+  }
+  return `CURRENT DATE AND TIME: ${when} (${zone}).
+Resolve relative days against this clock before you answer or search. "Thursday" means the upcoming Thursday, or today if it is Thursday. "this Sunday" means the upcoming Sunday, or today if it is Sunday. "tomorrow" and "tonight" use this clock. When you call web_search, the query must include that calendar date (for example "NFL game Thursday, October 1, 2026"), not only the weekday.`;
+}
+
+/**
+ * Leave the question text untouched. Relative days are explained in a suffix
+ * ("today is Wednesday, September 30, 2026, America/Chicago"). Numbers in the
+ * question are never read as dates and never rewritten.
+ */
+export function resolveAskSearchQuery(
+  query: string,
+  now: Date = new Date(),
+  timeZone: string = ASK_USER_TIME_ZONE,
+): string {
+  const original = trim(query);
+  if (!original) return original;
+  const zone = trim(timeZone) || ASK_USER_TIME_ZONE;
+  let today: ZonedYmd;
+  try {
+    today = zonedYmd(now, zone);
+  } catch {
+    return original;
+  }
+  const notes: string[] = [];
+  const seen = new Set<string>();
+  const rel =
+    /\b(today|tonight|tomorrow|yesterday)\b|\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = rel.exec(original)) !== null) {
+    let phrase = '';
+    let ymd: ZonedYmd;
+    if (match[1]) {
+      phrase = match[1];
+      const word = phrase.toLowerCase();
+      const delta = word === 'tomorrow' ? 1 : word === 'yesterday' ? -1 : 0;
+      ymd = addCalendarDays(today, delta);
+    } else if (match[2] && match[3]) {
+      phrase = `${match[2]} ${match[3]}`;
+      ymd = addCalendarDays(
+        today,
+        daysUntilWeekday(today.weekday, match[3], match[2].toLowerCase() === 'next' ? 'next' : 'this'),
+      );
+    } else if (match[4]) {
+      phrase = match[4];
+      ymd = addCalendarDays(today, daysUntilWeekday(today.weekday, match[4], 'this'));
+    } else {
+      continue;
+    }
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    notes.push(`${phrase} is ${longDate(ymd)}`);
+  }
+  if (!notes.length) return original;
+  return `${original} (${notes.join('; ')}, ${zone})`;
+}
+
+/** Hostnames the user named, plus any the model passed. Empty when none. */
+export function includeDomainsForAsk(question: string, explicit?: unknown): string[] {
+  const out: string[] = [];
+  const push = (raw: unknown) => {
+    let host = trim(raw).toLowerCase();
+    if (!host) return;
+    host = host.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] ?? '';
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return;
+    if (!out.includes(host)) out.push(host);
+  };
+  if (Array.isArray(explicit)) {
+    for (const item of explicit) push(item);
+  } else if (typeof explicit === 'string') {
+    for (const item of explicit.split(/[,\s]+/)) push(item);
+  }
+  if (/home\s*depot/i.test(question)) push('homedepot.com');
+  if (/lowe'?s/i.test(question)) push('lowes.com');
+  return out.slice(0, 8);
+}
+
+/**
+ * The user asked to search the web (any topic).
+ * Capability-only questions ("can you search?") are not a request to run one.
+ * A bare "search" or "google" is not a web request: "search the attic" and
+ * "did they mention Google" stay on the job file.
+ */
+export function looksLikeExplicitWebSearchRequest(question: string): boolean {
+  const q = trim(question);
+  if (!q || looksLikePureWebCapabilityAsk(q)) return false;
+  if (
+    /\b(search|look\s*up|lookup)\s+(the\s+)?(transcript|clip|clips|video|videos|job file|file|notes|recordings)\b/i.test(
+      q,
+    ) &&
+    !/\b(web|internet|online)\b/i.test(q)
+  ) {
+    return false;
+  }
+  return (
+    /\bsearch\s+the\s+(?:web|internet)\b/i.test(q) ||
+    /\bsearch\s+(?:online|on the (?:web|internet)|google)\b/i.test(q) ||
+    /\blook\s*(?:this|it|that)\s*up\s+online\b/i.test(q) ||
+    /\bgoogle\s+it\b/i.test(q) ||
+    /\b(find|check)\s+(?:online|on the (?:web|internet))\b/i.test(q) ||
+    /\bweb[\s-]?search\b/i.test(q)
+  );
+}
+
+function looksLikeSmallTalk(question: string): boolean {
+  return /^(?:hi|hey|hello|hiya|thanks|thank you|thx|ty|ok|okay|got it|cool|sounds good)[.!?\s]*$/i.test(
+    trim(question),
+  );
+}
+
+/** Codes, prices, and how-to subjects. A bare "search the web" is not a subject. */
+function looksLikeOutsideKnowledgeSubject(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
   return (
     /\b(IRC|IBC|NEC|IMC|IPC|IECC|ASTM|UL\s*\d|NFPA|OSHA)\b/i.test(q) ||
     /\b(building|electrical|plumbing|mechanical|fire)\s+code\b/i.test(q) ||
@@ -338,7 +532,6 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
     /\b(R-?value|gauge\s+steel|nail\s+pattern|flashing\s+detail|underlayment\s+spec)\b/i.test(q) ||
     /\b(warranty|standard\s+practice|best\s+practice|code\s+requirement)\b/i.test(q) ||
     /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q) ||
-    // Price / product market asks (tile prices, material cost, how much does X cost)
     /\b(tile|material|lumber|shingle|roofing|flooring|paint|supply|product|labor)\s+(prices?|pricing|cost|costs)\b/i.test(
       q,
     ) ||
@@ -349,34 +542,109 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   );
 }
 
-/** @deprecated alias — prefer shouldSupplementWithWebSearch */
-export function shouldSearchAskWeb(question: string, grounded: string): boolean {
-  return shouldSupplementWithWebSearch(question, grounded);
-}
-
-function groundedMisses(grounded: string): boolean {
-  return /does not have that|Nothing is on this job file/i.test(grounded);
+function looksLikePublicTopic(question: string): boolean {
+  return looksLikeLiveTopicalAsk(question) || looksLikeOutsideKnowledgeSubject(question);
 }
 
 /**
- * Search when the question needs outside knowledge, or the file clearly
- * misses and the wording still looks general (codes/products/how-to).
- * Job-evidence questions with a solid grounded hit skip the web.
+ * Questions the job file is supposed to answer: this job's videos, people,
+ * findings, or records. Shared words (job, claim, permit, homeowner, "how
+ * many", "what did") do not by themselves make a public question job-only.
  */
-export function shouldSupplementWithWebSearch(question: string, grounded: string): boolean {
-  if (askWebSearchBlockedReason(question)) return false;
-  if (!isAskWebSearchConfigured()) return false;
-  // Capability-only ("can you search the web?") — answer yes from rules; do not
-  // fetch google.com homepage junk to cite.
-  if (looksLikePureWebCapabilityAsk(question)) return false;
-  if (looksLikeOutsideKnowledgeAsk(question)) return true;
+const PUBLIC_JOB_TAIL =
+  'market|markets|opening|openings|posting|postings|board|boards|description|descriptions|title|titles|listing|listings|growth|report|reports|cuts|creation|losses';
+
+/** "the job market" is public. "this job" and "the job file" are this file. */
+function mentionsThisJobRecord(q: string): boolean {
+  if (new RegExp(`\\b(?:the|this|our|my)\\s+job\\s+(?:${PUBLIC_JOB_TAIL})\\b`, 'i').test(q)) return false;
+  if (/\b(?:this|our|my)\s+(?:job|file|claim|permit|visit|notes?|evidence|scope)\b/i.test(q)) return true;
+  if (/\bthe\s+(?:job\s+file|file|claim|visit|notes?|evidence|scope)\b/i.test(q)) return true;
+  if (/\bthe\s+job\b/i.test(q)) return true;
+  if (/\b(?:on|in)\s+(?:this|the|our)\s+(?:job|file)\b/i.test(q)) return true;
+  return false;
+}
+
+/**
+ * Questions about this recording: what was said, what happened, a timestamp,
+ * or whether something in the clip is on. A public subject ("is the game on")
+ * is not one of these.
+ */
+function asksAboutThisRecording(q: string): boolean {
+  if (looksLikeLiveTopicalAsk(q)) return false;
+  return (
+    /\b(time ?stamps?)\b/i.test(q) ||
+    /\bwhat was said\b/i.test(q) ||
+    /\bwhat are they talking about\b/i.test(q) ||
+    /\btalking about\b/i.test(q) ||
+    /\bdid (?:they|he|she|anyone|anything)\b/i.test(q) ||
+    /\b(?:anyone|they|he|she) mention(?:ed)?\b/i.test(q) ||
+    /\bagree(?:d)? on\b/i.test(q) ||
+    /\bis the (?:tv|light|fan|switch|screen|power|water|heater|ac|heat) (?:on|off)\b/i.test(q) ||
+    /\b(?:the|this) worker\b/i.test(q) ||
+    /\b(?:in|on) (?:the|this) (?:clip|video|recording|footage)\b/i.test(q)
+  );
+}
+
+export function asksAboutJobFile(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
+  if (asksAboutThisRecording(q)) return true;
+  // "search the attic" looks through this job. "search the web" does not.
   if (
-    groundedMisses(grounded) &&
-    /\b(code|standard|product|manufacturer|spec|install|warranty|how|what is|who makes)\b/i.test(question)
+    /\bsearch\s+(?:the\s+|this\s+|our\s+|my\s+)(?!(?:web|internet|online|google)\b)\S+/i.test(q) &&
+    !looksLikeExplicitWebSearchRequest(q) &&
+    !looksLikePublicTopic(q)
   ) {
     return true;
   }
+  const publicTopic = looksLikePublicTopic(q);
+  // These name this file's records even when the user also says "search".
+  if (/\b(lockbox|transcript|punch|access roster|on site|work logs?)\b/i.test(q)) return true;
+  if (/\b(clips?|videos?|footage|recordings?|mic|crew|speaker|findings?)\b/i.test(q)) {
+    if (publicTopic && !/\b(this|the|our|my)\s+(?:clip|video|recording|transcript|job|file)\b/i.test(q)) {
+      return false;
+    }
+    return true;
+  }
+  if (/\bhomeowner\s+(?:said|says|say|asked|told)\b/i.test(q)) return true;
+  if (/\b(?:what did|who said)\b/i.test(q) && /\b(?:homeowner|adjuster|crew|speaker|tech|guy|they|he|she|anyone)\b/i.test(q)) {
+    return true;
+  }
+  if (mentionsThisJobRecord(q) && !publicTopic) return true;
+  if (/\b(?:the|this|our|my)\s+homeowner\b/i.test(q) && !publicTopic) return true;
+  if (/\b(?:the|this|our|my)\s+permit\b/i.test(q) && !publicTopic) return true;
+  if (/\b(?:job|claim|permit)\s*(?:#|number|num)\b/i.test(q)) return true;
+  if (
+    /\bhow many\b/i.test(q) &&
+    /\b(?:clips?|videos?|lines?|notes?|findings?|speakers?|quotes?|people|tasks?)\b/i.test(q) &&
+    !publicTopic
+  ) {
+    return true;
+  }
+  if (/\b(?:this|the|our)\s+(?:visit|day)\b/i.test(q) && !publicTopic) return true;
   return false;
+}
+
+export function looksLikeJobEvidenceQuestion(question: string): boolean {
+  if (looksLikeExplicitWebSearchRequest(question)) return false;
+  return asksAboutJobFile(question);
+}
+
+/**
+ * Run web search for anything the job file is not meant to answer, and always
+ * when the user asks to search or look something up. Job evidence questions
+ * are not auto-searched — the model may still call web_search, and the answer
+ * must not let the web override the file. Topics are not restricted.
+ */
+export function shouldSupplementWithWebSearch(question: string, grounded = ''): boolean {
+  void grounded;
+  if (askWebSearchBlockedReason(question)) return false;
+  if (!isAskWebSearchConfigured()) return false;
+  if (looksLikePureWebCapabilityAsk(question)) return false;
+  if (looksLikeSmallTalk(question)) return false;
+  if (looksLikeExplicitWebSearchRequest(question)) return true;
+  if (looksLikeJobEvidenceQuestion(question)) return false;
+  return true;
 }
 
 /**
@@ -421,110 +689,67 @@ function pushHit(hits: AskWebHit[], next: AskWebHit | null) {
   });
 }
 
-async function searchBrave(
-  query: string,
-  apiKey: string,
-  limit: number,
-  fetchFn: typeof fetch,
-): Promise<AskWebHit[]> {
-  const url = new URL('https://api.search.brave.com/res/v1/web/search');
-  url.searchParams.set('q', query);
-  url.searchParams.set('count', String(Math.min(Math.max(limit, 1), 8)));
-  const res = await fetchFn(url, {
-    headers: {
-      Accept: 'application/json',
-      'X-Subscription-Token': apiKey,
-    },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!res.ok) {
-    const body = (await res.text().catch(() => '')).slice(0, 240);
-    throw new Error(`brave_search_${res.status}:${body}`);
-  }
-  const body = (await res.json()) as {
-    web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
-  };
-  const hits: AskWebHit[] = [];
-  for (const row of body.web?.results ?? []) {
-    pushHit(hits, {
-      title: trim(row.title),
-      url: trim(row.url),
-      snippet: trim(row.description),
-    });
-    if (hits.length >= limit) break;
-  }
-  return hits;
+const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
+const TAVILY_TIMEOUT_MS = 9_000;
+const TAVILY_MAX_RESULTS = 5;
+
+let askWebSearchCount = 0;
+
+function redactSecrets(detail: string): string {
+  const key = trim(process.env.TAVILY_API_KEY);
+  let out = detail.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').replace(/tvly-[A-Za-z0-9_-]+/g, '[redacted]');
+  if (key) out = out.split(key).join('[redacted]');
+  return out;
 }
 
-async function searchSerper(
-  query: string,
-  apiKey: string,
-  limit: number,
-  fetchFn: typeof fetch,
-): Promise<AskWebHit[]> {
-  const res = await fetchFn('https://google.serper.dev/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': apiKey,
-    },
-    body: JSON.stringify({ q: query, num: Math.min(Math.max(limit, 1), 8) }),
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!res.ok) {
-    const body = (await res.text().catch(() => '')).slice(0, 240);
-    throw new Error(`serper_search_${res.status}:${body}`);
-  }
-  const body = (await res.json()) as {
-    organic?: Array<{ title?: string; link?: string; snippet?: string }>;
-  };
-  const hits: AskWebHit[] = [];
-  for (const row of body.organic ?? []) {
-    pushHit(hits, {
-      title: trim(row.title),
-      url: trim(row.link),
-      snippet: trim(row.snippet),
-    });
-    if (hits.length >= limit) break;
-  }
-  return hits;
-}
+export type AskWebSearchOutcome = {
+  hits: AskWebHit[];
+  /** Tavily's short answer, when the API returned one. */
+  answer: string;
+};
 
 async function searchTavily(
   query: string,
   apiKey: string,
   limit: number,
   fetchFn: typeof fetch,
-): Promise<AskWebHit[]> {
-  const res = await fetchFn('https://api.tavily.com/search', {
+  includeDomains?: string[],
+): Promise<AskWebSearchOutcome> {
+  const maxResults = Math.min(Math.max(limit, 1), TAVILY_MAX_RESULTS);
+  const body: Record<string, unknown> = {
+    query,
+    search_depth: 'basic',
+    max_results: maxResults,
+    include_answer: true,
+  };
+  if (includeDomains?.length) body.include_domains = includeDomains;
+  const res = await fetchFn(TAVILY_SEARCH_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: 'basic',
-      max_results: Math.min(Math.max(limit, 1), 8),
-      include_answer: false,
-    }),
-    signal: AbortSignal.timeout(12_000),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TAVILY_TIMEOUT_MS),
   });
   if (!res.ok) {
-    const body = (await res.text().catch(() => '')).slice(0, 240);
-    throw new Error(`tavily_search_${res.status}:${body}`);
+    const errBody = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`tavily_search_${res.status}:${redactSecrets(errBody)}`);
   }
-  const body = (await res.json()) as {
+  const payload = (await res.json()) as {
+    answer?: string;
     results?: Array<{ title?: string; url?: string; content?: string }>;
   };
   const hits: AskWebHit[] = [];
-  for (const row of body.results ?? []) {
+  for (const row of payload.results ?? []) {
     pushHit(hits, {
       title: trim(row.title),
       url: trim(row.url),
       snippet: trim(row.content),
     });
-    if (hits.length >= limit) break;
+    if (hits.length >= maxResults) break;
   }
-  return hits;
+  return { hits, answer: trim(payload.answer).slice(0, 1200) };
 }
 
 /** Prefer ASK_WEB_SEARCH_MODEL; never inherit verification models that may lack google_search. */
@@ -640,7 +865,6 @@ function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number):
     if (hits.length >= limit) break;
   }
 
-  // groundingSupports may reference chunk indices; fold segment text as snippet filler.
   if (hits.length < limit) {
     for (const support of supports) {
       const indices = support.groundingChunkIndices ?? [];
@@ -664,7 +888,6 @@ function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number):
     }
   }
 
-  // Last resort: any http(s) URI nested under groundingMetadata.
   if (hits.length < limit && meta) {
     const uris = new Set<string>();
     collectUrisFromUnknown(meta, uris);
@@ -677,10 +900,7 @@ function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number):
   return hits;
 }
 
-/**
- * Gemini generateContent + Google Search grounding.
- * Parses groundingMetadata chunks and/or JSON hit lists from model text.
- */
+/** Gemini generateContent + Google Search grounding. Used when Tavily's key is missing. */
 async function searchGemini(
   query: string,
   apiKey: string,
@@ -712,14 +932,12 @@ async function searchGemini(
   });
   if (!res.ok) {
     const errBody = (await res.text().catch(() => '')).slice(0, 240);
-    throw new Error(`gemini_search_${res.status}:${errBody}`);
+    throw new Error(`gemini_search_${res.status}:${redactSecrets(errBody)}`);
   }
   const payload = (await res.json()) as GeminiGeneratePayload;
   const fromGrounding = hitsFromGeminiGrounding(payload, limit);
   const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
   const fromJson = parseGeminiAskWebHitsJson(text, limit);
-
-  // Prefer grounding URIs (server-attested) and fill gaps from JSON parts.
   const hits: AskWebHit[] = [];
   for (const hit of [...fromGrounding, ...fromJson]) {
     pushHit(hits, hit);
@@ -953,85 +1171,253 @@ export async function searchDuckDuckGo(
   return hits.slice(0, limit);
 }
 
-async function runConfiguredProvider(
-  provider: AskWebSearchProvider,
-  query: string,
-  apiKey: string,
-  limit: number,
-  fetchFn: typeof fetch,
-): Promise<AskWebHit[]> {
-  if (provider === 'brave') return searchBrave(query, apiKey, limit, fetchFn);
-  if (provider === 'serper') return searchSerper(query, apiKey, limit, fetchFn);
-  if (provider === 'tavily') return searchTavily(query, apiKey, limit, fetchFn);
-  return searchGemini(query, apiKey, limit, fetchFn);
+export type AskWebSearchOptions = {
+  fetchFn?: typeof fetch;
+  limit?: number;
+  includeDomains?: string[];
+  /** Pins "Thursday" / "this Sunday" in tests. */
+  now?: Date;
+  timeZone?: string;
+};
+
+/**
+ * Public web search for Ask. Tavily when TAVILY_API_KEY is set. Otherwise
+ * Gemini Google Search grounding, then DuckDuckGo. A missing Tavily key does
+ * not turn search off. ASK_WEB_SEARCH_PROVIDER=off does.
+ */
+export async function searchAskWebDetailed(
+  question: string,
+  opts?: AskWebSearchOptions,
+): Promise<AskWebSearchOutcome> {
+  const empty: AskWebSearchOutcome = { hits: [], answer: '' };
+  if (askWebSearchBlockedReason(question)) return empty;
+  if (!isAskWebSearchConfigured()) return empty;
+
+  const sanitized = sanitizeAskWebQuery(question);
+  const query = resolveAskSearchQuery(sanitized, opts?.now ?? new Date(), opts?.timeZone ?? ASK_USER_TIME_ZONE);
+  if (!query || query.length < 3) return empty;
+
+  const limit = Math.min(opts?.limit ?? TAVILY_MAX_RESULTS, TAVILY_MAX_RESULTS);
+  const fetchFn = opts?.fetchFn ?? fetch;
+  const includeDomains = includeDomainsForAsk(question, opts?.includeDomains);
+  askWebSearchCount += 1;
+  const searches = askWebSearchCount;
+  const tavilyKey = trim(process.env.TAVILY_API_KEY);
+  if (tavilyKey) {
+    try {
+      const outcome = await searchTavily(query, tavilyKey, limit, fetchFn, includeDomains);
+      // Count of searches only — never the key, the Authorization header, or the query.
+      logger.info('ask_web_search', { searches, results: outcome.hits.length });
+      return outcome;
+    } catch (err) {
+      const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
+      logger.warn('ask_web_search_failed', { searches, detail });
+      return empty;
+    }
+  }
+
+  const geminiKey = googleVisionApiKey();
+  if (geminiKey) {
+    try {
+      const hits = await searchGemini(query, geminiKey, limit, fetchFn);
+      if (hits.length) {
+        logger.info('ask_web_search', { searches, results: hits.length });
+        return { hits, answer: '' };
+      }
+    } catch (err) {
+      const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
+      logger.warn('ask_web_search_failed', { searches, detail });
+    }
+  }
+
+  try {
+    const hits = await searchDuckDuckGo(query, limit, fetchFn);
+    logger.info('ask_web_search', { searches, results: hits.length });
+    return { hits, answer: '' };
+  } catch (err) {
+    const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
+    logger.warn('ask_web_search_failed', { searches, detail });
+    return empty;
+  }
+}
+
+export async function searchAskWeb(question: string, opts?: AskWebSearchOptions): Promise<AskWebHit[]> {
+  const outcome = await searchAskWebDetailed(question, opts);
+  return outcome.hits;
+}
+
+export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
+  if (!hits.length && !trim(answer)) return '';
+  const lines = hits
+    .map((hit, i) => {
+      const title = plainWebText(hit.title) || 'Source';
+      const snippet = plainWebText(hit.snippet) || '(no snippet)';
+      const url = safeHttpResultUrl(hit.url);
+      return url
+        ? `${i + 1}. ${title}\n   URL: ${url}\n   ${snippet}`
+        : `${i + 1}. ${title}\n   ${snippet}`;
+    })
+    .join('\n');
+  const lead = trim(answer) ? `Tavily answer: ${plainWebText(answer)}\n` : '';
+  return `${lead}${lines}`.trim();
+}
+
+const WEB_SECTION_RE = /(?:^|\n+)(\*\*Web results\*\*[\s\S]*)$/i;
+
+/** Split a labeled Web results section off the answer so job checks leave it intact. */
+export function splitWebResultsSection(answer: string): { body: string; section: string } {
+  const text = String(answer ?? '');
+  const match = text.match(WEB_SECTION_RE);
+  if (!match || match.index == null) return { body: text, section: '' };
+  return { body: text.slice(0, match.index).trim(), section: (match[1] ?? '').trim() };
+}
+
+export function joinWebResultsSection(body: string, section: string): string {
+  return [trim(body), trim(section)].filter(Boolean).join('\n\n');
 }
 
 /**
- * Public web search for Ask. Returns [] when unset, blocked, or all providers fail.
- * Tries the configured provider first; on throw or empty hits, falls back to DuckDuckGo.
+ * Untrusted web prose. Markdown links and images become their label, bare URLs
+ * and angle-bracket autolinks are removed, and HTML is stripped. The only
+ * clickable links Ask emits are built separately from Tavily result URLs.
  */
-export async function searchAskWeb(
-  question: string,
-  opts?: { fetchFn?: typeof fetch; limit?: number },
-): Promise<AskWebHit[]> {
-  if (askWebSearchBlockedReason(question)) return [];
-  const provider = askWebSearchProvider();
-  if (!provider) return [];
-  const apiKey = askWebSearchApiKey(provider);
-  if (!apiKey) return [];
-
-  const query = sanitizeAskWebQuery(question);
-  if (!query || query.length < 3) return [];
-
-  const limit = opts?.limit ?? 5;
-  const fetchFn = opts?.fetchFn ?? fetch;
-
-  let hits: AskWebHit[] = [];
-  let primaryError: string | null = null;
-  try {
-    hits = await runConfiguredProvider(provider, query, apiKey, limit, fetchFn);
-    logger.info('ask_web_search_primary', {
-      provider,
-      queryLen: query.length,
-      hitCount: hits.length,
-      model: provider === 'gemini' ? geminiWebSearchModel() : undefined,
-    });
-  } catch (err) {
-    primaryError = (err instanceof Error ? err.message : String(err)).slice(0, 280);
-    // Never log API keys — error messages must not include the key header value.
-    logger.warn('ask_web_search_failed', {
-      provider,
-      detail: primaryError.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[redacted]'),
-    });
-    hits = [];
+function plainWebText(text: string, limit?: number): string {
+  let value = String(text ?? '');
+  for (let pass = 0; pass < 4; pass++) {
+    const next = value
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/!\[([^\]]*)\]\[[^\]]*\]/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1');
+    if (next === value) break;
+    value = next;
   }
-
-  if (hits.length) return hits;
-
-  try {
-    const ddgHits = await searchDuckDuckGo(query, limit, fetchFn);
-    logger.info('ask_web_search_ddg_fallback', {
-      provider,
-      queryLen: query.length,
-      hitCount: ddgHits.length,
-      primaryEmpty: !primaryError,
-      primaryError: primaryError
-        ? primaryError.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[redacted]').slice(0, 200)
-        : undefined,
-    });
-    return ddgHits;
-  } catch (err) {
-    const detail = (err instanceof Error ? err.message : String(err)).slice(0, 200);
-    logger.warn('ask_web_search_ddg_fallback_failed', { provider, detail });
-    return [];
-  }
+  value = value.replace(/<https?:\/\/[^>\s]*>/gi, '');
+  value = value.replace(/https?:\/\/[^\s<>"'`)\\]+/gi, '');
+  value = value.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>');
+  value = value.replace(/&#0*60;?/gi, '<').replace(/&#0*62;?/gi, '>');
+  value = value.replace(/&#x0*3c;?/gi, '<').replace(/&#x0*3e;?/gi, '>');
+  value = value.replace(/<[^>]*>/g, ' ');
+  value = value.replace(/[<>]/g, '');
+  value = value.replace(/[“”"]/g, '');
+  value = value.replace(/\s+/g, ' ').trim();
+  return limit ? value.slice(0, limit) : value;
 }
 
-export function formatAskWebContext(hits: AskWebHit[]): string {
-  if (!hits.length) return '';
-  return hits
-    .map((hit, i) => `${i + 1}. ${hit.title}\n   URL: ${hit.url}\n   ${hit.snippet || '(no snippet)'}`)
-    .join('\n');
+/** Result URLs we will turn into a markdown link. Rejects breakout characters. */
+function safeHttpResultUrl(url: string): string {
+  const value = trim(url);
+  if (!/^https?:\/\/[^\s<>()[\]"'`\\]+$/i.test(value)) return '';
+  return value;
+}
+
+/** Prose the model may see. Same stripping as snippets: no links, URLs, or HTML. */
+export function plainWebModelText(text: string): string {
+  return plainWebText(text);
+}
+
+/**
+ * Tool payload for the model. Answer, title, and snippet are plain text.
+ * Only an http(s) result URL is kept, and it is the URL our code may link.
+ */
+export function webSearchModelPayload(data: unknown): { answer: string; results: Array<{ title: string; url: string; snippet: string }> } {
+  const rec = data && typeof data === 'object' ? (data as { answer?: unknown; results?: unknown }) : {};
+  const results = Array.isArray(rec.results) ? rec.results : [];
+  return {
+    answer: plainWebText(typeof rec.answer === 'string' ? rec.answer : ''),
+    results: results.flatMap((row) => {
+      const hit = row && typeof row === 'object' ? (row as { title?: unknown; url?: unknown; snippet?: unknown; content?: unknown }) : {};
+      const url = safeHttpResultUrl(typeof hit.url === 'string' ? hit.url : '');
+      const title = plainWebText(typeof hit.title === 'string' ? hit.title : '');
+      const snippet = plainWebText(typeof (hit.snippet ?? hit.content) === 'string' ? String(hit.snippet ?? hit.content) : '');
+      if (!url && !title && !snippet) return [];
+      return [{ title, url, snippet }];
+    }),
+  };
+}
+
+export type AskWebSource = { title: string; url: string; snippet: string };
+
+/**
+ * Sources the Ask response may render. Only http(s) result URLs, with the
+ * same plain-text title and snippet the model is allowed to see.
+ */
+export function webSourcesFromHits(hits: readonly AskWebHit[]): AskWebSource[] {
+  const out: AskWebSource[] = [];
+  for (const hit of hits) {
+    const url = safeHttpResultUrl(hit?.url ?? '');
+    if (!url || out.some((row) => row.url === url)) continue;
+    out.push({
+      title: plainWebText(hit.title).replace(/[\[\]()]/g, '').trim() || 'Source',
+      url,
+      snippet: plainWebText(hit.snippet, 280),
+    });
+    if (out.length >= TAVILY_MAX_RESULTS) break;
+  }
+  return out;
+}
+
+/** Relative same-origin app paths. No scheme, no host, no protocol-relative URL. */
+export function isRelativeAskAppPath(url: string): boolean {
+  const value = trim(url).replace(/\s+["'][^"']*["']\s*$/, '');
+  if (!value || /[\s\\<>]/.test(value)) return false;
+  if (value.startsWith('//')) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+  if (!value.startsWith('/')) return false;
+  if (value.startsWith('/jobs/')) return true;
+  return /^\/job-progress(?:[/?#]|$)/.test(value);
+}
+
+/**
+ * Model-authored markdown links and autolinks become plain text.
+ * A relative /jobs/ or /job-progress path with no scheme or host may stay a link.
+ */
+export function stripExternalAskLinks(text: string): string {
+  let value = String(text ?? '');
+  value = value.replace(/!\[([^\]]*)\]\([^)\n]*\)/g, '$1');
+  value = value.replace(/\[([^\]\n]*)\]\(([^)\n]*)\)/g, (_full, label: string, url: string) => {
+    const href = trim(url).replace(/\s+["'][^"']*["']\s*$/, '');
+    const visible = label.trim() || href;
+    if (isRelativeAskAppPath(href)) return `[${label}](${href})`;
+    return visible;
+  });
+  value = value.replace(/<(https?:\/\/[^>\s]+)>/gi, '$1');
+  return value;
+}
+
+function plainWebSnippet(snippet: string): string {
+  return plainWebText(snippet, 280);
+}
+
+/**
+ * Drop a model-written Web results section and every external link.
+ * Clickable web URLs are returned on the response as webSources, not parsed out of this text.
+ */
+export function ensureWebResultsSection(answer: string): string {
+  const { body } = splitWebResultsSection(stripWebTrailer(answer));
+  return stripExternalAskLinks(body).trim();
+}
+
+function plainWebAnswer(text: string): string {
+  return plainWebText(text);
+}
+
+/**
+ * Job evidence stays in front. Public questions use Tavily's answer as plain
+ * text. Links are not written here; callers attach webSources from the hits.
+ * Web text is never wrapped in quotation marks.
+ */
+export function composeAskWebAnswer(input: {
+  question: string;
+  jobAnswer?: string | null;
+  webAnswer?: string | null;
+  hits: AskWebHit[];
+}): string {
+  const job = trim(input.jobAnswer);
+  const jobUseful = Boolean(job) && !/does not have that|nothing is on this job file/i.test(job);
+  const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
+  const prose = asksAboutJobFile(input.question) && jobUseful ? job : webLead || job;
+  return ensureWebResultsSection(prose);
 }
 
 export function formatWebTrailer(hits: AskWebHit[]): string {

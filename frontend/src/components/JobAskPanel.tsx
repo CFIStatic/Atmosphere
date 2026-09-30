@@ -27,6 +27,8 @@ import { parseAskProseBlocks, splitAskArtifact, type AskInline, type AskProseBlo
 import { sanitizeSpeakerProse } from '../lib/speakerLabel';
 import { SpeakerVerificationPrompt, type SpeakerVerification } from './ask/SpeakerVerificationPrompt';
 import { extractAskSources, type AskSourceChip } from '../lib/askSources';
+import { AskWebResults } from './AskWebResults';
+import type { AskWebSource } from '../lib/askWebSources';
 import { useJobFileFocus } from '../lib/jobFileFocus';
 import { useVideoSeek } from '../lib/videoSeek';
 import { SpinnerIcon } from './icons';
@@ -196,6 +198,19 @@ function AskInlineNodes({
         if (node.kind === 'text') {
           return <AskCiteSpans key={`t-${index}`} text={node.text} events={events} onSeek={onSeek} />;
         }
+        if (node.kind === 'link') {
+          return (
+            <a
+              key={`a-${index}`}
+              href={node.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-ink-900 underline decoration-ink-300 underline-offset-2"
+            >
+              {node.text}
+            </a>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold text-ink-900">
@@ -328,6 +343,7 @@ function AskAnswerBody({
   events,
   onSeek,
   sources,
+  webSources,
   onOpenSource,
   onAskFollowUp,
 }: {
@@ -335,6 +351,7 @@ function AskAnswerBody({
   events: number[];
   onSeek: (atSeconds: number) => void;
   sources: AskSourceChip[];
+  webSources?: readonly AskWebSource[] | null;
   onOpenSource: (source: AskSourceChip) => void;
   onAskFollowUp?: (question: string) => void;
 }) {
@@ -354,6 +371,7 @@ function AskAnswerBody({
         <p className="whitespace-pre-wrap">{prose}</p>
       ) : null}
       {artifact ? <AskArtifact markdown={artifact} events={events} onSeek={onSeek} /> : null}
+      <AskWebResults sources={webSources} />
       <AskQuoteList quotes={quotes} onOpen={onOpenSource} />
       <AskSourceChips sources={sources} onOpen={onOpenSource} />
       {onAskFollowUp ? <AskFollowUps questions={followUps} onAsk={onAskFollowUp} /> : null}
@@ -417,6 +435,7 @@ export type JobAskFn = (
   model?: string | null;
   question?: ProofQuestion | null;
   threadId?: string | null;
+  webSources?: AskWebSource[];
 }>;
 
 /**
@@ -773,6 +792,7 @@ export function JobAskPanel({
         model?: string | null;
         question?: ProofQuestion | null;
         threadId?: string | null;
+        webSources?: AskWebSource[];
       };
       const threadOpts = { threadId: activeThreadIdRef.current };
       if (askFn) {
@@ -819,6 +839,7 @@ export function JobAskPanel({
           groundedOn: res.groundedOn,
           groundedIds: res.question?.grounded_on,
           model: res.model ?? res.question?.model,
+          webSources: res.webSources,
           at: res.question?.created_at ?? now,
         },
       ]);
@@ -970,6 +991,7 @@ export function JobAskPanel({
                         .map((event) => event.atSeconds)}
                       onSeek={(atSeconds) => seekCite(turn, atSeconds)}
                       sources={extractAskSources(turn.content).sources}
+                      webSources={turn.webSources}
                       onOpenSource={openAskSource}
                       onAskFollowUp={(question) => void ask(question)}
                     />

@@ -11,7 +11,8 @@ import { stripAskWebTrailer } from './askSources';
 export type AskInline =
   | { kind: 'text'; text: string }
   | { kind: 'bold'; children: AskInline[] }
-  | { kind: 'italic'; children: AskInline[] };
+  | { kind: 'italic'; children: AskInline[] }
+  | { kind: 'link'; text: string; href: string };
 
 export type AskProseBlock =
   | { kind: 'paragraph'; children: AskInline[] }
@@ -111,6 +112,19 @@ export function normalizeAskProse(input: string): string {
   return text.replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/** Relative same-origin app paths. No scheme, no host, no protocol-relative URL. */
+function isRelativeAskAppPath(url: string): boolean {
+  const value = url.trim().replace(/\s+["'][^"']*["']\s*$/, '');
+  if (!value || /[\s\\<>]/.test(value)) return false;
+  if (value.startsWith('//')) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+  if (!value.startsWith('/')) return false;
+  if (value.startsWith('/jobs/')) return true;
+  return /^\/job-progress(?:[/?#]|$)/.test(value);
+}
+
+const ASK_LINK_RE = /^\[([^\]\n]*)\]\(([^)\n]*)\)/;
+
 function parseInline(input: string): AskInline[] {
   const nodes: AskInline[] = [];
   let i = 0;
@@ -123,6 +137,21 @@ function parseInline(input: string): AskInline[] {
   };
 
   while (i < input.length) {
+    if (input[i] === '[') {
+      const link = input.slice(i).match(ASK_LINK_RE);
+      if (link) {
+        flush();
+        const href = (link[2] ?? '').trim().replace(/\s+["'][^"']*["']\s*$/, '');
+        const label = link[1] ?? '';
+        if (isRelativeAskAppPath(href)) {
+          nodes.push({ kind: 'link', text: label || href, href });
+        } else {
+          nodes.push({ kind: 'text', text: label.trim() || href });
+        }
+        i += link[0].length;
+        continue;
+      }
+    }
     if (input.startsWith('**', i)) {
       const end = input.indexOf('**', i + 2);
       if (end > i + 2) {
@@ -182,6 +211,7 @@ function parseInline(input: string): AskInline[] {
 export function parseAskProseBlocks(input: string): AskProseBlock[] {
   const text = normalizeAskProse(input);
   if (!text) return [];
+  const inline = (value: string) => parseInline(value);
 
   const blocks: AskProseBlock[] = [];
   let paragraphLines: string[] = [];
@@ -192,14 +222,14 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
     if (!paragraphLines.length) return;
     const body = paragraphLines.join('\n').trim();
     paragraphLines = [];
-    if (body) blocks.push({ kind: 'paragraph', children: parseInline(body) });
+    if (body) blocks.push({ kind: 'paragraph', children: inline(body) });
   };
   const flushList = () => {
     if (!listItems.length) return;
     blocks.push({
       kind: 'list',
       ordered: listOrdered,
-      items: listItems.map((item) => parseInline(item)),
+      items: listItems.map((item) => inline(item)),
     });
     listItems = [];
     listOrdered = false;
@@ -220,7 +250,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
     if (heading) {
       flushAll();
       const level = (heading[1] ?? '').length >= 3 ? 3 : 2;
-      blocks.push({ kind: 'heading', level, children: parseInline((heading[2] ?? '').trim()) });
+      blocks.push({ kind: 'heading', level, children: inline((heading[2] ?? '').trim()) });
       continue;
     }
     if (/^\s*\|.+\|\s*$/.test(line)) {
@@ -238,7 +268,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
             .replace(/^\|/, '')
             .replace(/\|$/, '')
             .split('|')
-            .map((cell) => parseInline(cell.trim())),
+            .map((cell) => inline(cell.trim())),
         );
       if (parsed.length) {
         blocks.push({ kind: 'table', headers: parsed[0] ?? [], rows: parsed.slice(1) });
@@ -273,7 +303,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
 export function askInlineText(nodes: AskInline[]): string {
   return nodes
     .map((node) => {
-      if (node.kind === 'text') return node.text;
+      if (node.kind === 'text' || node.kind === 'link') return node.text;
       return askInlineText(node.children);
     })
     .join('');

@@ -92,6 +92,15 @@ import {
   supportedProse,
   verifyAskAnswer,
 } from './askVerify.js';
+import {
+  askClockSystemRules,
+  askWebCapabilityRules,
+  isAskWebSearchConfigured,
+  plainWebModelText,
+  searchAskWebDetailed,
+  stripExternalAskLinks,
+  webSearchModelPayload,
+} from './askWebSearch.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
 
@@ -189,8 +198,11 @@ function formatTrace(trace: AskLookupTraceStep[]): string {
   if (!trace.length) return '';
   return trace
     .map((step) => {
-      const payload = step.result.data != null ? `\n${JSON.stringify(step.result.data).slice(0, 6000)}` : '';
-      return `### ${step.tool} (${step.result.ok ? 'ok' : 'failed'})\n${step.result.summary}${payload}`;
+      const web = step.tool === 'web_search';
+      const data = web ? webSearchModelPayload(step.result.data) : step.result.data;
+      const payload = data != null ? `\n${JSON.stringify(data).slice(0, 6000)}` : '';
+      const summary = web ? plainWebModelText(step.result.summary) : step.result.summary;
+      return `### ${step.tool} (${step.result.ok ? 'ok' : 'failed'})\n${summary}${payload}`;
     })
     .join('\n\n');
 }
@@ -265,6 +277,29 @@ const LOOKUP_TOOLS = ASK_LOOKUP_TOOLS.map((tool) => ({
   input_schema: tool.input_schema as { type: 'object'; properties?: unknown },
 }));
 
+const WEB_SEARCH_MODEL_TOOL = {
+  name: 'web_search',
+  description:
+    'Search the public web for anything the job file cannot answer. Do not use it to override job evidence. Include a resolved calendar date in the query for relative days. Optional include_domains limits results to hostnames such as homedepot.com or lowes.com.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: { type: 'string', description: 'Search query, including the calendar date when the user named a relative day.' },
+      include_domains: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional hostnames, for example homedepot.com or lowes.com.',
+      },
+    },
+    required: ['query'],
+  },
+};
+
+function lookupModelTools() {
+  if (!isAskWebSearchConfigured()) return LOOKUP_TOOLS;
+  return [...LOOKUP_TOOLS, WEB_SEARCH_MODEL_TOOL];
+}
+
 type LookupCall = { id: string; name: string; input: Record<string, unknown> };
 
 function toolUses(blocks: Anthropic.ContentBlock[]): LookupCall[] {
@@ -278,6 +313,36 @@ function toolUses(blocks: Anthropic.ContentBlock[]): LookupCall[] {
     });
   }
   return calls.filter((call) => call.name);
+}
+
+function withAskSituation(system: string, timeZone?: string | null): string {
+  return `${system}\n\n${askClockSystemRules(new Date(), timeZone || 'America/Chicago')}\n\n${askWebCapabilityRules()}`;
+}
+
+async function webSearchLookupResult(
+  raw: Record<string, unknown>,
+  fetchFn: typeof fetch | undefined,
+  timeZone: string | null | undefined,
+): Promise<{ ok: boolean; tool: string; summary: string; data?: unknown }> {
+  const query = String(raw.query ?? raw.q ?? '').trim();
+  if (!query) return { ok: false, tool: 'web_search', summary: 'Missing search query.' };
+  const explicit = raw.include_domains ?? raw.includeDomains;
+  const outcome = await searchAskWebDetailed(query, {
+    fetchFn,
+    limit: 5,
+    includeDomains: Array.isArray(explicit) ? explicit.map((item) => String(item)) : undefined,
+    timeZone: timeZone || 'America/Chicago',
+  });
+  return {
+    ok: true,
+    tool: 'web_search',
+    summary: outcome.answer
+      ? plainWebModelText(outcome.answer)
+      : outcome.hits.length
+        ? `Found ${outcome.hits.length} web result(s). Do not treat them as job evidence.`
+        : 'No web results were found.',
+    data: { answer: outcome.answer, results: outcome.hits },
+  };
 }
 
 function textFromBlocks(blocks: Anthropic.ContentBlock[]): string {
@@ -316,8 +381,13 @@ function anthropicLookupSession(input: {
         role: 'user',
         content: pending.tools.map((tool, index) => {
           const step = fresh[index];
+          const web = step?.tool === 'web_search' || tool.name === 'web_search';
           const payload = step
-            ? { ok: step.result.ok, summary: step.result.summary, data: step.result.data ?? null }
+            ? {
+                ok: step.result.ok,
+                summary: web ? plainWebModelText(step.result.summary) : step.result.summary,
+                data: web ? webSearchModelPayload(step.result.data ?? null) : (step.result.data ?? null),
+              }
             : { ok: false, summary: 'Not run.' };
           return {
             type: 'tool_result' as const,
@@ -336,7 +406,7 @@ function anthropicLookupSession(input: {
         max_tokens: input.maxTokens,
         system: asAnthropicSystem(anthropicCachedSystem(state.system, state.stable ?? '')),
         messages,
-        tools: LOOKUP_TOOLS,
+        tools: lookupModelTools(),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(input.outputConfig ? { output_config: input.outputConfig } : {}),
       },
@@ -384,7 +454,7 @@ type GeminiPart = { text?: string; thought?: boolean; functionCall?: { name?: st
 export function geminiLookupTools() {
   return [
     {
-      functionDeclarations: ASK_LOOKUP_TOOLS.map(toGeminiFunctionDeclaration),
+      functionDeclarations: lookupModelTools().map(toGeminiFunctionDeclaration),
     },
   ];
 }
@@ -831,24 +901,35 @@ export async function answerFromAskLookup(input: {
   let prose = '';
   let streamed = false;
   const stopped = () => input.signal?.aborted === true;
-  const runCalls = (calls: Array<{ name: string; input: Record<string, unknown> }>) => {
+  const runCalls = async (calls: Array<{ name: string; input: Record<string, unknown> }>) => {
     if (stopped() || !calls.length) return;
     const batch = calls.slice(0, 6);
-    input.onStatus?.(askLookupStatus(batch[0]!.name));
-    const rows = batch.map((call) => {
-      const started = performance.now();
-      const result = executeAskLookup(call.name, call.input, input.catalog);
-      input.timing?.addTool(call.name, performance.now() - started);
-      return { tool: call.name, input: call.input, result };
-    });
+    input.onStatus?.(batch[0]!.name === 'web_search' ? 'Searching the web…' : askLookupStatus(batch[0]!.name));
+    const rows = await Promise.all(
+      batch.map(async (call) => {
+        const started = performance.now();
+        const result =
+          call.name === 'web_search'
+            ? await webSearchLookupResult(call.input, input.fetchFn, input.catalog.timeZone)
+            : executeAskLookup(call.name, call.input, input.catalog);
+        input.timing?.addTool(call.name, performance.now() - started);
+        return { tool: call.name, input: call.input, result };
+      }),
+    );
     trace.push(...rows);
   };
   input.onStatus?.('Looking through clips…');
   let forcedOther = false;
-  const consume = async (active: LookupModelStep, userText: string, limit: number, systemText = LOOKUP_SYSTEM) => {
+  const consume = async (
+    active: LookupModelStep,
+    userText: string,
+    limit: number,
+    systemText = withAskSituation(LOOKUP_SYSTEM, input.catalog.timeZone),
+  ) => {
     for (let i = 0; i < limit && !stopped(); i += 1) {
       const turn = await active({ system: systemText, stable: parts.stable, user: userText, trace });
-      if (!turn || stopped()) break;
+      if (!turn) break;
+      const halt = stopped();
       model = turn.model || model;
       input.timing?.noteModel(model);
       if (turn.usage) {
@@ -856,22 +937,25 @@ export async function answerFromAskLookup(input: {
         input.timing?.addCacheRead(turn.usage.cacheReadTokens);
       }
       if (turn.calls.length) {
+        if (halt) break;
         streamed = false;
-        runCalls(turn.calls);
+        await runCalls(turn.calls);
         continue;
       }
       if (
+        !halt &&
         !forcedOther &&
         asksAboutOtherJobs(resolved) &&
         !trace.some((row) => row.tool === 'search_other_jobs')
       ) {
         forcedOther = true;
         streamed = false;
-        runCalls(continueAskLookup(resolved, input.catalog, trace));
+        await runCalls(continueAskLookup(resolved, input.catalog, trace));
         continue;
       }
-      prose = turn.text;
+      if (turn.text) prose = turn.text;
       streamed = Boolean(turn.streamed);
+      if (halt) break;
       break;
     }
   };
@@ -899,7 +983,7 @@ export async function answerFromAskLookup(input: {
         onCache: (state) => input.timing?.noteGeminiCache(state),
       });
     if (decision.route === 'fast') {
-      await consume(stepFor('fast'), parts.volatile, 3, LOOKUP_SYSTEM_FAST);
+      await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));
       const traceHasHit = trace.some(
         (step) => step.result.ok && JSON.stringify(step.result.data ?? '').length > 40,
       );
@@ -920,17 +1004,17 @@ export async function answerFromAskLookup(input: {
 
   if (!prose && !stopped()) {
     if (!trace.length) {
-      runCalls(planAskLookup(resolved, input.catalog, input.history));
+      await runCalls(planAskLookup(resolved, input.catalog, input.history));
     }
     for (let round = 0; round < 2 && !stopped(); round += 1) {
       const more = continueAskLookup(resolved, input.catalog, trace);
       if (!more.length) break;
-      runCalls(more);
+      await runCalls(more);
     }
     const completed = stopped()
       ? null
       : await completeAskText({
-      system: LOOKUP_SYSTEM,
+      system: withAskSituation(LOOKUP_SYSTEM, input.catalog.timeZone),
       user: `${fullUser}\n\nTool results so far:\n${formatTrace(trace) || '(none)'}\n\nAnswer from the job context, the earlier turns, and these tool results. If they do not contain it, say what is on the file instead.`,
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
@@ -954,7 +1038,7 @@ export async function answerFromAskLookup(input: {
   const retrievedChunks = retrievedChunksFor(evidence, trace, `${fullUser}\n\n${formatTrace(trace)}`);
   if (stopped()) {
     return {
-      answer: scrubStoredAskText(prose, input.catalog.clips),
+      answer: stripExternalAskLinks(scrubStoredAskText(prose, input.catalog.clips)),
       model,
       usage,
       trace,
@@ -988,6 +1072,7 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
+  answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {
     answer,

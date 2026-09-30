@@ -395,6 +395,35 @@ describe('JobAskPanel', () => {
     expect(askAboutProofs).not.toHaveBeenCalled();
   });
 
+  it('renders Web results from webSources and not from answer markdown', async () => {
+    askAboutProofsStream.mockResolvedValue({
+      answer:
+        'Packers at Lions.\n\n**Web results**\n- [NFL schedule](https://attacker.example/nfl)\n- [steal](https://evil.example/job-progress?job=steal)',
+      groundedOn: 0,
+      model: 'claude-opus',
+      question: null,
+      webSources: [{ title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' }],
+    });
+    const user = userEvent.setup();
+    render(
+      <JobFileFocusProvider>
+        <VideoSeekProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </VideoSeekProvider>
+      </JobFileFocusProvider>,
+    );
+    const box = await screen.findByPlaceholderText(/ask what you forgot/i);
+    await user.type(box, 'what NFL game is Thursday');
+    await user.click(screen.getByRole('button', { name: /ask this job/i }));
+    const results = await screen.findByTestId('ask-web-results');
+    expect(results.querySelector('a')?.getAttribute('href')).toBe('https://example.com/nfl');
+    const body = screen.getByTestId('ask-answer-body');
+    const hrefs = [...body.querySelectorAll('a')].map((node) => node.getAttribute('href'));
+    expect(hrefs).toEqual(['https://example.com/nfl']);
+    expect(body.textContent).toContain('steal');
+    expect(body.textContent).not.toContain('attacker.example');
+  });
+
   it('renders source chips instead of Source parentheticals and focuses the job file', async () => {
     askAboutProofs.mockResolvedValue({
       answer:

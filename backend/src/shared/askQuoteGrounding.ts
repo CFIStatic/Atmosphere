@@ -15,6 +15,7 @@
  * - Fabricated speaker labels are replaced; see askSpeakers.ts.
  */
 import { formatAskClock, parseAskClock, parseMomentSource, type AskMomentQuote } from './askMoments.js';
+import { joinWebResultsSection, splitWebResultsSection } from './askWebSearch.js';
 import { UNIDENTIFIED_SPEAKER, sanitizeSpeakerProse, speakerLabelOrUnidentified } from './askSpeakers.js';
 import type { TranscriptChunk } from './askTranscriptIndex.js';
 
@@ -263,7 +264,8 @@ export function enforceQuoteGrounding(
     return '';
   });
   const used: Match[] = [];
-  const lines = body.split('\n');
+  const webSplit = splitWebResultsSection(body);
+  const lines = webSplit.body.split('\n');
   const kept: string[] = [];
   for (const line of lines) {
     const grounded = groundLine(line, input, report, used);
@@ -298,7 +300,7 @@ export function enforceQuoteGrounding(
   });
   const cites = new Set<string>(cards.map((card) => card.sourceId));
   const quotedClips = new Set(cards.map((card) => parseMomentSource(card.sourceId)?.proofId).filter(Boolean));
-  const out: string[] = [body];
+  const out: string[] = [joinWebResultsSection(body, webSplit.section)];
   const sourceTrailer = trailers.find((t) => t.kind === 'sources');
   // On a clip that has quote cards, a moment link at a different spoken line
   // (often 0:00) opens the wrong moment; drop it. Other links are kept.

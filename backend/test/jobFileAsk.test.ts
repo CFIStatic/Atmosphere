@@ -9,7 +9,7 @@ import {
   preferJobFileGroundedFastPath,
   type JobFileAskContext,
 } from '../src/shared/jobFileAsk.js';
-import { ASK_TOOL_DEFINITIONS, pickAskToolsHeuristically } from '../src/shared/askTools.js';
+import { ASK_TOOL_DEFINITIONS, askToolsForAccess, pickAskToolsHeuristically } from '../src/shared/askTools.js';
 
 const file: JobFileAskContext = {
   job: {
@@ -142,23 +142,68 @@ test('preferJobFileGroundedFastPath refuses web / capability / price / live topi
   assert.equal(preferJobFileGroundedFastPath('what NFL Games are on today', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath("what's the weather today", briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('latest news headlines', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('how many NFL games are on Thursday', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what permit do I need to replace a roof', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what is the permit number', briefHit), true);
 });
 
 test('pickAskToolsHeuristically includes web_search for topical web intents, not capability-only', () => {
-  for (const q of ['search the web for tile prices', 'google IRC R905', 'what NFL Games are on today']) {
-    const picks = pickAskToolsHeuristically(q, 'org');
-    assert.ok(picks.includes('web_search'), `expected web_search for: ${q} got ${picks.join(',')}`);
+  const prev = process.env.TAVILY_API_KEY;
+  const prevProvider = process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
+  try {
+    assert.equal(askToolsForAccess('org').some((tool) => tool.name === 'web_search'), true);
+    for (const q of [
+      'search the web for tile prices',
+      'google IRC R905',
+      'what NFL Games are on today',
+      'what is the capital of France',
+    ]) {
+      const picks = pickAskToolsHeuristically(q, 'org');
+      assert.ok(picks.includes('web_search'), `expected web_search for: ${q} got ${picks.join(',')}`);
+    }
+    for (const q of ['search the web for tile prices', 'google IRC R905']) {
+      const picks = pickAskToolsHeuristically(q, 'org');
+      assert.equal(picks[0], 'web_search', `web_search should be first for: ${q}`);
+    }
+    for (const q of [
+      'can u search google',
+      'what can you search for',
+      'can you search the web?',
+      'what did the homeowner say about the lockbox',
+      'how many clips are in the video',
+    ]) {
+      const picks = pickAskToolsHeuristically(q, 'org');
+      assert.ok(
+        !picks.includes('web_search'),
+        `job or capability ask should not auto-search: ${q} got ${picks.join(',')}`,
+      );
+    }
+  } finally {
+    if (prev === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = prev;
+    if (prevProvider === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
+    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProvider;
   }
-  for (const q of ['search the web for tile prices', 'google IRC R905']) {
-    const picks = pickAskToolsHeuristically(q, 'org');
-    assert.equal(picks[0], 'web_search', `web_search should be first for: ${q}`);
-  }
-  for (const q of ['can u search google', 'what can you search for', 'can you search the web?']) {
-    const picks = pickAskToolsHeuristically(q, 'org');
-    assert.ok(
-      !picks.includes('web_search'),
-      `capability-only should not fetch google junk via web_search: ${q} got ${picks.join(',')}`,
-    );
+});
+
+test('web_search stays registered without TAVILY_API_KEY and is omitted when search is off', () => {
+  const prev = process.env.TAVILY_API_KEY;
+  const prevProvider = process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.TAVILY_API_KEY;
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  try {
+    assert.equal(askToolsForAccess('org').some((tool) => tool.name === 'web_search'), true);
+    assert.equal(pickAskToolsHeuristically('what NFL game is Thursday?', 'org').includes('web_search'), true);
+    process.env.ASK_WEB_SEARCH_PROVIDER = 'off';
+    assert.equal(askToolsForAccess('org').some((tool) => tool.name === 'web_search'), false);
+    assert.equal(pickAskToolsHeuristically('what NFL game is Thursday?', 'org').includes('web_search'), false);
+  } finally {
+    if (prev === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = prev;
+    if (prevProvider === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
+    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProvider;
   }
 });
 
@@ -183,72 +228,96 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
     GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   };
-  process.env.ASK_WEB_SEARCH_API_KEY = 'test-key';
-  process.env.ASK_WEB_SEARCH_PROVIDER = 'brave';
+  delete process.env.ASK_WEB_SEARCH_API_KEY;
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
   delete process.env.BRAVE_SEARCH_API_KEY;
   delete process.env.SERPER_API_KEY;
-  delete process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
+
+  const tavily = (title: string, url: string, content: string, answer: string) =>
+    new Response(JSON.stringify({ answer, results: [{ title, url, content }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
   let searched = false;
   try {
     // Topical web ask still searches before grounded fast-path
     searched = false;
+    let domains: string[] = [];
     const topical = await answerFromJobFile({
-      question: 'search the web for tile prices',
+      question: "what's the price of this tile at Home Depot and Lowe's",
       file,
       apiKey: null,
-      fetchFn: async () => {
+      fetchFn: async (_input, init) => {
         searched = true;
-        return new Response(
-          JSON.stringify({
-            web: {
-              results: [
-                {
-                  title: 'Tile price guide',
-                  url: 'https://example.com/tile-prices',
-                  description: 'Average tile prices',
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        const body = JSON.parse(String(init?.body ?? '{}')) as { include_domains?: string[]; api_key?: string };
+        domains = body.include_domains ?? [];
+        assert.equal(body.api_key, undefined);
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        assert.equal(headers.Authorization, 'Bearer tvly-test-not-real');
+        return tavily(
+          'Tile price guide',
+          'https://www.homedepot.com/tile',
+          'Ceramic tile is about $3 a square foot at Home Depot.',
+          'Ceramic tile is about $3 a square foot.',
         );
       },
     });
     assert.equal(searched, true, 'expected searchAskWeb for topical web ask');
     assert.ok(topical.webHits.length >= 1, 'expected webHits for topical web ask');
-    assert.equal(topical.webHits[0]?.url, 'https://example.com/tile-prices');
+    assert.equal(topical.webHits[0]?.url, 'https://www.homedepot.com/tile');
+    assert.ok(domains.includes('homedepot.com'));
+    assert.ok(domains.includes('lowes.com'));
+    assert.doesNotMatch(topical.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(topical.answer, /\[Tile price guide\]\(https:\/\/www\.homedepot\.com\/tile\)/);
+    assert.match(topical.answer, /Ceramic tile is about \$3 a square foot/);
 
     // NFL / games-today style prompt must take the web_search path (not soft-refuse)
     searched = false;
+    let nflQuery = '';
     const nfl = await answerFromJobFile({
-      question: 'what NFL Games are on today',
+      question: 'what NFL game is Thursday?',
+      file,
+      apiKey: null,
+      now: new Date('2026-09-30T15:00:00.000Z'),
+      fetchFn: async (_input, init) => {
+        searched = true;
+        nflQuery = String((JSON.parse(String(init?.body ?? '{}')) as { query?: string }).query ?? '');
+        return tavily(
+          'NFL schedule',
+          'https://example.com/nfl-thursday',
+          'Thursday, October 1, 2026: Packers at Lions.',
+          'Packers at Lions on Thursday, October 1, 2026.',
+        );
+      },
+    });
+    assert.equal(searched, true, 'expected searchAskWeb for NFL games Thursday');
+    assert.match(nflQuery, /October 1, 2026/);
+    assert.ok(nfl.webHits.length >= 1, 'expected webHits for NFL games Thursday');
+    assert.equal(nfl.webHits[0]?.url, 'https://example.com/nfl-thursday');
+    assert.match(nfl.answer, /Packers at Lions/);
+    assert.doesNotMatch(nfl.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(nfl.answer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl-thursday\)/);
+    assert.doesNotMatch(nfl.answer, /Lockbox 4412/);
+
+    searched = false;
+    const jobQuestion = await answerFromJobFile({
+      question: 'what is the lockbox',
       file,
       apiKey: null,
       fetchFn: async () => {
         searched = true;
-        return new Response(
-          JSON.stringify({
-            web: {
-              results: [
-                {
-                  title: 'NFL schedule today',
-                  url: 'https://example.com/nfl-today',
-                  description: 'Games on today',
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+        return new Response('should not search the job file question', { status: 500 });
       },
     });
-    assert.equal(searched, true, 'expected searchAskWeb for NFL games today');
-    assert.ok(nfl.webHits.length >= 1, 'expected webHits for NFL games today');
-    assert.equal(nfl.webHits[0]?.url, 'https://example.com/nfl-today');
+    assert.equal(searched, false, 'job-file questions are answered from the file');
+    assert.equal(jobQuestion.webHits.length, 0);
+    assert.match(jobQuestion.answer, /4412/);
+    assert.doesNotMatch(jobQuestion.answer, /\*\*Web results\*\*/);
 
     // Capability-only: no live fetch + short professional yes (no google junk / star soup)
     for (const question of ['can u search google', 'what can you search for']) {
@@ -270,6 +339,23 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
       assert.doesNotMatch(result.answer, /\*\*\*/);
       assert.doesNotMatch(result.answer, /brief ·/i);
     }
+
+    const answerOnly = await answerFromJobFile({
+      question: 'what NFL game is Thursday?',
+      file,
+      apiKey: null,
+      now: new Date('2026-09-30T15:00:00.000Z'),
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({ answer: 'Packers at Lions on Thursday, October 1, 2026.', results: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+    assert.match(answerOnly.answer, /Packers at Lions/);
+    assert.doesNotMatch(answerOnly.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(answerOnly.answer, /https?:\/\//);
+    assert.doesNotMatch(answerOnly.answer, /Lockbox 4412/);
+    assert.equal(answerOnly.webHits.length, 0);
   } finally {
     for (const [key, value] of Object.entries(prev)) {
       if (value === undefined) delete process.env[key];

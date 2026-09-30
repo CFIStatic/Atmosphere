@@ -15,7 +15,7 @@ export const ASK_PROSE_FORMAT_RULES = `FORMAT (ChatGPT / Claude / Grok quality �
 - Use markdown for structure only: **bold** for short section labels (e.g. **Job setup:**), *italics* sparingly for asides, and "-" or "•" for bullet lists.
 - Never dump raw asterisk soup (no "***", no decorative * around every phrase, no unbalanced **). One clean **Label:** per bullet is enough — orphan stars must never appear in the answer.
 - Capability-only asks ("can you search Google/the web?", "are you connected?") → 1–3 short professional sentences saying yes (when web search is available), optionally offer to search something specific. Do NOT live-search, do NOT append ⟦web:…⟧ / [[web:…]], and do NOT cite google.com or how-to-search pages.
-- No headings (#), no inline URLs, no images, no HTML, no code fences unless quoting a short on-file code-like string. Web citations use the unicode ⟦web: Title|url⟧ trailer only on its own line (never ASCII [[web:…]], never mid-sentence) when you actually used WEB SEARCH RESULTS.
+- No headings (#), no images, no HTML, no code fences unless quoting a short on-file code-like string. Do not write markdown links, bare URLs, or a Web results heading. The app attaches web sources separately. Never write ⟦web:…⟧ or [[web:…]].
 - Glance-simple first; save long quotes and timestamps for when they ask for depth.
 - Stay grounded: only facts from the record — never invent evidence.
 

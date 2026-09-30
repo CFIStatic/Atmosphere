@@ -27,6 +27,7 @@ import {
 import { formatQuoteTrailer, parseMomentSource, parseQuoteTrailer, momentSourceId, type AskMomentQuote } from './askMoments.js';
 import { prettyMentionStamp, sourceSlug } from './mentions.js';
 import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
+import { joinWebResultsSection, splitWebResultsSection } from './askWebSearch.js';
 
 export type AskVerifyFailureKind =
   | 'quote'
@@ -81,6 +82,11 @@ export type AskVerifySource = {
   question?: string | null;
   /** Clock for "today"; tests pin it. */
   now?: Date;
+  /**
+   * Public web text shown this turn. Dates, names, and amounts in it may appear
+   * in the answer. It is not a transcript, so it cannot justify quotation marks.
+   */
+  web?: string | null;
 };
 
 type TimedLine = { start: number | null; end: number | null; norm: string };
@@ -238,6 +244,8 @@ export type AskGroundingIndex = {
   /** Raw text: job context fields, clip titles, summaries, findings, history, extra blocks. */
   raw: string;
   norm: string;
+  /** Job records only — web snippets are excluded so they cannot ground a quote. */
+  recordNorm: string;
   dates: Set<string>;
   times: Set<string>;
   clocks: number[];
@@ -281,9 +289,14 @@ export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex 
   for (const person of people) {
     if (person.onThisJob) parts.push(person.name);
   }
-  if (source.extra) parts.push(source.extra);
+  const recordRaw = parts.filter(Boolean).join('\n');
+  // Tool and web text may inform dates. It is never a quote source.
+  if (trim(source.extra)) parts.push(trim(source.extra));
+  const web = trim(source.web);
+  if (web) parts.push(web);
   const raw = parts.filter(Boolean).join('\n');
   collectDates(raw, dates);
+  collectDates(web, dates);
   if (source.question) collectDates(source.question, dates);
   const now = source.now ?? new Date();
   const today = prettyMentionStamp(now.toISOString(), zone).day;
@@ -297,7 +310,18 @@ export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex 
     const bits = match[1]!.split(':').map(Number);
     clocks.push(bits.length === 3 ? bits[0]! * 3600 + bits[1]! * 60 + bits[2]! : bits[0]! * 60 + bits[1]!);
   }
-  return { catalog, clips, raw, norm: normalizeForMatch(raw), dates, times, clocks, people, question: source.question ?? null };
+  return {
+    catalog,
+    clips,
+    raw,
+    norm: normalizeForMatch(raw),
+    recordNorm: normalizeForMatch(recordRaw),
+    dates,
+    times,
+    clocks,
+    people,
+    question: source.question ?? null,
+  };
 }
 
 function splitTrailers(answer: string): { prose: string; trailers: string[] } {
@@ -431,14 +455,12 @@ function checkProseQuote(index: AskGroundingIndex, quote: ProseQuote): AskVerify
   const norm = normalizeForMatch(quote.text);
   if (!norm) return null;
   const words = norm.split(' ').length;
+  // A quote is an exact transcript line. Web text, tool output, and notes are not.
   if (index.clips.some((text) => findInClip(text, quote.text))) return null;
-  // Short labels ("RESTORE 365") and written records (notes, history, titles) may be quoted from the file text.
-  const parts = quote.text.split(/\.{3}|…/).map((part) => normalizeForMatch(part)).filter(Boolean);
-  if (parts.every((part) => containsNorm(index.norm, part))) return null;
   return {
     kind: 'quote',
     text: quote.full,
-    detail: words >= 3 ? 'these words are not in any transcript or record on this file' : 'this label is not on the file',
+    detail: words >= 3 ? 'these words are not in any transcript on this file' : 'this label is not in a transcript on this file',
   };
 }
 
@@ -719,7 +741,9 @@ function dedupeFailures(failures: AskVerifyFailure[]): AskVerifyFailure[] {
 
 /** Check one answer. Trailer quotes and links come back fixed; prose failures come back open. */
 export function verifyAskAnswer(answer: string, index: AskGroundingIndex): AskVerifyResult {
-  const { prose, trailers } = splitTrailers(answer);
+  const { prose: proseWithWeb, trailers } = splitTrailers(answer);
+  const webSplit = splitWebResultsSection(proseWithWeb);
+  const prose = webSplit.body;
   const failures: AskVerifyFailure[] = [];
   const outTrailers: string[] = [];
   let quotesChecked = 0;
@@ -778,7 +802,7 @@ export function verifyAskAnswer(answer: string, index: AskGroundingIndex): AskVe
         evidenceNorm: index.norm,
       }).filter((failure) => failure.kind !== 'unsupported_claim' && failure.kind !== 'yes_no')
     : [];
-  const rebuilt = [prose, ...outTrailers].filter(Boolean).join('\n\n').trim();
+  const rebuilt = joinWebResultsSection([prose, ...outTrailers].filter(Boolean).join('\n\n'), webSplit.section);
   return { answer: rebuilt, failures, open: openDeduped, quotesChecked, quotesFailed, quality };
 }
 
@@ -851,11 +875,12 @@ export function stripUnsupported(
   failures: AskVerifyFailure[],
   fallback: string,
 ): string {
-  const { trailers } = splitTrailers(answer);
-  const body = supportedProse(answer, failures);
+  const { prose, trailers } = splitTrailers(answer);
+  const webSplit = splitWebResultsSection(prose);
+  const body = supportedProse(webSplit.body, failures);
   const labels = [...new Set(failures.map(failureLabel))].slice(0, 6);
   const note = labels.length ? `Not on file, so I left it out: ${labels.join('; ')}.` : '';
   const substantive = normalizeForMatch(body.replace(/⟦\/?artifact⟧/g, '')).split(' ').filter(Boolean).length >= 6;
   const blocks = substantive ? [body, note] : [note, trim(fallback)];
-  return [...blocks, ...trailers].filter(Boolean).join('\n\n').trim();
+  return joinWebResultsSection([...blocks, ...trailers].filter(Boolean).join('\n\n'), webSplit.section);
 }
