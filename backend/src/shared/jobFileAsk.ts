@@ -678,7 +678,7 @@ export async function answerFromJobFile(input: {
   // asks (e.g. "search the web for tile prices", "can u search google") are never
   // swallowed by a brief-note hit from the job file.
   let webSearchAttempted = false;
-  if (!mentionScoped && !webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
+  if (!mentionScoped && !webHits.length && !webAnswer.trim() && shouldSupplementWithWebSearch(input.question, grounded)) {
     webSearchAttempted = true;
     const outcome = await searchAskWebDetailed(input.question, {
       fetchFn: input.fetchFn,

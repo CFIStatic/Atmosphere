@@ -80,7 +80,7 @@ test('Gemini lookup tools carry no unsupported schema keys and no empty OBJECT p
   const prevKey = process.env.TAVILY_API_KEY;
   const prevProvider = process.env.ASK_WEB_SEARCH_PROVIDER;
   delete process.env.TAVILY_API_KEY;
-  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  process.env.ASK_WEB_SEARCH_PROVIDER = 'off';
   try {
   const [{ functionDeclarations }] = geminiLookupTools();
   assert.equal(functionDeclarations.length, ASK_LOOKUP_TOOLS.length);

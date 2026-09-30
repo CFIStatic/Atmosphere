@@ -7,10 +7,12 @@
  * user explicitly asks to search or look something up, the search always runs.
  *
  * The tool calls Tavily (POST https://api.tavily.com/search, Bearer
- * TAVILY_API_KEY). When that key is unset, the tool is not registered and Ask
- * behaves as before. ASK_WEB_SEARCH_PROVIDER=off disables it even if the key
- * is set. Queries are sanitized so lockbox codes, claim numbers, and street
- * addresses are not sent upstream. The API key is never logged.
+ * TAVILY_API_KEY) when that key is set. The key is read only from
+ * TAVILY_API_KEY. When it is missing, Ask falls back to Gemini Google Search
+ * grounding, then DuckDuckGo, so a missing key does not turn search off.
+ * ASK_WEB_SEARCH_PROVIDER=off disables search. Queries are sanitized so
+ * lockbox codes, claim numbers, and street addresses are not sent upstream.
+ * The API key is never logged.
  *
  * Privacy: never reverse-image-search; never identify children; never identify
  * private job-site people from photos/video.
@@ -60,12 +62,18 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function askWebSearchProvider(): AskWebSearchProvider | null {
+function askWebSearchDisabled(): boolean {
   const forced = trim(process.env.ASK_WEB_SEARCH_PROVIDER).toLowerCase();
-  if (forced === 'off' || forced === 'none' || forced === 'false') return null;
-  // Ask's web_search tool is Tavily. Other model providers are unchanged.
-  if (!trim(process.env.TAVILY_API_KEY)) return null;
-  return 'tavily';
+  return forced === 'off' || forced === 'none' || forced === 'false';
+}
+
+export function askWebSearchProvider(): AskWebSearchProvider | null {
+  if (askWebSearchDisabled()) return null;
+  // Tavily when its own key is set. Otherwise Gemini grounding. DuckDuckGo
+  // needs no key and is not a named provider.
+  if (trim(process.env.TAVILY_API_KEY)) return 'tavily';
+  if (googleVisionApiKey()) return 'gemini';
+  return null;
 }
 
 export function askWebSearchApiKey(provider: AskWebSearchProvider = askWebSearchProvider() ?? 'brave'): string {
@@ -79,12 +87,13 @@ export function askWebSearchApiKey(provider: AskWebSearchProvider = askWebSearch
   if (provider === 'serper') {
     return trim(process.env.SERPER_API_KEY) || generic;
   }
-  return trim(process.env.TAVILY_API_KEY) || generic;
+  // Tavily's key is only TAVILY_API_KEY — never ASK_WEB_SEARCH_API_KEY.
+  return trim(process.env.TAVILY_API_KEY);
 }
 
-/** True only when Ask should register and call the Tavily web_search tool. */
+/** True unless search is explicitly off. A missing Tavily key still searches. */
 export function isAskWebSearchConfigured(): boolean {
-  return askWebSearchProvider() === 'tavily' && Boolean(trim(process.env.TAVILY_API_KEY));
+  return !askWebSearchDisabled();
 }
 
 /** Prompt rules when web search is wired (Gemini grounding or Brave/Serper/Tavily). */
@@ -320,25 +329,7 @@ export function looksLikeOutsideKnowledgeAsk(question: string): boolean {
   if (!q) return false;
   if (looksLikeWebCapabilityAsk(q)) return true;
   if (looksLikeLiveTopicalAsk(q)) return true;
-  return (
-    /\b(IRC|IBC|NEC|IMC|IPC|IECC|ASTM|UL\s*\d|NFPA|OSHA)\b/i.test(q) ||
-    /\b(building|electrical|plumbing|mechanical|fire)\s+code\b/i.test(q) ||
-    /\b(manufacturer|product\s*(spec|data|sheet)|data\s*sheet|SDS|MSDS|spec\s*sheet)\b/i.test(q) ||
-    /\b(install(?:ation)?\s+(guide|instructions|manual)|how\s+(do|to|should)\s+I\b|what\s+does\s+.+\s+mean)\b/i.test(
-      q,
-    ) ||
-    /\b(R-?value|gauge\s+steel|nail\s+pattern|flashing\s+detail|underlayment\s+spec)\b/i.test(q) ||
-    /\b(warranty|standard\s+practice|best\s+practice|code\s+requirement)\b/i.test(q) ||
-    /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q) ||
-    // Price / product market asks (tile prices, material cost, how much does X cost)
-    /\b(tile|material|lumber|shingle|roofing|flooring|paint|supply|product|labor)\s+(prices?|pricing|cost|costs)\b/i.test(
-      q,
-    ) ||
-    /\b(prices?|pricing|cost|costs)\s+(for|of)\s+\w+/i.test(q) ||
-    /\bhow\s+much\s+(does|do|is|are)\b/i.test(q) ||
-    /\b(market|retail|wholesale)\s+(price|cost|rate)\b/i.test(q) ||
-    /\b(going\s+rate|price\s+check)\b/i.test(q)
-  );
+  return looksLikeOutsideKnowledgeSubject(q);
 }
 
 /** @deprecated alias — prefer shouldSupplementWithWebSearch */
@@ -455,6 +446,17 @@ Resolve relative days against this clock before you answer or search. "Thursday"
  * Rewrite a search query so "Thursday" / "this Sunday" / "tomorrow" include the
  * calendar date in the user's timezone (America/Chicago by default).
  */
+/** A calendar date already written in the query. Bare weekdays are not dates. */
+function hasExplicitCalendarDate(query: string): boolean {
+  return (
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b/i.test(
+      query,
+    ) ||
+    /\b\d{4}-\d{2}-\d{2}\b/.test(query) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(query)
+  );
+}
+
 export function resolveAskSearchQuery(
   query: string,
   now: Date = new Date(),
@@ -462,6 +464,8 @@ export function resolveAskSearchQuery(
 ): string {
   const original = trim(query);
   if (!original) return original;
+  // An explicit date stays as written. Do not append a weekday's next occurrence.
+  if (hasExplicitCalendarDate(original)) return original;
   const zone = trim(timeZone) || ASK_USER_TIME_ZONE;
   let today: ZonedYmd;
   try {
@@ -547,74 +551,102 @@ function looksLikeSmallTalk(question: string): boolean {
   );
 }
 
+/** Codes, prices, and how-to subjects. A bare "search the web" is not a subject. */
+function looksLikeOutsideKnowledgeSubject(question: string): boolean {
+  const q = trim(question);
+  if (!q) return false;
+  return (
+    /\b(IRC|IBC|NEC|IMC|IPC|IECC|ASTM|UL\s*\d|NFPA|OSHA)\b/i.test(q) ||
+    /\b(building|electrical|plumbing|mechanical|fire)\s+code\b/i.test(q) ||
+    /\b(manufacturer|product\s*(spec|data|sheet)|data\s*sheet|SDS|MSDS|spec\s*sheet)\b/i.test(q) ||
+    /\b(install(?:ation)?\s+(guide|instructions|manual)|how\s+(do|to|should)\s+I\b|what\s+does\s+.+\s+mean)\b/i.test(
+      q,
+    ) ||
+    /\b(R-?value|gauge\s+steel|nail\s+pattern|flashing\s+detail|underlayment\s+spec)\b/i.test(q) ||
+    /\b(warranty|standard\s+practice|best\s+practice|code\s+requirement)\b/i.test(q) ||
+    /\bwho\s+makes\b|\bwho\s+manufactures\b|\bpart\s*#?\s*\d/i.test(q) ||
+    /\b(tile|material|lumber|shingle|roofing|flooring|paint|supply|product|labor)\s+(prices?|pricing|cost|costs)\b/i.test(
+      q,
+    ) ||
+    /\b(prices?|pricing|cost|costs)\s+(for|of)\s+\w+/i.test(q) ||
+    /\bhow\s+much\s+(does|do|is|are)\b/i.test(q) ||
+    /\b(market|retail|wholesale)\s+(price|cost|rate)\b/i.test(q) ||
+    /\b(going\s+rate|price\s+check)\b/i.test(q)
+  );
+}
+
+function looksLikePublicTopic(question: string): boolean {
+  return looksLikeLiveTopicalAsk(question) || looksLikeOutsideKnowledgeSubject(question);
+}
+
 /**
- * Questions about this job, its videos, people, findings, or records.
- * Everyday words (homeowner, job, file, claim, permit, "how many", "what did")
- * count only when the question points at this file. A public fact that merely
- * shares one of those words is not a job-file question. Explicit web requests
- * are handled separately so "search the web for …" still runs.
+ * Questions the job file is supposed to answer: this job's videos, people,
+ * findings, or records. Shared words (job, claim, permit, homeowner, "how
+ * many", "what did") do not by themselves make a public question job-only.
  */
+const PUBLIC_JOB_TAIL =
+  'market|markets|opening|openings|posting|postings|board|boards|description|descriptions|title|titles|listing|listings|growth|report|reports|cuts|creation|losses';
+
+/** "the job market" is public. "this job" and "the job file" are this file. */
+function mentionsThisJobRecord(q: string): boolean {
+  if (new RegExp(`\\b(?:the|this|our|my)\\s+job\\s+(?:${PUBLIC_JOB_TAIL})\\b`, 'i').test(q)) return false;
+  if (/\b(?:this|our|my)\s+(?:job|file|claim|permit|visit|notes?|evidence|scope)\b/i.test(q)) return true;
+  if (/\bthe\s+(?:job\s+file|file|claim|visit|notes?|evidence|scope)\b/i.test(q)) return true;
+  if (/\bthe\s+job\b/i.test(q)) return true;
+  if (/\b(?:on|in)\s+(?:this|the|our)\s+(?:job|file)\b/i.test(q)) return true;
+  return false;
+}
+
+/**
+ * Questions about this recording: what was said, what happened, a timestamp,
+ * or whether something in the clip is on. A public subject ("is the game on")
+ * is not one of these.
+ */
+function asksAboutThisRecording(q: string): boolean {
+  if (looksLikeLiveTopicalAsk(q)) return false;
+  return (
+    /\b(time ?stamps?)\b/i.test(q) ||
+    /\bwhat was said\b/i.test(q) ||
+    /\bwhat are they talking about\b/i.test(q) ||
+    /\btalking about\b/i.test(q) ||
+    /\bdid (?:they|he|she|anyone|anything)\b/i.test(q) ||
+    /\b(?:anyone|they|he|she) mention(?:ed)?\b/i.test(q) ||
+    /\bagree(?:d)? on\b/i.test(q) ||
+    /\bis the (?:tv|light|fan|switch|screen|power|water|heater|ac|heat) (?:on|off)\b/i.test(q) ||
+    /\b(?:the|this) worker\b/i.test(q) ||
+    /\b(?:in|on) (?:the|this) (?:clip|video|recording|footage)\b/i.test(q)
+  );
+}
+
 export function asksAboutJobFile(question: string): boolean {
   const q = trim(question);
   if (!q) return false;
-
-  if (/\b(lockbox|access roster|work log|on[\s-]?site|transcript|punch(?:\s*list)?)\b/i.test(q)) {
+  if (asksAboutThisRecording(q)) return true;
+  const publicTopic = looksLikePublicTopic(q);
+  // These name this file's records even when the user also says "search".
+  if (/\b(lockbox|transcript|punch|access roster|on site|work logs?)\b/i.test(q)) return true;
+  if (/\b(clips?|videos?|footage|recordings?|mic|crew|speaker|findings?)\b/i.test(q)) {
+    if (publicTopic && !/\b(this|the|our|my)\s+(?:clip|video|recording|transcript|job|file)\b/i.test(q)) {
+      return false;
+    }
     return true;
   }
-  if (/\b(job file|job number|claim\s*(?:number|#|num)|permit\s*(?:number|#|num))\b/i.test(q)) {
+  if (/\bhomeowner\s+(?:said|says|say|asked|told)\b/i.test(q)) return true;
+  if (/\b(?:what did|who said)\b/i.test(q) && /\b(?:homeowner|adjuster|crew|speaker|tech|guy|they|he|she|anyone)\b/i.test(q)) {
     return true;
   }
-  // "this job" / "the job file", not "the job market".
-  if (
-    /\b(this|our|my)\s+job\b/i.test(q) ||
-    /\bthe\s+job\b(?!\s+(?:market|markets|interview|interviews|search|posting|postings|application|applications|board|offer|offers|hunting)\b)/i.test(
-      q,
-    )
-  ) {
-    return true;
-  }
-  // "the video", "our crew", "the file" — pointing at this job, not a public noun.
-  if (
-    /\b(this|the|our|my)\s+(file|clip|clips|video|videos|footage|recording|recordings|transcript|mic|visit|day|scope|crew|notes?|findings?|evidence|adjuster|speaker)\b/i.test(
-      q,
-    )
-  ) {
-    return true;
-  }
-  // "the homeowner" is a person on this job. "homeowner insurance" is not.
-  if (
-    /\b(this|the|our|my)\s+homeowners?\b(?!\s*'?s?\s*(?:insurance|policy|policies|rates?|costs?|premiums?)\b)/i.test(
-      q,
-    )
-  ) {
-    return true;
-  }
-  // This file's claim or permit, not "the permit cost" / "the claim process".
-  if (/\b(this|our|my)\s+(claim|permit)\b/i.test(q)) return true;
-  if (
-    /\bthe\s+(claim|permit)\b/i.test(q) &&
-    !/\bthe\s+(claim|permit)\s+(cost|costs|price|prices|fee|fees|process|requirements?|application)\b/i.test(q)
-  ) {
-    return true;
-  }
-  // "how many clips", not "how many ounces".
+  if (mentionsThisJobRecord(q) && !publicTopic) return true;
+  if (/\b(?:the|this|our|my)\s+homeowner\b/i.test(q) && !publicTopic) return true;
+  if (/\b(?:the|this|our|my)\s+permit\b/i.test(q) && !publicTopic) return true;
+  if (/\b(?:job|claim|permit)\s*(?:#|number|num)\b/i.test(q)) return true;
   if (
     /\bhow many\b/i.test(q) &&
-    /\b(clips?|videos?|recordings?|transcripts?|findings?|notes?|speakers?|photos?)\b/i.test(q)
+    /\b(?:clips?|videos?|lines?|notes?|findings?|speakers?|quotes?|people|tasks?)\b/i.test(q) &&
+    !publicTopic
   ) {
     return true;
   }
-  // What someone on the job said, not "what did the president say".
-  if (/\b(who said|what was said)\b/i.test(q)) return true;
-  if (/\bwhat did\s+(?:the\s+|our\s+|this\s+)?(homeowner|adjuster|crew|speaker|they|he|she)\b/i.test(q)) {
-    return true;
-  }
-  if (
-    /\b(homeowner|adjuster|crew|speaker)\b/i.test(q) &&
-    /\b(say|said|mention(?:ed)?|tell|told|ask(?:ed)?)\b/i.test(q)
-  ) {
-    return true;
-  }
+  if (/\b(?:this|the|our)\s+(?:visit|day)\b/i.test(q) && !publicTopic) return true;
   return false;
 }
 
@@ -750,6 +782,193 @@ export function geminiWebSearchModel(): string {
   const forced = trim(process.env.ASK_WEB_SEARCH_MODEL);
   if (forced) return forced;
   return 'gemini-2.5-flash';
+}
+
+function geminiWebSearchBaseUrl(): string {
+  return (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+}
+
+type GeminiGroundingChunk = {
+  web?: { uri?: string; title?: string; snippet?: string };
+};
+type GeminiGroundingSupport = {
+  groundingChunkIndices?: number[];
+  segment?: { text?: string };
+};
+type GeminiGeneratePayload = {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+    groundingMetadata?: {
+      groundingChunks?: GeminiGroundingChunk[];
+      groundingSupports?: GeminiGroundingSupport[];
+      webSearchQueries?: string[];
+    };
+  }>;
+};
+
+/** Parse {"hits":[{title,url,snippet}]} (or a bare array) from model text. */
+export function parseGeminiAskWebHitsJson(raw: string, limit = 5): AskWebHit[] {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return [];
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = (fence?.[1] ?? trimmed).trim();
+  const startObj = body.indexOf('{');
+  const startArr = body.indexOf('[');
+  let data: unknown;
+  try {
+    if (startObj >= 0 && (startArr < 0 || startObj < startArr)) {
+      const end = body.lastIndexOf('}');
+      if (end <= startObj) return [];
+      data = JSON.parse(body.slice(startObj, end + 1));
+    } else if (startArr >= 0) {
+      const end = body.lastIndexOf(']');
+      if (end <= startArr) return [];
+      data = JSON.parse(body.slice(startArr, end + 1));
+    } else {
+      return [];
+    }
+  } catch {
+    return [];
+  }
+  const rows: unknown[] = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { hits?: unknown }).hits)
+      ? ((data as { hits: unknown[] }).hits)
+      : Array.isArray((data as { results?: unknown }).results)
+        ? ((data as { results: unknown[] }).results)
+        : [];
+  const hits: AskWebHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    pushHit(hits, {
+      title: trim(r.title ?? r.name),
+      url: trim(r.url ?? r.link ?? r.uri),
+      snippet: trim(r.snippet ?? r.description ?? r.content ?? ''),
+    });
+    if (hits.length >= limit) break;
+  }
+  return hits;
+}
+
+function collectUrisFromUnknown(value: unknown, into: Set<string>, depth = 0) {
+  if (depth > 6 || value == null) return;
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (/^https?:\/\//i.test(s)) into.add(s);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectUrisFromUnknown(item, into, depth + 1);
+    return;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    for (const key of ['uri', 'url', 'link', 'web']) {
+      if (key in obj) collectUrisFromUnknown(obj[key], into, depth + 1);
+    }
+    if (obj.web && typeof obj.web === 'object') {
+      collectUrisFromUnknown(obj.web, into, depth + 1);
+    }
+  }
+}
+
+function hitsFromGeminiGrounding(payload: GeminiGeneratePayload, limit: number): AskWebHit[] {
+  const meta = payload.candidates?.[0]?.groundingMetadata;
+  const chunks = meta?.groundingChunks ?? [];
+  const supports = meta?.groundingSupports ?? [];
+  const hits: AskWebHit[] = [];
+
+  for (const chunk of chunks) {
+    const web = chunk.web;
+    if (!web) continue;
+    pushHit(hits, {
+      title: trim(web.title),
+      url: trim(web.uri),
+      snippet: trim(web.snippet),
+    });
+    if (hits.length >= limit) break;
+  }
+
+  if (hits.length < limit) {
+    for (const support of supports) {
+      const indices = support.groundingChunkIndices ?? [];
+      const segmentText = trim(support.segment?.text);
+      for (const idx of indices) {
+        const web = chunks[idx]?.web;
+        if (!web?.uri) continue;
+        const existing = hits.find((h) => h.url === trim(web.uri));
+        if (existing && !existing.snippet && segmentText) {
+          existing.snippet = segmentText.slice(0, 400);
+        } else if (!existing) {
+          pushHit(hits, {
+            title: trim(web.title),
+            url: trim(web.uri),
+            snippet: segmentText,
+          });
+        }
+        if (hits.length >= limit) break;
+      }
+      if (hits.length >= limit) break;
+    }
+  }
+
+  if (hits.length < limit && meta) {
+    const uris = new Set<string>();
+    collectUrisFromUnknown(meta, uris);
+    for (const uri of uris) {
+      pushHit(hits, { title: '', url: uri, snippet: '' });
+      if (hits.length >= limit) break;
+    }
+  }
+
+  return hits;
+}
+
+/** Gemini generateContent + Google Search grounding. Used when Tavily's key is missing. */
+async function searchGemini(
+  query: string,
+  apiKey: string,
+  limit: number,
+  fetchFn: typeof fetch,
+): Promise<AskWebHit[]> {
+  const model = geminiWebSearchModel();
+  const url = `${geminiWebSearchBaseUrl()}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const system = [
+    'You search the public web and return citation-ready hits.',
+    `Reply JSON only: {"hits":[{"title":"...","url":"https://...","snippet":"..."}]} with up to ${limit} results.`,
+    'Prefer official codes, manufacturer docs, and standards. Never invent URLs.',
+    'Never reverse-image-search or identify private people.',
+  ].join(' ');
+  const body = {
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: `Search the public web for:\n${query}` }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 2048,
+    },
+  };
+  const res = await fetchFn(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const errBody = (await res.text().catch(() => '')).slice(0, 240);
+    throw new Error(`gemini_search_${res.status}:${redactSecrets(errBody)}`);
+  }
+  const payload = (await res.json()) as GeminiGeneratePayload;
+  const fromGrounding = hitsFromGeminiGrounding(payload, limit);
+  const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  const fromJson = parseGeminiAskWebHitsJson(text, limit);
+  const hits: AskWebHit[] = [];
+  for (const hit of [...fromGrounding, ...fromJson]) {
+    pushHit(hits, hit);
+    if (hits.length >= limit) break;
+  }
+  return hits;
 }
 
 const DDG_UA =
@@ -987,8 +1206,9 @@ export type AskWebSearchOptions = {
 };
 
 /**
- * Public web search for Ask via Tavily. Returns no hits when the key is unset,
- * the question is blocked, or Tavily fails. Does not call other search providers.
+ * Public web search for Ask. Tavily when TAVILY_API_KEY is set. Otherwise
+ * Gemini Google Search grounding, then DuckDuckGo. A missing Tavily key does
+ * not turn search off. ASK_WEB_SEARCH_PROVIDER=off does.
  */
 export async function searchAskWebDetailed(
   question: string,
@@ -997,8 +1217,6 @@ export async function searchAskWebDetailed(
   const empty: AskWebSearchOutcome = { hits: [], answer: '' };
   if (askWebSearchBlockedReason(question)) return empty;
   if (!isAskWebSearchConfigured()) return empty;
-  const apiKey = trim(process.env.TAVILY_API_KEY);
-  if (!apiKey) return empty;
 
   const sanitized = sanitizeAskWebQuery(question);
   const query = resolveAskSearchQuery(sanitized, opts?.now ?? new Date(), opts?.timeZone ?? ASK_USER_TIME_ZONE);
@@ -1009,11 +1227,38 @@ export async function searchAskWebDetailed(
   const includeDomains = includeDomainsForAsk(question, opts?.includeDomains);
   askWebSearchCount += 1;
   const searches = askWebSearchCount;
+  const tavilyKey = trim(process.env.TAVILY_API_KEY);
+  if (tavilyKey) {
+    try {
+      const outcome = await searchTavily(query, tavilyKey, limit, fetchFn, includeDomains);
+      // Count of searches only — never the key, the Authorization header, or the query.
+      logger.info('ask_web_search', { searches, results: outcome.hits.length });
+      return outcome;
+    } catch (err) {
+      const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
+      logger.warn('ask_web_search_failed', { searches, detail });
+      return empty;
+    }
+  }
+
+  const geminiKey = googleVisionApiKey();
+  if (geminiKey) {
+    try {
+      const hits = await searchGemini(query, geminiKey, limit, fetchFn);
+      if (hits.length) {
+        logger.info('ask_web_search', { searches, results: hits.length });
+        return { hits, answer: '' };
+      }
+    } catch (err) {
+      const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
+      logger.warn('ask_web_search_failed', { searches, detail });
+    }
+  }
+
   try {
-    const outcome = await searchTavily(query, apiKey, limit, fetchFn, includeDomains);
-    // Count of searches only — never the key, the Authorization header, or the query.
-    logger.info('ask_web_search', { searches, results: outcome.hits.length });
-    return outcome;
+    const hits = await searchDuckDuckGo(query, limit, fetchFn);
+    logger.info('ask_web_search', { searches, results: hits.length });
+    return { hits, answer: '' };
   } catch (err) {
     const detail = redactSecrets((err instanceof Error ? err.message : String(err)).slice(0, 280));
     logger.warn('ask_web_search_failed', { searches, detail });
@@ -1035,7 +1280,7 @@ export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
   return `${lead}${lines}`.trim();
 }
 
-const WEB_SECTION_RE = /(?:^|\n)(\*\*Web results\*\*[\s\S]*)$/i;
+const WEB_SECTION_RE = /(?:^|\n+)(\*\*Web results\*\*[\s\S]*)$/i;
 
 /** Split a labeled Web results section off the answer so job checks leave it intact. */
 export function splitWebResultsSection(answer: string): { body: string; section: string } {

@@ -108,6 +108,20 @@ test('a Web results section keeps its link, date, and name while a fabricated jo
   assert.doesNotMatch(body, /The schedule is below/);
 });
 
+test('a Web results section after a single newline stays out of the job-evidence check', () => {
+  const answer = 'Thursday night.\n**Web results**\n- [NFL schedule](https://example.com/nfl) — October 1, 2026: Mike Delgado is not a source.';
+  const result = verifyAskAnswer(answer, index());
+  assert.match(result.answer, /\*\*Web results\*\*/);
+  assert.match(result.answer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
+  assert.match(result.answer, /October 1, 2026/);
+  assert.match(result.answer, /Mike Delgado/);
+  assert.equal(result.open.some((failure) => /October 1/.test(failure.text)), false);
+  assert.equal(
+    result.open.some((failure) => failure.kind === 'name' && /Mike Delgado/.test(failure.text)),
+    false,
+  );
+});
+
 test('a fabricated trailer quote is dropped and a misattributed one moves to the right clip and time', () => {
   const answer = `Two lines are on file.\n\n⟦quotes: ${cite(CLIP_A, 'handheld-walkthrough', 15)}|Speaker|We've just got to go to QuickBooks online. ;; ${cite(CLIP_A, 'handheld-walkthrough', 3)}|Speaker|We need a new roof.⟧`;
   const result = verifyAskAnswer(answer, index());

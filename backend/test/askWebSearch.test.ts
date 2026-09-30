@@ -11,6 +11,7 @@ import {
   filterWebHitsToAllowed,
   formatWebTrailer,
   geminiWebSearchModel,
+  askWebSearchApiKey,
   isAskWebSearchConfigured,
   filterLowValueWebCitations,
   isLowValueWebCitation,
@@ -26,8 +27,10 @@ import {
   resolveAskSearchQuery,
   sanitizeAskWebQuery,
   searchAskWeb,
+  searchAskWebDetailed,
   shouldSearchAskWeb,
   shouldSupplementWithWebSearch,
+  splitWebResultsSection,
   stripWebTrailer,
   unwrapDuckDuckGoUrl,
 } from '../src/shared/askWebSearch.js';
@@ -183,12 +186,27 @@ test('shouldSupplementWithWebSearch respects grounded hits and privacy', async (
     shouldSupplementWithWebSearch('what is the lockbox', 'brief · Gate / access: Lockbox 4412'),
     false,
   );
+  await withEnv(
+    {
+      ASK_WEB_SEARCH_PROVIDER: 'off',
+      TAVILY_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(
+        shouldSupplementWithWebSearch('what does IRC R905 require', 'This job file does not have that.'),
+        false,
+      );
+      assert.equal(isAskWebSearchConfigured(), false);
+    },
+  );
   await clearSearchEnv(() => {
+    assert.equal(isAskWebSearchConfigured(), true);
     assert.equal(
       shouldSupplementWithWebSearch('what does IRC R905 require', 'This job file does not have that.'),
-      false,
+      true,
     );
-    assert.equal(isAskWebSearchConfigured(), false);
   });
 });
 
@@ -228,10 +246,10 @@ test('shouldSupplementWithWebSearch when key is set for code questions', async (
   );
 });
 
-test('TAVILY_API_KEY configures Ask web search; other provider keys do not', async () => {
+test('TAVILY_API_KEY selects Tavily; a missing key still leaves search on', async () => {
   await withEnv(
     {
-      ASK_WEB_SEARCH_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: 'generic-not-tavily',
       ASK_WEB_SEARCH_PROVIDER: undefined,
       BRAVE_SEARCH_API_KEY: 'brave-key',
       SERPER_API_KEY: 'serper-key',
@@ -240,13 +258,19 @@ test('TAVILY_API_KEY configures Ask web search; other provider keys do not', asy
       GOOGLE_API_KEY: 'google-test-key',
     },
     () => {
-      assert.equal(askWebSearchProvider(), null);
-      assert.equal(isAskWebSearchConfigured(), false);
-      assert.match(askWebCapabilityRules(), /not configured/i);
+      assert.equal(askWebSearchProvider(), 'gemini');
+      assert.equal(isAskWebSearchConfigured(), true);
+      assert.equal(askWebSearchApiKey('tavily'), '');
+      assert.match(askWebCapabilityRules(), /You CAN search the public web/i);
     },
   );
+  await clearSearchEnv(() => {
+    assert.equal(askWebSearchProvider(), null);
+    assert.equal(isAskWebSearchConfigured(), true);
+  });
   await withEnv(TAVILY_ON, () => {
     assert.equal(askWebSearchProvider(), 'tavily');
+    assert.equal(askWebSearchApiKey(), 'tvly-test-not-real');
     assert.equal(isAskWebSearchConfigured(), true);
     assert.match(askWebCapabilityRules(), /You CAN search the public web/i);
     assert.doesNotMatch(askWebCapabilityRules(), /not configured/i);
@@ -369,8 +393,8 @@ test('normalizeAskWebCitations attaches validated trailer', () => {
   assert.match(missing, /⟦web:/);
 });
 
-test('searchAskWeb soft-fails when unset and when fetch errors', async () => {
-  await clearSearchEnv(async () => {
+test('searchAskWeb soft-fails when search is off and when fetch errors', async () => {
+  await withEnv({ ...TAVILY_ON, ASK_WEB_SEARCH_PROVIDER: 'off' }, async () => {
     let called = false;
     const hits = await searchAskWeb('IRC R905', {
       fetchFn: async () => {
@@ -737,4 +761,177 @@ test('professionalWebCapabilityAnswer is a short yes without citations', async (
       assert.doesNotMatch(offline, /web:/i);
     },
   );
+});
+
+test('shared words do not hide a public question from web search', async () => {
+  await withEnv(TAVILY_ON, () => {
+    for (const question of [
+      'how many NFL games are on Thursday',
+      'what permit do I need to replace a roof',
+      'what did the Fed say about rates',
+      'homeowner insurance deductible',
+      'job market today',
+    ]) {
+      assert.equal(asksAboutJobFile(question), false, question);
+      assert.equal(shouldSupplementWithWebSearch(question, 'brief · Carrier approved the deck.'), true, question);
+    }
+    for (const question of [
+      'what did the homeowner say about the skylights',
+      'how many clips are in the video',
+      'what is the permit number',
+      'what is the lockbox',
+      'what is on the job file',
+      'Did anything happen?',
+      'what are they talking about',
+      'Is the TV on?',
+      'What was said about LedgerApp and when?',
+    ]) {
+      assert.equal(asksAboutJobFile(question), true, question);
+      assert.equal(shouldSupplementWithWebSearch(question, 'brief · Lockbox 4412'), false, question);
+    }
+    const shared = composeAskWebAnswer({
+      question: 'how many NFL games are on Thursday',
+      jobAnswer: 'brief · Carrier approved the deck.',
+      webAnswer: 'Three games on Thursday, October 1, 2026.',
+      hits: [],
+    });
+    assert.match(shared, /^Three games on Thursday, October 1, 2026/);
+    assert.doesNotMatch(shared, /\*\*Web results\*\*/);
+    assert.doesNotMatch(shared, /https?:\/\//);
+    assert.doesNotMatch(shared, /Carrier approved/);
+  });
+});
+
+test('an explicit date is not rewritten into a conflicting weekday date', async () => {
+  const dated = 'NFL game Thursday, October 8, 2026';
+  assert.equal(resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'), dated);
+  assert.doesNotMatch(resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'), /October 1, 2026/);
+  assert.equal(
+    resolveAskSearchQuery('games today October 8, 2026', ASK_NOW, 'America/Chicago'),
+    'games today October 8, 2026',
+  );
+  assert.match(
+    resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago'),
+    /October 1, 2026/,
+  );
+
+  await withEnv(TAVILY_ON, async () => {
+    let query = '';
+    await searchAskWeb(dated, {
+      now: ASK_NOW,
+      timeZone: 'America/Chicago',
+      fetchFn: async (_input, init) => {
+        query = String((JSON.parse(String(init?.body ?? '{}')) as { query?: string }).query ?? '');
+        return new Response(JSON.stringify({ answer: 'Thursday night.', results: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    });
+    assert.equal(query, dated);
+    assert.doesNotMatch(query, /October 1, 2026/);
+  });
+});
+
+test('a single newline still splits the Web results section', () => {
+  const split = splitWebResultsSection(
+    'Thursday night.\n**Web results**\n- [NFL schedule](https://example.com/nfl) — October 1, 2026.',
+  );
+  assert.equal(split.body, 'Thursday night.');
+  assert.match(split.section, /^\*\*Web results\*\*/);
+  assert.match(split.section, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
+  assert.doesNotMatch(split.body, /Web results/);
+});
+
+test('a missing Tavily key falls back to Gemini grounding, then DuckDuckGo', async () => {
+  await withEnv(
+    {
+      TAVILY_API_KEY: undefined,
+      ASK_WEB_SEARCH_API_KEY: 'generic-not-tavily',
+      ASK_WEB_SEARCH_PROVIDER: undefined,
+      BRAVE_SEARCH_API_KEY: undefined,
+      SERPER_API_KEY: undefined,
+      GEMINI_API_KEY: 'gemini-test-key',
+      GOOGLE_API_KEY: undefined,
+    },
+    async () => {
+      const urls: string[] = [];
+      const hits = await searchAskWeb('what NFL game is Thursday?', {
+        now: ASK_NOW,
+        timeZone: 'America/Chicago',
+        fetchFn: async (input, init) => {
+          const url = String(input);
+          urls.push(url);
+          assert.equal(url.includes('api.tavily.com'), false);
+          const headers = (init?.headers ?? {}) as Record<string, string>;
+          assert.equal(headers.Authorization, undefined);
+          assert.equal(headers['x-goog-api-key'], 'gemini-test-key');
+          const body = JSON.parse(String(init?.body ?? '{}')) as { tools?: Array<{ google_search?: unknown }> };
+          assert.ok(body.tools?.some((tool) => tool.google_search));
+          return new Response(
+            JSON.stringify({
+              candidates: [
+                {
+                  groundingMetadata: {
+                    groundingChunks: [
+                      { web: { uri: 'https://example.com/nfl', title: 'NFL schedule', snippet: 'October 1, 2026.' } },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+      });
+      assert.equal(hits[0]?.url, 'https://example.com/nfl');
+      assert.equal(urls.some((url) => url.includes('generativelanguage.googleapis.com')), true);
+    },
+  );
+
+  await clearSearchEnv(async () => {
+    const urls: string[] = [];
+    const hits = await searchAskWebDetailed('IRC R905 underlayment', {
+      fetchFn: async (input) => {
+        const url = String(input);
+        urls.push(url);
+        assert.equal(url.includes('api.tavily.com'), false);
+        if (url.includes('api.duckduckgo.com')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(
+          `<a class="result__a" href="https://codes.iccsafe.org/r905">IRC R905</a><a class="result__snippet" href="#">Asphalt shingles</a>`,
+          { status: 200, headers: { 'Content-Type': 'text/html' } },
+        );
+      },
+    });
+    assert.equal(hits.hits[0]?.url, 'https://codes.iccsafe.org/r905');
+    assert.equal(hits.answer, '');
+    assert.equal(urls.some((url) => url.includes('duckduckgo.com')), true);
+  });
+});
+
+test('Tavily answer with no result links is kept and no links are invented', async () => {
+  await withEnv(TAVILY_ON, async () => {
+    const outcome = await searchAskWebDetailed('what NFL game is Thursday?', {
+      now: ASK_NOW,
+      timeZone: 'America/Chicago',
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({ answer: 'Packers at Lions on Thursday, October 1, 2026.', results: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+    assert.deepEqual(outcome.hits, []);
+    assert.match(outcome.answer, /Packers at Lions/);
+    const composed = composeAskWebAnswer({
+      question: 'what NFL game is Thursday?',
+      jobAnswer: 'brief · Carrier approved the deck.',
+      webAnswer: outcome.answer,
+      hits: outcome.hits,
+    });
+    assert.match(composed, /Packers at Lions/);
+    assert.doesNotMatch(composed, /\*\*Web results\*\*/);
+    assert.doesNotMatch(composed, /https?:\/\//);
+  });
 });

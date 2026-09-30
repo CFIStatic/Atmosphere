@@ -142,6 +142,9 @@ test('preferJobFileGroundedFastPath refuses web / capability / price / live topi
   assert.equal(preferJobFileGroundedFastPath('what NFL Games are on today', briefHit), false);
   assert.equal(preferJobFileGroundedFastPath("what's the weather today", briefHit), false);
   assert.equal(preferJobFileGroundedFastPath('latest news headlines', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('how many NFL games are on Thursday', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what permit do I need to replace a roof', briefHit), false);
+  assert.equal(preferJobFileGroundedFastPath('what is the permit number', briefHit), true);
 });
 
 test('pickAskToolsHeuristically includes web_search for topical web intents, not capability-only', () => {
@@ -185,12 +188,15 @@ test('pickAskToolsHeuristically includes web_search for topical web intents, not
   }
 });
 
-test('web_search is not registered when TAVILY_API_KEY is unset', () => {
+test('web_search stays registered without TAVILY_API_KEY and is omitted when search is off', () => {
   const prev = process.env.TAVILY_API_KEY;
   const prevProvider = process.env.ASK_WEB_SEARCH_PROVIDER;
   delete process.env.TAVILY_API_KEY;
   delete process.env.ASK_WEB_SEARCH_PROVIDER;
   try {
+    assert.equal(askToolsForAccess('org').some((tool) => tool.name === 'web_search'), true);
+    assert.equal(pickAskToolsHeuristically('what NFL game is Thursday?', 'org').includes('web_search'), true);
+    process.env.ASK_WEB_SEARCH_PROVIDER = 'off';
     assert.equal(askToolsForAccess('org').some((tool) => tool.name === 'web_search'), false);
     assert.equal(pickAskToolsHeuristically('what NFL game is Thursday?', 'org').includes('web_search'), false);
   } finally {
@@ -333,6 +339,23 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
       assert.doesNotMatch(result.answer, /\*\*\*/);
       assert.doesNotMatch(result.answer, /brief ·/i);
     }
+
+    const answerOnly = await answerFromJobFile({
+      question: 'what NFL game is Thursday?',
+      file,
+      apiKey: null,
+      now: new Date('2026-09-30T15:00:00.000Z'),
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({ answer: 'Packers at Lions on Thursday, October 1, 2026.', results: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+    assert.match(answerOnly.answer, /Packers at Lions/);
+    assert.doesNotMatch(answerOnly.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(answerOnly.answer, /https?:\/\//);
+    assert.doesNotMatch(answerOnly.answer, /Lockbox 4412/);
+    assert.equal(answerOnly.webHits.length, 0);
   } finally {
     for (const [key, value] of Object.entries(prev)) {
       if (value === undefined) delete process.env[key];
