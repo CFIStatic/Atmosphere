@@ -1669,7 +1669,8 @@ export async function answerFromClip(input: {
     return { answer, model: null, usage: null };
   }
 
-  const webNote = webHits.length
+  const webUsable = webHits.length > 0 || Boolean(webAnswer.trim());
+  const webNote = webUsable
     ? `\n\nWEB SEARCH RESULTS (public web — this clip's evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
     : '';
 
@@ -1698,7 +1699,7 @@ export async function answerFromClip(input: {
     onToken: input.onToken,
   });
   if (!completed) {
-    const answer = webHits.length
+    const answer = webUsable
       ? composeAskWebAnswer({
           question: input.question,
           jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
@@ -1733,7 +1734,7 @@ export async function answerFromClip(input: {
   // itself, skips the number or the time, dumps the whole transcript, or claims
   // work / prices / commitments the reading does not support is replaced by the
   // grounded answer when that one checks out better.
-  if (!supplement && !(webHits.length && !asksAboutJobFile(input.question))) {
+  if (!supplement && !(webUsable && !asksAboutJobFile(input.question))) {
     const evidenceNorm = normalizeForMatch(reading);
     const transcripts = [transcriptLines(input.record.transcript)];
     const modelIssues = answerQualityFailures({ question: input.question, answer: completed.text, transcripts, evidenceNorm });
@@ -1746,6 +1747,6 @@ export async function answerFromClip(input: {
     }
   }
   const shaped = withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text));
-  const answer = webHits.length ? ensureWebResultsSection(shaped, webHits) : shaped;
+  const answer = webUsable ? ensureWebResultsSection(shaped, webHits) : shaped;
   return { answer, model: completed.model, usage: completed.usage };
 }

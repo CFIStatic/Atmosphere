@@ -691,12 +691,14 @@ export async function answerFromJobFile(input: {
     webAnswer = outcome.answer || webAnswer;
   }
 
+  const webUsable = webHits.length > 0 || Boolean(trim(webAnswer));
+
   if (
     !mentionScoped &&
     !toolsHandled &&
     !isLongMemoryQuestion(input.question) &&
     preferJobFileGroundedFastPath(input.question, grounded) &&
-    !webHits.length
+    !webUsable
   ) {
     emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
@@ -734,7 +736,7 @@ export async function answerFromJobFile(input: {
   }
 
   const record = formatJobFileRecord(input.file).trim();
-  if (!input.lookup && !record && !toolResults.length && !webHits.length) {
+  if (!input.lookup && !record && !toolResults.length && !webUsable) {
     emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
@@ -748,7 +750,7 @@ export async function answerFromJobFile(input: {
   const extraSystem =
     `\n\n${askClockSystemRules(input.now ?? new Date(), zone)}` +
     `\n\n${askWebCapabilityRules()}` +
-    (webHits.length
+    (webUsable
       ? `\n\n${ASK_WEB_FORMAT_RULES}`
       : webSearchAttempted
         ? `\n\n${ASK_WEB_EMPTY_RESULTS_NOTE}`
@@ -757,7 +759,7 @@ export async function answerFromJobFile(input: {
       ? `\n\nIN-PRODUCT ACTIONS: Tool results below already ran. Summarize what changed or what you found. Never claim you emailed anyone. If a tool needs confirmation, tell the user clearly and do not pretend it already happened. Append ⟦actions: …⟧ only if tools already attached it — the server appends the trailer.`
       : '');
 
-  const webBlock = webHits.length
+  const webBlock = webUsable
     ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
     : webSearchAttempted
       ? `\n\nWEB SEARCH RESULTS: (none — live search returned no usable hits; do not invent web findings)`
@@ -835,6 +837,24 @@ export async function answerFromJobFile(input: {
     fetchFn: input.fetchFn,
   });
   if (!completed) {
+    if (webUsable) {
+      const toolOnly = toolResults.filter((r) => r.ok && r.tool !== 'web_search');
+      const jobAnswer = asksAboutJobFile(input.question)
+        ? toolOnly.length
+          ? toolOnly.map((r) => r.summary).join(' ')
+          : grounded
+        : '';
+      let answer = composeAskWebAnswer({
+        question: input.question,
+        jobAnswer,
+        webAnswer,
+        hits: webHits,
+      });
+      const trailer = formatActionsTrailer(toolResults);
+      if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
+      emit(answer);
+      return { ...empty, answer, groundedOn, toolResults, webHits };
+    }
     const toolOnly = toolResults.filter((r) => r.ok);
     const prose = toolOnly.length ? toolOnly.map((r) => r.summary).join(' ') : grounded;
     const trailer = formatActionsTrailer(toolResults);

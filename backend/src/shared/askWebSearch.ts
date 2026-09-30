@@ -386,6 +386,28 @@ function longDate(ymd: ZonedYmd): string {
   }).format(utc);
 }
 
+const EXPLICIT_DATE_RE =
+  /(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/i;
+const DAY_FILLER_RE = /(?:on|night|morning|evening|afternoon|game|games)/i;
+
+/**
+ * The weekday or relative day is already tied to a calendar date
+ * ("Thursday, October 8, 2026", "Thursday night, October 8").
+ */
+function relativeDayAlreadyDated(text: string, index: number, length: number): boolean {
+  const after = text.slice(index + length, index + length + 64);
+  const before = text.slice(Math.max(0, index - 64), index);
+  const follows = new RegExp(
+    `^\\s*(?:(?:,|\\(|-|–|—|:)\\s*)?(?:${DAY_FILLER_RE.source}\\b\\s*,?\\s*){0,2}${EXPLICIT_DATE_RE.source}\\b`,
+    'i',
+  );
+  const precedes = new RegExp(
+    `${EXPLICIT_DATE_RE.source}\\s*(?:(?:,|\\)|-|–|—|:)\\s*)?(?:${DAY_FILLER_RE.source}\\b\\s*,?\\s*){0,2}$`,
+    'i',
+  );
+  return follows.test(after) || precedes.test(before);
+}
+
 function weekdayIndex(name: string): number {
   return WEEKDAYS.indexOf(name.toLowerCase() as (typeof WEEKDAYS)[number]);
 }
@@ -457,6 +479,7 @@ export function resolveAskSearchQuery(
     /\b(today|tonight|tomorrow|yesterday)\b|\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
   let match: RegExpExecArray | null;
   while ((match = rel.exec(original)) !== null) {
+    if (relativeDayAlreadyDated(original, match.index, match[0].length)) continue;
     if (match[1]) {
       const word = match[1].toLowerCase();
       const delta = word === 'tomorrow' ? 1 : word === 'yesterday' ? -1 : 0;
@@ -525,20 +548,74 @@ function looksLikeSmallTalk(question: string): boolean {
 }
 
 /**
- * Questions the job file is supposed to answer: the job, its videos, people,
- * findings, or records. Explicit web requests are not classified here so a
- * "search the web for …" still runs.
+ * Questions about this job, its videos, people, findings, or records.
+ * Everyday words (homeowner, job, file, claim, permit, "how many", "what did")
+ * count only when the question points at this file. A public fact that merely
+ * shares one of those words is not a job-file question. Explicit web requests
+ * are handled separately so "search the web for …" still runs.
  */
 export function asksAboutJobFile(question: string): boolean {
   const q = trim(question);
   if (!q) return false;
-  return (
-    /\b(job|file|clip|clips|video|videos|footage|recording|transcript|mic|scope|punch|crew|homeowner|adjuster|speaker|finding|findings|evidence|notes?|access roster|lockbox|claim|permit|on site|work log)\b/i.test(
+
+  if (/\b(lockbox|access roster|work log|on[\s-]?site|transcript|punch(?:\s*list)?)\b/i.test(q)) {
+    return true;
+  }
+  if (/\b(job file|job number|claim\s*(?:number|#|num)|permit\s*(?:number|#|num))\b/i.test(q)) {
+    return true;
+  }
+  // "this job" / "the job file", not "the job market".
+  if (
+    /\b(this|our|my)\s+job\b/i.test(q) ||
+    /\bthe\s+job\b(?!\s+(?:market|markets|interview|interviews|search|posting|postings|application|applications|board|offer|offers|hunting)\b)/i.test(
       q,
-    ) ||
-    /\b(who said|what did|how many)\b/i.test(q) ||
-    /\b(this|the|our)\s+(visit|day)\b/i.test(q)
-  );
+    )
+  ) {
+    return true;
+  }
+  // "the video", "our crew", "the file" — pointing at this job, not a public noun.
+  if (
+    /\b(this|the|our|my)\s+(file|clip|clips|video|videos|footage|recording|recordings|transcript|mic|visit|day|scope|crew|notes?|findings?|evidence|adjuster|speaker)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  // "the homeowner" is a person on this job. "homeowner insurance" is not.
+  if (
+    /\b(this|the|our|my)\s+homeowners?\b(?!\s*'?s?\s*(?:insurance|policy|policies|rates?|costs?|premiums?)\b)/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  // This file's claim or permit, not "the permit cost" / "the claim process".
+  if (/\b(this|our|my)\s+(claim|permit)\b/i.test(q)) return true;
+  if (
+    /\bthe\s+(claim|permit)\b/i.test(q) &&
+    !/\bthe\s+(claim|permit)\s+(cost|costs|price|prices|fee|fees|process|requirements?|application)\b/i.test(q)
+  ) {
+    return true;
+  }
+  // "how many clips", not "how many ounces".
+  if (
+    /\bhow many\b/i.test(q) &&
+    /\b(clips?|videos?|recordings?|transcripts?|findings?|notes?|speakers?|photos?)\b/i.test(q)
+  ) {
+    return true;
+  }
+  // What someone on the job said, not "what did the president say".
+  if (/\b(who said|what was said)\b/i.test(q)) return true;
+  if (/\bwhat did\s+(?:the\s+|our\s+|this\s+)?(homeowner|adjuster|crew|speaker|they|he|she)\b/i.test(q)) {
+    return true;
+  }
+  if (
+    /\b(homeowner|adjuster|crew|speaker)\b/i.test(q) &&
+    /\b(say|said|mention(?:ed)?|tell|told|ask(?:ed)?)\b/i.test(q)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function looksLikeJobEvidenceQuestion(question: string): boolean {
@@ -958,7 +1035,7 @@ export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
   return `${lead}${lines}`.trim();
 }
 
-const WEB_SECTION_RE = /(?:^|\n{2,})(\*\*Web results\*\*[\s\S]*)$/i;
+const WEB_SECTION_RE = /(?:^|\n)(\*\*Web results\*\*[\s\S]*)$/i;
 
 /** Split a labeled Web results section off the answer so job checks leave it intact. */
 export function splitWebResultsSection(answer: string): { body: string; section: string } {
