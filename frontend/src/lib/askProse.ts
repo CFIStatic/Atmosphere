@@ -283,7 +283,7 @@ export function parseAskProseBlocks(input: string): AskProseBlock[] {
 export function askInlineText(nodes: AskInline[]): string {
   return nodes
     .map((node) => {
-      if (node.kind === 'text') return node.text;
+      if (node.kind === 'text' || node.kind === 'link') return node.text;
       return askInlineText(node.children);
     })
     .join('');
