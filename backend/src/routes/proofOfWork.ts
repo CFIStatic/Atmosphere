@@ -2733,6 +2733,39 @@ function askWriteClient(userScoped: any) {
   return unscopedAdminOrNull() ?? userScoped;
 }
 
+/**
+ * A mention briefing stands in for a job-file answer the model did not write.
+ * The web search that answer discarded must not stay attached to it.
+ */
+export function applyJobAskMentionFallback<T extends {
+  answer: string;
+  model: string | null;
+  webHits: unknown[];
+  webDerivedAnswer?: boolean;
+  answeredFromLookup?: boolean;
+}>(
+  result: T,
+  mentionPrep: {
+    fallbackAnswer?: string | null;
+    directAnswer?: string | null;
+    mentions: readonly unknown[];
+  } | null,
+): boolean {
+  if (
+    !mentionPrep?.fallbackAnswer ||
+    !mentionPrep.mentions.length ||
+    mentionPrep.directAnswer ||
+    result.model ||
+    result.answeredFromLookup
+  ) {
+    return false;
+  }
+  result.answer = mentionPrep.fallbackAnswer;
+  result.webDerivedAnswer = false;
+  result.webHits = [];
+  return true;
+}
+
 export async function runProofAsk(input: {
   supabase: any;
   orgId: string;
@@ -3317,15 +3350,7 @@ export async function runProofAsk(input: {
         jobTitle: file.job?.title ?? null,
       },
     });
-    if (
-      mentionPrep?.fallbackAnswer &&
-      mentionPrep.mentions.length &&
-      !mentionPrep.directAnswer &&
-      !result.model &&
-      !result.answeredFromLookup
-    ) {
-      result.answer = mentionPrep.fallbackAnswer;
-      result.webDerivedAnswer = false;
+    if (applyJobAskMentionFallback(result, mentionPrep) && mentionPrep?.fallbackAnswer) {
       onToken(mentionPrep.fallbackAnswer);
     }
 
