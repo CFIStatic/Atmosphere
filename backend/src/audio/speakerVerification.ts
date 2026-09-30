@@ -218,6 +218,7 @@ export function resolveSpeakerAnswer(
         displayName: name,
         status: 'confirmed',
         method: row.method === 'name_pickup' ? 'user' : row.method,
+        confidence: row.confidence != null && row.confidence >= 0.7 ? row.confidence : 1,
       };
     }
     const sameVoice = Boolean(anchor.voiceprintId && row.voiceprintId === anchor.voiceprintId);

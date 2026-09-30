@@ -3404,10 +3404,21 @@ export const api = {
     id: string,
     body: { answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string },
   ) =>
-    request<{ verifications: Array<{ id: string; question: string }> }>(
-      `/api/speaker-identity/jobs/${jobId}/verifications/${id}`,
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
+    request<{
+      verifications: Array<{
+        id: string;
+        question: string;
+        speakerLabel: string;
+        clipTitle: string;
+        tSec: number | null;
+        candidateName: string | null;
+        role: 'homeowner' | 'subcontractor' | 'crew' | 'adjuster' | 'other' | null;
+        quote: string | null;
+      }>;
+    }>(`/api/speaker-identity/jobs/${jobId}/verifications/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   clipSpeakers: (jobId: string, proofId: string) =>
     request<{

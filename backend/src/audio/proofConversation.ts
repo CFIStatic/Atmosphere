@@ -50,8 +50,9 @@ import { eventsSha256, transcriptSha256 } from './summaryFreshness.js';
 import { summaryClaimContradictions, SummaryContradictionError } from './summaryValidation.js';
 import { transcriptLineCount } from '../shared/speechCount.js';
 import { clipBeats, normalizeAnalysisTimeline } from '../shared/analysisTimeline.js';
-import { planClipSpeakers } from './speakerPlan.js';
-import { insertIdentityRows, insertRoleGuesses } from './speakerIdentityStore.js';
+import { applyConfirmedNames, planClipSpeakers } from './speakerPlan.js';
+import { insertIdentityRows, insertRoleGuesses, loadProofIdentities, rejectSupersededPending } from './speakerIdentityStore.js';
+import type { SpeakerIdentityRow } from './speakerVerification.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -218,7 +219,7 @@ export async function enrichProofConversation(
     .filter(Boolean) as string[];
 
   const sceneKind = classifySceneKind({ narrationText, summary });
-  const people = await identifySpeakers({
+  const identifiedPeople = await identifySpeakers({
     people: basePeople,
     narrationText,
     summary,
@@ -236,6 +237,13 @@ export async function enrichProofConversation(
             })
         : undefined,
   });
+  let existingIdentities: SpeakerIdentityRow[] = [];
+  try {
+    existingIdentities = await loadProofIdentities(admin, proofId);
+  } catch (err) {
+    console.warn('[speaker-identity] load failed:', err instanceof Error ? err.message : err);
+  }
+  const people = applyConfirmedNames(identifiedPeople, existingIdentities);
 
   const peopleNotes: Array<{ tSec?: number | null; note?: string | null }> = [];
   for (const person of people.people) {
@@ -317,8 +325,10 @@ export async function enrichProofConversation(
         proofId,
         clipTitle,
         transcript: typeof transcript === 'string' ? transcript : null,
+        existing: existingIdentities,
       });
       await insertIdentityRows(admin, String(proof.org_id), plan.identities);
+      await rejectSupersededPending(admin, proofId);
       await insertRoleGuesses(admin, String(proof.org_id), String(proof.job_id), plan.roleGuesses);
     }
   } catch (err) {

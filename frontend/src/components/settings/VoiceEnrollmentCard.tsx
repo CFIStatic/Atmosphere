@@ -32,6 +32,7 @@ export function VoiceEnrollmentCard({ preview }: Props) {
   const [recording, setRecording] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const acceptedRef = useRef(false);
 
   useEffect(() => {
     if (preview) return;
@@ -68,6 +69,7 @@ export function VoiceEnrollmentCard({ preview }: Props) {
         setState(saved.voiceprint);
       }
       setState((current) => ({ ...current, enrolled: true, consentedAt: new Date().toISOString() }));
+      acceptedRef.current = false;
       setAccepted(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that voice sample.');
@@ -81,12 +83,24 @@ export function VoiceEnrollmentCard({ preview }: Props) {
     await enroll(file, requestId);
   }
 
+  function stopRecorder() {
+    const media = recorder.current;
+    if (media && media.state !== 'inactive') media.stop();
+    setRecording(false);
+  }
+
+  function setConsent(next: boolean) {
+    acceptedRef.current = next;
+    setAccepted(next);
+    if (!next && recorder.current && recorder.current.state !== 'inactive') stopRecorder();
+  }
+
   async function toggleRecord(requestId?: string) {
     if (recording) {
-      recorder.current?.stop();
-      setRecording(false);
+      stopRecorder();
       return;
     }
+    if (!acceptedRef.current) return;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const media = new MediaRecorder(stream);
     chunks.current = [];
@@ -95,6 +109,8 @@ export function VoiceEnrollmentCard({ preview }: Props) {
     };
     media.onstop = () => {
       stream.getTracks().forEach((track) => track.stop());
+      recorder.current = null;
+      if (!acceptedRef.current) return;
       const blob = new Blob(chunks.current, { type: media.mimeType || 'audio/webm' });
       void enroll(blob, requestId);
     };
@@ -140,7 +156,7 @@ export function VoiceEnrollmentCard({ preview }: Props) {
           type="checkbox"
           className="mt-1"
           checked={accepted}
-          onChange={(event) => setAccepted(event.target.checked)}
+          onChange={(event) => setConsent(event.target.checked)}
           data-testid="voice-consent-check"
         />
         I agree to this voiceprint consent.
@@ -158,7 +174,7 @@ export function VoiceEnrollmentCard({ preview }: Props) {
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={!accepted || busy}
+          disabled={busy || (!accepted && !recording)}
           onClick={() => void toggleRecord()}
           className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
           data-testid="voice-record"
@@ -198,7 +214,7 @@ export function VoiceEnrollmentCard({ preview }: Props) {
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={!accepted || busy}
+              disabled={busy || (!accepted && !recording)}
               onClick={() => void toggleRecord(request.id)}
               className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
             >

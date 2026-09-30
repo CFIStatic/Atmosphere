@@ -67,6 +67,75 @@ export function candidatesFromMatchableRpc(rows: any[], uploaderOrgId: string): 
   );
 }
 
+const IDENTITY_COLUMNS =
+  'id, job_id, proof_id, speaker_label, display_name, status, method, confidence, voiceprint_id, subject_user_id, source_proof_id, source_t_sec, source_quote, clip_title';
+
+export function identityFromRow(row: any): SpeakerIdentityRow {
+  return {
+    id: String(row.id),
+    jobId: String(row.job_id),
+    proofId: String(row.proof_id),
+    speakerLabel: String(row.speaker_label),
+    displayName: row.display_name ?? null,
+    status: row.status,
+    method: row.method,
+    confidence: row.confidence == null ? null : Number(row.confidence),
+    voiceprintId: row.voiceprint_id ?? null,
+    subjectUserId: row.subject_user_id ?? null,
+    sourceProofId: row.source_proof_id ?? null,
+    sourceTSec: row.source_t_sec == null ? null : Number(row.source_t_sec),
+    sourceQuote: row.source_quote ?? null,
+    clipTitle: row.clip_title ?? null,
+  };
+}
+
+export async function loadProofIdentities(admin: any, proofId: string): Promise<SpeakerIdentityRow[]> {
+  const { data, error } = await admin.from('speaker_identities').select(IDENTITY_COLUMNS).eq('proof_id', proofId);
+  if (error) {
+    if (missing(error)) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []).map(identityFromRow);
+}
+
+/**
+ * A confirmed name or any voice match closes the pending name question for
+ * that speaker. The unique key is per method, so the pickup row would otherwise
+ * stay open beside voice_high and a later Yes would overwrite the voice name.
+ */
+export async function rejectSupersededPending(admin: any, proofId: string): Promise<void> {
+  const { data, error } = await admin
+    .from('speaker_identities')
+    .select('id, speaker_label, method, status')
+    .eq('proof_id', proofId);
+  if (error) {
+    if (missing(error)) return;
+    throw new Error(error.message);
+  }
+  const groups = new Map<string, any[]>();
+  for (const row of data ?? []) {
+    const label = String(row.speaker_label).toLowerCase();
+    const list = groups.get(label) ?? [];
+    list.push(row);
+    groups.set(label, list);
+  }
+  const drop: string[] = [];
+  for (const list of groups.values()) {
+    const settled = list.some((row) => row.status === 'confirmed' || row.method === 'voice_high');
+    const voiced = list.some((row) => String(row.method).startsWith('voice'));
+    for (const row of list) {
+      if (row.status !== 'pending') continue;
+      if (settled || (voiced && row.method === 'name_pickup')) drop.push(String(row.id));
+    }
+  }
+  if (!drop.length) return;
+  const { error: updateError } = await admin
+    .from('speaker_identities')
+    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+    .in('id', drop);
+  if (updateError && !missing(updateError)) throw new Error(updateError.message);
+}
+
 export async function insertIdentityRows(admin: any, orgId: string, rows: SpeakerIdentityRow[]): Promise<void> {
   if (!rows.length) return;
   const proofId = rows[0]!.proofId;
@@ -83,8 +152,27 @@ export async function insertIdentityRows(admin: any, orgId: string, rows: Speake
       .filter((row: any) => row.status === 'confirmed' || row.status === 'rejected')
       .map((row: any) => `${String(row.speaker_label).toLowerCase()}|${row.method}`),
   );
-  const open = rows.filter((row) => !locked.has(`${row.speakerLabel.toLowerCase()}|${row.method}`));
-  if (!open.length) return;
+  const settled = new Set(
+    (existing ?? [])
+      .filter((row: any) => row.status === 'confirmed' || row.method === 'voice_high')
+      .map((row: any) => String(row.speaker_label).toLowerCase()),
+  );
+  const voiced = new Set(
+    (existing ?? [])
+      .filter((row: any) => row.status === 'confirmed' || String(row.method).startsWith('voice'))
+      .map((row: any) => String(row.speaker_label).toLowerCase()),
+  );
+  const open = rows.filter((row) => {
+    const label = row.speakerLabel.toLowerCase();
+    if (locked.has(`${label}|${row.method}`)) return false;
+    if (row.status === 'pending' && row.method === 'name_pickup' && voiced.has(label)) return false;
+    if (row.status === 'pending' && settled.has(label)) return false;
+    return true;
+  });
+  if (!open.length) {
+    await rejectSupersededPending(admin, proofId);
+    return;
+  }
   const payload = open.map((row) => ({
     org_id: orgId,
     job_id: row.jobId,
@@ -105,6 +193,7 @@ export async function insertIdentityRows(admin: any, orgId: string, rows: Speake
     onConflict: 'proof_id,speaker_label,method',
   });
   if (error && !missing(error)) throw new Error(error.message);
+  if (!error) await rejectSupersededPending(admin, proofId);
 }
 
 export async function insertRoleGuesses(admin: any, orgId: string, jobId: string, rows: RoleGuessRow[]): Promise<void> {

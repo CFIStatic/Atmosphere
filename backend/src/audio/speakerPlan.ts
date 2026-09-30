@@ -81,6 +81,20 @@ export function addVoiceMatches(input: {
   return [...kept, ...voiceRows];
 }
 
+/** Ask stores a null score. Evidence only replaces Speaker N at confidence >= 0.7. */
+export function confirmedIdentityConfidence(confidence: number | null | undefined): number {
+  return confidence != null && confidence >= 0.7 ? confidence : 1;
+}
+
+function confirmedIdentityFields(hit: SpeakerIdentityRow) {
+  return {
+    displayName: hit.displayName,
+    identityConfidence: confirmedIdentityConfidence(hit.confidence),
+    identityMethod: hit.method.startsWith('voice') ? ('voice' as const) : ('roster' as const),
+    identitySource: hit.sourceQuote,
+  };
+}
+
 /** High-confidence and confirmed names become displayName. Guesses do not. */
 export function applyConfirmedNames(people: PeoplePresent, identities: SpeakerIdentityRow[]): PeoplePresent {
   const nameFor = (label: string) => {
@@ -92,31 +106,51 @@ export function applyConfirmedNames(people: PeoplePresent, identities: SpeakerId
     );
     return rows[0] ?? null;
   };
-  return {
-    ...people,
-    people: people.people.map((person) => {
-      const hit = person.speakerLabel ? nameFor(person.speakerLabel) : null;
-      if (!hit?.displayName) return person;
-      return {
-        ...person,
-        displayName: hit.displayName,
-        identityConfidence: hit.confidence,
-        identityMethod: hit.method.startsWith('voice') ? 'voice' as const : 'roster' as const,
-        identitySource: hit.sourceQuote,
-      };
-    }),
-    speakers: people.speakers.map((speaker) => {
-      const hit = nameFor(speaker.speakerLabel);
-      if (!hit?.displayName) return speaker;
-      return {
-        ...speaker,
-        displayName: hit.displayName,
-        identityConfidence: hit.confidence,
-        identityMethod: hit.method.startsWith('voice') ? 'voice' as const : 'roster' as const,
-        identitySource: hit.sourceQuote,
-      };
-    }),
-  };
+  const nextPeople = people.people.map((person) => {
+    const hit = person.speakerLabel ? nameFor(person.speakerLabel) : null;
+    if (!hit?.displayName) return person;
+    return { ...person, ...confirmedIdentityFields(hit) };
+  });
+  const nextSpeakers = people.speakers.map((speaker) => {
+    const hit = nameFor(speaker.speakerLabel);
+    if (!hit?.displayName) return speaker;
+    return { ...speaker, ...confirmedIdentityFields(hit) };
+  });
+  const seen = new Set<string>();
+  for (const person of nextPeople) {
+    if (person.speakerLabel) seen.add(person.speakerLabel.toLowerCase());
+  }
+  for (const speaker of nextSpeakers) {
+    if (speaker.speakerLabel) seen.add(speaker.speakerLabel.toLowerCase());
+  }
+  const peopleOut = [...nextPeople];
+  const speakersOut = [...nextSpeakers];
+  for (const row of identities) {
+    const name = row.displayName?.trim();
+    if (!(row.status === 'confirmed' || row.method === 'voice_high') || !name) continue;
+    const key = row.speakerLabel.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const fields = confirmedIdentityFields({ ...row, displayName: name });
+    speakersOut.push({
+      speakerLabel: row.speakerLabel,
+      personId: null,
+      turnCount: 0,
+      serviceTitle: null,
+      ...fields,
+    });
+    peopleOut.push({
+      id: `person-${peopleOut.length + 1}`,
+      label: name,
+      role: 'unknown',
+      appearance: null,
+      appearMoments: [],
+      speakerLabel: row.speakerLabel,
+      serviceTitle: null,
+      ...fields,
+    });
+  }
+  return { ...people, people: peopleOut, speakers: speakersOut, count: peopleOut.length };
 }
 
 export function nameIsConfirmed(identities: SpeakerIdentityRow[], proofId: string, speakerLabel: string): string | null {

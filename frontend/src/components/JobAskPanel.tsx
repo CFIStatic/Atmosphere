@@ -469,6 +469,7 @@ export function JobAskPanel({
   const inFlightRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+  const answeringRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(null);
   const { seek } = useVideoSeek();
   const { focus: focusJobFile } = useJobFileFocus();
@@ -490,13 +491,17 @@ export function JobAskPanel({
   }, [jobId, initialVerifications]);
 
   async function answerVerification(input: { id: string; answer: 'yes' | 'no' | 'other'; displayName?: string; role?: string }) {
-    setVerifications((rows) => rows.filter((row) => row.id !== input.id));
-    const answer = (api as { answerSpeakerVerification?: (...args: unknown[]) => Promise<unknown> }).answerSpeakerVerification;
-    if (!answer) return;
+    if (answeringRef.current) return;
+    answeringRef.current = true;
     try {
-      await answer(jobId, input.id, input);
+      const res = await api.answerSpeakerVerification(jobId, input.id, input);
+      // Yes confirms every same-name and same-voiceprint row. The response is
+      // the queue that is still open; dropping only this id leaves those cards up.
+      setVerifications(res.verifications ?? []);
     } catch {
-      /* the question leaves the thread either way; a refresh brings it back if the save failed */
+      /* keep the card; a failed save must not look like the question was resolved */
+    } finally {
+      answeringRef.current = false;
     }
   }
 
