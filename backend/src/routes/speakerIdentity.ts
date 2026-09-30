@@ -456,8 +456,9 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
         answer: body.answer === 'other' && body.role && !body.displayName ? 'no' : body.answer,
         displayName: body.displayName,
       });
+      let nextGuesses = guesses;
       if (body.answer === 'other' && body.role && !body.displayName) {
-        const nextGuesses = resolveRoleAnswer(guesses, {
+        nextGuesses = resolveRoleAnswer(guesses, {
           speakerLabel: identity.speakerLabel,
           proofId: identity.proofId,
           answer: 'other',
@@ -467,7 +468,7 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
       }
       await saveIdentities(supabase, nextRows);
       await publishConfirmedNames(req.orgId!, nextRows);
-      res.json({ verifications: pendingQuestions(nextRows, guesses) });
+      res.json({ verifications: pendingQuestions(nextRows, nextGuesses) });
       return;
     }
     const guess = guesses.find((row) => row.id === req.params.id);

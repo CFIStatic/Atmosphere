@@ -17,7 +17,7 @@ import {
 import { VOICE_CONSENT_TEXT, canConfirmEnrollment, canStoreVoiceprint, consentAccepted } from '../src/audio/speakerEnrollment.js';
 import { candidatesFromMatchableRpc, insertIdentityRows, loadMatchableVoiceprints } from '../src/audio/speakerIdentityStore.js';
 import { applyConfirmedNames } from '../src/audio/speakerPlan.js';
-import { speakerMatchWindowStarts } from '../src/audio/speakerClipApply.js';
+import { speakerMatchWindowStarts, speakerMatchWindows } from '../src/audio/speakerClipApply.js';
 import { peopleFromStored, toStoredPeople, type PeoplePresent } from '../src/audio/peoplePresent.js';
 import { sanitizeSpeakerProse } from '../src/shared/askSpeakers.js';
 
@@ -308,6 +308,28 @@ test('voice match windows cover a late speaker, not only the first minute', () =
   const long = speakerMatchWindowStarts(6 * 60 * 60, [{ speakerLabel: 'Speaker 1', tSec: 5 * 60 * 60, text: 'hours later' }]);
   assert.ok(long.length <= 12);
   assert.ok(long.includes(Math.floor((5 * 60 * 60) / 600) * 600));
+});
+
+test('untimed lines are not scored in every match window', () => {
+  const untimed = speakerMatchWindows(90 * 60, [
+    { speakerLabel: 'Speaker 1', tSec: null, text: 'SPEAKER_00 with no clock' },
+  ]);
+  assert.equal(untimed.length, 1);
+  assert.equal(untimed[0]!.start, 0);
+  assert.equal(untimed[0]!.lines.length, 1);
+
+  const late = 80 * 60;
+  const mixed = speakerMatchWindows(90 * 60, [
+    { speakerLabel: 'Speaker 1', tSec: null, text: 'unstamped' },
+    { speakerLabel: 'Speaker 2', tSec: late, text: 'later on the roof' },
+  ]);
+  assert.equal(mixed.length, 1);
+  assert.ok(mixed[0]!.start <= late && late < mixed[0]!.start + 600);
+  assert.deepEqual(
+    mixed[0]!.lines.map((line) => line.text),
+    ['later on the roof'],
+  );
+  assert.equal(mixed[0]!.lines[0]!.tSec, late - mixed[0]!.start);
 });
 
 test('someone else stores the typed name on that speaker', () => {

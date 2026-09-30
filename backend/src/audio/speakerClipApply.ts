@@ -100,6 +100,33 @@ export function speakerMatchWindowStarts(durationSeconds: unknown, lines: Transc
 }
 
 /**
+ * Timed speech stays in the slice where it was spoken. A line with no stamp
+ * is not copied into every slice: that speaker would be embedded against the
+ * whole window, and the best of those scores can confirm the wrong voice.
+ * A transcript with no stamps is scored once, on the opening window.
+ */
+export function speakerMatchWindows(
+  durationSeconds: unknown,
+  lines: TranscriptLine[],
+): Array<{ start: number; lines: TranscriptLine[] }> {
+  const starts = speakerMatchWindowStarts(durationSeconds, lines);
+  const timed = lines.some((line) => line.tSec != null);
+  const windows = timed ? starts : starts.slice(0, 1);
+  const passes: Array<{ start: number; lines: TranscriptLine[] }> = [];
+  for (const start of windows) {
+    const chunkLines = lines.flatMap((line) => {
+      if (line.tSec == null) return [];
+      const tSec = line.tSec - start;
+      if (tSec < 0 || tSec >= TRANSCRIPT_CHUNK_SECONDS) return [];
+      return [{ ...line, tSec }];
+    });
+    if (chunkLines.length) passes.push({ start, lines: chunkLines });
+    else if (!timed) passes.push({ start, lines });
+  }
+  return passes;
+}
+
+/**
  * Transcription hears the whole day film in 10-minute slices. Voice match has
  * to use the same slices: a single opening minute drops every later speaker.
  */
@@ -111,27 +138,19 @@ async function matchSpeakersAcrossClip(
   uploaderOrgId: string,
   thresholds: MatchThresholds,
 ): Promise<TimedVoiceMatch[]> {
-  const starts = speakerMatchWindowStarts(durationSeconds, lines);
   const best = new Map<string, TimedVoiceMatch>();
-  for (const start of starts) {
-    const chunkLines = lines.flatMap((line) => {
-      if (line.tSec == null) return [line];
-      const tSec = line.tSec - start;
-      if (tSec < 0 || tSec >= TRANSCRIPT_CHUNK_SECONDS) return [];
-      return [{ ...line, tSec }];
-    });
-    if (!chunkLines.length && lines.length > 0) continue;
+  for (const pass of speakerMatchWindows(durationSeconds, lines)) {
     let wav: Buffer;
     try {
-      wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
+      wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, pass.start);
     } catch {
       continue;
     }
     if (wav.length < 1000) continue;
-    const found = matchSpeakersInWav(wav, chunkLines, prints, uploaderOrgId, thresholds);
+    const found = matchSpeakersInWav(wav, pass.lines, prints, uploaderOrgId, thresholds);
     for (const match of found) {
       const key = match.speakerLabel.toLowerCase();
-      const shifted = { ...match, tSec: match.tSec == null ? null : match.tSec + start };
+      const shifted = { ...match, tSec: match.tSec == null ? null : match.tSec + pass.start };
       const prev = best.get(key);
       if (!prev || shifted.score > prev.score) best.set(key, shifted);
     }
