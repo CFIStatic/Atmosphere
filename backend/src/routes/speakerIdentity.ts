@@ -416,6 +416,38 @@ async function publishConfirmedNames(orgId: string, rows: SpeakerIdentityRow[]) 
   }
 }
 
+export function identityRewritten(prior: SpeakerIdentityRow, next: SpeakerIdentityRow): boolean {
+  return (
+    prior.displayName !== next.displayName ||
+    prior.status !== next.status ||
+    prior.method !== next.method ||
+    prior.confidence !== next.confidence
+  );
+}
+
+export function guessRewritten(prior: RoleGuessRow, next: RoleGuessRow): boolean {
+  return prior.role !== next.role || prior.status !== next.status;
+}
+
+/**
+ * Proof ids an answer rewrites. Soft-deleted clips stay on untouched speaker
+ * rows, and job_proofs RLS hides them from everyone except the deleter.
+ */
+export function rewrittenProofIds<T extends { proofId: string }>(
+  before: readonly T[],
+  after: readonly T[],
+  rewritten: (prior: T, next: T) => boolean,
+): string[] {
+  if (before === after) return [];
+  const ids: string[] = [];
+  for (let i = 0; i < after.length; i += 1) {
+    const prior = before[i];
+    const next = after[i];
+    if (next && (!prior || rewritten(prior, next))) ids.push(next.proofId);
+  }
+  return ids;
+}
+
 async function saveIdentities(supabase: ReturnType<typeof userClient>, rows: SpeakerIdentityRow[]) {
   for (const row of rows) {
     const { error } = await supabase
@@ -473,8 +505,8 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
           })
         : guesses;
       await requireCompanyClips(supabase, orgId, jobId, [
-        ...nextRows.map((row) => row.proofId),
-        ...nextGuesses.map((row) => row.proofId),
+        ...rewrittenProofIds(identities, nextRows, identityRewritten),
+        ...rewrittenProofIds(guesses, nextGuesses, guessRewritten),
       ]);
       if (roleOnly) await saveGuesses(supabase, nextGuesses);
       await saveIdentities(supabase, nextRows);
@@ -484,7 +516,7 @@ speakerIdentityRouter.post('/jobs/:jobId/verifications/:id', async (req, res, ne
     }
     const guess = guesses.find((row) => row.id === req.params.id);
     if (!guess) throw notFound('That question is no longer open.', 'verification_missing');
-    await requireCompanyClips(supabase, orgId, jobId, guesses.map((row) => row.proofId));
+    await requireCompanyClips(supabase, orgId, jobId, [guess.proofId]);
     if (body.answer === 'other' && body.displayName?.trim()) {
       const created = await supabase
         .from('speaker_identities')
@@ -594,7 +626,7 @@ speakerIdentityRouter.post('/jobs/:jobId/clips/:proofId/speakers', async (req, r
       );
       if (pending) {
         const nextRows = resolveSpeakerAnswer(identities, { id: pending.id, answer: 'other', displayName: body.displayName });
-        await requireCompanyClips(supabase, orgId, jobId, nextRows.map((row) => row.proofId));
+        await requireCompanyClips(supabase, orgId, jobId, rewrittenProofIds(identities, nextRows, identityRewritten));
         await saveIdentities(supabase, nextRows);
         await publishConfirmedNames(orgId, nextRows);
       } else {

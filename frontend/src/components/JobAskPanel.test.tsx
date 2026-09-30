@@ -675,6 +675,7 @@ describe('JobAskPanel', () => {
     const user = userEvent.setup();
     const marco = {
       id: 'v-marco',
+      proofId: 'clip-north',
       question: 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
       speakerLabel: 'Speaker 2',
       clipTitle: 'North slope walkthrough',
@@ -685,6 +686,7 @@ describe('JobAskPanel', () => {
     };
     const priya = {
       id: 'v-priya',
+      proofId: 'clip-south',
       question: 'Is Speaker 4 in South wall at 1:10 Priya?',
       speakerLabel: 'Speaker 4',
       clipTitle: 'South wall',
@@ -721,6 +723,7 @@ describe('JobAskPanel', () => {
     const user = userEvent.setup();
     const nameGuess = {
       id: 'v-name',
+      proofId: 'clip-north',
       question: 'Is Speaker 3 in North slope walkthrough at 1:05 Marco?',
       speakerLabel: 'Speaker 3',
       clipTitle: 'North slope walkthrough',
@@ -731,6 +734,7 @@ describe('JobAskPanel', () => {
     };
     const roleGuess = {
       id: 'v-role',
+      proofId: 'clip-north',
       question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
       speakerLabel: 'Speaker 3',
       clipTitle: 'North slope walkthrough',
@@ -758,6 +762,59 @@ describe('JobAskPanel', () => {
       'v-name',
       expect.objectContaining({ id: 'v-name', answer: 'other', role: 'crew' }),
     );
+  });
+
+  it('keeps a role question on another clip that shares the title', async () => {
+    const user = userEvent.setup();
+    const nameGuess = {
+      id: 'v-name',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 Marco?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: 'Marco',
+      role: null,
+      quote: "I'm Marco",
+    };
+    const sameClipRole = {
+      id: 'v-role',
+      proofId: 'clip-north',
+      question: 'Is Speaker 3 in North slope walkthrough at 1:05 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 65,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'The deductible on my house is still open.',
+    };
+    const otherClipRole = {
+      id: 'v-role-other',
+      proofId: 'clip-east',
+      question: 'Is Speaker 3 in North slope walkthrough at 2:00 the homeowner?',
+      speakerLabel: 'Speaker 3',
+      clipTitle: 'North slope walkthrough',
+      tSec: 120,
+      candidateName: null,
+      role: 'homeowner' as const,
+      quote: 'This other roof still needs a look.',
+    };
+    answerSpeakerVerification.mockResolvedValue({ verifications: [sameClipRole, otherClipRole] });
+    render(
+      <JobFileFocusProvider>
+        <JobAskPanel
+          jobId="job-1038"
+          file={{ record, proofs }}
+          initialVerifications={[nameGuess, sameClipRole, otherClipRole]}
+        />
+      </JobFileFocusProvider>,
+    );
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('Marco');
+    await user.click(screen.getByTestId('speaker-verify-other'));
+    await user.selectOptions(screen.getByTestId('speaker-verify-role'), 'crew');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByTestId('speaker-verification-question')).toHaveTextContent('at 2:00');
+    expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
   });
 
 });

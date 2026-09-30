@@ -3,6 +3,7 @@ import { SPEAKER_ROLES, type SpeakerRole } from '../../lib/speakerIdentity';
 
 export type SpeakerVerification = {
   id: string;
+  proofId: string;
   question: string;
   speakerLabel: string;
   clipTitle: string;

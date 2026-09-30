@@ -5,6 +5,7 @@ import { SpeakerVerificationPrompt } from './SpeakerVerificationPrompt';
 
 const verification = {
   id: 'v1',
+  proofId: 'clip-1',
   question: 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?',
   speakerLabel: 'Speaker 2',
   clipTitle: 'North slope walkthrough',

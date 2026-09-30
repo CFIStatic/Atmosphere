@@ -3389,6 +3389,7 @@ export const api = {
     request<{
       verifications: Array<{
         id: string;
+        proofId: string;
         question: string;
         speakerLabel: string;
         clipTitle: string;
@@ -3407,6 +3408,7 @@ export const api = {
     request<{
       verifications: Array<{
         id: string;
+        proofId: string;
         question: string;
         speakerLabel: string;
         clipTitle: string;

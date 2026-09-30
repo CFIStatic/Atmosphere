@@ -104,6 +104,7 @@ export function SpeakerIdPreviewPage() {
               <SpeakerVerificationPrompt
                 verification={{
                   id: 'v1',
+                  proofId: 'clip-1',
                   question: QUESTION,
                   speakerLabel: 'Speaker 2',
                   clipTitle: 'North slope walkthrough',

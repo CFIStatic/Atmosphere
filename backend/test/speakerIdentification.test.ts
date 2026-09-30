@@ -19,6 +19,7 @@ import { candidatesFromMatchableRpc, insertIdentityRows, loadMatchableVoiceprint
 import { applyConfirmedNames } from '../src/audio/speakerPlan.js';
 import { speakerMatchWindowStarts, speakerMatchWindows } from '../src/audio/speakerClipApply.js';
 import { requireCompanyClip, requireCompanyClips, requireCompanyJob } from '../src/audio/speakerAccess.js';
+import { guessRewritten, identityRewritten, rewrittenProofIds } from '../src/routes/speakerIdentity.js';
 import { HttpError } from '../src/lib/errors.js';
 import { resolveRoleAnswer, type RoleGuessRow } from '../src/audio/speakerVerification.js';
 import { peopleFromStored, toStoredPeople, type PeoplePresent } from '../src/audio/peoplePresent.js';
@@ -346,6 +347,7 @@ test('someone else stores the typed name on that speaker', () => {
 test('Ask asks the pending name with the clip and timestamp', () => {
   const identities = [row({ id: 'a', proofId: 'clip-1', speakerLabel: 'Speaker 2', sourceTSec: 42 })];
   const [question] = pendingQuestions(identities);
+  assert.equal(question!.proofId, 'clip-1');
   assert.equal(question!.question, 'Is Speaker 2 in North slope walkthrough at 0:42 Marco?');
   assert.equal(
     verificationQuestion({ speakerLabel: 'Speaker 2', clipTitle: 'North slope walkthrough', tSec: 42, candidateName: 'Marco' }),
@@ -474,6 +476,47 @@ test('a cross-company job or clip is rejected before any speaker read or write',
     (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === 'clip_missing',
   );
   assert.deepEqual(db.speakerTables, []);
+});
+
+test('an answer checks only the clips it rewrites, not every speaker row', () => {
+  const identities = [
+    row({ id: 'live', proofId: 'clip-live', speakerLabel: 'Speaker 1', voiceprintId: null }),
+    row({ id: 'hidden', proofId: 'clip-hidden', speakerLabel: 'Speaker 2', voiceprintId: null }),
+  ];
+  const rejected = resolveSpeakerAnswer(identities, { id: 'live', answer: 'no' });
+  assert.deepEqual(rewrittenProofIds(identities, rejected, identityRewritten), ['clip-live']);
+
+  const guesses: RoleGuessRow[] = [
+    {
+      id: 'guess-live',
+      proofId: 'clip-live',
+      speakerLabel: 'Speaker 1',
+      role: 'homeowner',
+      confidence: 0.8,
+      tSec: 12,
+      quote: 'This roof is mine.',
+      clipTitle: 'North slope walkthrough',
+      status: 'tentative',
+    },
+    {
+      id: 'guess-hidden',
+      proofId: 'clip-hidden',
+      speakerLabel: 'Speaker 2',
+      role: 'crew',
+      confidence: 0.7,
+      tSec: 40,
+      quote: 'I will start on the ridge.',
+      clipTitle: 'North slope walkthrough',
+      status: 'tentative',
+    },
+  ];
+  const dismissed = resolveRoleAnswer(guesses, {
+    speakerLabel: 'Speaker 1',
+    proofId: 'clip-live',
+    answer: 'no',
+  });
+  assert.deepEqual(rewrittenProofIds(guesses, dismissed, guessRewritten), ['clip-live']);
+  assert.deepEqual(rewrittenProofIds(guesses, guesses, guessRewritten), []);
 });
 
 test('a role-only correction does not leave the tentative guess pending', () => {

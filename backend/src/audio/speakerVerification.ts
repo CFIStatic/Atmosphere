@@ -264,6 +264,7 @@ export function confirmedNameFor(
 
 export function pendingQuestions(identities: SpeakerIdentityRow[], guesses: RoleGuessRow[] = []): Array<{
   id: string;
+  proofId: string;
   speakerLabel: string;
   clipTitle: string;
   tSec: number | null;
@@ -282,6 +283,7 @@ export function pendingQuestions(identities: SpeakerIdentityRow[], guesses: Role
     .filter((row) => !settled.has(`${row.proofId}|${row.speakerLabel.toLowerCase()}`))
     .map((row) => ({
       id: row.id,
+      proofId: row.proofId,
       speakerLabel: row.speakerLabel,
       clipTitle: row.clipTitle || 'this clip',
       tSec: row.sourceTSec,
@@ -300,6 +302,7 @@ export function pendingQuestions(identities: SpeakerIdentityRow[], guesses: Role
     if (confirmedNameFor(identities, guess.proofId, guess.speakerLabel)) continue;
     questions.push({
       id: guess.id,
+      proofId: guess.proofId,
       speakerLabel: guess.speakerLabel,
       clipTitle: guess.clipTitle || 'this clip',
       tSec: guess.tSec,
