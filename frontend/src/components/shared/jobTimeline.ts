@@ -707,8 +707,8 @@ function recordEvents(source: TimelineSource, out: TimelineEvent[]) {
     if (created) {
       const line =
         item.state === 'excluded'
-          ? `Marked \u201c${title}\u201d as out of scope`
-          : `Added \u201c${title}\u201d to the scope`;
+          ? `Marked “${title}” as out of scope`
+          : `Added “${title}” to the scope`;
       push(out, {
         id: `scope:${item.id}`,
         at: created,
@@ -726,7 +726,7 @@ function recordEvents(source: TimelineSource, out: TimelineEvent[]) {
         id: `scope:${item.id}:${item.state}`,
         at: decided,
         kind: 'history',
-        sentence: item.state === 'approved' ? `Approved \u201c${title}\u201d` : `Declined \u201c${title}\u201d`,
+        sentence: item.state === 'approved' ? `Approved “${title}”` : `Declined “${title}”`,
         actorName: null,
         actorEmail: null,
         avatarUrl: null,
