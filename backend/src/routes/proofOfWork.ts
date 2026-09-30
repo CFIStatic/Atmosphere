@@ -1,4 +1,5 @@
 import { servableSummary } from '../audio/summaryServe.js';
+import { clipProcessingInputOfProof } from '../shared/clipStatusOfProof.js';
 import { refreshProofSummary, queueSummaryRefresh } from '../audio/summaryQueue.js';
 import { staleSummaryPatch } from '../audio/summaryFreshness.js';
 import { randomUUID } from 'node:crypto';
@@ -214,10 +215,10 @@ export const PROOF_BUCKET = 'job-proofs';
 const PROOF_SELECT =
   'id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
-  'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
-  'narration, narration_text, narration_status, narration_error, actions, ' +
-  'transcript_status, transcript_text, transcript_segments, transcript_words, transcript_error, transcribed_at, ' +
-  'summary_status, summary_transcript_sha256, summary_generated_at, ' +
+  'ai_model, ai_material_change, analysis_status, analysis_error, analysis_lease_until, analysed_at, ' +
+  'narration, narration_text, narration_status, narration_error, narration_lease_until, actions, ' +
+  'transcript_status, transcript_text, transcript_segments, transcript_words, transcript_error, transcribed_at, transcript_lease_until, ' +
+  'summary_status, summary_transcript_sha256, summary_generated_at, summary_lease_until, ' +
   'decided_at, decided_note, created_at, device_metadata';
 
 /**
@@ -2485,6 +2486,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
 
   const videos = rows.map((row) => {
     const findings = findingsOf(row);
+    const clipStatus = clipProcessingInputOfProof(row);
     const actions = Array.isArray(row.actions)
       ? row.actions
       : Array.isArray(findings.actions)
@@ -2514,6 +2516,16 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       analysisStatus: row.analysis_status ?? null,
       narrationStatus: row.narration_status ?? null,
       transcriptStatus: row.transcript_status ?? null,
+      proofState: row.state ?? null,
+      summaryState: clipStatus.summaryState ?? null,
+      hasSummary: clipStatus.hasSummary === true,
+      noSpeech: clipStatus.noSpeech === true,
+      uploading: clipStatus.uploading === true,
+      retrying: clipStatus.retrying === true,
+      transcriptActive: clipStatus.transcriptActive === true,
+      analysisActive: clipStatus.analysisActive === true,
+      narrationActive: clipStatus.narrationActive === true,
+      summaryActive: clipStatus.summaryActive === true,
       transcriptError: row.transcript_error ?? null,
       aiSummary: row.ai_summary ?? row.narration_text ?? null,
       /** Full Whisper text — exact recall. Not truncated. */
@@ -4003,31 +4015,18 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
 
     const rows = (data ?? []) as any[];
     const proofIds = rows.map((row) => row.id).filter((id: unknown) => typeof id === 'string' && id);
-    const processingById = new Map<
-      string,
-      {
-        analysisStatus: string | null;
-        transcriptStatus: string | null;
-        narrationStatus: string | null;
-        summaryState: string | null;
-      }
-    >();
+    const processingById = new Map<string, ReturnType<typeof clipProcessingInputOfProof>>();
     if (proofIds.length) {
       const { data: proofs } = await supabase
         .from('job_proofs')
         .select(
-          'id, analysis_status, transcript_status, narration_status, summary_status, summary_transcript_sha256, transcript_text, ai_findings, narration, actions',
+          'id, state, analysis_status, analysis_error, analysis_lease_until, transcript_status, transcript_error, transcript_text, transcript_lease_until, narration_status, narration_error, narration_lease_until, summary_status, summary_lease_until, summary_transcript_sha256, ai_summary, ai_findings, narration, actions',
         )
         .eq('org_id', orgId)
         .in('id', proofIds);
       for (const proof of (proofs ?? []) as any[]) {
         if (!proof?.id) continue;
-        processingById.set(proof.id, {
-          analysisStatus: proof.analysis_status ?? null,
-          transcriptStatus: proof.transcript_status ?? null,
-          narrationStatus: proof.narration_status ?? null,
-          summaryState: servableSummary(proof).state,
-        });
+        processingById.set(proof.id, clipProcessingInputOfProof(proof));
       }
     }
     res.json({
@@ -4051,6 +4050,14 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
         transcriptStatus: processingById.get(row.id)?.transcriptStatus ?? null,
         narrationStatus: processingById.get(row.id)?.narrationStatus ?? null,
         summaryState: processingById.get(row.id)?.summaryState ?? null,
+        hasSummary: processingById.get(row.id)?.hasSummary === true,
+        noSpeech: processingById.get(row.id)?.noSpeech === true,
+        uploading: processingById.get(row.id)?.uploading === true,
+        retrying: processingById.get(row.id)?.retrying === true,
+        transcriptActive: processingById.get(row.id)?.transcriptActive === true,
+        analysisActive: processingById.get(row.id)?.analysisActive === true,
+        narrationActive: processingById.get(row.id)?.narrationActive === true,
+        summaryActive: processingById.get(row.id)?.summaryActive === true,
         checks: row.checks ?? [],
         aiSummary: row.ai_summary,
         legalHold: row.legal_hold,

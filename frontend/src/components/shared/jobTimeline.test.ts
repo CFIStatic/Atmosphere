@@ -262,6 +262,56 @@ describe('job timeline', () => {
     expect(reading.filter((sentence) => /still reading/i.test(sentence))).toHaveLength(1);
   });
 
+  it('reads summaryState from the video when there is no conversation', () => {
+    const base = tiffanyCustody.clips[0]!;
+    const id = 'clip-summary-field';
+    const source = tiffanySource({
+      proofs: {
+        ...tiffanyProofs,
+        videos: [
+          {
+            id,
+            partyId: 'party-el',
+            company: 'Atmosphere',
+            workDate: '2026-09-21',
+            phase: 'before',
+            durationSeconds: 10,
+            capturedAt: '2026-09-21T18:00:00.000Z',
+            receivedAt: '2026-09-21T18:01:00.000Z',
+            analysisStatus: 'done',
+            narrationStatus: 'done',
+            transcriptStatus: 'done',
+            transcriptError: null,
+            aiSummary: null,
+            heardOnMic: null,
+            summaryState: 'failed',
+            hasSummary: false,
+            summaryActive: false,
+          },
+        ],
+        days: [],
+      },
+      liveSessions: [],
+      custody: {
+        ...tiffanyCustody,
+        clips: [
+          {
+            ...base,
+            clip: { ...base.clip, id },
+            chainOfCustody: [
+              { action: 'analysed', by: 'Analysis', role: null, detail: null, at: '2026-09-21T18:05:00.000Z' },
+            ],
+          },
+        ],
+      },
+    });
+    const reading = buildJobTimeline(source)
+      .map((event) => event.sentence)
+      .filter((sentence) => /reading|unavailable/i.test(sentence));
+    expect(reading.join('\n')).toContain('Summary unavailable');
+    expect(reading.join('\n')).not.toContain('finished reading');
+  });
+
   it('keeps evidence-report exports and leaves claim packets out', () => {
     const text = joined();
     expect(text).toContain('El Presidente exported the evidence report (proof-pack.pdf · full job)');

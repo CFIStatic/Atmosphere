@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { clipProcessing } from '../../lib/clipProcessing';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
@@ -16,7 +17,7 @@ function extractRecordingStatusFns() {
     throw new Error('Could not find Dashboard recording-status helpers in verifier/index.html');
   }
   return new Function(
-    `${verifierHtml.slice(start, end)}; return { clipInstant, isActiveRecording, jobRecordingStatus, clipStatus };`,
+    `${verifierHtml.slice(start, end)}; return { clipInstant, isActiveRecording, jobRecordingStatus, clipStatus, clipProcessingOf };`,
   )() as {
     isActiveRecording: (e: unknown) => boolean;
     jobRecordingStatus: (
@@ -24,6 +25,7 @@ function extractRecordingStatusFns() {
       job?: { captureStatus?: string },
     ) => { cls: string; text: string };
     clipStatus: (e: unknown) => { cls: string; text: string };
+    clipProcessingOf: (e: unknown) => { state: string; label: string; tone: string };
   };
 }
 
@@ -59,7 +61,10 @@ describe('verifier dashboard recording status', () => {
     };
 
     expect(isActiveRecording(filming)).toBe(true);
-    expect(clipStatus(filming)).toEqual({ cls: 'yellow', text: 'Recording' });
+    // A landed file is Recorded on the clip row. The job folder can still say
+    // Recording while that recent file has not been queued.
+    expect(clipStatus(filming)).toEqual({ cls: 'green', text: 'Recorded' });
+    expect(clipStatus({ ...filming, recording: true })).toEqual({ cls: 'yellow', text: 'Recording' });
     expect(jobRecordingStatus([filming])).toEqual({ cls: 'yellow', text: 'Recording' });
   });
 
@@ -102,6 +107,91 @@ describe('verifier dashboard recording status', () => {
         uploadedAt: '2026-08-01T12:00:00Z',
       }),
     ).toEqual({ cls: 'yellow', text: 'Summary still processing' });
+    // The live library sends the shared status. A stored summary is Analyzed.
+    expect(
+      clipStatus({
+        analysis: { state: 'done', summaryState: 'updating' },
+        hasSummary: true,
+        processing: { state: 'ready', label: 'Analyzed', tone: 'good' },
+      }),
+    ).toEqual({ cls: 'green', text: 'Analyzed' });
+  });
+
+  it('uses the same labels as clipProcessing for the library mismatch cases', () => {
+    const { clipProcessingOf } = extractRecordingStatusFns();
+    const cases: Array<Record<string, unknown>> = [
+      { proofState: 'uploaded' },
+      { transcriptStatus: 'running' },
+      { analysisStatus: 'queued', narrationStatus: 'running' },
+      { proofState: 'checked' },
+      {
+        proofState: 'checked',
+        analysisStatus: 'running',
+        analysisActive: false,
+        narrationStatus: 'queued',
+        narrationActive: false,
+      },
+      { proofState: 'checked', analysisStatus: 'running', analysisActive: true },
+      {
+        proofState: 'checked',
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        summaryState: 'fresh',
+        hasSummary: true,
+        summaryActive: false,
+      },
+      { proofState: 'analysed', analysisStatus: 'done', summaryState: 'updating' },
+      {
+        proofState: 'analysed',
+        analysisStatus: 'done',
+        summaryState: 'updating',
+        hasSummary: true,
+        summaryActive: true,
+      },
+      {
+        proofState: 'analysed',
+        analysisStatus: 'done',
+        summaryState: 'quarantined',
+        hasSummary: true,
+      },
+      {
+        analysisStatus: 'done',
+        transcriptStatus: 'running',
+        transcriptActive: false,
+        hasSummary: true,
+        summaryState: 'updating',
+        summaryActive: false,
+      },
+      {
+        proofState: 'uploaded',
+        analysisStatus: 'queued',
+        analysisActive: false,
+        transcriptStatus: 'queued',
+        transcriptActive: false,
+      },
+      {
+        proofState: 'checked',
+        analysisStatus: 'queued',
+        analysisActive: false,
+        narrationStatus: 'running',
+        narrationActive: false,
+      },
+      { proofState: 'checked', analysisStatus: 'running', analysisActive: false },
+      { proofState: 'checked', analysisStatus: 'queued', analysisActive: true },
+      { transcriptStatus: 'skipped', noSpeech: true, proofState: 'uploaded' },
+      { transcriptStatus: 'skipped', noSpeech: true, analysisStatus: 'done', hasSummary: true },
+      { analysisStatus: 'failed' },
+      { analysisStatus: 'running', analysisActive: true, retrying: true },
+      { uploading: true, analysisStatus: 'done' },
+      { summaryState: 'failed', analysisStatus: 'done' },
+      {},
+    ];
+    for (const input of cases) {
+      const expected = clipProcessing(input);
+      expect(clipProcessingOf(input).label, JSON.stringify(input)).toBe(expected.label);
+      expect(clipProcessingOf(input).state).toBe(expected.state);
+    }
   });
 
   it('paints an in_progress job folder as Waiting for first clip on All videos', async () => {

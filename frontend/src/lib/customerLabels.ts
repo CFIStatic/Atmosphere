@@ -81,6 +81,14 @@ export function evidenceStatus(input: {
   transcriptStatus?: string | null;
   narrationStatus?: string | null;
   summaryState?: string | null;
+  hasSummary?: boolean | null;
+  noSpeech?: boolean | null;
+  uploading?: boolean | null;
+  retrying?: boolean | null;
+  transcriptActive?: boolean | null;
+  analysisActive?: boolean | null;
+  narrationActive?: boolean | null;
+  summaryActive?: boolean | null;
 }): EvidenceStatus {
   const state = (input.state ?? '').trim().toLowerCase();
   const capture = { label: 'Uploaded', tone: 'good' as StatusTone };
@@ -91,6 +99,14 @@ export function evidenceStatus(input: {
     transcriptStatus: input.transcriptStatus,
     narrationStatus: input.narrationStatus,
     summaryState: input.summaryState,
+    hasSummary: input.hasSummary,
+    noSpeech: input.noSpeech,
+    uploading: input.uploading,
+    retrying: input.retrying,
+    transcriptActive: input.transcriptActive,
+    analysisActive: input.analysisActive,
+    narrationActive: input.narrationActive,
+    summaryActive: input.summaryActive,
   } satisfies ClipProcessingInput);
   const processing = { label: derived.label, tone: derived.tone };
 
