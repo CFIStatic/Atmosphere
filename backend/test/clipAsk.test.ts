@@ -601,3 +601,69 @@ test('clip Ask returns webSources for the shared Web results list', async () => 
     }
   }
 });
+
+test('clip Ask falls back to the job-file answer when the model text strips empty', async () => {
+  const prev = {
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+    ASK_WEB_SEARCH_PROVIDER: process.env.ASK_WEB_SEARCH_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+  };
+  const prevFetch = globalThis.fetch;
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
+  process.env.GEMINI_API_KEY = 'gemini-test-not-real';
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  const grounded = groundedAnswerFromClip('search the web and tell me about the tarp on this clip', cedarAfter);
+  const geminiReply = (text: string): Response =>
+    new Response(
+      JSON.stringify({
+        candidates: [{ content: { parts: [{ text }] } }],
+        usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2 },
+        modelVersion: 'gemini-2.5-flash-lite',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  try {
+    assert.ok(grounded.trim());
+
+    const cases = [
+      '**Web results**\n\n[Plywood](https://example.com/plywood)\nPlywood is about $40 a sheet.',
+      '⟦web: Plywood|https://example.com/plywood⟧',
+      '⟦sources: video/job-1/proof-1/north@2⟧',
+    ];
+    for (const modelText of cases) {
+      let sawModel = false;
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        assert.match(url, /generativelanguage\.googleapis\.com/);
+        sawModel = true;
+        return geminiReply(modelText);
+      }) as typeof fetch;
+      const result = await answerFromClip({
+        question: 'search the web and tell me about the tarp on this clip',
+        record: cedarAfter,
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              answer: 'Plywood is about $40 a sheet.',
+              results: [{ title: 'Plywood', url: 'https://example.com/plywood', content: 'About $40 a sheet.' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      });
+      assert.equal(sawModel, true, modelText);
+      assert.equal(result.answer, grounded, modelText);
+      assert.doesNotMatch(result.answer, /\$40|example\.com\/plywood/, modelText);
+      assert.equal(result.webDerivedAnswer, false, modelText);
+    }
+  } finally {
+    globalThis.fetch = prevFetch;
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

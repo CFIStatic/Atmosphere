@@ -1689,6 +1689,24 @@ export async function answerFromClip(input: {
   }
 
   const webUsable = webHits.length > 0 || Boolean(webAnswer.trim());
+  // Same answer the no-model path serves: job text when this clip can answer,
+  // otherwise the web prose. Used when the model never answers, and when its
+  // text strips down to a Web results section or a trailing marker.
+  const jobFileFallback = (usable: boolean) => {
+    const composed = {
+      question: input.question,
+      jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+      webAnswer,
+      hits: webHits,
+    };
+    const webDerived = usable && composedAnswerIsWebProse(composed);
+    const answer = usable
+      ? webDerived
+        ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed))
+        : composeAskWebAnswer(composed)
+      : grounded;
+    return { answer, webDerivedAnswer: webDerived };
+  };
   const webNote = webUsable
     ? `\n\nWEB SEARCH RESULTS (public web — this clip's evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
     : '';
@@ -1718,25 +1736,14 @@ export async function answerFromClip(input: {
     onToken: input.onToken,
   });
   if (!completed) {
-    const composed = {
-      question: input.question,
-      jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
-      webAnswer,
-      hits: webHits,
-    };
-    const webDerived = webUsable && composedAnswerIsWebProse(composed);
-    const answer = webUsable
-      ? webDerived
-        ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed))
-        : composeAskWebAnswer(composed)
-      : grounded;
-    input.onToken?.(answer);
+    const fallback = jobFileFallback(webUsable);
+    input.onToken?.(fallback.answer);
     return {
-      answer,
+      answer: fallback.answer,
       model: null,
       usage: null,
       webSources: webSourcesFromHits(webHits),
-      webDerivedAnswer: webDerived,
+      webDerivedAnswer: fallback.webDerivedAnswer,
     };
   }
   // If the model wrongly denies on-file speech, keep the grounded transcript answer.
@@ -1796,19 +1803,12 @@ export async function answerFromClip(input: {
   const shaped = ensureWebResultsSection(
     withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
   );
-  const composed = {
-    question: input.question,
-    jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
-    webAnswer,
-    hits: webHits,
-  };
-  const webDerived = webUsable && !shaped.trim() && composedAnswerIsWebProse(composed);
-  const answer = webDerived ? scrubWebDerivedAskAnswer(composeAskWebAnswer(composed)) : shaped;
+  const fallback = shaped.trim() ? null : jobFileFallback(webUsable);
   return {
-    answer,
+    answer: fallback ? fallback.answer : shaped,
     model: completed.model,
     usage: completed.usage,
     webSources: webSourcesFromHits(webHits as AskWebHit[]),
-    webDerivedAnswer: webDerived,
+    webDerivedAnswer: fallback ? fallback.webDerivedAnswer : false,
   };
 }
