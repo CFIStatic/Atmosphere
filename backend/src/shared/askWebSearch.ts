@@ -420,97 +420,10 @@ export function askClockSystemRules(now: Date = new Date(), timeZone: string = A
 Resolve relative days against this clock before you answer or search. "Thursday" means the upcoming Thursday, or today if it is Thursday. "this Sunday" means the upcoming Sunday, or today if it is Sunday. "tomorrow" and "tonight" use this clock. When you call web_search, the query must include that calendar date (for example "NFL game Thursday, October 1, 2026"), not only the weekday.`;
 }
 
-function daysInMonth(month: number): number {
-  return [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month] ?? 0;
-}
-
-function plausibleMonthDay(month: number, day: number): boolean {
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(month);
-}
-
-/** Inch marks and material words. "7/16 OSB" is a size even though 16 is a valid day. */
-const MATERIAL_SIZE_AFTER_RE =
-  /^(?:\s*["″]|[\s-]*(?:inch(?:es)?|in\.?|ft|foot|feet|mm|cm|plywood|osb|drywall|shingle|board|sheet|lumber|thick|gauge|pitch|tab)\b)/i;
-
-const DATE_CUE =
-  'on|dated|date|due|scheduled|today|tonight|tomorrow|yesterday|sunday|monday|tuesday|wednesday|thursday|friday|saturday';
-const DATE_GAP =
-  '(?:\\s*,?\\s*(?:on|night|morning|evening|afternoon|game|games|this|next)\\b){0,2}\\s*,?\\s*';
-
-/** Cue before 10/8, with "night" or "this" allowed between. */
-const NUMERIC_DATE_CUE_BEFORE_RE = new RegExp(`\\b(?:${DATE_CUE})\\b${DATE_GAP}$`, 'i');
-/** Cue after 10/8 ("10/8 Thursday", "10/8, this Sunday"). */
-const NUMERIC_DATE_CUE_AFTER_RE = new RegExp(`^${DATE_GAP}(?:${DATE_CUE})\\b`, 'i');
-
-/**
- * A nearby weekday, relative day, or date word makes 10/8 a date.
- * The cue may sit before or after the number, with a filler between.
- */
-function numericDateContext(query: string, index: number, length: number): boolean {
-  const before = query.slice(Math.max(0, index - 48), index);
-  const after = query.slice(index + length, index + length + 40);
-  return NUMERIC_DATE_CUE_BEFORE_RE.test(before) || NUMERIC_DATE_CUE_AFTER_RE.test(after);
-}
-
-/** A calendar date already written in the query. Bare weekdays, fractions, and ranges are not dates. */
-function hasExplicitCalendarDate(query: string): boolean {
-  if (
-    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?\b/i.test(
-      query,
-    )
-  ) {
-    return true;
-  }
-  for (const match of query.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-    if (plausibleMonthDay(Number(match[2]), Number(match[3]))) return true;
-  }
-  // M/D/YYYY or M-D-YYYY. A hyphen pair with no year (2-3) is a range.
-  for (const match of query.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/g)) {
-    const yearRaw = match[3] ?? '';
-    const year = Number(yearRaw);
-    const yearOk = yearRaw.length === 4 ? year >= 1900 && year <= 2100 : yearRaw.length === 2;
-    if (yearOk && plausibleMonthDay(Number(match[1]), Number(match[2]))) return true;
-  }
-  // Bare M/D. 3/4 and 7/16 OSB are sizes. A day of 1-12 still needs a date phrase.
-  for (const match of query.matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)) {
-    const month = Number(match[1]);
-    const day = Number(match[2]);
-    if (!plausibleMonthDay(month, day)) continue;
-    const at = match.index ?? 0;
-    const len = match[0].length;
-    if (MATERIAL_SIZE_AFTER_RE.test(query.slice(at + len, at + len + 24))) continue;
-    if (day <= 12 && !numericDateContext(query, at, len)) continue;
-    return true;
-  }
-  return false;
-}
-
-/**
- * The weekday or relative day is already tied to a calendar date
- * ("Thursday, October 8, 2026", "Thursday night, 10/8", "today Oct. 8").
- * A size such as 3/4 or 7/16 OSB does not count.
- */
-function relativeDayAlreadyDated(text: string, index: number, length: number): boolean {
-  const after = text.slice(index + length, index + length + 64);
-  const before = text.slice(Math.max(0, index - 64), index);
-  const afterCore = after.replace(
-    /^\s*(?:(?:,|\(|-|–|—|:)\s*)?(?:(?:on|night|morning|evening|afternoon|game|games)\b\s*,?\s*){0,2}/i,
-    '',
-  );
-  const beforeCore = before.replace(
-    /(?:\s*,?\s*(?:on|night|morning|evening|afternoon|game|games)\b){0,2}\s*(?:(?:,|\)|-|–|—|:)\s*)?$/i,
-    '',
-  );
-  // The matched day was cut out of both slices ("Thursday night, 10/8" -> "10/8").
-  // Put it back so the date phrase still has its weekday or "today".
-  const word = text.slice(index, index + length);
-  return hasExplicitCalendarDate(`${word} ${afterCore}`) || hasExplicitCalendarDate(`${beforeCore} ${word}`);
-}
-
 /**
  * Leave the question text untouched. Relative days are explained in a suffix
- * ("today is Wednesday, September 30, 2026, America/Chicago") unless that word
- * is already next to a calendar date. Fractions such as 3/4 and 7/16 OSB are sizes.
+ * ("today is Wednesday, September 30, 2026, America/Chicago"). Numbers in the
+ * question are never read as dates and never rewritten.
  */
 export function resolveAskSearchQuery(
   query: string,
@@ -532,7 +445,6 @@ export function resolveAskSearchQuery(
     /\b(today|tonight|tomorrow|yesterday)\b|\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
   let match: RegExpExecArray | null;
   while ((match = rel.exec(original)) !== null) {
-    if (relativeDayAlreadyDated(original, match.index, match[0].length)) continue;
     let phrase = '';
     let ymd: ZonedYmd;
     if (match[1]) {

@@ -503,7 +503,10 @@ test('relative days resolve in America/Chicago and the Tavily query includes tha
     resolveAskSearchQuery('7/16 OSB tomorrow', ASK_NOW, 'America/Chicago'),
     '7/16 OSB tomorrow (tomorrow is Thursday, October 1, 2026, America/Chicago)',
   );
-  assert.equal(resolveAskSearchQuery('10/8 today', ASK_NOW, 'America/Chicago'), '10/8 today');
+  assert.equal(
+    resolveAskSearchQuery('10/8 today', ASK_NOW, 'America/Chicago'),
+    '10/8 today (today is Wednesday, September 30, 2026, America/Chicago)',
+  );
   assert.equal(
     resolveAskSearchQuery('what NFL game is Thursday', ASK_NOW, 'America/Chicago'),
     'what NFL game is Thursday (Thursday is Thursday, October 1, 2026, America/Chicago)',
@@ -841,10 +844,13 @@ test('shared words do not hide a public question from web search', async () => {
 
 test('relative days are explained in a suffix and the question text is never rewritten', async () => {
   const dated = 'NFL game Thursday, October 8, 2026';
-  assert.equal(resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'), dated);
+  assert.equal(
+    resolveAskSearchQuery(dated, ASK_NOW, 'America/Chicago'),
+    'NFL game Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
   assert.equal(
     resolveAskSearchQuery('games today October 8, 2026', ASK_NOW, 'America/Chicago'),
-    'games today October 8, 2026',
+    'games today October 8, 2026 (today is Wednesday, September 30, 2026, America/Chicago)',
   );
   assert.equal(
     resolveAskSearchQuery('2-3 tab shingles Thursday', ASK_NOW, 'America/Chicago'),
@@ -868,32 +874,54 @@ test('relative days are explained in a suffix and the question text is never rew
   );
   assert.equal(
     resolveAskSearchQuery('NFL game Thursday 10/8/2026', ASK_NOW, 'America/Chicago'),
-    'NFL game Thursday 10/8/2026',
+    'NFL game Thursday 10/8/2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
   );
   assert.equal(
     resolveAskSearchQuery('change order today 10/19', ASK_NOW, 'America/Chicago'),
-    'change order today 10/19',
+    'change order today 10/19 (today is Wednesday, September 30, 2026, America/Chicago)',
   );
   assert.equal(
     resolveAskSearchQuery('5/8 OSB Thursday, October 8, 2026', ASK_NOW, 'America/Chicago'),
-    '5/8 OSB Thursday, October 8, 2026',
+    '5/8 OSB Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('Thursday night 10/8', ASK_NOW, 'America/Chicago'),
+    'Thursday night 10/8 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('Thursday night, 10/8', ASK_NOW, 'America/Chicago'),
+    'Thursday night, 10/8 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('games today 10/8', ASK_NOW, 'America/Chicago'),
+    'games today 10/8 (today is Wednesday, September 30, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('NFL game 10/8 Thursday', ASK_NOW, 'America/Chicago'),
+    'NFL game 10/8 Thursday (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('10/8, this Sunday', ASK_NOW, 'America/Chicago'),
+    '10/8, this Sunday (this Sunday is Sunday, October 4, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('NFL game Thursday Oct. 8', ASK_NOW, 'America/Chicago'),
+    'NFL game Thursday Oct. 8 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('games today Oct. 8', ASK_NOW, 'America/Chicago'),
+    'games today Oct. 8 (today is Wednesday, September 30, 2026, America/Chicago)',
+  );
+  assert.equal(
+    resolveAskSearchQuery('Thursday, Oct. 8', ASK_NOW, 'America/Chicago'),
+    'Thursday, Oct. 8 (Thursday is Thursday, October 1, 2026, America/Chicago)',
   );
   for (const question of [
     '3/4 inch plywood on October 8, 2026',
     '2-3 bundles due 10/8/2026',
     '3/4 inch plywood on 2026-10-08',
-    'Thursday night 10/8',
-    'Thursday night, 10/8',
-    'games today 10/8',
-    'NFL game 10/8 Thursday',
-    '10/8, this Sunday',
-    'NFL game Thursday Oct. 8',
-    'games today Oct. 8',
-    'Thursday, Oct. 8',
   ]) {
     assert.equal(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), question, question);
-    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /October 1, 2026/);
-    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /September 30, 2026/);
   }
 
   await withEnv(TAVILY_ON, async () => {
@@ -909,8 +937,10 @@ test('relative days are explained in a suffix and the question text is never rew
         });
       },
     });
-    assert.equal(query, dated);
-    assert.doesNotMatch(query, /October 1, 2026/);
+    assert.equal(
+      query,
+      'NFL game Thursday, October 8, 2026 (Thursday is Thursday, October 1, 2026, America/Chicago)',
+    );
   });
 });
 
