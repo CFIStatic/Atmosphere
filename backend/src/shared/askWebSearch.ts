@@ -448,13 +448,24 @@ Resolve relative days against this clock before you answer or search. "Thursday"
  */
 /** A calendar date already written in the query. Bare weekdays are not dates. */
 function hasExplicitCalendarDate(query: string): boolean {
-  return (
+  if (
     /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b/i.test(
       query,
     ) ||
-    /\b\d{4}-\d{2}-\d{2}\b/.test(query) ||
-    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(query)
-  );
+    /\b\d{4}-\d{2}-\d{2}\b/.test(query)
+  ) {
+    return true;
+  }
+  // Slash dates only. A hyphen pair is a range (2-3), not a date.
+  // No year and a day of 1-12 is a fraction or a pitch (3/4, 5/8), not a calendar day.
+  for (const match of query.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    if (!match[3] && day <= 12) continue;
+    return true;
+  }
+  return false;
 }
 
 export function resolveAskSearchQuery(

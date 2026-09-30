@@ -814,6 +814,26 @@ test('an explicit date is not rewritten into a conflicting weekday date', async 
     resolveAskSearchQuery('what NFL game is Thursday?', ASK_NOW, 'America/Chicago'),
     /October 1, 2026/,
   );
+  assert.match(
+    resolveAskSearchQuery('2-3 tab shingles Thursday', ASK_NOW, 'America/Chicago'),
+    /Thursday, October 1, 2026/,
+  );
+  assert.match(
+    resolveAskSearchQuery('3/4 inch plywood today', ASK_NOW, 'America/Chicago'),
+    /Wednesday, September 30, 2026/,
+  );
+  assert.match(
+    resolveAskSearchQuery('5/8 drywall tomorrow', ASK_NOW, 'America/Chicago'),
+    /Thursday, October 1, 2026/,
+  );
+  assert.equal(
+    resolveAskSearchQuery('NFL game Thursday 10/8/2026', ASK_NOW, 'America/Chicago'),
+    'NFL game Thursday 10/8/2026',
+  );
+  assert.equal(
+    resolveAskSearchQuery('change order today 10/19', ASK_NOW, 'America/Chicago'),
+    'change order today 10/19',
+  );
 
   await withEnv(TAVILY_ON, async () => {
     let query = '';
