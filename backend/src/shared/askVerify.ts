@@ -27,7 +27,7 @@ import {
 import { formatQuoteTrailer, parseMomentSource, parseQuoteTrailer, momentSourceId, type AskMomentQuote } from './askMoments.js';
 import { prettyMentionStamp, sourceSlug } from './mentions.js';
 import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
-import { joinWebResultsSection, splitWebEvidenceMarkers, splitWebResultsSection } from './askWebSearch.js';
+import { joinWebResultsSection, splitWebResultsSection } from './askWebSearch.js';
 
 export type AskVerifyFailureKind =
   | 'quote'
@@ -289,10 +289,10 @@ export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex 
   for (const person of people) {
     if (person.onThisJob) parts.push(person.name);
   }
-  const embedded = splitEmbeddedWeb(source.extra ?? '');
-  if (embedded.record) parts.push(embedded.record);
-  const web = [trim(source.web), embedded.web].filter(Boolean).join('\n');
   const recordRaw = parts.filter(Boolean).join('\n');
+  // Tool and web text may inform dates. It is never a quote source.
+  if (trim(source.extra)) parts.push(trim(source.extra));
+  const web = trim(source.web);
   if (web) parts.push(web);
   const raw = parts.filter(Boolean).join('\n');
   collectDates(raw, dates);
@@ -322,30 +322,6 @@ export function buildGroundingIndex(source: AskVerifySource): AskGroundingIndex 
     people,
     question: source.question ?? null,
   };
-}
-
-/**
- * Pull web prose out of the extra prompt so a quote cannot be justified by it.
- * Tagged blocks are removed whatever surrounds them. Untagged web_search tool
- * output and a WEB SEARCH RESULTS heading are removed too.
- */
-function splitEmbeddedWeb(extra: string): { record: string; web: string } {
-  const text = trim(extra);
-  if (!text) return { record: '', web: '' };
-  const webs: string[] = [];
-  const tagged = splitWebEvidenceMarkers(text);
-  if (tagged.web) webs.push(tagged.web);
-  let record = tagged.record;
-  record = record.replace(/(?:^|\n{2,})(### (?:Tool )?web_search\b[\s\S]*?)(?=\n{2,}### |\s*$)/gi, (full, block: string) => {
-    webs.push(block);
-    return full.startsWith('\n') ? '\n\n' : '';
-  });
-  const match = record.match(/(?:^|\n\n)(WEB SEARCH RESULTS\b[\s\S]*?)(?=\n\n(?:TOOL RESULTS|IN-PRODUCT|Question:)|\s*$)/i);
-  if (match && match.index != null) {
-    webs.push(match[1] ?? '');
-    record = `${record.slice(0, match.index)}${record.slice(match.index + match[0].length)}`;
-  }
-  return { record: record.trim(), web: webs.filter(Boolean).join('\n') };
 }
 
 function splitTrailers(answer: string): { prose: string; trailers: string[] } {
@@ -479,14 +455,12 @@ function checkProseQuote(index: AskGroundingIndex, quote: ProseQuote): AskVerify
   const norm = normalizeForMatch(quote.text);
   if (!norm) return null;
   const words = norm.split(' ').length;
+  // A quote is an exact transcript line. Web text, tool output, and notes are not.
   if (index.clips.some((text) => findInClip(text, quote.text))) return null;
-  // Short labels ("RESTORE 365") and written records (notes, history, titles) may be quoted from the file text.
-  const parts = quote.text.split(/\.{3}|…/).map((part) => normalizeForMatch(part)).filter(Boolean);
-  if (parts.every((part) => containsNorm(index.recordNorm, part))) return null;
   return {
     kind: 'quote',
     text: quote.full,
-    detail: words >= 3 ? 'these words are not in any transcript or record on this file' : 'this label is not on the file',
+    detail: words >= 3 ? 'these words are not in any transcript on this file' : 'this label is not in a transcript on this file',
   };
 }
 

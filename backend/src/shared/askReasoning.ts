@@ -97,10 +97,9 @@ import {
   askWebCapabilityRules,
   isAskWebSearchConfigured,
   plainWebModelText,
-  restrictAskMarkdownLinks,
   searchAskWebDetailed,
+  stripExternalAskLinks,
   webSearchModelPayload,
-  wrapWebEvidence,
 } from './askWebSearch.js';
 
 const LOOKUP_SYSTEM = `You are a sharp project manager writing to a colleague or a client. You answer from this job file by looking things up. You have tools. Use them before you write.
@@ -195,19 +194,6 @@ export function askLookupStatus(tool: string): string {
   }
 }
 
-function webUrlsFromTrace(trace: AskLookupTraceStep[]): string[] {
-  const urls: string[] = [];
-  for (const step of trace) {
-    if (step.tool !== 'web_search' || !step.result.data || typeof step.result.data !== 'object') continue;
-    const results = (step.result.data as { results?: Array<{ url?: unknown }> }).results ?? [];
-    for (const hit of results) {
-      const url = typeof hit?.url === 'string' ? hit.url.trim() : '';
-      if (url && !urls.includes(url)) urls.push(url);
-    }
-  }
-  return urls;
-}
-
 function formatTrace(trace: AskLookupTraceStep[]): string {
   if (!trace.length) return '';
   return trace
@@ -216,8 +202,7 @@ function formatTrace(trace: AskLookupTraceStep[]): string {
       const data = web ? webSearchModelPayload(step.result.data) : step.result.data;
       const payload = data != null ? `\n${JSON.stringify(data).slice(0, 6000)}` : '';
       const summary = web ? plainWebModelText(step.result.summary) : step.result.summary;
-      const block = `### ${step.tool} (${step.result.ok ? 'ok' : 'failed'})\n${summary}${payload}`;
-      return web ? wrapWebEvidence(block) : block;
+      return `### ${step.tool} (${step.result.ok ? 'ok' : 'failed'})\n${summary}${payload}`;
     })
     .join('\n\n');
 }
@@ -943,7 +928,8 @@ export async function answerFromAskLookup(input: {
   ) => {
     for (let i = 0; i < limit && !stopped(); i += 1) {
       const turn = await active({ system: systemText, stable: parts.stable, user: userText, trace });
-      if (!turn || stopped()) break;
+      if (!turn) break;
+      const halt = stopped();
       model = turn.model || model;
       input.timing?.noteModel(model);
       if (turn.usage) {
@@ -951,11 +937,13 @@ export async function answerFromAskLookup(input: {
         input.timing?.addCacheRead(turn.usage.cacheReadTokens);
       }
       if (turn.calls.length) {
+        if (halt) break;
         streamed = false;
         await runCalls(turn.calls);
         continue;
       }
       if (
+        !halt &&
         !forcedOther &&
         asksAboutOtherJobs(resolved) &&
         !trace.some((row) => row.tool === 'search_other_jobs')
@@ -965,8 +953,9 @@ export async function answerFromAskLookup(input: {
         await runCalls(continueAskLookup(resolved, input.catalog, trace));
         continue;
       }
-      prose = turn.text;
+      if (turn.text) prose = turn.text;
       streamed = Boolean(turn.streamed);
+      if (halt) break;
       break;
     }
   };
@@ -1049,7 +1038,7 @@ export async function answerFromAskLookup(input: {
   const retrievedChunks = retrievedChunksFor(evidence, trace, `${fullUser}\n\n${formatTrace(trace)}`);
   if (stopped()) {
     return {
-      answer: scrubStoredAskText(prose, input.catalog.clips),
+      answer: stripExternalAskLinks(scrubStoredAskText(prose, input.catalog.clips)),
       model,
       usage,
       trace,
@@ -1083,7 +1072,7 @@ export async function answerFromAskLookup(input: {
   }
   // Every quote must be an exact retrieved transcript line, with its clip and time.
   answer = enforceQuoteGrounding(answer, { chunks: retrievedChunks, question: input.question }).answer;
-  answer = restrictAskMarkdownLinks(answer, webUrlsFromTrace(trace));
+  answer = stripExternalAskLinks(answer);
   if (!streamed) onToken(answer);
   return {
     answer,

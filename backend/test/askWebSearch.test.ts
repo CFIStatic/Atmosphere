@@ -8,10 +8,10 @@ import {
   askWebSearchProvider,
   asksAboutJobFile,
   composeAskWebAnswer,
-  formatWebResultsSection,
-  restrictAskMarkdownLinks,
+  isRelativeAskAppPath,
+  stripExternalAskLinks,
   webSearchModelPayload,
-  wrapWebEvidence,
+  webSourcesFromHits,
   filterWebHitsToAllowed,
   formatWebTrailer,
   geminiWebSearchModel,
@@ -182,7 +182,7 @@ test('askWebCapabilityRules forbids claiming no live search when configured', as
     assert.match(rules, /do not soft-refuse/i);
     assert.doesNotMatch(rules, /not configured/i);
     assert.match(ASK_WEB_FORMAT_RULES, /The job file wins/i);
-    assert.match(ASK_WEB_FORMAT_RULES, /\*\*Web results\*\*/);
+    assert.match(ASK_WEB_FORMAT_RULES, /Do not write markdown links/i);
   });
 });
 
@@ -314,6 +314,15 @@ test('job-file questions are not auto-searched; explicit and public questions ar
     assert.equal(shouldSupplementWithWebSearch('search the web for the capital of France', 'brief · Lockbox 4412'), true);
     assert.equal(shouldSupplementWithWebSearch('what is the capital of France', 'brief · Carrier approved deck.'), true);
     assert.equal(shouldSupplementWithWebSearch('what NFL game is Thursday?', 'brief · Carrier approved deck.'), true);
+    assert.equal(looksLikeExplicitWebSearchRequest('search the web'), true);
+    assert.equal(looksLikeExplicitWebSearchRequest('look it up online'), true);
+    assert.equal(looksLikeExplicitWebSearchRequest('google it'), true);
+    assert.equal(looksLikeExplicitWebSearchRequest('did they mention Google'), false);
+    assert.equal(looksLikeExplicitWebSearchRequest('search the attic'), false);
+    assert.equal(asksAboutJobFile('did they mention Google'), true);
+    assert.equal(asksAboutJobFile('search the attic'), true);
+    assert.equal(shouldSupplementWithWebSearch('did they mention Google', 'brief · two clips'), false);
+    assert.equal(shouldSupplementWithWebSearch('search the attic', 'brief · two clips'), false);
 
     const jobFirst = composeAskWebAnswer({
       question: 'what is the lockbox',
@@ -322,8 +331,9 @@ test('job-file questions are not auto-searched; explicit and public questions ar
       hits: [{ title: 'Lockbox', url: 'https://example.com/lockbox', snippet: 'A lockbox holds keys.' }],
     });
     assert.match(jobFirst, /^brief · Gate \/ access: Lockbox 4412/);
-    assert.match(jobFirst, /\*\*Web results\*\*/);
-    assert.doesNotMatch(jobFirst.split('**Web results**')[0] ?? '', /real estate key box/);
+    assert.doesNotMatch(jobFirst, /\*\*Web results\*\*/);
+    assert.doesNotMatch(jobFirst, /real estate key box/);
+    assert.equal(webSourcesFromHits([{ title: 'Lockbox', url: 'https://example.com/lockbox', snippet: 'A lockbox holds keys.' }])[0]?.url, 'https://example.com/lockbox');
 
     const publicAnswer = composeAskWebAnswer({
       question: 'what NFL game is Thursday?',
@@ -332,7 +342,11 @@ test('job-file questions are not auto-searched; explicit and public questions ar
       hits: [{ title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' }],
     });
     assert.match(publicAnswer, /^Packers at Lions on October 1, 2026/);
-    assert.match(publicAnswer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
+    assert.doesNotMatch(publicAnswer, /\[NFL schedule\]|https?:\/\//);
+    assert.equal(
+      webSourcesFromHits([{ title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' }])[0]?.url,
+      'https://example.com/nfl',
+    );
   });
 });
 
@@ -766,8 +780,8 @@ test('normalizeAskWebCitations strips ASCII trailer and skips capability junk', 
 test('askWebCapabilityRules and format rules forbid web trailers', async () => {
   await withEnv(TAVILY_ON, () => {
     const rules = askWebCapabilityRules();
-    assert.match(rules, /\*\*Web results\*\*/);
-    assert.match(rules, /separate from job evidence/i);
+    assert.match(rules, /Do not write markdown links/i);
+    assert.match(rules, /app attaches sources separately/i);
     assert.match(ASK_WEB_FORMAT_RULES, /Do not write ⟦web:/);
     assert.match(ASK_WEB_FORMAT_RULES, /\[\[web:/);
     assert.match(ASK_WEB_FORMAT_RULES, /quotation marks are only for an exact transcript/i);
@@ -1054,7 +1068,7 @@ test('Tavily answer with no result links is kept and no links are invented', asy
 test('poisoned Tavily answer and snippet text cannot add a clickable link', () => {
   const poisoned =
     'See [evil](https://attacker.example/phish) and https://bare.example and <https://auto.example> <a href="https://html.example">click</a> ![img](https://img.example/x.png)';
-  const section = formatWebResultsSection([
+  const sources = webSourcesFromHits([
     {
       title: 'NFL [schedule](https://attacker.example)',
       url: 'https://example.com/nfl',
@@ -1065,13 +1079,18 @@ test('poisoned Tavily answer and snippet text cannot add a clickable link', () =
       url: 'javascript:alert(1)',
       snippet: 'nope [click](https://attacker.example)',
     },
+    {
+      title: 'breakout',
+      url: 'https://example.com/ok) [phish](https://attacker.example)',
+      snippet: 'score',
+    },
   ]);
-  const sectionLinks = section.match(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g) ?? [];
-  assert.deepEqual(sectionLinks, ['[NFL schedule](https://example.com/nfl)']);
-  assert.match(section, /See evil/);
-  assert.match(section, /\bclick\b/);
-  assert.doesNotMatch(section, /attacker\.example|bare\.example|auto\.example|html\.example|img\.example|javascript:/i);
-  assert.doesNotMatch(section, /<a\b|<\/?[a-z]/i);
+  assert.deepEqual(sources.map((source) => source.url), ['https://example.com/nfl']);
+  assert.equal(sources[0]?.title, 'NFL schedule');
+  assert.match(sources[0]?.snippet ?? '', /See evil/);
+  assert.match(sources[0]?.snippet ?? '', /\bclick\b/);
+  assert.doesNotMatch(sources[0]?.snippet ?? '', /attacker\.example|bare\.example|auto\.example|html\.example|img\.example|javascript:/i);
+  assert.doesNotMatch(JSON.stringify(sources), /<a\b|<\/?[a-z]/i);
 
   const composed = composeAskWebAnswer({
     question: 'what NFL game is Thursday',
@@ -1085,20 +1104,9 @@ test('poisoned Tavily answer and snippet text cannot add a clickable link', () =
       },
     ],
   });
-  const composedLinks = composed.match(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g) ?? [];
-  assert.deepEqual(composedLinks, ['[NFL schedule](https://example.com/nfl)']);
-  assert.match(composed, /Packers play tonight here/);
+  assert.equal(composed, 'Packers play tonight here');
   assert.doesNotMatch(composed, /attacker\.example|auto\.example|bare\.example|html\.example|img\.example/);
-  assert.doesNotMatch(composed, /<b\b|<a\b|&lt;/i);
-
-  const breakout = formatWebResultsSection([
-    {
-      title: 'NFL schedule',
-      url: 'https://example.com/ok) [phish](https://attacker.example)',
-      snippet: 'score',
-    },
-  ]);
-  assert.equal(breakout, '');
+  assert.doesNotMatch(composed, /<b\b|<a\b|&lt;|\[[^\]]+\]\(/i);
 
   const answerOnly = composeAskWebAnswer({
     question: 'what NFL game is Thursday',
@@ -1140,25 +1148,29 @@ test('web_search tool output is plain text before the model sees it', () => {
       },
     },
   ]);
-  assert.match(shown, /⟦web-evidence⟧/);
+  assert.doesNotMatch(shown, /⟦web-evidence⟧/);
   assert.match(shown, /Packers play/);
   assert.match(shown, /https:\/\/example\.com\/nfl/);
   assert.doesNotMatch(shown, /attacker\.example/);
-  assert.equal(wrapWebEvidence(shown).includes('⟦web-evidence⟧'), true);
 });
 
-test('only returned web URLs and job-file paths stay clickable', () => {
-  const out = restrictAskMarkdownLinks(
-    'See [evil](https://attacker.example) and [NFL schedule](https://example.com/nfl) and [the job](/job-progress?job=job-1).',
-    ['https://example.com/nfl'],
+test('model links stay plain text except relative job paths', () => {
+  const out = stripExternalAskLinks(
+    'See [evil](https://attacker.example) and [NFL schedule](https://example.com/nfl) and [the job](/job-progress?job=job-1) and [clips](/jobs/job-1).',
   );
   assert.equal(
     out,
-    'See evil and [NFL schedule](https://example.com/nfl) and [the job](/job-progress?job=job-1).',
+    'See evil and NFL schedule and [the job](/job-progress?job=job-1) and [clips](/jobs/job-1).',
   );
   assert.equal(
-    restrictAskMarkdownLinks('[open](https://app.example/job-progress?job=job-1)', []),
-    '[open](https://app.example/job-progress?job=job-1)',
+    stripExternalAskLinks('[open](https://evil.example/job-progress?job=steal)'),
+    'open',
   );
-  assert.equal(restrictAskMarkdownLinks('[phish](https://app.example/login)', []), 'phish');
+  assert.equal(stripExternalAskLinks('[open](https://evil.example/jobs/job-1)'), 'open');
+  assert.equal(stripExternalAskLinks('[open](//evil.example/jobs/job-1)'), 'open');
+  assert.equal(stripExternalAskLinks('[phish](https://app.example/login)'), 'phish');
+  assert.equal(isRelativeAskAppPath('/job-progress?job=job-1'), true);
+  assert.equal(isRelativeAskAppPath('/jobs/job-1'), true);
+  assert.equal(isRelativeAskAppPath('https://evil.example/job-progress?job=steal'), false);
+  assert.equal(isRelativeAskAppPath('//evil.example/jobs/job-1'), false);
 });

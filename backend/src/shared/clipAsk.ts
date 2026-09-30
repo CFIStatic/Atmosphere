@@ -22,7 +22,6 @@ import {
   composeAskWebAnswer,
   ensureWebResultsSection,
   formatAskWebContext,
-  restrictAskMarkdownLinks,
   includeDomainsForAsk,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
@@ -1747,10 +1746,16 @@ export async function answerFromClip(input: {
       }
     }
   }
-  const shaped = restrictAskMarkdownLinks(
+  const shaped = ensureWebResultsSection(
     withUnprovenSpeakerCaveat(input.question, input.record, normalizeAskProse(completed.text)),
-    webHits.map((hit) => hit.url),
   );
-  const answer = webUsable ? ensureWebResultsSection(shaped, webHits) : shaped;
+  const answer = webUsable && !shaped.trim()
+    ? composeAskWebAnswer({
+        question: input.question,
+        jobAnswer: asksAboutJobFile(input.question) ? grounded : '',
+        webAnswer,
+        hits: webHits,
+      })
+    : shaped;
   return { answer, model: completed.model, usage: completed.usage };
 }

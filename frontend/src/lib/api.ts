@@ -4193,6 +4193,7 @@ export const api = {
       model: string | null;
       question: ProofQuestion;
       threadId?: string | null;
+      webSources?: Array<{ title: string; url: string; snippet: string }>;
     }>(`/api/operations/shared/${jobId}/proof/ask`, {
       method: 'POST',
       body: JSON.stringify({
@@ -4220,6 +4221,7 @@ export const api = {
     model: string | null;
     question: ProofQuestion | null;
     threadId?: string | null;
+    webSources?: Array<{ title: string; url: string; snippet: string }>;
   }> => {
     const embedToken = fieldEmbedAccessToken();
     let res: Response;
@@ -4258,6 +4260,7 @@ export const api = {
     let model: string | null = null;
     let stored: ProofQuestion | null = null;
     let threadId: string | null = opts?.threadId ?? null;
+    let webSources: Array<{ title: string; url: string; snippet: string }> | undefined;
     while (true) {
       if (opts?.signal?.aborted) {
         await reader.cancel().catch(() => undefined);
@@ -4280,15 +4283,15 @@ export const api = {
           model?: string | null;
           question?: ProofQuestion | null;
           threadId?: string | null;
+          webSources?: Array<{ title: string; url: string; snippet: string }>;
         };
         try {
           event = JSON.parse(trimmed) as typeof event;
         } catch {
           continue;
         }
-        if (event.type === 'token' && typeof event.text === 'string') {
-          answer += event.text;
-          handlers.onToken?.(event.text);
+        if (event.type === 'token') {
+          // Thinking dots only. The answer arrives on the done event.
         } else if (event.type === 'status' && event.phase) {
           handlers.onStatus?.(event.phase);
         } else if (event.type === 'done') {
@@ -4297,10 +4300,11 @@ export const api = {
           model = event.model ?? model;
           stored = event.question ?? stored;
           if (event.threadId) threadId = event.threadId;
+          if (Array.isArray(event.webSources)) webSources = event.webSources;
         }
       }
     }
-    return { answer, groundedOn, model, question: stored, threadId };
+    return { answer, groundedOn, model, question: stored, threadId, webSources };
   },
 
   proofQuestions: (jobId: string, opts?: { threadId?: string | null }) => {

@@ -17,7 +17,6 @@ import {
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
   webSearchModelPayload,
-  wrapWebEvidence,
   type AskWebHit,
 } from './askWebSearch.js';
 import type { JobFileAskContext } from './jobFileAsk.js';
@@ -968,8 +967,7 @@ export function formatAskToolResultsForModel(results: AskToolResult[]): string {
         ? `\nNEEDS CONFIRMATION: ${r.needsConfirmation.detail}`
         : '';
       const summary = r.tool === 'web_search' ? plainWebModelText(r.summary) : r.summary;
-      const block = `### Tool ${r.tool} (${r.ok ? 'ok' : 'failed'})\n${summary}${confirm}${payload}`;
-      return r.tool === 'web_search' ? wrapWebEvidence(block) : block;
+      return `### Tool ${r.tool} (${r.ok ? 'ok' : 'failed'})\n${summary}${confirm}${payload}`;
     })
     .join('\n\n');
 }

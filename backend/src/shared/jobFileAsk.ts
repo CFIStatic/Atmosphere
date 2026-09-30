@@ -34,7 +34,6 @@ import {
   includeDomainsForAsk,
   looksLikePureWebCapabilityAsk,
   professionalWebCapabilityAnswer,
-  restrictAskMarkdownLinks,
   searchAskWebDetailed,
   shouldSupplementWithWebSearch,
   asksAboutJobFile,
@@ -143,7 +142,7 @@ Rules:
 2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job and WEB SEARCH RESULTS are provided, answer from those results for any public topic. Never invent what happened on this job from the web, and never quote web text as a speaker.
 3. LAYERED DEFAULT for broad asks: short natural opener, a few markdown bullets with **Label:** when listing, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
-5. Cite job-file sources via ⟦sources: …⟧. Cite the web only in a **Web results** section of markdown links, kept separate from job evidence — never "(Source: …)" parentheticals or raw URL dumps in the job sentences.
+5. Cite job-file sources via ⟦sources: …⟧. Do not write markdown links, bare URLs, or a Web results heading — the app attaches web sources separately. Never "(Source: …)" parentheticals or raw URL dumps in the job sentences.
 6. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
 7. Speech on a recording and written notes are both evidence. For conversation topics, summarize first; only paste verbatim lines when depth was requested — never answer talk questions from vision-only room/screen descriptions.
 8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.
@@ -544,16 +543,16 @@ export function assembleMentionModelPrompt(input: {
 }
 
 function applyWebResults(answer: string, question: string, hits: AskWebHit[], webAnswer: string): string {
-  const restricted = restrictAskMarkdownLinks(answer, hits.map((hit) => hit.url));
-  if (!hits.length && !trim(webAnswer)) return restricted;
+  const stripped = ensureWebResultsSection(answer);
+  if (!hits.length && !trim(webAnswer)) return stripped;
   const refused =
     /does not have that|not on (this )?file|cannot search|can't search|unable to search|do not have (web|internet) access|aren'?t connected/i.test(
       answer,
     );
-  if (!asksAboutJobFile(question) && refused) {
+  if (!asksAboutJobFile(question) && (refused || !trim(stripped))) {
     return composeAskWebAnswer({ question, jobAnswer: '', webAnswer, hits });
   }
-  return ensureWebResultsSection(restricted, hits);
+  return stripped;
 }
 
 export async function answerFromJobFile(input: {

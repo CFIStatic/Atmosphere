@@ -272,8 +272,8 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
     assert.equal(topical.webHits[0]?.url, 'https://www.homedepot.com/tile');
     assert.ok(domains.includes('homedepot.com'));
     assert.ok(domains.includes('lowes.com'));
-    assert.match(topical.answer, /\*\*Web results\*\*/);
-    assert.match(topical.answer, /\[Tile price guide\]\(https:\/\/www\.homedepot\.com\/tile\)/);
+    assert.doesNotMatch(topical.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(topical.answer, /\[Tile price guide\]\(https:\/\/www\.homedepot\.com\/tile\)/);
     assert.match(topical.answer, /Ceramic tile is about \$3 a square foot/);
 
     // NFL / games-today style prompt must take the web_search path (not soft-refuse)
@@ -300,9 +300,9 @@ test('answerFromJobFile searches topical web asks but skips capability-only', as
     assert.ok(nfl.webHits.length >= 1, 'expected webHits for NFL games Thursday');
     assert.equal(nfl.webHits[0]?.url, 'https://example.com/nfl-thursday');
     assert.match(nfl.answer, /Packers at Lions/);
-    assert.match(nfl.answer, /\*\*Web results\*\*/);
-    assert.match(nfl.answer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl-thursday\)/);
-    assert.doesNotMatch(nfl.answer.split('**Web results**')[0] ?? '', /Lockbox 4412/);
+    assert.doesNotMatch(nfl.answer, /\*\*Web results\*\*/);
+    assert.doesNotMatch(nfl.answer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl-thursday\)/);
+    assert.doesNotMatch(nfl.answer, /Lockbox 4412/);
 
     searched = false;
     const jobQuestion = await answerFromJobFile({

@@ -47,6 +47,7 @@ export interface JobFileTurn {
   groundedIds?: string[];
   model?: string | null;
   at: string;
+  webSources?: Array<{ title: string; url: string; snippet: string }>;
 }
 
 function formatWorkDate(isoDate: string): string {

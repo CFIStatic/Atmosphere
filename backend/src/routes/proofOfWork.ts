@@ -57,6 +57,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
 import {
@@ -2755,6 +2756,7 @@ export async function runProofAsk(input: {
   groundedOn: number;
   question: { id: string; question: string; answer: string; grounded_on: unknown; created_at: string; thread_id?: string | null } | null;
   threadId: string | null;
+  webSources: AskWebSource[];
 }> {
     const { supabase, orgId, jobId, userId } = input;
     const clock = createAskTurnClock();
@@ -3345,7 +3347,8 @@ export async function runProofAsk(input: {
       ...((file.documents ?? []).length ? ['documents'] : []),
     ];
     const storedQuestion = scrubStoredAskText(input.question, lookup.clips);
-    const storedAnswer = scrubStoredAskText(result.answer, lookup.clips);
+    const storedAnswer = stripExternalAskLinks(scrubStoredAskText(result.answer, lookup.clips));
+    const webSources = webSourcesFromHits(Array.isArray(result.webHits) ? (result.webHits as AskWebHit[]) : []);
     result.answer = storedAnswer;
     if (input.signal?.aborted) {
       if (clock.routeReason === 'pending') clock.noteRoute('grounded', 'stopped');
@@ -3356,6 +3359,7 @@ export async function runProofAsk(input: {
         question: null,
         groundedOn: groundedOn.length,
         threadId,
+        webSources,
       };
     }
     const { data: stored } = await supabase
@@ -3479,6 +3483,7 @@ export async function runProofAsk(input: {
       question: stored ?? null,
       groundedOn: result.groundedOn || groundedOn.length,
       threadId,
+      webSources,
     };
 }
 
@@ -3534,7 +3539,6 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           requestId: `ask:${req.params.jobId}:${randomUUID()}`,
           access: access === 'org' ? 'org' : 'viewer',
           signal: abort.signal,
-          onToken: (text) => writeEvent({ type: 'token', text }),
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
         });
         if (!abort.signal.aborted && !res.writableEnded) {
@@ -3545,6 +3549,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
             groundedOn: result.groundedOn,
             question: result.question,
             threadId: result.threadId,
+            webSources: result.webSources,
           });
           res.end();
         }

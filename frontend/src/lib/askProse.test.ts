@@ -87,48 +87,37 @@ describe('parseAskProseBlocks', () => {
     expect(split.artifact).toBe('**Homeowner summary**');
   });
 
-  it('renders only web-result URLs and job-file paths as links', () => {
+  it('keeps only relative job paths as links and ignores a Web results heading', () => {
     const blocks = parseAskProseBlocks(
-      'See [evil](https://attacker.example) and [the same game](https://example.com/nfl).\n\n**Web results**\n- [NFL schedule](https://example.com/nfl) — Thursday night.\n- [phish](https://attacker.example/phish)',
-      { allowedHrefs: ['https://example.com/nfl'] },
+      'See [evil](https://attacker.example) and [the same game](https://example.com/nfl).\n\n**Web results**\n- [NFL schedule](https://example.com/nfl) — Thursday night.\n- [phish](https://attacker.example/phish)\n- [steal](https://evil.example/job-progress?job=steal)\n- [jobs](https://evil.example/jobs/job-1)\n- [proto](//evil.example/jobs/job-1)',
     );
-    const paragraph = blocks[0];
-    expect(paragraph?.kind).toBe('paragraph');
-    if (paragraph?.kind !== 'paragraph') throw new Error('expected paragraph');
-    expect(paragraph.children.some((node) => node.kind === 'link' && node.href.includes('attacker'))).toBe(false);
-    expect(paragraph.children).toEqual(
+    const links = blocks.flatMap((block) => {
+      if (block.kind === 'paragraph' || block.kind === 'heading') return block.children;
+      if (block.kind === 'list') return block.items.flat();
+      return [];
+    });
+    expect(links.some((node) => node.kind === 'link')).toBe(false);
+    expect(links).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'text', text: 'evil' }),
-        expect.objectContaining({ kind: 'link', text: 'the same game', href: 'https://example.com/nfl' }),
+        expect.objectContaining({ kind: 'text', text: 'NFL schedule' }),
+        expect.objectContaining({ kind: 'text', text: 'phish' }),
+        expect.objectContaining({ kind: 'text', text: 'steal' }),
       ]),
     );
-    const list = blocks.find((block) => block.kind === 'list');
-    expect(list?.kind).toBe('list');
-    if (list?.kind !== 'list') throw new Error('expected list');
-    const links = list.items.flat().filter((node) => node.kind === 'link');
-    expect(links).toEqual([expect.objectContaining({ kind: 'link', href: 'https://example.com/nfl' })]);
-    expect(list.items.flat().some((node) => node.kind === 'text' && node.text === 'phish')).toBe(true);
 
-    const job = parseAskProseBlocks('Open [the job](/job-progress?job=job-1) or [login](https://attacker.example/login).');
+    const job = parseAskProseBlocks(
+      'Open [the job](/job-progress?job=job-1) or [clips](/jobs/job-1) or [login](https://attacker.example/login).',
+    );
     expect(job[0]?.kind).toBe('paragraph');
     if (job[0]?.kind !== 'paragraph') throw new Error('expected paragraph');
+    expect(job[0].children.filter((node) => node.kind === 'link')).toEqual([
+      expect.objectContaining({ kind: 'link', href: '/job-progress?job=job-1' }),
+      expect.objectContaining({ kind: 'link', href: '/jobs/job-1' }),
+    ]);
     expect(job[0].children).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: 'link', href: '/job-progress?job=job-1' }),
-        expect.objectContaining({ kind: 'text', text: 'login' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ kind: 'text', text: 'login' })]),
     );
-  });
-
-  it('parses a Web results markdown link without treating it as job evidence markup', () => {
-    const blocks = parseAskProseBlocks(
-      'Packers at Lions on Thursday, October 1, 2026.\n\n**Web results**\n- [NFL schedule](https://example.com/nfl) — Thursday night game.',
-    );
-    const list = blocks.find((block) => block.kind === 'list');
-    expect(list?.kind).toBe('list');
-    if (list?.kind !== 'list') throw new Error('expected list');
-    const link = list.items[0]?.find((node) => node.kind === 'link');
-    expect(link).toMatchObject({ kind: 'link', text: 'NFL schedule', href: 'https://example.com/nfl' });
   });
 
   it('never renders unmatched stars as literal text', () => {

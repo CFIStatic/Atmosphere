@@ -50,13 +50,8 @@ export const ASK_WEB_FORMAT_RULES = `WEB (when WEB SEARCH RESULTS are provided, 
 - Use the web for anything the job file cannot answer. Do not limit yourself to a topic list.
 - Never reverse-image-search, identify children, or identify private job-site people from photos/video.
 - Never put web text in quotation marks and never attribute it to a speaker. Quotation marks are only for an exact transcript substring, followed by the clip name and timestamp.
-- Keep web sources in their own section, separate from job evidence. After the answer, add:
-
-**Web results**
-- [Source title](https://example.com/page) — short snippet
-
-- Cite only URLs from WEB SEARCH RESULTS or the web_search tool. Markdown links belong in that section, not in the job-evidence sentences.
-- Do not write ⟦web: …⟧, [[web: …]], or [web: …]. Skip the section when you did not use the web, or when the user only asked whether you can search.`;
+- Do not write markdown links, bare URLs, or a Web results heading. The app attaches sources separately from the answer. Never invent a URL.
+- Do not write ⟦web: …⟧, [[web: …]], or [web: …]. Skip web commentary when you did not use the web, or when the user only asked whether you can search.`;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -107,7 +102,7 @@ export function askWebCapabilityRules(): string {
 - Never claim you lack a live web search tool, cannot query prices, cannot access schedules, weather, or news, are offline, or unable to search the web.
 - When WEB SEARCH RESULTS are provided, answer from them. Do not soft-refuse or pretend the job file is the only source for a public question.
 - If asked ONLY whether you are connected to the internet or can search the web (no specific topic), answer briefly yes — job-file evidence still wins for on-job facts. Do NOT add a Web results section and do not cite google.com or how-to-search pages.
-- Cite web sources only as markdown links under a **Web results** heading, separate from job evidence. Never quote a web page as a speaker.
+- Do not write markdown links, bare URLs, or a Web results heading. The app attaches sources separately. Never quote a web page as a speaker.
 - Still never reverse-image-search, identify children, or identify private job-site people from photos/video.`;
   }
   return `INTERNET / WEB ACCESS:
@@ -226,17 +221,14 @@ export function looksLikePureWebCapabilityAsk(question: string): boolean {
     }
   }
 
-  // Bare capability: can/could/are you able / do you + search/google…
+  // Questions about ability ("can you search the web?"). An imperative
+  // ("search the web", "look it up online", "google it") is a real request.
   return (
     /\b(can|could)\s+(you|u|ya)\s+(search|browse|look\s*up|google|use)\b/i.test(q) ||
     /\b(are you able to|do you)\s+(search|browse|look\s*up|use)\s+(the\s+)?(web|internet|online|google)?\b/i.test(
       q,
     ) ||
-    /\b(search|look\s*(this|it|that)?\s*up|find)\s+(online|on the web|on the internet|via google)\s*[?.!]*$/i.test(
-      q,
-    ) ||
-    /\bweb[\s-]?search\s*[?.!]*$/i.test(q) ||
-    /\bsearch\s+(the\s+)?(web|internet|google|online)\s*[?.!]*$/i.test(q)
+    /\bweb[\s-]?search\s*[?.!]*$/i.test(q)
   );
 }
 
@@ -494,9 +486,10 @@ export function includeDomainsForAsk(question: string, explicit?: unknown): stri
 }
 
 /**
- * The user asked to search or look something up (any topic).
+ * The user asked to search the web (any topic).
  * Capability-only questions ("can you search?") are not a request to run one.
- * "Search the transcript" stays on the job file.
+ * A bare "search" or "google" is not a web request: "search the attic" and
+ * "did they mention Google" stay on the job file.
  */
 export function looksLikeExplicitWebSearchRequest(question: string): boolean {
   const q = trim(question);
@@ -505,12 +498,15 @@ export function looksLikeExplicitWebSearchRequest(question: string): boolean {
     /\b(search|look\s*up|lookup)\s+(the\s+)?(transcript|clip|clips|video|videos|job file|file|notes|recordings)\b/i.test(
       q,
     ) &&
-    !/\b(web|internet|google|online)\b/i.test(q)
+    !/\b(web|internet|online)\b/i.test(q)
   ) {
     return false;
   }
   return (
-    /\b(search(?:\s+the)?(?:\s+web|\s+internet|\s+google)?|look\s*(?:this|it|that)?\s*up|lookup|google)\b/i.test(q) ||
+    /\bsearch\s+the\s+(?:web|internet)\b/i.test(q) ||
+    /\bsearch\s+(?:online|on the (?:web|internet)|google)\b/i.test(q) ||
+    /\blook\s*(?:this|it|that)\s*up\s+online\b/i.test(q) ||
+    /\bgoogle\s+it\b/i.test(q) ||
     /\b(find|check)\s+(?:online|on the (?:web|internet))\b/i.test(q) ||
     /\bweb[\s-]?search\b/i.test(q)
   );
@@ -593,6 +589,14 @@ export function asksAboutJobFile(question: string): boolean {
   const q = trim(question);
   if (!q) return false;
   if (asksAboutThisRecording(q)) return true;
+  // "search the attic" looks through this job. "search the web" does not.
+  if (
+    /\bsearch\s+(?:the\s+|this\s+|our\s+|my\s+)(?!(?:web|internet|online|google)\b)\S+/i.test(q) &&
+    !looksLikeExplicitWebSearchRequest(q) &&
+    !looksLikePublicTopic(q)
+  ) {
+    return true;
+  }
   const publicTopic = looksLikePublicTopic(q);
   // These name this file's records even when the user also says "search".
   if (/\b(lockbox|transcript|punch|access roster|on site|work logs?)\b/i.test(q)) return true;
@@ -1242,27 +1246,6 @@ export async function searchAskWeb(question: string, opts?: AskWebSearchOptions)
   return outcome.hits;
 }
 
-/** Wraps untrusted web prose so the quote verifier can drop it in any surrounding format. */
-export const WEB_EVIDENCE_OPEN = '⟦web-evidence⟧';
-export const WEB_EVIDENCE_CLOSE = '⟦/web-evidence⟧';
-
-export function wrapWebEvidence(text: string): string {
-  const body = trim(text);
-  if (!body) return '';
-  if (body.includes(WEB_EVIDENCE_OPEN)) return body;
-  return `${WEB_EVIDENCE_OPEN}\n${body}\n${WEB_EVIDENCE_CLOSE}`;
-}
-
-/** Pull every tagged web block out of a prompt. What remains is job evidence. */
-export function splitWebEvidenceMarkers(text: string): { record: string; web: string } {
-  const webs: string[] = [];
-  const record = String(text ?? '').replace(/⟦web-evidence⟧[\s\S]*?⟦\/web-evidence⟧/g, (block) => {
-    webs.push(block);
-    return '';
-  });
-  return { record, web: webs.join('\n') };
-}
-
 export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
   if (!hits.length && !trim(answer)) return '';
   const lines = hits
@@ -1276,7 +1259,7 @@ export function formatAskWebContext(hits: AskWebHit[], answer = ''): string {
     })
     .join('\n');
   const lead = trim(answer) ? `Tavily answer: ${plainWebText(answer)}\n` : '';
-  return wrapWebEvidence(`${lead}${lines}`.trim());
+  return `${lead}${lines}`.trim();
 }
 
 const WEB_SECTION_RE = /(?:^|\n+)(\*\*Web results\*\*[\s\S]*)$/i;
@@ -1353,58 +1336,66 @@ export function webSearchModelPayload(data: unknown): { answer: string; results:
   };
 }
 
-/** In-app job file paths. These may stay clickable; other origins may not. */
-export function isKnownAskAppLink(url: string): boolean {
-  const value = trim(url);
-  if (/^\/(?:job-progress|jobs)(?:[/?#]|$)/.test(value)) return true;
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    return /^\/(?:job-progress|jobs)(?:\/|$)/.test(parsed.pathname);
-  } catch {
-    return false;
+export type AskWebSource = { title: string; url: string; snippet: string };
+
+/**
+ * Sources the Ask response may render. Only http(s) result URLs, with the
+ * same plain-text title and snippet the model is allowed to see.
+ */
+export function webSourcesFromHits(hits: readonly AskWebHit[]): AskWebSource[] {
+  const out: AskWebSource[] = [];
+  for (const hit of hits) {
+    const url = safeHttpResultUrl(hit?.url ?? '');
+    if (!url || out.some((row) => row.url === url)) continue;
+    out.push({
+      title: plainWebText(hit.title).replace(/[\[\]()]/g, '').trim() || 'Source',
+      url,
+      snippet: plainWebText(hit.snippet, 280),
+    });
+    if (out.length >= TAVILY_MAX_RESULTS) break;
   }
+  return out;
+}
+
+/** Relative same-origin app paths. No scheme, no host, no protocol-relative URL. */
+export function isRelativeAskAppPath(url: string): boolean {
+  const value = trim(url).replace(/\s+["'][^"']*["']\s*$/, '');
+  if (!value || /[\s\\<>]/.test(value)) return false;
+  if (value.startsWith('//')) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+  if (!value.startsWith('/')) return false;
+  if (value.startsWith('/jobs/')) return true;
+  return /^\/job-progress(?:[/?#]|$)/.test(value);
 }
 
 /**
- * Markdown links stay clickable only when the URL is one this turn's search
- * returned, or a job-file path. Every other link becomes its label.
+ * Model-authored markdown links and autolinks become plain text.
+ * A relative /jobs/ or /job-progress path with no scheme or host may stay a link.
  */
-export function restrictAskMarkdownLinks(text: string, allowedUrls: readonly string[]): string {
-  const allowed = new Set(allowedUrls.map((url) => trim(url)).filter(Boolean));
-  return String(text ?? '').replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, (full, label: string, url: string) => {
-    const href = trim(url);
-    if (allowed.has(href) || isKnownAskAppLink(href)) return full;
-    return label;
+export function stripExternalAskLinks(text: string): string {
+  let value = String(text ?? '');
+  value = value.replace(/!\[([^\]]*)\]\([^)\n]*\)/g, '$1');
+  value = value.replace(/\[([^\]\n]*)\]\(([^)\n]*)\)/g, (_full, label: string, url: string) => {
+    const href = trim(url).replace(/\s+["'][^"']*["']\s*$/, '');
+    const visible = label.trim() || href;
+    if (isRelativeAskAppPath(href)) return `[${label}](${href})`;
+    return visible;
   });
+  value = value.replace(/<(https?:\/\/[^>\s]+)>/gi, '$1');
+  return value;
 }
 
 function plainWebSnippet(snippet: string): string {
   return plainWebText(snippet, 280);
 }
 
-/** Markdown links in a section kept separate from job evidence. */
-export function formatWebResultsSection(hits: AskWebHit[]): string {
-  const lines = hits
-    .map((hit) => ({ hit, url: safeHttpResultUrl(hit.url) }))
-    .filter((row) => row.url)
-    .slice(0, TAVILY_MAX_RESULTS)
-    .map(({ hit, url }) => {
-      const title = plainWebText(hit.title).replace(/[\[\]()]/g, '').trim() || 'Source';
-      const snippet = plainWebSnippet(hit.snippet);
-      const link = `[${title}](${url})`;
-      return snippet ? `- ${link} — ${snippet}` : `- ${link}`;
-    });
-  if (!lines.length) return '';
-  return `**Web results**\n${lines.join('\n')}`;
-}
-
-/** Replace any Web results section with links for the hits the server actually retrieved. */
-export function ensureWebResultsSection(answer: string, hits: AskWebHit[]): string {
+/**
+ * Drop a model-written Web results section and every external link.
+ * Clickable web URLs are returned on the response as webSources, not parsed out of this text.
+ */
+export function ensureWebResultsSection(answer: string): string {
   const { body } = splitWebResultsSection(stripWebTrailer(answer));
-  const section = formatWebResultsSection(hits);
-  if (!section) return body.trim();
-  return joinWebResultsSection(body, section);
+  return stripExternalAskLinks(body).trim();
 }
 
 function plainWebAnswer(text: string): string {
@@ -1412,8 +1403,9 @@ function plainWebAnswer(text: string): string {
 }
 
 /**
- * Job evidence stays in front. Public questions use Tavily's answer, then the
- * Web results section. Web text is never wrapped in quotation marks.
+ * Job evidence stays in front. Public questions use Tavily's answer as plain
+ * text. Links are not written here; callers attach webSources from the hits.
+ * Web text is never wrapped in quotation marks.
  */
 export function composeAskWebAnswer(input: {
   question: string;
@@ -1421,14 +1413,11 @@ export function composeAskWebAnswer(input: {
   webAnswer?: string | null;
   hits: AskWebHit[];
 }): string {
-  const section = formatWebResultsSection(input.hits);
   const job = trim(input.jobAnswer);
   const jobUseful = Boolean(job) && !/does not have that|nothing is on this job file/i.test(job);
   const webLead = plainWebAnswer(input.webAnswer ?? '') || plainWebSnippet(input.hits[0]?.snippet ?? '');
-  if (asksAboutJobFile(input.question) && jobUseful) {
-    return joinWebResultsSection(job, section);
-  }
-  return joinWebResultsSection(webLead || job, section);
+  const prose = asksAboutJobFile(input.question) && jobUseful ? job : webLead || job;
+  return ensureWebResultsSection(prose);
 }
 
 export function formatWebTrailer(hits: AskWebHit[]): string {
