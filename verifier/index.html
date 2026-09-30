@@ -4260,39 +4260,63 @@
 
   /**
    * Same decision table as backend/src/shared/clipProcessing.ts.
-   * uploaded | transcribing | analyzing | ready | failed.
+   * uploading | uploaded | transcribing | analyzing | ready | failed.
    * Integrity check failures stay off this chip — a failed location check
-   * is not a failed reading.
+   * is not a failed reading. The live library sends `processing` from that
+   * function; this copy is the same table for demo rows and for parity tests.
    */
   function clipProcessingOf(e) {
     e = e || {};
     var a = e.analysis || {};
-    var summary = String(a.summaryState || e.summaryState || '').toLowerCase();
-    var transcript = String(e.transcriptStatus || a.transcriptStatus || '').toLowerCase();
-    var narration = String(a.dictationStatus || e.narrationStatus || '').toLowerCase();
-    var analysis = String(a.state || e.analysisStatus || '').toLowerCase();
+    function norm(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
     function busy(v) { return v === 'queued' || v === 'running' || v === 'pending'; }
+    function live(status, active) {
+      if (!busy(status)) return false;
+      if (active === false) return false;
+      return true;
+    }
+    var proof = norm(e.proofState || e.state);
+    var analysis = norm(e.analysisStatus || a.analysisStatus || a.state);
+    var transcript = norm(e.transcriptStatus || a.transcriptStatus);
+    var narration = norm(e.narrationStatus || a.dictationStatus);
+    var summary = norm(e.summaryState || a.summaryState);
+    var hasSummary = e.hasSummary === true || a.hasSummary === true;
+    var noSpeech = e.noSpeech === true;
+    var retrying = e.retrying === true;
+    if (e.uploading === true) return { state: 'uploading', label: 'Uploading', tone: 'progress' };
     if (analysis === 'failed' || narration === 'failed' || summary === 'failed') {
       if (summary === 'failed' && analysis !== 'failed' && narration !== 'failed') {
         return { state: 'failed', label: 'Summary unavailable', tone: 'bad' };
       }
       return { state: 'failed', label: 'Needs attention', tone: 'bad' };
     }
-    if (busy(transcript)) return { state: 'transcribing', label: 'Transcribing', tone: 'progress' };
-    if (busy(analysis) || busy(narration)) return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
-    if (summary === 'updating' || summary === 'quarantined') {
+    if (live(transcript, e.transcriptActive)) {
+      if (retrying) return { state: 'transcribing', label: 'Retrying', tone: 'progress' };
+      return { state: 'transcribing', label: 'Transcribing', tone: 'progress' };
+    }
+    if (live(analysis, e.analysisActive) || live(narration, e.narrationActive)) {
+      if (retrying) return { state: 'analyzing', label: 'Retrying', tone: 'progress' };
+      return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
+    }
+    var analysisSettled = analysis === 'done' || analysis === 'skipped';
+    var narrationSettled = narration === 'done' || narration === 'skipped';
+    if (proof === 'checked' && !analysisSettled && !narrationSettled) {
+      return { state: 'analyzing', label: 'Analyzing', tone: 'progress' };
+    }
+    var summaryLive = e.summaryActive !== false && a.summaryActive !== false;
+    if (!hasSummary && summaryLive && (summary === 'updating' || summary === 'quarantined')) {
       return { state: 'analyzing', label: 'Summary still processing', tone: 'progress' };
     }
-    if (analysis === 'done' || analysis === 'analysed' || analysis === 'analyzed' || analysis === 'accepted' || analysis === 'rejected' || summary === 'fresh') {
-      return { state: 'ready', label: 'Analyzed', tone: 'good' };
-    }
-    if (analysis === 'uploaded') return { state: 'uploaded', label: 'Waiting to process', tone: 'neutral' };
+    var read = analysis === 'done' || narration === 'done' || proof === 'analysed' || proof === 'analyzed' || proof === 'accepted' || proof === 'rejected' || summary === 'fresh' || hasSummary;
+    if (noSpeech && !read) return { state: 'ready', label: 'No speech', tone: 'good' };
+    if (read || noSpeech) return { state: 'ready', label: 'Analyzed', tone: 'good' };
+    if (proof === 'uploaded' || analysis === 'uploaded') return { state: 'uploaded', label: 'Waiting to process', tone: 'neutral' };
     return { state: 'uploaded', label: 'Recorded', tone: 'neutral' };
   }
 
   function clipStatus(e) {
-    if (isActiveRecording(e)) return { cls: 'yellow', text: 'Recording' };
-    var p = clipProcessingOf(e);
+    if (e && e.recording) return { cls: 'yellow', text: 'Recording' };
+    var p = e && e.processing && e.processing.label ? e.processing : clipProcessingOf(e);
     var cls = p.tone === 'bad' ? 'red' : p.tone === 'progress' ? 'yellow' : 'green';
     return { cls: cls, text: p.label };
   }
@@ -8910,6 +8934,21 @@
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
       labels: Array.isArray(raw.labels) ? raw.labels : [],
+      state: raw.state || null,
+      proofState: raw.state || null,
+      processing: raw.processing || null,
+      analysisStatus: raw.analysisStatus || null,
+      narrationStatus: raw.narrationStatus || null,
+      summaryState: raw.summaryState || (raw.analysis && raw.analysis.summaryState) || null,
+      hasSummary: raw.hasSummary === true,
+      noSpeech: raw.noSpeech === true,
+      uploading: raw.uploading === true,
+      retrying: raw.retrying === true,
+      recording: raw.recording === true,
+      transcriptActive: raw.transcriptActive,
+      analysisActive: raw.analysisActive,
+      narrationActive: raw.narrationActive,
+      summaryActive: raw.summaryActive,
       analysisError: raw.analysisError || null,
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
