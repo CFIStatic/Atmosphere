@@ -26,14 +26,19 @@ import {
 import {
   ASK_WEB_EMPTY_RESULTS_NOTE,
   ASK_WEB_FORMAT_RULES,
+  askClockSystemRules,
   askWebCapabilityRules,
+  composeAskWebAnswer,
+  ensureWebResultsSection,
   formatAskWebContext,
-  looksLikeOutsideKnowledgeAsk,
+  includeDomainsForAsk,
   looksLikePureWebCapabilityAsk,
-  normalizeAskWebCitations,
   professionalWebCapabilityAnswer,
-  searchAskWeb,
+  searchAskWebDetailed,
   shouldSupplementWithWebSearch,
+  asksAboutJobFile,
+  looksLikeExplicitWebSearchRequest,
+  looksLikeOutsideKnowledgeAsk,
   type AskWebHit,
 } from './askWebSearch.js';
 import {
@@ -133,11 +138,11 @@ const FILE_QA_SYSTEM = `You are a sharp, friendly expert on this job file. Answe
 The record may contain any mix of: job identity, brief facts (any labels), scope lines including do-nots, notes and messages, invited companies, tasks, crew, work logs, memory events, uploaded documents, and video readings / mic transcripts. Treat every section as first-class evidence. A job with no video is still answerable from the rest of the file.
 
 Rules:
-1. Answer job facts only from the record given. Do not invent facts, prices, or coverage decisions.
-2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When WEB SEARCH RESULTS are provided, you may supplement with outside knowledge (codes, products, manufacturers, standards, general how-to, current events, sports schedules/scores, news, weather, prices) — answer helpfully from those results and never soft-refuse live schedules or news when results are present; never invent what happened on this job from the web.
+1. Answer questions about this job, its videos, people, findings, or records only from the record given. Do not invent job facts, prices, or coverage decisions. Web search never replaces or overrides that evidence.
+2. If the record does not contain a job-specific answer and no WEB SEARCH RESULTS apply, say "This job file does not have that" and stop. When the question is not about this job and WEB SEARCH RESULTS are provided, answer from those results for any public topic. Never invent what happened on this job from the web, and never quote web text as a speaker.
 3. LAYERED DEFAULT for broad asks: short natural opener, a few markdown bullets with **Label:** when listing, optional invite to go deeper. Do not dump every quote or document excerpt on the first pass.
 4. GO DEEP when they ask for specifics (exact quotes, who said X, timestamps, "be specific", "more detail", full transcript): quote exactly and ground on the file (brief field, scope line, note, clip date, task, log, seek time).
-5. Cite job-file sources via ⟦sources: …⟧ and web via ⟦web: Title|url, …⟧ machine lines in FORMAT — never "(Source: …)" parentheticals or raw URL dumps in prose.
+5. Cite job-file sources via ⟦sources: …⟧. Cite the web only in a **Web results** section of markdown links, kept separate from job evidence — never "(Source: …)" parentheticals or raw URL dumps in the job sentences.
 6. Never estimate cost, hours, or whether work was worth paying for unless those numbers are already written on the file.
 7. Speech on a recording and written notes are both evidence. For conversation topics, summarize first; only paste verbatim lines when depth was requested — never answer talk questions from vision-only room/screen descriptions.
 8. Tone: warm expert colleague, lightly structured, no stiff disclaimers.
@@ -487,7 +492,11 @@ export function preferJobFileGroundedFastPath(question: string, grounded: string
   if (/does not have that|Nothing is on this job file/i.test(grounded)) return false;
   // Never fast-path web / outside-knowledge / capability asks — those need searchAskWeb
   // (or a model answer about web access), not a brief-note hit from the job file.
-  if (looksLikeOutsideKnowledgeAsk(question)) return false;
+  if (looksLikeOutsideKnowledgeAsk(question) || looksLikeExplicitWebSearchRequest(question)) return false;
+  // Public questions are not answered from a coincidental brief hit.
+  if (!asksAboutJobFile(question) && !/^(?:hi|hey|hello|thanks|thank you|ok|okay)\b/i.test(question.trim())) {
+    return false;
+  }
   if (looksLikeOverview(question)) return true;
   // Clear labelled hits from the corpus ("brief · Permit: …", "claim: …").
   if (
@@ -533,6 +542,18 @@ export function assembleMentionModelPrompt(input: {
   return { system, user };
 }
 
+function applyWebResults(answer: string, question: string, hits: AskWebHit[], webAnswer: string): string {
+  if (!hits.length && !trim(webAnswer)) return answer;
+  const refused =
+    /does not have that|not on (this )?file|cannot search|can't search|unable to search|do not have (web|internet) access|aren'?t connected/i.test(
+      answer,
+    );
+  if (!asksAboutJobFile(question) && refused) {
+    return composeAskWebAnswer({ question, jobAnswer: '', webAnswer, hits });
+  }
+  return ensureWebResultsSection(answer, hits);
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -559,6 +580,8 @@ export async function answerFromJobFile(input: {
   toolContext?: AskToolContext | null;
   /** Per-turn timings. Tool inputs are not recorded. */
   timing?: AskTurnClock | null;
+  /** Pins relative dates such as "Thursday" in tests. */
+  now?: Date;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -602,7 +625,7 @@ export async function answerFromJobFile(input: {
     const runTool = async (name: (typeof picks)[number]) => {
       const rawInput =
         name === 'web_search'
-          ? { query: input.question }
+          ? { query: input.question, include_domains: includeDomainsForAsk(input.question) }
           : name === 'find_evidence_moments'
             ? { topic: input.question }
             : name === 'search_crm'
@@ -630,6 +653,15 @@ export async function answerFromJobFile(input: {
     webHits = collectWebHitsFromToolResults(toolResults);
   }
 
+  const zone = input.lookup?.timeZone || 'America/Chicago';
+  let webAnswer = toolResults
+    .map((result) => {
+      const data = result.data;
+      if (!data || typeof data !== 'object') return '';
+      return String((data as { answer?: string }).answer ?? '');
+    })
+    .find((text) => text.trim()) ?? '';
+
   const mentionScoped = Boolean(trim(input.file.mentionSupplement));
   if (!mentionScoped && !jobFileHasContent(input.file) && !toolResults.some((r) => r.ok)) {
     emit(grounded);
@@ -648,7 +680,15 @@ export async function answerFromJobFile(input: {
   let webSearchAttempted = false;
   if (!mentionScoped && !webHits.length && shouldSupplementWithWebSearch(input.question, grounded)) {
     webSearchAttempted = true;
-    webHits = await searchAskWeb(input.question, { fetchFn: input.fetchFn, limit: 5 });
+    const outcome = await searchAskWebDetailed(input.question, {
+      fetchFn: input.fetchFn,
+      limit: 5,
+      includeDomains: includeDomainsForAsk(input.question),
+      now: input.now,
+      timeZone: zone,
+    });
+    webHits = outcome.hits;
+    webAnswer = outcome.answer || webAnswer;
   }
 
   if (
@@ -662,7 +702,22 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
   if (!isAskModelConfigured(apiKey || null) && !(input.lookup && isLongMemoryQuestion(input.question))) {
-    const toolOnly = toolResults.filter((r) => r.ok);
+    const toolOnly = toolResults.filter((r) => r.ok && r.tool !== 'web_search');
+    if (webHits.length || webAnswer) {
+      const jobAnswer = toolOnly.length && asksAboutJobFile(input.question)
+        ? toolOnly.map((r) => r.summary).join(' ')
+        : grounded;
+      let answer = composeAskWebAnswer({
+        question: input.question,
+        jobAnswer,
+        webAnswer,
+        hits: webHits,
+      });
+      const trailer = formatActionsTrailer(toolResults);
+      if (trailer) answer = `${answer.trimEnd()}\n\n${trailer}`;
+      emit(answer);
+      return { ...empty, answer, groundedOn, toolResults, webHits };
+    }
     if (toolOnly.length) {
       const prose =
         toolOnly.map((r) => r.summary).join(' ') +
@@ -691,6 +746,7 @@ export async function answerFromJobFile(input: {
     .join('\n');
 
   const extraSystem =
+    `\n\n${askClockSystemRules(input.now ?? new Date(), zone)}` +
     `\n\n${askWebCapabilityRules()}` +
     (webHits.length
       ? `\n\n${ASK_WEB_FORMAT_RULES}`
@@ -702,7 +758,7 @@ export async function answerFromJobFile(input: {
       : '');
 
   const webBlock = webHits.length
-    ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins):\n${formatAskWebContext(webHits)}`
+    ? `\n\nWEB SEARCH RESULTS (public web — supplemental only; job evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
     : webSearchAttempted
       ? `\n\nWEB SEARCH RESULTS: (none — live search returned no usable hits; do not invent web findings)`
       : '';
@@ -724,13 +780,18 @@ export async function answerFromJobFile(input: {
       signal: input.signal,
       timing: input.timing,
     });
+    for (const step of looked.trace) {
+      if (step.tool !== 'web_search' || !step.result.data || typeof step.result.data !== 'object') continue;
+      const data = step.result.data as { answer?: string; results?: AskWebHit[] };
+      if (data.answer && !webAnswer) webAnswer = data.answer;
+      for (const hit of data.results ?? []) {
+        if (hit?.url && !webHits.some((row) => row.url === hit.url)) webHits.push(hit);
+      }
+    }
     let answer = normalizeAskProse(looked.answer);
     // Final check before render: every quote is a retrieved transcript line.
     answer = enforceQuoteGrounding(answer, { chunks: looked.retrievedChunks, question: input.question }).answer;
-    answer = normalizeAskWebCitations(answer, webHits, {
-      question: input.question,
-      attachIfMissing: webHits.length > 0,
-    });
+    answer = applyWebResults(answer, input.question, webHits, webAnswer);
     const actions = formatActionsTrailer(toolResults);
     if (actions && !/⟦actions:/i.test(answer)) {
       answer = `${answer.trimEnd()}\n\n${actions}`;
@@ -782,10 +843,7 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer, groundedOn, toolResults, webHits };
   }
   let answer = normalizeAskProse(completed.text);
-  answer = normalizeAskWebCitations(answer, webHits, {
-    question: input.question,
-    attachIfMissing: webHits.length > 0,
-  });
+  answer = applyWebResults(answer, input.question, webHits, webAnswer);
   const actions = formatActionsTrailer(toolResults);
   if (actions && !/⟦actions:/i.test(answer)) {
     answer = `${answer.trimEnd()}\n\n${actions}`;

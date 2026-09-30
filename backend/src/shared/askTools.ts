@@ -10,10 +10,11 @@ import type { PunchListItem } from './jobPunchList.js';
 import { buildJobProofPayload } from '../routes/proofOfWork.js';
 import {
   askWebSearchBlockedReason,
-  looksLikeOutsideKnowledgeAsk,
-  looksLikePureWebCapabilityAsk,
-  looksLikeWebCapabilityAsk,
-  searchAskWeb,
+  includeDomainsForAsk,
+  isAskWebSearchConfigured,
+  looksLikeExplicitWebSearchRequest,
+  searchAskWebDetailed,
+  shouldSupplementWithWebSearch,
   type AskWebHit,
 } from './askWebSearch.js';
 import type { JobFileAskContext } from './jobFileAsk.js';
@@ -96,12 +97,20 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: 'web_search',
     description:
-      'Search the public web for codes, products, manufacturers, standards, or general how-to. Not for job-file facts. Never reverse-image-search or identify people.',
+      'Search the public web for anything this job file cannot answer (any topic: schedules, prices, product availability, current events, codes, or other public facts). Do not use it to replace job evidence about this job, its videos, people, findings, or records. If the user asks you to search or look something up, call this. Include the resolved calendar date in the query when they say Thursday, this Sunday, today, or tomorrow. Optional include_domains limits results to those sites, for example homedepot.com or lowes.com.',
     audience: 'both',
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Public-web search query (no lockbox codes or street addresses).' },
+        query: {
+          type: 'string',
+          description: 'Public-web search query. Include a calendar date for relative days. No lockbox codes or street addresses.',
+        },
+        include_domains: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional hostnames to limit results, such as homedepot.com or lowes.com.',
+        },
       },
       required: ['query'],
     },
@@ -244,7 +253,10 @@ export const ASK_TOOL_DEFINITIONS: ToolDef[] = [
 ];
 
 export function askToolsForAccess(access: AskAccessRole): ToolDef[] {
-  return ASK_TOOL_DEFINITIONS.filter((t) => t.audience === 'both' || access === 'org');
+  return ASK_TOOL_DEFINITIONS.filter((t) => {
+    if (t.name === 'web_search' && !isAskWebSearchConfigured()) return false;
+    return t.audience === 'both' || access === 'org';
+  });
 }
 
 export function anthropicToolsForAccess(access: AskAccessRole) {
@@ -311,22 +323,15 @@ export function pickAskToolsHeuristically(question: string, access: AskAccessRol
   ) {
     add('search_crm');
   }
-  // Capability-only ("can you search?") needs no live fetch — prompt rules answer yes.
-  if (
-    !looksLikePureWebCapabilityAsk(question) &&
-    (looksLikeWebCapabilityAsk(question) ||
-      looksLikeOutsideKnowledgeAsk(question) ||
-      /\b(irc|ibc|nec|code|manufacturer|product spec|how (do|to)|standard)\b/i.test(q) ||
-      (askWebSearchBlockedReason(question) == null &&
-        /\b(install guide|warranty|astm|ul\s*\d)\b/i.test(q)))
-  ) {
+  // Explicit search always runs. Other non-job questions run too (no topic list).
+  // Job evidence questions are not pre-searched; the model may still call the tool.
+  if (shouldSupplementWithWebSearch(question, '')) {
     add('web_search');
   }
 
-  // Explicit topical web intents always keep web_search even when other tools fill the cap.
+  // Explicit search requests keep web_search even when other tools fill the cap.
   if (
-    looksLikeWebCapabilityAsk(question) &&
-    !looksLikePureWebCapabilityAsk(question) &&
+    looksLikeExplicitWebSearchRequest(question) &&
     picks.includes('web_search')
   ) {
     const rest = picks.filter((name) => name !== 'web_search');
@@ -433,6 +438,9 @@ export async function executeAskTool(
   try {
     switch (name as AskToolName) {
       case 'web_search': {
+        if (!isAskWebSearchConfigured()) {
+          return { ok: false, tool: name, summary: 'Web search is not configured.' };
+        }
         const query = trim(input.query) || trim(input.q);
         if (!query) {
           return { ok: false, tool: name, summary: 'Missing search query.' };
@@ -445,21 +453,31 @@ export async function executeAskTool(
             summary: `Web search refused (${blocked}): Ask will not reverse-image-search or identify children / private job-site people.`,
           };
         }
-        const hits = await searchAskWeb(query, { fetchFn: ctx.fetchFn, limit: 5 });
-        if (!hits.length) {
+        const domains = includeDomainsForAsk(query, input.include_domains ?? input.includeDomains);
+        const outcome = await searchAskWebDetailed(query, {
+          fetchFn: ctx.fetchFn,
+          limit: 5,
+          includeDomains: domains,
+        });
+        const hits = outcome.hits;
+        if (!hits.length && !outcome.answer) {
           return {
             ok: true,
             tool: name,
-            summary:
-              'No web results were found or search was not available after provider + DuckDuckGo fallback. Do not invent web findings; answer from the job file only.',
+            summary: 'No web results were found. Do not invent web findings; answer from the job file when it applies.',
             webHits: [],
           };
         }
         return {
           ok: true,
           tool: name,
-          summary: `Found ${hits.length} web result(s) for outside knowledge.`,
-          data: hits.map((h) => ({ title: h.title, url: h.url, snippet: h.snippet })),
+          summary: outcome.answer
+            ? `Web search answer: ${outcome.answer}`
+            : `Found ${hits.length} web result(s). Job evidence still wins for this job.`,
+          data: {
+            answer: outcome.answer,
+            results: hits.map((h) => ({ title: h.title, url: h.url, snippet: h.snippet })),
+          },
           webHits: hits,
         };
       }

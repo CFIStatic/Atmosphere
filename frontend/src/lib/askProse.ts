@@ -11,7 +11,8 @@ import { stripAskWebTrailer } from './askSources';
 export type AskInline =
   | { kind: 'text'; text: string }
   | { kind: 'bold'; children: AskInline[] }
-  | { kind: 'italic'; children: AskInline[] };
+  | { kind: 'italic'; children: AskInline[] }
+  | { kind: 'link'; text: string; href: string };
 
 export type AskProseBlock =
   | { kind: 'paragraph'; children: AskInline[] }
@@ -123,6 +124,15 @@ function parseInline(input: string): AskInline[] {
   };
 
   while (i < input.length) {
+    if (input[i] === '[') {
+      const link = input.slice(i).match(/^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
+      if (link) {
+        flush();
+        nodes.push({ kind: 'link', text: link[1] ?? '', href: link[2] ?? '' });
+        i += link[0].length;
+        continue;
+      }
+    }
     if (input.startsWith('**', i)) {
       const end = input.indexOf('**', i + 2);
       if (end > i + 2) {

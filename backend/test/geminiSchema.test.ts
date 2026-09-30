@@ -77,6 +77,11 @@ test('a tool with no arguments omits parameters (Gemini rejects an empty OBJECT)
 });
 
 test('Gemini lookup tools carry no unsupported schema keys and no empty OBJECT parameters', () => {
+  const prevKey = process.env.TAVILY_API_KEY;
+  const prevProvider = process.env.ASK_WEB_SEARCH_PROVIDER;
+  delete process.env.TAVILY_API_KEY;
+  delete process.env.ASK_WEB_SEARCH_PROVIDER;
+  try {
   const [{ functionDeclarations }] = geminiLookupTools();
   assert.equal(functionDeclarations.length, ASK_LOOKUP_TOOLS.length);
   assert.deepEqual(
@@ -97,4 +102,10 @@ test('Gemini lookup tools carry no unsupported schema keys and no empty OBJECT p
   assert.equal(history.parameters, undefined);
   const search = functionDeclarations.find((decl) => decl.name === 'search_transcripts');
   assert.deepEqual(search?.parameters?.required, ['query']);
+  } finally {
+    if (prevKey === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = prevKey;
+    if (prevProvider === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
+    else process.env.ASK_WEB_SEARCH_PROVIDER = prevProvider;
+  }
 });

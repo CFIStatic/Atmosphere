@@ -12,6 +12,19 @@ function InlineNodes({ nodes }: { nodes: AskInline[] }) {
     <>
       {nodes.map((node, index) => {
         if (node.kind === 'text') return <MentionText key={`t-${index}`} text={node.text} />;
+        if (node.kind === 'link') {
+          return (
+            <a
+              key={`a-${index}`}
+              href={node.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-ink-300 underline-offset-2"
+            >
+              {node.text}
+            </a>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold">

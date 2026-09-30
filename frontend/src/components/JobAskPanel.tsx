@@ -196,6 +196,19 @@ function AskInlineNodes({
         if (node.kind === 'text') {
           return <AskCiteSpans key={`t-${index}`} text={node.text} events={events} onSeek={onSeek} />;
         }
+        if (node.kind === 'link') {
+          return (
+            <a
+              key={`a-${index}`}
+              href={node.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-ink-900 underline decoration-ink-300 underline-offset-2"
+            >
+              {node.text}
+            </a>
+          );
+        }
         if (node.kind === 'bold') {
           return (
             <strong key={`b-${index}`} className="font-semibold text-ink-900">

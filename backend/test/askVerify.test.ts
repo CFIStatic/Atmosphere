@@ -3,7 +3,7 @@ import test from 'node:test';
 import { answerFromAskLookup, groundLookupAnswer } from '../src/shared/askReasoning.js';
 import { askTurnLogFields, createAskTurnClock } from '../src/shared/askTiming.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
-import { buildGroundingIndex, normalizeForMatch, verifyAskAnswer } from '../src/shared/askVerify.js';
+import { buildGroundingIndex, normalizeForMatch, stripUnsupported, verifyAskAnswer } from '../src/shared/askVerify.js';
 import { toStoredPrivacyRedactions } from '../src/audio/privacyRedactions.js';
 
 const JOB = 'job-1';
@@ -74,6 +74,38 @@ test('a fabricated prose quote is flagged', () => {
   const result = verifyAskAnswer('The homeowner file shows: "Please replace the whole roof by Friday."', index());
   assert.equal(result.quotesFailed, 1);
   assert.equal(result.open[0]?.kind, 'quote');
+});
+
+test('a Web results section keeps its link, date, and name while a fabricated job quote still fails', () => {
+  const answer = [
+    'The schedule is below. "Please replace the whole roof by Friday."',
+    '',
+    '**Web results**',
+    '- [NFL schedule](https://example.com/nfl) — Thursday, October 1, 2026: Mike Delgado is not a source; Packers at Lions.',
+  ].join('\n');
+  const result = verifyAskAnswer(answer, index());
+  assert.equal(result.quotesFailed, 1);
+  assert.equal(result.open[0]?.kind, 'quote');
+  assert.match(result.answer, /\*\*Web results\*\*/);
+  assert.match(result.answer, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
+  assert.match(result.answer, /October 1, 2026/);
+  assert.match(result.answer, /Mike Delgado/);
+  assert.equal(
+    result.open.some((failure) => /October 1/.test(failure.text)),
+    false,
+  );
+  assert.equal(
+    result.open.some((failure) => failure.kind === 'name' && /Mike Delgado/.test(failure.text)),
+    false,
+  );
+  const stripped = stripUnsupported(answer, result.open, 'This job file does not have that.');
+  assert.match(stripped, /\*\*Web results\*\*/);
+  assert.match(stripped, /\[NFL schedule\]\(https:\/\/example\.com\/nfl\)/);
+  assert.match(stripped, /October 1, 2026/);
+  assert.match(stripped, /Mike Delgado/);
+  const body = stripped.split('**Web results**')[0] ?? '';
+  assert.match(body, /Not on file/);
+  assert.doesNotMatch(body, /The schedule is below/);
 });
 
 test('a fabricated trailer quote is dropped and a misattributed one moves to the right clip and time', () => {

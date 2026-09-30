@@ -87,6 +87,17 @@ describe('parseAskProseBlocks', () => {
     expect(split.artifact).toBe('**Homeowner summary**');
   });
 
+  it('parses a Web results markdown link without treating it as job evidence markup', () => {
+    const blocks = parseAskProseBlocks(
+      'Packers at Lions on Thursday, October 1, 2026.\n\n**Web results**\n- [NFL schedule](https://example.com/nfl) — Thursday night game.',
+    );
+    const list = blocks.find((block) => block.kind === 'list');
+    expect(list?.kind).toBe('list');
+    if (list?.kind !== 'list') throw new Error('expected list');
+    const link = list.items[0]?.find((node) => node.kind === 'link');
+    expect(link).toMatchObject({ kind: 'link', text: 'NFL schedule', href: 'https://example.com/nfl' });
+  });
+
   it('never renders unmatched stars as literal text', () => {
     const blocks = parseAskProseBlocks('Yes *** I can ** search');
     expect(blocks).toHaveLength(1);
