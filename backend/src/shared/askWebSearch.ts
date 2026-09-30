@@ -377,26 +377,29 @@ function longDate(ymd: ZonedYmd): string {
   }).format(utc);
 }
 
-const EXPLICIT_DATE_RE =
-  /(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/i;
-const DAY_FILLER_RE = /(?:on|night|morning|evening|afternoon|game|games)/i;
+function daysInMonth(month: number): number {
+  return [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month] ?? 0;
+}
 
-/**
- * The weekday or relative day is already tied to a calendar date
- * ("Thursday, October 8, 2026", "Thursday night, October 8").
- */
-function relativeDayAlreadyDated(text: string, index: number, length: number): boolean {
-  const after = text.slice(index + length, index + length + 64);
-  const before = text.slice(Math.max(0, index - 64), index);
-  const follows = new RegExp(
-    `^\\s*(?:(?:,|\\(|-|–|—|:)\\s*)?(?:${DAY_FILLER_RE.source}\\b\\s*,?\\s*){0,2}${EXPLICIT_DATE_RE.source}\\b`,
-    'i',
+function plausibleMonthDay(month: number, day: number): boolean {
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(month);
+}
+
+/** A weekday or "on"/"dated" makes 10/8 a date. "3/4 inch" stays a size. */
+function numericDateContext(query: string, index: number, length: number): boolean {
+  const before = query.slice(Math.max(0, index - 32), index);
+  const after = query.slice(index + length, index + length + 24);
+  if (
+    /^(?:\s*["″]|[\s-]*(?:inch(?:es)?|in\.?|ft|foot|feet|mm|cm|plywood|osb|drywall|shingle|board|sheet|lumber|thick|gauge|pitch|tab)\b)/i.test(
+      after,
+    )
+  ) {
+    return false;
+  }
+  return (
+    /\b(?:on|dated|date|due|scheduled)\s*$/i.test(before) ||
+    /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b\s*,?\s*$/i.test(before)
   );
-  const precedes = new RegExp(
-    `${EXPLICIT_DATE_RE.source}\\s*(?:(?:,|\\)|-|–|—|:)\\s*)?(?:${DAY_FILLER_RE.source}\\b\\s*,?\\s*){0,2}$`,
-    'i',
-  );
-  return follows.test(after) || precedes.test(before);
 }
 
 function weekdayIndex(name: string): number {
@@ -446,26 +449,53 @@ Resolve relative days against this clock before you answer or search. "Thursday"
  * Rewrite a search query so "Thursday" / "this Sunday" / "tomorrow" include the
  * calendar date in the user's timezone (America/Chicago by default).
  */
-/** A calendar date already written in the query. Bare weekdays are not dates. */
+/** A calendar date already written in the query. Bare weekdays, fractions, and ranges are not dates. */
 function hasExplicitCalendarDate(query: string): boolean {
   if (
     /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b/i.test(
       query,
-    ) ||
-    /\b\d{4}-\d{2}-\d{2}\b/.test(query)
+    )
   ) {
     return true;
   }
-  // Slash dates only. A hyphen pair is a range (2-3), not a date.
-  // No year and a day of 1-12 is a fraction or a pitch (3/4, 5/8), not a calendar day.
-  for (const match of query.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
+  for (const match of query.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    if (plausibleMonthDay(Number(match[2]), Number(match[3]))) return true;
+  }
+  // M/D/YYYY or M-D-YYYY. A hyphen pair with no year (2-3) is a range.
+  for (const match of query.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/g)) {
+    const yearRaw = match[3] ?? '';
+    const year = Number(yearRaw);
+    const yearOk = yearRaw.length === 4 ? year >= 1900 && year <= 2100 : yearRaw.length === 2;
+    if (yearOk && plausibleMonthDay(Number(match[1]), Number(match[2]))) return true;
+  }
+  // Bare M/D. 3/4 and 5/8 are sizes unless the words around them are a date.
+  for (const match of query.matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)) {
     const month = Number(match[1]);
     const day = Number(match[2]);
-    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
-    if (!match[3] && day <= 12) continue;
+    if (!plausibleMonthDay(month, day)) continue;
+    if (day <= 12 && !numericDateContext(query, match.index ?? 0, match[0].length)) continue;
     return true;
   }
   return false;
+}
+
+/**
+ * The weekday or relative day is already tied to a calendar date
+ * ("Thursday, October 8, 2026", "Thursday night, October 8").
+ * A size such as 3/4 does not count.
+ */
+function relativeDayAlreadyDated(text: string, index: number, length: number): boolean {
+  const after = text.slice(index + length, index + length + 64);
+  const before = text.slice(Math.max(0, index - 64), index);
+  const afterCore = after.replace(
+    /^\s*(?:(?:,|\(|-|–|—|:)\s*)?(?:(?:on|night|morning|evening|afternoon|game|games)\b\s*,?\s*){0,2}/i,
+    '',
+  );
+  const beforeCore = before.replace(
+    /(?:\s*,?\s*(?:on|night|morning|evening|afternoon|game|games)\b){0,2}\s*(?:(?:,|\)|-|–|—|:)\s*)?$/i,
+    '',
+  );
+  return hasExplicitCalendarDate(afterCore) || hasExplicitCalendarDate(beforeCore);
 }
 
 export function resolveAskSearchQuery(

@@ -834,6 +834,16 @@ test('an explicit date is not rewritten into a conflicting weekday date', async 
     resolveAskSearchQuery('change order today 10/19', ASK_NOW, 'America/Chicago'),
     'change order today 10/19',
   );
+  for (const question of [
+    '3/4 inch plywood on October 8, 2026',
+    '5/8 OSB Thursday, October 8, 2026',
+    '2-3 bundles due 10/8/2026',
+    '3/4 inch plywood on 2026-10-08',
+  ]) {
+    assert.equal(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), question, question);
+    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /September 30, 2026/);
+    assert.doesNotMatch(resolveAskSearchQuery(question, ASK_NOW, 'America/Chicago'), /October 1, 2026/);
+  }
 
   await withEnv(TAVILY_ON, async () => {
     let query = '';
