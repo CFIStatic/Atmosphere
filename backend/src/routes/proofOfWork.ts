@@ -3572,6 +3572,7 @@ export async function runProofAsk(input: {
         web_sources: sessionDocumentAnswer ? [] : webSources,
         research_trace: result.research ?? null,
         office_only: result.officeOnly === true,
+        document_ids: sessionDocuments.map((doc) => doc.id).slice(0, 8),
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
       })

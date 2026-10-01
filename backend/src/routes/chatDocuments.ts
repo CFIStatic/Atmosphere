@@ -16,7 +16,7 @@ import { writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import { ingestChatDocument } from '../documents/pipeline.js';
 import { chatSessionRows, viewsFromChatRows } from '../documents/load.js';
-import { answerFromJobDocuments, documentChunksForGrounding } from '../documents/answer.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding } from '../documents/answer.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
 import { documentRoomRows, persistDocumentRooms } from '../documents/rooms.js';
 import {
@@ -371,6 +371,8 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
       question: z.string().trim().min(3).max(1000),
       documentIds: z.array(z.string().uuid()).min(1).max(8),
       jobId: z.string().uuid().nullable().optional(),
+      /** False once this chat already showed the quiet unrelated line. */
+      quietNote: z.boolean().optional(),
     }).parse(req.body ?? {});
     const { supabase, orgId } = await requireOrgContext(req);
     const { data, error } = await supabase
@@ -381,7 +383,15 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
     if (error) throw new HttpError(500, 'The documents could not be read.', 'doc_read_failed');
     const rows = body.jobId ? chatSessionRows(data ?? [], body.jobId) : (data ?? []);
     const views = viewsFromChatRows(rows);
-    const direct = answerFromJobDocuments(body.question, views);
+    // Same gate as job-file Ask. A miss here would trap later capability and
+    // general questions on "this document does not show that."
+    if (!chatUploadShouldAnswer(body.question, views)) {
+      res.json({ answer: null });
+      return;
+    }
+    const direct = answerFromJobDocuments(body.question, views, [], {
+      quietNote: body.quietNote !== false,
+    });
     // Null means the question is not about these uploads. An abstain here
     // would hide the job file, clips, and room answers.
     if (!direct) {

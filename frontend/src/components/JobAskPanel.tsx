@@ -15,6 +15,7 @@ import {
   hasVideoOnFile,
   jobFileSuggestions,
   latestFilmedDate,
+  restoreSessionUploads,
   turnsFromQuestions,
   type JobFileTurn,
 } from '../lib/jobFileAsk';
@@ -528,6 +529,9 @@ export function JobAskPanel({
   const docs = useJobDocuments(jobId);
   const [pending, setPending] = useState<AskAttachment[]>([]);
   const threadUploadsRef = useRef<Record<string, AskAttachment[]>>({});
+  const turnsThreadRef = useRef<string | null>(null);
+  const documentCatalogRef = useRef<AskAttachment[]>([]);
+  const documentCatalogKey = docs.documents.map((doc) => doc.id).join('|');
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
   const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
@@ -551,7 +555,46 @@ export function JobAskPanel({
   useEffect(() => {
     setPending([]);
     threadUploadsRef.current = {};
+    turnsThreadRef.current = null;
   }, [jobId]);
+
+  function bindUploads(threadKey: string, msgs: JobFileTurn[]): JobFileTurn[] {
+    const restored = restoreSessionUploads(msgs, documentCatalogRef.current);
+    const prior = threadUploadsRef.current[threadKey] ?? [];
+    const byId = new Map<string, AskAttachment>();
+    for (const file of [...restored.session, ...prior]) {
+      const existing = byId.get(file.id);
+      if (!existing) {
+        byId.set(file.id, file);
+        continue;
+      }
+      if (!existing.filename && file.filename) byId.set(file.id, file);
+    }
+    const session = [...byId.values()].slice(-8);
+    if (session.length) threadUploadsRef.current[threadKey] = session;
+    return restored.turns;
+  }
+
+  function publishTurns(threadKey: string, msgs: JobFileTurn[]) {
+    turnsThreadRef.current = threadKey;
+    setTurns(bindUploads(threadKey, msgs));
+  }
+
+  useEffect(() => {
+    documentCatalogRef.current = docs.documents.map(chipFromDocument);
+    const threadKey = turnsThreadRef.current;
+    if (!threadKey) return;
+    setTurns((prev) => {
+      const next = bindUploads(threadKey, prev);
+      if (next.length !== prev.length) return next;
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] !== prev[i]) return next;
+      }
+      return prev;
+    });
+    // Catalog ids are the stable signal. The ref holds the latest cards.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentCatalogKey]);
 
   function rememberUploads(threadKey: string, files: AskAttachment[]) {
     const prior = threadUploadsRef.current[threadKey] ?? [];
@@ -684,11 +727,11 @@ export function JobAskPanel({
         if (firstId) {
           const msgs = await loadThreadMessages(firstId);
           if (n !== seq.current) return;
-          setTurns(msgs);
+          publishTurns(firstId, msgs);
         } else if (loadQuestions) {
           const legacy = await loadQuestions(null).catch(() => ({ questions: [] as ProofQuestion[] }));
           if (n !== seq.current) return;
-          setTurns(turnsFromQuestions(legacy.questions));
+          publishTurns(`job:${jobId}`, turnsFromQuestions(legacy.questions));
         }
       })
       .finally(() => {
@@ -711,6 +754,7 @@ export function JobAskPanel({
             if (created) {
               setThreads((prev) => [created.thread, ...prev.filter((t) => t.id !== created.thread.id)]);
               setActiveThreadId(created.thread.id);
+              turnsThreadRef.current = created.thread.id;
               setTurns([]);
               setPending([]);
               setError(null);
@@ -737,7 +781,7 @@ export function JobAskPanel({
           setAskFailure(null);
           try {
             const msgs = await loadThreadMessages(action.threadId);
-            setTurns(msgs);
+            publishTurns(action.threadId, msgs);
           } finally {
             setLoading(false);
             inputRef.current?.focus();
@@ -853,7 +897,14 @@ export function JobAskPanel({
     const documentIds = session.map((file) => file.id);
     setTurns((prev) => [
       ...prev.filter((turn) => turn.id !== failedPendingId),
-      { id: pendingId, role: 'user', content: text, at: now, attachments: sent },
+      {
+        id: pendingId,
+        role: 'user',
+        content: text,
+        at: now,
+        attachments: sent,
+        ...(documentIds.length ? { documentIds } : {}),
+      },
     ]);
     try {
       let res: {
@@ -895,6 +946,7 @@ export function JobAskPanel({
           threadUploadsRef.current[res.threadId] = session;
         }
         activeThreadIdRef.current = res.threadId;
+        turnsThreadRef.current = res.threadId;
         setActiveThreadId(res.threadId);
       }
       // Refresh thread titles after first message auto-title.
@@ -922,6 +974,7 @@ export function JobAskPanel({
             role: 'user',
             content: text,
             attachments: sent,
+            ...(documentIds.length ? { documentIds } : {}),
             at: res.question?.created_at ?? now,
           },
           {

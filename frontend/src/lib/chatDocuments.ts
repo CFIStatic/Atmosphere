@@ -140,12 +140,18 @@ export async function askChatDocuments(
   question: string,
   documentIds: string[],
   jobId?: string | null,
+  opts?: { quietNote?: boolean },
 ): Promise<string | null> {
   const res = await fetch('/api/operations/documents/ask', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, documentIds, jobId: jobId ?? undefined }),
+    body: JSON.stringify({
+      question,
+      documentIds,
+      jobId: jobId ?? undefined,
+      ...(opts?.quietNote === false ? { quietNote: false } : {}),
+    }),
   });
   if (!res.ok) throw new Error(await readError(res));
   const body = (await res.json()) as { answer?: string | null };

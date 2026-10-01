@@ -618,6 +618,9 @@ test('who wrote it reads the byline, and a follow-up drops the quiet line and we
   assert.match(follow ?? '', /Jack Cyganiak/);
   assert.doesNotMatch(follow ?? '', /doesn't appear to be about this job/);
   assert.equal(chatUploadShouldAnswer("What's the population of France?", [VISION_NOTE]), false);
+  assert.equal(answerFromJobDocuments("What's the population of France?", [VISION_NOTE]), null);
+  assert.equal(answerFromJobDocuments('how do I reset a breaker', [VISION_NOTE]), null);
+  assert.equal(answerFromJobDocuments("What's the estimate total?", [VISION_NOTE]), null);
   assert.equal(chatUploadShouldAnswer('Who wrote it?', [VISION_NOTE]), true);
   assert.equal(chatUploadShouldAnswer('What does Jettx build?', [VISION_NOTE]), true);
   assert.equal(sessionAnswerIsPrivate('what is this about', [VISION_NOTE]), true);

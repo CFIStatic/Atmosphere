@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,7 @@ import {
 } from '../domain/routing';
 import { dataClient } from '../data/client';
 import type { ApprovalRequest } from '../domain/types';
-import { askChatDocuments, type AskAttachment } from '../lib/chatDocuments';
+import { askChatDocuments, QUIET_DOCUMENT_NOTE, type AskAttachment } from '../lib/chatDocuments';
 
 /**
  * The single Atmosphere assistant.
@@ -77,6 +78,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [thinkingMode, setThinkingMode] = useState<'route' | 'document'>('route');
   const [contextLabel, setContextLabel] = useState('Atmosphere');
   const timers = useRef<number[]>([]);
+  const messagesRef = useRef<AssistantMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const send = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -133,7 +138,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(async () => {
       let answer: string | null = null;
       try {
-        answer = await askChatDocuments(trimmed, documentIds, opts?.jobId);
+        const quietAlready = messagesRef.current.some(
+          (message) => message.author === 'atmosphere' && message.text.includes(QUIET_DOCUMENT_NOTE),
+        );
+        answer = await askChatDocuments(trimmed, documentIds, opts?.jobId, { quietNote: !quietAlready });
       } catch (err) {
         answer = err instanceof Error ? err.message : 'This document does not show that.';
       }

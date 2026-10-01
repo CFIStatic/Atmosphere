@@ -8,6 +8,7 @@ import {
   jobFileSuggestions,
   sharedJobsRedirectTo,
   siteLine,
+  restoreSessionUploads,
   turnsFromQuestions,
 } from './jobFileAsk';
 import type { JobSummary, ProofResponse, SharedJobRecord } from './api';
@@ -242,6 +243,40 @@ describe('turnsFromQuestions', () => {
     expect(assistant?.webSources).toEqual([
       { title: 'NFL schedule', url: 'https://example.com/nfl', snippet: 'Thursday night game.' },
       { title: 'Evil host', url: 'https://evil.example/job-progress', snippet: 'no' },
+    ]);
+  });
+
+  it('keeps upload ids on the user turn and chips only on the message that added the file', () => {
+    const id = '00000000-0000-4000-8000-00000000d303';
+    const turns = turnsFromQuestions([
+      {
+        id: 'q-follow',
+        question: 'Who wrote it?',
+        answer: 'Jack Cyganiak wrote it.',
+        model: null,
+        grounded_on: [],
+        document_ids: [id],
+        created_at: '2026-10-01T00:01:00Z',
+      },
+      {
+        id: 'q-about',
+        question: 'what is this about',
+        answer: 'A vision note.',
+        model: null,
+        grounded_on: [],
+        document_ids: [id],
+        created_at: '2026-10-01T00:00:00Z',
+      },
+    ]);
+    const users = turns.filter((turn) => turn.role === 'user');
+    expect(users.map((turn) => turn.documentIds)).toEqual([[id], [id]]);
+    const restored = restoreSessionUploads(turns, [{ id, filename: 'The Future.docx', typeLabel: 'DOCX' }]);
+    expect(restored.session).toEqual([{ id, filename: 'The Future.docx', typeLabel: 'DOCX' }]);
+    expect(restored.turns.filter((turn) => turn.attachments?.length)).toEqual([
+      expect.objectContaining({
+        content: 'what is this about',
+        attachments: [{ id, filename: 'The Future.docx', typeLabel: 'DOCX' }],
+      }),
     ]);
   });
 });

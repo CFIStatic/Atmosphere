@@ -31,7 +31,17 @@ export function excludeOfficeOnlyRows<Q extends EqQuery>(
 }
 
 const QUESTION_COLUMNS =
-  'id, question, answer, model, grounded_on, web_sources, created_at, thread_id';
+  'id, question, answer, model, grounded_on, web_sources, document_ids, created_at, thread_id';
+
+/** Share links and grant viewers must not learn which chat uploads were in play. */
+function withoutSessionDocumentIds(rows: unknown[]): unknown[] {
+  return rows.map((row) => {
+    if (!row || typeof row !== 'object' || !('document_ids' in row)) return row;
+    const copy = { ...(row as Record<string, unknown>) };
+    delete copy.document_ids;
+    return copy;
+  });
+}
 
 /**
  * Last 30 stored Ask turns for a job. Shared, grant, and unthreaded reads
@@ -54,5 +64,9 @@ export async function listSharedProofQuestions(
   if (input.threadId) query = query.eq('thread_id', input.threadId);
   query = excludeOfficeOnlyRows(query, input.access, input.threadId ?? null);
   const { data } = await query.order('created_at', { ascending: false }).limit(30);
-  return data ?? [];
+  const rows = data ?? [];
+  if (!questionListingKeepsOfficeOnly(input.access, input.threadId ?? null)) {
+    return withoutSessionDocumentIds(rows);
+  }
+  return rows;
 }

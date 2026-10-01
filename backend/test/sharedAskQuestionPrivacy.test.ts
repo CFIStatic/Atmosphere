@@ -22,12 +22,14 @@ type StoredQuestion = {
   question: string;
   answer: string;
   office_only: boolean;
+  document_ids?: string[];
 };
 
 const ORG = 'org-1';
 const JOB = 'job-1';
 const OFFICE_THREAD = 'thread-office';
 const PRIVATE_ANSWER = 'Jack Cyganiak wrote the vision note about Jettx.';
+const UPLOAD_ID = '00000000-0000-4000-8000-00000000d303';
 
 const ROWS: StoredQuestion[] = [
   {
@@ -38,6 +40,7 @@ const ROWS: StoredQuestion[] = [
     question: 'What is the lockbox code?',
     answer: 'The lockbox code is 4821.',
     office_only: false,
+    document_ids: [UPLOAD_ID],
   },
   {
     id: 'private',
@@ -47,6 +50,7 @@ const ROWS: StoredQuestion[] = [
     question: 'Who wrote it?',
     answer: PRIVATE_ANSWER,
     office_only: true,
+    document_ids: [UPLOAD_ID],
   },
 ];
 
@@ -132,6 +136,8 @@ test('grant and unthreaded proof question listings omit unrelated upload answers
     access: 'org',
   });
   assert.deepEqual(answers(officeThread), [PRIVATE_ANSWER]);
+  assert.deepEqual((officeThread[0] as { document_ids?: string[] }).document_ids, [UPLOAD_ID]);
+  assert.equal('document_ids' in (viewer[0] as object), false);
 });
 
 test('share-link ask question listings omit unrelated upload answers', async () => {
@@ -152,6 +158,7 @@ test('share-link ask question listings omit unrelated upload answers', async () 
   });
   assert.deepEqual(answers(open), ['The lockbox code is 4821.']);
   assert.equal(answers(open).join('\n').includes('Jettx'), false);
+  assert.equal('document_ids' in (open[0] as object), false);
 
   const threaded = await listSharedProofQuestions(client, {
     orgId: ORG,

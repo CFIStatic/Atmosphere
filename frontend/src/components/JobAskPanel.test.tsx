@@ -1035,4 +1035,86 @@ describe('JobAskPanel', () => {
     }
   });
 
+  it('restores the uploaded file after the thread reloads', async () => {
+    const user = userEvent.setup();
+    const uploadId = '00000000-0000-4000-8000-00000000d303';
+    proofQuestions.mockResolvedValue({
+      questions: [
+        {
+          id: 'q-about',
+          question: 'what is this about',
+          answer: "This is a 2023 vision note by Jack Cyganiak.\n\nThis document doesn't appear to be about this job.",
+          model: null,
+          grounded_on: [],
+          document_ids: [uploadId],
+          created_at: '2026-10-01T00:00:00Z',
+        },
+      ],
+    });
+    askAboutProofs.mockResolvedValue({
+      answer: 'Jack Cyganiak wrote it.',
+      groundedOn: 0,
+      model: null,
+      question: {
+        id: 'q-follow',
+        question: 'Who wrote it?',
+        answer: 'Jack Cyganiak wrote it.',
+        grounded_on: [],
+        created_at: '2026-10-01T00:02:00Z',
+      },
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/operations/shared/') && url.includes('/documents')) {
+        return new Response(
+          JSON.stringify({
+            documents: [
+              {
+                id: uploadId,
+                filename: 'The Future.docx',
+                mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                byteSize: 32,
+                kind: 'other',
+                kindLabel: 'Document',
+                relevance: 'not_related',
+                relevanceReason: 'Nothing on the document matches the job name, address, or claim.',
+                summary: null,
+                attached: false,
+                jobId: null,
+                contextJobId: 'job-1038',
+                suggestedJobId: null,
+                suggestedJobTitle: null,
+                macrosIgnored: false,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+    try {
+      render(
+        <JobFileFocusProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </JobFileFocusProvider>,
+      );
+      expect(await screen.findByTestId('ask-message-attachments')).toHaveTextContent('The Future.docx');
+      expect(screen.queryByTestId('ask-composer-attachments')).not.toBeInTheDocument();
+      const box = screen.getByPlaceholderText('Ask what you forgot…');
+      await user.type(box, 'Who wrote it?');
+      await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+      await waitFor(() => {
+        expect(askAboutProofs).toHaveBeenCalledWith('job-1038', 'Who wrote it?', {
+          threadId: 'thr-1',
+          documentIds: [uploadId],
+        });
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
 });

@@ -1303,6 +1303,8 @@ export interface ProofQuestion {
   model?: string | null;
   grounded_on: string[];
   web_sources?: Array<{ title: string; url: string; snippet: string }> | null;
+  /** Chat uploads sent with this turn. Office thread reloads only. */
+  document_ids?: string[] | null;
   created_at: string;
   thread_id?: string | null;
 }

@@ -336,6 +336,9 @@ export function answerFromJobDocuments(
   const uploads = docs.filter((doc) => !documentIsJobKnowledge(doc));
   const attached = docs.filter((doc) => documentIsJobKnowledge(doc));
   const uploadsOnly = uploads.length > 0 && attached.length === 0;
+  // An unattached upload does not own the thread. Lockbox, weather, and
+  // "how to" questions stay null so the caller can fall through.
+  if (uploadsOnly && !chatUploadShouldAnswer(question, docs)) return null;
   if (
     asksAboutJobFile(question) &&
     !about &&

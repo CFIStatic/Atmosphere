@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   answerFromJobFile,
+  answerQuotesPrivateUpload,
   countJobFileSources,
   formatJobFileRecord,
   groundedJobFileAnswer,
+  historyWithoutPrivateUploads,
   isDuplicateAskTurn,
   jobFileHasContent,
   preferJobFileGroundedFastPath,
@@ -13,6 +18,9 @@ import {
 import { ASK_TOOL_DEFINITIONS, askToolsForAccess, parseActionsTrailer, pickAskToolsHeuristically } from '../src/shared/askTools.js';
 import { parseFollowupTrailer, parseQuoteTrailer } from '../src/shared/askMoments.js';
 import { parseSourceTrailerIds } from '../src/shared/askSources.js';
+import { QUIET_UNRELATED_NOTE } from '../src/documents/answer.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const file: JobFileAskContext = {
   job: {
@@ -490,6 +498,41 @@ test('a question about an uploaded document skips web search', async () => {
     if (prev === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = prev;
   }
+});
+
+test('a private upload is not model context for a job or public question', () => {
+  const vision = {
+    id: 'future',
+    filename: 'The Future.docx',
+    attached: false,
+    relevance: 'not_related',
+    extractedText: VISION_TEXT,
+  };
+  const privateAnswer = `This is a 2023 vision note by Jack Cyganiak about Jettx.\n\n${QUIET_UNRELATED_NOTE}`;
+  assert.equal(answerQuotesPrivateUpload('Delgado Roofing is on this job.', [vision]), false);
+  assert.equal(
+    answerQuotesPrivateUpload(
+      'Jettx builds long distance wireless power. Energy transmission from a space based power system can deliver electricity without wires.',
+      [vision],
+    ),
+    true,
+  );
+  assert.equal(answerQuotesPrivateUpload(`Noted.\n\n${QUIET_UNRELATED_NOTE}`, [vision]), false);
+  const kept = historyWithoutPrivateUploads(
+    [
+      { role: 'user', text: 'what is this about' },
+      { role: 'assistant', text: privateAnswer },
+      { role: 'user', text: 'what companies are involved on this job?' },
+    ],
+    [vision],
+  );
+  assert.deepEqual(kept?.map((turn) => turn.text), [
+    'what is this about',
+    'what companies are involved on this job?',
+  ]);
+  const src = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  assert.doesNotMatch(src, /formatChatUploadsForPrompt/);
+  assert.doesNotMatch(src, /Questions about these files are answered from this text only/);
 });
 
 test('isDuplicateAskTurn reuses only the same answer in the same thread', () => {
