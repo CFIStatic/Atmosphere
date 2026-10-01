@@ -2550,18 +2550,20 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       privacyRedactions: privacyRedactionsPayloadFromRow(row),
       childPrivacyRedactions: childPrivacyRedactionsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
-      rooms: segmentClipRooms(roomClipFromProofRow(row)).map((segment) => ({
-        roomName: segment.roomName,
-        roomKey: segment.roomKey,
-        startSeconds: segment.startSeconds,
-        endSeconds: segment.endSeconds,
-        confidence: segment.confidence,
-        findings: segment.findings.map((finding) => ({
-          kind: finding.kind,
-          text: finding.text,
-          atSeconds: finding.atSeconds,
+      rooms: segmentClipRooms(roomClipFromProofRow(row))
+        .filter((segment) => segment.roomType !== 'unclear')
+        .map((segment) => ({
+          roomName: segment.roomName,
+          roomKey: segment.roomKey,
+          startSeconds: segment.startSeconds,
+          endSeconds: segment.endSeconds,
+          confidence: segment.confidence,
+          findings: segment.findings.map((finding) => ({
+            kind: finding.kind,
+            text: finding.text,
+            atSeconds: finding.atSeconds,
+          })),
         })),
-      })),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),
     };

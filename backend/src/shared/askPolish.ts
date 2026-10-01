@@ -6,13 +6,14 @@
  * note the chat can copy. Visible prose never carries ids, UTC, or filler.
  */
 import { cleanMentionTitle, prettyMentionStamp } from './mentions.js';
-import { answerRoomQuestion, roomClipsFromLookupClips } from './roomIntelligence.js';
+import { answerRoomQuestion } from './roomIntelligence.js';
 import { isLongMemoryQuestion, recallLongMemory, type LongThreadMemory } from './askMemory.js';
 import { composeTopicSpeech, topicQuotes } from './askEvidenceAnswer.js';
 import { UNIDENTIFIED_SPEAKER, sanitizeSpeakerProse, speakerLabelOrUnidentified } from './askSpeakers.js';
 import {
   asksAboutOtherJobs,
   clipAskPreview,
+  roomClipsFromCatalog,
   type AskLookupCatalog,
   type AskLookupClip,
   type AskLookupTraceStep,
@@ -1137,7 +1138,7 @@ export function composeGroundedAsk(
     });
   }
   const voice = { timeZone: catalog.timeZone, jobTitle: catalog.jobTitle };
-  const roomAnswer = answerRoomQuestion(question, roomClipsFromLookupClips(catalog.clips));
+  const roomAnswer = answerRoomQuestion(question, roomClipsFromCatalog(catalog));
   if (roomAnswer) return polishAskProse(roomAnswer, voice);
   if (isJobOverview(question)) {
     return polishAskProse(composeJobOverview(catalog), voice);

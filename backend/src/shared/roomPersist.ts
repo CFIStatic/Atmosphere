@@ -7,6 +7,7 @@
  * segment on the clip is left alone.
  */
 import {
+  applyCrossClipRoomIdentity,
   matchRoomsAcrossClips,
   roomAnalysisFingerprint,
   roomDisplayName,
@@ -18,7 +19,11 @@ import {
 
 type Admin = {
   from: (table: string) => any;
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>;
 };
+
+/** One room refresh per proof. Narration and transcript both call this. */
+const roomRefreshChain = new Map<string, Promise<unknown>>();
 
 export function roomClipFromProofRow(row: Record<string, unknown>): RoomClipInput {
   const findings =
@@ -81,6 +86,35 @@ async function upsertLocation(
   return created?.id ? String(created.id) : null;
 }
 
+async function loadSiblingRoomClips(admin: Admin, jobId: string, proofId: string): Promise<RoomClipInput[]> {
+  const { data, error } = await admin
+    .from('job_proofs')
+    .select(
+      'id, title, work_date, phase, duration_seconds, actions, narration, ai_findings, transcript_text, transcript_segments',
+    )
+    .eq('job_id', jobId)
+    .neq('id', proofId)
+    .is('deleted_at', null);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((item: Record<string, unknown>) => roomClipFromProofRow(item));
+}
+
+/**
+ * Set roomSegments without replacing the rest of ai_findings. A full-object
+ * write drops people, privacy, or conversation saved after the read.
+ */
+async function writeRoomSegmentBounds(
+  admin: Admin,
+  proofId: string,
+  bounds: Array<{ startSec: number; endSec: number; room: string; confidence: number }>,
+): Promise<void> {
+  const { error } = await admin.rpc('set_proof_room_segments', {
+    p_proof_id: proofId,
+    p_segments: bounds,
+  });
+  if (error) throw new Error(error.message);
+}
+
 async function syncVerificationScenes(
   admin: Admin,
   input: { orgId: string; jobId: string; proofId: string; segments: ReturnType<typeof segmentClipRooms>; locationByKey: Map<string, string | null> },
@@ -119,12 +153,25 @@ async function syncVerificationScenes(
 
 /**
  * Rebuild one clip's room rows from the analysis and transcript already stored.
- * Does not re-read the video.
+ * Does not re-read the video. Calls for the same proof run one at a time.
  */
 export async function refreshClipRooms(
   admin: Admin,
   proofId: string,
   source: 'analysis' | 'backfill' = 'analysis',
+): Promise<{ written: boolean; skipped: boolean; segments: number }> {
+  const previous = roomRefreshChain.get(proofId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => writeClipRooms(admin, proofId, source));
+  roomRefreshChain.set(proofId, run);
+  return run.finally(() => {
+    if (roomRefreshChain.get(proofId) === run) roomRefreshChain.delete(proofId);
+  }) as Promise<{ written: boolean; skipped: boolean; segments: number }>;
+}
+
+async function writeClipRooms(
+  admin: Admin,
+  proofId: string,
+  source: 'analysis' | 'backfill',
 ): Promise<{ written: boolean; skipped: boolean; segments: number }> {
   const { data: row, error } = await admin
     .from('job_proofs')
@@ -158,7 +205,11 @@ export async function refreshClipRooms(
   }));
   if (!shouldRewriteRooms(prior, fingerprint)) return { written: false, skipped: true, segments: prior.length };
 
-  const rooms = matchRoomsAcrossClips([input]);
+  // A generic bathroom on this clip folds into the job's only specific bathroom
+  // when the other proofs are in the same match. One clip cannot see that row.
+  const siblings = await loadSiblingRoomClips(admin, String(row.job_id), proofId);
+  const rooms = matchRoomsAcrossClips([...siblings, input]);
+  const storedSegments = applyCrossClipRoomIdentity(proofId, segments, rooms);
   const locationByKey = new Map<string, string | null>();
   for (const room of rooms) {
     if (room.roomType === 'unclear') continue;
@@ -172,9 +223,9 @@ export async function refreshClipRooms(
   }
 
   await admin.from('clip_room_segments').delete().eq('proof_id', proofId).eq('user_corrected', false);
-  if (segments.length) {
+  if (storedSegments.length) {
     const { error: insertError } = await admin.from('clip_room_segments').insert(
-      segments.map((segment) => ({
+      storedSegments.map((segment) => ({
         org_id: row.org_id,
         job_id: row.job_id,
         proof_id: proofId,
@@ -195,16 +246,14 @@ export async function refreshClipRooms(
     if (insertError) throw new Error(insertError.message);
   }
 
-  const findings = row.ai_findings && typeof row.ai_findings === 'object' ? { ...row.ai_findings } : {};
-  findings.roomSegments = bounds;
-  await admin.from('job_proofs').update({ ai_findings: findings }).eq('id', proofId);
+  await writeRoomSegmentBounds(admin, proofId, bounds);
 
   try {
     await syncVerificationScenes(admin, {
       orgId: String(row.org_id),
       jobId: String(row.job_id),
       proofId,
-      segments,
+      segments: storedSegments,
       locationByKey,
     });
   } catch {

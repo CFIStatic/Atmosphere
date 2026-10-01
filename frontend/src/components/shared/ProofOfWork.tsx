@@ -504,6 +504,11 @@ function ClipSpeakerList({ jobId, proofId }: { jobId: string; proofId: string })
   );
 }
 
+/** Leading "room unclear" spans are not chips. Unknown evidence stays off the row. */
+function clipRoomChips(rooms: ProofVideoRecord['rooms']): NonNullable<ProofVideoRecord['rooms']> {
+  return (rooms ?? []).filter((room) => room.roomName !== 'room unclear' && room.roomKey !== 'unclear::');
+}
+
 function roomDay(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
@@ -594,6 +599,7 @@ function VideoCatalog({
           const title = clipDisplayTitle(video, meta);
           const status = videoRowStatus(video);
           const moments = clipMoments(video);
+          const roomChips = clipRoomChips(video.rooms);
           const day = new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
@@ -663,9 +669,9 @@ function VideoCatalog({
                       ) : null}
                     </p>
                   </button>
-                  {video.rooms?.length ? (
+                  {roomChips.length ? (
                     <div className="mt-1.5 flex flex-wrap gap-1" data-testid="clip-room-chips">
-                      {video.rooms.map((room) => (
+                      {roomChips.map((room) => (
                         <button
                           key={`${room.roomKey}-${room.startSeconds}`}
                           type="button"

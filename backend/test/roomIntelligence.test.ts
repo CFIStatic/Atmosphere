@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   answerRoomQuestion,
+  applyCrossClipRoomIdentity,
   isRoomQuestion,
   matchRoomsAcrossClips,
   parseRoomSegmentPayload,
@@ -174,6 +175,16 @@ test('a generic bathroom folds into the only specific bathroom unless fixtures c
   assert.equal(merged.filter((room) => room.roomType === 'bathroom').length, 1);
   assert.equal(merged.find((room) => room.roomType === 'bathroom')!.roomName, 'primary bathroom');
   assert.equal(merged[0]!.sightings.length, 2);
+  const generic = segmentClipRooms({
+    proofId: 'g',
+    title: 'Later bath',
+    workDate: '2026-09-04',
+    durationSeconds: 10,
+    actions: [{ atSeconds: 1, room: 'bathroom', action: 'inspect', description: 'Looks at the vanity.' }],
+  }).find((segment) => segment.roomType === 'bathroom')!;
+  const stored = applyCrossClipRoomIdentity('g', [generic], merged);
+  assert.equal(stored[0]!.roomKey, 'bathroom::primary');
+  assert.equal(stored[0]!.roomName, 'primary bathroom');
 
   const split = matchRoomsAcrossClips([
     {
@@ -230,6 +241,13 @@ test('room questions answer from tagged evidence and say when a room is missing'
   assert.equal(isRoomQuestion('what was said in the office recording'), false);
   assert.equal(isRoomQuestion('At any point did the worker go in the bathroom?'), false);
   assert.equal(isRoomQuestion('Did they work in the kitchen?'), false);
+  assert.equal(isRoomQuestion('what rooms are on file?'), true);
+  assert.equal(isRoomQuestion('what damage is in the living room?'), true);
+  assert.equal(isRoomQuestion('where is the lockbox in the living room?'), false);
+  assert.equal(isRoomQuestion('who uploaded the dining room video?'), false);
+  assert.equal(isRoomQuestion('search the web for living room paint prices'), false);
+  assert.equal(routeAskResearch('where is the lockbox in the living room?').reason, 'simple');
+  assert.equal(routeAskResearch('what damage is in the living room?').reason, 'room');
 
   const kitchenAnswer = answerRoomQuestion('what work was completed in the kitchen on Sep 21?', fileClips);
   assert.match(kitchenAnswer!, /Installs the cabinet boxes along the east wall/);

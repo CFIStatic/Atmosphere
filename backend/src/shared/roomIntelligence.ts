@@ -191,12 +191,20 @@ export function askedRoom(question: string): RoomIdentity | null {
  * A question Ask should answer from room segments.
  * Yes/no presence questions ("did they go in the bathroom?") and speech
  * questions ("what was said in the office recording") stay on their own paths.
+ * "What rooms are on file" is a room question. A named room such as living
+ * room or dining room is not, unless the question also asks about work,
+ * damage, or duration — the same rule as kitchen and bathroom.
  */
 export function isRoomQuestion(question: string): boolean {
   const text = question.trim();
   if (/\b(said|say|mention(?:ed|s)?|transcript|recording|spoke|speech|heard)\b/i.test(text)) return false;
   if (/^(?:did|do|does|was|were|is|are|at any point|has|have)\b/i.test(text)) return false;
-  if (/\brooms?\b/i.test(text)) return true;
+  // Drop compound names so "room" inside "living room" is not "what rooms".
+  const withoutNamedRoom = text.replace(
+    /\b(?:living|family|dining|powder|laundry|mechanical|utility)\s+rooms?\b/gi,
+    ' ',
+  );
+  if (/\brooms?\b/i.test(withoutNamedRoom)) return true;
   if (!askedRoom(text)) return false;
   return /\b(work|done|damage|damaged|condition|crack|stain|mold|leak|weeks?|days?|how (?:many|long)|duration|take to|took|fix(?:ed)?|repair(?:ed)?|install(?:ed)?|complete[d]?|characteristic)\b/i.test(text);
 }
@@ -497,6 +505,34 @@ export function matchRoomsAcrossClips(clips: RoomClipInput[]): JobRoom[] {
     });
   }
   return rooms.sort((a, b) => a.roomName.localeCompare(b.roomName));
+}
+
+/**
+ * Point one clip's spans at the job room they belong to after cross-clip merge.
+ * A generic bathroom filmed later keeps the only specific bathroom's key.
+ */
+export function applyCrossClipRoomIdentity(
+  proofId: string,
+  segments: ClipRoomSegment[],
+  rooms: JobRoom[],
+): ClipRoomSegment[] {
+  return segments.map((segment) => {
+    const room = rooms.find(
+      (item) =>
+        item.roomType !== 'unclear' &&
+        item.sightings.some(
+          (sighting) => sighting.proofId === proofId && sighting.sequenceIndex === segment.sequenceIndex,
+        ),
+    );
+    if (!room) return segment;
+    return {
+      ...segment,
+      roomKey: room.roomKey,
+      roomName: room.roomName,
+      roomType: room.roomType,
+      qualifier: room.qualifier,
+    };
+  });
 }
 
 function dateParts(iso: string): { year: number; month: number; day: number } | null {

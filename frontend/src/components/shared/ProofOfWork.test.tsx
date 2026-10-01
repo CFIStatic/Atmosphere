@@ -509,6 +509,14 @@ describe('ProofOfWork video collection', () => {
           ...catalog.videos![0]!,
           rooms: [
             {
+              roomName: 'room unclear',
+              roomKey: 'unclear::',
+              startSeconds: 0,
+              endSeconds: 12,
+              confidence: 0.3,
+              findings: [],
+            },
+            {
               roomName: 'kitchen',
               roomKey: 'kitchen::',
               startSeconds: 12,
@@ -528,6 +536,7 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByTestId('job-rooms')).toHaveTextContent('Installs the cabinet boxes along the east wall.');
     const chip = screen.getByRole('button', { name: 'Jump to kitchen at 0:12' });
     expect(screen.getByTestId('clip-room-chips')).toContainElement(chip);
+    expect(screen.queryByRole('button', { name: /room unclear/i })).toBeNull();
     await user.click(chip);
     expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
   });
