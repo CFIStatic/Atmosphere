@@ -1325,6 +1325,26 @@
       "mustContain": ["not on file", "attic"],
       "mustNotContain": ["Crack in the drywall", "Installs the cabinet"]
      }
+    },
+    {
+     "id": "room-uploader-not-room",
+     "type": "room",
+     "question": "who uploaded the living room clip?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["1 clip", "Sep 10"],
+      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
+     }
+    },
+    {
+     "id": "room-lockbox-not-room",
+     "type": "room",
+     "question": "where's the lockbox, by the living room?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["1 clip", "Sep 10"],
+      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
+     }
     }
    ]
   }

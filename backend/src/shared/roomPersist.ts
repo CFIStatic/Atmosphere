@@ -7,19 +7,20 @@
  * segment on the clip is left alone.
  */
 import {
-  applyCrossClipRoomIdentity,
-  matchRoomsAcrossClips,
+  alignClipRoomsToJob,
+  findingTraits,
+  identityFromRoomKey,
   roomAnalysisFingerprint,
   roomDisplayName,
   segmentClipRooms,
   shouldRewriteRooms,
+  type KnownJobRoom,
   type RoomClipInput,
-  type RoomIdentity,
 } from './roomIntelligence.js';
 
 type Admin = {
   from: (table: string) => any;
-  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>;
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data?: unknown; error?: { message?: string } | null }>;
 };
 
 /** One room refresh per proof. Narration and transcript both call this. */
@@ -44,16 +45,11 @@ export function roomClipFromProofRow(row: Record<string, unknown>): RoomClipInpu
   };
 }
 
-function identityFromKey(roomKey: string): RoomIdentity {
-  const [roomType, qualifier] = roomKey.split('::');
-  return { roomType: roomType || 'unclear', qualifier: qualifier || null };
-}
-
 async function upsertLocation(
   admin: Admin,
   input: { orgId: string; jobId: string; roomKey: string; traits: string[] },
 ): Promise<string | null> {
-  const identity = identityFromKey(input.roomKey);
+  const identity = identityFromRoomKey(input.roomKey);
   if (identity.roomType === 'unclear') return null;
   const { data: existing, error } = await admin
     .from('job_locations')
@@ -86,19 +82,6 @@ async function upsertLocation(
   return created?.id ? String(created.id) : null;
 }
 
-async function loadSiblingRoomClips(admin: Admin, jobId: string, proofId: string): Promise<RoomClipInput[]> {
-  const { data, error } = await admin
-    .from('job_proofs')
-    .select(
-      'id, title, work_date, phase, duration_seconds, actions, narration, ai_findings, transcript_text, transcript_segments',
-    )
-    .eq('job_id', jobId)
-    .neq('id', proofId)
-    .is('deleted_at', null);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((item: Record<string, unknown>) => roomClipFromProofRow(item));
-}
-
 /**
  * Set roomSegments without replacing the rest of ai_findings. A full-object
  * write drops people, privacy, or conversation saved after the read.
@@ -112,7 +95,7 @@ async function writeRoomSegmentBounds(
     p_proof_id: proofId,
     p_segments: bounds,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(error.message || 'Could not store room segments.');
 }
 
 async function syncVerificationScenes(
@@ -184,15 +167,18 @@ async function writeClipRooms(
   if (!row?.id || !row.org_id || !row.job_id) return { written: false, skipped: true, segments: 0 };
 
   const input = roomClipFromProofRow(row);
-  const segments = segmentClipRooms(input);
+  const segmented = segmentClipRooms(input);
+  const known = await knownJobRooms(admin, String(row.job_id));
+  // Resolve against the job before hashing. A later generic "bathroom" then
+  // lands on the existing bathroom::primary row, and the stored bounds hash
+  // to the same value on the next pass.
+  const segments = alignClipRoomsToJob(segmented, known);
   const bounds = segments.map((segment) => ({
     startSec: segment.startSeconds,
     endSec: segment.endSeconds,
     room: segment.roomName,
     confidence: segment.confidence,
   }));
-  // Hash the bounds that will be stored. Writing them back onto ai_findings
-  // must not change the next hash, so a second pass is a no-op.
   const fingerprint = roomAnalysisFingerprint({ ...input, roomSegments: bounds });
   const { data: existing, error: existingError } = await admin
     .from('clip_room_segments')
@@ -205,27 +191,27 @@ async function writeClipRooms(
   }));
   if (!shouldRewriteRooms(prior, fingerprint)) return { written: false, skipped: true, segments: prior.length };
 
-  // A generic bathroom on this clip folds into the job's only specific bathroom
-  // when the other proofs are in the same match. One clip cannot see that row.
-  const siblings = await loadSiblingRoomClips(admin, String(row.job_id), proofId);
-  const rooms = matchRoomsAcrossClips([...siblings, input]);
-  const storedSegments = applyCrossClipRoomIdentity(proofId, segments, rooms);
+  const traitsByKey = new Map<string, string[]>();
+  for (const segment of segments) {
+    if (segment.roomType === 'unclear') continue;
+    const prev = traitsByKey.get(segment.roomKey) ?? [];
+    traitsByKey.set(segment.roomKey, [...new Set([...prev, ...findingTraits(segment.findings)])]);
+  }
   const locationByKey = new Map<string, string | null>();
-  for (const room of rooms) {
-    if (room.roomType === 'unclear') continue;
+  for (const [roomKey, traits] of traitsByKey) {
     const id = await upsertLocation(admin, {
       orgId: String(row.org_id),
       jobId: String(row.job_id),
-      roomKey: room.roomKey,
-      traits: room.traits,
+      roomKey,
+      traits,
     });
-    locationByKey.set(room.roomKey, id);
+    locationByKey.set(roomKey, id);
   }
 
   await admin.from('clip_room_segments').delete().eq('proof_id', proofId).eq('user_corrected', false);
-  if (storedSegments.length) {
+  if (segments.length) {
     const { error: insertError } = await admin.from('clip_room_segments').insert(
-      storedSegments.map((segment) => ({
+      segments.map((segment) => ({
         org_id: row.org_id,
         job_id: row.job_id,
         proof_id: proofId,
@@ -253,7 +239,7 @@ async function writeClipRooms(
       orgId: String(row.org_id),
       jobId: String(row.job_id),
       proofId,
-      segments: storedSegments,
+      segments,
       locationByKey,
     });
   } catch {
@@ -263,32 +249,90 @@ async function writeClipRooms(
   return { written: true, skipped: false, segments: segments.length };
 }
 
+async function knownJobRooms(admin: Admin, jobId: string): Promise<KnownJobRoom[]> {
+  const { data, error } = await admin
+    .from('job_locations')
+    .select('room_key, match_traits')
+    .eq('job_id', jobId)
+    .eq('kind', 'room')
+    .not('room_key', 'is', null);
+  if (error) throw new Error(error.message);
+  const rooms: KnownJobRoom[] = [];
+  for (const row of data ?? []) {
+    const roomKey = String(row.room_key ?? '').trim();
+    if (!roomKey) continue;
+    const traits = Array.isArray(row.match_traits) ? row.match_traits.map((trait: unknown) => String(trait)) : [];
+    rooms.push({ roomKey, traits });
+  }
+  return rooms;
+}
+
+const BACKFILL_PAGE = 50;
+
+async function proofsAwaitingRoomBackfill(
+  admin: Admin,
+  limit: number,
+  opts?: { jobId?: string | null; orgId?: string | null },
+): Promise<string[]> {
+  const { data, error } = await admin.rpc('proofs_awaiting_room_backfill', {
+    p_limit: limit,
+    p_job_id: opts?.jobId ?? null,
+    p_org_id: opts?.orgId ?? null,
+  });
+  if (error) throw new Error(error.message || 'Could not list clips awaiting room backfill.');
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map((row) => (row && typeof row === 'object' ? String((row as { id?: unknown }).id ?? '') : ''))
+    .filter(Boolean);
+}
+
+export type RoomBackfillFailure = { id: string; reason: string };
+
+export type RoomBackfillResult = {
+  scanned: number;
+  written: number;
+  skipped: number;
+  failed: number;
+  failures: RoomBackfillFailure[];
+};
+
+/**
+ * Clips with no room rows and no stored roomSegments key. A dry run reads
+ * one page and writes nothing, so the same ids are not fetched again.
+ * Apply walks pages until the cap or the queue is empty. An id that fails
+ * is remembered for this run so a single error cannot spin the loop.
+ */
 export async function backfillClipRooms(
   admin: Admin,
   opts?: { apply?: boolean; jobId?: string | null; orgId?: string | null; limit?: number },
-): Promise<{ scanned: number; written: number; skipped: number }> {
+): Promise<RoomBackfillResult> {
   const limit = Math.max(1, Math.min(opts?.limit ?? 500, 2000));
-  let query = admin
-    .from('job_proofs')
-    .select('id')
-    .is('deleted_at', null)
-    .in('narration_status', ['done', 'skipped'])
-    .order('created_at', { ascending: true })
-    .limit(limit);
-  if (opts?.jobId) query = query.eq('job_id', opts.jobId);
-  if (opts?.orgId) query = query.eq('org_id', opts.orgId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  const empty: RoomBackfillResult = { scanned: 0, written: 0, skipped: 0, failed: 0, failures: [] };
+  if (!opts?.apply) {
+    const ids = await proofsAwaitingRoomBackfill(admin, Math.min(limit, 200), opts);
+    return { ...empty, scanned: ids.length, skipped: ids.length };
+  }
+  const seen = new Set<string>();
   let written = 0;
   let skipped = 0;
-  for (const row of data ?? []) {
-    if (!opts?.apply) {
-      skipped += 1;
-      continue;
+  let failed = 0;
+  const failures: RoomBackfillFailure[] = [];
+  while (seen.size < limit) {
+    const page = await proofsAwaitingRoomBackfill(admin, Math.min(BACKFILL_PAGE, limit - seen.size), opts);
+    const fresh = page.filter((id) => !seen.has(id));
+    if (!fresh.length) break;
+    for (const id of fresh) {
+      if (seen.size >= limit) break;
+      seen.add(id);
+      try {
+        const result = await refreshClipRooms(admin, id, 'backfill');
+        if (result.written) written += 1;
+        else skipped += 1;
+      } catch (err) {
+        failed += 1;
+        failures.push({ id, reason: err instanceof Error && err.message ? err.message : String(err) });
+      }
     }
-    const result = await refreshClipRooms(admin, String(row.id), 'backfill');
-    if (result.written) written += 1;
-    else skipped += 1;
   }
-  return { scanned: (data ?? []).length, written, skipped };
+  return { scanned: seen.size, written, skipped, failed, failures };
 }

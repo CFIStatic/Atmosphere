@@ -188,25 +188,20 @@ export function askedRoom(question: string): RoomIdentity | null {
 }
 
 /**
- * A question Ask should answer from room segments.
- * Yes/no presence questions ("did they go in the bathroom?") and speech
- * questions ("what was said in the office recording") stay on their own paths.
- * "What rooms are on file" is a room question. A named room such as living
- * room or dining room is not, unless the question also asks about work,
- * damage, or duration — the same rule as kitchen and bathroom.
+ * A question Ask should answer from room segments: a room's work, damage,
+ * features, timeline, or duration, or an inventory of the rooms on file.
+ * Naming a room is not enough. "Who uploaded the living room clip?" and
+ * "where's the lockbox, by the living room?" stay on the normal Ask path.
+ * Yes/no presence questions and speech questions stay on their own paths.
  */
 export function isRoomQuestion(question: string): boolean {
   const text = question.trim();
   if (/\b(said|say|mention(?:ed|s)?|transcript|recording|spoke|speech|heard)\b/i.test(text)) return false;
   if (/^(?:did|do|does|was|were|is|are|at any point|has|have)\b/i.test(text)) return false;
-  // Drop compound names so "room" inside "living room" is not "what rooms".
-  const withoutNamedRoom = text.replace(
-    /\b(?:living|family|dining|powder|laundry|mechanical|utility)\s+rooms?\b/gi,
-    ' ',
-  );
-  if (/\brooms?\b/i.test(withoutNamedRoom)) return true;
+  if (/\b(?:what|which)\s+rooms?\b/i.test(text)) return true;
+  if (/\b(?:list|name)\s+(?:the\s+|every\s+|all\s+)?rooms?\b/i.test(text)) return true;
   if (!askedRoom(text)) return false;
-  return /\b(work|done|damage|damaged|condition|crack|stain|mold|leak|weeks?|days?|how (?:many|long)|duration|take to|took|fix(?:ed)?|repair(?:ed)?|install(?:ed)?|complete[d]?|characteristic)\b/i.test(text);
+  return /\b(work|done|damage|damaged|condition|crack|stain|mold|leak|weeks?|days?|how (?:many|long)|duration|take to|took|timeline|feature|fixture|finish|material|unique|characteristic|fix(?:ed)?|repair(?:ed)?|install(?:ed)?|complete[d]?)\b/i.test(text);
 }
 
 function asRecords(raw: unknown): Array<Record<string, unknown>> {
@@ -425,9 +420,9 @@ export function segmentClipRooms(input: RoomClipInput): ClipRoomSegment[] {
   });
 }
 
-function traitsOf(sighting: RoomSighting): string[] {
+export function findingTraits(findings: RoomFinding[]): string[] {
   const found = new Set<string>();
-  for (const finding of sighting.findings) {
+  for (const finding of findings) {
     if (finding.kind === 'damage') continue;
     const text = finding.text.toLowerCase();
     for (const word of FIXTURE_WORDS) {
@@ -435,6 +430,74 @@ function traitsOf(sighting: RoomSighting): string[] {
     }
   }
   return [...found];
+}
+
+function traitsOf(sighting: RoomSighting): string[] {
+  return findingTraits(sighting.findings);
+}
+
+export type KnownJobRoom = { roomKey: string; traits: string[] };
+
+export function identityFromRoomKey(roomKey: string): RoomIdentity {
+  const [roomType, qualifier] = roomKey.split('::');
+  return { roomType: roomType || 'unclear', qualifier: qualifier || null };
+}
+
+/**
+ * Fold a generic room key into the job's one specific room of that type.
+ * "bathroom" becomes "bathroom::primary" only when the job has exactly one
+ * qualified bathroom and the fixture traits do not conflict. Two bathrooms,
+ * or a shower clip against a tub room, stay separate.
+ */
+export function resolveRoomKeyAgainstJob(roomKey: string, traits: string[], known: KnownJobRoom[]): string {
+  const identity = identityFromRoomKey(roomKey);
+  if (identity.qualifier || identity.roomType === 'unclear') return roomKey;
+  const specific = known.filter((room) => {
+    const other = identityFromRoomKey(room.roomKey);
+    return other.roomType === identity.roomType && Boolean(other.qualifier) && other.roomType !== 'unclear';
+  });
+  if (specific.length !== 1) return roomKey;
+  if (traitsConflict(traits, specific[0]!.traits)) return roomKey;
+  return specific[0]!.roomKey;
+}
+
+/**
+ * Point this clip's generic spans at rooms the job already has, and at a
+ * qualified room on the same clip. Stored room_key and location_id then
+ * share one job_locations row.
+ */
+export function alignClipRoomsToJob(segments: ClipRoomSegment[], known: KnownJobRoom[]): ClipRoomSegment[] {
+  const pool: KnownJobRoom[] = known.map((room) => ({ roomKey: room.roomKey, traits: [...room.traits] }));
+  for (const segment of segments) {
+    const identity = identityFromRoomKey(segment.roomKey);
+    if (!identity.qualifier || identity.roomType === 'unclear') continue;
+    const traits = findingTraits(segment.findings);
+    const existing = pool.find((room) => room.roomKey === segment.roomKey);
+    if (existing) {
+      for (const trait of traits) {
+        if (!existing.traits.includes(trait)) existing.traits.push(trait);
+      }
+    } else {
+      pool.push({ roomKey: segment.roomKey, traits });
+    }
+  }
+  return segments.map((segment) => {
+    const resolved = resolveRoomKeyAgainstJob(segment.roomKey, findingTraits(segment.findings), pool);
+    if (resolved === segment.roomKey) return segment;
+    const identity = identityFromRoomKey(resolved);
+    return {
+      ...segment,
+      roomKey: resolved,
+      roomName: roomDisplayName(identity),
+      roomType: identity.roomType,
+      qualifier: identity.qualifier,
+    };
+  });
+}
+
+/** Clip timeline chips. "room unclear" is not a room the user can jump to. */
+export function clipRoomChipSegments(segments: ClipRoomSegment[]): ClipRoomSegment[] {
+  return segments.filter((segment) => segment.roomType !== 'unclear');
 }
 
 function traitsConflict(a: string[], b: string[]): boolean {

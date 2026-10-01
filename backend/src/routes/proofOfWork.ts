@@ -1,5 +1,5 @@
 import { servableSummary } from '../audio/summaryServe.js';
-import { matchRoomsAcrossClips, segmentClipRooms } from '../shared/roomIntelligence.js';
+import { clipRoomChipSegments, matchRoomsAcrossClips, segmentClipRooms } from '../shared/roomIntelligence.js';
 import { refreshClipRooms, roomClipFromProofRow } from '../shared/roomPersist.js';
 import { clipProcessingInputOfProof } from '../shared/clipStatusOfProof.js';
 import { refreshProofSummary, queueSummaryRefresh } from '../audio/summaryQueue.js';
@@ -2550,20 +2550,18 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       privacyRedactions: privacyRedactionsPayloadFromRow(row),
       childPrivacyRedactions: childPrivacyRedactionsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
-      rooms: segmentClipRooms(roomClipFromProofRow(row))
-        .filter((segment) => segment.roomType !== 'unclear')
-        .map((segment) => ({
-          roomName: segment.roomName,
-          roomKey: segment.roomKey,
-          startSeconds: segment.startSeconds,
-          endSeconds: segment.endSeconds,
-          confidence: segment.confidence,
-          findings: segment.findings.map((finding) => ({
-            kind: finding.kind,
-            text: finding.text,
-            atSeconds: finding.atSeconds,
-          })),
+      rooms: clipRoomChipSegments(segmentClipRooms(roomClipFromProofRow(row))).map((segment) => ({
+        roomName: segment.roomName,
+        roomKey: segment.roomKey,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        confidence: segment.confidence,
+        findings: segment.findings.map((finding) => ({
+          kind: finding.kind,
+          text: finding.text,
+          atSeconds: finding.atSeconds,
         })),
+      })),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),
     };

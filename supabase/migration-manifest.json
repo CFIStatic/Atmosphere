@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 175,
+    "migrationCount": 177,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -189,7 +189,9 @@
     "20260929203000_speaker_identification.sql",
     "20260930180000_ask_web_sources.sql",
     "20261001120000_ask_research_trace.sql",
-    "20261001143000_clip_room_segments.sql"
+    "20261001143000_clip_room_segments.sql",
+    "20261001161000_set_proof_room_segments.sql",
+    "20261001170000_proofs_awaiting_room_backfill.sql"
   ],
   "migrations": [
     {
@@ -5798,6 +5800,30 @@
         "index|public.clip_room_segments.clip_room_segments_location_idx",
         "policy|public.clip_room_segments.clip_room_segments_select",
         "rls|public.clip_room_segments"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261001161000_set_proof_room_segments",
+      "file": "20261001161000_set_proof_room_segments.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.set_proof_room_segments"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261001170000_proofs_awaiting_room_backfill",
+      "file": "20261001170000_proofs_awaiting_room_backfill.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.proofs_awaiting_room_backfill"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

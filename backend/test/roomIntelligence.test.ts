@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  alignClipRoomsToJob,
   answerRoomQuestion,
   applyCrossClipRoomIdentity,
+  clipRoomChipSegments,
   isRoomQuestion,
   matchRoomsAcrossClips,
   parseRoomSegmentPayload,
+  resolveRoomKeyAgainstJob,
   roomAnalysisFingerprint,
   roomWorkDuration,
   segmentClipRooms,
@@ -14,6 +17,7 @@ import {
 } from '../src/shared/roomIntelligence.js';
 import { routeAskResearch, runAskResearch } from '../src/shared/askResearch.js';
 import type { AskLookupCatalog } from '../src/shared/askLookup.js';
+import { composeGroundedAsk } from '../src/shared/askPolish.js';
 
 const kitchen: RoomClipInput = {
   proofId: 'k1',
@@ -242,12 +246,17 @@ test('room questions answer from tagged evidence and say when a room is missing'
   assert.equal(isRoomQuestion('At any point did the worker go in the bathroom?'), false);
   assert.equal(isRoomQuestion('Did they work in the kitchen?'), false);
   assert.equal(isRoomQuestion('what rooms are on file?'), true);
+  assert.equal(isRoomQuestion('what rooms are on this file?'), true);
   assert.equal(isRoomQuestion('what damage is in the living room?'), true);
   assert.equal(isRoomQuestion('where is the lockbox in the living room?'), false);
   assert.equal(isRoomQuestion('who uploaded the dining room video?'), false);
+  assert.equal(isRoomQuestion('who uploaded the living room clip?'), false);
+  assert.equal(isRoomQuestion("where's the lockbox, by the living room?"), false);
   assert.equal(isRoomQuestion('search the web for living room paint prices'), false);
   assert.equal(routeAskResearch('where is the lockbox in the living room?').reason, 'simple');
   assert.equal(routeAskResearch('what damage is in the living room?').reason, 'room');
+  assert.notEqual(routeAskResearch('who uploaded the living room clip?').reason, 'room');
+  assert.notEqual(routeAskResearch("where's the lockbox, by the living room?").reason, 'room');
 
   const kitchenAnswer = answerRoomQuestion('what work was completed in the kitchen on Sep 21?', fileClips);
   assert.match(kitchenAnswer!, /Installs the cabinet boxes along the east wall/);
@@ -325,6 +334,64 @@ test('room questions route into research and the loop answers without a planner 
   assert.match(result.answer, /about 3 weeks/);
   assert.match(result.answer, /does not establish completion/);
   assert.ok(result.meta.steps.some((step) => step.tools.includes('lookup_room')));
+});
+
+test('a generic bathroom folds into the one specific bathroom already on the job', () => {
+  const generic = segmentClipRooms({
+    proofId: 'g',
+    title: 'Later bath',
+    durationSeconds: 10,
+    roomSegments: [{ startSec: 0, endSec: 10, room: 'bathroom', confidence: 0.8 }],
+    actions: [{ atSeconds: 1, room: 'bathroom', action: 'remove', description: 'Removes the old vanity.' }],
+  });
+  const bath = generic.find((segment) => segment.roomType === 'bathroom')!;
+  assert.equal(bath.roomKey, 'bathroom::');
+  const folded = alignClipRoomsToJob(generic, [{ roomKey: 'bathroom::primary', traits: ['vanity'] }]);
+  assert.equal(folded.find((segment) => segment.roomType === 'bathroom')!.roomKey, 'bathroom::primary');
+  assert.equal(folded.find((segment) => segment.roomType === 'bathroom')!.roomName, 'primary bathroom');
+
+  const two = alignClipRoomsToJob(generic, [
+    { roomKey: 'bathroom::primary', traits: ['vanity'] },
+    { roomKey: 'bathroom::1', traits: ['tub'] },
+  ]);
+  assert.equal(two.find((segment) => segment.roomType === 'bathroom')!.roomKey, 'bathroom::');
+
+  assert.equal(
+    resolveRoomKeyAgainstJob('bathroom::', ['vanity'], [{ roomKey: 'bathroom::primary', traits: ['shower'] }]),
+    'bathroom::',
+  );
+});
+
+test('room unclear spans are not clip chips', () => {
+  const chips = clipRoomChipSegments(segmentClipRooms(kitchen));
+  assert.ok(chips.length >= 1);
+  assert.ok(chips.every((segment) => segment.roomType !== 'unclear'));
+  assert.ok(chips.some((segment) => segment.roomName === 'kitchen'));
+});
+
+test('a room answer ignores a bathroom on another job', () => {
+  const answer = composeGroundedAsk('what was done in the bathroom?', [], {
+    orgId: 'org-a',
+    jobId: 'job-a',
+    access: 'org',
+    jobTitle: 'Open job',
+    clips: [
+      {
+        proofId: 'other',
+        jobId: 'job-b',
+        orgId: 'org-a',
+        title: 'Other bath',
+        workDate: '2026-09-01',
+        durationSeconds: 10,
+        transcript: '',
+        findings: {
+          actions: [{ atSeconds: 2, room: 'bathroom', action: 'remove', description: 'Removes the secret vault.' }],
+        },
+      },
+    ],
+  });
+  assert.match(answer, /not on file/);
+  assert.doesNotMatch(answer, /secret vault/);
 });
 
 test('a stored room fingerprint does not change when the same bounds are written back', () => {

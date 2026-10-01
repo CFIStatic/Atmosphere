@@ -1,171 +1,126 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { refreshClipRooms } from '../src/shared/roomPersist.js';
+import { backfillClipRooms, refreshClipRooms } from '../src/shared/roomPersist.js';
+
+type Row = Record<string, unknown>;
+
+function adminDouble(seed: {
+  proof: Row;
+  locations?: Row[];
+  segments?: Row[];
+  refreshError?: string;
+}) {
+  const calls: Array<{ op: string; table?: string; rows?: unknown; fn?: string; args?: unknown }> = [];
+  const from = (table: string) => {
+    let selectCols = '';
+    const api: Record<string, unknown> = {};
+    const chain = () => api;
+    api.select = (cols?: string) => {
+      selectCols = cols ?? '';
+      return chain();
+    };
+    api.eq = chain;
+    api.is = chain;
+    api.in = chain;
+    api.not = chain;
+    api.order = chain;
+    api.limit = chain;
+    api.update = (patch: unknown) => {
+      calls.push({ op: 'update', table, rows: patch });
+      return chain();
+    };
+    api.delete = () => {
+      calls.push({ op: 'delete', table });
+      return chain();
+    };
+    api.insert = (rows: unknown) => {
+      calls.push({ op: 'insert', table, rows });
+      return Promise.resolve({ data: null, error: null });
+    };
+    api.maybeSingle = () => {
+      if (table === 'job_proofs') return Promise.resolve({ data: seed.proof, error: null });
+      if (table === 'job_locations') {
+        return Promise.resolve({ data: { id: 'loc-primary', match_traits: ['vanity'] }, error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    };
+    api.then = (resolve: (value: unknown) => unknown, reject?: (err: unknown) => unknown) => {
+      let data: unknown = [];
+      if (table === 'job_locations' && selectCols.includes('room_key')) data = seed.locations ?? [];
+      if (table === 'clip_room_segments' && selectCols.includes('analysis_fingerprint')) data = seed.segments ?? [];
+      return Promise.resolve({ data, error: null }).then(resolve, reject);
+    };
+    return api;
+  };
+  return {
+    calls,
+    from,
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      calls.push({ op: 'rpc', fn, args });
+      if (fn === 'proofs_awaiting_room_backfill') {
+        return { data: [{ id: String(seed.proof.id) }], error: seed.refreshError ? { message: seed.refreshError } : null };
+      }
+      return { data: null, error: null };
+    },
+  };
+}
 
 const proof = {
-  id: 'g',
-  org_id: 'org',
-  job_id: 'job',
+  id: 'proof-1',
+  org_id: 'org-1',
+  job_id: 'job-1',
   title: 'Later bath',
-  work_date: '2026-09-04',
-  phase: 'after',
-  duration_seconds: 10,
-  actions: [
-    { atSeconds: 1, room: 'bathroom', action: 'inspect', description: 'Looks at the vanity.' },
-  ],
+  work_date: '2026-09-08',
+  phase: 'during',
+  duration_seconds: 12,
+  actions: [{ atSeconds: 2, room: 'bathroom', action: 'remove', description: 'Removes the old vanity.' }],
   narration: null,
   ai_findings: {
-    people: { count: 1 },
-    privacyRedactions: { ranges: [{ startSec: 1, endSec: 2 }] },
+    roomSegments: [{ startSec: 0, endSec: 12, room: 'bathroom', confidence: 0.8 }],
+    actions: [{ atSeconds: 2, room: 'bathroom', action: 'remove', description: 'Removes the old vanity.' }],
   },
   transcript_text: null,
   transcript_segments: null,
 };
 
-const sibling = {
-  id: 'p',
-  title: 'Primary',
-  work_date: '2026-09-01',
-  phase: 'before',
-  duration_seconds: 10,
-  actions: [
-    {
-      atSeconds: 1,
-      room: 'primary bathroom',
-      action: 'inspect',
-      description: 'Vanity on the north wall.',
-    },
-  ],
-  narration: null,
-  ai_findings: {},
-  transcript_text: null,
-  transcript_segments: null,
-};
+test('a later generic bathroom reuses the job primary room and writes segments atomically', async () => {
+  const admin = adminDouble({
+    proof,
+    locations: [{ room_key: 'bathroom::primary', match_traits: ['vanity'] }],
+  });
+  const result = await refreshClipRooms(admin as never, 'proof-1', 'analysis');
+  assert.equal(result.written, true);
+  const inserted = admin.calls.find((call) => call.op === 'insert' && call.table === 'clip_room_segments');
+  const rows = inserted?.rows as Array<{ room_key: string; location_id: string | null; room_name: string }>;
+  const bath = rows.find((row) => row.room_key.startsWith('bathroom'));
+  assert.ok(bath);
+  assert.equal(bath!.room_key, 'bathroom::primary');
+  assert.equal(bath!.room_name, 'primary bathroom');
+  assert.equal(bath!.location_id, 'loc-primary');
+  const rpc = admin.calls.find((call) => call.fn === 'set_proof_room_segments');
+  assert.ok(rpc);
+  const bounds = (rpc!.args as { p_segments: Array<{ room: string }> }).p_segments;
+  assert.ok(bounds.some((bound) => bound.room === 'primary bathroom'));
+  assert.equal(admin.calls.some((call) => call.op === 'update' && call.table === 'job_proofs'), false);
+});
 
-function query(result: { data: unknown; error: { message: string } | null }) {
-  const builder: {
-    select: () => typeof builder;
-    eq: () => typeof builder;
-    neq: () => typeof builder;
-    is: () => typeof builder;
-    insert: () => typeof builder;
-    update: () => typeof builder;
-    delete: () => typeof builder;
-    maybeSingle: () => Promise<typeof result>;
-    single: () => Promise<typeof result>;
-    then: (
-      onFulfilled: (value: typeof result) => unknown,
-      onRejected?: (reason: unknown) => unknown,
-    ) => Promise<unknown>;
-  } = {
-    select() {
-      return builder;
-    },
-    eq() {
-      return builder;
-    },
-    neq() {
-      return builder;
-    },
-    is() {
-      return builder;
-    },
-    insert() {
-      return builder;
-    },
-    update() {
-      return builder;
-    },
-    delete() {
-      return builder;
-    },
-    maybeSingle() {
-      return Promise.resolve(result);
-    },
-    single() {
-      return Promise.resolve(result);
-    },
-    then(onFulfilled, onRejected) {
-      return Promise.resolve(result).then(onFulfilled, onRejected);
-    },
-  };
-  return builder;
-}
+test('a user-corrected clip is not rewritten', async () => {
+  const admin = adminDouble({
+    proof,
+    locations: [{ room_key: 'bathroom::primary', match_traits: ['vanity'] }],
+    segments: [{ analysis_fingerprint: 'old', user_corrected: true }],
+  });
+  const result = await refreshClipRooms(admin as never, 'proof-1', 'backfill');
+  assert.equal(result.skipped, true);
+  assert.equal(result.written, false);
+  assert.equal(admin.calls.some((call) => call.fn === 'set_proof_room_segments'), false);
+});
 
-test('room refresh folds a later bathroom into the job room and does not rewrite findings', async () => {
-  const locationKeys: string[] = [];
-  const segmentKeys: string[] = [];
-  const findingWrites: unknown[] = [];
-  const rpcCalls: unknown[] = [];
-  let jobProofCalls = 0;
-  let inside = 0;
-  let maxInside = 0;
-
-  const admin = {
-    from(table: string) {
-      if (table === 'job_proofs') {
-        const call = jobProofCalls;
-        jobProofCalls += 1;
-        const isRow = call % 2 === 0;
-        const builder = query({ data: isRow ? proof : [sibling], error: null });
-        if (isRow) {
-          const read = builder.maybeSingle.bind(builder);
-          builder.maybeSingle = async () => {
-            inside += 1;
-            maxInside = Math.max(maxInside, inside);
-            await new Promise((resolve) => setTimeout(resolve, 15));
-            return read();
-          };
-          const update = builder.update.bind(builder);
-          builder.update = (payload?: unknown) => {
-            findingWrites.push(payload);
-            return update();
-          };
-        }
-        return builder;
-      }
-      if (table === 'job_locations') {
-        const builder = query({ data: { id: 'loc-primary' }, error: null });
-        builder.maybeSingle = () => Promise.resolve({ data: null, error: null });
-        const insert = builder.insert.bind(builder);
-        builder.insert = (payload?: { room_key?: string }) => {
-          if (payload?.room_key) locationKeys.push(payload.room_key);
-          return insert();
-        };
-        return builder;
-      }
-      if (table === 'clip_room_segments') {
-        const builder = query({ data: [], error: null });
-        const insert = builder.insert.bind(builder);
-        builder.insert = (rows?: Array<{ room_key?: string }>) => {
-          for (const row of rows ?? []) {
-            if (row.room_key) segmentKeys.push(row.room_key);
-          }
-          return insert();
-        };
-        return builder;
-      }
-      return query({ data: null, error: null });
-    },
-    async rpc(fn: string, args: Record<string, unknown>) {
-      assert.equal(fn, 'set_proof_room_segments');
-      rpcCalls.push(args);
-      inside -= 1;
-      return { error: null };
-    },
-  };
-
-  const [first, second] = await Promise.all([
-    refreshClipRooms(admin, 'g', 'analysis'),
-    refreshClipRooms(admin, 'g', 'analysis'),
-  ]);
-  assert.equal(first.written, true);
-  assert.equal(second.written, true);
-  assert.equal(maxInside, 1);
-  assert.deepEqual(locationKeys, ['bathroom::primary', 'bathroom::primary']);
-  assert.ok(segmentKeys.every((key) => key === 'bathroom::primary'));
-  assert.equal(segmentKeys.length, 2);
-  assert.equal(findingWrites.length, 0);
-  assert.equal(rpcCalls.length, 2);
-  assert.equal((rpcCalls[0] as { p_proof_id?: string }).p_proof_id, 'g');
+test('a dry run lists awaiting clips once and does not write', async () => {
+  const admin = adminDouble({ proof });
+  const result = await backfillClipRooms(admin as never, { apply: false, limit: 50 });
+  assert.equal(result.scanned, 1);
+  assert.equal(result.written, 0);
+  assert.equal(admin.calls.filter((call) => call.fn === 'proofs_awaiting_room_backfill').length, 1);
+  assert.equal(admin.calls.some((call) => call.op === 'insert'), false);
 });
