@@ -269,21 +269,33 @@ async function knownJobRooms(admin: Admin, jobId: string): Promise<KnownJobRoom[
 
 const BACKFILL_PAGE = 50;
 
+type AwaitingClip = { id: string; createdAt: string };
+type AwaitingCursor = { createdAt: string; id: string };
+
 async function proofsAwaitingRoomBackfill(
   admin: Admin,
   limit: number,
   opts?: { jobId?: string | null; orgId?: string | null },
-): Promise<string[]> {
+  cursor?: AwaitingCursor | null,
+): Promise<AwaitingClip[]> {
   const { data, error } = await admin.rpc('proofs_awaiting_room_backfill', {
     p_limit: limit,
     p_job_id: opts?.jobId ?? null,
     p_org_id: opts?.orgId ?? null,
+    p_after: cursor?.createdAt ?? null,
+    p_after_id: cursor?.id ?? null,
   });
   if (error) throw new Error(error.message || 'Could not list clips awaiting room backfill.');
   const rows = Array.isArray(data) ? data : [];
-  return rows
-    .map((row) => (row && typeof row === 'object' ? String((row as { id?: unknown }).id ?? '') : ''))
-    .filter(Boolean);
+  const clips: AwaitingClip[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const id = String((row as { id?: unknown }).id ?? '');
+    if (!id) continue;
+    const createdAt = String((row as { created_at?: unknown }).created_at ?? '');
+    clips.push({ id, createdAt });
+  }
+  return clips;
 }
 
 export type RoomBackfillFailure = { id: string; reason: string };
@@ -298,9 +310,10 @@ export type RoomBackfillResult = {
 
 /**
  * Clips with no room rows and no stored roomSegments key. A dry run reads
- * one page and writes nothing, so the same ids are not fetched again.
- * Apply walks pages until the cap or the queue is empty. An id that fails
- * is remembered for this run so a single error cannot spin the loop.
+ * one page and writes nothing. Apply walks a keyset cursor (created_at, id)
+ * until the cap or the queue is empty. A failed or skipped clip stays
+ * awaiting, so the next page starts after the last row read instead of
+ * asking for the same oldest page again.
  */
 export async function backfillClipRooms(
   admin: Admin,
@@ -317,21 +330,35 @@ export async function backfillClipRooms(
   let skipped = 0;
   let failed = 0;
   const failures: RoomBackfillFailure[] = [];
+  let cursor: AwaitingCursor | null = null;
+  const attempt = async (id: string) => {
+    seen.add(id);
+    try {
+      const result = await refreshClipRooms(admin, id, 'backfill');
+      if (result.written) written += 1;
+      else skipped += 1;
+    } catch (err) {
+      failed += 1;
+      failures.push({ id, reason: err instanceof Error && err.message ? err.message : String(err) });
+    }
+  };
   while (seen.size < limit) {
-    const page = await proofsAwaitingRoomBackfill(admin, Math.min(BACKFILL_PAGE, limit - seen.size), opts);
-    const fresh = page.filter((id) => !seen.has(id));
-    if (!fresh.length) break;
-    for (const id of fresh) {
-      if (seen.size >= limit) break;
-      seen.add(id);
-      try {
-        const result = await refreshClipRooms(admin, id, 'backfill');
-        if (result.written) written += 1;
-        else skipped += 1;
-      } catch (err) {
-        failed += 1;
-        failures.push({ id, reason: err instanceof Error && err.message ? err.message : String(err) });
+    const page = await proofsAwaitingRoomBackfill(admin, Math.min(BACKFILL_PAGE, limit - seen.size), opts, cursor);
+    if (!page.length) break;
+    const last = page[page.length - 1]!;
+    const advanced = Boolean(last.createdAt) && (!cursor || last.id !== cursor.id || last.createdAt !== cursor.createdAt);
+    if (!advanced) {
+      for (const row of page) {
+        if (seen.has(row.id) || seen.size >= limit) continue;
+        await attempt(row.id);
       }
+      break;
+    }
+    cursor = { createdAt: last.createdAt, id: last.id };
+    for (const row of page) {
+      if (seen.has(row.id)) continue;
+      if (seen.size >= limit) break;
+      await attempt(row.id);
     }
   }
   return { scanned: seen.size, written, skipped, failed, failures };

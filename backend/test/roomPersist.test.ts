@@ -116,6 +116,83 @@ test('a user-corrected clip is not rewritten', async () => {
   assert.equal(admin.calls.some((call) => call.fn === 'set_proof_room_segments'), false);
 });
 
+test('a full page of failing clips does not block the clips after them', async () => {
+  const page = 50;
+  const failing = Array.from({ length: page }, (_, index) => ({
+    id: `fail-${String(index).padStart(2, '0')}`,
+    created_at: `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+  }));
+  const good = [
+    { id: 'good-1', created_at: '2026-01-02T00:00:00.000Z' },
+    { id: 'good-2', created_at: '2026-01-02T00:01:00.000Z' },
+  ];
+  const queue = [...failing, ...good];
+  const calls: Array<{ fn?: string; args?: Record<string, unknown> }> = [];
+  const from = (table: string) => {
+    let idFilter = '';
+    const api: Record<string, unknown> = {};
+    const chain = () => api;
+    api.select = chain;
+    api.eq = (column: string, value: unknown) => {
+      if (column === 'id') idFilter = String(value);
+      return chain();
+    };
+    api.is = chain;
+    api.in = chain;
+    api.not = chain;
+    api.order = chain;
+    api.limit = chain;
+    api.update = chain;
+    api.delete = chain;
+    api.insert = () => Promise.resolve({ data: null, error: null });
+    api.maybeSingle = () => {
+      if (table === 'job_proofs' && idFilter.startsWith('fail-')) {
+        return Promise.resolve({ data: null, error: { message: `failed ${idFilter}` } });
+      }
+      if (table === 'job_proofs') return Promise.resolve({ data: { ...proof, id: idFilter }, error: null });
+      if (table === 'job_locations') {
+        return Promise.resolve({ data: { id: 'loc-primary', match_traits: ['vanity'] }, error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    };
+    api.then = (resolve: (value: unknown) => unknown, reject?: (err: unknown) => unknown) => {
+      const data = table === 'job_locations' ? [{ room_key: 'bathroom::primary', match_traits: ['vanity'] }] : [];
+      return Promise.resolve({ data, error: null }).then(resolve, reject);
+    };
+    return api;
+  };
+  const admin = {
+    from,
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      calls.push({ fn, args });
+      if (fn !== 'proofs_awaiting_room_backfill') return { data: null, error: null };
+      const afterAt = args.p_after == null ? '' : String(args.p_after);
+      const afterId = args.p_after_id == null ? '' : String(args.p_after_id);
+      const start = queue.findIndex((row) => {
+        if (!afterAt) return true;
+        if (row.created_at > afterAt) return true;
+        return row.created_at === afterAt && row.id > afterId;
+      });
+      const fromIndex = start < 0 ? queue.length : start;
+      const limit = Number(args.p_limit);
+      return { data: queue.slice(fromIndex, fromIndex + limit), error: null };
+    },
+  };
+  const result = await backfillClipRooms(admin as never, { apply: true, limit: page + good.length });
+  assert.equal(result.failed, page);
+  assert.equal(result.written, good.length);
+  assert.equal(result.skipped, 0);
+  assert.deepEqual(
+    result.failures.map((failure) => failure.id),
+    failing.map((row) => row.id),
+  );
+  const pages = calls.filter((call) => call.fn === 'proofs_awaiting_room_backfill');
+  assert.equal(pages[0]?.args?.p_after, null);
+  assert.equal(pages[1]?.args?.p_after_id, failing[page - 1]!.id);
+  const written = calls.filter((call) => call.fn === 'set_proof_room_segments').map((call) => call.args?.p_proof_id);
+  assert.deepEqual(written, ['good-1', 'good-2']);
+});
+
 test('a dry run lists awaiting clips once and does not write', async () => {
   const admin = adminDouble({ proof });
   const result = await backfillClipRooms(admin as never, { apply: false, limit: 50 });
