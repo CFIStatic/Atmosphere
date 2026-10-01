@@ -25,6 +25,7 @@ import {
   extractSparseFramesFromUrl,
   type CommandRunner,
 } from './sparseExtract.js';
+import { parseRoomSegmentPayload, roomDisplayName } from './roomIntelligence.js';
 import { parseVisionActions, type VisionAction } from './proofActions.js';
 import {
   eventsFromActions,
@@ -93,6 +94,8 @@ export type VideoDictationResult = {
   privacyRedactions: PrivacyRedactionRange[];
   /** Child privacy intervals (age appearance child vs adult only — never identify). */
   childPrivacyRedactions: ChildPrivacyRange[];
+  /** Timed rooms from the same vision JSON. Empty when the model omitted them. */
+  roomSegments: Array<{ startSec: number; endSec: number; room: string; confidence: number }>;
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -212,6 +215,7 @@ export async function dictatePreparedFrames(
     'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, fixtures, equipment, damage/conditions, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
     'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
     'Name the room or area when you can see it. If you cannot tell, write "room unclear" rather than inventing one.',
+    'ROOM SEGMENTS: also emit roomSegments covering the clip in order, {startSec,endSec,room,confidence}. room is the area visible in those stills (kitchen, primary bathroom, hallway). Use "room unclear" when the stills do not show which room. Do not invent a second bathroom or any room name. Split only when the camera enters a different room. confidence is 0 to 1.',
     'CONTEXT/WHY: when job phase, scope line, or situation is visible or given in Context, state it; otherwise leave it out — do not invent why.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
     'PEOPLE: list every distinct visible person in "people". Use labels like "Person 1 (crew-like)" or "Person 2 (homeowner-like)". Include appearance (PPE, clothing, build) when identity is unknown.',
@@ -231,7 +235,7 @@ export async function dictatePreparedFrames(
     'atSeconds MUST match a provided frame timestamp.',
     'PRIVACY: when stills show a bathroom/toilet/shower, locker/changing room, explicit undressing, or clearly intimate/private space not meant for work evidence, add privacyRedactions ranges {startSec,endSec,reason,confidence}. Prefer over-redacting private spaces over leaking them. Mark confidence; never invent a private room that is not evidenced. Empty array when nothing private is visible.',
     'CHILD PRIVACY (protective only): when stills show a person who appears to be a minor (child/infant/toddler/teen by appearance), add childPrivacyRedactions ranges {startSec,endSec,reason,confidence,regions?}. ageAppearance on people must be only "child", "adult", or "cannotTell" — NEVER invent names, NEVER reverse-search faces of children, NEVER identify minors. Skip cannotTell. Prefer over-redacting when clearly a child. Optional regions are normalized 0-1 face/body boxes. Empty array when no child is evidenced.',
-    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","ageAppearance":"adult","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}],"privacyRedactions":[{"startSec":60,"endSec":95,"reason":"bathroom","confidence":0.85}],"childPrivacyRedactions":[{"startSec":40,"endSec":70,"reason":"child present","confidence":0.85,"regions":[{"x":0.2,"y":0.1,"w":0.15,"h":0.25}]}]}',
+    'Reply with JSON only: {"narration":"...","summary":"...","people":[{"id":"person-1","label":"Person 1 (crew-like)","role":"crew","appearance":"hard hat, high-vis vest","ageAppearance":"adult","appearMoments":[{"tSec":12,"note":"enters bathroom"}],"speakerLabel":null}],"events":[{"t_seconds":12,"description":"...","type":"scene"}],"actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}],"roomSegments":[{"startSec":0,"endSec":40,"room":"kitchen","confidence":0.8}],"privacyRedactions":[{"startSec":60,"endSec":95,"reason":"bathroom","confidence":0.85}],"childPrivacyRedactions":[{"startSec":40,"endSec":70,"reason":"child present","confidence":0.85,"regions":[{"x":0.2,"y":0.1,"w":0.15,"h":0.25}]}]}',
     'actions may be an empty array. people may be empty when nobody is visible. events may be empty — prefer an empty events array over a single t=0 dump that restates the summary. privacyRedactions and childPrivacyRedactions may be empty.',
   ].join(' ');
 
@@ -319,6 +323,7 @@ export async function dictatePreparedFrames(
     people: parsed.people,
     privacyRedactions: parsed.privacyRedactions,
     childPrivacyRedactions: parsed.childPrivacyRedactions,
+    roomSegments: parsed.roomSegments,
   };
 }
 
@@ -411,6 +416,7 @@ async function dictateWithGemini(input: {
     people: parsed.people,
     privacyRedactions: parsed.privacyRedactions,
     childPrivacyRedactions: parsed.childPrivacyRedactions,
+    roomSegments: parsed.roomSegments,
   };
 }
 
@@ -480,6 +486,7 @@ export function parseDictationPayload(
   people: unknown[];
   privacyRedactions: PrivacyRedactionRange[];
   childPrivacyRedactions: ChildPrivacyRange[];
+  roomSegments: Array<{ startSec: number; endSec: number; room: string; confidence: number }>;
 } {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -493,6 +500,7 @@ export function parseDictationPayload(
       people: [],
       privacyRedactions: [],
       childPrivacyRedactions: [],
+      roomSegments: [],
     };
   }
   try {
@@ -508,6 +516,8 @@ export function parseDictationPayload(
       privacy_redactions?: unknown;
       childPrivacyRedactions?: unknown;
       child_privacy_redactions?: unknown;
+      roomSegments?: unknown;
+      room_segments?: unknown;
     };
     const narration = String(data.narration ?? '').trim();
     const summary = String(data.summary ?? '').trim() || null;
@@ -524,6 +534,12 @@ export function parseDictationPayload(
       childPrivacyRedactions: parseChildPrivacyRedactions(
         data.childPrivacyRedactions ?? data.child_privacy_redactions,
       ),
+      roomSegments: parseRoomSegmentPayload(data.roomSegments ?? data.room_segments).map((span) => ({
+        startSec: span.start,
+        endSec: span.end,
+        room: roomDisplayName(span.identity),
+        confidence: span.confidence,
+      })),
     };
   } catch {
     const trimmed = text.trim();
@@ -535,6 +551,7 @@ export function parseDictationPayload(
       people: [],
       privacyRedactions: [],
       childPrivacyRedactions: [],
+      roomSegments: [],
     };
   }
 }

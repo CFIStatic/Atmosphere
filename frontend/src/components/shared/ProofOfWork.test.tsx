@@ -478,4 +478,66 @@ describe('ProofOfWork video collection', () => {
     await user.click(chip);
     expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
   });
+
+  it('shows room chips and the job rooms list, and a chip seeks into the clip', async () => {
+    const user = userEvent.setup();
+    const withRooms: ProofResponse = {
+      ...catalog,
+      rooms: [
+        {
+          roomKey: 'kitchen::',
+          roomName: 'kitchen',
+          firstSeen: '2026-08-20',
+          lastSeen: '2026-08-20',
+          datesWorked: ['2026-08-20'],
+          traits: ['cabinet'],
+          sightings: [
+            {
+              proofId: 'proof-morning',
+              clipTitle: 'Morning clip',
+              workDate: '2026-08-20',
+              startSeconds: 12,
+              findings: [
+                { kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 },
+              ],
+            },
+          ],
+        },
+      ],
+      videos: [
+        {
+          ...catalog.videos![0]!,
+          rooms: [
+            {
+              roomName: 'room unclear',
+              roomKey: 'unclear::',
+              startSeconds: 0,
+              endSeconds: 12,
+              confidence: 0.3,
+              findings: [],
+            },
+            {
+              roomName: 'kitchen',
+              roomKey: 'kitchen::',
+              startSeconds: 12,
+              endSeconds: 40,
+              confidence: 0.8,
+              findings: [
+                { kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 },
+              ],
+            },
+          ],
+        },
+        catalog.videos![1]!,
+      ],
+    };
+    render(<ProofOfWork jobId="job-1" heading="Videos" initialData={withRooms} />);
+    expect(screen.getByTestId('job-rooms')).toHaveTextContent('kitchen');
+    expect(screen.getByTestId('job-rooms')).toHaveTextContent('Installs the cabinet boxes along the east wall.');
+    const chip = screen.getByRole('button', { name: 'Jump to kitchen at 0:12' });
+    expect(screen.getByTestId('clip-room-chips')).toContainElement(chip);
+    expect(screen.queryByRole('button', { name: /room unclear/i })).toBeNull();
+    await user.click(chip);
+    expect(screen.getByTestId('job-video-expansion')).toBeInTheDocument();
+  });
 });

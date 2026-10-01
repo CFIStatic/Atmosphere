@@ -27,6 +27,7 @@ import {
   type ResearchComplete,
 } from './askResearch.js';
 import { activitySystemAddendum } from './mentions.js';
+import { answerRoomQuestion, isRoomQuestion, roomClipsFromLookupClips, segmentClipRooms } from './roomIntelligence.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import {
   askClockSystemRules,
@@ -1199,6 +1200,25 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 function groundedAnswerCore(question: string, record: ClipAskRecord): string {
   const q = question.trim();
   if (isSpeechCountQuestion(q)) return speechCountAnswer(record);
+  if (isRoomQuestion(q)) {
+    const roomAnswer = answerRoomQuestion(
+      q,
+      roomClipsFromLookupClips([
+        {
+          proofId: 'clip',
+          title: record.company || 'This clip',
+          workDate: record.workDate,
+          phase: record.phase,
+          durationSeconds: record.durationSeconds,
+          transcript: record.transcript,
+          findings: { actions: record.actions ?? [], events: record.dictationEntries ?? [] },
+          privacyRedactions: record.privacyRedactions,
+          childPrivacyRedactions: record.childPrivacyRedactions,
+        },
+      ]),
+    );
+    if (roomAnswer) return roomAnswer;
+  }
   const heardRows = splitTranscript(record.transcript);
   // "Who is talking?" with nothing transcribed: nobody is heard.
   if (/\b(talking|speaking|said|says|saying|voice|voices)\b/i.test(q) && !heardRows.length && !isTranscriptPending(record.transcriptStatus)) {
@@ -1510,6 +1530,21 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.conversationRooms ?? []).length) {
     lines.push(`Rooms mentioned on the mic: ${record.conversationRooms!.join(', ')}`);
+  }
+  const visualRooms = segmentClipRooms({
+    proofId: 'clip',
+    durationSeconds: record.durationSeconds,
+    actions: record.actions,
+    events: record.dictationEntries,
+    privacyRedactions: record.privacyRedactions,
+    childPrivacyRedactions: record.childPrivacyRedactions,
+  }).filter((segment) => segment.roomType !== 'unclear');
+  if (visualRooms.length) {
+    lines.push(
+      `Rooms visible on camera: ${visualRooms
+        .map((segment) => `${segment.roomName} ${formatClipTime(segment.startSeconds) ?? ''}`.trim())
+        .join('; ')}`,
+    );
   }
   if (hasPeople(people)) {
     lines.push('People present:');

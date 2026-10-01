@@ -27,11 +27,13 @@ import {
   asksAboutOtherJobs,
   clipsInScope,
   executeAskLookup,
+  roomClipsFromCatalog,
   type AskLookupCatalog,
   type AskLookupClip,
   type AskLookupTraceStep,
 } from './askLookup.js';
 import { formatAskClock, formatAskDate } from './askMoments.js';
+import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { speakerLabelOrUnidentified, UNIDENTIFIED_SPEAKER, UNIDENTIFIED_SPEAKER_PROSE } from './askSpeakers.js';
 import { chunkClipTranscript, retrieveAskEvidence, searchPhrases, type TranscriptChunk } from './askTranscriptIndex.js';
 import {
@@ -107,7 +109,8 @@ export type ResearchToolResult = { step: AskLookupTraceStep; records: ResearchRe
 export type ResearchToolRunner = (call: ResearchCall, signal: AbortSignal) => Promise<ResearchToolResult>;
 
 const PLAN_SYSTEM = `You plan the next retrieval step for a job-file question. Reply with JSON only: {"calls":[{"tool":"search_transcripts","query":"..."}]}
-Tools: search_transcripts (query), get_clip (proofId), read_job_history, read_job_fields, list_clips, list_person_activity (name), search_other_jobs (query), web_search (query).
+Tools: search_transcripts (query), get_clip (proofId), read_job_history, read_job_fields, list_clips, list_person_activity (name), lookup_room (query, room), search_other_jobs (query), web_search (query).
+lookup_room when the question names a room (kitchen, bathroom, damage in a room, work on a date, how long a room took).
 Use only proof ids from the clip index. search_other_jobs only when the question is about other jobs. web_search only when the question explicitly asks to search the web. Do not write the answer.`;
 
 const SUFFICIENCY_SYSTEM = `You check whether retrieved evidence answers the question. Reply with JSON only: {"sufficient":true,"covered":["part"],"gaps":["part still open"]}
@@ -122,6 +125,7 @@ No hidden markers, no ⟦tags⟧, no raw ids. Clean markdown. A table when compa
 export function routeAskResearch(question: string): { route: 'single' | 'research'; reason: string } {
   const q = question.trim();
   if (!q) return { route: 'single', reason: 'empty' };
+  if (isRoomQuestion(q)) return { route: 'research', reason: 'room' };
   if (/\b(what(?:'s| has| have)? changed|what changed|between the first|between the last|first and last visit|timeline|over time)\b/i.test(q)) {
     return { route: 'research', reason: 'timeline' };
   }
@@ -172,6 +176,11 @@ export function catalogFromClipRecord(
     transcript: record.transcript ?? null,
     privacyRedactions: record.privacyRedactions,
     childPrivacyRedactions: record.childPrivacyRedactions,
+    durationSeconds: record.durationSeconds ?? null,
+    findings: {
+      actions: record.actions ?? [],
+      events: record.dictationEntries ?? [],
+    },
   };
   return {
     orgId,
@@ -306,6 +315,7 @@ function heuristicCalls(question: string, catalog: AskLookupCatalog, pad: Resear
   };
   push({ name: 'list_clips', input: {} });
   push({ name: 'read_job_fields', input: {} });
+  if (isRoomQuestion(question)) push({ name: 'lookup_room', input: { query: question.slice(0, 240) } });
 
   const person = (catalog.people ?? []).find((row) => row.name && question.toLowerCase().includes(row.name.toLowerCase()));
   if (person) push({ name: 'list_person_activity', input: { name: person.name } });
@@ -630,6 +640,19 @@ async function runCall(
   if (call.name === 'read_job_history') {
     records.push(...fieldRecords(catalog).filter((record) => record.kind === 'history'));
   }
+  if (call.name === 'lookup_room' && result.ok && result.summary.trim()) {
+    records.push({
+      id: `room:${String(call.input.query ?? call.input.room ?? 'room').slice(0, 80)}`,
+      kind: 'field',
+      proofId: null,
+      jobId: catalog.jobId,
+      clipTitle: null,
+      startSec: null,
+      speaker: null,
+      text: result.summary.trim(),
+      cite: null,
+    });
+  }
   return { step: { tool: call.name, input: call.input, result }, records };
 }
 
@@ -653,6 +676,7 @@ const TOOLS = new Set([
   'read_job_fields',
   'list_clips',
   'list_person_activity',
+  'lookup_room',
   'search_other_jobs',
   'web_search',
 ]);
@@ -669,6 +693,7 @@ function callsFromModel(parsed: Record<string, unknown>, question: string, catal
     if (name === 'web_search' && !(looksLikeExplicitWebSearchRequest(question) && shouldSupplementWithWebSearch(question))) continue;
     const input: Record<string, unknown> = {};
     if (row.query) input.query = String(row.query).slice(0, 240);
+    if (row.room) input.room = String(row.room).slice(0, 80);
     if (row.proofId) input.proofId = String(row.proofId);
     if (row.name && name === 'list_person_activity') input.name = String(row.name);
     calls.push({ name, input });
@@ -837,6 +862,8 @@ function deterministicAnswer(
   history?: Array<{ role?: string | null; text?: string | null }> | null,
   memory?: LongThreadMemory | null,
 ): string {
+  const roomAnswer = answerRoomQuestion(question, roomClipsFromCatalog(catalog));
+  if (roomAnswer) return roomAnswer;
   // "on other jobs" already has a composer. Use it so that reply stays the one
   // the single pass writes. A similar-job comparison still quotes both files.
   if (isCrossJobQuestion(question) && !asksAboutOtherJobs(question)) {
@@ -912,7 +939,9 @@ export async function runAskResearch(input: {
   const traceSteps: AskLookupTraceStep[] = [];
   const ran = new Set<string>();
   const steps: AskResearchStep[] = [];
-  const modelOn = Boolean(input.complete) || isAskModelConfigured(input.anthropicApiKey);
+  // Room answers stay on the grounded room record. The loop still runs lookup_room.
+  // A planner model is not asked to invent rooms, damage, or dates.
+  const modelOn = !isRoomQuestion(input.question) && (Boolean(input.complete) || isAskModelConfigured(input.anthropicApiKey));
   const stable = scopeStable(input.catalog);
   let stop: AskResearchStop = 'max_steps';
   const runTool: ResearchToolRunner =

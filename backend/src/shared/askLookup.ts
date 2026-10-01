@@ -12,6 +12,7 @@
  * - another org's rows are dropped even if they were passed in
  */
 import { transcriptLineCount } from './speechCount.js';
+import { answerRoomQuestion, isRoomQuestion, roomClipsFromLookupClips, type RoomClipInput } from './roomIntelligence.js';
 import {
   CHILD_PRIVACY_REDACTED_LABEL,
   childPrivacyRedactionsFromStored,
@@ -81,6 +82,7 @@ export type AskLookupClip = {
   recordedByUserIds?: string[] | null;
   /** When the clip was filmed. Ask's grounding check allows its local time. */
   capturedAt?: string | null;
+  durationSeconds?: number | null;
 };
 
 export type AskLookupHistoryEvent = {
@@ -130,7 +132,8 @@ export type AskLookupToolName =
   | 'search_other_jobs'
   | 'get_clip'
   | 'list_person_activity'
-  | 'read_job_history';
+  | 'read_job_history'
+  | 'lookup_room';
 
 export type AskLookupResult = {
   ok: boolean;
@@ -204,6 +207,18 @@ export const ASK_LOOKUP_TOOLS: ToolDef[] = [
     name: 'read_job_history',
     description: 'Read job history events on this Ask\'s scope. Does not include other organizations.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'lookup_room',
+    description:
+      'Read room-tagged evidence on this job: which room a clip span is, damage, fixtures, and work, with clip name and seek time. Use for a question about a specific room, including work on a date and how long work in that room took.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The room question, including a date when one was asked.' },
+        room: { type: 'string', description: 'Room name, such as kitchen or primary bathroom.' },
+      },
+    },
   },
 ];
 
@@ -610,12 +625,16 @@ export function clipFromProofRow(
     transcript: row.transcript_text == null ? null : String(row.transcript_text),
     segments: asTimed(row.transcript_segments),
     words: asTimed(row.transcript_words),
-    findings,
+    findings: {
+      ...findings,
+      ...(Array.isArray(findings.actions) ? {} : Array.isArray(row.actions) ? { actions: row.actions } : {}),
+    },
     privacyRedactions: findings.privacyRedactions,
     childPrivacyRedactions: findings.childPrivacyRedactions,
     speakers,
     recordedByUserIds: [...new Set(recorded)],
     capturedAt: row.captured_at ? String(row.captured_at) : null,
+    durationSeconds: row.duration_seconds == null ? null : Number(row.duration_seconds),
   };
 }
 
@@ -1049,6 +1068,19 @@ export function readJobHistory(catalog: AskLookupCatalog): AskLookupResult {
   };
 }
 
+export function roomClipsFromCatalog(catalog: AskLookupCatalog): RoomClipInput[] {
+  return roomClipsFromLookupClips(clipsInScope(catalog));
+}
+
+function lookupRoom(catalog: AskLookupCatalog, question: string): AskLookupResult {
+  const asked = question.trim();
+  const answer = answerRoomQuestion(asked, roomClipsFromCatalog(catalog));
+  if (!answer) {
+    return { ok: false, tool: 'lookup_room', summary: 'That question does not name a room on this file.' };
+  }
+  return { ok: true, tool: 'lookup_room', summary: answer, data: { answer } };
+}
+
 export function executeAskLookup(
   name: string,
   rawInput: Record<string, unknown> | undefined,
@@ -1083,6 +1115,8 @@ export function executeAskLookup(
       return listPersonActivity(catalog, trim(input.name) || trim(input.person));
     case 'read_job_history':
       return readJobHistory(catalog);
+    case 'lookup_room':
+      return lookupRoom(catalog, trim(input.query) || trim(input.room));
     default:
       return { ok: false, tool: name, summary: `Unknown lookup tool: ${name}` };
   }
@@ -1320,6 +1354,7 @@ export function planAskLookup(
     return steps;
   }
   const steps: Array<{ name: AskLookupToolName; input: Record<string, unknown> }> = [];
+  if (isRoomQuestion(resolved)) steps.push({ name: 'lookup_room', input: { query: resolved.slice(0, 240) } });
   const q = resolved.toLowerCase();
   const person = (catalog.people ?? []).find((row) => resolved.toLowerCase().includes(row.name.toLowerCase()));
   if (person) steps.push({ name: 'list_person_activity', input: { name: person.name } });

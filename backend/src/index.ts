@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { listenHost, resolveWorkerRole, shouldRunSoldPathWorkers } from './bootFlags.js';
 import { config } from './config.js';
+import { scheduleClipRoomBackfill, stopClipRoomBackfill } from './lib/backfillClipRooms.js';
 import { schedulePlayableProofBackfill, stopPlayableProofBackfill } from './lib/backfillPlayableProofs.js';
 import { scheduleTimedTranscriptBackfill, stopTimedTranscriptBackfill } from './lib/backfillTimedTranscripts.js';
 import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
@@ -54,6 +55,8 @@ const server = app.listen(config.port, host, () => {
     schedulePlayableProofBackfill();
     // One-shot word-timing re-transcription ~60s after listen. PROOF_TIMED_TRANSCRIPT_BACKFILL_ON_BOOT=0 turns it off.
     scheduleTimedTranscriptBackfill();
+    // One-shot room segments for clips analyzed before room rows existed. PROOF_ROOM_BACKFILL_ON_BOOT=0 turns it off.
+    scheduleClipRoomBackfill();
     startProofPurgeSweep();
     startVerificationLeaseSweep();
     startSoldPathOutboxWorkers();
@@ -70,6 +73,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopProofAnalysisSweep();
     stopPlayableProofBackfill();
     stopTimedTranscriptBackfill();
+    stopClipRoomBackfill();
     stopProofPurgeSweep();
     stopSoldPathOutboxWorkers();
     stopDailyJobReportSweep();

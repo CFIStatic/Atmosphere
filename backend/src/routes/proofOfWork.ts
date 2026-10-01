@@ -1,4 +1,6 @@
 import { servableSummary } from '../audio/summaryServe.js';
+import { clipRoomChipSegments, matchRoomsAcrossClips, segmentClipRooms } from '../shared/roomIntelligence.js';
+import { refreshClipRooms, roomClipFromProofRow } from '../shared/roomPersist.js';
 import { clipProcessingInputOfProof } from '../shared/clipStatusOfProof.js';
 import { refreshProofSummary, queueSummaryRefresh } from '../audio/summaryQueue.js';
 import { staleSummaryPatch } from '../audio/summaryFreshness.js';
@@ -1626,6 +1628,11 @@ async function finishProofActions(
     actions,
     model: model ?? null,
   });
+  try {
+    await refreshClipRooms(admin, job.proofId, 'analysis');
+  } catch (err) {
+    console.warn('[rooms] persist failed', err instanceof Error ? err.message : err);
+  }
 }
 
 const narrationLocks = new Map<string, Promise<void>>();
@@ -2543,6 +2550,18 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       privacyRedactions: privacyRedactionsPayloadFromRow(row),
       childPrivacyRedactions: childPrivacyRedactionsPayloadFromRow(row),
       events: catalogEventsFromRow(row),
+      rooms: clipRoomChipSegments(segmentClipRooms(roomClipFromProofRow(row))).map((segment) => ({
+        roomName: segment.roomName,
+        roomKey: segment.roomKey,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        confidence: segment.confidence,
+        findings: segment.findings.map((finding) => ({
+          kind: finding.kind,
+          text: finding.text,
+          atSeconds: finding.atSeconds,
+        })),
+      })),
       dictationEntries,
       disputes: disputesForProof(disputes, row.id),
     };
@@ -2585,10 +2604,33 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
     })),
   });
 
+  const jobRooms = matchRoomsAcrossClips(rows.map((row) => roomClipFromProofRow(row)))
+    .filter((room) => room.roomType !== 'unclear')
+    .map((room) => ({
+      roomKey: room.roomKey,
+      roomName: room.roomName,
+      firstSeen: room.firstSeen,
+      lastSeen: room.lastSeen,
+      datesWorked: room.datesWorked,
+      traits: room.traits,
+      sightings: room.sightings.map((sighting) => ({
+        proofId: sighting.proofId,
+        clipTitle: sighting.clipTitle,
+        workDate: sighting.workDate,
+        startSeconds: sighting.startSeconds,
+        findings: sighting.findings.map((finding) => ({
+          kind: finding.kind,
+          text: finding.text,
+          atSeconds: finding.atSeconds,
+        })),
+      })),
+    }));
+
   return {
     job: jobMeta,
     days,
     videos,
+    rooms: jobRooms,
     disputes,
     punchList,
     counts: {

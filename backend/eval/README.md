@@ -76,6 +76,8 @@ Without a model configured the runner scores the deterministic path (retrieval â
 
 `multi_hop` questions are synthetic only. They ask what changed between visits, every time a topic was said across clips, or how this job compares with another job in the fixture (`orgProofs`).
 
+`room` questions ask about one room's work, damage, features, timeline, or duration: work in the kitchen on a date, work in the bathroom, how many weeks that bathroom work spans, damage in a named room, and a room that is not on file. Duration is measured from the dated clips for that room. The answer names the first and last clip and says when the file does not establish completion. A question that only mentions a room, such as who uploaded the living room clip or where the lockbox is, stays on the normal Ask path.
+
 The committed synthetic job mirrors the real regressions with made-up lines: a topic + owner question on a dated clip (both lines quoted verbatim with clip name and time, owner stated as an unidentified speaker), a spoken-line count ("how many spoken lines are in this clip" â†’ 5, all quoted), and a topic in no clip (not found, nothing improvised). The real versions run from the private gold.
 
 ## CI

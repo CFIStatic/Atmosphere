@@ -1118,6 +1118,235 @@
      }
     }
    ]
+  },
+  {
+   "id": "syn-job-rooms",
+   "consent": { "status": "synthetic" },
+   "timeZone": "America/Chicago",
+   "fixture": {
+    "job": {
+     "id": "00000000-0000-4000-8000-00000000d001",
+     "org_id": "00000000-0000-4000-8000-00000000d002",
+     "title": "Synthetic Room Job"
+    },
+    "parties": [
+     {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "company": null,
+      "trade": null,
+      "contact_name": null,
+      "created_by": null
+     }
+    ],
+    "proofs": [
+     {
+      "id": "00000000-0000-4000-8000-00000000d101",
+      "party_id": "00000000-0000-4000-8000-00000000d003",
+      "job_id": "00000000-0000-4000-8000-00000000d001",
+      "org_id": "00000000-0000-4000-8000-00000000d002",
+      "work_date": "2026-09-21",
+      "phase": "after",
+      "title": "Kitchen walkthrough",
+      "duration_seconds": 40,
+      "ai_summary": "Kitchen cabinets along the east wall.",
+      "ai_findings": {
+       "actions": [
+        {
+         "atSeconds": 12,
+         "room": "kitchen",
+         "action": "position",
+         "description": "Installs the cabinet boxes along the east wall."
+        }
+       ]
+      },
+      "transcript_text": "[0:04] The east wall is open.",
+      "transcript_segments": [
+       { "start": 4, "end": 6, "text": "The east wall is open.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000d102",
+      "party_id": "00000000-0000-4000-8000-00000000d003",
+      "job_id": "00000000-0000-4000-8000-00000000d001",
+      "org_id": "00000000-0000-4000-8000-00000000d002",
+      "work_date": "2026-09-03",
+      "phase": "before",
+      "title": "Bathroom start",
+      "duration_seconds": 30,
+      "ai_summary": "Bathroom vanity comes out.",
+      "ai_findings": {
+       "actions": [
+        {
+         "atSeconds": 8,
+         "room": "bathroom",
+         "action": "remove",
+         "description": "Removes the old vanity."
+        }
+       ]
+      },
+      "transcript_text": "[0:02] Starting in the bath.",
+      "transcript_segments": [
+       { "start": 2, "end": 4, "text": "Starting in the bath.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000d103",
+      "party_id": "00000000-0000-4000-8000-00000000d003",
+      "job_id": "00000000-0000-4000-8000-00000000d001",
+      "org_id": "00000000-0000-4000-8000-00000000d002",
+      "work_date": "2026-09-24",
+      "phase": "after",
+      "title": "Bathroom finish",
+      "duration_seconds": 36,
+      "ai_summary": "New vanity is set.",
+      "ai_findings": {
+       "actions": [
+        {
+         "atSeconds": 20,
+         "room": "bathroom",
+         "action": "position",
+         "description": "Sets the new vanity and caulks the seam."
+        }
+       ]
+      },
+      "transcript_text": "[0:10] Vanity is in place.",
+      "transcript_segments": [
+       { "start": 10, "end": 12, "text": "Vanity is in place.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000d104",
+      "party_id": "00000000-0000-4000-8000-00000000d003",
+      "job_id": "00000000-0000-4000-8000-00000000d001",
+      "org_id": "00000000-0000-4000-8000-00000000d002",
+      "work_date": "2026-09-10",
+      "phase": "before",
+      "title": "Living room close-up",
+      "duration_seconds": 20,
+      "ai_summary": "A crack above the living room window.",
+      "ai_findings": {
+       "actions": [
+        {
+         "atSeconds": 6,
+         "room": "living room",
+         "action": "inspect",
+         "description": "Crack in the drywall above the window."
+        }
+       ]
+      },
+      "transcript_text": "[0:03] Look at the wall.",
+      "transcript_segments": [
+       { "start": 3, "end": 5, "text": "Look at the wall.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     }
+    ]
+   },
+   "questions": [
+    {
+     "id": "room-kitchen-sep21",
+     "type": "room",
+     "question": "what work was completed in the kitchen on Sep 21?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": [
+       "Sep 21",
+       "kitchen",
+       "Installs the cabinet boxes along the east wall",
+       "Kitchen walkthrough",
+       "0:12"
+      ],
+      "mustNotContain": ["This file does not have that", "room unclear", "not on file"]
+     }
+    },
+    {
+     "id": "room-bathroom-work",
+     "type": "room",
+     "question": "what was done in the bathroom?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": [
+       "bathroom",
+       "Removes the old vanity",
+       "Sets the new vanity and caulks the seam",
+       "Bathroom start",
+       "Bathroom finish",
+       "Sep 3",
+       "Sep 24"
+      ],
+      "mustNotContain": ["This file does not have that", "not on file"]
+     }
+    },
+    {
+     "id": "room-bathroom-duration",
+     "type": "room",
+     "question": "how many weeks did it take to fix the bathroom?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": [
+       "Sep 3",
+       "Sep 24",
+       "about 3 weeks",
+       "does not establish completion",
+       "Bathroom start",
+       "Bathroom finish"
+      ],
+      "mustNotContain": ["not established", "does not show", "not on file", "This file does not have that"]
+     }
+    },
+    {
+     "id": "room-living-damage",
+     "type": "room",
+     "question": "what damage is in the living room?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": [
+       "Crack in the drywall above the window",
+       "Living room close-up",
+       "0:06",
+       "living room"
+      ],
+      "mustNotContain": ["not on file", "This file does not have that"]
+     }
+    },
+    {
+     "id": "room-attic-unknown",
+     "type": "room",
+     "question": "what damage is in the attic?",
+     "expect": {
+      "answerType": "abstain",
+      "mustContain": ["not on file", "attic"],
+      "mustNotContain": ["Crack in the drywall", "Installs the cabinet"]
+     }
+    },
+    {
+     "id": "room-uploader-not-room",
+     "type": "room",
+     "question": "who uploaded the living room clip?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["1 clip", "Sep 10"],
+      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
+     }
+    },
+    {
+     "id": "room-lockbox-not-room",
+     "type": "room",
+     "question": "where's the lockbox, by the living room?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["1 clip", "Sep 10"],
+      "mustNotContain": ["Crack in the drywall above the window", "Damage in the living room"]
+     }
+    }
+   ]
   }
  ]
 }

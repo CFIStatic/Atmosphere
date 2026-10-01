@@ -12,6 +12,8 @@
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
+import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
+import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
@@ -727,6 +729,14 @@ export async function answerFromJobFile(input: {
     emit(grounded);
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
+  if (!isAskModelConfigured(apiKey || null) && input.lookup && isRoomQuestion(input.question)) {
+    const roomAnswer = answerRoomQuestion(input.question, roomClipsFromCatalog(input.lookup));
+    if (roomAnswer) {
+      emit(roomAnswer);
+      return { ...empty, answer: roomAnswer, groundedOn, toolResults, webHits };
+    }
+  }
+
   if (!isAskModelConfigured(apiKey || null) && !(input.lookup && isLongMemoryQuestion(input.question))) {
     const toolOnly = toolResults.filter((r) => r.ok && r.tool !== 'web_search');
     if (webHits.length || webAnswer) {

@@ -9,6 +9,7 @@
  * Money, hours, and payability stay out of the model prompt either way.
  */
 
+import { segmentClipRooms } from './roomIntelligence.js';
 import { normalizeAnalysisTimeline } from './analysisTimeline.js';
 import { narrationEntriesFromEvents, sanitizeDictationEvents } from './dictationEvents.js';
 import { dictatePreparedFrames, type PreparedVideoFrames, type VideoDictationResult } from './videoIntelligence.js';
@@ -114,6 +115,19 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
     windowsRead: 0,
     actions: dictation.actions,
     events,
+    roomSegments: segmentClipRooms({
+      proofId: 'analysis',
+      actions: dictation.actions,
+      events: events.map((event) => ({ atSeconds: event.atSeconds, text: event.text, type: event.type })),
+      roomSegments: dictation.roomSegments,
+      privacyRedactions: dictation.privacyRedactions,
+      childPrivacyRedactions: dictation.childPrivacyRedactions,
+    }).map((segment) => ({
+      startSec: segment.startSeconds,
+      endSec: segment.endSeconds,
+      room: segment.roomName,
+      confidence: segment.confidence,
+    })),
     /** Raw vision people array — enrichProofConversation normalizes into ai_findings.people */
     visionPeople: Array.isArray(dictation.people) ? dictation.people : [],
     privacyRedactions: (() => {
