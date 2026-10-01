@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createUserClient } from '../lib/supabase.js';
+import { z } from 'zod';
+import { createAdminClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import {
@@ -8,7 +9,10 @@ import {
   analyticsOrgIdSchema,
   analyticsRangeSchema,
 } from '../lib/validation.js';
-import { HttpError } from '../lib/errors.js';
+import { forbidden, HttpError } from '../lib/errors.js';
+import { canGrantAiCredits } from '../metering/aiBudget.js';
+import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
+import { grantAiCredits, loadAiAllowance, publicAllowance } from '../metering/aiBudgetService.js';
 import {
   approveAccessRequests,
   countPendingAccessRequests,
@@ -347,3 +351,65 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
     next(err);
   }
 });
+
+/** Staff view of each org's AI spend against its allowance. */
+analyticsRouter.get(
+  '/ai-budgets',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!canGrantAiCredits(req.analyticsScope)) {
+        throw forbidden('Only Atmosphere staff can view AI budgets.', 'analytics_forbidden');
+      }
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Admin client is not configured.', 'no_admin');
+      const { data, error } = await admin.from('orgs').select('id, name').order('name').limit(100);
+      if (error) throw new HttpError(500, error.message, 'ai_budgets_failed');
+      const budgets = [];
+      for (const org of (data ?? []) as Array<{ id: string; name: string | null }>) {
+        const view = publicAllowance(await loadAiAllowance(admin, org.id));
+        budgets.push({ orgId: org.id, orgName: org.name, ...view });
+      }
+      res.json({ budgets });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Manual credit grant. Investors cannot reach this route. */
+analyticsRouter.post(
+  '/ai-budgets/:orgId/credits',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!canGrantAiCredits(req.analyticsScope)) {
+        throw forbidden('Only Atmosphere staff can grant AI credits.', 'analytics_forbidden');
+      }
+      const parsed = analyticsOrgIdSchema.safeParse(req.params.orgId);
+      if (!parsed.success) {
+        throw new HttpError(400, parsed.error.issues[0]?.message ?? 'Invalid org id', 'invalid_org');
+      }
+      const body = z
+        .object({
+          dollars: z.number().positive().max(100_000),
+          note: z.string().trim().max(500).optional(),
+        })
+        .parse(req.body ?? {});
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Admin client is not configured.', 'no_admin');
+      const deltaNanos = Math.round(body.dollars * 1_000_000_000 * aiBudgetConfig().creditUsdRatio);
+      const granted = await grantAiCredits(admin, {
+        orgId: parsed.data,
+        deltaNanos,
+        kind: 'admin_grant',
+        note: body.note ?? 'Manual credit grant',
+        actorId: req.user?.id ?? null,
+        requestId: `admin-grant:${req.user?.id ?? 'staff'}:${Date.now()}`,
+      });
+      res.status(201).json(granted);
+    } catch (err) {
+      next(err);
+    }
+  },
+);

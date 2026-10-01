@@ -15,6 +15,9 @@ import {
   PROOF_PLAYBACK_URL_TTL_SECONDS,
 } from '../lib/proofPlayableUrl.js';
 import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
+import { canPurchaseAiCredits } from '../metering/aiBudget.js';
+import { enterAiUsageScope } from '../metering/aiUsageContext.js';
+import { assertAiFeatureAllowed, isAiPaused, markProofBudgetHold } from '../metering/aiBudgetService.js';
 import { resolveUsageActor } from '../metering/usageAttribution.js';
 import { requireGlobalAdmin, requireOrgContext } from '../lib/orgContext.js';
 import { resolveOrgOrViewerAccess } from '../shared/jobProgressGrants.js';
@@ -224,7 +227,7 @@ const PROOF_SELECT =
   'narration, narration_text, narration_status, narration_error, narration_lease_until, actions, ' +
   'transcript_status, transcript_text, transcript_segments, transcript_words, transcript_error, transcribed_at, transcript_lease_until, ' +
   'summary_status, summary_transcript_sha256, summary_generated_at, summary_lease_until, ' +
-  'decided_at, decided_note, created_at, device_metadata';
+  'decided_at, decided_note, created_at, device_metadata, ai_budget_hold, ai_budget_hold_reason';
 
 /**
  * Page size while walking every clip on a job. Not a product cap — a job
@@ -2137,11 +2140,21 @@ export async function analyseUploadedProof(
     queueNarrationFn?: typeof queueNarration;
     queueDayAnalysisFn?: typeof queueDayAnalysis;
     queueTranscriptFn?: typeof queueProofTranscript;
+    /** Test seam. Production reads the org allowance. */
+    paused?: boolean;
   },
 ): Promise<'queued'> {
   const narrate = hooks?.queueNarrationFn ?? queueNarration;
   const analyseDay = hooks?.queueDayAnalysisFn ?? queueDayAnalysis;
   const transcribe = hooks?.queueTranscriptFn ?? queueProofTranscript;
+  const paused = hooks?.paused ?? (await isAiPaused(admin, party.org_id));
+  if (paused) {
+    await markProofBudgetHold(admin, proof.id, 'Waiting for AI allowance');
+    console.log(
+      `[proof-analysis] budget hold after upload proof=${proof.id} phase=${proof.phase} workDate=${workDate} party=${party.id}`,
+    );
+    return 'queued';
+  }
   console.log(
     `[proof-analysis] enqueue after upload proof=${proof.id} phase=${proof.phase} workDate=${workDate} party=${party.id}`,
   );
@@ -2828,6 +2841,25 @@ async function loadChatSessionDocuments(
   return viewsFromChatRows(chatSessionRows(data, jobId));
 }
 
+async function memberCanPurchaseAi(
+  supabase: any,
+  orgId: string,
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { data } = await supabase
+      .from('org_members')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    return canPurchaseAiCredits((data as { role?: string } | null)?.role);
+  } catch {
+    return false;
+  }
+}
+
 export async function runProofAsk(input: {
   supabase: any;
   orgId: string;
@@ -2859,6 +2891,17 @@ export async function runProofAsk(input: {
   webSources: AskWebSource[];
 }> {
     const { supabase, orgId, jobId, userId } = input;
+    enterAiUsageScope({
+      client: supabase,
+      orgId,
+      requestId: input.requestId,
+      jobId,
+      userId: userId ?? null,
+    });
+    const budgetClient = unscopedAdminOrNull() ?? supabase;
+    if (await isAiPaused(budgetClient, orgId)) {
+      await assertAiFeatureAllowed(budgetClient, orgId, { canManage: false });
+    }
     const clock = createAskTurnClock();
     const onToken = (text: string) => {
       if (text) clock.markFirstToken();
@@ -3440,7 +3483,7 @@ export async function runProofAsk(input: {
     recordMeasuredTokenUsage(supabase, {
       orgId,
       requestId: input.requestId,
-      feature: 'ask',
+      feature: result.research ? 'research' : 'ask',
       source: 'proof_ask',
       userId: userId ?? undefined,
       jobId,
@@ -3640,6 +3683,10 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         documentIds: z.array(z.string().uuid()).max(8).optional(),
       })
       .parse(req.body ?? {});
+    const canManage =
+      access === 'org' ? await memberCanPurchaseAi(supabase, orgId, userId) : false;
+    await assertAiFeatureAllowed(unscopedAdminOrNull() ?? supabase, orgId, { canManage });
+
     const wantsStream =
       String(req.query.stream ?? '') === '1' ||
       String(req.headers.accept ?? '').includes('application/x-ndjson');
@@ -3967,6 +4014,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
 
     const admin = unscopedAdminOrNull();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+    await assertAiFeatureAllowed(admin, orgId);
 
     const { data: filmRows } = await admin
       .from('job_proofs')

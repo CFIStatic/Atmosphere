@@ -50,6 +50,7 @@ export function billedUsageRateInputs(
   };
 }
 
-export function billedUsageRateClause(env: NodeJS.ProcessEnv = process.env): string {
-  return usageRateClause(billedUsageRateInputs(env));
+/** Customer-facing line. The allowance is the product; per-token invoice rates are not. */
+export function billedUsageRateClause(_env: NodeJS.ProcessEnv = process.env): string {
+  return 'Each plan includes an AI usage allowance. Buy credits if you need more.';
 }

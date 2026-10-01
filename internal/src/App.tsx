@@ -9,6 +9,7 @@ import { AccountDetailPage } from './pages/AccountDetailPage';
 import { UsagePage } from './pages/UsagePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
 import { MeteringPage } from './pages/MeteringPage';
+import { AiBudgetsPage } from './pages/AiBudgetsPage';
 import { TokenUsagePage } from './pages/TokenUsagePage';
 import { SystemPage } from './pages/SystemPage';
 import { AccessPage } from './pages/AccessPage';
@@ -39,6 +40,7 @@ export function App() {
             <Route path="usage" element={<UsagePage />} />
             <Route path="experiments" element={<ExperimentsPage />} />
             <Route path="metering" element={<MeteringPage />} />
+            <Route path="ai-budgets" element={<AiBudgetsPage />} />
             <Route path="token-usage" element={<TokenUsagePage />} />
             <Route path="legal" element={<LegalPage />} />
             <Route path="safety" element={<SafetyAlertsPage />} />

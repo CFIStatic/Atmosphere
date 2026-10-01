@@ -60,6 +60,7 @@ export function clipProcessingInputOfProof(proof: any): ClipProcessingInput {
     analysisActive: analysisLive,
     narrationActive: narrationLive,
     summaryActive: live(row.summary_status === 'stale' ? 'queued' : row.summary_status, row.summary_lease_until),
+    budgetHold: row.ai_budget_hold === true,
   };
 }
 

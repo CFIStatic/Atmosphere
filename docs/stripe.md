@@ -5,16 +5,18 @@ seat), **Work Verification** ($849/mo or $8,490/yr, 3 seats, the default), and
 **Scale** ($1,999/mo or $19,990/yr, 10 seats). Extra Field Capture seats are
 **$125/month** or **$1,250/year** each. Monthly is the default. Yearly is
 “pay yearly, get 2 months free” (10× the monthly price). The yearly prepay
-covers the plan and seats only — token/AI usage is still invoiced **the day it
-is used**. The annual rate is locked for the term; the 10% increase applies at
-renewal. Annual plans are non-refundable and cancel at the end of the term.
+covers the plan and seats. Each plan includes an AI usage allowance for the
+billing period. Optional credit packs add more allowance. The annual rate is
+locked for the term. Annual plans are non-refundable and cancel at the end of
+the term.
 Signup Checkout and Settings → Billing are that bill. Enterprise is
 contact-sales only — there is no fourth self-serve SKU. The Field Capture Chest
 Mount is a one-time **$49.99** Payment Link on the website.
 
-A leftover seat / LLM-credit catalog (`billing_plans`, credit packs) still has
-API and webhook handlers so existing Stripe events do not break. It is **not**
-shown in the app. Do not add UI for it unless that catalog is product again.
+A leftover seat / LLM-credit catalog (`billing_plans`, the old credit wallet)
+still has API and webhook handlers so existing Stripe events do not break. It
+is **not** the AI usage allowance. Do not revive that wallet. New credit packs
+are one-time Checkout prices for extra AI spend; see `docs/ai-usage-budgets.md`.
 
 Setting `STRIPE_SECRET_KEY` switches billing to Stripe. Without it the app
 falls back to `PAYMENT_PROVIDER=dev` locally (refused in production).

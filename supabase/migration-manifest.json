@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 178,
+    "migrationCount": 181,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3604
+    "finalObjects": 3620
   },
   "outOfOrder": [
     {
@@ -192,7 +192,10 @@
     "20261001143000_clip_room_segments.sql",
     "20261001161000_set_proof_room_segments.sql",
     "20261001170000_proofs_awaiting_room_backfill.sql",
-    "20261001180000_job_chat_documents.sql"
+    "20261001180000_job_chat_documents.sql",
+    "20261002120000_ai_usage_budgets.sql",
+    "20261002130000_ai_allowance_enforcement.sql",
+    "20261002140000_ai_budget_span_and_refund.sql"
   ],
   "migrations": [
     {
@@ -5855,6 +5858,78 @@
         "index|public.job_document_rooms.job_document_rooms_job_idx",
         "policy|public.job_document_rooms.job_document_rooms_select",
         "rls|public.job_document_rooms"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002120000_ai_usage_budgets",
+      "file": "20261002120000_ai_usage_budgets.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.ai_credit_ledger",
+        "index|public.ai_credit_ledger.ai_credit_ledger_pkey",
+        "index|public.ai_credit_ledger.ai_credit_ledger_stripe_event_uidx",
+        "index|public.ai_credit_ledger.ai_credit_ledger_request_uidx",
+        "index|public.ai_credit_ledger.ai_credit_ledger_org_idx",
+        "policy|public.ai_credit_ledger.ai_credit_ledger_select",
+        "rls|public.ai_credit_ledger",
+        "table|public.ai_usage_allocations",
+        "index|public.ai_usage_allocations.ai_usage_allocations_pkey",
+        "index|public.ai_usage_allocations.ai_usage_allocations_org_id_request_id_key",
+        "index|public.ai_usage_allocations.ai_usage_allocations_org_created_idx",
+        "policy|public.ai_usage_allocations.ai_usage_allocations_select",
+        "rls|public.ai_usage_allocations",
+        "table|public.ai_budget_price_spans",
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_pkey",
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_org_idx",
+        "policy|public.ai_budget_price_spans.ai_budget_price_spans_select",
+        "rls|public.ai_budget_price_spans",
+        "column|public.job_proofs.ai_budget_hold",
+        "column|public.job_proofs.ai_budget_hold_reason",
+        "index|public.job_proofs.job_proofs_ai_budget_hold_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002130000_ai_allowance_enforcement",
+      "file": "20261002130000_ai_allowance_enforcement.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.ai_credit_balance",
+        "function|public.ai_allowance_totals",
+        "function|public.settle_ai_usage",
+        "function|private.job_proofs_guard_budget_hold",
+        "trigger|public.job_proofs.job_proofs_guard_budget_hold"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002140000_ai_budget_span_and_refund",
+      "file": "20261002140000_ai_budget_span_and_refund.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_one_open_idx",
+        "function|public.record_subscription_price_span",
+        "column|public.ai_credit_ledger.stripe_charge_id",
+        "index|public.ai_credit_ledger.ai_credit_ledger_charge_idx",
+        "table|public.ai_credit_pack_clawbacks",
+        "index|public.ai_credit_pack_clawbacks.ai_credit_pack_clawbacks_pkey",
+        "rls|public.ai_credit_pack_clawbacks",
+        "table|public.ai_credit_pack_disputes",
+        "index|public.ai_credit_pack_disputes.ai_credit_pack_disputes_pkey",
+        "index|public.ai_credit_pack_disputes.ai_credit_pack_disputes_charge_idx",
+        "rls|public.ai_credit_pack_disputes",
+        "column|public.ai_credit_pack_disputes.stripe_dispute_id",
+        "function|public.apply_ai_credit_clawback"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

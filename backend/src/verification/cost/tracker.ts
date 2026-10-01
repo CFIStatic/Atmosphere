@@ -6,22 +6,22 @@ import { randomUUID } from 'node:crypto';
 import { verificationConfig } from '../config.js';
 import { estimatedUsdToNanos, recordTokenUsage } from '../../metering/tokenUsage.js';
 import { resolveUsageActor } from '../../metering/usageAttribution.js';
+import { modelPriceTable, tokenCostUsd } from '../../metering/modelPriceTable.js';
+import { isAiPaused } from '../../metering/aiBudgetService.js';
+import { unscopedAdminOrNull } from '../../lib/scopedAdmin.js';
 
 export function estimateCostUsd(
   provider: string,
   inputTokens: number,
   outputTokens: number,
+  modelId?: string | null,
 ): number {
-  const p = provider.toLowerCase();
-  const inRate =
-    p.includes('anthropic') || p.includes('claude')
-      ? verificationConfig.anthropicInputPerMTokUsd
-      : verificationConfig.geminiInputPerMTokUsd;
-  const outRate =
-    p.includes('anthropic') || p.includes('claude')
-      ? verificationConfig.anthropicOutputPerMTokUsd
-      : verificationConfig.geminiOutputPerMTokUsd;
-  return Number(((inputTokens / 1e6) * inRate + (outputTokens / 1e6) * outRate).toFixed(6));
+  const usd = tokenCostUsd(modelPriceTable(), {
+    provider,
+    modelId,
+    tokens: { inputTokens, outputTokens },
+  });
+  return Number((usd ?? 0).toFixed(6));
 }
 
 function monthStart(d = new Date()): string {
@@ -129,5 +129,10 @@ export async function wouldExceedBudget(
       : verificationConfig.defaultMonthlyBudgetUsd;
   if (budget <= 0) return false;
   const spent = await monthSpendUsd(supabase, orgId);
-  return spent + additionalUsd > budget;
+  if (spent + additionalUsd > budget) return true;
+  try {
+    return await isAiPaused(unscopedAdminOrNull() ?? supabase, orgId);
+  } catch {
+    return false;
+  }
 }
