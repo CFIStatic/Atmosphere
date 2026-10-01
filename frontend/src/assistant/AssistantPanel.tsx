@@ -42,7 +42,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
   const location = useLocation();
   const jobId = new URLSearchParams(location.search).get('job');
   const docs = useJobDocuments(jobId);
-  const [pending, setPending] = useState<AskAttachment[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<AskAttachment[]>([]);
   const [session, setSession] = useState<AskAttachment[]>([]);
 
   const { data: recommendations = [] } = useRecommendations();
@@ -71,17 +71,17 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
   async function attachFiles(files: File[]) {
     const cards = await docs.upload(files);
     if (!cards.length) return;
-    setPending((prev) => keepAttachments(prev, cards.map(chipFromDocument)));
+    setPendingFiles((prev) => keepAttachments(prev, cards.map(chipFromDocument)));
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const raw = draft.trim();
     if (!raw) return;
-    const sent = pending;
+    const sent = pendingFiles;
     const nextSession = keepAttachments(session, sent);
     if (nextSession.length) {
-      setPending([]);
+      setPendingFiles([]);
       setSession(nextSession);
       askAboutDocuments(raw, nextSession.map((file) => file.id), { jobId, attachments: sent });
       setDraft('');
@@ -269,13 +269,13 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
           if (files.length) void attachFiles(files);
         }}
       >
-        {pending.length > 0 && (
+        {pendingFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5" data-testid="ask-composer-attachments">
-            {pending.map((file) => (
+            {pendingFiles.map((file) => (
               <AskAttachmentChip
                 key={file.id}
                 file={file}
-                onRemove={() => setPending((prev) => prev.filter((row) => row.id !== file.id))}
+                onRemove={() => setPendingFiles((prev) => prev.filter((row) => row.id !== file.id))}
               />
             ))}
           </div>
