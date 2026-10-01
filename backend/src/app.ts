@@ -25,6 +25,7 @@ import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
+import { chatDocumentsRouter } from './routes/chatDocuments.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
@@ -153,6 +154,8 @@ export function createApp(): Express {
   // used to 413 here: six ~900px JPEGs as base64 routinely exceed the global
   // 256kb JSON cap ("That request body is too large."). Raise this route only.
   const proofRecordPath = /\/proof\/?$/;
+  // A 25 MB office file is about 33 MB once it is base64 inside JSON.
+  const chatDocumentPath = /^\/api\/operations\/documents\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
@@ -160,6 +163,7 @@ export function createApp(): Express {
   const voiceSampleJson = express.json({ limit: '2mb' });
   const safetySampleJson = express.json({ limit: '1.5mb' });
   const proofRecordJson = express.json({ limit: '2mb' });
+  const chatDocumentJson = express.json({ limit: '36mb' });
 
   app.use((req, res, next) => {
     const parse = avatarPath.test(req.path)
@@ -170,7 +174,9 @@ export function createApp(): Express {
         ? safetySampleJson
         : proofRecordPath.test(req.path) && req.method === 'POST'
           ? proofRecordJson
-          : standardJson;
+          : chatDocumentPath.test(req.path) && req.method === 'POST'
+            ? chatDocumentJson
+            : standardJson;
     parse(req, res, next);
   });
 
@@ -200,6 +206,7 @@ export function createApp(): Express {
   app.use('/api/metering', meteringRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/operations', chatDocumentsRouter);
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);

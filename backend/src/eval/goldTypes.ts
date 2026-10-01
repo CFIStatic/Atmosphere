@@ -86,6 +86,8 @@ export type GoldJob = {
     proofs: Array<Record<string, unknown>>;
     /** Other jobs in the same org. Synthetic only. Ask may read these on a cross-job question. */
     orgProofs?: Array<Record<string, unknown>>;
+    /** Synthetic uploaded documents. Ask quotes these instead of the transcript. */
+    documents?: Array<Record<string, unknown>>;
   };
   questions: GoldQuestion[];
 };

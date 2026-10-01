@@ -12,6 +12,7 @@ import { askLookupCatalogFromJob, clipFromProofRow } from '../shared/askLookup.j
 import { answerFromJobFile, type JobFileAskContext } from '../shared/jobFileAsk.js';
 import { answerFromAskLookup } from '../shared/askReasoning.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
+import { answerFromJobDocuments, documentChunksForGrounding, type AskDocumentView } from '../documents/answer.js';
 import { normalizeAskProse } from '../shared/askProse.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
 import { parseMomentSource, parseQuoteTrailer } from '../shared/askMoments.js';
@@ -39,6 +40,17 @@ function stubContext(): any {
 
 export const defaultJobAnswerFn: JobAnswerFn = async (question, job) => {
   const { fixture } = job;
+  const uploaded = (fixture.documents ?? []) as AskDocumentView[];
+  if (uploaded.length) {
+    const direct = answerFromJobDocuments(question, uploaded, []);
+    if (direct) {
+      const prose = normalizeAskProse(direct);
+      return enforceQuoteGrounding(prose, {
+        chunks: documentChunksForGrounding(uploaded),
+        question,
+      }).answer;
+    }
+  }
   const company = new Map(fixture.parties.map((party) => [String(party.id ?? ''), party.company ?? null]));
   const clips = collectionClipsFromRows(
     fixture.proofs.map((row) => ({ ...row, company: company.get(String(row.party_id ?? '')) ?? null })) as any,
@@ -122,6 +134,10 @@ export function jobEvidenceRecord(job: GoldJob): ClipAskRecord {
     } else if (row.transcript_text) {
       lines.push(...String(row.transcript_text).split('\n'));
     }
+  }
+  for (const doc of job.fixture.documents ?? []) {
+    const text = String((doc as { extractedText?: unknown }).extractedText ?? '').trim();
+    if (text) lines.push(text);
   }
   return { transcript: lines.join('\n'), analysisState: 'done', transcriptStatus: 'done' } as unknown as ClipAskRecord;
 }

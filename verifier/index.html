@@ -1906,7 +1906,29 @@
     align-self: flex-start; background: var(--line-soft); color: var(--ink);
     border-bottom-left-radius: 4px;
   }
-  .ask-bubble.pending { color: var(--muted); font-style: italic; }
+  .ask-bubble.pending { color: var(--muted); font-style: normal; }
+  .ask-dots { display: inline-flex; gap: 4px; align-items: center; height: 16px; }
+  .ask-dots i {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+    animation: ask-dot 1.1s ease-in-out infinite;
+  }
+  .ask-dots i:nth-child(2) { animation-delay: .15s; }
+  .ask-dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes ask-dot {
+    0%, 80%, 100% { transform: translateY(0); opacity: .4; }
+    40% { transform: translateY(-3px); opacity: 1; }
+  }
+  .ask-doc {
+    align-self: stretch; border: 1px solid var(--line); border-radius: 12px;
+    padding: 8px 10px; background: var(--panel); font-size: 12.5px; line-height: 1.45;
+  }
+  .ask-doc strong { display: block; font-size: 13px; }
+  .ask-doc .ask-doc-kind { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .ask-attach {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
+    border-radius: 999px; width: 34px; height: 34px; flex: none;
+  }
+  .ask-drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
   .ask-web-results { margin-top: 8px; white-space: normal; }
   .ask-web-results p { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
   .ask-web-results ul { margin: 0; padding-left: 1.15em; }
@@ -7548,7 +7570,13 @@
     apiFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question, history: history || [] })
+      body: JSON.stringify({
+        question: question,
+        history: history || [],
+        documentIds: (item._chatDocs || []).map(function (doc) { return doc.id; }).filter(function (id) {
+          return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''));
+        })
+      })
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
@@ -7689,6 +7717,18 @@
     return out;
   }
 
+  function chatDocCard(doc) {
+    if (!doc) return '';
+    var verdict = doc.relevance === 'related'
+      ? 'Related to this job'
+      : doc.relevance === 'pending_confirm'
+        ? 'Confirm before attaching'
+        : 'Not related';
+    return '<div class="ask-doc" data-testid="ask-document-card"><strong>' + esc(doc.filename || 'Document') +
+      '</strong><div class="ask-doc-kind">' + esc(doc.kindLabel || 'Document') + ' · ' + esc(verdict) +
+      '</div><div>' + esc(doc.summary || doc.relevanceReason || '') + '</div></div>';
+  }
+
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="ask-pane">' +
@@ -7711,8 +7751,11 @@
           (m.role === 'user' ? renderMentionHtml(m.text) : renderAskMarkdown(m.text, [item.customTitle, item.aiTitle, item.title]) + renderAskWebResults(m.webSources)) + '</div>';
       });
     }
-    html += '</div>' +
-      '<form id="ask-form" class="ask-form">' +
+    html += '</div>';
+    (item._chatDocs || []).forEach(function (doc) { html += chatDocCard(doc); });
+    html += '<form id="ask-form" class="ask-form">' +
+      '<input id="ask-file" type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.md,.rtf,.jpg,.jpeg,.png,.heic,.webp" />' +
+      '<button type="button" id="ask-attach" class="ask-attach" aria-label="Attach a document">+</button>' +
       '<textarea id="ask-input" maxlength="1000" rows="1" autocomplete="off" placeholder="Ask about this clip…"></textarea>' +
       '<button type="submit">Ask</button>' +
       '</form></div>';
@@ -7722,6 +7765,71 @@
   function bindAsk(item) {
     var form = document.getElementById('ask-form');
     var input = document.getElementById('ask-input');
+    var fileInput = document.getElementById('ask-file');
+    var attachBtn = document.getElementById('ask-attach');
+    function uploadChatFiles(fileList) {
+      var files = Array.prototype.slice.call(fileList || []);
+      if (!files.length || !ORG_MODE) return;
+          var job = item && (item.jobId || item.job);
+          function asUuid(value) {
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '')) ? String(value) : null;
+          }
+          files.forEach(function (file) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          var result = String(reader.result || '');
+          var comma = result.indexOf(',');
+          var contentBase64 = comma >= 0 ? result.slice(comma + 1) : result;
+          apiFetch('/api/operations/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              contentBase64: contentBase64,
+              jobId: asUuid(job),
+              proofId: asUuid(item && item.id)
+            })
+          }).then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+            .then(function (res) {
+              if (!res.ok) {
+                window.alert((res.body && res.body.error) || 'Could not read that file.');
+                return;
+              }
+              item._chatDocs = (item._chatDocs || []).concat([res.body.document]);
+              if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
+            })
+            .catch(function () { window.alert('Could not read that file.'); });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    if (attachBtn && fileInput) {
+      attachBtn.addEventListener('click', function () { fileInput.click(); });
+      fileInput.addEventListener('change', function () {
+        uploadChatFiles(fileInput.files);
+        fileInput.value = '';
+      });
+    }
+    if (form) {
+      form.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        form.classList.add('ask-drop');
+      });
+      form.addEventListener('dragleave', function () { form.classList.remove('ask-drop'); });
+      form.addEventListener('drop', function (event) {
+        event.preventDefault();
+        form.classList.remove('ask-drop');
+        uploadChatFiles(event.dataTransfer && event.dataTransfer.files);
+      });
+    }
+    if (input) {
+      input.addEventListener('paste', function (event) {
+        var files = event.clipboardData && event.clipboardData.files;
+        if (!files || !files.length) return;
+        event.preventDefault();
+        uploadChatFiles(files);
+      });
+    }
     function send(text) {
       var q = String(text || '').trim();
       if (q.length < 3) return;
@@ -7742,7 +7850,7 @@
       if (host) {
         var pending = document.createElement('div');
         pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Thinking…';
+        pending.innerHTML = '<span class="ask-dots" aria-label="Thinking"><i></i><i></i><i></i></span>';
         pending.id = 'ask-pending';
         host.appendChild(pending);
       }

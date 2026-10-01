@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
 import {
   api,
   ApiError,
@@ -36,6 +36,8 @@ import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
+import { CHAT_DOCUMENT_ACCEPT } from '../lib/chatDocuments';
+import { AskDocumentCard, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -389,6 +391,20 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
 }
 
+function PaperclipIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 12.5l6.2-6.2a3 3 0 114.2 4.2l-7.4 7.5a4.5 4.5 0 11-6.4-6.4l7.2-7.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function SendIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -500,6 +516,9 @@ export function JobAskPanel({
   const [asking, setAsking] = useState(false);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const docs = useJobDocuments(jobId);
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
   const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
@@ -1068,13 +1087,80 @@ export function JobAskPanel({
       </div>
 
       <div className="shrink-0 border-t border-line px-5 py-3">
+        {docs.documents.some((doc) => doc.attached) && (
+          <div data-testid="job-documents-list" className="mb-3 space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Documents on this job</p>
+            {docs.documents.filter((doc) => doc.attached).map((doc) => (
+              <AskDocumentCard key={doc.id} doc={doc} />
+            ))}
+          </div>
+        )}
+        {docs.documents.some((doc) => !doc.attached) && (
+          <div className="mb-3 space-y-2">
+            {docs.documents.filter((doc) => !doc.attached).map((doc) => (
+              <AskDocumentCard key={doc.id} doc={doc} onAttach={docs.confirm} onDismiss={docs.dismiss} />
+            ))}
+          </div>
+        )}
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
-        <form onSubmit={onSubmit} className="flex items-end gap-2">
+        {docs.error && <p className="mb-2 text-xs text-danger-700">{docs.error}</p>}
+        {docs.phase && (
+          <p className="mb-2 text-xs text-ink-500" data-testid="ask-upload-progress">{uploadPhaseLabel(docs.phase)}</p>
+        )}
+        <form
+          onSubmit={onSubmit}
+          className="relative flex items-end gap-2"
+          onDragOver={(event: DragEvent) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event: DragEvent) => {
+            event.preventDefault();
+            setDragging(false);
+            const files = [...(event.dataTransfer.files ?? [])];
+            if (files.length) void docs.upload(files);
+          }}
+        >
+          {dragging && (
+            <div
+              data-testid="ask-drop-overlay"
+              className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-xl border border-dashed border-brand-300 bg-paper-0/90 text-xs font-medium text-ink-700"
+            >
+              Drop the document to add it
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            accept={CHAT_DOCUMENT_ACCEPT}
+            multiple
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              event.target.value = '';
+              if (files.length) void docs.upload(files);
+            }}
+          />
+          <button
+            type="button"
+            aria-label="Attach a document"
+            onClick={() => fileRef.current?.click()}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line bg-paper-0 text-ink-600 transition hover:border-brand-200 hover:text-ink-900"
+          >
+            <PaperclipIcon />
+          </button>
           <MentionTextarea
             inputRef={inputRef}
             value={draft}
             onChange={setDraft}
             onKeyDown={onKeyDown}
+            onPaste={(event) => {
+              const files = [...(event.clipboardData?.files ?? [])];
+              if (!files.length) return;
+              event.preventDefault();
+              void docs.upload(files);
+            }}
             autoGrow
             rows={1}
             jobId={jobId}

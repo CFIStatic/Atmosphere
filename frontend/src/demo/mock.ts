@@ -1909,6 +1909,114 @@ function demoPeopleOnJob(jobId: string) {
   return MEMBERS.filter((member) => ids.has(member.userId) && member.fullName);
 }
 
+type DemoChatDoc = {
+  id: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number;
+  kind: string;
+  kindLabel: string;
+  relevance: 'related' | 'not_related' | 'pending_confirm';
+  relevanceReason: string;
+  summary: string;
+  attached: boolean;
+  jobId: string | null;
+  contextJobId: string | null;
+  suggestedJobId: string | null;
+  suggestedJobTitle: string | null;
+  macrosIgnored: boolean;
+  createdAt: string;
+};
+
+const demoChatDocs: DemoChatDoc[] = [];
+
+function demoIngestDocument(filename: string, jobId: string | null, byteSize: number): DemoChatDoc {
+  const name = filename.toLowerCase();
+  const id = `doc-${Date.now()}-${demoChatDocs.length}`;
+  const now = new Date().toISOString();
+  const base = {
+    id,
+    filename,
+    mediaType: 'application/octet-stream',
+    byteSize,
+    macrosIgnored: name.includes('macro'),
+    createdAt: now,
+    contextJobId: jobId,
+    suggestedJobId: null as string | null,
+    suggestedJobTitle: null as string | null,
+  };
+  if (/\.(exe|html?|js)$/.test(name)) {
+    throw new Error('This file type is not supported.');
+  }
+  if (name.includes('invoice') || name.includes('pine')) {
+    return {
+      ...base,
+      kind: 'invoice',
+      kindLabel: 'Invoice',
+      relevance: 'not_related',
+      attached: false,
+      jobId: null,
+      relevanceReason: 'The address 900 Pine Avenue does not match this job, so it was not attached.',
+      summary: 'Invoice. 900 Pine Avenue. Not related to this job.',
+    };
+  }
+  if (name.includes('floor') || name.includes('plan') || name.includes('sketch')) {
+    const attached = Boolean(jobId);
+    return {
+      ...base,
+      kind: 'floor_plan',
+      kindLabel: 'Floor plan',
+      relevance: attached ? 'related' : 'pending_confirm',
+      attached,
+      jobId: attached ? jobId : null,
+      suggestedJobId: attached ? null : 'job-1038',
+      suggestedJobTitle: attached ? null : 'Cedar Ridge',
+      relevanceReason: attached
+        ? 'The floor plan matches the job on screen.'
+        : 'This looks like Cedar Ridge. Attach it only after you confirm.',
+      summary: "Floor plan. Kitchen 12' x 14'. Living room 16' x 18'.",
+    };
+  }
+  const attached = Boolean(jobId);
+  return {
+    ...base,
+    kind: 'estimate',
+    kindLabel: 'Estimate',
+    relevance: attached ? 'related' : 'pending_confirm',
+    attached,
+    jobId: attached ? jobId : null,
+    suggestedJobId: attached ? null : 'job-1038',
+    suggestedJobTitle: attached ? null : 'Cedar Ridge',
+    relevanceReason: attached
+      ? 'The address matches this job.'
+      : 'This looks like Cedar Ridge. Attach it only after you confirm.',
+    summary: 'Estimate. Total $4,280.00.',
+  };
+}
+
+function demoAnswerFromDocs(question: string, jobId?: string): string | null {
+  const docs = demoChatDocs.filter((doc) => !jobId || doc.contextJobId === jobId || doc.jobId === jobId);
+  if (!docs.length) return null;
+  const q = question.toLowerCase();
+  const estimate = docs.find((doc) => doc.kind === 'estimate' && doc.attached);
+  const plan = docs.find((doc) => doc.kind === 'floor_plan' && doc.attached);
+  const invoice = docs.find((doc) => doc.kind === 'invoice' || doc.relevance === 'not_related');
+  if (/\b(related|relevant|belong)\b/.test(q) && invoice) {
+    return `${invoice.filename} is not related to this job and was not attached. ${invoice.relevanceReason}`;
+  }
+  if (estimate && /\b(total|how much|estimate)\b/.test(q) && !/\bpermit\b/.test(q)) {
+    return `The estimate total is $4,280.00. The document says “Total: $4,280.00” (${estimate.filename}, page 1).`;
+  }
+  if (plan && /\b(rooms?|floor\s*plan|dimensions?)\b/.test(q)) {
+    return `The floor plan shows Kitchen, Living room. “Kitchen 12' x 14'” (${plan.filename}, page 1). “Living room 16' x 18'” (${plan.filename}, page 1).`;
+  }
+  if (/\bpermit\b/.test(q)) return 'This document does not show that.';
+  if (/\b(document|estimate|invoice|floor)\b/.test(q) && !estimate && !plan) {
+    return 'This document does not show that.';
+  }
+  return null;
+}
+
 function demoMentionAnswer(question: string, jobId?: string): {
   answer: string;
   groundedOn: number;
@@ -1930,6 +2038,24 @@ function demoMentionAnswer(question: string, jobId?: string): {
   const elena = compact.includes('elenacruz') || q.includes('elena cruz') || /@elena\b/.test(q);
   const electrical = q.includes('electric');
   const now = new Date().toISOString();
+  const fromDocs = demoAnswerFromDocs(question, jobId);
+  if (fromDocs) {
+    return {
+      answer: fromDocs,
+      groundedOn: 1,
+      model: null,
+      threadId: 'thread-demo',
+      question: {
+        id: `q-${Date.now()}`,
+        question,
+        answer: fromDocs,
+        model: null,
+        grounded_on: ['document'],
+        created_at: now,
+        thread_id: 'thread-demo',
+      },
+    };
+  }
   if (jobId && john && !demoPeopleOnJob(jobId).some((member) => member.fullName === 'John Cyganiak')) {
     const elsewhere = JOBS.filter(
       (job) => job.jobId !== jobId && demoPeopleOnJob(job.jobId).some((member) => member.fullName === 'John Cyganiak'),
@@ -3708,6 +3834,45 @@ const routes: Array<[string, RegExp, Handler]> = [
       return { status: 404, body: { error: "That job isn't in this organization." } };
     }
     return { body: { members: demoPeopleOnJob(m[1]) } };
+  }],
+  ['POST', /^\/api\/operations\/documents$/, async (_m, b) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const filename = String(b.filename ?? 'document');
+    if (/\.(exe|html?|js)$/i.test(filename) || /<html/i.test(String(b.contentBase64 ?? '').slice(0, 40))) {
+      return { status: 400, body: { error: 'This file type is not supported.', code: 'unsupported' } };
+    }
+    const jobId = typeof b.jobId === 'string' && b.jobId ? b.jobId : null;
+    const byteSize = typeof b.contentBase64 === 'string' ? Math.floor((b.contentBase64.length * 3) / 4) : 0;
+    let document: DemoChatDoc;
+    try {
+      document = demoIngestDocument(filename, jobId, byteSize);
+    } catch (err) {
+      return { status: 400, body: { error: err instanceof Error ? err.message : 'Could not read that file.', code: 'unsupported' } };
+    }
+    demoChatDocs.unshift(document);
+    return { status: 201, body: { document } };
+  }],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/documents$/, (m) => ({
+    body: {
+      documents: demoChatDocs.filter((doc) => doc.jobId === m[1] || doc.contextJobId === m[1]),
+    },
+  })],
+  ['POST', /^\/api\/operations\/documents\/([\w-]+)\/attach$/, (m, b) => {
+    const doc = demoChatDocs.find((row) => row.id === m[1]);
+    if (!doc) return { status: 404, body: { error: 'No such document.', code: 'not_found' } };
+    const jobId = String(b.jobId ?? doc.suggestedJobId ?? '');
+    doc.attached = true;
+    doc.jobId = jobId || doc.jobId;
+    doc.relevance = 'related';
+    doc.relevanceReason = 'Attached after you confirmed this job.';
+    return { body: { document: doc } };
+  }],
+  ['POST', /^\/api\/operations\/documents\/ask$/, (_m, b) => {
+    const ids = Array.isArray(b.documentIds) ? b.documentIds.map(String) : [];
+    const known = demoChatDocs.filter((doc) => ids.includes(doc.id));
+    const answer = demoAnswerFromDocs(String(b.question ?? ''), known[0]?.contextJobId ?? known[0]?.jobId ?? undefined)
+      ?? 'This document does not show that.';
+    return { body: { answer } };
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => ({
     stream: true,

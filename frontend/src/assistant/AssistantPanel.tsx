@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowUp, Bot, PanelRightClose, Sparkles, TrendingUp } from 'lucide-react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowUp, Bot, PanelRightClose, Paperclip, Sparkles, TrendingUp } from 'lucide-react';
 import { Badge, Button, EmptyState, cn } from '../design';
 import { expandMentionTokens } from '../lib/mentions';
 import { MentionText } from '../components/mentions/MentionText';
@@ -19,6 +19,8 @@ import { ActionProposal } from '../patterns/ActionProposal';
 import { riskTone } from '../patterns/tone';
 import type { Role } from '../domain/types';
 import { useAssistant } from './AssistantContext';
+import { CHAT_DOCUMENT_ACCEPT } from '../lib/chatDocuments';
+import { AskDocumentCard, uploadPhaseLabel, useJobDocuments } from '../components/ask/ChatDocuments';
 
 /**
  * The persistent contextual panel.
@@ -31,10 +33,15 @@ import { useAssistant } from './AssistantContext';
  */
 
 export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => void }) {
-  const { messages, thinking, send, contextLabel } = useAssistant();
+  const { messages, thinking, thinkingMode, send, askAboutDocuments, contextLabel } = useAssistant();
   const [draft, setDraft] = useState('');
+  const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const jobId = new URLSearchParams(location.search).get('job');
+  const docs = useJobDocuments(jobId);
 
   const { data: recommendations = [] } = useRecommendations();
   const { data: approvals = [] } = useApprovals();
@@ -48,10 +55,19 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
 
+  function looksLikeDocumentQuestion(text: string): boolean {
+    return /\b(document|estimate|invoice|floor\s*plan|sketch|permit|total|rooms?|related|attachment|uploaded)\b/i.test(text);
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     const raw = draft.trim();
     if (!raw) return;
+    if (docs.documents.length && looksLikeDocumentQuestion(raw)) {
+      askAboutDocuments(raw, docs.documents.map((doc) => doc.id));
+      setDraft('');
+      return;
+    }
     const members = raw.includes('@') ? await loadOrgMentions() : [];
     send(expandMentionTokens(raw, members));
     setDraft('');
@@ -99,7 +115,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
                       <Bot className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm leading-relaxed text-fg-2">{m.text}</p>
-                        {m.routing && (
+                        {m.routing && !m.grounded && (
                           <p className="mt-1.5 text-2xs text-fg-4">
                             Routed to {CAPABILITY_LABELS[m.routing.capability]} ·{' '}
                             {Math.round(m.routing.confidence * 100)}% confidence
@@ -122,7 +138,16 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
                 )}
               </div>
             ))}
-            {thinking && (
+            {thinking && thinkingMode === 'document' && (
+              <div className="flex items-center gap-2 text-xs text-fg-3" aria-label="Thinking">
+                <span className="gpt-typing inline-flex items-center gap-1">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            )}
+            {thinking && thinkingMode !== 'document' && (
               <div className="flex items-center gap-2 text-xs text-fg-3">
                 <Bot className="h-4 w-4 animate-pulse-soft text-brand-400" />
                 Routing your request…
@@ -203,8 +228,56 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
         )}
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-line/10 p-3">
+      <form
+        onSubmit={submit}
+        className="relative shrink-0 border-t border-line/10 p-3"
+        onDragOver={(event: DragEvent) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event: DragEvent) => {
+          event.preventDefault();
+          setDragging(false);
+          const files = [...(event.dataTransfer.files ?? [])];
+          if (files.length) void docs.upload(files);
+        }}
+      >
+        {docs.documents.length > 0 && (
+          <div className="mb-2 space-y-2">
+            {docs.documents.map((doc) => (
+              <AskDocumentCard key={doc.id} doc={doc} onAttach={docs.confirm} onDismiss={docs.dismiss} />
+            ))}
+          </div>
+        )}
+        {docs.error && <p className="mb-2 text-xs text-danger-700">{docs.error}</p>}
+        {docs.phase && <p className="mb-2 text-xs text-fg-3" data-testid="ask-upload-progress">{uploadPhaseLabel(docs.phase)}</p>}
+        {dragging && (
+          <div data-testid="ask-drop-overlay" className="mb-2 rounded-lg border border-dashed border-brand-300 px-3 py-2 text-xs text-fg-2">
+            Drop the document to add it
+          </div>
+        )}
         <div className="relative">
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            accept={CHAT_DOCUMENT_ACCEPT}
+            multiple
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              event.target.value = '';
+              if (files.length) void docs.upload(files);
+            }}
+          />
+          <button
+            type="button"
+            aria-label="Attach a document"
+            onClick={() => fileRef.current?.click()}
+            className="absolute bottom-2 left-2 z-10 rounded-md p-1 text-fg-3 hover:text-fg"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
           <MentionTextarea
             value={draft}
             onChange={setDraft}
@@ -216,7 +289,13 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
             }}
             rows={2}
             placeholder="Ask Atmosphere to do something…"
-            className="w-full resize-none rounded-lg border border-line/10 bg-surface px-3 py-2 pr-10 text-sm text-fg outline-none placeholder:text-fg-4"
+            onPaste={(event) => {
+              const files = [...(event.clipboardData?.files ?? [])];
+              if (!files.length) return;
+              event.preventDefault();
+              void docs.upload(files);
+            }}
+            className="w-full resize-none rounded-lg border border-line/10 bg-surface py-2 pl-9 pr-10 text-sm text-fg outline-none placeholder:text-fg-4"
           />
           <Button
             type="submit"

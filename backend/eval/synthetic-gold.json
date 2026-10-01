@@ -1118,6 +1118,141 @@
      }
     }
    ]
+  },
+  {
+   "id": "syn-job-chat-docs",
+   "consent": { "status": "synthetic" },
+   "fixture": {
+    "job": {
+     "id": "00000000-0000-4000-8000-00000000d101",
+     "org_id": "00000000-0000-4000-8000-00000000d001",
+     "title": "Oak Street kitchen"
+    },
+    "parties": [],
+    "proofs": [],
+    "documents": [
+     {
+      "id": "00000000-0000-4000-8000-00000000d201",
+      "filename": "Oak-Street-Estimate.pdf",
+      "kind": "estimate",
+      "attached": true,
+      "relevance": "related",
+      "relevanceReason": "The address 418 Oak Street matches this job.",
+      "summary": "Estimate. Total $4,280.00.",
+      "extractedText": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00",
+      "chunks": [
+       {
+        "location": "page 1",
+        "text": "Estimate\nJob address: 418 Oak Street\nDrywall repair  $2,100.00\nTotal: $4,280.00"
+       }
+      ],
+      "facts": {
+       "totals": [
+        { "label": "Total", "value": "$4,280.00", "quote": "Total: $4,280.00", "location": "page 1" }
+       ],
+       "lineItems": [
+        { "label": "Drywall repair", "value": "$2,100.00", "quote": "Drywall repair  $2,100.00", "location": "page 1" }
+       ],
+       "dates": [],
+       "addresses": [],
+       "parties": [],
+       "claimNumbers": [],
+       "rooms": []
+      }
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000d202",
+      "filename": "Floor-Plan.pdf",
+      "kind": "floor_plan",
+      "attached": true,
+      "relevance": "related",
+      "relevanceReason": "The floor plan matches this job.",
+      "summary": "Floor plan. Kitchen, Living room.",
+      "extractedText": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'",
+      "chunks": [
+       {
+        "location": "page 1",
+        "text": "Floor plan\nKitchen 12' x 14'\nLiving room 16' x 18'"
+       }
+      ],
+      "facts": {
+       "totals": [],
+       "lineItems": [],
+       "dates": [],
+       "addresses": [],
+       "parties": [],
+       "claimNumbers": [],
+       "rooms": [
+        { "name": "Kitchen", "dimensions": "12' x 14'", "notes": null, "quote": "Kitchen 12' x 14'", "sourceLocation": "page 1" },
+        { "name": "Living room", "dimensions": "16' x 18'", "notes": null, "quote": "Living room 16' x 18'", "sourceLocation": "page 1" }
+       ]
+      }
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000d203",
+      "filename": "Unrelated-Invoice.pdf",
+      "kind": "invoice",
+      "attached": false,
+      "relevance": "not_related",
+      "relevanceReason": "The address 900 Pine Avenue does not match this job.",
+      "summary": "Invoice for 900 Pine Avenue.",
+      "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
+      "chunks": [
+       { "location": "page 1", "text": "Invoice\n900 Pine Avenue\nTotal: $900.00" }
+      ],
+      "facts": {
+       "totals": [
+        { "label": "Total", "value": "$900.00", "quote": "Total: $900.00", "location": "page 1" }
+       ],
+       "lineItems": [],
+       "dates": [],
+       "addresses": [],
+       "parties": [],
+       "claimNumbers": [],
+       "rooms": []
+      }
+     }
+    ]
+   },
+   "questions": [
+    {
+     "id": "doc-estimate-total",
+     "type": "multi_hop",
+     "question": "What's the estimate total?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["$4,280.00", "Oak-Street-Estimate.pdf", "page 1", "Total: $4,280.00"]
+     }
+    },
+    {
+     "id": "doc-floor-plan-rooms",
+     "type": "multi_hop",
+     "question": "What rooms are on the floor plan?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["Kitchen", "Living room", "12' x 14'", "16' x 18'", "Floor-Plan.pdf"]
+     }
+    },
+    {
+     "id": "doc-irrelevant-invoice",
+     "type": "negative",
+     "question": "Is the Pine Avenue invoice related to this job?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["not related", "was not attached"],
+      "mustNotContain": ["$900.00"]
+     }
+    },
+    {
+     "id": "doc-permit-missing",
+     "type": "negative",
+     "question": "What is the permit number on the estimate?",
+     "expect": {
+      "answerType": "abstain",
+      "mustContain": ["does not show"]
+     }
+    }
+   ]
   }
  ]
 }
