@@ -199,6 +199,29 @@ describe('turnsFromQuestions', () => {
     ]);
   });
 
+  it('drops a duplicate question and answer from a double send or reload', () => {
+    const turns = turnsFromQuestions([
+      {
+        id: 'q-copy',
+        question: 'what is this about',
+        answer: 'This is a 2023 vision note by Jack Cyganiak.',
+        model: null,
+        grounded_on: [],
+        created_at: '2026-08-06T12:00:01Z',
+      },
+      {
+        id: 'q-orig',
+        question: 'what is this about',
+        answer: 'This is a 2023 vision note by Jack Cyganiak.',
+        model: null,
+        grounded_on: [],
+        created_at: '2026-08-06T12:00:00Z',
+      },
+    ]);
+    expect(turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
+    expect(turns.filter((turn) => turn.role === 'user')).toHaveLength(1);
+  });
+
   it('restores web sources stored with the assistant message', () => {
     const turns = turnsFromQuestions([
       {

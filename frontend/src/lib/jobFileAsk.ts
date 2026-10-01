@@ -256,9 +256,20 @@ export function hasVideoOnFile(proofs: ProofResponse | null): boolean {
 }
 
 export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
-  return [...questions]
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .flatMap((question) => {
+  const sorted = [...questions].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const unique: ProofQuestion[] = [];
+  for (const question of sorted) {
+    const prev = unique[unique.length - 1];
+    if (
+      prev &&
+      prev.question.trim() === question.question.trim() &&
+      (prev.answer ?? '').trim() === (question.answer ?? '').trim()
+    ) {
+      continue;
+    }
+    unique.push(question);
+  }
+  return unique.flatMap((question) => {
       const turns: JobFileTurn[] = [
         {
           id: `${question.id}-q`,

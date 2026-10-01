@@ -16,7 +16,7 @@ import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, quietNoteAlreadySaid, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -167,7 +167,7 @@ Rules:
 11. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly that it is not in the evidence. Do not guess or answer with a nearby detail.
 12. Quotes are exact transcript words only, never paraphrased inside quotation marks, each followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15).
 13. Speakers: use only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)" as a speaker.
-14. Attached documents are evidence. Quote exact substrings of the extracted document, with the file name and the page, sheet, or cell, like “Total: $4,280.00” (Estimate.pdf, page 1). A file marked not related is not part of the job. Do not invent figures, line items, rooms, or dimensions. Job file evidence beats web results.
+14. Documents uploaded in this chat are evidence for questions about those files, even when they are not about this job. Answer from the full uploaded text. A summary is 2–4 sentences in your own words: do not paste the opening lines back, do not call the file an invoice or any other type unless the text or filename says it is, and do not end with a "(filename, document)" citation. A specific fact may quote an exact substring with the file name and page, like “Total: $4,280.00” (Estimate.pdf, page 1). If the upload is not about this job, add "${QUIET_UNRELATED_NOTE}" once, after the first answer only, never on a follow-up. Do not search the web for a question about an uploaded document. Do not label that answer as coming from the job file. Job-file questions still use the job record, and job evidence beats web results.
 
 ` + ASK_PROSE_FORMAT_RULES;
 
@@ -644,16 +644,34 @@ function keepDocumentAnswer(question: string, answer: string): boolean {
  * that are not on the job. Job questions and questions about a different
  * document kind fall through so the job file stays first.
  */
-function answerFromChatUploads(question: string, documents: AskDocumentView[] | null | undefined): string | null {
+function answerFromChatUploads(
+  question: string,
+  documents: AskDocumentView[] | null | undefined,
+  history?: Array<{ role?: string | null; text?: string | null }> | null,
+): string | null {
   const docs = (documents ?? []).filter((doc) => trim(doc.extractedText) || (doc.chunks?.length ?? 0) > 0 || trim(doc.filename));
   const readable = docs.filter((doc) => trim(doc.extractedText) || (doc.chunks ?? []).some((chunk) => trim(chunk.text)));
   if (!chatUploadShouldAnswer(question, readable)) return null;
-  const direct = answerFromJobDocuments(question, readable);
-  if (!direct) return null;
+  const direct = answerFromJobDocuments(question, readable, [], {
+    quietNote: !quietNoteAlreadySaid(history),
+  });
+  if (!direct) return 'This document does not show that.';
   return enforceQuoteGrounding(normalizeAskProse(direct), {
     chunks: documentChunksForGrounding(readable, { includeUploads: true }),
     question,
   }).answer;
+}
+
+function formatChatUploadsForPrompt(documents: AskDocumentView[] | null | undefined): string {
+  const blocks = (documents ?? []).flatMap((doc) => {
+    const text = trim(doc.extractedText) || (doc.chunks ?? []).map((chunk) => trim(chunk.text)).filter(Boolean).join('\n');
+    if (!text) return [];
+    return [`File: ${doc.filename}\n${text.slice(0, 12000)}`];
+  });
+  if (!blocks.length) return '';
+  return (
+    `\n\nDocuments uploaded in this chat. Questions about these files are answered from this text only — do not search the web, do not invent a document type, and do not paste the opening lines as the summary:\n\n${blocks.join('\n\n')}`
+  );
 }
 
 /** Deterministic document answers. Quotes are exact substrings, cited with the file and location. */
@@ -670,6 +688,20 @@ function answerFromAttachedDocuments(question: string, file: JobFileAskContext):
     chunks: documentChunksForGrounding(views),
     question,
   }).answer;
+}
+
+/**
+ * True when this thread already stored the same answer moments ago.
+ * A stream failure that retries as JSON must not insert a second turn.
+ */
+export function isDuplicateAskTurn(
+  recent: { answer?: string | null; thread_id?: string | null } | null | undefined,
+  threadId: string | null | undefined,
+  answer: string,
+): boolean {
+  if (!recent) return false;
+  const sameThread = !threadId || !recent.thread_id || recent.thread_id === threadId;
+  return sameThread && String(recent.answer ?? '').trim() === answer.trim();
 }
 
 export async function answerFromJobFile(input: {
@@ -714,6 +746,8 @@ export async function answerFromJobFile(input: {
   toolResults: AskToolResult[];
   /** True when the reply came from the lookup tools, including a failed-model grounding. */
   answeredFromLookup?: boolean;
+  /** The reply is about a chat upload, not the job file. */
+  answeredFromSessionDocument?: boolean;
   /** The stored prose is web text. Marker parsing must not treat it as a model answer. */
   webDerivedAnswer?: boolean;
   /** Compact research trace for debugging. Absent on the single pass. */
@@ -743,10 +777,18 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
   }
 
-  const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments);
+  const sessionCovers = chatUploadShouldAnswer(input.question, input.sessionDocuments);
+  const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments, input.history);
   if (fromUploads) {
     emit(fromUploads);
-    return { ...empty, answer: fromUploads, groundedOn };
+    return { ...empty, answer: fromUploads, groundedOn: 0, answeredFromSessionDocument: true };
+  }
+  if (sessionCovers) {
+    const miss = quietNoteAlreadySaid(input.history)
+      ? 'This document does not show that.'
+      : `This document does not show that.\n\n${QUIET_UNRELATED_NOTE}`;
+    emit(miss);
+    return { ...empty, answer: miss, groundedOn: 0, answeredFromSessionDocument: true };
   }
 
   const fromDocuments = answerFromAttachedDocuments(input.question, input.file);
@@ -758,7 +800,7 @@ export async function answerFromJobFile(input: {
   // Run safe tools first so field updates apply before the model writes prose.
   let toolResults: AskToolResult[] = [];
   let webHits: AskWebHit[] = [];
-  if (input.toolContext) {
+  if (input.toolContext && !sessionCovers) {
     const picks = pickAskToolsHeuristically(input.question, input.toolContext.access);
     const { sequential, parallel } = partitionAskTools(picks);
     const runTool = async (name: (typeof picks)[number]) => {
@@ -817,7 +859,7 @@ export async function answerFromJobFile(input: {
   // asks (e.g. "search the web for tile prices", "can u search google") are never
   // swallowed by a brief-note hit from the job file.
   let webSearchAttempted = false;
-  if (!mentionScoped && !webHits.length && !webAnswer.trim() && shouldSupplementWithWebSearch(input.question, grounded)) {
+  if (!sessionCovers && !mentionScoped && !webHits.length && !webAnswer.trim() && shouldSupplementWithWebSearch(input.question, grounded)) {
     webSearchAttempted = true;
     const outcome = await searchAskWebDetailed(input.question, {
       fetchFn: input.fetchFn,
@@ -978,6 +1020,7 @@ export async function answerFromJobFile(input: {
   const user = mentionPrompt
     ? mentionPrompt.user
     : `Job file record:\n\n${record || '(empty record)'}` +
+      formatChatUploadsForPrompt(input.sessionDocuments) +
       webBlock +
       toolBlock +
       (history ? `\n\nEarlier questions on this file:\n${history}` : '') +

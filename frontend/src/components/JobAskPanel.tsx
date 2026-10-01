@@ -896,26 +896,39 @@ export function JobAskPanel({
       } else if (!askFn) {
         void api.askThreads(jobId).then((r) => setThreads(r.threads)).catch(() => {});
       }
-      setTurns((prev) => [
-        ...prev.filter((turn) => turn.id !== pendingId),
-        {
-          id: res.question?.id ? `${res.question.id}-q` : pendingId,
-          role: 'user',
-          content: text,
-          attachments: sent,
-          at: res.question?.created_at ?? now,
-        },
-        {
-          id: res.question?.id ? `${res.question.id}-a` : answerId,
-          role: 'assistant',
-          content: res.answer,
-          groundedOn: res.groundedOn,
-          groundedIds: res.question?.grounded_on,
-          model: res.model ?? res.question?.model,
-          webSources: res.webSources,
-          at: res.question?.created_at ?? now,
-        },
-      ]);
+      const userId = res.question?.id ? `${res.question.id}-q` : pendingId;
+      const assistantId = res.question?.id ? `${res.question.id}-a` : answerId;
+      setTurns((prev) => {
+        const rest = prev.filter((turn) => turn.id !== pendingId && turn.id !== userId && turn.id !== assistantId);
+        const tailUser = rest[rest.length - 2];
+        const tailAnswer = rest[rest.length - 1];
+        const alreadyShown =
+          tailUser?.role === 'user' &&
+          tailAnswer?.role === 'assistant' &&
+          tailUser.content.trim() === text.trim() &&
+          tailAnswer.content.trim() === res.answer.trim();
+        const base = alreadyShown ? rest.slice(0, -2) : rest;
+        return [
+          ...base,
+          {
+            id: userId,
+            role: 'user',
+            content: text,
+            attachments: sent,
+            at: res.question?.created_at ?? now,
+          },
+          {
+            id: assistantId,
+            role: 'assistant',
+            content: res.answer,
+            groundedOn: res.groundedOn,
+            groundedIds: res.question?.grounded_on,
+            model: res.model ?? res.question?.model,
+            webSources: res.webSources,
+            at: res.question?.created_at ?? now,
+          },
+        ];
+      });
       const target = seekTargetFromAnswer({
         answer: res.answer,
         events: analysisEvents,
@@ -1087,7 +1100,7 @@ export function JobAskPanel({
                       {quiet.note}
                     </p>
                   ) : null}
-                  {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
+                  {turn.role === 'assistant' && !quiet?.note && turn.groundedOn != null && turn.groundedOn > 0 && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
                   {showActions ? (

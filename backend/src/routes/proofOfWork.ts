@@ -56,6 +56,7 @@ import {
 } from '../shared/proofAnalyst.js';
 import {
   answerFromJobFile,
+  isDuplicateAskTurn,
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
@@ -3392,6 +3393,7 @@ export async function runProofAsk(input: {
           webHits: [] as unknown[],
           toolResults: [] as unknown[],
           answeredFromLookup: false,
+          answeredFromSessionDocument: false,
           webDerivedAnswer: false,
           research: null,
         }
@@ -3471,7 +3473,26 @@ export async function runProofAsk(input: {
         webSources,
       };
     }
-    const { data: stored } = await supabase
+    const sessionDocumentAnswer = result.answeredFromSessionDocument === true;
+    const since = new Date(Date.now() - 30_000).toISOString();
+    const { data: recentSame } = await supabase
+      .from('job_proof_questions')
+      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .eq('question', storedQuestion)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const recentRow = (recentSame ?? [])[0] as {
+      id?: string;
+      question?: string;
+      answer?: string;
+      thread_id?: string | null;
+    } | undefined;
+    const { data: stored } = isDuplicateAskTurn(recentRow, threadId, storedAnswer)
+      ? { data: recentRow }
+      : await supabase
       .from('job_proof_questions')
       .insert({
         org_id: orgId,
@@ -3479,8 +3500,8 @@ export async function runProofAsk(input: {
         question: storedQuestion,
         answer: storedAnswer,
         model: result.model,
-        grounded_on: groundedOn,
-        web_sources: webSources,
+        grounded_on: sessionDocumentAnswer ? [] : groundedOn,
+        web_sources: sessionDocumentAnswer ? [] : webSources,
         research_trace: result.research ?? null,
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
@@ -3592,7 +3613,7 @@ export async function runProofAsk(input: {
       answer: result.answer,
       model: result.model,
       question: stored ?? null,
-      groundedOn: result.groundedOn || groundedOn.length,
+      groundedOn: sessionDocumentAnswer ? 0 : result.groundedOn || groundedOn.length,
       threadId,
       webSources,
     };

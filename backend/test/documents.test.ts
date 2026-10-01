@@ -571,6 +571,62 @@ test('an unrelated upload is answered, with one quiet line after', () => {
   assert.equal(chatUploadShouldAnswer('what is this about', [invoice]), true);
   assert.equal(chatUploadShouldAnswer("What's the total on it?", [invoice]), true);
   assert.equal(answerFromJobDocuments("what's the lockbox code?", [invoice]), null);
+  assert.doesNotMatch(about ?? '', /\([^)]*,\s*document\)/i);
+  assert.doesNotMatch(about ?? '', /Invoice\n900 Pine/);
+});
+
+const VISION_NOTE: AskDocumentView = {
+  id: 'future',
+  filename: 'The Future.docx',
+  kind: 'invoice',
+  attached: false,
+  relevance: 'not_related',
+  relevanceReason: 'Nothing on the document matches the job name, address, or claim.',
+  extractedText: [
+    'The Future',
+    'By Jack Cyganiak',
+    '8/11/2023',
+    '',
+    'My companies and vision.',
+    '',
+    'Jettx builds long distance wireless power. Energy transmission from a space based power system can deliver electricity without wires. Blox Group automates the ground stations that receive that power.',
+    '',
+    'This note is a company vision, not a construction claim, invoice, or site report.',
+  ].join('\n'),
+  chunks: [{ location: 'document', text: 'The Future\nBy Jack Cyganiak\n8/11/2023\n\nMy companies and vision.\n\nJettx builds long distance wireless power. Energy transmission from a space based power system can deliver electricity without wires. Blox Group automates the ground stations that receive that power.\n\nThis note is a company vision, not a construction claim, invoice, or site report.' }],
+  facts: { totals: [], lineItems: [], dates: [], addresses: [], parties: [], claimNumbers: [], rooms: [] },
+};
+
+test('a vision note is summarized in prose, not mislabeled or dumped', () => {
+  const about = answerFromJobDocuments('what is this about', [VISION_NOTE]);
+  assert.match(about ?? '', /2023 vision note by Jack Cyganiak/);
+  assert.match(about ?? '', /Jettx \(long-distance wireless power, including space-based power\)/);
+  assert.match(about ?? '', /Blox Group \(automated ground stations\)/);
+  assert.match(about ?? '', /doesn't appear to be about this job/);
+  assert.doesNotMatch(about ?? '', /is an invoice/i);
+  assert.doesNotMatch(about ?? '', /The Future By Jack Cyganiak/);
+  assert.doesNotMatch(about ?? '', /My companies and vision\./);
+  assert.doesNotMatch(about ?? '', /\(The Future\.docx, document\)/);
+  assert.equal((about ?? '').split(QUIET_UNRELATED_NOTE).length, 2);
+});
+
+test('who wrote it reads the byline, and a follow-up drops the quiet line and web search', () => {
+  const wrote = answerFromJobDocuments('Who wrote it?', [VISION_NOTE]);
+  assert.match(wrote ?? '', /Jack Cyganiak wrote it/);
+  assert.doesNotMatch(wrote ?? '', /does not show/);
+  const follow = answerFromJobDocuments('Who wrote it?', [VISION_NOTE], [], { quietNote: false });
+  assert.match(follow ?? '', /Jack Cyganiak/);
+  assert.doesNotMatch(follow ?? '', /doesn't appear to be about this job/);
+  assert.equal(chatUploadShouldAnswer("What's the population of France?", [VISION_NOTE]), false);
+  assert.equal(chatUploadShouldAnswer('Who wrote it?', [VISION_NOTE]), true);
+  assert.equal(chatUploadShouldAnswer('What does Jettx build?', [VISION_NOTE]), true);
+  const jettx = answerFromJobDocuments('What does Jettx build?', [VISION_NOTE], [], { quietNote: false });
+  assert.match(jettx ?? '', /Jettx builds long-distance wireless power, including space-based power/);
+  assert.doesNotMatch(jettx ?? '', /\(The Future\.docx, document\)/);
+  assert.doesNotMatch(jettx ?? '', /doesn't appear to be about this job/);
+  const missing = answerFromJobDocuments("What's the total on it?", [VISION_NOTE]);
+  assert.match(missing ?? '', /does not show/);
+  assert.notEqual(missing, null);
 });
 
 test('an unrelated document is flagged and a missing fact is stated plainly', () => {

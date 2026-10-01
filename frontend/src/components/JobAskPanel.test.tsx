@@ -974,6 +974,8 @@ describe('JobAskPanel', () => {
         });
       });
       expect(screen.getAllByTestId('ask-message-attachments')).toHaveLength(1);
+      expect(screen.getAllByTestId('ask-document-job-note')).toHaveLength(1);
+      expect(screen.queryByText('From this job file')).not.toBeInTheDocument();
     } finally {
       globalThis.fetch = originalFetch;
     }
