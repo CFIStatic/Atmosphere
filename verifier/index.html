@@ -1410,6 +1410,21 @@
       margin-left: auto;
       flex: none;
     }
+    /* Tracks above sum to 684px. Once the pane is narrower than that, share
+       the width so the table stays inside the shell. */
+    .tablewrap { container-type: inline-size; }
+    @container (max-width: 683px) {
+      #clip-table .col-preview,
+      #clip-table th[data-sort-key="preview"] { width: 14%; }
+      #clip-table .col-status,
+      #clip-table th[data-sort-key="status"] { width: 21%; }
+      #clip-table .col-recorded,
+      #clip-table th[data-sort-key="recorded"] { width: 19%; }
+      #clip-table .col-uploader,
+      #clip-table th[data-sort-key="uploader"] { width: 30%; }
+      #clip-table td.job-status,
+      #clip-table td.job-when { overflow: hidden; }
+    }
   }
 
   /* Phone All videos: one compact card per job, not a stacked desktop table.

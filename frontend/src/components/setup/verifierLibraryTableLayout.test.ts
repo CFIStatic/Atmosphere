@@ -30,6 +30,9 @@ describe('All videos table layout', () => {
     expect(css).toContain('font-size: 14px');
     expect(css).toContain('height: 49px');
     expect(css).toContain('padding: 7px 10px');
+    expect(css).toContain('container-type: inline-size');
+    expect(css).toContain('@container (max-width: 683px)');
+    expect(css).toContain('th[data-sort-key="uploader"] { width: 30%; }');
   });
 
   it('declares the same tracks on the table so the first row cannot renegotiate them', () => {
@@ -41,6 +44,8 @@ describe('All videos table layout', () => {
     expect(verifierHtml).toMatch(/th style="width:128px"[^>]*data-sort-key="preview"/);
     expect(verifierHtml).toMatch(/th style="width:132px"[^>]*data-sort-key="recorded"/);
     expect(verifierHtml).not.toMatch(/<col class="col-status" style=/);
-    expect(verifierHtml).toContain('#clip-table colgroup,\n    #clip-table col { display: none !important; }');
+    expect(verifierHtml).toContain(
+      '#clip-table colgroup,\n    #clip-table col { display: none !important; }',
+    );
   });
 });
