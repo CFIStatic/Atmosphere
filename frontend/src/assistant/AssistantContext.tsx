@@ -120,11 +120,31 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setThinking(true);
     setOpen(true);
     const timer = window.setTimeout(async () => {
-      let answer = 'This document does not show that.';
+      let answer: string | null = null;
       try {
         answer = await askChatDocuments(trimmed, documentIds);
       } catch (err) {
-        answer = err instanceof Error ? err.message : answer;
+        answer = err instanceof Error ? err.message : 'This document does not show that.';
+      }
+      if (!answer) {
+        const routing = routeRequest(trimmed);
+        const approvals = await dataClient.approvals.list().catch(() => []);
+        const match = approvals.find(
+          (a) => a.capability === routing.capability && a.status === 'proposed',
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            author: 'atmosphere',
+            at: new Date().toISOString(),
+            routing,
+            proposal: match,
+            text: composeReply(routing, match),
+          },
+        ]);
+        setThinking(false);
+        return;
       }
       setMessages((prev) => [
         ...prev,

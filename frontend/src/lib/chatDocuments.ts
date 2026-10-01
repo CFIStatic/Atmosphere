@@ -102,7 +102,8 @@ export async function attachChatDocument(id: string, jobId: string): Promise<Cha
   return body.document;
 }
 
-export async function askChatDocuments(question: string, documentIds: string[]): Promise<string> {
+/** Null means the question is not about these uploads, so the job assistant should answer. */
+export async function askChatDocuments(question: string, documentIds: string[]): Promise<string | null> {
   const res = await fetch('/api/operations/documents/ask', {
     method: 'POST',
     credentials: 'include',
@@ -110,6 +111,8 @@ export async function askChatDocuments(question: string, documentIds: string[]):
     body: JSON.stringify({ question, documentIds }),
   });
   if (!res.ok) throw new Error(await readError(res));
-  const body = (await res.json()) as { answer?: string };
-  return String(body.answer ?? '').trim() || 'This document does not show that.';
+  const body = (await res.json()) as { answer?: string | null };
+  if (body.answer == null) return null;
+  const answer = String(body.answer).trim();
+  return answer || null;
 }

@@ -9204,6 +9204,7 @@
       _remote: true,
       id: raw.id,
       job: jobKey || 'shared',
+      jobId: raw.jobId || (jobKey && jobKey !== 'shared' ? jobKey : null),
       jobName: raw.jobName,
       address: raw.address || '',
       claimNumber: raw.claimNumber || '',

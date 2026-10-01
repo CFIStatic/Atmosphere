@@ -4062,9 +4062,8 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['POST', /^\/api\/operations\/documents\/ask$/, (_m, b) => {
     const ids = Array.isArray(b.documentIds) ? b.documentIds.map(String) : [];
     const known = demoChatDocs.filter((doc) => ids.includes(doc.id));
-    const answer = demoAnswerFromDocs(String(b.question ?? ''), known[0]?.contextJobId ?? known[0]?.jobId ?? undefined)
-      ?? 'This document does not show that.';
-    return { body: { answer } };
+    const answer = demoAnswerFromDocs(String(b.question ?? ''), known[0]?.contextJobId ?? known[0]?.jobId ?? undefined);
+    return { body: { answer: answer ?? null } };
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => ({
     stream: true,

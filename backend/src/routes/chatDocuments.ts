@@ -379,7 +379,13 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
       .in('id', body.documentIds);
     if (error) throw new HttpError(500, 'The documents could not be read.', 'doc_read_failed');
     const views = viewsFromChatRows(data ?? []);
-    const direct = answerFromJobDocuments(body.question, views) ?? 'This document does not show that.';
+    const direct = answerFromJobDocuments(body.question, views);
+    // Null means the question is not about these uploads. An abstain here
+    // would hide the job file, clips, and room answers.
+    if (!direct) {
+      res.json({ answer: null });
+      return;
+    }
     const answer = enforceQuoteGrounding(direct, {
       chunks: documentChunksForGrounding(views),
       question: body.question,
