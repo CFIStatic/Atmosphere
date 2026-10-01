@@ -43,6 +43,12 @@ import { CrmConnectPanel } from './CrmConnectPage';
 import { VoiceEnrollmentCard } from '../components/settings/VoiceEnrollmentCard';
 import { TeamVoiceList } from '../components/settings/TeamVoiceList';
 
+/**
+ * Settings → Connect is hidden for now (the section tab and the CRM
+ * credential panel). Flip this to bring the button and section back.
+ */
+const SHOW_SETTINGS_CONNECT = false;
+
 type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'support' | 'connect';
 
 interface SettingsSection {
@@ -91,7 +97,11 @@ export function SettingsPage() {
       icon: PlugIcon,
     },
   ];
-  const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'billing' || showBilling);
+  const SECTIONS = ALL_SECTIONS.filter((section) => {
+    if (section.id === 'billing' && !showBilling) return false;
+    if (section.id === 'connect' && !SHOW_SETTINGS_CONNECT) return false;
+    return true;
+  });
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
   const [params, setParams] = useSearchParams();
@@ -178,7 +188,7 @@ export function SettingsPage() {
           )}
           {active === 'billing' && showBilling && <BillingSection />}
           {active === 'support' && <SupportSection />}
-          {active === 'connect' && <CrmConnectPanel embedded />}
+          {SHOW_SETTINGS_CONNECT && active === 'connect' && <CrmConnectPanel embedded />}
         </div>
       </div>
     </div>
