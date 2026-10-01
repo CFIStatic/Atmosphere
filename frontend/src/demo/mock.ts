@@ -1192,7 +1192,168 @@ const PROOF_DAYS: Record<string, any> = {
       },
     ],
   },
-  'job-1041': { siteKnown: false, days: [] },
+  'job-1041': {
+    siteKnown: true,
+    rooms: [
+      {
+        roomKey: 'bathroom::',
+        roomName: 'bathroom',
+        firstSeen: '2026-09-03',
+        lastSeen: '2026-09-24',
+        datesWorked: ['2026-09-03', '2026-09-24'],
+        traits: ['vanity'],
+        sightings: [
+          {
+            proofId: 'pf-bath-start',
+            clipTitle: 'Bathroom start',
+            workDate: '2026-09-03',
+            startSeconds: 0,
+            findings: [{ kind: 'work', text: 'Removes the old vanity.', atSeconds: 8 }],
+          },
+          {
+            proofId: 'pf-bath-finish',
+            clipTitle: 'Bathroom finish',
+            workDate: '2026-09-24',
+            startSeconds: 0,
+            findings: [{ kind: 'work', text: 'Sets the new vanity and caulks the seam.', atSeconds: 20 }],
+          },
+        ],
+      },
+      {
+        roomKey: 'kitchen::',
+        roomName: 'kitchen',
+        firstSeen: '2026-09-21',
+        lastSeen: '2026-09-21',
+        datesWorked: ['2026-09-21'],
+        traits: ['cabinet'],
+        sightings: [
+          {
+            proofId: 'pf-kitchen',
+            clipTitle: 'Kitchen walkthrough',
+            workDate: '2026-09-21',
+            startSeconds: 0,
+            findings: [{ kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 }],
+          },
+        ],
+      },
+      {
+        roomKey: 'living room::',
+        roomName: 'living room',
+        firstSeen: '2026-09-10',
+        lastSeen: '2026-09-10',
+        datesWorked: ['2026-09-10'],
+        traits: ['drywall', 'window'],
+        sightings: [
+          {
+            proofId: 'pf-living',
+            clipTitle: 'Living room close-up',
+            workDate: '2026-09-10',
+            startSeconds: 0,
+            findings: [{ kind: 'damage', text: 'Crack in the drywall above the window.', atSeconds: 6 }],
+          },
+        ],
+      },
+    ],
+    videos: [
+      {
+        id: 'pf-kitchen',
+        partyId: 'pty-4',
+        company: 'Kestrel Flooring',
+        workDate: '2026-09-21',
+        phase: 'after',
+        durationSeconds: 40,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'Kitchen cabinets along the east wall.',
+        heardOnMic: null,
+        rooms: [
+          {
+            roomName: 'kitchen',
+            roomKey: 'kitchen::',
+            startSeconds: 0,
+            endSeconds: 40,
+            confidence: 0.8,
+            findings: [{ kind: 'work', text: 'Installs the cabinet boxes along the east wall.', atSeconds: 12 }],
+          },
+        ],
+      },
+      {
+        id: 'pf-bath-start',
+        partyId: 'pty-4',
+        company: 'Kestrel Flooring',
+        workDate: '2026-09-03',
+        phase: 'before',
+        durationSeconds: 30,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'Bathroom vanity comes out.',
+        heardOnMic: null,
+        rooms: [
+          {
+            roomName: 'bathroom',
+            roomKey: 'bathroom::',
+            startSeconds: 0,
+            endSeconds: 30,
+            confidence: 0.72,
+            findings: [{ kind: 'work', text: 'Removes the old vanity.', atSeconds: 8 }],
+          },
+        ],
+      },
+      {
+        id: 'pf-bath-finish',
+        partyId: 'pty-4',
+        company: 'Kestrel Flooring',
+        workDate: '2026-09-24',
+        phase: 'after',
+        durationSeconds: 36,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'New vanity is set.',
+        heardOnMic: null,
+        rooms: [
+          {
+            roomName: 'bathroom',
+            roomKey: 'bathroom::',
+            startSeconds: 0,
+            endSeconds: 36,
+            confidence: 0.74,
+            findings: [{ kind: 'work', text: 'Sets the new vanity and caulks the seam.', atSeconds: 20 }],
+          },
+        ],
+      },
+      {
+        id: 'pf-living',
+        partyId: 'pty-4',
+        company: 'Kestrel Flooring',
+        workDate: '2026-09-10',
+        phase: 'before',
+        durationSeconds: 20,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'A crack above the living room window.',
+        heardOnMic: null,
+        rooms: [
+          {
+            roomName: 'living room',
+            roomKey: 'living room::',
+            startSeconds: 0,
+            endSeconds: 20,
+            confidence: 0.7,
+            findings: [{ kind: 'damage', text: 'Crack in the drywall above the window.', atSeconds: 6 }],
+          },
+        ],
+      },
+    ],
+    days: [],
+  },
 };
 
 const PROOF_QUESTIONS: Record<string, any[]> = {
@@ -2074,6 +2235,37 @@ function demoMentionAnswer(question: string, jobId?: string): {
         answer: absent,
         model: null,
         grounded_on: [],
+        created_at: now,
+        thread_id: 'thread-demo',
+      },
+    };
+  }
+  const roomQuestion = /\b(kitchen|bathroom|bath|living room|attic|rooms?)\b/.test(q);
+  if (jobId === 'job-1041' && roomQuestion) {
+    const weeks = /\b(how (?:many|long)|weeks?|days?|take to|took)\b/.test(q);
+    const attic = /\battic\b/.test(q);
+    const kitchen = /\bkitchen\b/.test(q);
+    const damage = /\b(damage|crack|stain)\b/.test(q);
+    const answer = attic
+      ? 'An attic is not on file. Rooms on file: bathroom, kitchen, living room.'
+      : weeks
+        ? 'The bathroom work on file runs from the first bathroom work clip on Sep 3, 2026 (Bathroom start) to the last on Sep 24, 2026 (Bathroom finish), about 3 weeks. The file does not establish completion.'
+        : kitchen
+          ? 'On Sep 21, work in the kitchen on file: Sep 21, 2026, Installs the cabinet boxes along the east wall. (Kitchen walkthrough, 0:12)'
+          : damage
+            ? 'Damage in the living room: Sep 10, 2026, Crack in the drywall above the window. (Living room close-up, 0:06)'
+            : 'Work in the bathroom on file: Sep 3, 2026, Removes the old vanity. (Bathroom start, 0:08) Sep 24, 2026, Sets the new vanity and caulks the seam. (Bathroom finish, 0:20)';
+    return {
+      answer,
+      groundedOn: 2,
+      model: null,
+      threadId: 'thread-demo',
+      question: {
+        id: `q-${Date.now()}`,
+        question,
+        answer,
+        model: null,
+        grounded_on: ['clip:bathroom', 'clip:kitchen'],
         created_at: now,
         thread_id: 'thread-demo',
       },
@@ -3926,6 +4118,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       body: {
         days,
         videos,
+        rooms: record.rooms ?? [],
         counts: {
           days: days.length,
           videos: videos.length,

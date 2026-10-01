@@ -14,7 +14,8 @@ export type GoldQuestionType =
   | 'negative'
   | 'false_premise'
   | 'speaker_source'
-  | 'multi_hop';
+  | 'multi_hop'
+  | 'room';
 
 export type GoldCategory =
   | 'walkthrough'

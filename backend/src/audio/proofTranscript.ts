@@ -312,6 +312,12 @@ export async function transcribeProofVideo(
   // Rebuild the Ask transcript chunk index for this clip. Failure-tolerant:
   // a missing table or a failed write never fails the transcript save.
   await writeTranscriptChunks(admin, proofId);
+  try {
+    const { refreshClipRooms } = await import('../shared/roomPersist.js');
+    await refreshClipRooms(admin, proofId, 'analysis');
+  } catch (err) {
+    console.warn('[rooms] transcript refresh failed', err instanceof Error ? err.message : err);
+  }
 
   // Conversation summary, evidence log and people log are rebuilt on the
   // summary retry queue (never fails the Whisper write). This runs for the

@@ -274,16 +274,13 @@ describe('Settings sections', () => {
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
-  it('shows Connect under Settings without Connect CRM in the page chrome', async () => {
+  it('hides the Connect section for now', async () => {
     renderSettings('/settings?section=connect');
-    expect(screen.getByRole('button', { name: 'Connect' })).toHaveAttribute('aria-current', 'page');
-    await waitFor(() => expect(screen.getByTestId('crm-card-jobnimbus')).toBeInTheDocument());
-    expect(screen.getByTestId('crm-card-acculynx')).toBeInTheDocument();
-    expect(screen.getByTestId('crm-card-salesforce')).toBeInTheDocument();
-    expect(screen.getByTestId('crm-card-servicetitan')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('crm-connect-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('crm-card-jobnimbus')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Profile' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByText('Connect CRM')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Atmosphere native/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Always on/i)).not.toBeInTheDocument();
   });
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   api,
+  type ProofJobRoom,
   type ProofResponse,
   type ProofQuestion,
   type ProofVideoRecord,
@@ -230,15 +231,20 @@ export function ProofOfWork({
           enough. The assistant will describe what happened.
         </p>
       ) : (
-        <VideoCatalog
-          jobId={jobId}
-          videos={data.videos ?? []}
-          videoFetcher={videoFetcher}
-          seekProofId={seekProofId}
-          seekAt={seekAt}
-          seekNonce={seekNonce}
-          onSeek={applyClipSeek}
-        />
+        <>
+          {data.rooms?.length ? (
+            <JobRooms rooms={data.rooms} onSeek={applyClipSeek} />
+          ) : null}
+          <VideoCatalog
+            jobId={jobId}
+            videos={data.videos ?? []}
+            videoFetcher={videoFetcher}
+            seekProofId={seekProofId}
+            seekAt={seekAt}
+            seekNonce={seekNonce}
+            onSeek={applyClipSeek}
+          />
+        </>
       )}
 
       {!readOnly && showCollectionAsk && data && ((data.videos?.length ?? 0) > 0 || data.days.length > 0) && (
@@ -498,6 +504,63 @@ function ClipSpeakerList({ jobId, proofId }: { jobId: string; proofId: string })
   );
 }
 
+/** Leading "room unclear" spans are not chips. Unknown evidence stays off the row. */
+function clipRoomChips(rooms: ProofVideoRecord['rooms']): NonNullable<ProofVideoRecord['rooms']> {
+  return (rooms ?? []).filter((room) => room.roomName !== 'room unclear' && room.roomKey !== 'unclear::');
+}
+
+function roomDay(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function JobRooms({
+  rooms,
+  onSeek,
+}: {
+  rooms: ProofJobRoom[];
+  onSeek?: (proofId: string, seconds: number) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border border-line px-3 py-2.5" data-testid="job-rooms">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Rooms</p>
+      <ul className="mt-2 space-y-2">
+        {rooms.map((room) => {
+          const span = [roomDay(room.firstSeen), roomDay(room.lastSeen)].filter(Boolean);
+          const when = span.length > 1 && span[0] !== span[1] ? `${span[0]} – ${span[1]}` : span[0] ?? null;
+          return (
+            <li key={room.roomKey} data-testid="job-room">
+              <p className="text-sm font-medium text-ink-900">
+                {room.roomName}
+                {when ? <span className="ml-2 text-[11px] font-normal text-ink-500">{when}</span> : null}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {room.sightings.flatMap((sighting) =>
+                  sighting.findings.slice(0, 3).map((finding) => (
+                    <button
+                      key={`${sighting.proofId}-${finding.atSeconds}-${finding.text}`}
+                      type="button"
+                      onClick={() => onSeek?.(sighting.proofId, finding.atSeconds)}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-left text-[11px] text-ink-700 hover:border-brand-300"
+                    >
+                      <span className="font-semibold tabular-nums text-brand-700">
+                        {momentClock(finding.atSeconds)}
+                      </span>
+                      <span className="truncate">{finding.text}</span>
+                    </button>
+                  )),
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function VideoCatalog({
   jobId,
   videos,
@@ -536,6 +599,7 @@ function VideoCatalog({
           const title = clipDisplayTitle(video, meta);
           const status = videoRowStatus(video);
           const moments = clipMoments(video);
+          const roomChips = clipRoomChips(video.rooms);
           const day = new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
@@ -605,6 +669,28 @@ function VideoCatalog({
                       ) : null}
                     </p>
                   </button>
+                  {roomChips.length ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1" data-testid="clip-room-chips">
+                      {roomChips.map((room) => (
+                        <button
+                          key={`${room.roomKey}-${room.startSeconds}`}
+                          type="button"
+                          title={`${room.roomName} · ${momentClock(room.startSeconds)}`}
+                          aria-label={`Jump to ${room.roomName} at ${momentClock(room.startSeconds)}`}
+                          onClick={() => {
+                            setOpenId(video.id);
+                            onSeek?.(video.id, room.startSeconds);
+                          }}
+                          className="inline-flex max-w-[14rem] items-center gap-1 rounded-full border border-line bg-paper-0/70 px-2 py-0.5 text-[11px] text-ink-700 hover:border-brand-300"
+                        >
+                          <span className="font-semibold tabular-nums text-brand-700">
+                            {momentClock(room.startSeconds)}
+                          </span>
+                          <span className="truncate">{room.roomName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {moments.length > 0 ? (
                     <div className="mt-1.5 flex flex-wrap gap-1" data-testid="job-video-moments">
                       {moments.map((moment) => (
