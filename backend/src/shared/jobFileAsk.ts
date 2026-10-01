@@ -16,6 +16,8 @@ import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { answerFromJobDocuments, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
+import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
 import { activitySystemAddendum } from './mentions.js';
@@ -108,8 +110,17 @@ export interface JobFileAskLog {
 }
 
 export interface JobFileAskDocument {
+  id?: string | null;
   filename?: string | null;
   extractedText?: string | null;
+  kind?: string | null;
+  /** False when relevance refused the file or the office has not confirmed it. */
+  attached?: boolean | null;
+  relevance?: string | null;
+  relevanceReason?: string | null;
+  summary?: string | null;
+  chunks?: Array<{ seq?: number; location: string; text: string }> | null;
+  facts?: DocumentFacts | null;
 }
 
 export interface JobFileAskTurn {
@@ -156,6 +167,7 @@ Rules:
 11. When the question assumes something the file does not show (an object, a brand, an install, a person, a visual detail), say plainly that it is not in the evidence. Do not guess or answer with a nearby detail.
 12. Quotes are exact transcript words only, never paraphrased inside quotation marks, each followed by the clip name and time, like “We need the permit.” (Kitchen walkthrough, 0:15).
 13. Speakers: use only diarization labels ("Speaker 1") or a name the file explicitly gives that speaker. Otherwise write "an unidentified speaker" and append nothing. Never infer a name, role, posture, or relationship, and never write labels like "Person 1 (Seated…)" as a speaker.
+14. Attached documents are evidence. Quote exact substrings of the extracted document, with the file name and the page, sheet, or cell, like “Total: $4,280.00” (Estimate.pdf, page 1). A file marked not related is not part of the job. Do not invent figures, line items, rooms, or dimensions. Job file evidence beats web results.
 
 ` + ASK_PROSE_FORMAT_RULES;
 
@@ -257,9 +269,16 @@ export function jobFileCorpus(file: JobFileAskContext): CorpusRow[] {
   }
 
   for (const doc of file.documents ?? []) {
+    const filename = trim(doc.filename) || 'document';
+    const unattached = doc.attached === false || doc.relevance === 'not_related' || doc.relevance === 'pending_confirm';
+    if (unattached) {
+      const reason = trim(doc.relevanceReason);
+      push(`document · ${filename}`, `${filename} is not attached to this job.${reason ? ` ${reason}` : ''}`);
+      continue;
+    }
     const text = trim(doc.extractedText);
     if (!text) continue;
-    push(doc.filename ? `document · ${doc.filename}` : 'document', text.slice(0, 4000));
+    push(`document · ${filename}`, text.slice(0, 4000));
   }
 
   for (const clip of file.clips ?? []) {
@@ -290,7 +309,7 @@ export function countJobFileSources(file: JobFileAskContext): number {
   if ((file.crew ?? []).some((member) => trim(member.name))) n += 1;
   if ((file.workLogs ?? []).some((log) => trim(log.body))) n += 1;
   if ((file.memory ?? []).some((event) => trim(event.summary))) n += 1;
-  if ((file.documents ?? []).some((doc) => trim(doc.extractedText))) n += 1;
+  if ((file.documents ?? []).some((doc) => documentIsJobKnowledge(doc) && trim(doc.extractedText))) n += 1;
   n += (file.clips ?? []).length;
   return n;
 }
@@ -380,14 +399,21 @@ export function formatJobFileRecord(file: JobFileAskContext): string {
     sections.push(`Recent record\n${memory.slice(0, 20).map((line) => `- ${line}`).join('\n')}`);
   }
 
-  const docs = (file.documents ?? []).filter((doc) => trim(doc.extractedText));
-  if (docs.length) {
-    sections.push(
-      `Uploaded documents\n${docs
-        .map((doc) => `- ${trim(doc.filename) || 'document'}: ${trim(doc.extractedText).slice(0, 2500)}`)
-        .join('\n')}`,
-    );
+  const docLines: string[] = [];
+  for (const doc of file.documents ?? []) {
+    const filename = trim(doc.filename) || 'document';
+    const unattached = !documentIsJobKnowledge(doc);
+    if (unattached) {
+      if (!trim(doc.filename) && !trim(doc.relevanceReason)) continue;
+      const reason = trim(doc.relevanceReason);
+      docLines.push(`- ${filename} is not attached to this job.${reason ? ` ${reason}` : ''}`);
+      continue;
+    }
+    const text = trim(doc.extractedText);
+    if (!text) continue;
+    docLines.push(`- ${filename}: ${text.slice(0, 2500)}`);
   }
+  if (docLines.length) sections.push(`Uploaded documents\n${docLines.join('\n')}`);
 
   const supplement = trim(file.mentionSupplement);
   const priority = new Set(
@@ -467,7 +493,7 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
   const need = words.some((word) => word.length >= 6) ? 1 : Math.min(words.length >= 2 ? 2 : 1, words.length);
   const scored = rows
     .map((row) => {
-      const hay = tokens(row.text);
+      const hay = tokens(`${row.source} ${row.text}`);
       const hits = words.filter((token) => hay.some((h) => tokensOverlap(token, h) || h === token));
       return { row, score: hits.length };
     })
@@ -576,6 +602,59 @@ function applyWebResults(
   return { answer: stripped, webDerived: false };
 }
 
+function documentViews(file: JobFileAskContext): AskDocumentView[] {
+  return (file.documents ?? []).flatMap((doc) => {
+    const filename = trim(doc.filename);
+    const text = trim(doc.extractedText);
+    if (!filename && !text) return [];
+    return [{
+      id: trim(doc.id) || filename || 'document',
+      filename: filename || 'document',
+      kind: doc.kind,
+      attached: doc.attached,
+      relevance: doc.relevance,
+      relevanceReason: doc.relevanceReason,
+      summary: doc.summary,
+      extractedText: doc.extractedText,
+      chunks: doc.chunks,
+      facts: doc.facts,
+    }];
+  });
+}
+
+/**
+ * A document miss is final only when the question names an upload.
+ * "Who is invited on the file?" must not stop at "This document does not show that."
+ */
+function keepDocumentAnswer(question: string, answer: string): boolean {
+  if (
+    /\b(document|pdf|spreadsheet|workbook|uploaded|attachment|estimate|invoice|contract|change\s+order|floor\s*plan|sketch|permit|photo)\b/i.test(
+      question,
+    )
+  ) {
+    return true;
+  }
+  // "this file" / "the file" are the job. Do not let an upload hit or abstain replace it.
+  if (/\b(?:this|the)\s+file\b/i.test(question)) return false;
+  return !/^this document does not show that\.?$/i.test(answer.trim());
+}
+
+/** Deterministic document answers. Quotes are exact substrings, cited with the file and location. */
+function answerFromAttachedDocuments(question: string, file: JobFileAskContext): string | null {
+  const views = documentViews(file);
+  if (!views.length) return null;
+  const evidence = (file.clips ?? []).map((clip) => ({
+    source: [clip.workDate, clip.phase, clip.company].filter(Boolean).join(' · ') || 'Video',
+    text: [clip.summary, clip.narration, clip.transcript].map(trim).filter(Boolean).join('\n'),
+  }));
+  const direct = answerFromJobDocuments(question, views, evidence);
+  if (!direct) return null;
+  return enforceQuoteGrounding(direct, {
+    chunks: documentChunksForGrounding(views),
+    question,
+  }).answer;
+}
+
 export async function answerFromJobFile(input: {
   question: string;
   file: JobFileAskContext;
@@ -640,6 +719,12 @@ export async function answerFromJobFile(input: {
     const answer = professionalWebCapabilityAnswer(input.question);
     emit(answer);
     return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
+  }
+
+  const fromDocuments = answerFromAttachedDocuments(input.question, input.file);
+  if (fromDocuments && keepDocumentAnswer(input.question, fromDocuments)) {
+    emit(fromDocuments);
+    return { ...empty, answer: fromDocuments, groundedOn };
   }
 
   // Run safe tools first so field updates apply before the model writes prose.
@@ -826,8 +911,12 @@ export async function answerFromJobFile(input: {
       }
     }
     let answer = normalizeAskProse(looked.answer);
-    // Final check before render: every quote is a retrieved transcript line.
-    answer = enforceQuoteGrounding(answer, { chunks: looked.retrievedChunks, question: input.question }).answer;
+    // Final check before render: every quote is a retrieved transcript line or an uploaded document.
+    const documentChunks = documentChunksForGrounding(documentViews(input.file));
+    answer = enforceQuoteGrounding(answer, {
+      chunks: [...looked.retrievedChunks, ...documentChunks],
+      question: input.question,
+    }).answer;
     const applied = applyWebResults(answer, input.question, webHits, webAnswer);
     answer = applied.answer;
     const actions = formatActionsTrailer(toolResults);

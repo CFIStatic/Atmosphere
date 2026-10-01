@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject, type Ref } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MutableRefObject, type Ref } from 'react';
 import { PersonAvatar } from '../PersonAvatar';
 import {
   filterMentionMembers,
@@ -27,6 +27,7 @@ export function MentionTextarea({
   value,
   onChange,
   onKeyDown,
+  onPaste,
   inputRef,
   className,
   placeholder,
@@ -38,6 +39,7 @@ export function MentionTextarea({
   value: string;
   onChange: (value: string) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   inputRef?: Ref<HTMLTextAreaElement>;
   className?: string;
   placeholder?: string;
@@ -133,6 +135,7 @@ export function MentionTextarea({
           syncQuery(event.target.value, event.target.selectionStart ?? event.target.value.length);
         }}
         onKeyDown={handleKeyDown}
+        onPaste={onPaste}
         onClick={(event) => syncQuery(value, event.currentTarget.selectionStart ?? value.length)}
         onBlur={() => {
           window.setTimeout(() => setQuery(null), 140);

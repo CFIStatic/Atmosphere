@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 177,
+    "migrationCount": 178,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -191,7 +191,8 @@
     "20261001120000_ask_research_trace.sql",
     "20261001143000_clip_room_segments.sql",
     "20261001161000_set_proof_room_segments.sql",
-    "20261001170000_proofs_awaiting_room_backfill.sql"
+    "20261001170000_proofs_awaiting_room_backfill.sql",
+    "20261001180000_job_chat_documents.sql"
   ],
   "migrations": [
     {
@@ -5824,6 +5825,36 @@
       "indistinguishableReason": null,
       "expect": [
         "function|public.proofs_awaiting_room_backfill"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261001180000_job_chat_documents",
+      "file": "20261001180000_job_chat_documents.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.job_chat_documents",
+        "index|public.job_chat_documents.job_chat_documents_pkey",
+        "index|public.job_chat_documents.job_chat_documents_job_idx",
+        "index|public.job_chat_documents.job_chat_documents_context_idx",
+        "policy|public.job_chat_documents.job_chat_documents_select",
+        "rls|public.job_chat_documents",
+        "table|public.ask_document_chunks",
+        "index|public.ask_document_chunks.ask_document_chunks_pkey",
+        "index|public.ask_document_chunks.ask_document_chunks_document_seq_key",
+        "index|public.ask_document_chunks.ask_document_chunks_job_idx",
+        "index|public.ask_document_chunks.ask_document_chunks_fts_idx",
+        "policy|public.ask_document_chunks.ask_document_chunks_select",
+        "rls|public.ask_document_chunks",
+        "table|public.job_document_rooms",
+        "index|public.job_document_rooms.job_document_rooms_pkey",
+        "index|public.job_document_rooms.job_document_rooms_document_idx",
+        "index|public.job_document_rooms.job_document_rooms_job_idx",
+        "policy|public.job_document_rooms.job_document_rooms_select",
+        "rls|public.job_document_rooms"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
