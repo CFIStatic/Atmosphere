@@ -4394,6 +4394,7 @@
     var noSpeech = e.noSpeech === true;
     var retrying = e.retrying === true;
     if (e.uploading === true) return { state: 'uploading', label: 'Uploading', tone: 'progress' };
+    if (e.budgetHold === true || e.aiBudgetHold === true) return { state: 'uploaded', label: 'Waiting for AI allowance', tone: 'neutral' };
     if (analysis === 'failed' || narration === 'failed' || summary === 'failed') {
       if (summary === 'failed' && analysis !== 'failed' && narration !== 'failed') {
         return { state: 'failed', label: 'Summary unavailable', tone: 'bad' };

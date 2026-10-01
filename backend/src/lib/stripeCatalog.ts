@@ -191,7 +191,7 @@ export function planDescription(plan: AtmosphereSelfServePlan): string {
     '• Field Capture + Evidence Platform',
     `• $${(plan.monthlyCents / 100).toLocaleString('en-US')}/mo includes ${plan.includedFcSeats} Field Capture ${seatWord}`,
     `• Additional Field Capture accounts are $${(EXTRA_FC_SEAT_MONTHLY_CENTS / 100).toLocaleString('en-US')}/mo each`,
-    '• AI/token usage is billed the day it is used',
+    '• Each plan includes an AI usage allowance. Buy credits if you need more.',
   ].join('\n');
 }
 

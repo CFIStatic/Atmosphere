@@ -26,6 +26,8 @@ import {
 import { fallbackProviderCogsNanos } from './providerCogs.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
 import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
+import { aiBudgetConfig } from './aiBudgetConfig.js';
+import { settleUsageCost } from './aiBudgetService.js';
 
 export interface TokenUsageInput {
   orgId: string;
@@ -442,15 +444,61 @@ export async function recordTokenUsage(
   if (!row?.eventId) return null;
   const recorded = { eventId: String(row.eventId), duplicate: Boolean(row.duplicate) };
   if (!recorded.duplicate) {
-    const { priceNanos } = resolveTokenLedgerAmounts({
+    const amounts = resolveTokenLedgerAmounts({
       costNanos: input.costNanos,
       priceNanos: input.priceNanos,
     });
-    if (priceNanos > 0) {
+    const budget = aiBudgetConfig();
+    if (!budget.replacesUsageInvoices && amounts.priceNanos > 0) {
       invoiceSameDayUsageAsync(client, input.orgId, input.at ? usageDayUtc(input.at) : undefined);
+    }
+    if (amounts.costNanos > 0) {
+      void settleUsageCost(client, {
+        orgId: input.orgId,
+        requestId: input.requestId,
+        costNanos: amounts.costNanos,
+        at: input.at,
+      }).catch((err) => {
+        console.error('[metering] failed to settle AI allowance', {
+          orgId: input.orgId,
+          requestId: input.requestId,
+          err,
+        });
+      });
     }
   }
   return recorded;
+}
+
+/** Flat provider fees (Whisper minutes, Tavily searches) on the same ledger as tokens. */
+export function recordFlatProviderCost(
+  client: SupabaseClient,
+  input: {
+    orgId: string;
+    requestId: string;
+    feature: string;
+    source: string;
+    modelId: string;
+    costNanos: number;
+    jobId?: string | null;
+    userId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+): void {
+  if (!Number.isFinite(input.costNanos) || input.costNanos <= 0) return;
+  recordTokenUsageAsync(client, {
+    orgId: input.orgId,
+    requestId: input.requestId,
+    feature: input.feature,
+    source: input.source,
+    modelId: input.modelId,
+    costNanos: Math.round(input.costNanos),
+    inputTokens: 0,
+    outputTokens: 0,
+    jobId: input.jobId ?? null,
+    userId: input.userId ?? null,
+    metadata: input.metadata,
+  });
 }
 
 export function recordTokenUsageAsync(

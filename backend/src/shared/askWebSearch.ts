@@ -18,8 +18,12 @@
  * private job-site people from photos/video.
  */
 
+import { randomUUID } from 'node:crypto';
 import { logger } from '../lib/logger.js';
 import { googleVisionApiKey } from '../lib/visionProvider.js';
+import { currentAiUsageScope } from '../metering/aiUsageContext.js';
+import { modelPriceTable, tavilySearchCostNanos } from '../metering/modelPriceTable.js';
+import { recordFlatProviderCost } from '../metering/tokenUsage.js';
 
 export type AskWebHit = {
   title: string;
@@ -1206,6 +1210,7 @@ export async function searchAskWebDetailed(
   if (tavilyKey) {
     try {
       const outcome = await searchTavily(query, tavilyKey, limit, fetchFn, includeDomains);
+      meterTavilySearch();
       // Count of searches only — never the key, the Authorization header, or the query.
       logger.info('ask_web_search', { searches, results: outcome.hits.length });
       return outcome;
@@ -1239,6 +1244,22 @@ export async function searchAskWebDetailed(
     logger.warn('ask_web_search_failed', { searches, detail });
     return empty;
   }
+}
+
+function meterTavilySearch(): void {
+  const scope = currentAiUsageScope();
+  if (!scope) return;
+  const costNanos = tavilySearchCostNanos(modelPriceTable(), 1);
+  recordFlatProviderCost(scope.client, {
+    orgId: scope.orgId,
+    requestId: `tavily:${scope.requestId}:${randomUUID()}`,
+    feature: 'web_search',
+    source: 'tavily',
+    modelId: 'tavily-search',
+    costNanos,
+    jobId: scope.jobId,
+    userId: scope.userId,
+  });
 }
 
 export async function searchAskWeb(question: string, opts?: AskWebSearchOptions): Promise<AskWebHit[]> {

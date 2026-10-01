@@ -66,6 +66,8 @@ export type ClipProcessingInput = {
   /** False means a summary rebuild flag is not backed by a live job. */
   summaryActive?: boolean | null;
   failedChecks?: number | null;
+  /** The file is stored. Analysis waits until the AI allowance is available. */
+  budgetHold?: boolean | null;
 };
 
 export type ClipProcessing = {
@@ -101,6 +103,9 @@ export function clipProcessing(input: ClipProcessingInput = {}): ClipProcessing 
 
   if (input.uploading) {
     return { state: 'uploading', label: 'Uploading', tone: 'progress' };
+  }
+  if (input.budgetHold) {
+    return { state: 'uploaded', label: 'Waiting for AI allowance', tone: 'neutral' };
   }
   if (Number.isFinite(failedChecks) && failedChecks > 0) {
     return {

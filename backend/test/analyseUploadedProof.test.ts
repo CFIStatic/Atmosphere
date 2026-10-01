@@ -76,6 +76,44 @@ test('analyseUploadedProof can be called twice for the same proof without skippi
   assert.deepEqual(counts, { narration: 2, day: 2, transcript: 2 });
 });
 
+test('analyseUploadedProof keeps the file and holds analysis when the allowance is paused', async () => {
+  const started: string[] = [];
+  const updates: Array<Record<string, unknown>> = [];
+  const admin = {
+    from() {
+      return {
+        update(patch: Record<string, unknown>) {
+          updates.push(patch);
+          return { eq: async () => ({ error: null }) };
+        },
+      };
+    },
+  };
+  const result = await analyseUploadedProof(
+    admin,
+    { org_id: 'org-1', job_id: 'job-1', id: 'party-1', trade: 'water' },
+    { id: 'proof-1', phase: 'after' },
+    '2026-08-31',
+    {
+      paused: true,
+      queueNarrationFn: async () => {
+        started.push('narration');
+      },
+      queueDayAnalysisFn: async () => {
+        started.push('day');
+        return 'queued';
+      },
+      queueTranscriptFn: async () => {
+        started.push('transcript');
+      },
+    },
+  );
+  assert.equal(result, 'queued');
+  assert.deepEqual(started, []);
+  assert.equal(updates[0]?.ai_budget_hold, true);
+  assert.equal(updates[0]?.analysis_status, 'queued');
+});
+
 test('recordProof is the only Field Capture finalize that starts analysis', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../src/routes/proofOfWork.ts', import.meta.url), 'utf8');

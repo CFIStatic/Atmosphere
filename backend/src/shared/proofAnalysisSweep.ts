@@ -9,6 +9,8 @@
 
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
+import { releaseHeldProofs } from '../metering/aiBudgetService.js';
+import { releaseHeldScopeDocuments } from '../routes/scopeDocs.js';
 import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
 import { claimNextProofWork, type ProofWorkKind } from './outboxClaim.js';
@@ -83,7 +85,7 @@ export async function sweepUnanalyzedProofs(
   const { data, error } = await admin
     .from('job_proofs')
     .select(
-      'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, narration_lease_until, transcript_status, transcript_lease_until, analysis_status, analysis_error, analysis_lease_until, storage_path',
+      'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, narration_lease_until, transcript_status, transcript_lease_until, analysis_status, analysis_error, analysis_lease_until, storage_path, ai_budget_hold',
     )
     .is('deleted_at', null)
     .not('storage_path', 'is', null)
@@ -119,6 +121,7 @@ export async function sweepUnanalyzedProofs(
   let analysis = 0;
   const owner = leaseOwnerId();
   for (const row of rows) {
+    if (row.ai_budget_hold === true) continue;
     const party = { org_id: row.org_id, job_id: row.job_id, id: row.party_id };
     if (needsNarration(row.narration_status, row.narration_error) && !leaseIsHeld(row.narration_lease_until)) {
       if (await claimProofKind(admin, 'narration', row.id, owner)) {
@@ -185,6 +188,18 @@ async function tick(): Promise<void> {
   const admin = unscopedAdminOrNull();
   if (!admin) return;
   running = true;
+  try {
+    const released = await releaseHeldProofs(admin);
+    if (released) console.log(`[proof-analysis] released ${released} clips waiting on the AI allowance`);
+  } catch (err) {
+    console.warn('[proof-analysis] allowance release failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    const docs = await releaseHeldScopeDocuments(admin);
+    if (docs) console.log(`[proof-analysis] released ${docs} documents waiting on the AI allowance`);
+  } catch (err) {
+    console.warn('[proof-analysis] document allowance release failed:', err instanceof Error ? err.message : err);
+  }
   try {
     const result = await sweepUnanalyzedProofs(admin);
     if (result.narration || result.transcript || result.analysis) {

@@ -32,6 +32,7 @@ export type ClipProcessingInput = {
   narrationActive?: boolean | null;
   summaryActive?: boolean | null;
   failedChecks?: number | null;
+  budgetHold?: boolean | null;
 };
 
 export type ClipProcessing = {
@@ -66,6 +67,9 @@ export function clipProcessing(input: ClipProcessingInput = {}): ClipProcessing 
 
   if (input.uploading) {
     return { state: 'uploading', label: 'Uploading', tone: 'progress' };
+  }
+  if (input.budgetHold) {
+    return { state: 'uploaded', label: 'Waiting for AI allowance', tone: 'neutral' };
   }
   if (Number.isFinite(failedChecks) && failedChecks > 0) {
     return {

@@ -2186,6 +2186,64 @@ type Handler = (
   body: Record<string, unknown>,
 ) => HandlerResult | Promise<HandlerResult>;
 
+function demoAllowanceFraction(): number {
+  const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('demo-ai-usage') : null;
+  if (raw === '100') return 1;
+  if (raw === '80') return 0.8;
+  return 0.4;
+}
+
+function demoAiAllowance() {
+  const allowanceNanos = 12_500_000_000;
+  const fraction = demoAllowanceFraction();
+  const usedNanos = Math.round(allowanceNanos * fraction);
+  const state = fraction >= 1 ? 'limited' : fraction >= 0.8 ? 'warning' : 'ok';
+  const resetAt = '2026-11-01T00:00:00.000Z';
+  return {
+    state,
+    paused: state === 'limited',
+    warning: state === 'warning',
+    message:
+      state === 'warning'
+        ? 'This account has used most of its AI usage allowance for this period. It resets on November 1, 2026.'
+        : state === 'limited'
+          ? 'AI is paused until the usage allowance resets on November 1, 2026. Uploaded videos are saved and will be analyzed when the allowance is available. Upgrade the plan or buy credits to continue.'
+          : null,
+    usedNanos,
+    allowanceNanos,
+    usedFraction: fraction,
+    resetAt,
+    periodStart: '2026-10-01T00:00:00.000Z',
+    periodEnd: resetAt,
+    rolling: {
+      enabled: true,
+      limited: false,
+      hours: 24,
+      usedNanos: Math.round(allowanceNanos * 0.08),
+      capNanos: Math.round(allowanceNanos * 0.25),
+    },
+    byFeature: [
+      { feature: 'ask', label: 'Ask', nanos: Math.round(usedNanos * 0.45) },
+      { feature: 'video_analysis', label: 'Video analysis', nanos: Math.round(usedNanos * 0.35) },
+      { feature: 'transcription', label: 'Transcription', nanos: Math.round(usedNanos * 0.2) },
+    ],
+    creditBalanceNanos: 0,
+    creditsRollOver: true,
+    canManage: true,
+    packs: [
+      { code: 'ai_10', label: '$10', cents: 1000, creditNanos: 10_000_000_000, priceConfigured: true },
+      { code: 'ai_25', label: '$25', cents: 2500, creditNanos: 25_000_000_000, priceConfigured: true },
+      { code: 'ai_50', label: '$50', cents: 5000, creditNanos: 50_000_000_000, priceConfigured: true },
+    ],
+    history: {
+      usage: [
+        { id: 'u1', at: '2026-10-01T15:00:00.000Z', feature: 'ask', label: 'Ask', nanos: Math.round(usedNanos * 0.45) },
+      ],
+      credits: [],
+    },
+  };
+}
+
 const routes: Array<[string, RegExp, Handler]> = [
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
     state.signedIn = true; state.onboarded = true;
@@ -2500,6 +2558,15 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/usage\/events$/, () => ({ body: { events: USAGE_EVENTS } })],
   ['GET', /^\/api\/usage\/daily$/, () => ({ body: { days: USAGE_DAYS } })],
   ['GET', /^\/api\/billing\/token-usage$/, () => ({ body: TOKEN_USAGE() })],
+  ['GET', /^\/api\/billing\/ai-allowance$/, () => ({ body: demoAiAllowance() })],
+  ['POST', /^\/api\/billing\/ai-allowance\/credits\/checkout$/, () => ({
+    status: 201,
+    body: { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_ai_credits', packCode: 'ai_25' },
+  })],
+  ['POST', /^\/api\/billing\/ai-allowance\/plan\/checkout$/, () => ({
+    status: 201,
+    body: { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_plan_change', planCode: 'scale', billingInterval: 'month' },
+  })],
 
 
 
@@ -3901,10 +3968,24 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { members: demoPeopleOnJob(m[1]) } };
   }],
-  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => ({
-    stream: true,
-    body: demoMentionAnswer(String(b.question ?? ''), m[1]),
-  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => {
+    if (demoAllowanceFraction() >= 1) {
+      return {
+        status: 402,
+        body: {
+          error:
+            'AI is paused until the usage allowance resets on November 1, 2026. Uploaded videos are saved and will be analyzed when the allowance is available. Upgrade the plan or buy credits to continue.',
+          code: 'ai_budget_limited',
+          canManage: true,
+          state: 'limited',
+        },
+      };
+    }
+    return {
+      stream: true,
+      body: demoMentionAnswer(String(b.question ?? ''), m[1]),
+    };
+  }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/messages$/, (m, b) => {
     const record = SHARED_RECORDS[m[1]];
     const message = { id: `msg-${Date.now()}`, party_id: null, author_label: state.fullName || state.email, body: String(b.body ?? ''), scope_item_id: null, is_decision: false, created_at: new Date().toISOString() };

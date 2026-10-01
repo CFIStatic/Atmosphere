@@ -36,6 +36,9 @@ import {
   requireCreditPurchaseId,
 } from '../lib/stripeWebhook.js';
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
+import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
+import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
+import { grantAiCredits, recordSubscriptionPriceSpan } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
 
@@ -141,9 +144,31 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     `checkout ${session.id}`,
   );
 
+  if (session.metadata?.kind === 'plan_change') {
+    await replaceSubscriptionFromCheckout(session);
+  }
+
   if (session.mode !== 'payment') return; // subscriptions settle via invoice.paid
 
-  const purchaseId = requireCreditPurchaseId(session.mode, session.metadata?.purchase_id);
+  const isAiCredits = session.metadata?.kind === 'ai_credits';
+  const purchaseId = isAiCredits
+    ? null
+    : requireCreditPurchaseId(session.mode, session.metadata?.purchase_id);
+
+  if (isAiCredits) {
+    const grant = creditGrantFromCheckout(session, aiBudgetConfig().creditUsdRatio);
+    if (!grant) {
+      throw new Error(`[stripe] AI credit checkout ${session.id} is not paid`);
+    }
+    await grantAiCredits(admin, {
+      orgId,
+      deltaNanos: grant.creditNanos,
+      kind: 'purchase',
+      stripeEventId: session.id,
+      stripeSessionId: session.id,
+      note: `AI credits ${grant.paidCents} cents`,
+    });
+  }
   const paymentIntentId =
     typeof session.payment_intent === 'string'
       ? session.payment_intent
@@ -174,7 +199,7 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     p_status: 'succeeded',
     p_amount_cents: session.amount_total ?? 0,
     p_currency: session.currency ?? 'usd',
-    p_description: 'Usage credits',
+    p_description: isAiCredits ? 'AI usage credits' : 'Usage credits',
     p_payment_intent_id: paymentIntentId,
     p_charge_id: charge?.id ?? null,
     p_receipt_url: charge?.receipt_url ?? null,
@@ -256,6 +281,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   // versions; read whichever the account's version provides.
   const periodStart = toIso(item?.current_period_start ?? (sub as any).current_period_start);
   const periodEnd = toIso(item?.current_period_end ?? (sub as any).current_period_end);
+  await rememberRecurringPrice(admin, orgId, sub, periodStart);
 
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   const extraOnThisSub = extraSeatQuantityFromSubscription(sub);
@@ -375,6 +401,38 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
   await persistExtraFcSeats(admin, orgId, 0);
+}
+
+async function replaceSubscriptionFromCheckout(session: Stripe.Checkout.Session): Promise<void> {
+  const oldId = session.metadata?.replaces_subscription_id;
+  const newId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+  if (!oldId || !newId || oldId === newId) return;
+  await stripeClient().subscriptions.cancel(oldId, { prorate: true });
+}
+
+async function rememberRecurringPrice(
+  admin: any,
+  orgId: string,
+  sub: Stripe.Subscription,
+  periodStart: string | null,
+): Promise<void> {
+  const charge = recurringChargeFromItems(
+    (sub.items?.data ?? []).map((row) => {
+      const price = typeof row.price === 'object' && row.price ? row.price : null;
+      const interval = price?.recurring?.interval;
+      return {
+        unitAmountCents: price?.unit_amount ?? null,
+        quantity: row.quantity ?? 1,
+        interval: interval === 'year' || interval === 'month' || interval === 'week' || interval === 'day' ? interval : null,
+      };
+    }),
+  );
+  if (!charge) return;
+  await recordSubscriptionPriceSpan(admin, orgId, {
+    amountCents: charge.amountCents,
+    interval: charge.interval,
+    periodStart: periodStart ? new Date(periodStart) : null,
+  });
 }
 
 /**

@@ -3000,17 +3000,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly checkoutUrl: string | null;
+  readonly canManage: boolean;
   constructor(
     status: number,
     message: string,
     code = 'error',
     checkoutUrl: string | null = null,
+    body: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.checkoutUrl = checkoutUrl;
+    this.canManage = body?.canManage === true;
   }
 }
 
@@ -3137,7 +3140,7 @@ async function request<T>(path: string, options: RequestInit = {}, retried = fal
   if (!res.ok) {
     const { message, code } = apiFailureMessage(res.status, body, text);
     const checkoutUrl = typeof body.checkoutUrl === 'string' && body.checkoutUrl ? body.checkoutUrl : null;
-    throw new ApiError(res.status, message, code, checkoutUrl);
+    throw new ApiError(res.status, message, code, checkoutUrl, body);
   }
 
   return body as T;
@@ -4285,7 +4288,8 @@ export const api = {
       const text = await res.text();
       const body = parseApiJson(text);
       const { message, code } = apiFailureMessage(res.status, body, text);
-      throw new ApiError(res.status, message, code);
+      const checkoutUrl = typeof body.checkoutUrl === 'string' && body.checkoutUrl ? body.checkoutUrl : null;
+      throw new ApiError(res.status, message, code, checkoutUrl, body);
     }
     const reader = res.body?.getReader();
     if (!reader) throw new ApiError(0, 'Ask stream returned no body', 'network_error');
@@ -5038,6 +5042,24 @@ export const api = {
       method: 'GET',
       cache: 'no-store',
     }),
+
+  getAiAllowance: () =>
+    request<AiAllowance>('/api/billing/ai-allowance', { method: 'GET', cache: 'no-store' }),
+
+  checkoutAiCredits: (packCode: string) =>
+    request<{ checkoutUrl: string | null; packCode: string }>('/api/billing/ai-allowance/credits/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ packCode }),
+    }),
+
+  checkoutAiPlan: (planCode: string, billingInterval: 'month' | 'year' = 'month') =>
+    request<{ checkoutUrl: string | null; planCode: string; billingInterval: string }>(
+      '/api/billing/ai-allowance/plan/checkout',
+      {
+        method: 'POST',
+        body: JSON.stringify({ planCode, billingInterval }),
+      },
+    ),
 
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
@@ -6337,6 +6359,39 @@ export interface TokenUsageRecent {
   cacheTokens: number;
   totalTokens: number;
   priceNanos: number;
+}
+
+export interface AiAllowance {
+  state: 'ok' | 'warning' | 'limited' | 'credits' | 'unlimited';
+  paused: boolean;
+  warning: boolean;
+  message: string | null;
+  usedNanos: number;
+  allowanceNanos: number;
+  usedFraction: number;
+  resetAt: string | null;
+  rolling: {
+    enabled: boolean;
+    limited: boolean;
+    hours: number;
+    usedNanos: number;
+    capNanos: number | null;
+  };
+  byFeature: Array<{ feature: string; label: string; nanos: number }>;
+  creditBalanceNanos: number;
+  creditsRollOver: boolean;
+  canManage: boolean;
+  packs: Array<{
+    code: string;
+    label: string;
+    cents: number;
+    creditNanos: number;
+    priceConfigured: boolean;
+  }>;
+  history: {
+    usage: Array<{ id: string; at: string; feature: string; label: string; nanos: number }>;
+    credits: Array<{ id: string; at: string; kind: string; deltaNanos: number; note: string | null }>;
+  };
 }
 
 export interface TokenUsageReport {

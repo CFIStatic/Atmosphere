@@ -1,6 +1,6 @@
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { unscopedAdminOrNull, writerForJob } from '../lib/scopedAdmin.js';
@@ -8,6 +8,8 @@ import { HttpError } from '../lib/errors.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { extractScopeFromDocument } from '../verifier/scopeReader.js';
+import { recordMeasuredTokenUsage } from '../metering/tokenUsage.js';
+import { isAiPaused } from '../metering/aiBudgetService.js';
 import { recordAccess } from './proofOfWork.js';
 
 /**
@@ -30,6 +32,29 @@ import { recordAccess } from './proofOfWork.js';
 const DOC_BUCKET = 'job-proofs';
 const MAX_DOC_BYTES = 10 * 1024 * 1024;
 
+/** When the allowance returns, read documents that were stored but not extracted. */
+export async function releaseHeldScopeDocuments(admin: any, limit = 20): Promise<number> {
+  const { data, error } = await admin
+    .from('scope_documents')
+    .select('id, org_id')
+    .eq('status', 'budget_hold')
+    .limit(limit);
+  if (error || !data) return 0;
+  const paused = new Map<string, boolean>();
+  let released = 0;
+  for (const row of data as Array<{ id: string; org_id: string }>) {
+    if (!paused.has(row.org_id)) paused.set(row.org_id, await isAiPaused(admin, row.org_id));
+    if (paused.get(row.org_id)) continue;
+    await admin
+      .from('scope_documents')
+      .update({ status: 'uploaded', extraction_error: null })
+      .eq('id', row.id);
+    extractionQueue.enqueue({ key: `scopedoc:${row.id}`, docId: row.id, orgId: row.org_id });
+    released += 1;
+  }
+  return released;
+}
+
 export const scopeDocsRouter = Router();
 scopeDocsRouter.use(requireAuth);
 // The document rides in the JSON body; the default body cap would refuse it.
@@ -44,6 +69,11 @@ interface ExtractionJob {
 async function performExtraction(admin: any, job: ExtractionJob): Promise<void> {
   const write = (patch: Record<string, unknown>) =>
     admin.from('scope_documents').update(patch).eq('id', job.docId);
+
+  if (await isAiPaused(admin, job.orgId)) {
+    await write({ status: 'budget_hold', extraction_error: 'Waiting for AI allowance' });
+    return;
+  }
 
   if (!isModelProviderConfigured()) {
     await write({ status: 'failed', extraction_error: 'No model is configured on this server.' });
@@ -70,6 +100,15 @@ async function performExtraction(admin: any, job: ExtractionJob): Promise<void> 
     base64,
   });
   if (!extraction) throw new Error('The model reply was not usable.');
+
+  recordMeasuredTokenUsage(admin, {
+    orgId: job.orgId,
+    requestId: `scope-doc:${job.docId}:${randomUUID()}`,
+    feature: 'document_analysis',
+    source: 'scope_document',
+    modelId: extraction.model,
+    usage: extraction.usage ?? null,
+  });
 
   await write({
     status: 'extracted',
@@ -164,6 +203,16 @@ scopeDocsRouter.post(
       if (storeError) {
         await admin.from('scope_documents').delete().eq('id', (doc as any).id);
         throw new HttpError(500, storeError.message, 'doc_store_failed');
+      }
+
+      const paused = await isAiPaused(admin, orgId);
+      if (paused) {
+        await admin
+          .from('scope_documents')
+          .update({ status: 'budget_hold', extraction_error: 'Waiting for AI allowance' })
+          .eq('id', (doc as any).id);
+        res.status(201).json({ doc: serializeDoc({ ...(doc as any), status: 'budget_hold' }) });
+        return;
       }
 
       extractionQueue.enqueue({ key: `scopedoc:${(doc as any).id}`, docId: (doc as any).id, orgId });

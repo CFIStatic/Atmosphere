@@ -943,6 +943,7 @@ export async function runAskResearch(input: {
   // A planner model is not asked to invent rooms, damage, or dates.
   const modelOn = !isRoomQuestion(input.question) && (Boolean(input.complete) || isAskModelConfigured(input.anthropicApiKey));
   const stable = scopeStable(input.catalog);
+  const modelUsages: MeasuredUsage[] = [];
   let stop: AskResearchStop = 'max_steps';
   const runTool: ResearchToolRunner =
     input.callTool ??
@@ -950,23 +951,21 @@ export async function runAskResearch(input: {
 
   const callModel = async (kind: ResearchModelKind, user: string, signal: AbortSignal) => {
     const system = kind === 'plan' ? PLAN_SYSTEM : kind === 'sufficiency' ? SUFFICIENCY_SYSTEM : SYNTHESIS_SYSTEM;
-    if (input.complete) {
-      const turned = await input.complete({ kind, system, stable, user, signal });
-      if (!turned?.text?.trim()) throw new Error('research_model_empty');
-      return { text: turned.text, model: turned.model ?? null, usage: turned.usage ?? null };
-    }
-    const turned = await completeAskText({
-      system,
-      stable,
-      user,
-      anthropicApiKey: input.anthropicApiKey,
-      fetchFn: input.fetchFn,
-      signal,
-      mode: 'interactive',
-      maxTokens: kind === 'synthesis' ? 1400 : 500,
-    });
+    const turned = input.complete
+      ? await input.complete({ kind, system, stable, user, signal })
+      : await completeAskText({
+          system,
+          stable,
+          user,
+          anthropicApiKey: input.anthropicApiKey,
+          fetchFn: input.fetchFn,
+          signal,
+          mode: 'interactive',
+          maxTokens: kind === 'synthesis' ? 1400 : 500,
+        });
     if (!turned?.text?.trim()) throw new Error('research_model_empty');
-    return turned;
+    if (turned.usage && turned.usage.totalTokens > 0) modelUsages.push(turned.usage);
+    return { text: turned.text, model: turned.model ?? null, usage: turned.usage ?? null };
   };
 
   /**
@@ -1109,7 +1108,6 @@ export async function runAskResearch(input: {
     deterministicAnswer(input.question, input.catalog, pad, traceSteps, input.history, input.memory).trim();
   let answer: string;
   let model: string | null = null;
-  let usage: MeasuredUsage | null = null;
   if (modelOn) {
     try {
       const synthesized = await withDeadline(budgetMs + reserveMs, (signal) =>
@@ -1121,7 +1119,6 @@ export async function runAskResearch(input: {
       );
       answer = synthesized.text.trim();
       model = synthesized.model;
-      usage = synthesized.usage;
     } catch (err) {
       if (isParentAbort(err, input.signal)) throw new Error('research_aborted', { cause: err });
       answer = fromPad();
@@ -1138,5 +1135,28 @@ export async function runAskResearch(input: {
     elapsedMs: Math.max(0, Math.round(clock() - started)),
   };
   logAskResearch(meta);
-  return { answer, model, usage, traceSteps, meta };
+  return { answer, model, usage: sumMeasuredUsages(modelUsages), traceSteps, meta };
+}
+
+function sumMeasuredUsages(parts: MeasuredUsage[]): MeasuredUsage | null {
+  if (!parts.length) return null;
+  const usage = parts.reduce(
+    (acc, row) => ({
+      inputTokens: acc.inputTokens + (row.inputTokens || 0),
+      outputTokens: acc.outputTokens + (row.outputTokens || 0),
+      cacheWrite5mTokens: acc.cacheWrite5mTokens + (row.cacheWrite5mTokens || 0),
+      cacheWrite1hTokens: acc.cacheWrite1hTokens + (row.cacheWrite1hTokens || 0),
+      cacheReadTokens: acc.cacheReadTokens + (row.cacheReadTokens || 0),
+      totalTokens: acc.totalTokens + (row.totalTokens || 0),
+    }),
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 0,
+    },
+  );
+  return usage.totalTokens > 0 ? usage : null;
 }

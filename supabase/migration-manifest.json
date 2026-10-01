@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 177,
+    "migrationCount": 178,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -191,7 +191,8 @@
     "20261001120000_ask_research_trace.sql",
     "20261001143000_clip_room_segments.sql",
     "20261001161000_set_proof_room_segments.sql",
-    "20261001170000_proofs_awaiting_room_backfill.sql"
+    "20261001170000_proofs_awaiting_room_backfill.sql",
+    "20261002120000_ai_usage_budgets.sql"
   ],
   "migrations": [
     {
@@ -5824,6 +5825,38 @@
       "indistinguishableReason": null,
       "expect": [
         "function|public.proofs_awaiting_room_backfill"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002120000_ai_usage_budgets",
+      "file": "20261002120000_ai_usage_budgets.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "table|public.ai_credit_ledger",
+        "index|public.ai_credit_ledger.ai_credit_ledger_pkey",
+        "index|public.ai_credit_ledger.ai_credit_ledger_stripe_event_uidx",
+        "index|public.ai_credit_ledger.ai_credit_ledger_request_uidx",
+        "index|public.ai_credit_ledger.ai_credit_ledger_org_idx",
+        "policy|public.ai_credit_ledger.ai_credit_ledger_select",
+        "rls|public.ai_credit_ledger",
+        "table|public.ai_usage_allocations",
+        "index|public.ai_usage_allocations.ai_usage_allocations_pkey",
+        "index|public.ai_usage_allocations.ai_usage_allocations_org_id_request_id_key",
+        "index|public.ai_usage_allocations.ai_usage_allocations_org_created_idx",
+        "policy|public.ai_usage_allocations.ai_usage_allocations_select",
+        "rls|public.ai_usage_allocations",
+        "table|public.ai_budget_price_spans",
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_pkey",
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_org_idx",
+        "policy|public.ai_budget_price_spans.ai_budget_price_spans_select",
+        "rls|public.ai_budget_price_spans",
+        "column|public.job_proofs.ai_budget_hold",
+        "column|public.job_proofs.ai_budget_hold_reason",
+        "index|public.job_proofs.job_proofs_ai_budget_hold_idx"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,
