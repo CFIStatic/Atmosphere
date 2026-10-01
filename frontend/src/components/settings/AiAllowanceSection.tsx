@@ -19,6 +19,8 @@ export function AiAllowanceSection({
   onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const billingInterval = allowance.billingInterval === 'year' ? 'year' : 'month';
   const percent = allowance.state === 'unlimited' ? 0 : Math.min(100, Math.round(allowance.usedFraction * 100));
   const bar = allowance.state === 'limited' ? 100 : percent;
   const tone =
@@ -43,9 +45,12 @@ export function AiAllowanceSection({
   async function changePlan(planCode: string) {
     setBusy(planCode);
     try {
-      const { checkoutUrl } = await api.checkoutAiPlan(planCode, 'month');
-      if (checkoutUrl) window.location.href = checkoutUrl;
-      else onError('Checkout did not return a payment link.');
+      const result = await api.checkoutAiPlan(planCode, billingInterval);
+      if (result.checkoutUrl) window.location.href = result.checkoutUrl;
+      else if (result.updated) {
+        setPlanNotice('Plan updated. Stripe prorates the difference on this billing period.');
+        setBusy(null);
+      } else onError('Checkout did not return a payment link.');
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Could not start the plan change.');
       setBusy(null);
@@ -84,6 +89,11 @@ export function AiAllowanceSection({
         </div>
       )}
 
+      {planNotice ? (
+        <p role="status" data-testid="plan-change-updated" className="mt-4 text-sm text-ink-700">
+          {planNotice}
+        </p>
+      ) : null}
       {allowance.message && allowance.state === 'warning' ? (
         <p
           role="status"

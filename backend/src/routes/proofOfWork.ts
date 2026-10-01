@@ -2873,8 +2873,9 @@ export async function runProofAsk(input: {
       jobId,
       userId: userId ?? null,
     });
-    if (await isAiPaused(supabase, orgId)) {
-      await assertAiFeatureAllowed(supabase, orgId, { canManage: false });
+    const budgetClient = unscopedAdminOrNull() ?? supabase;
+    if (await isAiPaused(budgetClient, orgId)) {
+      await assertAiFeatureAllowed(budgetClient, orgId, { canManage: false });
     }
     const clock = createAskTurnClock();
     const onToken = (text: string) => {

@@ -32,7 +32,28 @@ type DbError = { code?: string; message?: string } | null;
 
 function missingSchema(error: DbError): boolean {
   if (!error) return false;
-  return error.code === '42P01' || error.code === '42703' || /does not exist|schema cache/i.test(error.message ?? '');
+  return (
+    error.code === '42P01' ||
+    error.code === '42703' ||
+    error.code === '42883' ||
+    error.code === 'PGRST202' ||
+    /does not exist|schema cache|could not find the function/i.test(error.message ?? '')
+  );
+}
+
+function asNanos(value: unknown): number {
+  if (Array.isArray(value)) return asNanos(value[0]);
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+function firstRpcRow(data: unknown): Record<string, unknown> | null {
+  if (Array.isArray(data)) {
+    const row = data[0];
+    return row && typeof row === 'object' ? (row as Record<string, unknown>) : null;
+  }
+  if (data && typeof data === 'object') return data as Record<string, unknown>;
+  return null;
 }
 
 export interface AllowanceFeatureRow {
@@ -79,6 +100,8 @@ export interface AiAllowanceView {
   creditBalanceNanos: number;
   /** Purchased credits and staff grants stay until they are used. The included allowance does not. */
   creditsRollOver: true;
+  /** Current subscription term. Plan changes stay on this interval. */
+  billingInterval: 'month' | 'year';
   /** True when the rolling figure comes from allocations, not raw event cost. */
   windowUsesAllocations: boolean;
   canManage: boolean;
@@ -160,12 +183,18 @@ export async function loadAiAllowance(
   const windowStart = new Date(now.getTime() - config.rollingHours * 3_600_000);
   const unlimited = Boolean(opts?.unlimited) || row.status === 'comped';
 
-  const [spansRes, eventsRes, creditsRes, allocRes] = await Promise.all([
+  const [spansRes, totalsRes, eventsRes, creditsRes] = await Promise.all([
     client
       .from('ai_budget_price_spans')
       .select('amount_cents, effective_from, effective_to')
       .eq('org_id', orgId)
       .order('effective_from', { ascending: true }),
+    client.rpc('ai_allowance_totals', {
+      p_org: orgId,
+      p_period_start: periodStart.toISOString(),
+      p_period_end: periodEnd.toISOString(),
+      p_window_start: windowStart.toISOString(),
+    }),
     client
       .from('token_usage_events')
       .select('id, feature, cost_nanos, created_at')
@@ -173,22 +202,16 @@ export async function loadAiAllowance(
       .gte('created_at', periodStart.toISOString())
       .lt('created_at', periodEnd.toISOString())
       .order('created_at', { ascending: false })
-      .limit(5000),
+      .limit(20),
     client
       .from('ai_credit_ledger')
       .select('id, delta_nanos, kind, note, created_at')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
-      .limit(10000),
-    client
-      .from('ai_usage_allocations')
-      .select('allowance_nanos, created_at')
-      .eq('org_id', orgId)
-      .gte('created_at', windowStart.toISOString()),
+      .limit(20),
   ]);
 
-  const schemaGap =
-    missingSchema(spansRes.error) || missingSchema(creditsRes.error) || missingSchema(allocRes.error);
+  const schemaGap = missingSchema(spansRes.error) || missingSchema(totalsRes.error);
   if (schemaGap) {
     console.warn('[ai-budget] allowance tables are not migrated yet; limits are off');
   }
@@ -210,30 +233,33 @@ export async function loadAiAllowance(
     ? 0
     : monthlyAllowanceNanos(periodAllowance, periodStart, periodEnd);
 
+  if (totalsRes.error && !missingSchema(totalsRes.error)) throw totalsRes.error;
+  const totals = schemaGap ? null : firstRpcRow(totalsRes.data);
+  if (!schemaGap && !totals) {
+    throw new Error('ai_allowance_totals returned no row');
+  }
+  const periodSpend = asNanos(totals?.period_spend_nanos);
+  const windowFromAlloc = asNanos(totals?.window_allowance_nanos);
+  const windowAllocationCount = asNanos(totals?.window_allocation_count);
+  const windowSpend = windowAllocationCount > 0 ? windowFromAlloc : asNanos(totals?.window_event_nanos);
+  const creditBalance = asNanos(totals?.credit_balance_nanos);
+  const byFeature = new Map<string, number>();
+  const featureRaw = totals?.by_feature;
+  if (featureRaw && typeof featureRaw === 'object' && !Array.isArray(featureRaw)) {
+    for (const [key, value] of Object.entries(featureRaw as Record<string, unknown>)) {
+      const feature = displayFeature(key);
+      byFeature.set(feature, (byFeature.get(feature) ?? 0) + asNanos(value));
+    }
+  }
   const events = (eventsRes.error ? [] : (eventsRes.data ?? [])) as Array<{
     id: string;
     feature: string | null;
     cost_nanos: number | string | null;
     created_at: string;
   }>;
-  let periodSpend = 0;
-  let windowCost = 0;
-  const byFeature = new Map<string, number>();
-  for (const event of events) {
-    const nanos = Math.max(0, Math.round(Number(event.cost_nanos ?? 0)));
-    periodSpend += nanos;
-    const at = new Date(event.created_at).getTime();
-    if (at >= windowStart.getTime()) windowCost += nanos;
-    const feature = displayFeature(event.feature);
-    byFeature.set(feature, (byFeature.get(feature) ?? 0) + nanos);
-  }
-  const allocRows = schemaGap || allocRes.error ? [] : ((allocRes.data ?? []) as Array<{ allowance_nanos: number }>);
-  const windowFromAlloc = allocRows.reduce((sum, row) => sum + Math.max(0, Number(row.allowance_nanos ?? 0)), 0);
-  const windowSpend = allocRows.length ? windowFromAlloc : windowCost;
   const creditRows = schemaGap || creditsRes.error
     ? []
     : ((creditsRes.data ?? []) as Array<{ id: string; delta_nanos: number | string; kind: string; note: string | null; created_at: string }>);
-  const creditBalance = creditRows.reduce((sum, row) => sum + Number(row.delta_nanos ?? 0), 0);
 
   const evaluation = evaluateAllowance({
     unlimited: unlimited || schemaGap,
@@ -278,7 +304,8 @@ export async function loadAiAllowance(
       .sort((a, b) => b.nanos - a.nanos),
     creditBalanceNanos: Math.max(0, creditBalance),
     creditsRollOver: true,
-    windowUsesAllocations: allocRows.length > 0,
+    billingInterval: intervalOf(row.billing_interval),
+    windowUsesAllocations: windowAllocationCount > 0,
     canManage,
     packs: AI_CREDIT_PACKS.map((pack) => ({
       code: pack.code,
@@ -356,30 +383,22 @@ export async function settleUsageCost(
     creditBalanceNanos: view.evaluation.creditBalanceNanos,
   });
   const createdAt = input.at ?? new Date().toISOString();
-  const { error } = await client.from('ai_usage_allocations').insert({
-    org_id: input.orgId,
-    request_id: input.requestId,
-    cost_nanos: cost,
-    allowance_nanos: alloc.allowanceNanos,
-    credit_nanos: alloc.creditNanos,
-    created_at: createdAt,
+  const { data, error } = await client.rpc('settle_ai_usage', {
+    p_org: input.orgId,
+    p_request_id: input.requestId,
+    p_cost_nanos: cost,
+    p_allowance_nanos: alloc.allowanceNanos,
+    p_credit_nanos: alloc.creditNanos,
+    p_at: createdAt,
   });
   if (error) {
-    if (error.code === '23505' || missingSchema(error)) return;
+    if (missingSchema(error)) return;
     throw error;
   }
-  if (alloc.creditNanos > 0) {
-    const draw = await client.from('ai_credit_ledger').insert({
-      org_id: input.orgId,
-      delta_nanos: -alloc.creditNanos,
-      kind: 'consume',
-      request_id: input.requestId,
-      note: 'AI usage',
-      created_at: createdAt,
-    });
-    if (draw.error && draw.error.code !== '23505' && !missingSchema(draw.error)) {
-      console.warn('[ai-budget] credit draw failed', draw.error.message);
-    }
+  const settled = firstRpcRow(data);
+  const creditApplied = settled?.credit_applied === true && asNanos(settled.credit_nanos) > 0;
+  if (alloc.creditNanos > 0 && !creditApplied) {
+    throw new Error('insufficient_ai_credits');
   }
 }
 
@@ -407,16 +426,9 @@ export async function grantAiCredits(
     actor_id: input.actorId ?? null,
   });
   if (error && error.code !== '23505') throw error;
-  const { data, error: readError } = await client
-    .from('ai_credit_ledger')
-    .select('delta_nanos')
-    .eq('org_id', input.orgId);
+  const { data, error: readError } = await client.rpc('ai_credit_balance', { p_org: input.orgId });
   if (readError) throw readError;
-  const balanceNanos = ((data ?? []) as Array<{ delta_nanos: number | string }>).reduce(
-    (sum, row) => sum + Number(row.delta_nanos ?? 0),
-    0,
-  );
-  return { applied: !error, balanceNanos };
+  return { applied: !error, balanceNanos: asNanos(data) };
 }
 
 export async function recordSubscriptionPriceSpan(

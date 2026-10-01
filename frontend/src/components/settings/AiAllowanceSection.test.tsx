@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import type { AiAllowance } from '../../lib/api';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { api, type AiAllowance } from '../../lib/api';
 import tailwindConfig from '../../../tailwind.config.js';
 import { AiAllowanceSection } from './AiAllowanceSection';
 
@@ -68,5 +68,23 @@ describe('AI allowance meter', () => {
       />,
     );
     expectFill('100%', 'danger', '600');
+  });
+
+  it('keeps a yearly plan on the yearly price when switching plans', async () => {
+    const checkout = vi.spyOn(api, 'checkoutAiPlan').mockResolvedValue({
+      checkoutUrl: null,
+      updated: true,
+      planCode: 'scale',
+      billingInterval: 'year',
+    });
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ billingInterval: 'year', canManage: true })}
+        onError={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    await waitFor(() => expect(checkout).toHaveBeenCalledWith('scale', 'year'));
+    checkout.mockRestore();
   });
 });

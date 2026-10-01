@@ -5053,7 +5053,7 @@ export const api = {
     }),
 
   checkoutAiPlan: (planCode: string, billingInterval: 'month' | 'year' = 'month') =>
-    request<{ checkoutUrl: string | null; planCode: string; billingInterval: string }>(
+    request<{ checkoutUrl: string | null; updated?: boolean; planCode: string; billingInterval: string }>(
       '/api/billing/ai-allowance/plan/checkout',
       {
         method: 'POST',
@@ -6380,6 +6380,7 @@ export interface AiAllowance {
   byFeature: Array<{ feature: string; label: string; nanos: number }>;
   creditBalanceNanos: number;
   creditsRollOver: boolean;
+  billingInterval?: 'month' | 'year';
   canManage: boolean;
   packs: Array<{
     code: string;

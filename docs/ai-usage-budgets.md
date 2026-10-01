@@ -82,9 +82,10 @@ rolling window, when it is on) cannot cover the call.
 
 Checkout metadata is `kind=ai_credits`. The webhook verifies the Stripe
 signature, claims `stripe_event_seen`, and grants once per Checkout session
-id. A replay does not mint a second balance. Plan changes use
-`kind=plan_change` and cancel the previous subscription with proration when
-`replaces_subscription_id` differs from the new subscription.
+id. A replay does not mint a second balance. An existing subscription changes
+plan in place: the plan item's price is updated with proration, and extra
+Field Capture seat items stay on that subscription. A workspace with no
+subscription still opens Checkout (`kind=plan_change`) on its current interval.
 
 Only org owners (Global Admin, including the legacy office-manager role) can
 upgrade or buy. Employees cannot. Atmosphere staff on the internal analytics

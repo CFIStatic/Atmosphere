@@ -11,8 +11,10 @@ import { config } from '../config.js';
 import { badRequest, forbidden } from '../lib/errors.js';
 import { createUserClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
+import { planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
 import {
   ensureCustomer,
+  liveStripeSubscriptionId,
   normalizeAtmosphereBillingInterval,
   stripeClient,
   stripeIdempotencyKey,
@@ -123,18 +125,47 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
     }
     const body = planSchema.parse(req.body ?? {});
     const plan = atmospherePlan(parseAtmospherePlanCode(body.planCode));
-    const interval = normalizeAtmosphereBillingInterval(body.billingInterval);
     const supabase = createUserClient(req.accessToken!);
-    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code, interval);
-    if (!priceId) {
-      throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
-    }
     const { data: billing } = await supabase
       .from('org_billing')
       .select('stripe_subscription_id')
       .eq('org_id', req.orgId!)
       .maybeSingle();
-    const currentSub = (billing as { stripe_subscription_id?: string | null } | null)?.stripe_subscription_id ?? null;
+    const currentSub = liveStripeSubscriptionId(
+      (billing as { stripe_subscription_id?: string | null } | null)?.stripe_subscription_id,
+    );
+    if (currentSub) {
+      const stripe = stripeClient();
+      const existing = await stripe.subscriptions.retrieve(currentSub);
+      const interval = planChangeInterval(existing);
+      const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code, interval);
+      if (!priceId) {
+        throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
+      }
+      const update = planItemUpdateParams(existing.items?.data ?? [], priceId);
+      await stripe.subscriptions.update(
+        currentSub,
+        {
+          ...update,
+          metadata: {
+            org_id: req.orgId!,
+            kind: 'plan_change',
+            atmosphere_plan_code: plan.code,
+            atmosphere_included_fc_seats: String(plan.includedFcSeats),
+            billing_interval: interval,
+            atmosphere_interval: interval,
+          },
+        },
+        { idempotencyKey: stripeIdempotencyKey('plan-change', req.orgId, plan.code, interval, priceId) },
+      );
+      res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
+      return;
+    }
+    const interval = normalizeAtmosphereBillingInterval(body.billingInterval);
+    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!, plan.code, interval);
+    if (!priceId) {
+      throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
+    }
     const customerId = await ensureCustomer(supabase, req.orgId!, {
       email: req.user!.email,
       orgName: null,
@@ -147,7 +178,6 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
       billing_interval: interval,
       atmosphere_interval: interval,
     };
-    if (currentSub) metadata.replaces_subscription_id = currentSub;
     const session = await stripeClient().checkout.sessions.create(
       {
         mode: 'subscription',

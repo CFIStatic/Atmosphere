@@ -192,6 +192,155 @@ test('sweep requeues a failed day reading after a provider failure once', async 
   assert.deepEqual(queued.transcript, []);
 });
 
+test('held clips do not fill the sweep batch ahead of another org', async () => {
+  const held = Array.from({ length: 20 }, (_, index) => ({
+    id: `held-${index}`,
+    org_id: 'paused-org',
+    job_id: 'job',
+    party_id: 'party',
+    phase: 'after',
+    work_date: '2026-10-01',
+    narration_status: 'idle',
+    transcript_status: 'idle',
+    analysis_status: 'idle',
+    storage_path: `paused/${index}.mp4`,
+    ai_budget_hold: true,
+    received_at: `2026-10-01T00:${String(index).padStart(2, '0')}:00.000Z`,
+  }));
+  const other = {
+    id: 'other-org-clip',
+    org_id: 'other-org',
+    job_id: 'job-2',
+    party_id: 'party-2',
+    phase: 'after',
+    work_date: '2026-10-02',
+    narration_status: 'idle',
+    transcript_status: 'idle',
+    analysis_status: 'idle',
+    storage_path: 'other/clip.mp4',
+    ai_budget_hold: false,
+    received_at: '2026-10-02T00:00:00.000Z',
+  };
+  const rows = [...held, other];
+  const filters: Array<[string, unknown]> = [];
+  const admin = {
+    from() {
+      const self: any = {
+        select() {
+          return self;
+        },
+        is() {
+          return self;
+        },
+        not() {
+          return self;
+        },
+        or() {
+          return self;
+        },
+        order() {
+          return self;
+        },
+        eq(column: string, value: unknown) {
+          filters.push([column, value]);
+          return self;
+        },
+        update() {
+          return self;
+        },
+        limit: async (count: number) => {
+          const excludesHeld = filters.some(([column, value]) => column === 'ai_budget_hold' && value === false);
+          const visible = excludesHeld ? rows.filter((row) => row.ai_budget_hold === false) : rows;
+          return { data: visible.slice(0, count), error: null };
+        },
+        maybeSingle: async () => ({ data: { id: 'other-org-clip' }, error: null }),
+      };
+      return self;
+    },
+  };
+  const queued: string[] = [];
+  const result = await sweepUnanalyzedProofs(admin, {
+    limit: 20,
+    isPaused: async () => false,
+    queueNarrationFn: async (_admin, _party, proofId) => {
+      queued.push(proofId);
+    },
+    queueTranscriptFn: async () => {},
+    queueAnalysisFn: async () => {},
+  });
+  assert.equal(result.narration, 1);
+  assert.deepEqual(queued, ['other-org-clip']);
+});
+
+test('the sweep rechecks the allowance before running AI on a clip whose hold was cleared', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const rows = [
+    {
+      id: 'cleared-hold',
+      org_id: 'paused-org',
+      job_id: 'job',
+      party_id: 'party',
+      phase: 'after',
+      work_date: '2026-10-01',
+      narration_status: 'idle',
+      transcript_status: 'idle',
+      analysis_status: 'idle',
+      storage_path: 'paused/cleared.mp4',
+      ai_budget_hold: false,
+    },
+  ];
+  const admin = {
+    from() {
+      const self: any = {
+        select() {
+          return self;
+        },
+        is() {
+          return self;
+        },
+        not() {
+          return self;
+        },
+        or() {
+          return self;
+        },
+        order() {
+          return self;
+        },
+        eq() {
+          return self;
+        },
+        update(payload: Record<string, unknown>) {
+          updates.push(payload);
+          return self;
+        },
+        limit: async () => ({ data: rows, error: null }),
+        maybeSingle: async () => ({ data: { id: 'cleared-hold' }, error: null }),
+      };
+      return self;
+    },
+  };
+  const queued: string[] = [];
+  const result = await sweepUnanalyzedProofs(admin, {
+    limit: 20,
+    isPaused: async () => true,
+    queueNarrationFn: async (_admin, _party, proofId) => {
+      queued.push(proofId);
+    },
+    queueTranscriptFn: async (_admin, proofId) => {
+      queued.push(proofId);
+    },
+    queueAnalysisFn: async (_admin, _party, _workDate, proofId) => {
+      if (proofId) queued.push(proofId);
+    },
+  });
+  assert.equal(result.narration, 0);
+  assert.equal(result.transcript, 0);
+  assert.equal(result.analysis, 0);
+  assert.deepEqual(queued, []);
+  assert.equal(updates.some((row) => row.ai_budget_hold === true), true);
+});
+
 test('sweep starts day reading for a filed clip that never left idle analysis', async () => {
   const rows = [
     {

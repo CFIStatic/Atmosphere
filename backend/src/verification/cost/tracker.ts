@@ -8,6 +8,7 @@ import { estimatedUsdToNanos, recordTokenUsage } from '../../metering/tokenUsage
 import { resolveUsageActor } from '../../metering/usageAttribution.js';
 import { modelPriceTable, tokenCostUsd } from '../../metering/modelPriceTable.js';
 import { isAiPaused } from '../../metering/aiBudgetService.js';
+import { unscopedAdminOrNull } from '../../lib/scopedAdmin.js';
 
 export function estimateCostUsd(
   provider: string,
@@ -130,7 +131,7 @@ export async function wouldExceedBudget(
   const spent = await monthSpendUsd(supabase, orgId);
   if (spent + additionalUsd > budget) return true;
   try {
-    return await isAiPaused(supabase, orgId);
+    return await isAiPaused(unscopedAdminOrNull() ?? supabase, orgId);
   } catch {
     return false;
   }

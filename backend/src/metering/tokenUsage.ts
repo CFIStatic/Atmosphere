@@ -25,6 +25,7 @@ import {
 } from './customerMarkup.js';
 import { fallbackProviderCogsNanos } from './providerCogs.js';
 import { classifyTokenFeature, TOKEN_FEATURES, type TokenFeature } from './tokenFeatures.js';
+import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { invoiceSameDayUsageAsync, usageDayUtc } from '../lib/stripeSameDayUsage.js';
 import { aiBudgetConfig } from './aiBudgetConfig.js';
 import { settleUsageCost } from './aiBudgetService.js';
@@ -453,7 +454,7 @@ export async function recordTokenUsage(
       invoiceSameDayUsageAsync(client, input.orgId, input.at ? usageDayUtc(input.at) : undefined);
     }
     if (amounts.costNanos > 0) {
-      void settleUsageCost(client, {
+      void settleUsageCost(unscopedAdminOrNull() ?? client, {
         orgId: input.orgId,
         requestId: input.requestId,
         costNanos: amounts.costNanos,

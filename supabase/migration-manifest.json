@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 178,
+    "migrationCount": 179,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -192,7 +192,8 @@
     "20261001143000_clip_room_segments.sql",
     "20261001161000_set_proof_room_segments.sql",
     "20261001170000_proofs_awaiting_room_backfill.sql",
-    "20261002120000_ai_usage_budgets.sql"
+    "20261002120000_ai_usage_budgets.sql",
+    "20261002130000_ai_allowance_enforcement.sql"
   ],
   "migrations": [
     {
@@ -5857,6 +5858,22 @@
         "column|public.job_proofs.ai_budget_hold",
         "column|public.job_proofs.ai_budget_hold_reason",
         "index|public.job_proofs.job_proofs_ai_budget_hold_idx"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002130000_ai_allowance_enforcement",
+      "file": "20261002130000_ai_allowance_enforcement.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "function|public.ai_credit_balance",
+        "function|public.ai_allowance_totals",
+        "function|public.settle_ai_usage",
+        "function|private.job_proofs_guard_budget_hold",
+        "trigger|public.job_proofs.job_proofs_guard_budget_hold"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

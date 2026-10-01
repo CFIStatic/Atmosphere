@@ -144,10 +144,6 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     `checkout ${session.id}`,
   );
 
-  if (session.metadata?.kind === 'plan_change') {
-    await replaceSubscriptionFromCheckout(session);
-  }
-
   if (session.mode !== 'payment') return; // subscriptions settle via invoice.paid
 
   const isAiCredits = session.metadata?.kind === 'ai_credits';
@@ -401,13 +397,6 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
   await persistExtraFcSeats(admin, orgId, 0);
-}
-
-async function replaceSubscriptionFromCheckout(session: Stripe.Checkout.Session): Promise<void> {
-  const oldId = session.metadata?.replaces_subscription_id;
-  const newId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
-  if (!oldId || !newId || oldId === newId) return;
-  await stripeClient().subscriptions.cancel(oldId, { prorate: true });
 }
 
 async function rememberRecurringPrice(

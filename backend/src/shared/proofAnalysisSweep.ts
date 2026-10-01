@@ -9,7 +9,7 @@
 
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
-import { releaseHeldProofs } from '../metering/aiBudgetService.js';
+import { isAiPaused, releaseHeldProofs } from '../metering/aiBudgetService.js';
 import { releaseHeldScopeDocuments } from '../routes/scopeDocs.js';
 import { queueNarration, queueProofAnalysis } from '../routes/proofOfWork.js';
 import { leaseIsHeld, leaseOwnerId } from '../verification/lease.js';
@@ -75,12 +75,14 @@ export async function sweepUnanalyzedProofs(
     queueNarrationFn?: typeof queueNarration;
     queueTranscriptFn?: typeof queueProofTranscript;
     queueAnalysisFn?: typeof queueProofAnalysis;
+    isPaused?: (orgId: string) => Promise<boolean>;
   },
 ): Promise<{ narration: number; transcript: number; analysis: number }> {
   const limit = Math.max(1, Math.min(opts?.limit ?? SWEEP_LIMIT, 50));
   const enqueueNarration = opts?.queueNarrationFn ?? queueNarration;
   const enqueueTranscript = opts?.queueTranscriptFn ?? queueProofTranscript;
   const enqueueAnalysis = opts?.queueAnalysisFn ?? queueProofAnalysis;
+  const isPaused = opts?.isPaused ?? ((orgId: string) => isAiPaused(admin, orgId));
 
   const { data, error } = await admin
     .from('job_proofs')
@@ -88,6 +90,7 @@ export async function sweepUnanalyzedProofs(
       'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, narration_lease_until, transcript_status, transcript_lease_until, analysis_status, analysis_error, analysis_lease_until, storage_path, ai_budget_hold',
     )
     .is('deleted_at', null)
+    .eq('ai_budget_hold', false)
     .not('storage_path', 'is', null)
     .or(
       [
@@ -120,8 +123,24 @@ export async function sweepUnanalyzedProofs(
   let transcript = 0;
   let analysis = 0;
   const owner = leaseOwnerId();
+  const pausedByOrg = new Map<string, boolean>();
   for (const row of rows) {
     if (row.ai_budget_hold === true) continue;
+    let paused = pausedByOrg.get(row.org_id);
+    if (paused === undefined) {
+      paused = await isPaused(row.org_id);
+      pausedByOrg.set(row.org_id, paused);
+    }
+    if (paused) {
+      await admin
+        .from('job_proofs')
+        .update({
+          ai_budget_hold: true,
+          ai_budget_hold_reason: 'AI is paused until the usage allowance resets.',
+        })
+        .eq('id', row.id);
+      continue;
+    }
     const party = { org_id: row.org_id, job_id: row.job_id, id: row.party_id };
     if (needsNarration(row.narration_status, row.narration_error) && !leaseIsHeld(row.narration_lease_until)) {
       if (await claimProofKind(admin, 'narration', row.id, owner)) {
