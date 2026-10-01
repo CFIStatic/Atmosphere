@@ -89,24 +89,33 @@ async function extractPdf(bytes: Buffer, readImage?: ImageReader): Promise<Extra
   const visionText: Array<{ page: number; text: string }> = [];
   const blankPages = read.pages.filter((page) => !page.text.trim());
   if (blankPages.length && read.images.length) {
-    for (let i = 0; i < Math.min(blankPages.length, read.images.length, 8); i += 1) {
-      const image = read.images[i]!;
-      const page = blankPages[i]!.page;
+    let calls = 0;
+    for (const page of blankPages) {
+      if (calls >= 8) break;
+      const image = read.images.find((row) => row.page === page.page);
+      if (!image) continue;
+      calls += 1;
       try {
         const extracted = await extractImage({
-          bytes: image,
+          bytes: image.bytes,
           mimeType: 'image/jpeg',
           readImage,
-          location: `page ${page}`,
+          location: `page ${page.page}`,
         });
-        visionText.push({ page, text: extracted.text });
+        visionText.push({ page: page.page, text: extracted.text });
       } catch {
-        visionText.push({ page, text: '' });
+        visionText.push({ page: page.page, text: '' });
       }
     }
   } else if (!read.pages.some((page) => page.text.trim()) && read.images.length) {
-    const extracted = await extractImage({ bytes: read.images[0]!, mimeType: 'image/jpeg', readImage, location: 'page 1' });
-    visionText.push({ page: 1, text: extracted.text });
+    const image = read.images[0]!;
+    const extracted = await extractImage({
+      bytes: image.bytes,
+      mimeType: 'image/jpeg',
+      readImage,
+      location: `page ${image.page}`,
+    });
+    visionText.push({ page: image.page, text: extracted.text });
   }
   if (!read.pages.some((page) => page.text.trim()) && !visionText.some((row) => row.text.trim())) {
     throw new DocumentReadError(

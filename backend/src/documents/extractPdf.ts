@@ -8,9 +8,11 @@ import { DOCUMENT_LIMITS } from './limits.js';
 import { capChunks, sanitizeExtractedText } from './text.js';
 import { DocumentReadError, type ExtractedChunk, type ExtractionResult } from './types.js';
 
+export type PdfPageImage = { page: number; bytes: Buffer };
+
 export type PdfRead = {
   pages: Array<{ page: number; text: string }>;
-  images: Buffer[];
+  images: PdfPageImage[];
   encrypted: boolean;
 };
 
@@ -27,7 +29,7 @@ export function readPdf(bytes: Buffer): PdfRead {
   }
   const pageIds = pageOrder(objects);
   const pages: Array<{ page: number; text: string }> = [];
-  const images: Buffer[] = [];
+  const images: PdfPageImage[] = [];
   const seenImages = new Set<number>();
 
   const takePage = (pageNumber: number, contentIds: number[]) => {
@@ -48,7 +50,7 @@ export function readPdf(bytes: Buffer): PdfRead {
         const image = jpegFromObject(objects.get(id));
         if (image && !seenImages.has(id)) {
           seenImages.add(id);
-          images.push(image);
+          images.push({ page: index + 1, bytes: image });
         }
       }
     });
@@ -59,7 +61,7 @@ export function readPdf(bytes: Buffer): PdfRead {
       const text = textFromContent(obj.stream.toString('latin1'));
       if (text.trim()) blobs.push(text);
       const image = jpegFromObject(obj);
-      if (image) images.push(image);
+      if (image) images.push({ page: 1, bytes: image });
     }
     pages.push({ page: 1, text: sanitizeExtractedText(blobs.join('\n')) });
   }

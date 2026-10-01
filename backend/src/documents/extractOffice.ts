@@ -251,6 +251,8 @@ export function parseBiff(buf: Buffer): BiffRow[] {
   const strings: string[] = [];
   const sheets: string[] = [];
   const rows = new Map<string, string[]>();
+  const customFormats = new Map<number, string>();
+  const xfFormats: number[] = [];
   let sheet = 'Sheet1';
   let sheetIndex = -1;
   let offset = 0;
@@ -276,6 +278,11 @@ export function parseBiff(buf: Buffer): BiffRow[] {
         sheet = sheets[sheetIndex] || `Sheet${sheetIndex + 1}`;
       }
     }
+    if (type === 0x041e && data.length >= 2) {
+      const format = biffString(data.slice(2));
+      if (format) customFormats.set(data.readUInt16LE(0), format);
+    }
+    if (type === 0x00e0 && data.length >= 4) xfFormats.push(data.readUInt16LE(2));
     if (type === 0x000a && globals) globals = false;
     if (globals) {
       if (type === 0x00fc) strings.push(...sstStrings(data));
@@ -284,8 +291,10 @@ export function parseBiff(buf: Buffer): BiffRow[] {
     if (type === 0x0203 && data.length >= 14) {
       const row = data.readUInt16LE(0);
       const col = data.readUInt16LE(2);
+      const xf = data.readUInt16LE(4);
       const value = data.readDoubleLE(6);
-      pushCell(rows, sheet, row, col, formatNumber(value));
+      const ifmt = xfFormats[xf] ?? 0;
+      pushCell(rows, sheet, row, col, formatNumber(value, excelNumberFormat(ifmt, customFormats)));
     } else if (type === 0x0204 && data.length >= 8) {
       const row = data.readUInt16LE(0);
       const col = data.readUInt16LE(2);
@@ -309,13 +318,52 @@ function pushCell(rows: Map<string, string[]>, sheet: string, row: number, col: 
   rows.set(key, list);
 }
 
-function formatNumber(value: number): string {
+/** Built-in Excel format ids. Custom formats (164+) come from FORMAT records. */
+const BUILTIN_NUMBER_FORMATS: Record<number, string> = {
+  0: 'General',
+  1: '0',
+  2: '0.00',
+  3: '#,##0',
+  4: '#,##0.00',
+  5: '$#,##0',
+  6: '$#,##0',
+  7: '$#,##0.00',
+  8: '$#,##0.00',
+  9: '0%',
+  10: '0.00%',
+  42: '$#,##0',
+  44: '$#,##0.00',
+};
+
+function excelNumberFormat(ifmt: number, custom: Map<number, string>): string {
+  return custom.get(ifmt) ?? BUILTIN_NUMBER_FORMATS[ifmt] ?? 'General';
+}
+
+function formatNumber(value: number, format: string): string {
   if (!Number.isFinite(value)) return '';
-  if (Number.isInteger(value) && Math.abs(value) >= 100) {
-    const body = Math.abs(Math.round(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return `${value < 0 ? '-' : ''}$${body}.00`;
+  const section = (format.split(';')[0] ?? format).replace(/_./g, '').replace(/\*./g, '');
+  const decimals = decimalPlaces(section);
+  if (!/[$€£¥]/.test(section)) {
+    if (decimals == null) {
+      return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+    }
+    if (decimals === 0) return String(Math.round(value));
+    return String(Math.round(value * 10 ** decimals) / 10 ** decimals);
   }
-  return String(Math.round(value * 100) / 100);
+  const places = decimals ?? (Number.isInteger(value) ? 0 : 2);
+  const negative = value < 0;
+  const [whole, frac] = Math.abs(value).toFixed(places).split('.');
+  const grouped = (whole ?? '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${negative ? '-' : ''}$${grouped}${places > 0 && frac != null ? `.${frac}` : ''}`;
+}
+
+function decimalPlaces(section: string): number | null {
+  const trimmed = section.trim();
+  if (!trimmed || /^general$/i.test(trimmed)) return null;
+  const match = trimmed.match(/\.(0+)/);
+  if (match) return match[1]!.length;
+  if (/[#0]/.test(trimmed) && !trimmed.includes('.')) return 0;
+  return null;
 }
 
 function biffString(data: Buffer): string {

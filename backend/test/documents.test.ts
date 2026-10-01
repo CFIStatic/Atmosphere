@@ -146,6 +146,65 @@ test('scanned pdf page is sent through the vision reader', async () => {
   assert.ok(doc.extraction.chunks.some((chunk) => /page 1/.test(chunk.location)));
 });
 
+test('scanned page images are paired by their source page number', async () => {
+  const jpeg = (mark: string) => Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+    Buffer.from('JFIF'),
+    Buffer.from(mark),
+    Buffer.alloc(80, 0x11),
+    Buffer.from([0xff, 0xd9]),
+  ]);
+  const imageObj = (id: number, bytes: Buffer) => Buffer.concat([
+    Buffer.from(`${id} 0 obj << /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >> stream\n`),
+    bytes,
+    Buffer.from('\nendstream\nendobj\n'),
+  ]);
+  const stream = (id: number, body: string) => Buffer.from(
+    `${id} 0 obj << /Length ${Buffer.byteLength(body)} >> stream\n${body}\nendstream\nendobj\n`,
+  );
+  const pdf = Buffer.concat([
+    Buffer.from('%PDF-1.4\n'),
+    Buffer.from('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n'),
+    Buffer.from('2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >> endobj\n'),
+    Buffer.from('3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 6 0 R /Resources << /XObject << /Im1 8 0 R >> >> >> endobj\n'),
+    Buffer.from('4 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 7 0 R /Resources << /XObject << /Im2 9 0 R >> >> >> endobj\n'),
+    Buffer.from('5 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 10 0 R >> endobj\n'),
+    stream(6, '(Estimate total) Tj'),
+    stream(7, 'q 100 0 0 100 0 0 cm /Im2 Do Q'),
+    stream(10, 'q Q'),
+    imageObj(8, jpeg('PAGEONE')),
+    imageObj(9, jpeg('PAGETWO')),
+    Buffer.from('trailer << /Root 1 0 R >>\n%%EOF\n'),
+  ]);
+  const read = readPdf(pdf);
+  assert.deepEqual(read.images.map((image) => image.page), [1, 2]);
+  const doc = await ingestChatDocument({
+    bytes: pdf,
+    filename: 'scan-pages.pdf',
+    job: JOB,
+    readImage: async (input) => {
+      const raw = Buffer.from(input.base64, 'base64').toString('latin1');
+      if (raw.includes('PAGETWO')) {
+        return { visibleText: ['Scanned kitchen wall'], description: 'Page two scan', roomType: null };
+      }
+      return { visibleText: ['Wrong page image'], description: 'Page one image', roomType: null };
+    },
+  });
+  const page2 = doc.extraction.chunks
+    .filter((chunk) => chunk.location.startsWith('page 2'))
+    .map((chunk) => chunk.text)
+    .join('\n');
+  const page3 = doc.extraction.chunks
+    .filter((chunk) => chunk.location.startsWith('page 3'))
+    .map((chunk) => chunk.text)
+    .join('\n');
+  assert.match(page2, /Scanned kitchen wall/);
+  assert.doesNotMatch(page2, /Wrong page image/);
+  assert.equal(page3, '');
+  assert.match(doc.extraction.text, /Estimate total/);
+  assert.doesNotMatch(doc.extraction.text, /Wrong page image/);
+});
+
 test('docx, pptx, and macro-bearing docx', async () => {
   const docx = writeZip([
     { name: '[Content_Types].xml', data: contentTypes('word') },
@@ -237,6 +296,56 @@ test('legacy xls and doc streams are read when the bytes are simple', async () =
   assert.equal(doc.relevance.verdict, 'not_related');
   assert.equal(doc.relevance.attach, false);
   assert.match(doc.relevance.reason, /does not match/);
+
+  const biff = (type: number, body: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt16LE(type, 0);
+    head.writeUInt16LE(body.length, 2);
+    return Buffer.concat([head, body]);
+  };
+  const format = (ifmt: number, text: string) => {
+    const str = Buffer.alloc(3 + text.length);
+    str.writeUInt16LE(text.length, 0);
+    str.writeUInt8(0, 2);
+    str.write(text, 3, 'latin1');
+    const body = Buffer.alloc(2 + str.length);
+    body.writeUInt16LE(ifmt, 0);
+    str.copy(body, 2);
+    return biff(0x041e, body);
+  };
+  const xf = (ifmt: number) => {
+    const body = Buffer.alloc(4);
+    body.writeUInt16LE(0, 0);
+    body.writeUInt16LE(ifmt, 2);
+    return biff(0x00e0, body);
+  };
+  const number = (row: number, col: number, xfIndex: number, value: number) => {
+    const body = Buffer.alloc(14);
+    body.writeUInt16LE(row, 0);
+    body.writeUInt16LE(col, 2);
+    body.writeUInt16LE(xfIndex, 4);
+    body.writeDoubleLE(value, 6);
+    return biff(0x0203, body);
+  };
+  const numbers = parseBiff(Buffer.concat([
+    rec(0x0809),
+    format(164, '$#,##0.00'),
+    xf(0),
+    xf(164),
+    xf(1),
+    rec(0x000a),
+    rec(0x0809),
+    number(0, 0, 0, 1200),
+    number(1, 0, 1, 4280),
+    number(2, 0, 2, 100),
+    rec(0x000a),
+  ]));
+  const cells = numbers.map((row) => row.text).join('\n');
+  assert.match(cells, /A1=1200/);
+  assert.doesNotMatch(cells, /\$1,200\.00/);
+  assert.match(cells, /A2=\$4,280\.00/);
+  assert.match(cells, /A3=100/);
+  assert.doesNotMatch(cells, /\$100\.00/);
 
   const word = writeOleStream('WordDocument', Buffer.from('Permit number 4412 for 418 Oak Street', 'utf16le'));
   const permit = await ingestChatDocument({ bytes: word, filename: 'permit.doc', job: JOB });
