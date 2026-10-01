@@ -322,3 +322,62 @@ test('analysis mode defaults to gemini-3.1-pro-preview with high thinkingLevel',
     restoreEnv('VERIFICATION_PRIMARY_MODEL', prevPrimary);
   }
 });
+
+test('reasoning mode keeps deadlineAt instead of starting a new window', async () => {
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  const prevTimeout = process.env.ASK_REASONING_TIMEOUT_MS;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-gemini';
+  process.env.ASK_REASONING_TIMEOUT_MS = '8000';
+  let fetched = 0;
+  const fetchFn: typeof fetch = async () => {
+    fetched += 1;
+    return new Response('no', { status: 500 });
+  };
+  try {
+    const expired = await completeAskText({
+      system: 'sys',
+      user: 'question',
+      mode: 'reasoning',
+      deadlineAt: Date.now() - 10,
+      fetchFn,
+    });
+    assert.equal(expired, null);
+    assert.equal(fetched, 0);
+
+    const started = Date.now();
+    const capped = await completeAskText({
+      system: 'sys',
+      user: 'question',
+      mode: 'reasoning',
+      deadlineAt: started + 1_600,
+      fetchFn: async (_input, init) => {
+        fetched += 1;
+        await new Promise((_resolve, reject) => {
+          // AbortSignal.timeout does not keep the event loop alive.
+          const timer = setTimeout(() => reject(new Error('fresh window')), 4_000);
+          const signal = init?.signal;
+          const fail = () => {
+            clearTimeout(timer);
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          };
+          if (!signal || signal.aborted) fail();
+          else signal.addEventListener('abort', fail, { once: true });
+        });
+        return new Response('no', { status: 500 });
+      },
+    });
+    const elapsed = Date.now() - started;
+    assert.equal(capped, null);
+    assert.equal(fetched, 1);
+    assert.ok(elapsed < 4_000, `elapsed ${elapsed}`);
+  } finally {
+    restoreEnv('ANTHROPIC_API_KEY', prevAnthropic);
+    restoreEnv('GEMINI_API_KEY', prevGemini);
+    restoreEnv('GOOGLE_API_KEY', prevGoogle);
+    restoreEnv('ASK_REASONING_TIMEOUT_MS', prevTimeout);
+  }
+});

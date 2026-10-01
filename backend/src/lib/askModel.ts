@@ -666,6 +666,11 @@ export async function completeAskText(input: {
   mode?: AskCompletionMode;
   onToken?: (text: string) => void;
   signal?: AbortSignal;
+  /**
+   * When set, a reasoning turn uses this absolute deadline instead of starting
+   * a new window. Research fallback passes the deadline captured when Ask began.
+   */
+  deadlineAt?: number;
   /** Overrides ANTHROPIC_MODEL for this call. Titles use the fast model. */
   anthropicModel?: string | null;
 }): Promise<AskModelResult | null> {
@@ -673,7 +678,10 @@ export async function completeAskText(input: {
   const reasoning = mode === 'reasoning';
   const { anthropicMax, geminiMax } = resolveMaxTokens({ maxTokens: input.maxTokens, mode });
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
-  const deadline = reasoning ? Date.now() + askReasoningTimeoutMs() : 0;
+  const freshDeadline = Date.now() + askReasoningTimeoutMs();
+  const deadline = reasoning ? Math.min(input.deadlineAt ?? freshDeadline, freshDeadline) : 0;
+  // Same floor as the lookup step: a turn that cannot finish is not started.
+  if (reasoning && deadline - Date.now() < 1500) return null;
   const signalFor = (): AbortSignal | undefined => {
     if (!reasoning) return input.signal;
     const left = deadline - Date.now();

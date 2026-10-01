@@ -1108,6 +1108,7 @@ export async function answerFromAskLookup(input: {
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
       mode: 'reasoning',
+      deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, 'deep') : undefined,
       onToken,
     });
     if (completed?.text) {

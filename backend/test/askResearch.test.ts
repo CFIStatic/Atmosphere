@@ -505,6 +505,94 @@ test('a deadline with evidence does not start a second full pass', async () => {
   });
 });
 
+test('empty-prose research fallback keeps the original ask deadline', async () => {
+  const prev = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    google: process.env.GOOGLE_API_KEY,
+    timeout: process.env.ASK_REASONING_TIMEOUT_MS,
+  };
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-gemini';
+  process.env.ASK_REASONING_TIMEOUT_MS = '8000';
+  const realNow = Date.now;
+  const realTimeout = AbortSignal.timeout;
+  let now = realNow();
+  const timeouts: number[] = [];
+  Date.now = () => now;
+  AbortSignal.timeout = ((ms: number) => {
+    timeouts.push(ms);
+    return realTimeout.call(AbortSignal, ms);
+  }) as typeof AbortSignal.timeout;
+  let fetched = 0;
+  const fetchFn: typeof fetch = async () => {
+    fetched += 1;
+    return new Response(
+      JSON.stringify({
+        candidates: [{ content: { parts: [{ text: 'Grounded fallback.' }] } }],
+        modelVersion: 'gemini-test',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+  try {
+    now = realNow();
+    timeouts.length = 0;
+    fetched = 0;
+    const spent = await answerFromAskLookup({
+      question: 'compare the two visits',
+      catalog: kitchen,
+      step: async () => null,
+      fetchFn,
+      research: {
+        budgetMs: 20_000,
+        synthesisReserveMs: 5_000,
+        complete: async () => {
+          now += 60_000;
+          throw new Error('research_empty');
+        },
+      },
+    });
+    assert.equal(spent.research?.stopReason, 'fallback');
+    assert.equal(fetched, 0);
+    assert.equal(timeouts.length, 0);
+
+    now = realNow();
+    timeouts.length = 0;
+    fetched = 0;
+    const partial = await answerFromAskLookup({
+      question: 'compare the two visits',
+      catalog: kitchen,
+      step: async () => null,
+      fetchFn,
+      research: {
+        budgetMs: 20_000,
+        synthesisReserveMs: 5_000,
+        complete: async () => {
+          now += 5_000;
+          throw new Error('research_empty');
+        },
+      },
+    });
+    assert.equal(partial.research?.stopReason, 'fallback');
+    assert.equal(fetched, 1);
+    assert.equal(timeouts.length, 1);
+    assert.ok(timeouts[0]! > 2_000 && timeouts[0]! < 4_500, `timeout ${timeouts[0]}`);
+  } finally {
+    Date.now = realNow;
+    AbortSignal.timeout = realTimeout;
+    if (prev.anthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prev.anthropic;
+    if (prev.gemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prev.gemini;
+    if (prev.google === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prev.google;
+    if (prev.timeout === undefined) delete process.env.ASK_REASONING_TIMEOUT_MS;
+    else process.env.ASK_REASONING_TIMEOUT_MS = prev.timeout;
+  }
+});
+
 test('lookup fallback does not start a turn after the original ask deadline', async () => {
   let fetched = 0;
   const step = providerLookupStep({
