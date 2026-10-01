@@ -296,7 +296,7 @@ export function creditDisputeStanding(status: string | null | undefined): Credit
   return 'open';
 }
 
-/** Won and lost are terminal. Open never outranks them. */
+/** Won and lost are terminal for one dispute. Open never outranks them. */
 export function disputeStandingRank(standing: CreditDisputeStanding | null | undefined): number {
   if (standing === 'won' || standing === 'lost') return 2;
   if (standing === 'open') return 1;
@@ -304,17 +304,27 @@ export function disputeStandingRank(standing: CreditDisputeStanding | null | und
 }
 
 /**
- * Whether an incoming dispute event may replace the stored one.
- * A lower rank never overwrites a higher one, so open cannot reopen won or lost.
- * At the same rank, an older Stripe event is ignored.
+ * Whether an incoming dispute event may be recorded against the stored one.
+ * The same dispute is monotonic: open never reopens won or lost, and an older
+ * event at the same rank is ignored. A different dispute does not rewrite
+ * that row; it applies only when its Stripe event is strictly newer, so a
+ * later chargeback can still claw credits after a closed inquiry.
  */
 export function disputeUpdateApplies(input: {
   storedStanding: CreditDisputeStanding | null;
   storedEventAt: Date | null;
+  storedDisputeId?: string | null;
   incomingStanding: CreditDisputeStanding | null;
   incomingEventAt: Date | null;
+  incomingDisputeId?: string | null;
 }): boolean {
   if (!input.incomingStanding) return false;
+  const storedId = input.storedDisputeId ?? null;
+  const incomingId = input.incomingDisputeId ?? null;
+  if (storedId && incomingId && storedId !== incomingId) {
+    if (!input.incomingEventAt || !input.storedEventAt) return input.incomingEventAt != null;
+    return input.incomingEventAt.getTime() > input.storedEventAt.getTime();
+  }
   const incomingRank = disputeStandingRank(input.incomingStanding);
   const storedRank = disputeStandingRank(input.storedStanding);
   if (incomingRank > storedRank) return true;

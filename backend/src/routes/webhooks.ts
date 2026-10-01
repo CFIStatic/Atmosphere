@@ -471,8 +471,10 @@ async function onChargeRefunded(charge: Stripe.Charge, eventId: string, admin: a
 
 /**
  * An open or lost dispute claws back its share of the pack. A dispute closed
- * as won restores that share, except the part a refund still covers. The
- * database keeps one running total per charge, so this cannot stack on a refund.
+ * as won restores that share, except the part a refund still covers. Status
+ * is kept per dispute id, so a later chargeback on the same charge still
+ * claws credits after a closed inquiry. The database keeps one running total
+ * per charge, so this cannot stack on a refund.
  */
 async function onChargeDisputed(
   dispute: Stripe.Dispute,
@@ -496,6 +498,7 @@ async function onChargeDisputed(
     metadata: charge.metadata,
     disputeAmountCents: dispute.amount ?? 0,
     disputeStatus: dispute.status,
+    disputeId: dispute.id,
     eventAt: new Date(eventCreated * 1000),
     note: `dispute ${dispute.id} ${dispute.status} on credit pack ${charge.id}`,
   });

@@ -77,17 +77,28 @@ function clawbackClient(initialBalance: number) {
     granted: number;
     chargeAmount: number;
     refunded: number;
-    disputeAmount: number;
-    standing: CreditDisputeStanding | null;
-    eventAt: Date | null;
     clawed: number;
+  }>();
+  const disputes = new Map<string, {
+    chargeId: string;
+    id: string;
+    amount: number;
+    standing: CreditDisputeStanding;
+    eventAt: Date | null;
   }>();
   const calls: ClawbackCall[] = [];
   const client = {
     calls,
     balance: () => balance,
     clawed: (chargeId: string) => charges.get(chargeId)?.clawed ?? 0,
-    standing: (chargeId: string) => charges.get(chargeId)?.standing ?? null,
+    standing: (chargeId: string) => {
+      const rows = [...disputes.values()].filter((row) => row.chargeId === chargeId);
+      const active = rows.filter((row) => row.standing !== 'won');
+      if (active.length > 0) {
+        return active.reduce((best, row) => (row.amount > best.amount ? row : best)).standing;
+      }
+      return rows.length > 0 ? 'won' : null;
+    },
     async rpc(name: string, args: ClawbackCall) {
       assert.equal(name, 'apply_ai_credit_clawback');
       calls.push(args);
@@ -111,34 +122,61 @@ function clawbackClient(initialBalance: number) {
         granted: 0,
         chargeAmount: 0,
         refunded: 0,
-        disputeAmount: 0,
-        standing: null as CreditDisputeStanding | null,
-        eventAt: null as Date | null,
         clawed: 0,
       };
       state.granted = Math.max(state.granted, Number(args.p_granted_nanos));
       state.chargeAmount = Math.max(state.chargeAmount, Number(args.p_charge_amount_cents));
       state.refunded = Math.max(state.refunded, Number(args.p_amount_refunded_cents ?? 0));
       if (args.p_dispute_standing != null) {
+        const disputeId = args.p_dispute_id == null ? '' : String(args.p_dispute_id);
+        if (!disputeId) throw new Error('dispute_id required');
         const incomingAt = args.p_event_at ? new Date(String(args.p_event_at)) : null;
-        if (disputeUpdateApplies({
-          storedStanding: state.standing,
-          storedEventAt: state.eventAt,
-          incomingStanding: args.p_dispute_standing as CreditDisputeStanding,
-          incomingEventAt: incomingAt,
-        })) {
-          state.standing = args.p_dispute_standing as CreditDisputeStanding;
-          state.disputeAmount = Number(args.p_dispute_amount_cents ?? 0);
-          state.eventAt = incomingAt;
+        const incomingStanding = args.p_dispute_standing as CreditDisputeStanding;
+        const key = `${chargeId}\0${disputeId}`;
+        const existing = disputes.get(key);
+        const others = [...disputes.values()].filter((row) => row.chargeId === chargeId && row.id !== disputeId);
+        const latest = others.reduce<typeof others[number] | null>((best, row) => {
+          if (!best) return row;
+          if (!best.eventAt) return row;
+          if (!row.eventAt) return best;
+          return row.eventAt.getTime() >= best.eventAt.getTime() ? row : best;
+        }, null);
+        const applies = existing
+          ? disputeUpdateApplies({
+              storedStanding: existing.standing,
+              storedEventAt: existing.eventAt,
+              storedDisputeId: existing.id,
+              incomingStanding,
+              incomingEventAt: incomingAt,
+              incomingDisputeId: disputeId,
+            })
+          : disputeUpdateApplies({
+              storedStanding: latest?.standing ?? null,
+              storedEventAt: latest?.eventAt ?? null,
+              storedDisputeId: latest?.id ?? null,
+              incomingStanding,
+              incomingEventAt: incomingAt,
+              incomingDisputeId: disputeId,
+            });
+        if (applies) {
+          disputes.set(key, {
+            chargeId,
+            id: disputeId,
+            amount: Number(args.p_dispute_amount_cents ?? 0),
+            standing: incomingStanding,
+            eventAt: incomingAt,
+          });
         }
       }
       charges.set(chargeId, state);
+      const active = [...disputes.values()].filter((row) => row.chargeId === chargeId && row.standing !== 'won');
+      const disputeAmount = active.reduce((max, row) => Math.max(max, row.amount), 0);
       const target = creditPackClawbackTarget({
         chargeAmountCents: state.chargeAmount,
         grantedCreditNanos: state.granted,
         amountRefundedCents: state.refunded,
-        disputeAmountCents: state.disputeAmount,
-        disputeStanding: state.standing,
+        disputeAmountCents: disputeAmount,
+        disputeStanding: active.length > 0 ? active[0]!.standing : null,
       });
       const delta = target - state.clawed;
       let debited = 0;
@@ -290,6 +328,7 @@ test('a dispute and a refund share one pack cap, and a won dispute restores only
     metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
     disputeAmountCents: 5_000,
     disputeStatus: 'needs_response',
+    disputeId: 'dp_pack',
     note: 'dispute opened',
   });
   await syncCreditPackClawback(stacked as never, 'org-1', {
@@ -311,6 +350,7 @@ test('a dispute and a refund share one pack cap, and a won dispute restores only
     metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
     disputeAmountCents: 5_000,
     disputeStatus: 'won',
+    disputeId: 'dp_pack',
     note: 'dispute won',
   });
   assert.equal(stacked.clawed('ch_pack'), granted);
@@ -325,6 +365,7 @@ test('a dispute and a refund share one pack cap, and a won dispute restores only
     metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
     disputeAmountCents: 5_000,
     disputeStatus: 'needs_response',
+    disputeId: 'dp_pack',
     note: 'dispute opened',
   });
   assert.equal(restored.balance(), 0);
@@ -336,6 +377,7 @@ test('a dispute and a refund share one pack cap, and a won dispute restores only
     metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
     disputeAmountCents: 5_000,
     disputeStatus: 'won',
+    disputeId: 'dp_pack',
     note: 'dispute won',
   });
   assert.equal(restored.clawed('ch_pack'), 0);
@@ -355,7 +397,7 @@ test('a dispute and a refund share one pack cap, and a won dispute restores only
 
   assert.match(webhooks, /case 'charge\.dispute\.closed'/);
   assert.match(webhooks, /case 'charge\.refunded'/);
-  assert.match(sql, /dispute_standing <> 'won'/);
+  assert.match(sql, /standing <> 'won'/);
   assert.match(sql, /v_shortfall := v_delta - v_debit/);
   assert.match(sql, /'adjustment'/);
   assert.match(sql, /stripe_charge_id = p_charge_id/);
@@ -368,6 +410,7 @@ test('a closed dispute stays closed when an older open event arrives', async () 
     chargeAmountCents: 5_000,
     metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
     disputeAmountCents: 5_000,
+    disputeId: 'dp_same',
   };
   const opened = new Date('2026-10-01T12:00:00.000Z');
   const updated = new Date('2026-10-02T12:00:00.000Z');
@@ -376,21 +419,43 @@ test('a closed dispute stays closed when an older open event arrives', async () 
   assert.equal(disputeUpdateApplies({
     storedStanding: 'won',
     storedEventAt: closed,
+    storedDisputeId: 'dp_same',
     incomingStanding: 'open',
     incomingEventAt: opened,
+    incomingDisputeId: 'dp_same',
   }), false);
   assert.equal(disputeUpdateApplies({
     storedStanding: 'lost',
     storedEventAt: closed,
+    storedDisputeId: 'dp_same',
     incomingStanding: 'open',
-    incomingEventAt: opened,
+    incomingEventAt: new Date('2026-10-04T12:00:00.000Z'),
+    incomingDisputeId: 'dp_same',
   }), false);
   assert.equal(disputeUpdateApplies({
     storedStanding: 'open',
     storedEventAt: updated,
+    storedDisputeId: 'dp_same',
     incomingStanding: 'won',
     incomingEventAt: closed,
+    incomingDisputeId: 'dp_same',
   }), true);
+  assert.equal(disputeUpdateApplies({
+    storedStanding: 'won',
+    storedEventAt: closed,
+    storedDisputeId: 'dp_inquiry',
+    incomingStanding: 'open',
+    incomingEventAt: new Date('2026-10-04T12:00:00.000Z'),
+    incomingDisputeId: 'dp_chargeback',
+  }), true);
+  assert.equal(disputeUpdateApplies({
+    storedStanding: 'won',
+    storedEventAt: closed,
+    storedDisputeId: 'dp_inquiry',
+    incomingStanding: 'open',
+    incomingEventAt: opened,
+    incomingDisputeId: 'dp_chargeback',
+  }), false);
 
   const afterWon = clawbackClient(granted);
   await syncCreditPackClawback(afterWon as never, 'org-1', {
@@ -505,6 +570,123 @@ test('a closed dispute stays closed when an older open event arrives', async () 
   assert.match(webhooks, /event\.created/);
   assert.match(sql, /when 'open' then 1/);
   assert.match(sql, /v_incoming_rank > v_stored_rank/);
-  assert.match(sql, /p_event_at >= v_state\.dispute_event_at/);
+  assert.match(sql, /p_event_at >= v_dispute\.event_at/);
+  assert.match(sql, /p_event_at > v_latest_dispute_at/);
+  assert.match(sql, /stripe_dispute_id = p_dispute_id/);
   assert.match(sql, /where stripe_event_id = p_event_id/);
+  assert.match(webhooks, /disputeId: dispute\.id/);
+});
+
+test('a later chargeback claws credits after a closed inquiry, and replays do not', async () => {
+  const granted = 5_000 * NANOS_PER_CENT;
+  const pack = {
+    chargeId: 'ch_pack',
+    chargeAmountCents: 5_000,
+    metadata: { kind: 'ai_credits', credit_nanos: String(granted) },
+    disputeAmountCents: 5_000,
+  };
+  const inquiryOpened = new Date('2026-10-01T12:00:00.000Z');
+  const inquiryClosed = new Date('2026-10-02T12:00:00.000Z');
+  const chargebackOpened = new Date('2026-10-04T12:00:00.000Z');
+  const client = clawbackClient(granted);
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_created',
+    amountRefundedCents: 0,
+    disputeStatus: 'warning_needs_response',
+    disputeId: 'dp_inquiry',
+    eventAt: inquiryOpened,
+    note: 'inquiry opened',
+  });
+  assert.equal(client.clawed('ch_pack'), granted);
+  assert.equal(client.balance(), 0);
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_closed',
+    amountRefundedCents: 0,
+    disputeStatus: 'warning_closed',
+    disputeId: 'dp_inquiry',
+    eventAt: inquiryClosed,
+    note: 'inquiry closed',
+  });
+  assert.equal(client.standing('ch_pack'), 'won');
+  assert.equal(client.clawed('ch_pack'), 0);
+  assert.equal(client.balance(), granted);
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_created',
+    amountRefundedCents: 0,
+    disputeStatus: 'warning_needs_response',
+    disputeId: 'dp_inquiry',
+    eventAt: inquiryOpened,
+    note: 'inquiry opened replay',
+  });
+  assert.equal(client.standing('ch_pack'), 'won');
+  assert.equal(client.clawed('ch_pack'), 0);
+  assert.equal(client.balance(), granted);
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_created_again',
+    amountRefundedCents: 0,
+    disputeStatus: 'needs_response',
+    disputeId: 'dp_inquiry',
+    eventAt: inquiryOpened,
+    note: 'stale inquiry created',
+  });
+  assert.equal(client.standing('ch_pack'), 'won');
+  assert.equal(client.clawed('ch_pack'), 0);
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_chargeback_created',
+    amountRefundedCents: 0,
+    disputeStatus: 'needs_response',
+    disputeId: 'dp_chargeback',
+    eventAt: chargebackOpened,
+    note: 'chargeback opened',
+  });
+  assert.equal(client.standing('ch_pack'), 'open');
+  assert.equal(client.clawed('ch_pack'), granted);
+  assert.equal(client.balance(), 0);
+  assert.equal(client.calls.at(-1)!.p_dispute_id, 'dp_chargeback');
+
+  await syncCreditPackClawback(client as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_chargeback_created',
+    amountRefundedCents: 0,
+    disputeStatus: 'needs_response',
+    disputeId: 'dp_chargeback',
+    eventAt: chargebackOpened,
+    note: 'chargeback opened replay',
+  });
+  assert.equal(client.clawed('ch_pack'), granted);
+  assert.equal(client.balance(), 0);
+  assert.equal(client.standing('ch_pack'), 'open');
+
+  const lost = clawbackClient(granted);
+  await syncCreditPackClawback(lost as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_lost',
+    amountRefundedCents: 0,
+    disputeStatus: 'lost',
+    disputeId: 'dp_inquiry',
+    eventAt: inquiryClosed,
+    note: 'inquiry lost',
+  });
+  await syncCreditPackClawback(lost as never, 'org-1', {
+    ...pack,
+    eventId: 'evt_inquiry_reopened',
+    amountRefundedCents: 0,
+    disputeStatus: 'needs_response',
+    disputeId: 'dp_inquiry',
+    eventAt: chargebackOpened,
+    note: 'same dispute opened again',
+  });
+  assert.equal(lost.standing('ch_pack'), 'lost');
+  assert.equal(lost.clawed('ch_pack'), granted);
+  assert.equal(lost.balance(), 0);
 });

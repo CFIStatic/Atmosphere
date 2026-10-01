@@ -471,6 +471,7 @@ export async function applyAiCreditClawback(
     amountRefundedCents: number;
     disputeAmountCents?: number | null;
     disputeStanding?: 'open' | 'lost' | 'won' | null;
+    disputeId?: string | null;
     eventAt?: Date | string | null;
     note?: string | null;
   },
@@ -491,6 +492,7 @@ export async function applyAiCreditClawback(
     p_amount_refunded_cents: input.amountRefundedCents,
     p_dispute_amount_cents: input.disputeAmountCents ?? null,
     p_dispute_standing: input.disputeStanding ?? null,
+    p_dispute_id: input.disputeId ?? null,
     p_event_at: input.eventAt instanceof Date ? input.eventAt.toISOString() : (input.eventAt ?? null),
     p_note: input.note ?? null,
   });
@@ -510,8 +512,10 @@ export async function applyAiCreditClawback(
 /**
  * Move one credit pack's clawback to the amount the charge currently owes.
  * Refunds pass cumulative amount_refunded and leave any dispute in place.
- * A dispute event records that dispute; a won dispute drops its share unless
- * a refund still covers the money. The database applies only the delta.
+ * A dispute event records that dp_ id. Open never reopens the same won or
+ * lost dispute. A strictly newer dispute id can still claw credits. A won
+ * dispute drops its share unless a refund still covers the money. The
+ * database applies only the delta.
  */
 export async function syncCreditPackClawback(
   client: SupabaseClient,
@@ -524,6 +528,7 @@ export async function syncCreditPackClawback(
     metadata?: Record<string, string> | null;
     disputeAmountCents?: number | null;
     disputeStatus?: string | null;
+    disputeId?: string | null;
     eventAt?: Date | null;
     note: string;
   },
@@ -555,6 +560,7 @@ export async function syncCreditPackClawback(
     amountRefundedCents: input.amountRefundedCents,
     disputeAmountCents: hasDispute ? (input.disputeAmountCents ?? 0) : null,
     disputeStanding: hasDispute ? creditDisputeStanding(input.disputeStatus) : null,
+    disputeId: hasDispute ? (input.disputeId ?? null) : null,
     eventAt: input.eventAt ?? null,
     note: input.note,
   });
