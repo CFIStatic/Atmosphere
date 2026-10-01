@@ -72,7 +72,9 @@ Job-level Ask (the job file Ask box) is scored over a fixture of the job's proof
 - `quoteCards`: every expected quote must also be a quote card (a moment link at its own time, not 0:00).
 - `clipTitle`: the quote must be attached to this clip name.
 
-Without a model configured the runner scores the deterministic path (retrieval → answer → quote grounding). With `EVAL_WITH_MODEL=1` it scores `answerFromJobFile`.
+Without a model configured the runner scores the deterministic path (retrieval → answer → quote grounding). Hard questions (comparisons, timelines, cross-clip counts, cross-job) take the research loop on that same path; simple questions stay one pass. With `EVAL_WITH_MODEL=1` it scores `answerFromJobFile`.
+
+`multi_hop` questions are synthetic only. They ask what changed between visits, every time a topic was said across clips, or how this job compares with another job in the fixture (`orgProofs`).
 
 The committed synthetic job mirrors the real regressions with made-up lines: a topic + owner question on a dated clip (both lines quoted verbatim with clip name and time, owner stated as an unidentified speaker), a spoken-line count ("how many spoken lines are in this clip" → 5, all quoted), and a topic in no clip (not found, nothing improvised). The real versions run from the private gold.
 

@@ -999,6 +999,125 @@
      }
     }
    ]
+  },
+  {
+   "id": "syn-job-kitchen-visits",
+   "consent": {
+    "status": "synthetic"
+   },
+   "timeZone": "America/Chicago",
+   "fixture": {
+    "job": {
+     "id": "00000000-0000-4000-8000-00000000c001",
+     "org_id": "00000000-0000-4000-8000-00000000c002",
+     "title": "Synthetic Kitchen Visits"
+    },
+    "parties": [],
+    "proofs": [
+     {
+      "id": "00000000-0000-4000-8000-00000000c101",
+      "job_id": "00000000-0000-4000-8000-00000000c001",
+      "org_id": "00000000-0000-4000-8000-00000000c002",
+      "work_date": "2026-09-03",
+      "phase": "before",
+      "title": "First kitchen visit",
+      "ai_summary": "First visit. Cabinets are still on order.",
+      "transcript_text": "[0:04] The cabinets are still on order.\n[0:08] The budget is twelve thousand.\n[0:14] We will measure the wall.",
+      "transcript_segments": [
+       { "start": 4, "end": 6, "text": "The cabinets are still on order.", "speaker": "SPEAKER_0" },
+       { "start": 8, "end": 11, "text": "The budget is twelve thousand.", "speaker": "SPEAKER_0" },
+       { "start": 14, "end": 16, "text": "We will measure the wall.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     },
+     {
+      "id": "00000000-0000-4000-8000-00000000c102",
+      "job_id": "00000000-0000-4000-8000-00000000c001",
+      "org_id": "00000000-0000-4000-8000-00000000c002",
+      "work_date": "2026-09-17",
+      "phase": "after",
+      "title": "Last kitchen visit",
+      "ai_summary": "Last visit. The budget moved.",
+      "transcript_text": "[0:06] Cabinets are in.\n[0:22] The budget moved to fifteen thousand.\n[0:30] The floor is next.",
+      "transcript_segments": [
+       { "start": 6, "end": 8, "text": "Cabinets are in.", "speaker": "SPEAKER_0" },
+       { "start": 22, "end": 25, "text": "The budget moved to fifteen thousand.", "speaker": "SPEAKER_0" },
+       { "start": 30, "end": 32, "text": "The floor is next.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     }
+    ],
+    "orgProofs": [
+     {
+      "id": "00000000-0000-4000-8000-00000000c201",
+      "job_id": "00000000-0000-4000-8000-00000000c301",
+      "org_id": "00000000-0000-4000-8000-00000000c002",
+      "job_title": "Similar kitchen job",
+      "work_date": "2026-08-12",
+      "phase": "after",
+      "title": "Similar kitchen walkthrough",
+      "ai_summary": "A similar kitchen. Their budget was lower.",
+      "transcript_text": "[0:05] Their budget was ten thousand.\n[0:11] They chose maple.",
+      "transcript_segments": [
+       { "start": 5, "end": 8, "text": "Their budget was ten thousand.", "speaker": "SPEAKER_0" },
+       { "start": 11, "end": 13, "text": "They chose maple.", "speaker": "SPEAKER_0" }
+      ],
+      "transcript_words": null,
+      "deleted_at": null
+     }
+    ]
+   },
+   "questions": [
+    {
+     "id": "mh-changed-visits",
+     "type": "multi_hop",
+     "question": "What changed between the first and last visit?",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       { "text": "The budget is twelve thousand.", "at": 8 },
+       { "text": "The budget moved to fifteen thousand.", "at": 22 }
+      ],
+      "order": ["twelve thousand", "fifteen thousand"],
+      "mustContain": ["First kitchen visit", "Last kitchen visit", "Speaker 1"],
+      "mustNotContain": ["the homeowner said", "This file does not have that"],
+      "quoteCards": true
+     }
+    },
+    {
+     "id": "mh-budget-every-time",
+     "type": "multi_hop",
+     "question": "List every time the homeowner mentioned budget across clips.",
+     "expect": {
+      "answerType": "answer",
+      "count": 2,
+      "quotes": [
+       { "text": "The budget is twelve thousand.", "at": 8 },
+       { "text": "The budget moved to fifteen thousand.", "at": 22 }
+      ],
+      "mustContain": ["Speaker 1", "First kitchen visit", "Last kitchen visit"],
+      "mustNotContain": ["the homeowner said", "2 lines", "two lines"],
+      "quoteCards": true
+     }
+    },
+    {
+     "id": "mh-similar-job",
+     "type": "multi_hop",
+     "question": "Compare this job to the last similar job.",
+     "expect": {
+      "answerType": "answer",
+      "quotes": [
+       { "text": "The budget is twelve thousand.", "at": 8 },
+       { "text": "Their budget was ten thousand.", "at": 5 }
+      ],
+      "mustContain": ["Similar kitchen walkthrough", "Speaker 1", "ten thousand"],
+      "mustNotContain": ["the homeowner said", "This file does not have that"],
+      "quoteCards": true
+     }
+    }
+   ]
   }
  ]
 }

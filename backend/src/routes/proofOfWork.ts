@@ -3314,6 +3314,7 @@ export async function runProofAsk(input: {
           toolResults: [] as unknown[],
           answeredFromLookup: false,
           webDerivedAnswer: false,
+          research: null,
         }
       : await answerFromJobFile({
       question: input.question,
@@ -3400,6 +3401,7 @@ export async function runProofAsk(input: {
         model: result.model,
         grounded_on: groundedOn,
         web_sources: webSources,
+        research_trace: result.research ?? null,
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
       })

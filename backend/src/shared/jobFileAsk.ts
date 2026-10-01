@@ -12,6 +12,7 @@
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
 import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
+import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -612,6 +613,8 @@ export async function answerFromJobFile(input: {
   answeredFromLookup?: boolean;
   /** The stored prose is web text. Marker parsing must not treat it as a model answer. */
   webDerivedAnswer?: boolean;
+  /** Compact research trace for debugging. Absent on the single pass. */
+  research?: AskResearchTrace | null;
 }> {
   const emit = (text: string) => {
     if (text) input.timing?.markFirstToken();
@@ -830,6 +833,7 @@ export async function answerFromJobFile(input: {
       toolResults,
       answeredFromLookup: true,
       webDerivedAnswer: applied.webDerived,
+      research: looked.research ?? null,
     };
   }
 

@@ -69,6 +69,13 @@ import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 import { fastAnswerNeedsDeepFallback, routeAskQuestion, type AskModelRoute } from './askRoute.js';
 import {
+  logAskResearch,
+  routeAskResearch,
+  runAskResearch,
+  type AskResearchTrace,
+  type ResearchComplete,
+} from './askResearch.js';
+import {
   anthropicCachedSystem,
   asAnthropicSystem,
   geminiCachedContentName,
@@ -82,7 +89,7 @@ import {
   retrievedChunksFor,
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
+import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import {
   ASK_REPAIR_SYSTEM,
   buildGroundingIndex,
@@ -870,6 +877,18 @@ export async function answerFromAskLookup(input: {
   timing?: AskTurnClock | null;
   /** Test double for the one grounding repair pass. Production uses the Ask model. */
   repair?: (input: { system: string; user: string }) => Promise<string | null>;
+  /**
+   * `off` keeps the single pass (latency comparisons). Default routes hard
+   * questions through the research loop.
+   */
+  researchMode?: 'auto' | 'off';
+  /** Test doubles for the research loop. Production leaves these unset. */
+  research?: {
+    now?: () => number;
+    maxSteps?: number;
+    budgetMs?: number;
+    complete?: ResearchComplete | null;
+  };
 }): Promise<{
   answer: string;
   model: string | null;
@@ -879,6 +898,8 @@ export async function answerFromAskLookup(input: {
   answeredFromLookup: true;
   /** Transcript chunks this Ask retrieved. The final quote check verifies against these. */
   retrievedChunks: TranscriptChunk[];
+  /** Compact research trace for debugging. Absent on the single pass. */
+  research?: AskResearchTrace | null;
 }> {
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
@@ -924,8 +945,46 @@ export async function answerFromAskLookup(input: {
     );
     trace.push(...rows);
   };
-  input.onStatus?.('Looking through clips…');
   let forcedOther = false;
+  let researchMeta: AskResearchTrace | null = null;
+  const researchDecision =
+    input.researchMode === 'off' ? { route: 'single' as const, reason: 'off' } : routeAskResearch(resolved);
+  if (researchDecision.route === 'research' && !stopped()) {
+    try {
+      const researched = await runAskResearch({
+        question: resolved,
+        catalog: input.catalog,
+        history: input.history,
+        memory: input.memory,
+        extra: input.extra,
+        anthropicApiKey: input.anthropicApiKey,
+        fetchFn: input.fetchFn,
+        signal: input.signal,
+        now: input.research?.now,
+        maxSteps: input.research?.maxSteps,
+        budgetMs: input.research?.budgetMs,
+        complete: input.research?.complete,
+      });
+      if (!researched.answer.trim()) throw new Error('research_empty');
+      prose = researched.answer;
+      model = researched.model;
+      usage = researched.usage;
+      if (model) input.timing?.noteModel(model);
+      trace.push(...researched.traceSteps);
+      researchMeta = researched.meta;
+      streamed = false;
+      input.timing?.noteRoute('deep', `research_${researched.meta.stopReason}`);
+    } catch (err) {
+      logAskFailure('ask_research_fallback', err);
+      prose = '';
+      model = null;
+      researchMeta = { route: 'research', stopReason: 'fallback', steps: [], elapsedMs: 0 };
+      logAskResearch(researchMeta);
+      input.timing?.noteRoute('deep', 'research_fallback', true);
+    }
+  }
+  if (!prose) {
+  input.onStatus?.('Looking through clips…');
   const consume = async (
     active: LookupModelStep,
     userText: string,
@@ -1040,8 +1099,23 @@ export async function answerFromAskLookup(input: {
       streamed = false;
     }
   }
+  }
 
   const retrievedChunks = retrievedChunksFor(evidence, trace, `${fullUser}\n\n${formatTrace(trace)}`);
+  if (input.catalog.access !== 'viewer') {
+    const opened = new Set<string>();
+    for (const step of trace) {
+      if (step.tool !== 'get_clip' || !step.result.ok) continue;
+      const id = (step.result.data as { proofId?: unknown } | undefined)?.proofId;
+      if (typeof id === 'string' && id) opened.add(id);
+    }
+    for (const clip of input.catalog.orgClips ?? []) {
+      if (clip.orgId !== input.catalog.orgId || !opened.has(clip.proofId)) continue;
+      for (const chunk of chunkClipTranscript(clip)) {
+        if (!retrievedChunks.some((row) => row.key === chunk.key)) retrievedChunks.push(chunk);
+      }
+    }
+  }
   if (stopped()) {
     return {
       answer: stripExternalAskLinks(scrubStoredAskText(prose, input.catalog.clips)),
@@ -1051,6 +1125,7 @@ export async function answerFromAskLookup(input: {
       followUps: [],
       answeredFromLookup: true,
       retrievedChunks,
+      research: researchMeta,
     };
   }
 
@@ -1090,5 +1165,6 @@ export async function answerFromAskLookup(input: {
     followUps: finalized.followUps,
     answeredFromLookup: true,
     retrievedChunks,
+    research: researchMeta,
   };
 }

@@ -821,7 +821,7 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
 
     anthropicBodies.length = 0;
     await answerFromAskLookup({
-      question: 'Compare the visits and draft an email to the homeowner',
+      question: 'Draft an email to the homeowner',
       catalog: file,
       anthropicApiKey: 'sk-ant-test-shape-key',
       fetchFn,

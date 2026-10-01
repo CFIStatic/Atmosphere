@@ -543,12 +543,16 @@ async function settleClipQuestion(opts: {
         }).catch(() => null)
       : null;
   const result = mentionPrep?.directAnswer
-    ? { answer: mentionPrep.directAnswer, model: null, usage: null, webSources: [], webDerivedAnswer: false }
+    ? { answer: mentionPrep.directAnswer, model: null, usage: null, webSources: [], webDerivedAnswer: false, research: null }
     : await answerFromClip({
         question: opts.question,
         record,
         history: opts.history,
         supplement: mentionPrep?.supplement,
+        orgId: opts.orgId,
+        jobId: opts.jobId,
+        proofId: opts.proofId,
+        title: opts.item?.title ?? null,
       });
   let webDerived = result.webDerivedAnswer;
   let webSources = result.webSources ?? [];
@@ -581,6 +585,7 @@ async function settleClipQuestion(opts: {
         model: result.model,
         grounded_on: opts.item.workDate ? [opts.item.workDate] : [],
         web_sources: webSources,
+        research_trace: result.research ?? null,
         asked_by: opts.askedBy ?? null,
       })
       .select('id')

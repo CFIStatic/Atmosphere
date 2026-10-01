@@ -13,7 +13,17 @@
  */
 import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
 import { answerQualityFailures, normalizeForMatch } from './askVerify.js';
-import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { completeAskText, isAskModelConfigured, logAskFailure } from '../lib/askModel.js';
+import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { chunkClipTranscript } from './askTranscriptIndex.js';
+import {
+  catalogFromClipRecord,
+  logAskResearch,
+  routeAskResearch,
+  runAskResearch,
+  type AskResearchTrace,
+  type ResearchComplete,
+} from './askResearch.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import {
@@ -1613,12 +1623,26 @@ export async function answerFromClip(input: {
   supplement?: string | null;
   fetchFn?: typeof fetch;
   now?: Date;
+  /** Clip identity so research quotes name this proof. */
+  orgId?: string | null;
+  jobId?: string | null;
+  proofId?: string | null;
+  title?: string | null;
+  /** `off` keeps today's single pass. Default routes hard questions through research. */
+  researchMode?: 'auto' | 'off';
+  research?: {
+    now?: () => number;
+    maxSteps?: number;
+    budgetMs?: number;
+    complete?: ResearchComplete | null;
+  };
 }): Promise<{
   answer: string;
   model: string | null;
   usage: MeasuredUsage | null;
   webSources: AskWebSource[];
   webDerivedAnswer: boolean;
+  research?: AskResearchTrace | null;
 }> {
   input = { ...input, record: withAuthoritativeTranscript(speechSafeClipRecord(input.record)) };
   const grounded = groundedAnswerFromClip(input.question, input.record);
@@ -1629,6 +1653,42 @@ export async function answerFromClip(input: {
   }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
   const wantsWeb = !supplement && shouldSupplementWithWebSearch(input.question, grounded);
+  if (input.researchMode !== 'off' && routeAskResearch(input.question).route === 'research') {
+    try {
+      const catalog = catalogFromClipRecord(input.record, {
+        orgId: input.orgId ?? undefined,
+        jobId: input.jobId ?? undefined,
+        proofId: input.proofId ?? undefined,
+        title: input.title ?? input.record.company ?? null,
+      });
+      const researched = await runAskResearch({
+        question: input.question,
+        catalog,
+        history: input.history,
+        extra: supplement || null,
+        fetchFn: input.fetchFn,
+        now: input.research?.now,
+        maxSteps: input.research?.maxSteps,
+        budgetMs: input.research?.budgetMs,
+        complete: input.research?.complete,
+      });
+      const chunks = catalog.clips.flatMap((clip) => chunkClipTranscript(clip));
+      const checked = enforceQuoteGrounding(researched.answer, { chunks, question: input.question }).answer.trim();
+      if (!checked) throw new Error('research_empty');
+      input.onToken?.(checked);
+      return {
+        answer: checked,
+        model: researched.model,
+        usage: researched.usage,
+        webSources: [],
+        webDerivedAnswer: false,
+        research: researched.meta,
+      };
+    } catch (err) {
+      logAskFailure('ask_research_fallback', err);
+      logAskResearch({ route: 'research', stopReason: 'fallback', steps: [], elapsedMs: 0 });
+    }
+  }
   if (!wantsWeb && !supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
