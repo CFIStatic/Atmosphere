@@ -3,6 +3,7 @@
  * Money is applied by the Stripe webhook, not by the success URL.
  */
 
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -14,10 +15,12 @@ import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
 import { planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
 import {
   ensureCustomer,
+  isExtraSeatLineItem,
   liveStripeSubscriptionId,
   normalizeAtmosphereBillingInterval,
   stripeClient,
   stripeIdempotencyKey,
+  subscriptionItemPriceId,
 } from '../lib/stripe.js';
 import { atmospherePlan, parseAtmospherePlanCode } from '../lib/stripeCatalog.js';
 import { loadWorkspaceBilling, resolveOnboardingPriceId } from '../lib/workspaceBilling.js';
@@ -142,7 +145,14 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
       if (!priceId) {
         throw badRequest(`No Stripe price is configured for the ${plan.name} plan.`, 'price_not_configured');
       }
+      const planItem = (existing.items?.data ?? []).find((item) => item.id && !isExtraSeatLineItem(item));
+      if (subscriptionItemPriceId(planItem) === priceId) {
+        res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
+        return;
+      }
       const update = planItemUpdateParams(existing.items?.data ?? [], priceId);
+      // A stable key is replayed for 24 hours. Switching away and back to this
+      // plan in that window must send a new update, not the cached one.
       await stripe.subscriptions.update(
         currentSub,
         {
@@ -156,7 +166,16 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
             atmosphere_interval: interval,
           },
         },
-        { idempotencyKey: stripeIdempotencyKey('plan-change', req.orgId, plan.code, interval, priceId) },
+        {
+          idempotencyKey: stripeIdempotencyKey(
+            'plan-change',
+            req.orgId,
+            plan.code,
+            interval,
+            priceId,
+            randomUUID(),
+          ),
+        },
       );
       res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });
       return;

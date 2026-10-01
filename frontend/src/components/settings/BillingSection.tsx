@@ -76,6 +76,15 @@ export function BillingSection() {
     };
   }, []);
 
+  async function refreshAfterPlanChange() {
+    const [next, nextAllowance] = await Promise.all([
+      api.getBillingWorkspace(),
+      api.getAiAllowance().catch(() => null),
+    ]);
+    setWorkspace(next);
+    if (nextAllowance) setAllowance(nextAllowance);
+  }
+
   async function openPortal() {
     setBusy(true);
     try {
@@ -127,6 +136,7 @@ export function BillingSection() {
           allowance={allowance}
           currentPlanCode={sub.code}
           onError={setError}
+          onUpdated={refreshAfterPlanChange}
         />
       ) : null}
 

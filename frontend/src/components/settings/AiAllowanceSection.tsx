@@ -13,13 +13,18 @@ export function AiAllowanceSection({
   allowance,
   currentPlanCode,
   onError,
+  onUpdated,
 }: {
   allowance: AiAllowance;
   currentPlanCode?: string | null;
   onError: (message: string) => void;
+  /** Reload allowance and the current plan after an in-place change. */
+  onUpdated?: () => Promise<void> | void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const [confirmedPlan, setConfirmedPlan] = useState<string | null>(null);
+  const activePlanCode = confirmedPlan ?? currentPlanCode;
   const billingInterval = allowance.billingInterval === 'year' ? 'year' : 'month';
   const percent = allowance.state === 'unlimited' ? 0 : Math.min(100, Math.round(allowance.usedFraction * 100));
   const bar = allowance.state === 'limited' ? 100 : percent;
@@ -48,7 +53,13 @@ export function AiAllowanceSection({
       const result = await api.checkoutAiPlan(planCode, billingInterval);
       if (result.checkoutUrl) window.location.href = result.checkoutUrl;
       else if (result.updated) {
+        setConfirmedPlan(result.planCode);
         setPlanNotice('Plan updated. Stripe prorates the difference on this billing period.');
+        try {
+          await onUpdated?.();
+        } catch (refreshErr) {
+          onError(refreshErr instanceof Error ? refreshErr.message : 'Could not refresh the plan.');
+        }
         setBusy(null);
       } else onError('Checkout did not return a payment link.');
     } catch (err) {
@@ -156,11 +167,11 @@ export function AiAllowanceSection({
                   key={plan.code}
                   type="button"
                   data-testid={`upgrade-plan-${plan.code}`}
-                  disabled={busy !== null || plan.code === currentPlanCode}
+                  disabled={busy !== null || plan.code === activePlanCode}
                   onClick={() => void changePlan(plan.code)}
                   className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm font-medium text-ink-800 transition hover:border-brand-300 disabled:opacity-50"
                 >
-                  {busy === plan.code ? 'Opening checkout…' : plan.code === currentPlanCode ? plan.name : `Switch to ${plan.name}`}
+                  {busy === plan.code ? 'Opening checkout…' : plan.code === activePlanCode ? plan.name : `Switch to ${plan.name}`}
                 </button>
               ))}
             </div>

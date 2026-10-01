@@ -87,4 +87,31 @@ describe('AI allowance meter', () => {
     await waitFor(() => expect(checkout).toHaveBeenCalledWith('scale', 'year'));
     checkout.mockRestore();
   });
+
+  it('reloads the allowance and marks the new plan current after an in-place change', async () => {
+    const checkout = vi.spyOn(api, 'checkoutAiPlan').mockResolvedValue({
+      checkoutUrl: null,
+      updated: true,
+      planCode: 'scale',
+      billingInterval: 'month',
+    });
+    const onUpdated = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AiAllowanceSection
+        allowance={allowance({ canManage: true })}
+        currentPlanCode="starter"
+        onError={() => {}}
+        onUpdated={onUpdated}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('upgrade-plan-scale'));
+    await waitFor(() => {
+      expect(onUpdated).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('upgrade-plan-scale')).toBeDisabled();
+    });
+    expect(screen.getByTestId('plan-change-updated')).toHaveTextContent(/Plan updated/);
+    expect(screen.getByTestId('upgrade-plan-starter')).toBeEnabled();
+    expect(screen.getByTestId('upgrade-plan-scale')).toHaveTextContent('Scale');
+    checkout.mockRestore();
+  });
 });

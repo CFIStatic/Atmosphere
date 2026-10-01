@@ -139,7 +139,17 @@ test('a short credit balance does not count the call as paid by credits', async 
   const settle = client.rpcCalls.find((call) => call.name === 'settle_ai_usage');
   assert.ok(settle);
   assert.ok(Number(settle.args.p_credit_nanos) > 0);
+  assert.equal(typeof settle.args.p_period_start, 'string');
+  assert.equal(typeof settle.args.p_period_end, 'string');
+  assert.equal(typeof settle.args.p_window_start, 'string');
+  assert.equal(typeof settle.args.p_period_allowance_nanos, 'number');
+  assert.ok('p_rolling_cap_nanos' in settle.args);
+  assert.equal(typeof settle.args.p_window_event_nanos, 'number');
   assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /v_period_used/);
+  assert.match(sql, /v_allowance := least\(v_allowance, greatest\(0, p_period_allowance_nanos - v_period_used\)\)/);
+  assert.match(sql, /v_window_count > 0/);
+  assert.match(sql, /v_credit := v_credit \+ greatest\(0, v_caller_allowance - v_allowance\)/);
   assert.match(sql, /v_balance < v_credit/);
   assert.match(sql, /v_credit := 0/);
 });

@@ -77,17 +77,25 @@ as $$
     ), '{}'::jsonb);
 $$;
 
--- One locked statement: the credit consume is inserted only when the summed
+-- One locked statement. Allowance is recomputed from allocations already
+-- committed for this org, so two settles that snapshotted the same leftover
+-- cannot both keep it. The credit consume is inserted only when the summed
 -- balance covers the full draw. A short balance records the allowance portion
--- with credit_nanos = 0 and does not insert a consume, so the call is not
--- paid by credits.
+-- with credit_nanos = 0 and does not insert a consume.
+drop function if exists public.settle_ai_usage(uuid, text, bigint, bigint, bigint, timestamptz);
 create or replace function public.settle_ai_usage(
   p_org uuid,
   p_request_id text,
   p_cost_nanos bigint,
   p_allowance_nanos bigint,
   p_credit_nanos bigint,
-  p_at timestamptz
+  p_at timestamptz,
+  p_period_allowance_nanos bigint,
+  p_period_start timestamptz,
+  p_period_end timestamptz,
+  p_window_start timestamptz,
+  p_rolling_cap_nanos bigint,
+  p_window_event_nanos bigint
 )
 returns table (
   applied boolean,
@@ -102,8 +110,13 @@ as $$
 declare
   v_existing public.ai_usage_allocations%rowtype;
   v_balance bigint;
+  v_caller_allowance bigint := greatest(coalesce(p_allowance_nanos, 0), 0);
   v_credit bigint := greatest(coalesce(p_credit_nanos, 0), 0);
-  v_allowance bigint := greatest(coalesce(p_allowance_nanos, 0), 0);
+  v_allowance bigint := v_caller_allowance;
+  v_period_used bigint := 0;
+  v_window_used bigint := 0;
+  v_window_count bigint := 0;
+  v_window_room bigint := 0;
 begin
   if p_request_id is null or length(btrim(p_request_id)) = 0 then
     raise exception 'request_id required' using errcode = '22023';
@@ -123,6 +136,38 @@ begin
              v_existing.credit_nanos;
     return;
   end if;
+
+  if p_period_start is not null
+     and p_period_end is not null
+     and p_period_allowance_nanos is not null
+  then
+    select coalesce(sum(greatest(allowance_nanos, 0)), 0)
+      into v_period_used
+    from public.ai_usage_allocations
+    where org_id = p_org
+      and created_at >= p_period_start
+      and created_at < p_period_end;
+
+    v_allowance := least(v_allowance, greatest(0, p_period_allowance_nanos - v_period_used));
+  end if;
+
+  if p_rolling_cap_nanos is not null and p_window_start is not null then
+    select coalesce(sum(greatest(allowance_nanos, 0)), 0), count(*)
+      into v_window_used, v_window_count
+    from public.ai_usage_allocations
+    where org_id = p_org
+      and created_at >= p_window_start;
+
+    if v_window_count > 0 then
+      v_window_room := greatest(0, p_rolling_cap_nanos - v_window_used);
+    else
+      v_window_room := greatest(0, p_rolling_cap_nanos - greatest(coalesce(p_window_event_nanos, 0), 0));
+    end if;
+
+    v_allowance := least(v_allowance, v_window_room);
+  end if;
+
+  v_credit := v_credit + greatest(0, v_caller_allowance - v_allowance);
 
   select public.ai_credit_balance(p_org) into v_balance;
 
@@ -155,10 +200,10 @@ $$;
 
 revoke all on function public.ai_credit_balance(uuid) from public, anon, authenticated;
 revoke all on function public.ai_allowance_totals(uuid, timestamptz, timestamptz, timestamptz) from public, anon, authenticated;
-revoke all on function public.settle_ai_usage(uuid, text, bigint, bigint, bigint, timestamptz) from public, anon, authenticated;
+revoke all on function public.settle_ai_usage(uuid, text, bigint, bigint, bigint, timestamptz, bigint, timestamptz, timestamptz, timestamptz, bigint, bigint) from public, anon, authenticated;
 grant execute on function public.ai_credit_balance(uuid) to service_role;
 grant execute on function public.ai_allowance_totals(uuid, timestamptz, timestamptz, timestamptz) to service_role;
-grant execute on function public.settle_ai_usage(uuid, text, bigint, bigint, bigint, timestamptz) to service_role;
+grant execute on function public.settle_ai_usage(uuid, text, bigint, bigint, bigint, timestamptz, bigint, timestamptz, timestamptz, timestamptz, bigint, bigint) to service_role;
 
 -- ai_budget_hold is server-write-only. Org members can update a clip, but
 -- not clear the hold that keeps analysis queued. Column grants drop the

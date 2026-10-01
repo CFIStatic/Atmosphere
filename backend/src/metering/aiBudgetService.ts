@@ -383,6 +383,8 @@ export async function settleUsageCost(
     creditBalanceNanos: view.evaluation.creditBalanceNanos,
   });
   const createdAt = input.at ?? new Date().toISOString();
+  const budget = aiBudgetConfig();
+  const windowStart = new Date(Date.now() - budget.rollingHours * 3_600_000).toISOString();
   const { data, error } = await client.rpc('settle_ai_usage', {
     p_org: input.orgId,
     p_request_id: input.requestId,
@@ -390,14 +392,23 @@ export async function settleUsageCost(
     p_allowance_nanos: alloc.allowanceNanos,
     p_credit_nanos: alloc.creditNanos,
     p_at: createdAt,
+    p_period_allowance_nanos: view.evaluation.periodAllowanceNanos,
+    p_period_start: view.periodStart,
+    p_period_end: view.periodEnd,
+    p_window_start: windowStart,
+    p_rolling_cap_nanos: view.evaluation.rollingCapNanos,
+    p_window_event_nanos: windowSpend,
   });
   if (error) {
     if (missingSchema(error)) return;
     throw error;
   }
   const settled = firstRpcRow(data);
-  const creditApplied = settled?.credit_applied === true && asNanos(settled.credit_nanos) > 0;
-  if (alloc.creditNanos > 0 && !creditApplied) {
+  const settledAllowance = asNanos(settled?.allowance_nanos);
+  const settledCredit = asNanos(settled?.credit_nanos);
+  const creditApplied = settled?.credit_applied === true && settledCredit > 0;
+  const covered = settledAllowance + (creditApplied ? settledCredit : 0);
+  if ((alloc.creditNanos > 0 && !creditApplied) || (settled && covered < alloc.allowanceNanos + alloc.creditNanos)) {
     throw new Error('insufficient_ai_credits');
   }
 }
