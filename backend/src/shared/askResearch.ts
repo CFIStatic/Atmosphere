@@ -7,10 +7,14 @@
  * retrieval tools in parallel, drop duplicates into a scratchpad, then check
  * which parts of the question are still open. The loop stops when the
  * question is covered, after ASK_RESEARCH_MAX_STEPS, or at
- * ASK_RESEARCH_BUDGET_MS. One synthesis call then reads only that scratchpad.
+ * ASK_RESEARCH_BUDGET_MS. ASK_RESEARCH_SYNTHESIS_RESERVE_MS stays unused by
+ * the loop so the final synthesis still fits inside ASK_RESEARCH_DEADLINE_MS.
+ * Every plan, tool, sufficiency, and synthesis call gets its own abortable
+ * timeout bounded by the time left. When that deadline hits and the
+ * scratchpad already has records, synthesis reads that scratchpad. An empty
+ * scratchpad or an early loop error throws so the caller can fall back.
  *
- * A loop error, a model failure, or an empty synthesis throws. Callers fall
- * back to the single pass. This module does not stream tokens or status text.
+ * This module does not stream tokens or status text.
  */
 import type { MeasuredUsage } from '../lib/anthropic.js';
 import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
@@ -39,8 +43,12 @@ import {
 
 /** Hard-question research stops after this many plan / retrieve / check cycles. */
 export const ASK_RESEARCH_MAX_STEPS = 4;
-/** Wall-clock budget for the research steps. Synthesis runs after this. */
+/** Wall-clock budget for plan, retrieval, and sufficiency. Synthesis is reserved after this. */
 export const ASK_RESEARCH_BUDGET_MS = 20_000;
+/** Kept free so the final synthesis still runs when the step budget is spent. */
+export const ASK_RESEARCH_SYNTHESIS_RESERVE_MS = 5_000;
+/** Research steps plus synthesis. Callers keep the single-pass fallback inside the Ask timeout. */
+export const ASK_RESEARCH_DEADLINE_MS = ASK_RESEARCH_BUDGET_MS + ASK_RESEARCH_SYNTHESIS_RESERVE_MS;
 
 export type AskResearchStop = 'sufficient' | 'max_steps' | 'budget' | 'fallback';
 
@@ -91,7 +99,12 @@ export type ResearchComplete = (input: {
   system: string;
   stable: string;
   user: string;
+  signal?: AbortSignal;
 }) => Promise<{ text: string; model?: string | null; usage?: MeasuredUsage | null } | null>;
+
+export type ResearchToolResult = { step: AskLookupTraceStep; records: ResearchRecord[] };
+
+export type ResearchToolRunner = (call: ResearchCall, signal: AbortSignal) => Promise<ResearchToolResult>;
 
 const PLAN_SYSTEM = `You plan the next retrieval step for a job-file question. Reply with JSON only: {"calls":[{"tool":"search_transcripts","query":"..."}]}
 Tools: search_transcripts (query), get_clip (proofId), read_job_history, read_job_fields, list_clips, list_person_activity (name), search_other_jobs (query), web_search (query).
@@ -112,7 +125,7 @@ export function routeAskResearch(question: string): { route: 'single' | 'researc
   if (/\b(what(?:'s| has| have)? changed|what changed|between the first|between the last|first and last visit|timeline|over time)\b/i.test(q)) {
     return { route: 'research', reason: 'timeline' };
   }
-  if (/\b(compare|versus|vs\.?|difference between)\b/i.test(q) || asksAboutOtherJobs(q) || /\bsimilar job\b/i.test(q)) {
+  if (/\b(compare|versus|vs\.?|difference between)\b/i.test(q) || asksAboutCrossJob(q)) {
     return { route: 'research', reason: 'comparison' };
   }
   if (/\b(everything about|all about|tell me everything|every time|each time|how many times|list every)\b/i.test(q)) {
@@ -189,6 +202,19 @@ function datedClips(catalog: AskLookupCatalog): AskLookupClip[] {
       const byDate = String(a.workDate ?? '').localeCompare(String(b.workDate ?? ''));
       if (byDate) return byDate;
       return String(a.capturedAt ?? '').localeCompare(String(b.capturedAt ?? '')) || a.title.localeCompare(b.title);
+    });
+}
+
+/** Newest other-job clips first. A last-job compare loads these even when search misses. */
+function recentOrgClips(catalog: AskLookupCatalog): AskLookupClip[] {
+  if (catalog.access === 'viewer') return [];
+  return (catalog.orgClips ?? [])
+    .filter((clip) => clip.orgId === catalog.orgId && Boolean(clip.jobId) && clip.jobId !== catalog.jobId)
+    .slice()
+    .sort((a, b) => {
+      const byDate = String(b.workDate ?? '').localeCompare(String(a.workDate ?? ''));
+      if (byDate) return byDate;
+      return String(b.capturedAt ?? '').localeCompare(String(a.capturedAt ?? '')) || b.title.localeCompare(a.title);
     });
 }
 
@@ -323,13 +349,21 @@ function heuristicCalls(question: string, catalog: AskLookupCatalog, pad: Resear
     push({ name: 'search_other_jobs', input: { query } });
     push({ name: 'search_transcripts', input: { query } });
     const opened = openedProofs(pad);
-    for (const clip of clipsInScope(catalog).slice(0, 3)) {
+    const clipCalls = () => calls.filter((call) => call.name === 'get_clip').length;
+    // Latest other-job clips before this job, so "last job" still loads when the
+    // framed words ("last", "job") leave the search with nothing to match.
+    for (const clip of recentOrgClips(catalog).slice(0, 2)) {
+      if (clipCalls() >= 4) break;
       if (!opened.has(clip.proofId)) push({ name: 'get_clip', input: { proofId: clip.proofId } });
     }
     for (const record of pad.records) {
       if (record.kind !== 'hit' || !record.proofId || opened.has(record.proofId)) continue;
-      if (calls.filter((call) => call.name === 'get_clip').length >= 4) break;
+      if (clipCalls() >= 4) break;
       push({ name: 'get_clip', input: { proofId: record.proofId } });
+    }
+    for (const clip of clipsInScope(catalog).slice(0, 2)) {
+      if (clipCalls() >= 4) break;
+      if (!opened.has(clip.proofId)) push({ name: 'get_clip', input: { proofId: clip.proofId } });
     }
   }
 
@@ -375,8 +409,11 @@ function facetReport(question: string, catalog: AskLookupCatalog, pad: ResearchS
     const searched = [...ran].some((key) => key.startsWith('search_other_jobs:'));
     if (!searched && catalog.access !== 'viewer') gaps.push('other jobs');
     else covered.push('other jobs');
-    const pending = pad.records.some((record) => record.kind === 'hit' && record.proofId && !opened.has(record.proofId));
-    if (pending) gaps.push('other job clips');
+    const pendingHits = pad.records.some((record) => record.kind === 'hit' && record.proofId && !opened.has(record.proofId));
+    const pendingLatest = recentOrgClips(catalog)
+      .slice(0, 2)
+      .some((clip) => !opened.has(clip.proofId));
+    if (pendingHits || pendingLatest) gaps.push('other job clips');
     else if (searched) covered.push('other job clips');
   }
   const more = heuristicCalls(question, catalog, pad, ran);
@@ -459,12 +496,21 @@ function listClipRecords(catalog: AskLookupCatalog): ResearchRecord[] {
   }));
 }
 
+function fetchWithSignal(fetchFn: typeof fetch | undefined, signal: AbortSignal): typeof fetch {
+  const base = fetchFn ?? fetch;
+  return (input, init) => {
+    const merged = init?.signal ? AbortSignal.any([init.signal, signal]) : signal;
+    return base(input, { ...init, signal: merged });
+  };
+}
+
 async function runCall(
   call: ResearchCall,
   catalog: AskLookupCatalog,
   question: string,
-  fetchFn?: typeof fetch,
-): Promise<{ step: AskLookupTraceStep; records: ResearchRecord[] }> {
+  fetchFn: typeof fetch | undefined,
+  signal: AbortSignal,
+): Promise<ResearchToolResult> {
   if (call.name === 'read_job_fields') {
     const records = fieldRecords(catalog);
     return {
@@ -496,7 +542,11 @@ async function runCall(
       };
     }
     const query = String(call.input.query ?? question);
-    const outcome = await searchAskWebDetailed(query, { fetchFn, limit: 5, timeZone: catalog.timeZone || 'America/Chicago' });
+    const outcome = await searchAskWebDetailed(query, {
+      fetchFn: fetchWithSignal(fetchFn, signal),
+      limit: 5,
+      timeZone: catalog.timeZone || 'America/Chicago',
+    });
     const records: ResearchRecord[] = outcome.hits.map((hit) => ({
       id: `web:${hit.url}`,
       kind: 'web',
@@ -639,11 +689,50 @@ function evidenceRank(record: ResearchRecord): number {
   return 7;
 }
 
-function evidenceForModel(pad: ResearchScratchpad): string {
-  const window = pad.records
-    .map((record, index) => ({ record, index }))
+const EVIDENCE_CHUNKS_PER_CLIP = 8;
+const EVIDENCE_CHUNK_CAP = 48;
+const EVIDENCE_OTHER_CAP = 8;
+
+/**
+ * Keep at least one line from every opened clip, then fill toward the cap.
+ * A flat slice of the earliest chunks drops the visit that was opened last
+ * once many filler transcripts are on the pad.
+ */
+function evidenceForModel(pad: ResearchScratchpad, question: string): string {
+  const terms = topicTerms(question);
+  const matches = (record: ResearchRecord) => terms.some((term) => record.text.toLowerCase().includes(term));
+  const prefer = (
+    a: { record: ResearchRecord; index: number },
+    b: { record: ResearchRecord; index: number },
+  ) => Number(matches(b.record)) - Number(matches(a.record)) || a.index - b.index;
+  const byClip = new Map<string, Array<{ record: ResearchRecord; index: number }>>();
+  const others: Array<{ record: ResearchRecord; index: number }> = [];
+  pad.records.forEach((record, index) => {
+    if (record.kind !== 'chunk') {
+      others.push({ record, index });
+      return;
+    }
+    const key = record.proofId ?? record.id;
+    const list = byClip.get(key) ?? [];
+    list.push({ record, index });
+    byClip.set(key, list);
+  });
+  const first: Array<{ record: ResearchRecord; index: number }> = [];
+  const extra: Array<{ record: ResearchRecord; index: number }> = [];
+  for (const list of byClip.values()) {
+    list.sort(prefer);
+    if (list[0]) first.push(list[0]);
+    extra.push(...list.slice(1, EVIDENCE_CHUNKS_PER_CLIP));
+  }
+  first.sort(prefer);
+  extra.sort(prefer);
+  const chunks = [...first, ...extra].slice(0, EVIDENCE_CHUNK_CAP);
+  const otherWindow = others
     .sort((a, b) => evidenceRank(a.record) - evidenceRank(b.record) || a.index - b.index)
-    .slice(0, 24);
+    .slice(0, EVIDENCE_OTHER_CAP);
+  const window = [...chunks, ...otherWindow].sort(
+    (a, b) => evidenceRank(a.record) - evidenceRank(b.record) || a.index - b.index,
+  );
   return window
     .map(({ record }) => {
       const when = record.startSec == null ? '' : ` ${formatAskClock(record.startSec)}`;
@@ -778,6 +867,17 @@ export function logAskResearch(trace: AskResearchTrace): void {
   });
 }
 
+function deadlineError(): Error {
+  const err = new Error('research_deadline');
+  err.name = 'TimeoutError';
+  return err;
+}
+
+function isParentAbort(err: unknown, parent?: AbortSignal): boolean {
+  if (parent?.aborted) return true;
+  return err instanceof Error && err.message === 'research_aborted';
+}
+
 export async function runAskResearch(input: {
   question: string;
   catalog: AskLookupCatalog;
@@ -790,8 +890,12 @@ export async function runAskResearch(input: {
   now?: () => number;
   maxSteps?: number;
   budgetMs?: number;
+  /** Time held back from the step loop so synthesis still fits under the deadline. */
+  synthesisReserveMs?: number;
   /** Test double. When set, planning, sufficiency, and synthesis use it instead of the Ask model. */
   complete?: ResearchComplete | null;
+  /** Test double for retrieval. Production runs the lookup tools. */
+  callTool?: ResearchToolRunner | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -803,6 +907,7 @@ export async function runAskResearch(input: {
   const started = clock();
   const maxSteps = input.maxSteps ?? ASK_RESEARCH_MAX_STEPS;
   const budgetMs = input.budgetMs ?? ASK_RESEARCH_BUDGET_MS;
+  const reserveMs = input.synthesisReserveMs ?? ASK_RESEARCH_SYNTHESIS_RESERVE_MS;
   const pad = createResearchScratchpad();
   const traceSteps: AskLookupTraceStep[] = [];
   const ran = new Set<string>();
@@ -810,11 +915,14 @@ export async function runAskResearch(input: {
   const modelOn = Boolean(input.complete) || isAskModelConfigured(input.anthropicApiKey);
   const stable = scopeStable(input.catalog);
   let stop: AskResearchStop = 'max_steps';
+  const runTool: ResearchToolRunner =
+    input.callTool ??
+    ((call, signal) => runCall(call, input.catalog, input.question, input.fetchFn, signal));
 
-  const callModel = async (kind: ResearchModelKind, user: string) => {
+  const callModel = async (kind: ResearchModelKind, user: string, signal: AbortSignal) => {
     const system = kind === 'plan' ? PLAN_SYSTEM : kind === 'sufficiency' ? SUFFICIENCY_SYSTEM : SYNTHESIS_SYSTEM;
     if (input.complete) {
-      const turned = await input.complete({ kind, system, stable, user });
+      const turned = await input.complete({ kind, system, stable, user, signal });
       if (!turned?.text?.trim()) throw new Error('research_model_empty');
       return { text: turned.text, model: turned.model ?? null, usage: turned.usage ?? null };
     }
@@ -824,7 +932,7 @@ export async function runAskResearch(input: {
       user,
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
-      signal: input.signal,
+      signal,
       mode: 'interactive',
       maxTokens: kind === 'synthesis' ? 1400 : 500,
     });
@@ -832,87 +940,165 @@ export async function runAskResearch(input: {
     return turned;
   };
 
-  for (let index = 0; index < maxSteps; index += 1) {
+  /**
+   * Abort `work` when the clock passes `limitMs` from the start, or when the
+   * caller aborts. The timer is cleared when the work finishes so a fast call
+   * does not keep the process alive.
+   */
+  const withDeadline = async <T>(limitMs: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     if (input.signal?.aborted) throw new Error('research_aborted');
-    if (clock() - started >= budgetMs) {
-      stop = 'budget';
-      break;
-    }
-    const stepStarted = clock();
-    let calls: ResearchCall[];
-    if (modelOn) {
-      const planned = await callModel(
-        'plan',
-        `Question: ${input.question}\n\nClip index:\n${stable}\n\nEvidence so far:\n${evidenceForModel(pad) || '(none)'}\n\nGaps still open: ${facetReport(input.question, input.catalog, pad, ran).gaps.join(', ') || 'none yet'}`,
-      );
-      const parsed = parseJson(planned.text);
-      if (!parsed) throw new Error('research_plan_unparsed');
-      calls = callsFromModel(parsed, input.question, input.catalog).filter((call) => !ran.has(callKey(call)));
-    } else {
-      calls = heuristicCalls(input.question, input.catalog, pad, ran);
-    }
-    if (!calls.length) {
-      stop = 'sufficient';
-      break;
-    }
-    const batch = await Promise.all(calls.map((call) => runCall(call, input.catalog, input.question, input.fetchFn)));
-    let added = 0;
-    for (const row of batch) {
-      ran.add(callKey({ name: row.step.tool, input: row.step.input }));
-      traceSteps.push(row.step);
-      added += addResearchRecords(pad, row.records);
-    }
-    let covered: string[];
-    let gaps: string[];
-    let sufficient: boolean;
-    if (modelOn) {
-      const checked = await callModel(
-        'sufficiency',
-        `Question: ${input.question}\n\nEvidence:\n${evidenceForModel(pad) || '(none)'}`,
-      );
-      const parsed = parseJson(checked.text);
-      if (!parsed || typeof parsed.sufficient !== 'boolean') throw new Error('research_sufficiency_unparsed');
-      sufficient = parsed.sufficient === true;
-      covered = Array.isArray(parsed.covered) ? parsed.covered.map((item) => String(item).slice(0, 80)) : [];
-      gaps = Array.isArray(parsed.gaps) ? parsed.gaps.map((item) => String(item).slice(0, 80)) : [];
-    } else {
-      const report = facetReport(input.question, input.catalog, pad, ran);
-      sufficient = report.sufficient;
-      covered = report.covered;
-      gaps = report.gaps;
-    }
-    steps.push({
-      step: index + 1,
-      queries: calls.map(queryOf),
-      tools: calls.map((call) => call.name),
-      added,
-      total: pad.records.length,
-      ms: Math.max(0, Math.round(clock() - stepStarted)),
-      covered,
-      gaps,
+    const left = limitMs - (clock() - started);
+    if (left <= 0) throw deadlineError();
+    const controller = new AbortController();
+    const onParent = () => controller.abort();
+    input.signal?.addEventListener('abort', onParent, { once: true });
+    const timer = setTimeout(() => controller.abort(), Math.max(1, Math.ceil(left)));
+    const aborted = new Promise<never>((_, reject) => {
+      const fail = () => reject(input.signal?.aborted ? new Error('research_aborted') : deadlineError());
+      if (controller.signal.aborted) fail();
+      else controller.signal.addEventListener('abort', fail, { once: true });
     });
-    if (sufficient) {
-      stop = 'sufficient';
-      break;
+    const pending = work(controller.signal).then(
+      (value) => value,
+      (err: unknown) => {
+        if (isParentAbort(err, input.signal)) throw new Error('research_aborted');
+        if (controller.signal.aborted) throw deadlineError();
+        throw err;
+      },
+    );
+    void pending.catch(() => {});
+    void aborted.catch(() => {});
+    try {
+      return await Promise.race([pending, aborted]);
+    } finally {
+      clearTimeout(timer);
+      input.signal?.removeEventListener('abort', onParent);
     }
-    if (index === maxSteps - 1) stop = 'max_steps';
+  };
+
+  try {
+    for (let index = 0; index < maxSteps; index += 1) {
+      if (input.signal?.aborted) throw new Error('research_aborted');
+      if (clock() - started >= budgetMs) {
+        stop = 'budget';
+        break;
+      }
+      const stepStarted = clock();
+      let calls: ResearchCall[];
+      if (modelOn) {
+        const planned = await withDeadline(budgetMs, (signal) =>
+          callModel(
+            'plan',
+            `Question: ${input.question}\n\nClip index:\n${stable}\n\nEvidence so far:\n${evidenceForModel(pad, input.question) || '(none)'}\n\nGaps still open: ${facetReport(input.question, input.catalog, pad, ran).gaps.join(', ') || 'none yet'}`,
+            signal,
+          ),
+        );
+        const parsed = parseJson(planned.text);
+        if (!parsed) throw new Error('research_plan_unparsed');
+        calls = callsFromModel(parsed, input.question, input.catalog).filter((call) => !ran.has(callKey(call)));
+      } else {
+        calls = heuristicCalls(input.question, input.catalog, pad, ran);
+      }
+      if (!calls.length) {
+        stop = 'sufficient';
+        break;
+      }
+      const batch = await Promise.allSettled(
+        calls.map((call) => withDeadline(budgetMs, (signal) => runTool(call, signal))),
+      );
+      let added = 0;
+      let timedOut = false;
+      for (const item of batch) {
+        if (item.status === 'rejected') {
+          if (isParentAbort(item.reason, input.signal)) throw new Error('research_aborted');
+          const reason = item.reason;
+          const timed =
+            reason instanceof Error && (reason.name === 'TimeoutError' || reason.message === 'research_deadline');
+          if (timed) {
+            timedOut = true;
+            continue;
+          }
+          throw reason;
+        }
+        ran.add(callKey({ name: item.value.step.tool, input: item.value.step.input }));
+        traceSteps.push(item.value.step);
+        added += addResearchRecords(pad, item.value.records);
+      }
+      let covered: string[];
+      let gaps: string[];
+      let sufficient: boolean;
+      if (timedOut) {
+        covered = [];
+        gaps = ['deadline'];
+        sufficient = false;
+      } else if (modelOn) {
+        const checked = await withDeadline(budgetMs, (signal) =>
+          callModel('sufficiency', `Question: ${input.question}\n\nEvidence:\n${evidenceForModel(pad, input.question) || '(none)'}`, signal),
+        );
+        const parsed = parseJson(checked.text);
+        if (!parsed || typeof parsed.sufficient !== 'boolean') throw new Error('research_sufficiency_unparsed');
+        sufficient = parsed.sufficient === true;
+        covered = Array.isArray(parsed.covered) ? parsed.covered.map((item) => String(item).slice(0, 80)) : [];
+        gaps = Array.isArray(parsed.gaps) ? parsed.gaps.map((item) => String(item).slice(0, 80)) : [];
+      } else {
+        const report = facetReport(input.question, input.catalog, pad, ran);
+        sufficient = report.sufficient;
+        covered = report.covered;
+        gaps = report.gaps;
+      }
+      steps.push({
+        step: index + 1,
+        queries: calls.map(queryOf),
+        tools: calls.map((call) => call.name),
+        added,
+        total: pad.records.length,
+        ms: Math.max(0, Math.round(clock() - stepStarted)),
+        covered,
+        gaps,
+      });
+      if (timedOut) {
+        if (!pad.records.length) throw deadlineError();
+        stop = 'budget';
+        break;
+      }
+      if (sufficient) {
+        stop = 'sufficient';
+        break;
+      }
+      if (index === maxSteps - 1) stop = 'max_steps';
+    }
+  } catch (err) {
+    if (isParentAbort(err, input.signal)) throw new Error('research_aborted', { cause: err });
+    const timed = err instanceof Error && (err.name === 'TimeoutError' || err.message === 'research_deadline');
+    if (!timed || !pad.records.length) throw err;
+    stop = 'budget';
   }
 
   if (!pad.records.length) throw new Error('research_empty');
 
+  const fromPad = () =>
+    deterministicAnswer(input.question, input.catalog, pad, traceSteps, input.history, input.memory).trim();
   let answer: string;
   let model: string | null = null;
   let usage: MeasuredUsage | null = null;
   if (modelOn) {
-    const synthesized = await callModel(
-      'synthesis',
-      `Question: ${input.question}\n\nEvidence:\n${evidenceForModel(pad)}\n\n${input.extra?.trim() ? `Notes:\n${input.extra.trim().slice(0, 2000)}` : ''}`,
-    );
-    answer = synthesized.text.trim();
-    model = synthesized.model;
-    usage = synthesized.usage;
+    try {
+      const synthesized = await withDeadline(budgetMs + reserveMs, (signal) =>
+        callModel(
+          'synthesis',
+          `Question: ${input.question}\n\nEvidence:\n${evidenceForModel(pad, input.question)}\n\n${input.extra?.trim() ? `Notes:\n${input.extra.trim().slice(0, 2000)}` : ''}`,
+          signal,
+        ),
+      );
+      answer = synthesized.text.trim();
+      model = synthesized.model;
+      usage = synthesized.usage;
+    } catch (err) {
+      if (isParentAbort(err, input.signal)) throw new Error('research_aborted', { cause: err });
+      answer = fromPad();
+    }
   } else {
-    answer = deterministicAnswer(input.question, input.catalog, pad, traceSteps, input.history, input.memory).trim();
+    answer = fromPad();
   }
   if (!answer || /^this file does not have that\.?$/i.test(answer)) throw new Error('research_empty');
 

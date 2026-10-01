@@ -69,6 +69,8 @@ import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 import { fastAnswerNeedsDeepFallback, routeAskQuestion, type AskModelRoute } from './askRoute.js';
 import {
+  ASK_RESEARCH_BUDGET_MS,
+  ASK_RESEARCH_SYNTHESIS_RESERVE_MS,
   logAskResearch,
   routeAskResearch,
   runAskResearch,
@@ -633,6 +635,12 @@ async function geminiLookupTurn(input: {
   return turn;
 }
 
+/** Absolute time the single pass must stop. Fast turns stay inside 18s of the Ask timeout. */
+export function askLookupDeadlineAt(startedAt: number, route: AskModelRoute, timeoutMs = askReasoningTimeoutMs()): number {
+  const windowMs = route === 'fast' ? Math.min(timeoutMs, 18_000) : timeoutMs;
+  return startedAt + windowMs;
+}
+
 export function providerLookupStep(input: {
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
@@ -640,6 +648,11 @@ export function providerLookupStep(input: {
   /** Fast turns skip thinking. Deep turns keep adaptive thinking, then Gemini. */
   route?: AskModelRoute;
   onCache?: (state: 'hit' | 'miss' | 'skip') => void;
+  /**
+   * When set, the turn uses this absolute deadline instead of starting a new
+   * window. Research fallback passes the deadline captured when Ask began.
+   */
+  deadlineAt?: number;
 }): LookupModelStep {
   const route = input.route ?? 'deep';
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
@@ -662,7 +675,7 @@ export function providerLookupStep(input: {
     : googleVisionApiKey()
       ? 'google'
       : 'none';
-  const deadline = Date.now() + (route === 'fast' ? Math.min(askReasoningTimeoutMs(), 18_000) : askReasoningTimeoutMs());
+  const deadline = input.deadlineAt ?? askLookupDeadlineAt(Date.now(), route);
   return async (state) => {
     const left = deadline - Date.now();
     if (left < 1500) return null;
@@ -887,6 +900,7 @@ export async function answerFromAskLookup(input: {
     now?: () => number;
     maxSteps?: number;
     budgetMs?: number;
+    synthesisReserveMs?: number;
     complete?: ResearchComplete | null;
   };
 }): Promise<{
@@ -947,10 +961,17 @@ export async function answerFromAskLookup(input: {
   };
   let forcedOther = false;
   let researchMeta: AskResearchTrace | null = null;
+  let researchFellBack = false;
+  const askStarted = Date.now();
   const researchDecision =
     input.researchMode === 'off' ? { route: 'single' as const, reason: 'off' } : routeAskResearch(resolved);
   if (researchDecision.route === 'research' && !stopped()) {
     try {
+      const askWindow = askReasoningTimeoutMs();
+      const reserveMs =
+        input.research?.synthesisReserveMs ?? Math.min(ASK_RESEARCH_SYNTHESIS_RESERVE_MS, askWindow);
+      const budgetMs =
+        input.research?.budgetMs ?? Math.min(ASK_RESEARCH_BUDGET_MS, Math.max(0, askWindow - reserveMs));
       const researched = await runAskResearch({
         question: resolved,
         catalog: input.catalog,
@@ -962,7 +983,8 @@ export async function answerFromAskLookup(input: {
         signal: input.signal,
         now: input.research?.now,
         maxSteps: input.research?.maxSteps,
-        budgetMs: input.research?.budgetMs,
+        budgetMs,
+        synthesisReserveMs: reserveMs,
         complete: input.research?.complete,
       });
       if (!researched.answer.trim()) throw new Error('research_empty');
@@ -978,6 +1000,7 @@ export async function answerFromAskLookup(input: {
       logAskFailure('ask_research_fallback', err);
       prose = '';
       model = null;
+      researchFellBack = true;
       researchMeta = { route: 'research', stopReason: 'fallback', steps: [], elapsedMs: 0 };
       logAskResearch(researchMeta);
       input.timing?.noteRoute('deep', 'research_fallback', true);
@@ -1046,6 +1069,7 @@ export async function answerFromAskLookup(input: {
         fetchFn: input.fetchFn,
         onToken,
         onCache: (state) => input.timing?.noteGeminiCache(state),
+        deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, route) : undefined,
       });
     if (decision.route === 'fast') {
       await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));

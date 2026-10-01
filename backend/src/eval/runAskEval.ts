@@ -37,16 +37,20 @@ export type EvalMetrics = {
   summaryContradictions: number;
   /** Job Ask answers with a fabricated speaker label or an unbalanced parenthesis (gate: 0). */
   speakerLabelFailures: number;
+  /** Answers that passed the scorer. Printed with the question total so a percent is not the only figure. */
+  correct: number;
 };
 
 export type EvalReport = {
   gold: string;
   model: string | null;
   metrics: EvalMetrics;
-  byType: Record<string, { questions: number; correctness: number }>;
+  byType: Record<string, { questions: number; correct: number; correctness: number }>;
   gate: { pass: boolean; reasons: string[] };
   clips: ClipResult[];
   jobs: JobResult[];
+  /** Keyless runs disable live web search so the score does not depend on DuckDuckGo. */
+  webSearch: 'disabled' | 'live';
 };
 
 export const defaultAnswerFn: AnswerFn = async (question, record) => (await answerFromClip({ question, record })).answer;
@@ -94,7 +98,7 @@ export async function runClip(clip: GoldClip, answer: AnswerFn, opts?: { summari
   };
 }
 
-export function summarize(gold: GoldSet, clips: ClipResult[], model: string | null, jobs: JobResult[] = []): EvalReport {
+export function summarize(gold: GoldSet, clips: ClipResult[], model: string | null, jobs: JobResult[] = []): Omit<EvalReport, 'webSearch'> {
   const all = [...clips.flatMap((clip) => clip.answers), ...jobs.flatMap((job) => job.answers)];
   const speakerLabelFailures = jobs.reduce((n, job) => n + job.answers.filter((a) => a.speakerLabelFailures.length).length, 0);
   const jobMisses = jobs.reduce((n, job) => n + job.answers.filter((a) => !a.correct).length, 0);
@@ -110,6 +114,7 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
   );
   const metrics: EvalMetrics = {
     questions: all.length,
+    correct: all.filter((a) => a.correct).length,
     correctness: mean(all.map((a) => (a.correct ? 1 : 0))),
     relevance: mean(all.map((a) => (a.relevant ? 1 : 0))),
     grounding: mean(all.map((a) => a.grounding)),
@@ -123,11 +128,11 @@ export function summarize(gold: GoldSet, clips: ClipResult[], model: string | nu
   };
   const byType: EvalReport['byType'] = {};
   for (const a of all) {
-    const row = (byType[a.type] ??= { questions: 0, correctness: 0 });
+    const row = (byType[a.type] ??= { questions: 0, correct: 0, correctness: 0 });
     row.questions += 1;
-    row.correctness += a.correct ? 1 : 0;
+    row.correct += a.correct ? 1 : 0;
   }
-  for (const row of Object.values(byType)) row.correctness = row.questions ? row.correctness / row.questions : 0;
+  for (const row of Object.values(byType)) row.correctness = row.questions ? row.correct / row.questions : 0;
   const reasons: string[] = [];
   if (criticalAssertions > 0) reasons.push(`${criticalAssertions} false work-completed / price / commitment assertion(s)`);
   if (summaryContradictions > 0) reasons.push(`${summaryContradictions} summary-transcript contradiction(s)`);
@@ -147,18 +152,28 @@ export async function runAskEval(
   gold: GoldSet,
   opts?: { answer?: AnswerFn; jobAnswer?: JobAnswerFn; model?: string | null; summaries?: boolean },
 ): Promise<EvalReport> {
-  const answer = opts?.answer ?? defaultAnswerFn;
-  const clips: ClipResult[] = [];
-  for (const clip of gold.clips) {
-    if (clip.consent?.status === 'declined') continue;
-    clips.push(await runClip(clip, answer, { summaries: opts?.summaries }));
+  const liveWeb = process.env.EVAL_WITH_MODEL === '1';
+  const previousWeb = process.env.ASK_WEB_SEARCH_PROVIDER;
+  if (!liveWeb) process.env.ASK_WEB_SEARCH_PROVIDER = 'off';
+  try {
+    const answer = opts?.answer ?? defaultAnswerFn;
+    const clips: ClipResult[] = [];
+    for (const clip of gold.clips) {
+      if (clip.consent?.status === 'declined') continue;
+      clips.push(await runClip(clip, answer, { summaries: opts?.summaries }));
+    }
+    const jobs: JobResult[] = [];
+    for (const job of gold.jobs ?? []) {
+      if (job.consent?.status === 'declined') continue;
+      jobs.push(await runJob(job, opts?.jobAnswer));
+    }
+    return { ...summarize(gold, clips, opts?.model ?? null, jobs), webSearch: liveWeb ? 'live' : 'disabled' };
+  } finally {
+    if (!liveWeb) {
+      if (previousWeb === undefined) delete process.env.ASK_WEB_SEARCH_PROVIDER;
+      else process.env.ASK_WEB_SEARCH_PROVIDER = previousWeb;
+    }
   }
-  const jobs: JobResult[] = [];
-  for (const job of gold.jobs ?? []) {
-    if (job.consent?.status === 'declined') continue;
-    jobs.push(await runJob(job, opts?.jobAnswer));
-  }
-  return summarize(gold, clips, opts?.model ?? null, jobs);
 }
 
 /** Drop quoted clip text from a miss so private gold never lands in a public CI log. */
@@ -169,16 +184,19 @@ function redactMiss(miss: string): string {
 export function reportMarkdown(report: EvalReport, opts?: { redact?: boolean }): string {
   const m = report.metrics;
   const pct = (n: number | null) => (n == null ? 'n/a' : `${(n * 100).toFixed(1)}%`);
+  const web =
+    report.webSearch === 'live' ? 'live' : report.webSearch === 'disabled' ? 'disabled (no live results)' : 'unspecified';
   const lines = [
     `# Ask gold eval: ${report.gold}`,
     '',
     `Model: ${report.model ?? 'none (deterministic path)'}`,
+    `Web search: ${web}`,
     `Gate: **${report.gate.pass ? 'PASS' : 'FAIL'}**${report.gate.reasons.length ? ` (${report.gate.reasons.join('; ')})` : ''}`,
     '',
     '| metric | value |',
     '| --- | --- |',
     `| questions | ${m.questions} |`,
-    `| correctness | ${pct(m.correctness)} |`,
+    `| correctness | ${m.correct}/${m.questions} (${pct(m.correctness)}) |`,
     `| relevance | ${pct(m.relevance)} |`,
     `| grounding | ${pct(m.grounding)} |`,
     `| timestamp accuracy | ${pct(m.timestampAccuracy)} |`,
@@ -191,7 +209,9 @@ export function reportMarkdown(report: EvalReport, opts?: { redact?: boolean }):
     '',
     '| question type | n | correctness |',
     '| --- | --- | --- |',
-    ...Object.entries(report.byType).map(([type, row]) => `| ${type} | ${row.questions} | ${pct(row.correctness)} |`),
+    ...Object.entries(report.byType).map(
+      ([type, row]) => `| ${type} | ${row.questions} | ${row.correct}/${row.questions} (${pct(row.correctness)}) |`,
+    ),
   ];
   const misses = report.clips.flatMap((clip) =>
     clip.answers
