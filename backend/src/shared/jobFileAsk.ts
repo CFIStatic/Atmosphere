@@ -16,7 +16,7 @@ import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { answerFromJobDocuments, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -639,6 +639,23 @@ function keepDocumentAnswer(question: string, answer: string): boolean {
   return !/^this document does not show that\.?$/i.test(answer.trim());
 }
 
+/**
+ * Answers from files the office user uploaded in this chat, including ones
+ * that are not on the job. Job questions and questions about a different
+ * document kind fall through so the job file stays first.
+ */
+function answerFromChatUploads(question: string, documents: AskDocumentView[] | null | undefined): string | null {
+  const docs = (documents ?? []).filter((doc) => trim(doc.extractedText) || (doc.chunks?.length ?? 0) > 0 || trim(doc.filename));
+  const readable = docs.filter((doc) => trim(doc.extractedText) || (doc.chunks ?? []).some((chunk) => trim(chunk.text)));
+  if (!chatUploadShouldAnswer(question, readable)) return null;
+  const direct = answerFromJobDocuments(question, readable);
+  if (!direct) return null;
+  return enforceQuoteGrounding(normalizeAskProse(direct), {
+    chunks: documentChunksForGrounding(readable, { includeUploads: true }),
+    question,
+  }).answer;
+}
+
 /** Deterministic document answers. Quotes are exact substrings, cited with the file and location. */
 function answerFromAttachedDocuments(question: string, file: JobFileAskContext): string | null {
   const views = documentViews(file);
@@ -683,6 +700,11 @@ export async function answerFromJobFile(input: {
   timing?: AskTurnClock | null;
   /** Pins relative dates such as "Thursday" in tests. */
   now?: Date;
+  /**
+   * Files uploaded in this office chat. They are not job-file evidence and
+   * are ignored for share and homeowner Ask.
+   */
+  sessionDocuments?: AskDocumentView[] | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -719,6 +741,12 @@ export async function answerFromJobFile(input: {
     const answer = professionalWebCapabilityAnswer(input.question);
     emit(answer);
     return { ...empty, answer, groundedOn, toolResults: [], webHits: [] };
+  }
+
+  const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments);
+  if (fromUploads) {
+    emit(fromUploads);
+    return { ...empty, answer: fromUploads, groundedOn };
   }
 
   const fromDocuments = answerFromAttachedDocuments(input.question, input.file);

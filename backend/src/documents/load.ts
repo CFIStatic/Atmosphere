@@ -20,6 +20,24 @@ export function chatDocumentsForJobFile(rows: unknown, jobId: string): AskDocume
   return viewsFromChatRows(scoped);
 }
 
+/**
+ * Office chat uploads for this job. A file attached to another job is dropped.
+ * An unattached file is kept only when it was uploaded while this job was open.
+ * Share and homeowner Ask must not call this.
+ */
+export function chatSessionRows(rows: unknown, jobId: string): unknown[] {
+  if (!Array.isArray(rows) || !jobId) return [];
+  return rows.filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const record = row as { job_id?: string | null; context_job_id?: string | null };
+    const attached = record.job_id ? String(record.job_id) : '';
+    const context = record.context_job_id ? String(record.context_job_id) : '';
+    if (attached && attached !== jobId) return false;
+    if (!attached && context !== jobId) return false;
+    return attached === jobId || context === jobId;
+  });
+}
+
 export function viewsFromChatRows(rows: unknown): AskDocumentView[] {
   if (!Array.isArray(rows)) return [];
   const views: AskDocumentView[] = [];

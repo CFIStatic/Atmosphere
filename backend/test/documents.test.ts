@@ -14,9 +14,9 @@ import { extractOffice, parseBiff } from '../src/documents/extractOffice.js';
 import { readOle, writeOleStream } from '../src/documents/ole.js';
 import { documentRoomRows } from '../src/documents/rooms.js';
 import { addressesMatch } from '../src/documents/classify.js';
-import { answerFromJobDocuments, chatDocumentInJobScope, documentChunksForGrounding, type AskDocumentView } from '../src/documents/answer.js';
+import { answerFromJobDocuments, chatDocumentInJobScope, chatUploadShouldAnswer, documentChunksForGrounding, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../src/documents/answer.js';
 import { readPdf } from '../src/documents/extractPdf.js';
-import { chatDocumentsForJobFile, viewsFromChatRows } from '../src/documents/load.js';
+import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../src/documents/load.js';
 import { extractCsv, extractPlain } from '../src/documents/text.js';
 import { formatJobFileRecord } from '../src/shared/jobFileAsk.js';
 import { enforceQuoteGrounding } from '../src/shared/askQuoteGrounding.js';
@@ -539,6 +539,40 @@ test('document answers cite the estimate total and the floor plan', () => {
   assert.match(rooms, /Floor-Plan\.pdf, page 1/);
 });
 
+test('an unrelated upload is answered, with one quiet line after', () => {
+  const invoice = DOCUMENTS[2]!;
+  const about = answerFromJobDocuments('what is this about', [invoice]);
+  assert.match(about ?? '', /900 Pine Avenue/);
+  assert.match(about ?? '', /invoice/i);
+  assert.match(about ?? '', /Unrelated-Invoice\.pdf/);
+  assert.match(about ?? '', new RegExp(QUIET_UNRELATED_NOTE.replace(/[.]/g, '\\.')));
+  assert.doesNotMatch(about ?? '', /Not related/);
+  assert.doesNotMatch(about ?? '', /Nothing on the document matches/);
+  assert.doesNotMatch(about ?? '', /was not attached/);
+
+  const casual = answerFromJobDocuments('what this about', [invoice]);
+  assert.match(casual ?? '', /900 Pine Avenue/);
+  assert.match(casual ?? '', /doesn't appear to be about this job/);
+
+  const follow = answerFromJobDocuments("What's the total on it?", [invoice]);
+  assert.match(follow ?? '', /\$900\.00/);
+  assert.match(follow ?? '', /page 1/);
+  assert.match(follow ?? '', /doesn't appear to be about this job/);
+  assert.doesNotMatch(follow ?? '', /Not related/);
+  const groundedFollow = enforceQuoteGrounding(follow!, {
+    chunks: documentChunksForGrounding([invoice], { includeUploads: true }),
+    question: "What's the total on it?",
+  }).answer;
+  assert.match(groundedFollow, /\$900\.00/);
+  assert.match(groundedFollow, /Total: \$900\.00/);
+
+  assert.equal(chatUploadShouldAnswer("What's the estimate total?", [invoice]), false);
+  assert.equal(chatUploadShouldAnswer("what's the lockbox code?", [invoice]), false);
+  assert.equal(chatUploadShouldAnswer('what is this about', [invoice]), true);
+  assert.equal(chatUploadShouldAnswer("What's the total on it?", [invoice]), true);
+  assert.equal(answerFromJobDocuments("what's the lockbox code?", [invoice]), null);
+});
+
 test('an unrelated document is flagged and a missing fact is stated plainly', () => {
   const related = grounded('Is the Pine Avenue invoice related to this job?');
   assert.match(related, /not related/);
@@ -579,6 +613,46 @@ test('grounding and the model record omit unattached document text', () => {
   assert.match(record, /\$4,280\.00/);
   assert.match(record, /not attached/);
   assert.doesNotMatch(record, /\$900\.00/);
+});
+
+test('a chat session keeps this job’s upload and drops every other job', () => {
+  const jobA = '00000000-0000-4000-8000-00000000a001';
+  const jobB = '00000000-0000-4000-8000-00000000b002';
+  const rows = [
+    {
+      id: 'doc-loose',
+      filename: 'The-Future.docx',
+      doc_kind: 'other',
+      relevance: 'not_related',
+      relevance_reason: 'Nothing on the document matches the job name, address, or claim.',
+      extracted_text: 'Jettx long distance wireless power',
+      job_id: null,
+      context_job_id: jobA,
+    },
+    {
+      id: 'doc-other',
+      filename: 'Other-Job-Secret.pdf',
+      relevance: 'related',
+      extracted_text: 'Secret total $777.00',
+      job_id: jobB,
+      context_job_id: jobB,
+    },
+    {
+      id: 'doc-elsewhere',
+      filename: 'Elsewhere.docx',
+      relevance: 'not_related',
+      extracted_text: 'Elsewhere note',
+      job_id: null,
+      context_job_id: jobB,
+    },
+  ];
+  const kept = chatSessionRows(rows, jobA);
+  assert.deepEqual(kept.map((row) => (row as { id: string }).id), ['doc-loose']);
+  const views = viewsFromChatRows(kept);
+  assert.equal(views[0]?.filename, 'The-Future.docx');
+  assert.equal(views[0]?.attached, false);
+  const other = chatDocumentsForJobFile(rows, jobA);
+  assert.equal(other.length, 0);
 });
 
 test('clip ask only keeps documents attached to that job', () => {

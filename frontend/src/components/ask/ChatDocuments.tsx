@@ -3,6 +3,7 @@ import {
   attachChatDocument,
   listChatDocuments,
   uploadChatDocument,
+  type AskAttachment,
   type ChatDocumentCard,
   type UploadPhase,
 } from '../../lib/chatDocuments';
@@ -11,6 +12,62 @@ export function verdictLabel(doc: ChatDocumentCard): string {
   if (doc.relevance === 'related') return 'Related to this job';
   if (doc.relevance === 'pending_confirm') return 'Confirm before attaching';
   return 'Not related';
+}
+
+function FileIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 3.5h7l5 5V20a1.5 1.5 0 01-1.5 1.5H7A1.5 1.5 0 015.5 20V5A1.5 1.5 0 017 3.5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path d="M14 3.5V9h5.5" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+/** Compact file chip. Composer chips include remove; message chips include the type. */
+export function AskAttachmentChip({
+  file,
+  onRemove,
+  onDark = false,
+}: {
+  file: AskAttachment;
+  onRemove?: () => void;
+  onDark?: boolean;
+}) {
+  return (
+    <span
+      data-testid="ask-attachment-chip"
+      data-filename={file.filename}
+      className={
+        onDark
+          ? 'inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-xs text-paper-0'
+          : 'inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-2 py-1 text-xs text-ink-800'
+      }
+    >
+      <FileIcon />
+      <span className="max-w-[14rem] truncate font-medium">{file.filename}</span>
+      {!onRemove && file.typeLabel ? (
+        <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">{file.typeLabel}</span>
+      ) : null}
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label={`Remove ${file.filename}`}
+          onClick={onRemove}
+          className={
+            onDark
+              ? 'grid h-4 w-4 place-items-center rounded-full text-sm leading-none text-paper-0/80 hover:bg-white/10'
+              : 'grid h-4 w-4 place-items-center rounded-full text-sm leading-none text-ink-500 hover:bg-paper-100 hover:text-ink-800'
+          }
+        >
+          ×
+        </button>
+      ) : null}
+    </span>
+  );
 }
 
 export function AskDocumentCard({
@@ -83,10 +140,16 @@ export function JobDocumentsList({ jobId }: { jobId: string }) {
       {documents.length === 0 ? (
         <p className="mt-1 text-xs text-ink-500">No documents on this job yet.</p>
       ) : (
-        <ul className="mt-2 space-y-2">
+        <ul className="mt-2 space-y-1.5">
           {documents.map((doc) => (
             <li key={doc.id}>
-              <AskDocumentCard doc={doc} />
+              <AskAttachmentChip
+                file={{
+                  id: doc.id,
+                  filename: doc.filename,
+                  typeLabel: doc.kindLabel,
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -123,11 +186,13 @@ export function useJobDocuments(jobId: string | null) {
     void reload();
   }, [reload]);
 
-  async function upload(files: File[], proofId?: string | null) {
+  async function upload(files: File[], proofId?: string | null): Promise<ChatDocumentCard[]> {
+    const created: ChatDocumentCard[] = [];
     for (const file of files) {
       try {
         setError(null);
         const card = await uploadChatDocument(file, { jobId, proofId, onPhase: setPhase });
+        created.push(card);
         setDocuments((prev) => [card, ...prev.filter((row) => row.id !== card.id)]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not read that file.');
@@ -135,6 +200,7 @@ export function useJobDocuments(jobId: string | null) {
         setPhase(null);
       }
     }
+    return created;
   }
 
   async function confirm(doc: ChatDocumentCard) {

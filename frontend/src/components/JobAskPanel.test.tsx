@@ -885,4 +885,98 @@ describe('JobAskPanel', () => {
     expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
   });
 
+  it('shows an upload chip and keeps the document for a follow-up', async () => {
+    const user = userEvent.setup();
+    askAboutProofs.mockImplementation(async (_jobId: string, question: string) => ({
+      answer: question.startsWith('what is')
+        ? "The Future.docx is a document about Jack Cyganiak's companies and vision.\n\nThis document doesn't appear to be about this job."
+        : 'The Future.docx describes Jettx, long-distance wireless power.',
+      groundedOn: 0,
+      model: null,
+      question: {
+        id: question.startsWith('what is') ? 'q-about' : 'q-follow',
+        question,
+        answer: 'answered',
+        grounded_on: [],
+        created_at: '2026-10-01T00:00:00Z',
+      },
+    }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/operations/documents') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            document: {
+              id: '00000000-0000-4000-8000-00000000d303',
+              filename: 'The Future.docx',
+              mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              byteSize: 32,
+              kind: 'other',
+              kindLabel: 'Document',
+              relevance: 'not_related',
+              relevanceReason: 'Nothing on the document matches the job name, address, or claim.',
+              summary: 'Document. The Future By Jack Cyganiak 8/11/2023 My companies and vision',
+              attached: false,
+              jobId: null,
+              contextJobId: 'job-1038',
+              suggestedJobId: null,
+              suggestedJobTitle: null,
+              macrosIgnored: false,
+              createdAt: '2026-10-01T00:00:00Z',
+            },
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ documents: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    try {
+      render(
+        <JobFileFocusProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </JobFileFocusProvider>,
+      );
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, new File(['vision'], 'The Future.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+
+      const composer = await screen.findByTestId('ask-composer-attachments');
+      expect(composer).toHaveTextContent('The Future.docx');
+      expect(composer).not.toHaveTextContent('Not related');
+      expect(screen.queryByTestId('ask-document-card')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Nothing on the document matches/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove The Future.docx' })).toBeInTheDocument();
+
+      const box = screen.getByPlaceholderText('Ask what you forgot…');
+      await user.type(box, 'what is this about');
+      await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+
+      expect(await screen.findByTestId('ask-message-attachments')).toHaveTextContent('DOCX');
+      expect(screen.queryByTestId('ask-composer-attachments')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-document-card')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(askAboutProofs).toHaveBeenCalledWith('job-1038', 'what is this about', {
+          threadId: 'thr-1',
+          documentIds: ['00000000-0000-4000-8000-00000000d303'],
+        });
+      });
+
+      await user.type(box, 'what address does it give?');
+      await user.click(screen.getByRole('button', { name: 'Ask this job' }));
+      await waitFor(() => {
+        expect(askAboutProofs).toHaveBeenLastCalledWith('job-1038', 'what address does it give?', {
+          threadId: 'thr-1',
+          documentIds: ['00000000-0000-4000-8000-00000000d303'],
+        });
+      });
+      expect(screen.getAllByTestId('ask-message-attachments')).toHaveLength(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
 });

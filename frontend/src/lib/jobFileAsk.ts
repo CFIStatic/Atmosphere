@@ -49,6 +49,8 @@ export interface JobFileTurn {
   model?: string | null;
   at: string;
   webSources?: Array<{ title: string; url: string; snippet: string }>;
+  /** Files sent with this user message. */
+  attachments?: Array<{ id: string; filename: string; typeLabel: string }>;
 }
 
 function formatWorkDate(isoDate: string): string {

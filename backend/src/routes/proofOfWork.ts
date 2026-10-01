@@ -59,7 +59,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
-import { chatDocumentsForJobFile } from '../documents/load.js';
+import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -2809,6 +2809,24 @@ export function applyJobAskMentionFallback<T extends {
   return true;
 }
 
+/** Office chat only. Other jobs and unattached files from another chat are dropped. */
+async function loadChatSessionDocuments(
+  supabase: { from: (table: string) => any },
+  orgId: string,
+  jobId: string,
+  documentIds: string[] | null | undefined,
+): Promise<ReturnType<typeof viewsFromChatRows>> {
+  const ids = [...new Set((documentIds ?? []).filter(Boolean))].slice(0, 8);
+  if (!ids.length || !jobId) return [];
+  const { data, error } = await supabase
+    .from('job_chat_documents')
+    .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id, context_job_id')
+    .eq('org_id', orgId)
+    .in('id', ids);
+  if (error || !data) return [];
+  return viewsFromChatRows(chatSessionRows(data, jobId));
+}
+
 export async function runProofAsk(input: {
   supabase: any;
   orgId: string;
@@ -2826,6 +2844,11 @@ export async function runProofAsk(input: {
   signal?: AbortSignal;
   /** org = office member; viewer = progress-share homeowner. */
   access?: 'org' | 'viewer';
+  /**
+   * Documents uploaded in this office chat. Ignored for share and homeowner
+   * Ask so an unattached or other-job file never enters that answer.
+   */
+  documentIds?: string[] | null;
 }): Promise<{
   answer: string;
   model: string | null;
@@ -3280,6 +3303,8 @@ export async function runProofAsk(input: {
       now: new Date().toISOString(),
     };
 
+    const sessionDocuments =
+      askAccess === 'org' ? await loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : [];
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
@@ -3391,6 +3416,7 @@ export async function runProofAsk(input: {
       onStatus: input.onStatus,
       signal: input.signal,
       timing: clock,
+      sessionDocuments,
       lookup,
       toolContext: {
         orgId,
@@ -3590,6 +3616,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         question: z.string().trim().min(3).max(1000),
         threadId: z.string().uuid().optional().nullable(),
         timeZone: z.string().trim().min(1).max(64).optional(),
+        documentIds: z.array(z.string().uuid()).max(8).optional(),
       })
       .parse(req.body ?? {});
     const wantsStream =
@@ -3623,6 +3650,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
           timeZone: input.timeZone ?? null,
           requestId: `ask:${req.params.jobId}:${randomUUID()}`,
           access: access === 'org' ? 'org' : 'viewer',
+          documentIds: access === 'org' ? input.documentIds : undefined,
           signal: abort.signal,
           onStatus: (phase) => writeEvent({ type: 'status', phase }),
         });
@@ -3654,6 +3682,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
       timeZone: input.timeZone ?? null,
       requestId: `ask:${req.params.jobId}:${randomUUID()}`,
       access: access === 'org' ? 'org' : 'viewer',
+      documentIds: access === 'org' ? input.documentIds : undefined,
     });
     res.status(201).json(result);
   } catch (err) {

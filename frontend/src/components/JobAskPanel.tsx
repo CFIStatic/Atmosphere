@@ -36,8 +36,8 @@ import { displayMentionText, expandMentionTokens } from '../lib/mentions';
 import { MentionText } from './mentions/MentionText';
 import { MentionTextarea } from './mentions/MentionTextarea';
 import { loadOrgMentions } from './mentions/useOrgMentions';
-import { CHAT_DOCUMENT_ACCEPT } from '../lib/chatDocuments';
-import { AskDocumentCard, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
+import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, splitQuietDocumentNote, type AskAttachment } from '../lib/chatDocuments';
+import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from './ask/ChatDocuments';
 
 /**
  * Artificial typing hold removed for ultra-low-latency Ask.
@@ -519,6 +519,8 @@ export function JobAskPanel({
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const docs = useJobDocuments(jobId);
+  const [pending, setPending] = useState<AskAttachment[]>([]);
+  const threadUploadsRef = useRef<Record<string, AskAttachment[]>>({});
   const [askFailure, setAskFailure] = useState<AskFailure | null>(null);
   const [verifications, setVerifications] = useState<SpeakerVerification[]>(initialVerifications ?? []);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
@@ -538,6 +540,40 @@ export function JobAskPanel({
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
   }, [activeThreadId]);
+
+  useEffect(() => {
+    setPending([]);
+    threadUploadsRef.current = {};
+  }, [jobId]);
+
+  function rememberUploads(threadKey: string, files: AskAttachment[]) {
+    const prior = threadUploadsRef.current[threadKey] ?? [];
+    const seen = new Set<string>();
+    const next: AskAttachment[] = [];
+    for (const file of [...prior, ...files]) {
+      if (seen.has(file.id)) continue;
+      seen.add(file.id);
+      next.push(file);
+    }
+    const kept = next.slice(-8);
+    threadUploadsRef.current[threadKey] = kept;
+    return kept;
+  }
+
+  async function attachFiles(files: File[]) {
+    const cards = await docs.upload(files);
+    if (!cards.length) return;
+    setPending((prev) => {
+      const seen = new Set(prev.map((file) => file.id));
+      const next = [...prev];
+      for (const card of cards) {
+        if (seen.has(card.id)) continue;
+        seen.add(card.id);
+        next.push(chipFromDocument(card));
+      }
+      return next.slice(-8);
+    });
+  }
 
   useEffect(() => {
     if (initialVerifications) return;
@@ -669,12 +705,14 @@ export function JobAskPanel({
               setThreads((prev) => [created.thread, ...prev.filter((t) => t.id !== created.thread.id)]);
               setActiveThreadId(created.thread.id);
               setTurns([]);
+              setPending([]);
               setError(null);
               setAskFailure(null);
               inputRef.current?.focus();
             } else {
               setActiveThreadId(null);
               setTurns([]);
+              setPending([]);
               setAskFailure(null);
             }
           } catch (err) {
@@ -686,6 +724,7 @@ export function JobAskPanel({
       if (action.type === 'select-thread') {
         void (async () => {
           setActiveThreadId(action.threadId);
+          setPending([]);
           setLoading(true);
           setError(null);
           setAskFailure(null);
@@ -778,7 +817,7 @@ export function JobAskPanel({
     });
   }
 
-  async function ask(textRaw: string) {
+  async function ask(textRaw: string, attachments?: AskAttachment[] | null) {
     const raw = textRaw.trim();
     if (!raw || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -800,9 +839,14 @@ export function JobAskPanel({
     const now = new Date().toISOString();
     const pendingId = `local-${now}`;
     const answerId = `${pendingId}-a`;
+    const sent = attachments ?? pending;
+    if (attachments == null) setPending([]);
+    const threadKey = activeThreadIdRef.current ?? `job:${jobId}`;
+    const session = rememberUploads(threadKey, sent);
+    const documentIds = session.map((file) => file.id);
     setTurns((prev) => [
       ...prev.filter((turn) => turn.id !== failedPendingId),
-      { id: pendingId, role: 'user', content: text, at: now },
+      { id: pendingId, role: 'user', content: text, at: now, attachments: sent },
     ]);
     try {
       let res: {
@@ -814,6 +858,11 @@ export function JobAskPanel({
         webSources?: AskWebSource[];
       };
       const threadOpts = { threadId: activeThreadIdRef.current };
+      // Share and homeowner Ask use askFn and never receive upload ids.
+      const officeOpts = {
+        ...threadOpts,
+        ...(documentIds.length ? { documentIds } : {}),
+      };
       if (askFn) {
         res = await askFn(text, threadOpts);
       } else {
@@ -824,17 +873,21 @@ export function JobAskPanel({
             jobId,
             text,
             {},
-            { ...threadOpts, signal: controller.signal },
+            { ...officeOpts, signal: controller.signal },
           );
         } catch (err) {
           if (controller.signal.aborted || isAbortError(err)) throw err;
           // Stream unavailable — fall back to the classic JSON Ask.
-          res = await api.askAboutProofs(jobId, text, threadOpts);
+          res = await api.askAboutProofs(jobId, text, officeOpts);
         }
       }
       if (controller.signal.aborted) return;
       if (!res.answer?.trim()) throw new Error('empty_answer');
       if (res.threadId && res.threadId !== activeThreadIdRef.current) {
+        if (res.threadId !== threadKey) {
+          threadUploadsRef.current[res.threadId] = session;
+        }
+        activeThreadIdRef.current = res.threadId;
         setActiveThreadId(res.threadId);
       }
       // Refresh thread titles after first message auto-title.
@@ -849,6 +902,7 @@ export function JobAskPanel({
           id: res.question?.id ? `${res.question.id}-q` : pendingId,
           role: 'user',
           content: text,
+          attachments: sent,
           at: res.question?.created_at ?? now,
         },
         {
@@ -894,9 +948,10 @@ export function JobAskPanel({
   function retryFailedAsk() {
     const failed = askFailure;
     if (!failed) return;
+    const prior = turns.find((turn) => turn.id === failed.pendingId);
     setTurns((prev) => prev.filter((turn) => turn.id !== failed.pendingId));
     setAskFailure(null);
-    void ask(failed.question);
+    void ask(failed.question, prior?.attachments ?? []);
   }
 
   function stopAsk() {
@@ -981,6 +1036,7 @@ export function JobAskPanel({
                 .reverse()
                 .find((row) => row.role === 'assistant')?.id;
               const showActions = turn.role === 'assistant' && turn.content.trim();
+              const quiet = turn.role === 'assistant' ? splitQuietDocumentNote(turn.content) : null;
               return (
               <li
                 key={turn.id}
@@ -993,9 +1049,16 @@ export function JobAskPanel({
                       : ASSISTANT_BUBBLE
                   }
                 >
+                  {turn.role === 'user' && turn.attachments?.length ? (
+                    <div className="mb-1.5 flex flex-wrap justify-end gap-1.5" data-testid="ask-message-attachments">
+                      {turn.attachments.map((file) => (
+                        <AskAttachmentChip key={file.id} file={file} onDark />
+                      ))}
+                    </div>
+                  ) : null}
                   {turn.role === 'assistant' ? (
                     <AskAnswerBody
-                      text={turn.content}
+                      text={quiet?.note ? quiet.answer : turn.content}
                       events={analysisEvents
                         .filter((event) =>
                           !turn.groundedIds?.length
@@ -1019,6 +1082,11 @@ export function JobAskPanel({
                       <MentionText text={turn.content} onDark />
                     </p>
                   )}
+                  {quiet?.note ? (
+                    <p className="mt-2 text-xs leading-relaxed text-ink-400" data-testid="ask-document-job-note">
+                      {quiet.note}
+                    </p>
+                  ) : null}
                   {turn.role === 'assistant' && turn.groundedOn != null && turn.groundedOn > 0 && (
                     <p className="mt-1.5 text-[11px] text-ink-400">From this job file</p>
                   )}
@@ -1087,18 +1155,14 @@ export function JobAskPanel({
       </div>
 
       <div className="shrink-0 border-t border-line px-5 py-3">
-        {docs.documents.some((doc) => doc.attached) && (
-          <div data-testid="job-documents-list" className="mb-3 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Documents on this job</p>
-            {docs.documents.filter((doc) => doc.attached).map((doc) => (
-              <AskDocumentCard key={doc.id} doc={doc} />
-            ))}
-          </div>
-        )}
-        {docs.documents.some((doc) => !doc.attached) && (
-          <div className="mb-3 space-y-2">
-            {docs.documents.filter((doc) => !doc.attached).map((doc) => (
-              <AskDocumentCard key={doc.id} doc={doc} onAttach={docs.confirm} onDismiss={docs.dismiss} />
+        {pending.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5" data-testid="ask-composer-attachments">
+            {pending.map((file) => (
+              <AskAttachmentChip
+                key={file.id}
+                file={file}
+                onRemove={() => setPending((prev) => prev.filter((row) => row.id !== file.id))}
+              />
             ))}
           </div>
         )}
@@ -1126,7 +1190,7 @@ export function JobAskPanel({
             event.preventDefault();
             setDragging(false);
             const files = [...(event.dataTransfer.files ?? [])];
-            if (files.length) void docs.upload(files);
+            if (files.length) void attachFiles(files);
           }}
         >
           {dragging && (
@@ -1146,7 +1210,7 @@ export function JobAskPanel({
             onChange={(event) => {
               const files = [...(event.target.files ?? [])];
               event.target.value = '';
-              if (files.length) void docs.upload(files);
+              if (files.length) void attachFiles(files);
             }}
           />
           <button
@@ -1166,7 +1230,7 @@ export function JobAskPanel({
               const files = [...(event.clipboardData?.files ?? [])];
               if (!files.length) return;
               event.preventDefault();
-              void docs.upload(files);
+              void attachFiles(files);
             }}
             autoGrow
             rows={1}
