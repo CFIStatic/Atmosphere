@@ -7940,12 +7940,12 @@
   function rememberSessionDocs(item, docs) {
     var session = ((item && item._chatDocs) || []).slice();
     (docs || []).forEach(function (doc) {
-      if (!doc || session.length >= 8) return;
+      if (!doc) return;
       var id = String(doc.id || '');
       if (session.some(function (row) { return row && String(row.id || '') === id; })) return;
       session.push(doc);
     });
-    item._chatDocs = session;
+    item._chatDocs = session.slice(-8);
   }
 
   function sessionAskDocumentIds(item) {
@@ -8034,7 +8034,7 @@
                 window.alert((res.body && res.body.error) || 'Could not read that file.');
                 return;
               }
-              item._pendingDocs = (item._pendingDocs || []).concat([res.body.document]).slice(0, 8);
+              item._pendingDocs = (item._pendingDocs || []).concat([res.body.document]).slice(-8);
               if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
             })
             .catch(function () { window.alert('Could not read that file.'); });
@@ -8140,10 +8140,18 @@
         }).then(function (r) {
           return r.json().then(function (body) { return { ok: r.ok, body: body }; });
         }).then(function (res) {
-          var answer = res.ok && res.body && typeof res.body.answer === 'string' ? res.body.answer.trim() : '';
-          if (answer) finishAsk(answer, []);
-          else askTheClip();
-        }).catch(function () { askTheClip(); });
+          var body = res.body;
+          var text = body && typeof body.answer === 'string' ? body.answer.trim() : '';
+          if (res.ok && text) {
+            finishAsk(text, []);
+            return;
+          }
+          if (res.ok && body && (body.answer === null || typeof body.answer === 'string')) {
+            askTheClip();
+            return;
+          }
+          finishAsk((body && (body.error || body.message)) || 'Could not answer.', []);
+        }).catch(function () { finishAsk('Could not answer.', []); });
         return;
       }
       askTheClip();
