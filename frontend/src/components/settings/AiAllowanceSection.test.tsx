@@ -1,0 +1,72 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import type { AiAllowance } from '../../lib/api';
+import tailwindConfig from '../../../tailwind.config.js';
+import { AiAllowanceSection } from './AiAllowanceSection';
+
+const colors = tailwindConfig.theme.extend.colors as Record<string, Record<string, string>>;
+
+function allowance(partial: Partial<AiAllowance>): AiAllowance {
+  return {
+    state: 'ok',
+    paused: false,
+    warning: false,
+    message: null,
+    usedNanos: 5_000_000_000,
+    allowanceNanos: 12_500_000_000,
+    usedFraction: 0.4,
+    resetAt: '2026-11-01T00:00:00.000Z',
+    rolling: { enabled: true, limited: false, hours: 24, usedNanos: 1_000_000_000, capNanos: 3_125_000_000 },
+    byFeature: [],
+    creditBalanceNanos: 0,
+    creditsRollOver: true,
+    canManage: true,
+    packs: [],
+    history: { usage: [], credits: [] },
+    ...partial,
+  };
+}
+
+function expectFill(width: string, tone: 'brand' | 'caution' | 'danger', shade: string) {
+  const fill = screen.getByTestId('ai-allowance-fill');
+  expect(fill).toHaveStyle({ width });
+  expect(fill.className).toContain(`bg-${tone}-${shade}`);
+  expect(colors[tone]?.[shade]).toBeTruthy();
+}
+
+describe('AI allowance meter', () => {
+  it('fills the bar for normal use, the warning, and the limit', () => {
+    const { rerender } = render(
+      <AiAllowanceSection allowance={allowance({ state: 'ok', usedFraction: 0.4 })} onError={() => {}} />,
+    );
+    expectFill('40%', 'brand', '600');
+
+    rerender(
+      <AiAllowanceSection
+        allowance={allowance({
+          state: 'warning',
+          warning: true,
+          usedFraction: 0.8,
+          usedNanos: 10_000_000_000,
+          message: 'This account has used most of its AI allowance for this period.',
+        })}
+        onError={() => {}}
+      />,
+    );
+    expectFill('80%', 'caution', '600');
+
+    rerender(
+      <AiAllowanceSection
+        allowance={allowance({
+          state: 'limited',
+          paused: true,
+          usedFraction: 1,
+          usedNanos: 12_500_000_000,
+          message: 'AI is paused until the usage allowance resets.',
+        })}
+        onError={() => {}}
+      />,
+    );
+    expectFill('100%', 'danger', '600');
+  });
+});

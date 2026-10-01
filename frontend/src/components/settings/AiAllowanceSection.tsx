@@ -25,7 +25,7 @@ export function AiAllowanceSection({
     allowance.state === 'limited'
       ? 'bg-danger-600'
       : allowance.state === 'warning'
-        ? 'bg-caution-500'
+        ? 'bg-caution-600'
         : 'bg-brand-600';
 
   async function buy(packCode: string) {
@@ -75,7 +75,11 @@ export function AiAllowanceSection({
             </p>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-paper-200">
-            <div className={`h-full rounded-full ${tone}`} style={{ width: `${bar}%` }} />
+            <div
+              data-testid="ai-allowance-fill"
+              className={`h-full rounded-full ${tone}`}
+              style={{ width: `${bar}%` }}
+            />
           </div>
         </div>
       )}
