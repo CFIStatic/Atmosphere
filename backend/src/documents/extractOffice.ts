@@ -121,7 +121,7 @@ async function extractXlsxAsync(bytes: Buffer): Promise<ExtractionResult> {
   workbook.eachSheet((sheet) => {
     if (sheets >= DOCUMENT_LIMITS.maxSheets) return;
     sheets += 1;
-    const sheetName = String(sheet.name || `Sheet${sheets}`).slice(0, 40);
+    const sheetName = sanitizeExtractedText(String(sheet.name || `Sheet${sheets}`)).slice(0, 40) || `Sheet${sheets}`;
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (chunks.length >= DOCUMENT_LIMITS.maxChunks) return;
       const cells: string[] = [];
@@ -132,7 +132,8 @@ async function extractXlsxAsync(bytes: Buffer): Promise<ExtractionResult> {
         cells.push(`${address}=${value}`);
       });
       if (!cells.length) return;
-      const text = `${sheetName}!${cells.join(' | ')}`;
+      const text = sanitizeExtractedText(`${sheetName}!${cells.join(' | ')}`);
+      if (!text) return;
       lines.push(text);
       chunks.push({ seq: chunks.length, location: `${sheetName}!A${rowNumber}`, text });
     });
@@ -190,13 +191,16 @@ function extractXls(bytes: Buffer): ExtractionResult {
   if (!grid.length) {
     throw new DocumentReadError('This .xls workbook could not be read. Save it as .xlsx and upload it again.', 'unsupported');
   }
-  const chunks: ExtractedChunk[] = grid.map((row, seq) => ({
-    seq,
-    location: row.location,
-    text: row.text,
-  }));
+  const lines: string[] = [];
+  const chunks: ExtractedChunk[] = [];
+  for (const row of grid) {
+    const text = sanitizeExtractedText(row.text);
+    if (!text) continue;
+    lines.push(text);
+    chunks.push({ seq: chunks.length, location: row.location, text });
+  }
   return {
-    text: sanitizeExtractedText(grid.map((row) => row.text).join('\n')),
+    text: sanitizeExtractedText(lines.join('\n')),
     chunks: capChunks(chunks),
     warnings: [],
     scanned: false,
