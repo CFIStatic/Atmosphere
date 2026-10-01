@@ -7651,6 +7651,45 @@
     }).join('. ') + '.';
   }
 
+  function attachedJobDocumentIds(rows, jobId) {
+    var job = String(jobId || '');
+    var uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(job)) return [];
+    var ids = [];
+    var seen = {};
+    var list = rows || [];
+    for (var i = 0; i < list.length && ids.length < 8; i++) {
+      var doc = list[i] || {};
+      if (doc.attached === false) continue;
+      if (String(doc.jobId || '') !== job) continue;
+      if (doc.relevance === 'not_related' || doc.relevance === 'pending_confirm') continue;
+      var id = String(doc.id || '');
+      if (!uuid.test(id) || seen[id]) continue;
+      seen[id] = true;
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function jobDocumentsUrl(jobId, orgMode, shareToken) {
+    var job = String(jobId || '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job)) return '';
+    if (orgMode) return '/api/operations/shared/' + encodeURIComponent(job) + '/documents';
+    if (shareToken) return '/api/verifier-share/' + encodeURIComponent(shareToken) + '/documents';
+    return '';
+  }
+
+  function loadAttachedJobDocuments(jobId) {
+    var listUrl = jobDocumentsUrl(jobId, ORG_MODE, SHARE_TOKEN);
+    if (!listUrl) return Promise.resolve([]);
+    return apiFetch(listUrl).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok || !body) return [];
+        return Array.isArray(body.documents) ? body.documents : [];
+      });
+    }).catch(function () { return []; });
+  }
+
   function askClip(item, question, history, cb) {
     var local = answerClipLocally(item, question);
     if (!item._remote) {
@@ -7672,15 +7711,15 @@
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/ask'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/ask';
+    var jobId = item && (item.jobId || item.job);
+    loadAttachedJobDocuments(jobId).then(function (rows) {
     apiFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: question,
         history: history || [],
-        documentIds: (item._chatDocs || []).map(function (doc) { return doc.id; }).filter(function (id) {
-          return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''));
-        })
+        documentIds: attachedJobDocumentIds(rows, jobId)
       })
     }).then(function (r) {
       return r.json().then(function (body) {
@@ -7693,6 +7732,9 @@
           cb(null, remote, sources);
         }
       });
+    }).catch(function () {
+      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.', null);
+    });
     }).catch(function () {
       cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.', null);
     });

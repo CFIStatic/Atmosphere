@@ -25,7 +25,7 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
-import { answerFromJobDocuments, documentChunksForGrounding } from '../documents/answer.js';
+import { answerFromJobDocuments, chatDocumentInJobScope, documentChunksForGrounding } from '../documents/answer.js';
 import { viewsFromChatRows } from '../documents/load.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
 import { scrubWebDerivedAskAnswer } from '../shared/askWebSearch.js';
@@ -1567,6 +1567,42 @@ evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
         : null,
       items,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/verifier-share/:token/documents — files attached to this shared job. */
+evidenceShareRouter.get('/:token/documents', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { share, admin } = await shareForToken(req.params.token, req);
+    const { data, error } = await admin
+      .from('job_chat_documents')
+      .select('id, filename, doc_kind, relevance, job_id')
+      .eq('org_id', share.org_id)
+      .eq('job_id', share.job_id)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (error) {
+      res.json({ documents: [] });
+      return;
+    }
+    const documents = ((data ?? []) as Array<Record<string, unknown>>)
+      .filter((row) => {
+        const relevance = String(row.relevance ?? '');
+        return chatDocumentInJobScope({ job_id: row.job_id ? String(row.job_id) : null }, String(share.job_id))
+          && relevance !== 'not_related'
+          && relevance !== 'pending_confirm';
+      })
+      .map((row) => ({
+        id: String(row.id),
+        filename: String(row.filename ?? ''),
+        kind: String(row.doc_kind ?? 'other'),
+        relevance: String(row.relevance ?? 'related'),
+        attached: true,
+        jobId: String(share.job_id),
+      }));
+    res.json({ documents });
   } catch (err) {
     next(err);
   }

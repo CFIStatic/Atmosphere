@@ -545,6 +545,40 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
+  it('asks with the job’s attached documents from the server, not this tab’s uploads', () => {
+    const start = verifierHtml.indexOf('function attachedJobDocumentIds');
+    const end = verifierHtml.indexOf('function loadAttachedJobDocuments');
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const { attachedJobDocumentIds, jobDocumentsUrl } = new Function(
+      `${verifierHtml.slice(start, end)}; return { attachedJobDocumentIds, jobDocumentsUrl };`,
+    )() as {
+      attachedJobDocumentIds: (rows: Array<Record<string, unknown>>, jobId: string) => string[];
+      jobDocumentsUrl: (jobId: string, orgMode: boolean, shareToken: string) => string;
+    };
+    const job = '11111111-1111-4111-8111-111111111111';
+    const attached = '22222222-2222-4222-8222-222222222222';
+    const loose = '33333333-3333-4333-8333-333333333333';
+    const ids = attachedJobDocumentIds(
+      [
+        { id: loose, attached: false, jobId: null, relevance: 'not_related' },
+        { id: attached, attached: true, jobId: job, relevance: 'related' },
+        { id: '44444444-4444-4444-8444-444444444444', attached: true, jobId: '99999999-9999-4999-8999-999999999999', relevance: 'related' },
+        { id: '55555555-5555-4555-8555-555555555555', attached: true, jobId: job, relevance: 'pending_confirm' },
+      ],
+      job,
+    );
+    expect(ids).toEqual([attached]);
+    expect(jobDocumentsUrl(job, true, '')).toBe(`/api/operations/shared/${job}/documents`);
+    expect(jobDocumentsUrl(job, false, 'share-token')).toBe('/api/verifier-share/share-token/documents');
+    const askStart = verifierHtml.indexOf('function askClip');
+    const askEnd = verifierHtml.indexOf('function safeAskWebUrl');
+    const ask = verifierHtml.slice(askStart, askEnd);
+    expect(ask).toContain('loadAttachedJobDocuments');
+    expect(ask).toContain('attachedJobDocumentIds(rows, jobId)');
+    expect(ask).not.toContain('_chatDocs');
+  });
+
   it('exports clip custody as versioned JSON with filmedBy, time, job, device, integrity', () => {
     expect(verifierHtml).toContain("schema: 'atmosphere.clip_custody.v1'");
     expect(verifierHtml).toContain('filmedBy');
