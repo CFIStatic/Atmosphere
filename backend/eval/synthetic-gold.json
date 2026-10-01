@@ -1129,7 +1129,28 @@
      "title": "Oak Street kitchen"
     },
     "parties": [],
-    "proofs": [],
+    "proofs": [
+     {
+      "id": "00000000-0000-4000-8000-00000000d301",
+      "party_id": null,
+      "job_id": "00000000-0000-4000-8000-00000000d101",
+      "org_id": "00000000-0000-4000-8000-00000000d001",
+      "work_date": "2026-09-12",
+      "phase": "during",
+      "title": "Kitchen walkthrough",
+      "ai_summary": "A walkthrough that states the lockbox code.",
+      "narration_text": null,
+      "ai_findings": {},
+      "transcript_text": "[0:04] The lockbox code is 4821.",
+      "transcript_segments": [
+       { "start": 4, "end": 6, "text": "The lockbox code is 4821." }
+      ],
+      "transcript_words": null,
+      "device_metadata": {},
+      "captured_at": "2026-09-12T15:00:00Z",
+      "deleted_at": null
+     }
+    ],
     "documents": [
      {
       "id": "00000000-0000-4000-8000-00000000d201",
@@ -1250,6 +1271,25 @@
      "expect": {
       "answerType": "abstain",
       "mustContain": ["does not show"]
+     }
+    },
+    {
+     "id": "doc-file-lockbox",
+     "type": "multi_hop",
+     "question": "What was said about the lockbox on this file?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["4821", "lockbox"],
+      "mustNotContain": ["does not show", "This document does not"]
+     }
+    },
+    {
+     "id": "doc-uploaded-estimate",
+     "type": "multi_hop",
+     "question": "What does the uploaded estimate say the total is?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["$4,280.00", "Oak-Street-Estimate.pdf", "page 1"]
      }
     }
    ]

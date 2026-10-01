@@ -136,7 +136,9 @@ export function jobEvidenceRecord(job: GoldJob): ClipAskRecord {
     }
   }
   for (const doc of job.fixture.documents ?? []) {
-    const text = String((doc as { extractedText?: unknown }).extractedText ?? '').trim();
+    const row = doc as { extractedText?: unknown; attached?: boolean | null; relevance?: string | null };
+    if (row.attached === false || row.relevance === 'not_related' || row.relevance === 'pending_confirm') continue;
+    const text = String(row.extractedText ?? '').trim();
     if (text) lines.push(text);
   }
   return { transcript: lines.join('\n'), analysisState: 'done', transcriptStatus: 'done' } as unknown as ClipAskRecord;

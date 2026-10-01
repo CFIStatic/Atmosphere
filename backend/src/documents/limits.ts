@@ -13,6 +13,9 @@ export const DOCUMENT_LIMITS = {
   chunkChars: 1200,
   /** Sum of unzipped Office parts. A small docx must not expand without a bound. */
   maxUnzippedBytes: 128 * 1024 * 1024,
+  /** Per-entry and entry-count caps, so one part or a huge archive cannot expand alone. */
+  maxZipEntries: 400,
+  maxZipEntryBytes: 16 * 1024 * 1024,
 } as const;
 
 export function limitForFormat(format: string): number {

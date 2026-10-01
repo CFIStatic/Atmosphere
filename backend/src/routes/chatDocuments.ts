@@ -7,7 +7,8 @@
  * match waits for the user to confirm.
  */
 import { randomUUID } from 'node:crypto';
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import express, { Router, type Request, type Response, type NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
@@ -30,7 +31,26 @@ import {
 const BUCKET = 'job-proofs';
 
 export const chatDocumentsRouter = Router();
-chatDocumentsRouter.use(requireAuth);
+
+const uploadJson = express.json({ limit: '36mb' });
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many uploads. Wait a few minutes.', code: 'rate_limited' },
+});
+
+// Every route needs a session. The upload route rate-limits and checks that
+// session before the 36 MB body is parsed, so this skip only defers auth
+// into that route's own middleware.
+chatDocumentsRouter.use((req, res, next) => {
+  if (req.method === 'POST' && (req.path === '/documents' || req.path === '/documents/')) {
+    next();
+    return;
+  }
+  void requireAuth(req, res, next);
+});
 
 type Card = {
   id: string;
@@ -167,7 +187,7 @@ function chunkRows(orgId: string, documentId: string, jobId: string | null, inge
 }
 
 /** POST /api/operations/documents — sniff, read, classify, then store. */
-chatDocumentsRouter.post('/documents', async (req: Request, res: Response, next: NextFunction) => {
+chatDocumentsRouter.post('/documents', uploadLimiter, requireAuth, uploadJson, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = z.object({
       filename: z.string().trim().min(1).max(200),

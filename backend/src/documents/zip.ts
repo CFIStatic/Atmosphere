@@ -33,6 +33,7 @@ export function readZip(bytes: Buffer): Map<string, Buffer> {
   }
   const files = new Map<string, Buffer>();
   let offset = 0;
+  let entries = 0;
   let unzipped = 0;
   while (offset + 30 <= bytes.length) {
     const sig = bytes.readUInt32LE(offset);
@@ -63,9 +64,16 @@ export function readZip(bytes: Buffer): Map<string, Buffer> {
     if (dataEnd > bytes.length) {
       throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
     }
+    entries += 1;
+    if (entries > DOCUMENT_LIMITS.maxZipEntries) throw unzippedTooLarge();
     const compressed = bytes.slice(dataStart, dataEnd);
-    const room = DOCUMENT_LIMITS.maxUnzippedBytes - unzipped;
-    if (uncompressedSize === 0xffffffff || (uncompressedSize > 0 && uncompressedSize > room)) {
+    const room = Math.min(DOCUMENT_LIMITS.maxZipEntryBytes, DOCUMENT_LIMITS.maxUnzippedBytes - unzipped);
+    if (
+      uncompressedSize === 0xffffffff ||
+      uncompressedSize > DOCUMENT_LIMITS.maxZipEntryBytes ||
+      (uncompressedSize > 0 && uncompressedSize > room) ||
+      compressed.length > DOCUMENT_LIMITS.maxZipEntryBytes
+    ) {
       throw unzippedTooLarge();
     }
     let content: Buffer;

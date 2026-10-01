@@ -8,12 +8,13 @@ import ExcelJS from 'exceljs';
 import { ingestChatDocument } from '../src/documents/pipeline.js';
 import { sniffDocument } from '../src/documents/sniff.js';
 import { DocumentReadError } from '../src/documents/types.js';
-import { writeZip } from '../src/documents/zip.js';
+import { readZip, writeZip } from '../src/documents/zip.js';
 import { parseBiff } from '../src/documents/extractOffice.js';
 import { writeOleStream } from '../src/documents/ole.js';
 import { documentRoomRows } from '../src/documents/rooms.js';
 import { addressesMatch } from '../src/documents/classify.js';
-import { answerFromJobDocuments, documentChunksForGrounding, type AskDocumentView } from '../src/documents/answer.js';
+import { answerFromJobDocuments, chatDocumentInJobScope, documentChunksForGrounding, type AskDocumentView } from '../src/documents/answer.js';
+import { formatJobFileRecord } from '../src/shared/jobFileAsk.js';
 import { enforceQuoteGrounding } from '../src/shared/askQuoteGrounding.js';
 import { DOCUMENT_LIMITS } from '../src/documents/limits.js';
 import type { ImageReader, JobMatchProfile } from '../src/documents/types.js';
@@ -445,4 +446,85 @@ test('a comparison quotes the document and does not invent a video quote', () =>
 
 test('a lockbox question is not stolen by an uploaded document', () => {
   assert.equal(answerFromJobDocuments("what's the lockbox code?", DOCUMENTS), null);
+  assert.equal(answerFromJobDocuments("what's the lockbox code on this file?", DOCUMENTS), null);
+  assert.equal(answerFromJobDocuments('what does the file say about the lockbox?', DOCUMENTS), null);
+});
+
+test('grounding and the model record omit unattached document text', () => {
+  const chunks = documentChunksForGrounding(DOCUMENTS);
+  assert.ok(chunks.some((chunk) => chunk.text.includes('Total: $4,280.00')));
+  assert.ok(chunks.every((chunk) => !chunk.text.includes('$900.00') && !chunk.text.includes('Pine Avenue')));
+
+  const record = formatJobFileRecord({
+    documents: DOCUMENTS.map((doc) => ({
+      filename: doc.filename,
+      extractedText: doc.extractedText,
+      attached: doc.attached,
+      relevance: doc.relevance,
+    })),
+  });
+  assert.match(record, /\$4,280\.00/);
+  assert.match(record, /not attached/);
+  assert.doesNotMatch(record, /\$900\.00/);
+});
+
+test('clip ask only keeps documents attached to that job', () => {
+  const jobId = '00000000-0000-4000-8000-00000000d101';
+  assert.equal(chatDocumentInJobScope({ job_id: jobId }, jobId), true);
+  assert.equal(chatDocumentInJobScope({ job_id: null }, jobId), false);
+  assert.equal(chatDocumentInJobScope({ job_id: '00000000-0000-4000-8000-00000000d199' }, jobId), false);
+});
+
+test('zip reader rejects a declared zip bomb and too many entries', () => {
+  const name = Buffer.from('word/document.xml');
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(4, 18);
+  local.writeUInt32LE(DOCUMENT_LIMITS.maxZipEntryBytes + 1, 22);
+  local.writeUInt16LE(name.length, 26);
+  const bomb = Buffer.concat([local, name, Buffer.from([1, 2, 3, 4])]);
+  assert.throws(
+    () => readZip(bomb),
+    (err: unknown) => err instanceof DocumentReadError && err.code === 'too_large',
+  );
+
+  const entries = Array.from({ length: DOCUMENT_LIMITS.maxZipEntries + 1 }, (_, index) => ({
+    name: `part-${index}.xml`,
+    data: '<p/>',
+  }));
+  assert.throws(
+    () => readZip(writeZip(entries, 0)),
+    (err: unknown) => err instanceof DocumentReadError && err.code === 'too_large',
+  );
+});
+
+test('an unauthenticated document upload is refused before the body is parsed', async () => {
+  const { createApp } = await import('../src/app.js');
+  const app = createApp();
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  try {
+    const res = await fetch(`http://127.0.0.1:${address.port}/api/operations/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+    });
+    assert.equal(res.status, 401);
+    const statuses: number[] = [res.status];
+    for (let i = 0; i < 24; i += 1) {
+      const next = await fetch(`http://127.0.0.1:${address.port}/api/operations/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{',
+      });
+      statuses.push(next.status);
+    }
+    assert.ok(statuses.includes(429));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
 });

@@ -14,7 +14,7 @@ import type { AskTurnClock } from './askTiming.js';
 import { answerFromAskLookup } from './askReasoning.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { answerFromJobDocuments, documentChunksForGrounding, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -307,7 +307,7 @@ export function countJobFileSources(file: JobFileAskContext): number {
   if ((file.crew ?? []).some((member) => trim(member.name))) n += 1;
   if ((file.workLogs ?? []).some((log) => trim(log.body))) n += 1;
   if ((file.memory ?? []).some((event) => trim(event.summary))) n += 1;
-  if ((file.documents ?? []).some((doc) => trim(doc.extractedText))) n += 1;
+  if ((file.documents ?? []).some((doc) => documentIsJobKnowledge(doc) && trim(doc.extractedText))) n += 1;
   n += (file.clips ?? []).length;
   return n;
 }
@@ -400,9 +400,9 @@ export function formatJobFileRecord(file: JobFileAskContext): string {
   const docLines: string[] = [];
   for (const doc of file.documents ?? []) {
     const filename = trim(doc.filename) || 'document';
-    const unattached = doc.attached === false || doc.relevance === 'not_related' || doc.relevance === 'pending_confirm';
+    const unattached = !documentIsJobKnowledge(doc);
     if (unattached) {
-      if (!trim(doc.filename) && !trim(doc.relevanceReason) && !trim(doc.extractedText)) continue;
+      if (!trim(doc.filename) && !trim(doc.relevanceReason)) continue;
       const reason = trim(doc.relevanceReason);
       docLines.push(`- ${filename} is not attached to this job.${reason ? ` ${reason}` : ''}`);
       continue;

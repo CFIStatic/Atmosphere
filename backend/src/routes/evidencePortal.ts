@@ -533,6 +533,8 @@ async function answerClipFromDocuments(opts: {
     .eq('job_id', opts.jobId)
     .in('id', ids);
   if (error || !data) return null;
+  // Attached to this shared job, which is the job this clip belongs to.
+  // Client ids for another job, or a file that was never attached, are ignored.
   const onJob = (Array.isArray(data) ? data : []).filter((row) => {
     if (!row || typeof row !== 'object') return false;
     return String((row as { job_id?: unknown }).job_id ?? '') === opts.jobId;

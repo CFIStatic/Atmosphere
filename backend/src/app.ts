@@ -154,8 +154,6 @@ export function createApp(): Express {
   // used to 413 here: six ~900px JPEGs as base64 routinely exceed the global
   // 256kb JSON cap ("That request body is too large."). Raise this route only.
   const proofRecordPath = /\/proof\/?$/;
-  // A 25 MB office file is about 33 MB once it is base64 inside JSON.
-  const chatDocumentPath = /^\/api\/operations\/documents\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   // A profile photo is small after the client squares it, but a raw phone
   // picture still has to fit the request before that resize is trusted.
@@ -163,9 +161,14 @@ export function createApp(): Express {
   const voiceSampleJson = express.json({ limit: '2mb' });
   const safetySampleJson = express.json({ limit: '1.5mb' });
   const proofRecordJson = express.json({ limit: '2mb' });
-  const chatDocumentJson = express.json({ limit: '36mb' });
 
   app.use((req, res, next) => {
+    // Document upload parses its body after auth, on the route. A 36 MB JSON
+    // parser here would read the upload before the session is checked.
+    if (req.method === 'POST' && /^\/api\/operations\/documents\/?$/.test(req.path)) {
+      next();
+      return;
+    }
     const parse = avatarPath.test(req.path)
       ? avatarJson
       : voiceSamplePath.test(req.path) && (req.method === 'POST' || req.method === 'PUT')
@@ -174,9 +177,7 @@ export function createApp(): Express {
         ? safetySampleJson
         : proofRecordPath.test(req.path) && req.method === 'POST'
           ? proofRecordJson
-          : chatDocumentPath.test(req.path) && req.method === 'POST'
-            ? chatDocumentJson
-            : standardJson;
+          : standardJson;
     parse(req, res, next);
   });
 

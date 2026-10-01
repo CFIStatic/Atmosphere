@@ -21,6 +21,29 @@ export type AskDocumentView = {
 
 const STOP = new Set(['what', 'whats', 'which', 'where', 'when', 'who', 'how', 'does', 'this', 'that', 'with', 'from', 'have', 'the', 'and', 'for', 'job', 'file', 'document', 'page']);
 
+/**
+ * Attached job knowledge. Unattached, not-related, and unconfirmed files stay
+ * out of the model prompt and out of quote grounding. A legacy scope document
+ * has no verdict, so it still counts.
+ */
+export function documentIsJobKnowledge(doc: {
+  attached?: boolean | null;
+  relevance?: string | null;
+}): boolean {
+  if (doc.attached === false) return false;
+  if (doc.relevance === 'not_related' || doc.relevance === 'pending_confirm') return false;
+  return true;
+}
+
+/** A share or clip question may only see documents attached to that job. */
+export function chatDocumentInJobScope(
+  row: { job_id?: string | null },
+  jobId: string,
+): boolean {
+  const attachedJob = row.job_id ? String(row.job_id) : '';
+  return Boolean(jobId) && attachedJob === jobId;
+}
+
 export function answerFromJobDocuments(
   question: string,
   documents: AskDocumentView[] | null | undefined,
@@ -51,7 +74,7 @@ export function answerFromJobDocuments(
     const doc = pickDoc(question, pool) ?? pool.find((row) => (row.facts?.totals.length ?? 0) > 0) ?? null;
     const total = doc?.facts?.totals.find((row) => /total/i.test(row.label)) ?? doc?.facts?.totals[0];
     if (!doc || !total || !textOf(doc).includes(total.quote)) {
-      return 'This document does not show that.';
+      return documentMiss(question, docs);
     }
     return `The ${kindWord(doc)} total is ${total.value}. The document says “${total.quote}” ${cite(doc, total.location)}.`;
   }
@@ -59,7 +82,7 @@ export function answerFromJobDocuments(
   if (/\b(rooms?|floor\s*plan|dimensions?)\b/i.test(question)) {
     const doc = pickDoc(question, pool) ?? pool.find((row) => (row.facts?.rooms.length ?? 0) > 0) ?? null;
     const rooms = (doc?.facts?.rooms ?? []).filter((room) => textOf(doc!).includes(room.quote));
-    if (!doc || !rooms.length) return 'This document does not show that.';
+    if (!doc || !rooms.length) return documentMiss(question, docs);
     const listed = rooms.slice(0, 8).map((room) => `“${room.quote}” ${cite(doc, room.sourceLocation)}`);
     const names = rooms.map((room) => room.name).join(', ');
     return `The floor plan shows ${names}. ${listed.join(' ')}`;
@@ -68,14 +91,14 @@ export function answerFromJobDocuments(
   if (/\b(line items?|breakdown)\b/i.test(question)) {
     const doc = pickDoc(question, pool) ?? pool.find((row) => (row.facts?.lineItems.length ?? 0) > 0) ?? null;
     const items = (doc?.facts?.lineItems ?? []).filter((item) => textOf(doc!).includes(item.quote)).slice(0, 8);
-    if (!doc || !items.length) return 'This document does not show that.';
+    if (!doc || !items.length) return documentMiss(question, docs);
     return items.map((item) => `“${item.quote}” ${cite(doc, item.location)}`).join(' ');
   }
 
   if (/\b(permit)\b/i.test(question)) {
     const doc = pickDoc(question, pool.length ? pool : docs);
     const hay = doc ? textOf(doc) : pool.map(textOf).join('\n');
-    if (!/permit/i.test(hay)) return 'This document does not show that.';
+    if (!/permit/i.test(hay)) return documentMiss(question, docs);
   }
 
   const doc = pickDoc(question, pool.length ? pool : docs);
@@ -83,12 +106,12 @@ export function answerFromJobDocuments(
     if (doc && (doc.attached === false || doc.relevance === 'not_related')) {
       return `${doc.filename} is not related to this job and was not attached.`;
     }
-    return 'This document does not show that.';
+    return documentMiss(question, docs);
   }
   const hit = bestChunk(question, doc);
-  if (!hit) return 'This document does not show that.';
+  if (!hit) return documentMiss(question, docs);
   const quote = clipQuote(hit.text, question);
-  if (!quote || !hit.text.includes(quote)) return 'This document does not show that.';
+  if (!quote || !hit.text.includes(quote)) return documentMiss(question, docs);
   return `“${quote}” ${cite(doc, hit.location)}`;
 }
 
@@ -97,7 +120,7 @@ export function documentChunksForGrounding(documents: AskDocumentView[] | null |
   for (const doc of documents ?? []) {
     // A refused or unconfirmed upload is not job evidence. Leaving its text
     // here would let quote checks accept a line from a file that is not on the job.
-    if (doc.attached === false || doc.relevance === 'not_related' || doc.relevance === 'pending_confirm') continue;
+    if (!documentIsJobKnowledge(doc)) continue;
     const rows = doc.chunks?.length
       ? doc.chunks
       : textOf(doc)
@@ -143,12 +166,20 @@ function compareToEvidence(question: string, docs: AskDocumentView[], evidence: 
   return lines.join(' ');
 }
 
+/** Abstain only when the question really targets an attached document. Otherwise the job file answers. */
+function documentMiss(question: string, docs: AskDocumentView[]): string | null {
+  const attached = docs.filter(documentIsJobKnowledge);
+  if (!isDocumentQuestion(question, attached)) return null;
+  return 'This document does not show that.';
+}
+
 function isDocumentQuestion(question: string, docs: AskDocumentView[]): boolean {
   // "this file" and "the file" are the job file (brief, parties, clips).
   // Treating them as an upload makes those questions abstain before job evidence runs.
   if (/\b(document|pdf|spreadsheet|workbook|uploaded|attachment)\b/i.test(question)) {
     return true;
   }
+  if (/\b(?:uploaded|attached)\s+files?\b/i.test(question)) return true;
   const q = question.toLowerCase();
   if (docs.some((doc) => {
     const name = doc.filename.toLowerCase().replace(/\.[a-z0-9]+$/, '');
