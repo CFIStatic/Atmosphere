@@ -19,6 +19,7 @@ import type { ClipAskRecord } from './clipAsk.js';
 import { composeGroundedAsk } from './askPolish.js';
 import type { LongThreadMemory } from './askMemory.js';
 import {
+  asksAboutCrossJob,
   asksAboutOtherJobs,
   clipsInScope,
   executeAskLookup,
@@ -235,7 +236,18 @@ function isTimelineQuestion(question: string): boolean {
 }
 
 function isCrossJobQuestion(question: string): boolean {
-  return asksAboutOtherJobs(question) || /\bsimilar job\b|\blast job\b|\bother jobs?\b/i.test(question);
+  return asksAboutCrossJob(question);
+}
+
+/** Same-job visit compares and timelines need the first and last clips opened. */
+function needsBoundaryVisits(question: string): boolean {
+  const reason = routeAskResearch(question).reason;
+  return reason === 'timeline' || (reason === 'comparison' && !isCrossJobQuestion(question));
+}
+
+/** Cross-clip questions that are not also an enumeration still have to open the visits. */
+function needsEveryVisit(question: string): boolean {
+  return routeAskResearch(question).reason === 'cross_scope' && !isCrossJobQuestion(question);
 }
 
 function isEnumerationQuestion(question: string): boolean {
@@ -272,7 +284,7 @@ function heuristicCalls(question: string, catalog: AskLookupCatalog, pad: Resear
   const person = (catalog.people ?? []).find((row) => row.name && question.toLowerCase().includes(row.name.toLowerCase()));
   if (person) push({ name: 'list_person_activity', input: { name: person.name } });
 
-  if (isTimelineQuestion(question)) {
+  if (needsBoundaryVisits(question)) {
     const clips = datedClips(catalog);
     const first = clips[0];
     const last = clips[clips.length - 1];
@@ -280,6 +292,16 @@ function heuristicCalls(question: string, catalog: AskLookupCatalog, pad: Resear
     if (first && !opened.has(first.proofId)) push({ name: 'get_clip', input: { proofId: first.proofId } });
     if (last && last.proofId !== first?.proofId && !opened.has(last.proofId)) {
       push({ name: 'get_clip', input: { proofId: last.proofId } });
+    }
+  }
+
+  if (needsEveryVisit(question)) {
+    const opened = openedProofs(pad);
+    const query = contentQuery(question);
+    if (query) push({ name: 'search_transcripts', input: { query } });
+    for (const clip of datedClips(catalog)) {
+      if (opened.has(clip.proofId) || calls.filter((call) => call.name === 'get_clip').length >= 4) continue;
+      push({ name: 'get_clip', input: { proofId: clip.proofId } });
     }
   }
 
@@ -328,7 +350,7 @@ function facetReport(question: string, catalog: AskLookupCatalog, pad: ResearchS
   const opened = openedProofs(pad);
   if (ran.has(callKey({ name: 'read_job_fields', input: {} }))) covered.push('job fields');
   if (ran.has(callKey({ name: 'list_clips', input: {} }))) covered.push('clip list');
-  if (isTimelineQuestion(question)) {
+  if (needsBoundaryVisits(question)) {
     const clips = datedClips(catalog);
     const first = clips[0];
     const last = clips[clips.length - 1];
@@ -336,6 +358,11 @@ function facetReport(question: string, catalog: AskLookupCatalog, pad: ResearchS
     else gaps.push('first visit');
     if (!last || last.proofId === first?.proofId || opened.has(last.proofId)) covered.push('last visit');
     else gaps.push('last visit');
+  }
+  if (needsEveryVisit(question)) {
+    const pending = datedClips(catalog).some((clip) => !opened.has(clip.proofId));
+    if (pending) gaps.push('clips');
+    else covered.push('clips');
   }
   if (isEnumerationQuestion(question)) {
     const terms = topicTerms(question);
@@ -600,10 +627,25 @@ function callsFromModel(parsed: Record<string, unknown>, question: string, catal
   return calls;
 }
 
+/** Transcript rows outrank the clip list, which is inserted first and would otherwise fill the window. */
+function evidenceRank(record: ResearchRecord): number {
+  if (record.kind === 'chunk') return 0;
+  if (record.kind === 'hit') return 1;
+  if (record.kind === 'web') return 2;
+  if (record.kind === 'mention') return 3;
+  if (record.kind === 'clip' && record.proofId) return 4;
+  if (record.kind === 'field') return 5;
+  if (record.kind === 'history') return 6;
+  return 7;
+}
+
 function evidenceForModel(pad: ResearchScratchpad): string {
-  return pad.records
-    .slice(0, 24)
-    .map((record) => {
+  const window = pad.records
+    .map((record, index) => ({ record, index }))
+    .sort((a, b) => evidenceRank(a.record) - evidenceRank(b.record) || a.index - b.index)
+    .slice(0, 24);
+  return window
+    .map(({ record }) => {
       const when = record.startSec == null ? '' : ` ${formatAskClock(record.startSec)}`;
       const who = record.speaker ? ` ${speakerLabelOrUnidentified(record.speaker)}` : '';
       const title = record.clipTitle ? `${record.clipTitle}` : record.kind;

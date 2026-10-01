@@ -686,6 +686,15 @@ export function asksAboutOtherJobs(question: string): boolean {
   );
 }
 
+/**
+ * True when the other-job clip pool should be loaded.
+ * Similar-job and last-job compares search that pool even though they miss
+ * the narrower asksAboutOtherJobs phrase list.
+ */
+export function asksAboutCrossJob(question: string): boolean {
+  return asksAboutOtherJobs(question) || /\bsimilar job\b|\blast job\b|\bother jobs?\b/i.test(question);
+}
+
 function orgClipsVisible(catalog: AskLookupCatalog): AskLookupClip[] {
   if (catalog.access === 'viewer') return [];
   return (catalog.orgClips ?? []).filter(

@@ -112,6 +112,84 @@ test('the scratchpad keeps one record per chunk id', () => {
   assert.equal(pad.records.length, 1);
 });
 
+test('a same-job visit comparison opens both visits before it stops', async () => {
+  await withoutModelKeys(async () => {
+    const researched = await runAskResearch({
+      question: 'compare the two visits',
+      catalog: kitchen,
+    });
+    const tools = researched.meta.steps.flatMap((step) => step.tools);
+    assert.equal(researched.meta.stopReason, 'sufficient');
+    assert.ok(tools.filter((tool) => tool === 'get_clip').length >= 2);
+    assert.match(researched.answer, /\| Visit \|/);
+    assert.match(researched.answer, /First kitchen visit/);
+    assert.match(researched.answer, /Last kitchen visit/);
+  });
+});
+
+test('a cross-scope question opens clips instead of stopping on the list', async () => {
+  await withoutModelKeys(async () => {
+    const researched = await runAskResearch({
+      question: 'summarize findings across clips',
+      catalog: kitchen,
+    });
+    const tools = researched.meta.steps.flatMap((step) => step.tools);
+    assert.ok(tools.includes('get_clip'));
+    assert.doesNotMatch(researched.answer, /does not have visits/i);
+    assert.match(researched.answer, /first kitchen visit/i);
+    assert.match(researched.answer, /last kitchen visit/i);
+  });
+});
+
+test('a similar-job comparison quotes the other job when those clips are loaded', async () => {
+  await withoutModelKeys(async () => {
+    const researched = await runAskResearch({
+      question: 'Compare this job to the last similar job.',
+      catalog: kitchen,
+    });
+    assert.match(researched.answer, /twelve thousand/);
+    assert.match(researched.answer, /ten thousand/);
+    assert.match(researched.answer, /Similar kitchen walkthrough/);
+    assert.doesNotMatch(researched.answer, /No other job in this organization is loaded/);
+  });
+});
+
+test('synthesis still sees transcript lines after the clip list fills the window', async () => {
+  await withoutModelKeys(async () => {
+    const fillers = Array.from({ length: 30 }, (_, index) => {
+      const n = String(index + 1).padStart(12, '0');
+      return clip({
+        proofId: `00000000-0000-4000-8000-${n}`,
+        title: `Filler visit ${index + 1}`,
+        workDate: '2026-09-01',
+        segments: [{ start: 1, end: 2, text: `Nothing about the topic ${index + 1}.` }],
+      });
+    });
+    const budget = kitchen.clips[0]!;
+    let synthesis = '';
+    await runAskResearch({
+      question: 'What changed between the first and last visit?',
+      catalog: { ...kitchen, clips: [...fillers, budget] },
+      complete: async ({ kind, user }) => {
+        if (kind === 'synthesis') synthesis = user;
+        if (kind === 'plan') {
+          return {
+            text: JSON.stringify({
+              calls: [
+                { tool: 'list_clips' },
+                { tool: 'get_clip', proofId: budget.proofId },
+              ],
+            }),
+          };
+        }
+        if (kind === 'sufficiency') return { text: '{"sufficient":true,"covered":["visit"],"gaps":[]}' };
+        return { text: 'Speaker 1 said “The budget is twelve thousand.” (First kitchen visit, 0:08).' };
+      },
+    });
+    assert.match(synthesis, /twelve thousand/);
+  });
+});
+
 test('heuristic research stops when the timeline is covered', async () => {
   await withoutModelKeys(async () => {
     const researched = await runAskResearch({
