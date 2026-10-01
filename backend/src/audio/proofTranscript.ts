@@ -8,7 +8,6 @@
  * Additive. A missing transcriber or a silent clip must never fail the upload.
  */
 
-import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -329,9 +328,10 @@ export async function transcribeProofVideo(
 
   const heardSeconds = Number.isFinite(duration) && duration > 0 ? duration : 0;
   if (heardSeconds > 0 && proof.org_id) {
+    // One charge per clip. The ledger no-ops a retry, sweep, or timing backfill.
     recordFlatProviderCost(admin, {
       orgId: proof.org_id,
-      requestId: `whisper:${proofId}:${randomUUID()}`,
+      requestId: `whisper:${proofId}`,
       feature: 'transcription',
       source: 'whisper',
       modelId: 'whisper-1',

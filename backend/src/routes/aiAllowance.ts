@@ -110,7 +110,11 @@ aiAllowanceRouter.post('/credits/checkout', async (req: Request, res: Response, 
         invoice_creation: { enabled: true },
         line_items: [{ price: priceId, quantity: 1 }],
       },
-      { idempotencyKey: stripeIdempotencyKey('ai-credits', req.orgId, pack.code, priceId) },
+      {
+        // A stable key is replayed for 24 hours. Buying the same pack again
+        // that day must open a new Checkout Session, not the one already paid.
+        idempotencyKey: stripeIdempotencyKey('ai-credits', req.orgId, pack.code, priceId, randomUUID()),
+      },
     );
     res.status(201).json({ checkoutUrl: session.url, packCode: pack.code });
   } catch (err) {
