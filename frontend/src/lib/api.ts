@@ -1159,6 +1159,39 @@ export interface ProofVideoRecord {
   events?: ProofVideoEvent[];
   dictationEntries?: DictationEventEntry[];
   disputes?: DisputeMoment[];
+  /** Room spans on this clip. A chip seeks to startSeconds. */
+  rooms?: ProofClipRoom[];
+}
+
+export interface ProofRoomFinding {
+  kind: 'damage' | 'work' | 'characteristic';
+  text: string;
+  atSeconds: number;
+}
+
+export interface ProofClipRoom {
+  roomName: string;
+  roomKey: string;
+  startSeconds: number;
+  endSeconds: number;
+  confidence: number;
+  findings: ProofRoomFinding[];
+}
+
+export interface ProofJobRoom {
+  roomKey: string;
+  roomName: string;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  datesWorked: string[];
+  traits: string[];
+  sightings: Array<{
+    proofId: string;
+    clipTitle: string;
+    workDate: string | null;
+    startSeconds: number;
+    findings: ProofRoomFinding[];
+  }>;
 }
 
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
@@ -1206,6 +1239,8 @@ export interface ProofResponse {
   job?: { id: string; number: number | null; name: string | null };
   days: ProofDay[];
   videos?: ProofVideoRecord[];
+  /** Job-level rooms. The same physical room filmed on different days is one row. */
+  rooms?: ProofJobRoom[];
   disputes?: DisputeMoment[];
   /** Open items from film analysis for the job file + proof-pack consumers. */
   punchList?: PunchListItem[];
