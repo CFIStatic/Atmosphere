@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   attachChatDocument,
+  chipFromDocument,
   listChatDocuments,
   uploadChatDocument,
   type AskAttachment,
   type ChatDocumentCard,
   type UploadPhase,
 } from '../../lib/chatDocuments';
-
-export function verdictLabel(doc: ChatDocumentCard): string {
-  if (doc.relevance === 'related') return 'Related to this job';
-  if (doc.relevance === 'pending_confirm') return 'Confirm before attaching';
-  return 'Not related';
-}
 
 function FileIcon() {
   return (
@@ -27,6 +22,13 @@ function FileIcon() {
   );
 }
 
+function chipType(label: string | null | undefined): string | null {
+  const value = (label ?? '').trim();
+  if (!value) return null;
+  if (/^(document|file|other)$/i.test(value)) return null;
+  return value;
+}
+
 /** Compact file chip. Composer chips include remove; message chips include the type. */
 export function AskAttachmentChip({
   file,
@@ -37,20 +39,21 @@ export function AskAttachmentChip({
   onRemove?: () => void;
   onDark?: boolean;
 }) {
+  const typeLabel = onRemove ? null : chipType(file.typeLabel);
   return (
     <span
       data-testid="ask-attachment-chip"
       data-filename={file.filename}
       className={
         onDark
-          ? 'inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-xs text-paper-0'
-          : 'inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-2 py-1 text-xs text-ink-800'
+          ? 'inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-white/15 bg-white/10 px-2.5 py-1 text-xs text-paper-0'
+          : 'inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-800 shadow-sm'
       }
     >
       <FileIcon />
-      <span className="max-w-[14rem] truncate font-medium">{file.filename}</span>
-      {!onRemove && file.typeLabel ? (
-        <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">{file.typeLabel}</span>
+      <span className="max-w-[12rem] truncate font-medium">{file.filename}</span>
+      {typeLabel ? (
+        <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">{typeLabel}</span>
       ) : null}
       {onRemove ? (
         <button
@@ -59,63 +62,14 @@ export function AskAttachmentChip({
           onClick={onRemove}
           className={
             onDark
-              ? 'grid h-4 w-4 place-items-center rounded-full text-sm leading-none text-paper-0/80 hover:bg-white/10'
-              : 'grid h-4 w-4 place-items-center rounded-full text-sm leading-none text-ink-500 hover:bg-paper-100 hover:text-ink-800'
+              ? 'grid h-4 w-4 shrink-0 place-items-center rounded-full text-[13px] leading-none text-paper-0/80 hover:bg-white/15'
+              : 'grid h-4 w-4 shrink-0 place-items-center rounded-full text-[13px] leading-none text-ink-500 hover:bg-paper-100 hover:text-ink-800'
           }
         >
           ×
         </button>
       ) : null}
     </span>
-  );
-}
-
-export function AskDocumentCard({
-  doc,
-  onAttach,
-  onDismiss,
-}: {
-  doc: ChatDocumentCard;
-  onAttach?: (doc: ChatDocumentCard) => void;
-  onDismiss?: (doc: ChatDocumentCard) => void;
-}) {
-  const tone =
-    doc.relevance === 'related'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-      : doc.relevance === 'pending_confirm'
-        ? 'border-amber-200 bg-amber-50 text-amber-950'
-        : 'border-line bg-paper-0 text-ink-800';
-  return (
-    <article data-testid="ask-document-card" className={`rounded-xl border px-3 py-2 text-sm ${tone}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-medium">{doc.filename}</p>
-        <p className="text-[11px] uppercase tracking-wide">{doc.kindLabel}</p>
-      </div>
-      <p className="mt-1 text-xs font-medium">{verdictLabel(doc)}</p>
-      {doc.summary ? <p className="mt-1 text-xs leading-relaxed">{doc.summary}</p> : null}
-      {doc.relevanceReason ? <p className="mt-1 text-xs leading-relaxed opacity-80">{doc.relevanceReason}</p> : null}
-      {doc.macrosIgnored ? <p className="mt-1 text-xs">Macros in this file were not opened.</p> : null}
-      {doc.relevance === 'pending_confirm' && doc.suggestedJobId && onAttach ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onAttach(doc)}
-            className="rounded-full bg-ink-900 px-2.5 py-1 text-[11px] font-medium text-white"
-          >
-            Attach to {doc.suggestedJobTitle || 'this job'}
-          </button>
-          {onDismiss ? (
-            <button
-              type="button"
-              onClick={() => onDismiss(doc)}
-              className="rounded-full border border-line bg-paper-0 px-2.5 py-1 text-[11px] font-medium text-ink-600"
-            >
-              Don't attach
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
   );
 }
 
@@ -143,13 +97,7 @@ export function JobDocumentsList({ jobId }: { jobId: string }) {
         <ul className="mt-2 space-y-1.5">
           {documents.map((doc) => (
             <li key={doc.id}>
-              <AskAttachmentChip
-                file={{
-                  id: doc.id,
-                  filename: doc.filename,
-                  typeLabel: doc.kindLabel,
-                }}
-              />
+              <AskAttachmentChip file={chipFromDocument(doc)} />
             </li>
           ))}
         </ul>
@@ -160,8 +108,7 @@ export function JobDocumentsList({ jobId }: { jobId: string }) {
 
 export function uploadPhaseLabel(phase: UploadPhase): string {
   if (phase === 'reading') return 'Reading the file…';
-  if (phase === 'uploading') return 'Uploading…';
-  return 'Checking whether it belongs on this job…';
+  return 'Uploading…';
 }
 
 export function useJobDocuments(jobId: string | null) {

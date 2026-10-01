@@ -885,6 +885,60 @@ describe('JobAskPanel', () => {
     expect(screen.queryByText(/deductible/i)).not.toBeInTheDocument();
   });
 
+  it('does not revive the document card when the job already has an upload', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/operations/shared/') && url.includes('/documents')) {
+        return new Response(
+          JSON.stringify({
+            documents: [
+              {
+                id: '00000000-0000-4000-8000-00000000d303',
+                filename: 'The Future.docx',
+                mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                byteSize: 32,
+                kind: 'other',
+                kindLabel: 'Document',
+                relevance: 'not_related',
+                relevanceReason: 'Nothing on the document matches the job name, address, or claim.',
+                summary: 'The Future By Jack Cyganiak 8/11/2023 My companies and vision.',
+                attached: false,
+                jobId: null,
+                contextJobId: 'job-1038',
+                suggestedJobId: null,
+                suggestedJobTitle: null,
+                macrosIgnored: false,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+    try {
+      render(
+        <JobFileFocusProvider>
+          <JobAskPanel jobId="job-1038" file={{ record, proofs }} />
+        </JobFileFocusProvider>,
+      );
+      await screen.findByPlaceholderText('Ask what you forgot…');
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalled();
+      });
+      expect(screen.queryByTestId('ask-document-card')).not.toBeInTheDocument();
+      expect(screen.queryByText('Not related')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Nothing on the document matches/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/My companies and vision/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^DOCUMENT$/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId('ask-composer-attachments')).not.toBeInTheDocument();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('shows an upload chip and keeps the document for a follow-up', async () => {
     const user = userEvent.setup();
     askAboutProofs.mockImplementation(async (_jobId: string, question: string) => ({
