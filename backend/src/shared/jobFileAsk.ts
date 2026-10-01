@@ -126,6 +126,8 @@ export interface JobFileAskDocument {
 export interface JobFileAskTurn {
   role: 'user' | 'assistant';
   text: string;
+  /** Set when this turn quoted an upload that is not on the job. */
+  officeOnly?: boolean;
 }
 
 export interface JobFileAskContext {
@@ -704,9 +706,13 @@ export function historyWithoutPrivateUploads(
   documents: AskDocumentView[] | null | undefined,
 ): JobFileAskTurn[] | undefined {
   if (!history?.length) return history ?? undefined;
-  if (!(documents ?? []).some((doc) => !documentIsJobKnowledge(doc))) return history;
+  const hasPrivateDocs = (documents ?? []).some((doc) => !documentIsJobKnowledge(doc));
+  const hasOfficeOnly = history.some((turn) => turn.officeOnly === true);
+  if (!hasPrivateDocs && !hasOfficeOnly) return history;
   const quiet = normalizedAskText(QUIET_UNRELATED_NOTE);
   return history.filter((turn) => {
+    if (turn.officeOnly === true) return false;
+    if (!hasPrivateDocs) return true;
     const text = normalizedAskText(turn.text ?? '');
     if (text.includes(quiet)) return false;
     return !answerQuotesPrivateUpload(turn.text ?? '', documents);
@@ -976,7 +982,15 @@ export async function answerFromJobFile(input: {
     return { ...empty, answer: grounded, groundedOn, toolResults, webHits };
   }
 
-  const modelHistory = historyWithoutPrivateUploads(input.history, input.sessionDocuments);
+  const sourceHistory = input.history ?? [];
+  const modelHistory = historyWithoutPrivateUploads(sourceHistory, input.sessionDocuments);
+  const privateHistoryRemoved =
+    sourceHistory.some((turn) => turn.officeOnly === true) ||
+    (modelHistory != null && modelHistory.length < sourceHistory.length);
+  const promptMemory =
+    privateHistoryRemoved && input.memory
+      ? { ...input.memory, summary: '', notes: [] }
+      : input.memory;
   const history = (modelHistory ?? [])
     .filter((turn) => trim(turn.text))
     .slice(-12)
@@ -1009,7 +1023,7 @@ export async function answerFromJobFile(input: {
       question: input.question,
       catalog: input.lookup,
       history: modelHistory,
-      memory: input.memory,
+      memory: promptMemory,
       extra: [trim(input.file.mentionSupplement), webBlock, toolBlock, extraSystem].filter(Boolean).join('\n'),
       anthropicApiKey: apiKey || null,
       fetchFn: input.fetchFn,

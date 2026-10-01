@@ -34,7 +34,7 @@ const QUESTION_COLUMNS =
   'id, question, answer, model, grounded_on, web_sources, document_ids, created_at, thread_id';
 
 /** Share links and grant viewers must not learn which chat uploads were in play. */
-function withoutSessionDocumentIds(rows: unknown[]): unknown[] {
+export function omitSessionDocumentIds(rows: unknown[]): unknown[] {
   return rows.map((row) => {
     if (!row || typeof row !== 'object' || !('document_ids' in row)) return row;
     const copy = { ...(row as Record<string, unknown>) };
@@ -66,7 +66,7 @@ export async function listSharedProofQuestions(
   const { data } = await query.order('created_at', { ascending: false }).limit(30);
   const rows = data ?? [];
   if (!questionListingKeepsOfficeOnly(input.access, input.threadId ?? null)) {
-    return withoutSessionDocumentIds(rows);
+    return omitSessionDocumentIds(rows);
   }
   return rows;
 }

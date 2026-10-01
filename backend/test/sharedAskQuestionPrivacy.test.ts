@@ -102,6 +102,8 @@ test('grant and unthreaded proof question listings omit unrelated upload answers
   assert.match(questionsFn, /listSharedProofQuestions\(/);
   assert.match(questionsFn, /access:\s*access === 'org' \? 'org' : 'viewer'/);
   assert.match(questionsFn, /resolveOrgOrViewerAccess/);
+  assert.match(questionsFn, /getAskThreadForOwner/);
+  assert.match(questionsFn, /omitSessionDocumentIds/);
 
   const client = listingClient(ROWS);
   const viewer = await listSharedProofQuestions(client, {
@@ -200,6 +202,10 @@ test('viewer and job-wide history queries drop office-only rows', () => {
   assert.match(ask, /office_only:\s*result\.officeOnly === true/);
   assert.match(ask, /excludeOfficeOnlyRows\([\s\S]*askAccess,\s*null/);
   assert.match(ask, /excludeOfficeOnlyRows\([\s\S]*askAccess,\s*threadId/);
+  assert.match(ask, /publicPairs/);
+  assert.match(ask, /historyWithoutPrivateUploads/);
+  assert.match(progressShare, /access:\s*'share'/);
+  assert.doesNotMatch(progressShare, /document_ids/);
 });
 
 test('a session-only or unrelated upload is private, an attached job document is not', () => {

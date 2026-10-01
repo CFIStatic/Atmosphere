@@ -146,6 +146,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         answer = err instanceof Error ? err.message : 'This document does not show that.';
       }
       if (!answer) {
+        setThinkingMode('route');
         const routing = routeRequest(trimmed);
         const approvals = await dataClient.approvals.list().catch(() => []);
         const match = approvals.find(

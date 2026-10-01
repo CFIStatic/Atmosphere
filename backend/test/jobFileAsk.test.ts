@@ -533,6 +533,42 @@ test('a private upload is not model context for a job or public question', () =>
   const src = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
   assert.doesNotMatch(src, /formatChatUploadsForPrompt/);
   assert.doesNotMatch(src, /Questions about these files are answered from this text only/);
+  const authorOnly = historyWithoutPrivateUploads(
+    [
+      { role: 'assistant', text: 'Jack Cyganiak wrote it.', officeOnly: true },
+      { role: 'user', text: "what's the lockbox code?" },
+    ],
+    [],
+  );
+  assert.deepEqual(authorOnly?.map((turn) => turn.text), ["what's the lockbox code?"]);
+});
+
+test('a job question after an unrelated upload does not keep the upload text', async () => {
+  const vision = {
+    id: 'future',
+    filename: 'The Future.docx',
+    attached: false,
+    relevance: 'not_related',
+    extractedText: VISION_TEXT,
+  };
+  const result = await answerFromJobFile({
+    question: "what's the lockbox code?",
+    file,
+    apiKey: null,
+    sessionDocuments: [vision],
+    history: [
+      { role: 'user', text: 'Who wrote it?', officeOnly: true },
+      { role: 'assistant', text: 'Jack Cyganiak wrote it.', officeOnly: true },
+    ],
+    memory: {
+      summary: 'Earlier the upload said Jettx builds long distance wireless power.',
+      notes: [{ note: 'Jettx builds long distance wireless power.', sourceQuestionId: 'doc', at: null }],
+      now: '2026-10-01T00:00:00Z',
+    },
+  });
+  assert.match(result.answer, /4412/);
+  assert.doesNotMatch(result.answer, /Jettx|Cyganiak|Future\.docx/i);
+  assert.notEqual(result.officeOnly, true);
 });
 
 test('isDuplicateAskTurn reuses only the same answer in the same thread', () => {

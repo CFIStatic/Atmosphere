@@ -59,12 +59,14 @@ import {
 } from '../shared/proofAnalyst.js';
 import {
   answerFromJobFile,
+  historyWithoutPrivateUploads,
   isDuplicateAskTurn,
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { chatUploadShouldAnswer, sessionAnswerIsPrivate } from '../documents/answer.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
-import { excludeOfficeOnlyRows, listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
+import { excludeOfficeOnlyRows, listSharedProofQuestions, omitSessionDocumentIds } from '../shared/askQuestionVisibility.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -3052,7 +3054,7 @@ export async function runProofAsk(input: {
       (async () => {
         const memoryStarted = Date.now();
         const threadId = await threadPromise;
-        const shape = 'id, question, answer, created_at';
+        const shape = 'id, question, answer, created_at, office_only';
         const empty = {
           rows: [] as Array<Record<string, unknown>>,
           memory: null as { summary: string | null; throughId: string | null } | null,
@@ -3329,6 +3331,12 @@ export async function runProofAsk(input: {
         });
       });
     const scrubAsk = (text: string) => scrubStoredAskText(text, memoryClips);
+    const officeOnlyPairIds = new Set(
+      ((recentRes.rows ?? []) as Array<Record<string, unknown>>)
+        .filter((row) => row.office_only === true)
+        .map((row) => String(row.id ?? ''))
+        .filter(Boolean),
+    );
     const priorPairs: StoredAskPair[] = (recentRes.rows ?? []).flatMap((row) => {
       const question = scrubAsk(String(row.question ?? ''));
       if (!question.trim()) return [];
@@ -3350,25 +3358,41 @@ export async function runProofAsk(input: {
       incomplete: recentRes.incomplete === true,
       reuseSummary: true,
     });
-    const scrubbedFold = scrubLongMemory(folded, scrubAsk);
+    const summaryTainted = officeOnlyPairIds.size > 0;
+    const publicPairs = priorPairs.filter((pair) => !officeOnlyPairIds.has(pair.id));
+    const publicFold = foldThreadMemory({
+      pairs: publicPairs,
+      previousSummary: summaryTainted ? null : recentRes.memory?.summary ?? null,
+      summarizedThroughId: summaryTainted ? null : recentRes.memory?.throughId ?? null,
+      timeZone: askTimeZone,
+      incomplete: summaryTainted ? false : recentRes.incomplete === true,
+      reuseSummary: !summaryTainted,
+    });
+    const scrubbedPublic = scrubLongMemory(publicFold, scrubAsk);
     const storedNotes = (recentRes.notes ?? []).flatMap((note) => {
       const text = scrubAsk(note.note).trim();
       if (!text || /\[privacy redacted\]/i.test(text)) return [];
+      if (note.sourceQuestionId && officeOnlyPairIds.has(note.sourceQuestionId)) return [];
       return [{ ...note, note: text }];
     });
-    const durableNotes = mergeDurableNotes(storedNotes, scrubbedFold.notes);
+    const durableNotes = mergeDurableNotes(storedNotes, scrubbedPublic.notes);
     const history: JobFileAskTurn[] = folded.recent.map((turn) => ({
       role: turn.role === 'assistant' ? 'assistant' : 'user',
       text: scrubAsk(turn.text),
+      officeOnly: officeOnlyPairIds.has(String(turn.id ?? '')),
     }));
     const longMemory = {
-      summary: scrubbedFold.summary,
+      summary: scrubbedPublic.summary,
       notes: durableNotes,
       now: new Date().toISOString(),
     };
 
     const sessionDocuments =
       askAccess === 'org' ? await loadChatSessionDocuments(supabase, orgId, jobId, input.documentIds) : [];
+    const aboutUpload = chatUploadShouldAnswer(input.question, sessionDocuments);
+    const mentionHistory = aboutUpload
+      ? history
+      : (historyWithoutPrivateUploads(history, sessionDocuments) ?? history);
     const apiKey = await resolveAskApiKey(orgId);
     const mentionPrep =
       askAccess === 'org'
@@ -3376,7 +3400,7 @@ export async function runProofAsk(input: {
             orgId,
             question: input.question,
             jobId,
-            history,
+            history: mentionHistory,
             askerUserId: userId ?? null,
             timeZone: input.timeZone ?? null,
           }).catch(() => null)
@@ -3459,7 +3483,7 @@ export async function runProofAsk(input: {
           answeredFromSessionDocument: false,
           webDerivedAnswer: false,
           research: null,
-          officeOnly: false,
+          officeOnly: aboutUpload && sessionAnswerIsPrivate(input.question, sessionDocuments),
         }
       : await answerFromJobFile({
       question: input.question,
@@ -3612,12 +3636,13 @@ export async function runProofAsk(input: {
       try {
         if (threadId && owner && stored?.id) {
           let pairs = priorPairs;
+          let privateIds = new Set(officeOnlyPairIds);
           let incomplete = recentRes.incomplete === true;
           if (incomplete) {
             const { data } = await excludeOfficeOnlyRows(
               supabase
                 .from('job_proof_questions')
-                .select('id, question, answer, created_at')
+                .select('id, question, answer, created_at, office_only')
                 .eq('org_id', orgId)
                 .eq('job_id', jobId)
                 .eq('thread_id', threadId),
@@ -3626,7 +3651,11 @@ export async function runProofAsk(input: {
             )
               .order('created_at', { ascending: false })
               .limit(200);
-            pairs = [...((data ?? []) as Array<Record<string, unknown>>)].reverse().flatMap((row) => {
+            const loaded = [...((data ?? []) as Array<Record<string, unknown>>)].reverse();
+            privateIds = new Set(
+              loaded.filter((row) => row.office_only === true).map((row) => String(row.id ?? '')).filter(Boolean),
+            );
+            pairs = loaded.flatMap((row) => {
               const question = scrubStoredAskText(String(row.question ?? ''), lookup.clips);
               if (!question.trim()) return [];
               return [
@@ -3640,6 +3669,7 @@ export async function runProofAsk(input: {
             });
             incomplete = pairs.length >= 200;
           }
+          if (result.officeOnly === true && stored.id) privateIds.add(String(stored.id));
           const withTurn = pairs.some((pair) => pair.id === String(stored.id))
             ? pairs
             : [
@@ -3651,12 +3681,13 @@ export async function runProofAsk(input: {
                   createdAt: String(stored.created_at ?? new Date().toISOString()),
                 },
               ];
+          const tainted = privateIds.size > 0;
           const again = foldThreadMemory({
-            pairs: withTurn,
-            previousSummary: recentRes.memory?.summary ?? null,
-            summarizedThroughId: recentRes.memory?.throughId ?? null,
+            pairs: withTurn.filter((pair) => !privateIds.has(pair.id)),
+            previousSummary: tainted ? null : recentRes.memory?.summary ?? null,
+            summarizedThroughId: tainted ? null : recentRes.memory?.throughId ?? null,
             timeZone: askTimeZone,
-            incomplete,
+            incomplete: tainted ? false : incomplete,
           });
           const againScrub = scrubLongMemory(again, (text) => scrubStoredAskText(text, lookup.clips));
           await persistAskThreadMemory(writeDb, {
@@ -3792,7 +3823,7 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 /** GET /api/operations/shared/:jobId/proof/questions */
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
     const questions = await listSharedProofQuestions(supabase, {
       orgId,
@@ -3800,6 +3831,22 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
       threadId,
       access: access === 'org' ? 'org' : 'viewer',
     });
+    if (access === 'org' && threadId) {
+      try {
+        await getAskThreadForOwner(askWriteClient(supabase), {
+          orgId,
+          jobId: req.params.jobId,
+          threadId,
+          owner: { kind: 'user', userId },
+        });
+      } catch (err) {
+        if (err instanceof HttpError && err.status === 404) {
+          res.json({ questions: omitSessionDocumentIds(questions) });
+          return;
+        }
+        throw err;
+      }
+    }
     res.json({ questions });
   } catch (err) {
     next(err);
