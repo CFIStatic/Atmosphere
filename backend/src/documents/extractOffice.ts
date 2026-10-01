@@ -190,13 +190,16 @@ function extractXls(bytes: Buffer): ExtractionResult {
   if (!grid.length) {
     throw new DocumentReadError('This .xls workbook could not be read. Save it as .xlsx and upload it again.', 'unsupported');
   }
-  const chunks: ExtractedChunk[] = grid.map((row, seq) => ({
-    seq,
-    location: row.location,
-    text: row.text,
-  }));
+  const lines: string[] = [];
+  const chunks: ExtractedChunk[] = [];
+  for (const row of grid) {
+    const text = sanitizeExtractedText(row.text);
+    if (!text) continue;
+    lines.push(text);
+    chunks.push({ seq: chunks.length, location: row.location, text });
+  }
   return {
-    text: sanitizeExtractedText(grid.map((row) => row.text).join('\n')),
+    text: sanitizeExtractedText(lines.join('\n')),
     chunks: capChunks(chunks),
     warnings: [],
     scanned: false,

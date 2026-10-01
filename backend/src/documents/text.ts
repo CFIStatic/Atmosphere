@@ -44,8 +44,8 @@ export function extractCsv(bytes: Buffer): ExtractionResult {
   const lines: string[] = [];
   grid.slice(0, 500).forEach((row, index) => {
     const cells = row.map((value, col) => `${columnLetter(col + 1)}${index + 1}=${value}`);
-    const text = cells.join(' | ');
-    if (!text.trim()) return;
+    const text = sanitizeExtractedText(cells.join(' | '));
+    if (!text) return;
     lines.push(text);
     chunks.push({ seq: chunks.length, location: `CSV!A${index + 1}`, text });
   });
