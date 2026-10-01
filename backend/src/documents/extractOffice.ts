@@ -207,7 +207,8 @@ function extractDoc(bytes: Buffer): ExtractionResult {
   let ole;
   try {
     ole = readOle(bytes);
-  } catch {
+  } catch (err) {
+    if (err instanceof DocumentReadError) throw err;
     throw new DocumentReadError('This .doc file could not be read. Save it as .docx and upload it again.', 'unsupported');
   }
   if (ole.streams.has('EncryptionInfo') || ole.streams.has('EncryptedPackage')) {
@@ -221,8 +222,7 @@ function extractDoc(bytes: Buffer): ExtractionResult {
   if (text.length < 8) {
     throw new DocumentReadError('This .doc file could not be read. Save it as .docx and upload it again.', 'unsupported');
   }
-  const chunks: ExtractedChunk[] = [{ seq: 0, location: 'document', text: text.slice(0, 4000) }];
-  return { text, chunks, warnings: [], scanned: false };
+  return { text, chunks: capChunks([{ seq: 0, location: 'document', text }]), warnings: [], scanned: false };
 }
 
 export function utf16Runs(buf: Buffer): string {

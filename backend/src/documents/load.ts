@@ -3,6 +3,7 @@
  * A missing table returns nothing so Ask still answers while a migration is applying.
  */
 import { chatDocumentInJobScope, type AskDocumentView } from './answer.js';
+import { sanitizeExtractedText } from './text.js';
 import type { DocumentFacts, ExtractedChunk } from './types.js';
 
 /**
@@ -51,12 +52,12 @@ function chunksFrom(value: unknown): ExtractedChunk[] {
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') continue;
     const row = raw as { seq?: unknown; location?: unknown; text?: unknown };
-    const text = String(row.text ?? '').trim();
+    const text = sanitizeExtractedText(String(row.text ?? '')).slice(0, 4000);
     if (!text) continue;
     chunks.push({
       seq: Number(row.seq ?? chunks.length) || chunks.length,
       location: String(row.location ?? 'document').slice(0, 80) || 'document',
-      text: text.slice(0, 4000),
+      text,
     });
   }
   return chunks;

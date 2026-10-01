@@ -1,12 +1,26 @@
 /**
  * Compound File Binary reader for legacy .doc and .xls.
  * Enough to pull a named stream. Mini-streams are followed when the file uses them.
+ * Sector chains share the zip and PDF caps: 16 MB per stream, 128 MB total.
+ * A chain that loops or revisits a sector already used by another chain fails closed.
  */
+import { DOCUMENT_LIMITS } from './limits.js';
 import { DocumentReadError } from './types.js';
 
 const ENDOFCHAIN = 0xfffffffe;
 const FREESECT = 0xffffffff;
 const FATSECT = 0xfffffffd;
+
+type OleBudget = {
+  produced: number;
+  usedSectors: Set<number>;
+  usedMini: Set<number>;
+};
+
+function oleTooLarge(): DocumentReadError {
+  const mb = Math.round(DOCUMENT_LIMITS.maxUnzippedBytes / (1024 * 1024));
+  return new DocumentReadError(`This file is over the ${mb} MB limit.`, 'too_large');
+}
 
 export type OleFile = {
   streams: Map<string, Buffer>;
@@ -17,9 +31,13 @@ export function readOle(bytes: Buffer): OleFile {
     throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
   }
   const sectorShift = bytes.readUInt16LE(0x1e);
-  const sectorSize = 2 ** sectorShift;
   const miniShift = bytes.readUInt16LE(0x20);
+  if (sectorShift < 9 || sectorShift > 12 || miniShift < 6 || miniShift > 12) {
+    throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+  }
+  const sectorSize = 2 ** sectorShift;
   const miniSize = 2 ** miniShift;
+  const budget: OleBudget = { produced: 0, usedSectors: new Set(), usedMini: new Set() };
   const fatCount = bytes.readUInt32LE(0x2c);
   const dirStart = bytes.readUInt32LE(0x30);
   const miniCutoff = bytes.readUInt32LE(0x38);
@@ -38,21 +56,29 @@ export function readOle(bytes: Buffer): OleFile {
     for (let i = 0; i < sectorSize / 4 - 1 && fat.length < fatCount; i += 1) fat.push(block.readUInt32LE(i * 4));
     difat = block.readUInt32LE(sectorSize - 4);
   }
+  for (const sector of fat) {
+    if (sector === FREESECT || sector === ENDOFCHAIN || sector === FATSECT) continue;
+    if (budget.usedSectors.has(sector)) throw oleTooLarge();
+    budget.usedSectors.add(sector);
+  }
   const table = buildFat(bytes, fat, sectorSize);
-  const directory = readChain(bytes, table, dirStart, sectorSize);
+  const directory = readChain(bytes, table, dirStart, sectorSize, budget);
   const entries = parseDirectory(directory);
   const root = entries.find((entry) => entry.type === 5) ?? entries[0];
-  const miniStream = root && root.start !== ENDOFCHAIN ? readChain(bytes, table, root.start, sectorSize, root.size) : Buffer.alloc(0);
+  const miniStream = root && root.start !== ENDOFCHAIN
+    ? readChain(bytes, table, root.start, sectorSize, budget, root.size)
+    : Buffer.alloc(0);
   const miniTable = miniFatStart === ENDOFCHAIN || miniFatStart === FREESECT
     ? []
-    : fatNumbers(readChain(bytes, table, miniFatStart, sectorSize));
+    : fatNumbers(readChain(bytes, table, miniFatStart, sectorSize, budget));
   const streams = new Map<string, Buffer>();
   for (const entry of entries) {
     if (entry.type !== 2 || !entry.name) continue;
+    if (entry.size > DOCUMENT_LIMITS.maxZipEntryBytes) throw oleTooLarge();
     const data = entry.size < miniCutoff && miniTable.length
-      ? readMini(miniStream, miniTable, entry.start, miniSize, entry.size)
-      : readChain(bytes, table, entry.start, sectorSize, entry.size);
-    streams.set(entry.name, data.slice(0, entry.size));
+      ? readMini(miniStream, miniTable, entry.start, miniSize, entry.size, budget)
+      : readChain(bytes, table, entry.start, sectorSize, budget, entry.size);
+    streams.set(entry.name, data.subarray(0, entry.size));
   }
   return { streams };
 }
@@ -88,32 +114,105 @@ function fatNumbers(buf: Buffer): number[] {
   return out;
 }
 
-function readChain(bytes: Buffer, fat: number[], start: number, sectorSize: number, size?: number): Buffer {
+function readChain(
+  bytes: Buffer,
+  fat: number[],
+  start: number,
+  sectorSize: number,
+  budget: OleBudget,
+  size?: number,
+): Buffer {
+  if (start === ENDOFCHAIN || start === FREESECT || size === 0) return Buffer.alloc(0);
+  if (size != null && size > DOCUMENT_LIMITS.maxZipEntryBytes) throw oleTooLarge();
+  const streamCap = Math.min(
+    DOCUMENT_LIMITS.maxZipEntryBytes,
+    Math.max(0, DOCUMENT_LIMITS.maxUnzippedBytes - budget.produced),
+  );
+  if (streamCap < 1) throw oleTooLarge();
+  const target = size ?? streamCap;
   const parts: Buffer[] = [];
   let sector = start;
+  let got = 0;
   const seen = new Set<number>();
-  while (sector !== ENDOFCHAIN && sector !== FREESECT && sector !== FATSECT && !seen.has(sector)) {
+  while (sector !== ENDOFCHAIN && sector !== FREESECT && sector !== FATSECT && got < target) {
+    if (!Number.isInteger(sector) || sector < 0 || seen.has(sector) || budget.usedSectors.has(sector)) {
+      throw oleTooLarge();
+    }
+    const offset = (sector + 1) * sectorSize;
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= bytes.length) {
+      throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+    }
+    const block = bytes.subarray(offset, Math.min(bytes.length, offset + sectorSize));
+    if (!block.length) throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+    const room = Math.min(streamCap, target) - got;
+    if (room < 1) throw oleTooLarge();
+    if (size == null && block.length > room) throw oleTooLarge();
+    const take = block.length > room ? block.subarray(0, room) : block;
     seen.add(sector);
-    parts.push(sectorAt(bytes, sector, sectorSize));
-    sector = fat[sector] ?? ENDOFCHAIN;
-    if (parts.length > 4096) break;
+    budget.usedSectors.add(sector);
+    parts.push(take);
+    got += take.length;
+    budget.produced += take.length;
+    if (budget.produced > DOCUMENT_LIMITS.maxUnzippedBytes) throw oleTooLarge();
+    const next = fat[sector] ?? ENDOFCHAIN;
+    if (
+      next !== ENDOFCHAIN &&
+      next !== FREESECT &&
+      next !== FATSECT &&
+      (seen.has(next) || budget.usedSectors.has(next))
+    ) {
+      throw oleTooLarge();
+    }
+    sector = next;
   }
-  const all = Buffer.concat(parts);
-  return size != null ? all.slice(0, size) : all;
+  return Buffer.concat(parts);
 }
 
-function readMini(miniStream: Buffer, fat: number[], start: number, miniSize: number, size: number): Buffer {
+function readMini(
+  miniStream: Buffer,
+  fat: number[],
+  start: number,
+  miniSize: number,
+  size: number,
+  budget: OleBudget,
+): Buffer {
+  if (size > DOCUMENT_LIMITS.maxZipEntryBytes) throw oleTooLarge();
+  if (size < 1) return Buffer.alloc(0);
+  const streamCap = Math.min(
+    DOCUMENT_LIMITS.maxZipEntryBytes,
+    Math.max(0, DOCUMENT_LIMITS.maxUnzippedBytes - budget.produced),
+  );
+  if (streamCap < 1) throw oleTooLarge();
   const parts: Buffer[] = [];
   let sector = start;
+  let got = 0;
   const seen = new Set<number>();
-  while (sector !== ENDOFCHAIN && sector !== FREESECT && !seen.has(sector) && parts.join('').length < size + miniSize) {
-    seen.add(sector);
+  while (sector !== ENDOFCHAIN && sector !== FREESECT && got < size) {
+    if (!Number.isInteger(sector) || sector < 0 || seen.has(sector) || budget.usedMini.has(sector)) {
+      throw oleTooLarge();
+    }
     const at = sector * miniSize;
-    parts.push(miniStream.slice(at, at + miniSize));
-    sector = fat[sector] ?? ENDOFCHAIN;
-    if (parts.length > 4096) break;
+    if (!Number.isSafeInteger(at) || at < 0 || at >= miniStream.length) {
+      throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+    }
+    const block = miniStream.subarray(at, Math.min(miniStream.length, at + miniSize));
+    if (!block.length) throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+    const room = Math.min(streamCap, size) - got;
+    if (room < 1) throw oleTooLarge();
+    const take = block.length > room ? block.subarray(0, room) : block;
+    seen.add(sector);
+    budget.usedMini.add(sector);
+    parts.push(take);
+    got += take.length;
+    budget.produced += take.length;
+    if (budget.produced > DOCUMENT_LIMITS.maxUnzippedBytes) throw oleTooLarge();
+    const next = fat[sector] ?? ENDOFCHAIN;
+    if (next !== ENDOFCHAIN && next !== FREESECT && (seen.has(next) || budget.usedMini.has(next))) {
+      throw oleTooLarge();
+    }
+    sector = next;
   }
-  return Buffer.concat(parts).slice(0, size);
+  return Buffer.concat(parts);
 }
 
 function parseDirectory(buf: Buffer): DirEntry[] {
@@ -121,6 +220,7 @@ function parseDirectory(buf: Buffer): DirEntry[] {
   for (let i = 0; i + 128 <= buf.length; i += 128) {
     const type = buf[i + 66] ?? 0;
     if (!type) continue;
+    if (entries.length >= DOCUMENT_LIMITS.maxZipEntries) throw oleTooLarge();
     const nameLen = buf.readUInt16LE(i + 64);
     const name = buf.slice(i, i + Math.max(0, nameLen - 2)).toString('utf16le').replace(/\u0000/g, '');
     entries.push({

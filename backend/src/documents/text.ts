@@ -70,14 +70,15 @@ export function packText(text: string, location: string): ExtractionResult {
       text: slice,
     });
   }
-  return { text: clean, chunks, warnings: [], scanned: false };
+  return { text: clean, chunks: capChunks(chunks), warnings: [], scanned: false };
 }
 
+/** Every stored chunk goes through the same marker strip as the document text. */
 export function capChunks(chunks: ExtractedChunk[]): ExtractedChunk[] {
   return chunks.slice(0, DOCUMENT_LIMITS.maxChunks).map((chunk, seq) => ({
     ...chunk,
     seq,
-    text: chunk.text.slice(0, 4000),
+    text: sanitizeExtractedText(chunk.text).slice(0, 4000),
   })).filter((chunk) => chunk.text.trim().length > 0);
 }
 
