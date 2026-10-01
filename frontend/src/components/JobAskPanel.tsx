@@ -1105,7 +1105,14 @@ export function JobAskPanel({
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
         {docs.error && <p className="mb-2 text-xs text-danger-700">{docs.error}</p>}
         {docs.phase && (
-          <p className="mb-2 text-xs text-ink-500" data-testid="ask-upload-progress">{uploadPhaseLabel(docs.phase)}</p>
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium text-ink-800" data-testid="ask-upload-progress">
+            <span className="gpt-typing inline-flex items-center gap-1" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </span>
+            {uploadPhaseLabel(docs.phase)}
+          </p>
         )}
         <form
           onSubmit={onSubmit}

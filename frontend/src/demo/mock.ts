@@ -3836,7 +3836,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { members: demoPeopleOnJob(m[1]) } };
   }],
   ['POST', /^\/api\/operations\/documents$/, async (_m, b) => {
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await new Promise((resolve) => setTimeout(resolve, 1600));
     const filename = String(b.filename ?? 'document');
     if (/\.(exe|html?|js)$/i.test(filename) || /<html/i.test(String(b.contentBase64 ?? '').slice(0, 40))) {
       return { status: 400, body: { error: 'This file type is not supported.', code: 'unsupported' } };
