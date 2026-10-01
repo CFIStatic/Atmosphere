@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   excludeOfficeOnlyRows,
   listSharedProofQuestions,
+  ownedThreadKeepsOfficeOnly,
   questionListingKeepsOfficeOnly,
 } from '../src/shared/askQuestionVisibility.js';
 import { sessionAnswerIsPrivate, type AskDocumentView } from '../src/documents/answer.js';
@@ -102,8 +103,10 @@ test('grant and unthreaded proof question listings omit unrelated upload answers
   assert.match(questionsFn, /listSharedProofQuestions\(/);
   assert.match(questionsFn, /access:\s*access === 'org' \? 'org' : 'viewer'/);
   assert.match(questionsFn, /resolveOrgOrViewerAccess/);
-  assert.match(questionsFn, /getAskThreadForOwner/);
-  assert.match(questionsFn, /omitSessionDocumentIds/);
+  assert.match(questionsFn, /ownsThread/);
+  const ownerCheck = questionsFn.indexOf('getAskThreadForOwner');
+  const fetchQuestions = questionsFn.indexOf('listSharedProofQuestions');
+  assert.ok(ownerCheck >= 0 && fetchQuestions > ownerCheck);
 
   const client = listingClient(ROWS);
   const viewer = await listSharedProofQuestions(client, {
@@ -130,16 +133,55 @@ test('grant and unthreaded proof question listings omit unrelated upload answers
     access: 'org',
   });
   assert.deepEqual(answers(jobWide), ['The lockbox code is 4821.']);
+  assert.equal('thread_id' in (jobWide[0] as object), false);
+  assert.equal('thread_id' in (viewer[0] as object), false);
 
   const officeThread = await listSharedProofQuestions(client, {
     orgId: ORG,
     jobId: JOB,
     threadId: OFFICE_THREAD,
     access: 'org',
+    ownsThread: true,
   });
   assert.deepEqual(answers(officeThread), [PRIVATE_ANSWER]);
   assert.deepEqual((officeThread[0] as { document_ids?: string[] }).document_ids, [UPLOAD_ID]);
   assert.equal('document_ids' in (viewer[0] as object), false);
+});
+
+test('a coworker with someone else’s thread id gets no office-only rows', async () => {
+  const rows: StoredQuestion[] = [
+    ...ROWS,
+    {
+      id: 'public-on-office-thread',
+      org_id: ORG,
+      job_id: JOB,
+      thread_id: OFFICE_THREAD,
+      question: 'What is the permit number?',
+      answer: 'The permit is BP-2026-8841.',
+      office_only: false,
+      document_ids: [UPLOAD_ID],
+    },
+  ];
+  const client = listingClient(rows);
+  const coworker = await listSharedProofQuestions(client, {
+    orgId: ORG,
+    jobId: JOB,
+    threadId: OFFICE_THREAD,
+    access: 'org',
+    ownsThread: false,
+  });
+  assert.deepEqual(answers(coworker), ['The permit is BP-2026-8841.']);
+  assert.equal(answers(coworker).some((answer) => /Jack|Jettx/i.test(answer)), false);
+  assert.equal('document_ids' in (coworker[0] as object), false);
+  assert.equal('thread_id' in (coworker[0] as object), false);
+
+  const omitted = await listSharedProofQuestions(client, {
+    orgId: ORG,
+    jobId: JOB,
+    threadId: OFFICE_THREAD,
+    access: 'org',
+  });
+  assert.deepEqual(answers(omitted), ['The permit is BP-2026-8841.']);
 });
 
 test('share-link ask question listings omit unrelated upload answers', async () => {
@@ -176,6 +218,9 @@ test('viewer and job-wide history queries drop office-only rows', () => {
   assert.equal(questionListingKeepsOfficeOnly('org', null), false);
   assert.equal(questionListingKeepsOfficeOnly('viewer', OFFICE_THREAD), false);
   assert.equal(questionListingKeepsOfficeOnly('share', OFFICE_THREAD), false);
+  assert.equal(ownedThreadKeepsOfficeOnly('org', OFFICE_THREAD, true), true);
+  assert.equal(ownedThreadKeepsOfficeOnly('org', OFFICE_THREAD, false), false);
+  assert.equal(ownedThreadKeepsOfficeOnly('viewer', OFFICE_THREAD, true), false);
 
   const calls: Array<[string, unknown]> = [];
   const query = {

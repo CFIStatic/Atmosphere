@@ -66,7 +66,7 @@ import {
 } from '../shared/jobFileAsk.js';
 import { chatUploadShouldAnswer, sessionAnswerIsPrivate } from '../documents/answer.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
-import { excludeOfficeOnlyRows, listSharedProofQuestions, omitSessionDocumentIds } from '../shared/askQuestionVisibility.js';
+import { excludeOfficeOnlyRows, listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -3825,12 +3825,7 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
   try {
     const { orgId, userId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
-    const questions = await listSharedProofQuestions(supabase, {
-      orgId,
-      jobId: req.params.jobId,
-      threadId,
-      access: access === 'org' ? 'org' : 'viewer',
-    });
+    let ownsThread = false;
     if (access === 'org' && threadId) {
       try {
         await getAskThreadForOwner(askWriteClient(supabase), {
@@ -3839,14 +3834,18 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
           threadId,
           owner: { kind: 'user', userId },
         });
+        ownsThread = true;
       } catch (err) {
-        if (err instanceof HttpError && err.status === 404) {
-          res.json({ questions: omitSessionDocumentIds(questions) });
-          return;
-        }
-        throw err;
+        if (!(err instanceof HttpError && err.status === 404)) throw err;
       }
     }
+    const questions = await listSharedProofQuestions(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      threadId,
+      access: access === 'org' ? 'org' : 'viewer',
+      ownsThread,
+    });
     res.json({ questions });
   } catch (err) {
     next(err);
