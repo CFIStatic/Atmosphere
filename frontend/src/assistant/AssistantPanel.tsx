@@ -19,6 +19,7 @@ import { ActionProposal } from '../patterns/ActionProposal';
 import { riskTone } from '../patterns/tone';
 import type { Role } from '../domain/types';
 import { useAssistant } from './AssistantContext';
+import { documentAskIds } from './documentQuestion';
 import { CHAT_DOCUMENT_ACCEPT } from '../lib/chatDocuments';
 import { AskDocumentCard, uploadPhaseLabel, useJobDocuments } from '../components/ask/ChatDocuments';
 
@@ -55,16 +56,13 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
 
-  function looksLikeDocumentQuestion(text: string): boolean {
-    return /\b(document|estimate|invoice|floor\s*plan|sketch|permit|total|rooms?|related|attachment|uploaded)\b/i.test(text);
-  }
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     const raw = draft.trim();
     if (!raw) return;
-    if (docs.documents.length && looksLikeDocumentQuestion(raw)) {
-      askAboutDocuments(raw, docs.documents.map((doc) => doc.id));
+    const documentIds = documentAskIds(raw, docs.documents, jobId);
+    if (documentIds) {
+      askAboutDocuments(raw, documentIds);
       setDraft('');
       return;
     }
