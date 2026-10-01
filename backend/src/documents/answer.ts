@@ -95,6 +95,9 @@ export function answerFromJobDocuments(
 export function documentChunksForGrounding(documents: AskDocumentView[] | null | undefined): TranscriptChunk[] {
   const chunks: TranscriptChunk[] = [];
   for (const doc of documents ?? []) {
+    // A refused or unconfirmed upload is not job evidence. Leaving its text
+    // here would let quote checks accept a line from a file that is not on the job.
+    if (doc.attached === false || doc.relevance === 'not_related' || doc.relevance === 'pending_confirm') continue;
     const rows = doc.chunks?.length
       ? doc.chunks
       : textOf(doc)
@@ -141,7 +144,9 @@ function compareToEvidence(question: string, docs: AskDocumentView[], evidence: 
 }
 
 function isDocumentQuestion(question: string, docs: AskDocumentView[]): boolean {
-  if (/\b(document|pdf|spreadsheet|workbook|uploaded|attachment|this file|the file)\b/i.test(question)) {
+  // "this file" and "the file" are the job file (brief, parties, clips).
+  // Treating them as an upload makes those questions abstain before job evidence runs.
+  if (/\b(document|pdf|spreadsheet|workbook|uploaded|attachment)\b/i.test(question)) {
     return true;
   }
   const q = question.toLowerCase();

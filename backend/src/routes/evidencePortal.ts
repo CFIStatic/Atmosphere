@@ -519,19 +519,25 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
 async function answerClipFromDocuments(opts: {
   client: any;
   orgId: string;
+  jobId: string;
   item: any;
   question: string;
   documentIds?: string[];
 }): Promise<string | null> {
   const ids = (opts.documentIds ?? []).filter(Boolean);
-  if (!ids.length) return null;
+  if (!ids.length || !opts.jobId) return null;
   const { data, error } = await opts.client
     .from('job_chat_documents')
     .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id')
     .eq('org_id', opts.orgId)
+    .eq('job_id', opts.jobId)
     .in('id', ids);
   if (error || !data) return null;
-  const views = viewsFromChatRows(data);
+  const onJob = (Array.isArray(data) ? data : []).filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    return String((row as { job_id?: unknown }).job_id ?? '') === opts.jobId;
+  });
+  const views = viewsFromChatRows(onJob);
   if (!views.length) return null;
   const evidenceText = [opts.item?.transcriptText, opts.item?.transcript, opts.item?.summary, opts.item?.aiSummary]
     .map((value) => (typeof value === 'string' ? value : ''))

@@ -3,6 +3,7 @@
  * Reads stored and deflated entries. Does not execute anything inside the archive.
  */
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { DOCUMENT_LIMITS } from './limits.js';
 import { DocumentReadError } from './types.js';
 
 const LOCAL = 0x04034b50;
@@ -10,12 +11,29 @@ const CENTRAL = 0x02014b50;
 const EOCD = 0x06054b50;
 const DESCRIPTOR = 0x08074b50;
 
+function unzippedTooLarge(): DocumentReadError {
+  const mb = Math.round(DOCUMENT_LIMITS.maxUnzippedBytes / (1024 * 1024));
+  return new DocumentReadError(`This file is over the ${mb} MB limit.`, 'too_large');
+}
+
+function inflateCapped(compressed: Buffer, room: number): Buffer {
+  if (room < 1) throw unzippedTooLarge();
+  try {
+    return inflateRawSync(compressed, { maxOutputLength: room });
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: unknown }).code) : '';
+    if (code === 'ERR_BUFFER_TOO_LARGE') throw unzippedTooLarge();
+    throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
+  }
+}
+
 export function readZip(bytes: Buffer): Map<string, Buffer> {
   if (bytes.length < 22 || bytes.readUInt32LE(0) !== LOCAL) {
     throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
   }
   const files = new Map<string, Buffer>();
   let offset = 0;
+  let unzipped = 0;
   while (offset + 30 <= bytes.length) {
     const sig = bytes.readUInt32LE(offset);
     if (sig === CENTRAL || sig === EOCD) break;
@@ -23,6 +41,7 @@ export function readZip(bytes: Buffer): Map<string, Buffer> {
     const flags = bytes.readUInt16LE(offset + 6);
     const method = bytes.readUInt16LE(offset + 8);
     let compSize = bytes.readUInt32LE(offset + 18);
+    const uncompressedSize = bytes.readUInt32LE(offset + 22);
     const nameLen = bytes.readUInt16LE(offset + 26);
     const extraLen = bytes.readUInt16LE(offset + 28);
     const nameStart = offset + 30;
@@ -45,17 +64,20 @@ export function readZip(bytes: Buffer): Map<string, Buffer> {
       throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
     }
     const compressed = bytes.slice(dataStart, dataEnd);
+    const room = DOCUMENT_LIMITS.maxUnzippedBytes - unzipped;
+    if (uncompressedSize === 0xffffffff || (uncompressedSize > 0 && uncompressedSize > room)) {
+      throw unzippedTooLarge();
+    }
     let content: Buffer;
-    if (method === 0) content = compressed;
-    else if (method === 8) {
-      try {
-        content = inflateRawSync(compressed);
-      } catch {
-        throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
-      }
-    } else {
+    if (method === 0) {
+      if (compressed.length > room) throw unzippedTooLarge();
+      content = compressed;
+    } else if (method === 8) content = inflateCapped(compressed, room);
+    else {
       throw new DocumentReadError('This file looks damaged and could not be read.', 'corrupt');
     }
+    if (content.length > room) throw unzippedTooLarge();
+    unzipped += content.length;
     if (name && !name.endsWith('/')) files.set(name, content);
     offset = dataEnd + descriptor;
   }

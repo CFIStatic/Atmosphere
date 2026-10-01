@@ -397,14 +397,21 @@ export function formatJobFileRecord(file: JobFileAskContext): string {
     sections.push(`Recent record\n${memory.slice(0, 20).map((line) => `- ${line}`).join('\n')}`);
   }
 
-  const docs = (file.documents ?? []).filter((doc) => trim(doc.extractedText));
-  if (docs.length) {
-    sections.push(
-      `Uploaded documents\n${docs
-        .map((doc) => `- ${trim(doc.filename) || 'document'}: ${trim(doc.extractedText).slice(0, 2500)}`)
-        .join('\n')}`,
-    );
+  const docLines: string[] = [];
+  for (const doc of file.documents ?? []) {
+    const filename = trim(doc.filename) || 'document';
+    const unattached = doc.attached === false || doc.relevance === 'not_related' || doc.relevance === 'pending_confirm';
+    if (unattached) {
+      if (!trim(doc.filename) && !trim(doc.relevanceReason) && !trim(doc.extractedText)) continue;
+      const reason = trim(doc.relevanceReason);
+      docLines.push(`- ${filename} is not attached to this job.${reason ? ` ${reason}` : ''}`);
+      continue;
+    }
+    const text = trim(doc.extractedText);
+    if (!text) continue;
+    docLines.push(`- ${filename}: ${text.slice(0, 2500)}`);
   }
+  if (docLines.length) sections.push(`Uploaded documents\n${docLines.join('\n')}`);
 
   const supplement = trim(file.mentionSupplement);
   const priority = new Set(
@@ -484,7 +491,7 @@ export function groundedJobFileAnswer(question: string, file: JobFileAskContext)
   const need = words.some((word) => word.length >= 6) ? 1 : Math.min(words.length >= 2 ? 2 : 1, words.length);
   const scored = rows
     .map((row) => {
-      const hay = tokens(row.text);
+      const hay = tokens(`${row.source} ${row.text}`);
       const hits = words.filter((token) => hay.some((h) => tokensOverlap(token, h) || h === token));
       return { row, score: hits.length };
     })
@@ -613,6 +620,23 @@ function documentViews(file: JobFileAskContext): AskDocumentView[] {
   });
 }
 
+/**
+ * A document miss is final only when the question names an upload.
+ * "Who is invited on the file?" must not stop at "This document does not show that."
+ */
+function keepDocumentAnswer(question: string, answer: string): boolean {
+  if (
+    /\b(document|pdf|spreadsheet|workbook|uploaded|attachment|estimate|invoice|contract|change\s+order|floor\s*plan|sketch|permit|photo)\b/i.test(
+      question,
+    )
+  ) {
+    return true;
+  }
+  // "this file" / "the file" are the job. Do not let an upload hit or abstain replace it.
+  if (/\b(?:this|the)\s+file\b/i.test(question)) return false;
+  return !/^this document does not show that\.?$/i.test(answer.trim());
+}
+
 /** Deterministic document answers. Quotes are exact substrings, cited with the file and location. */
 function answerFromAttachedDocuments(question: string, file: JobFileAskContext): string | null {
   const views = documentViews(file);
@@ -696,7 +720,7 @@ export async function answerFromJobFile(input: {
   }
 
   const fromDocuments = answerFromAttachedDocuments(input.question, input.file);
-  if (fromDocuments) {
+  if (fromDocuments && keepDocumentAnswer(input.question, fromDocuments)) {
     emit(fromDocuments);
     return { ...empty, answer: fromDocuments, groundedOn };
   }

@@ -11,6 +11,8 @@ export const DOCUMENT_LIMITS = {
   maxSlides: 40,
   maxChunks: 200,
   chunkChars: 1200,
+  /** Sum of unzipped Office parts. A small docx must not expand without a bound. */
+  maxUnzippedBytes: 128 * 1024 * 1024,
 } as const;
 
 export function limitForFormat(format: string): number {
