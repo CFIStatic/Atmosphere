@@ -62,6 +62,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
+import { chatDocumentsForJobFile } from '../documents/load.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -2942,6 +2943,7 @@ export async function runProofAsk(input: {
       logRes,
       memoryRes,
       docRes,
+      chatDocRes,
       recentRes,
       otherJobsRes,
       threadIdResolved,
@@ -3015,6 +3017,13 @@ export async function runProofAsk(input: {
         .eq('job_id', jobId)
         .order('created_at', { ascending: false })
         .limit(5),
+      supabase
+        .from('job_chat_documents')
+        .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id')
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(24),
       (async () => {
         const memoryStarted = Date.now();
         const threadId = await threadPromise;
@@ -3237,12 +3246,15 @@ export async function runProofAsk(input: {
         author: personName(row.author_id),
       })),
       memory: ((memoryRes.data ?? []) as any[]).map((row) => ({ summary: row.summary ?? null })),
-      documents: ((docRes.data ?? []) as any[])
-        .map((row) => ({
-          filename: row.filename ?? null,
-          extractedText: extractedDocumentText(row.extracted),
-        }))
-        .filter((doc) => doc.extractedText),
+      documents: [
+        ...((docRes.data ?? []) as any[])
+          .map((row) => ({
+            filename: row.filename ?? null,
+            extractedText: extractedDocumentText(row.extracted),
+          }))
+          .filter((doc) => doc.extractedText),
+        ...chatDocumentsForJobFile(chatDocRes.error ? [] : chatDocRes.data, jobId),
+      ],
       clips,
     };
 

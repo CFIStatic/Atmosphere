@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { api, type SharedJobSummary, type SharedJobRecord, type IntakeCaptureInvite } from '../lib/api';
 import { JobFileAskChrome } from '../components/JobFileAskChrome';
 import { JobAskPanel } from '../components/JobAskPanel';
+import { JobDocumentsList } from '../components/ask/ChatDocuments';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { JobAccessRoster } from '../components/shared/JobAccessRoster';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
@@ -488,7 +489,12 @@ function JobFileSections({
         ) : null}
 
         {active === 'timeline' ? (
-          <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <JobDocumentsList jobId={record.job.id} />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <JobTimeline key={record.job.id} jobId={record.job.id} record={record} office={office} />
+            </div>
+          </div>
         ) : null}
 
         {active === 'access' && !grantViewer ? <JobAccessRoster jobId={record.job.id} /> : null}

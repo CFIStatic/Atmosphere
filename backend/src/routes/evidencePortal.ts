@@ -25,6 +25,9 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
+import { answerFromJobDocuments, chatDocumentInJobScope, documentChunksForGrounding } from '../documents/answer.js';
+import { viewsFromChatRows } from '../documents/load.js';
+import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
 import { scrubWebDerivedAskAnswer } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { displayMentionText } from '../shared/mentions.js';
@@ -124,6 +127,7 @@ const askBody = z.object({
     )
     .max(20)
     .optional(),
+  documentIds: z.array(z.string().uuid()).max(8).optional(),
 });
 
 /* ------------------------------------------------------------------ *
@@ -512,6 +516,48 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
   return (data as any)?.full_name ?? (data as any)?.email ?? 'Office';
 }
 
+async function answerClipFromDocuments(opts: {
+  client: any;
+  orgId: string;
+  jobId: string;
+  item: any;
+  question: string;
+  documentIds?: string[];
+}): Promise<string | null> {
+  const ids = (opts.documentIds ?? []).filter(Boolean);
+  if (!ids.length || !opts.jobId) return null;
+  const { data, error } = await opts.client
+    .from('job_chat_documents')
+    .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id')
+    .eq('org_id', opts.orgId)
+    .eq('job_id', opts.jobId)
+    .in('id', ids);
+  if (error || !data) return null;
+  // Attached to this shared job, which is the job this clip belongs to.
+  // Client ids for another job, or a file that was never attached, are ignored.
+  const onJob = (Array.isArray(data) ? data : []).filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    return String((row as { job_id?: unknown }).job_id ?? '') === opts.jobId;
+  });
+  const views = viewsFromChatRows(onJob);
+  if (!views.length) return null;
+  const evidenceText = [opts.item?.transcriptText, opts.item?.transcript, opts.item?.summary, opts.item?.aiSummary]
+    .map((value) => (typeof value === 'string' ? value : ''))
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 4000);
+  const direct = answerFromJobDocuments(
+    opts.question,
+    views,
+    evidenceText ? [{ source: String(opts.item?.title || 'This clip'), text: evidenceText }] : [],
+  );
+  if (!direct) return null;
+  return enforceQuoteGrounding(direct, {
+    chunks: documentChunksForGrounding(views),
+    question: opts.question,
+  }).answer;
+}
+
 /**
  * Answer from the clip's reading, keep the question, log the ask.
  * Persistence is best-effort: the reviewer still gets the answer if the
@@ -530,9 +576,11 @@ async function settleClipQuestion(opts: {
   orgMentions?: boolean;
   actorLabel: string;
   actorRole: string;
+  documentIds?: string[];
 }): Promise<{ answer: string; model: string | null; webSources: Array<{ title: string; url: string; snippet: string }> }> {
   const record = clipRecordFromEvidenceItem(opts.item);
-  const mentionPrep =
+  const documentAnswer = await answerClipFromDocuments(opts);
+  const mentionPrep = documentAnswer ? null :
     opts.orgMentions && opts.askedBy
       ? await prepareMentionAsk(opts.client, {
           orgId: opts.orgId,
@@ -542,7 +590,9 @@ async function settleClipQuestion(opts: {
           askerUserId: opts.askedBy ?? null,
         }).catch(() => null)
       : null;
-  const result = mentionPrep?.directAnswer
+  const result = documentAnswer
+    ? { answer: documentAnswer, model: null, usage: null, webSources: [] as Array<{ title: string; url: string; snippet: string }>, webDerivedAnswer: false, research: null }
+    : mentionPrep?.directAnswer
     ? { answer: mentionPrep.directAnswer, model: null, usage: null, webSources: [], webDerivedAnswer: false, research: null }
     : await answerFromClip({
         question: opts.question,
@@ -1017,6 +1067,7 @@ evidencePortalRouter.post(
         item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
+        documentIds: input.documentIds,
         askedBy: userId,
         orgMentions: true,
         actorLabel: await actorLabelFor(supabase, userId),
@@ -1521,6 +1572,42 @@ evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
   }
 });
 
+/** GET /api/verifier-share/:token/documents — files attached to this shared job. */
+evidenceShareRouter.get('/:token/documents', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { share, admin } = await shareForToken(req.params.token, req);
+    const { data, error } = await admin
+      .from('job_chat_documents')
+      .select('id, filename, doc_kind, relevance, job_id')
+      .eq('org_id', share.org_id)
+      .eq('job_id', share.job_id)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (error) {
+      res.json({ documents: [] });
+      return;
+    }
+    const documents = ((data ?? []) as Array<Record<string, unknown>>)
+      .filter((row) => {
+        const relevance = String(row.relevance ?? '');
+        return chatDocumentInJobScope({ job_id: row.job_id ? String(row.job_id) : null }, String(share.job_id))
+          && relevance !== 'not_related'
+          && relevance !== 'pending_confirm';
+      })
+      .map((row) => ({
+        id: String(row.id),
+        filename: String(row.filename ?? ''),
+        kind: String(row.doc_kind ?? 'other'),
+        relevance: String(row.relevance ?? 'related'),
+        attached: true,
+        jobId: String(share.job_id),
+      }));
+    res.json({ documents });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** GET /api/verifier-share/:token/evidence/:proofId — one clip, logged. */
 evidenceShareRouter.get(
   '/:token/evidence/:proofId',
@@ -1647,6 +1734,7 @@ evidenceShareRouter.post(
         item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
+        documentIds: input.documentIds,
         askedBy: viewer.userId,
         orgMentions: false,
         actorLabel: viewer.custodyLabel,

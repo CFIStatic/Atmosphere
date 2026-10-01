@@ -26,6 +26,7 @@ import { healthRouter } from './routes/health.js';
 import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
+import { chatDocumentsRouter } from './routes/chatDocuments.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
@@ -163,6 +164,12 @@ export function createApp(): Express {
   const proofRecordJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {
+    // Document upload parses its body after auth, on the route. A 36 MB JSON
+    // parser here would read the upload before the session is checked.
+    if (req.method === 'POST' && /^\/api\/operations\/documents\/?$/.test(req.path)) {
+      next();
+      return;
+    }
     const parse = avatarPath.test(req.path)
       ? avatarJson
       : voiceSamplePath.test(req.path) && (req.method === 'POST' || req.method === 'PUT')
@@ -202,6 +209,7 @@ export function createApp(): Express {
   app.use('/api/metering', meteringRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/operations', chatDocumentsRouter);
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);

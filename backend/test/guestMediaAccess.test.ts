@@ -104,6 +104,16 @@ test('verifier-share video and download exclude deleted proofs and refuse raw wh
   assert.match(download, /assertGuestMayMintRawMedia/);
 });
 
+test('share document list is the files attached to that shared job', () => {
+  const start = evidencePortal.indexOf("evidenceShareRouter.get('/:token/documents'");
+  assert.ok(start > 0);
+  const body = evidencePortal.slice(start, start + 1400);
+  assert.match(body, /\.eq\('org_id', share\.org_id\)/);
+  assert.match(body, /\.eq\('job_id', share\.job_id\)/);
+  assert.doesNotMatch(body, /context_job_id/);
+  assert.match(body, /chatDocumentInJobScope/);
+});
+
 test('job-file DELETE API is gone so product clients cannot soft-delete', () => {
   const start = sharedJobs.indexOf("sharedJobsRouter.delete('/shared/:jobId'");
   assert.ok(start > 0);

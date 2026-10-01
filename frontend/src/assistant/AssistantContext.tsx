@@ -15,6 +15,7 @@ import {
 } from '../domain/routing';
 import { dataClient } from '../data/client';
 import type { ApprovalRequest } from '../domain/types';
+import { askChatDocuments } from '../lib/chatDocuments';
 
 /**
  * The single Atmosphere assistant.
@@ -40,6 +41,8 @@ export interface AssistantMessage {
   routing?: RoutingResult;
   /** When the reply corresponds to a real pending action, it is linked here. */
   proposal?: ApprovalRequest;
+  /** A grounded answer about an uploaded document. Routing chrome stays off. */
+  grounded?: boolean;
 }
 
 interface AssistantValue {
@@ -47,7 +50,10 @@ interface AssistantValue {
   setOpen: (open: boolean) => void;
   messages: AssistantMessage[];
   thinking: boolean;
+  /** document: animated dots, then the answer. route: the existing capability router. */
+  thinkingMode: 'route' | 'document';
   send: (text: string) => void;
+  askAboutDocuments: (text: string, documentIds: string[]) => void;
   clear: () => void;
   /** What the panel should describe itself as being about, per route. */
   contextLabel: string;
@@ -63,6 +69,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [thinkingMode, setThinkingMode] = useState<'route' | 'document'>('route');
   const [contextLabel, setContextLabel] = useState('Atmosphere');
   const timers = useRef<number[]>([]);
 
@@ -76,6 +83,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       ...prev,
       { id: nextId(), author: 'user', text: trimmed, at: new Date().toISOString() },
     ]);
+    setThinkingMode('route');
     setThinking(true);
     setOpen(true);
 
@@ -101,6 +109,58 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     timers.current.push(timer);
   }, []);
 
+  const askAboutDocuments = useCallback((text: string, documentIds: string[]) => {
+    const trimmed = text.trim();
+    if (!trimmed || !documentIds.length) return;
+    setMessages((prev) => [
+      ...prev,
+      { id: nextId(), author: 'user', text: trimmed, at: new Date().toISOString() },
+    ]);
+    setThinkingMode('document');
+    setThinking(true);
+    setOpen(true);
+    const timer = window.setTimeout(async () => {
+      let answer: string | null = null;
+      try {
+        answer = await askChatDocuments(trimmed, documentIds);
+      } catch (err) {
+        answer = err instanceof Error ? err.message : 'This document does not show that.';
+      }
+      if (!answer) {
+        const routing = routeRequest(trimmed);
+        const approvals = await dataClient.approvals.list().catch(() => []);
+        const match = approvals.find(
+          (a) => a.capability === routing.capability && a.status === 'proposed',
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            author: 'atmosphere',
+            at: new Date().toISOString(),
+            routing,
+            proposal: match,
+            text: composeReply(routing, match),
+          },
+        ]);
+        setThinking(false);
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          author: 'atmosphere',
+          at: new Date().toISOString(),
+          text: answer,
+          grounded: true,
+        },
+      ]);
+      setThinking(false);
+    }, 400);
+    timers.current.push(timer);
+  }, []);
+
   const clear = useCallback(() => {
     timers.current.forEach(window.clearTimeout);
     timers.current = [];
@@ -109,8 +169,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AssistantValue>(
-    () => ({ open, setOpen, messages, thinking, send, clear, contextLabel, setContextLabel }),
-    [open, messages, thinking, send, clear, contextLabel],
+    () => ({ open, setOpen, messages, thinking, thinkingMode, send, askAboutDocuments, clear, contextLabel, setContextLabel }),
+    [open, messages, thinking, thinkingMode, send, askAboutDocuments, clear, contextLabel],
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
