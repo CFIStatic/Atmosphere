@@ -18,13 +18,22 @@ describe('All videos table layout', () => {
     expect(css).toContain('#clip-table');
     expect(css).toContain('table-layout: fixed');
     expect(css).toContain('.col-preview,');
-    expect(css).toContain('th[data-sort-key="preview"] { width: 128px; }');
+    expect(css).toContain('th[data-sort-key="preview"] { width: 18% !important; }');
     expect(css).toContain('.col-status,');
-    expect(css).toContain('th[data-sort-key="status"] { width: 196px; }');
+    expect(css).toContain('th[data-sort-key="status"] { width: 20% !important; }');
     expect(css).toContain('.col-recorded,');
-    expect(css).toContain('th[data-sort-key="recorded"] { width: 132px; }');
+    expect(css).toContain('th[data-sort-key="recorded"] { width: 14% !important; }');
     expect(css).toContain('.col-uploader,');
-    expect(css).toContain('th[data-sort-key="uploader"] { width: 228px; }');
+    expect(css).toContain('th[data-sort-key="uploader"] { width: 32% !important; }');
+    expect(css).toContain('max-width: 100%');
+    const wide = verifierHtml.match(
+      /@media \(min-width: 1200px\) \{[\s\S]*?\n  \}/,
+    );
+    expect(wide).not.toBeNull();
+    expect(wide![0]).toContain('th[data-sort-key="preview"] { width: 128px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="status"] { width: 196px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="recorded"] { width: 132px !important; }');
+    expect(wide![0]).toContain('th[data-sort-key="uploader"] { width: 228px !important; }');
     expect(css).toContain('text-overflow: ellipsis');
     expect(css).toContain('#clip-table tr.jobrow td.titlecell .t');
     expect(css).toContain('font-size: 14px');
