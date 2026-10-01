@@ -45,7 +45,7 @@ describe('AtmospherePlanPicker', () => {
     expect(note.className).toMatch(/text-ink-500/);
     expect(note.textContent).toMatch(/Seats count Field Capture accounts only/);
     expect(note.textContent).toMatch(/office-only Global Admins do not use a seat/);
-    expect(note.textContent).toMatch(/AI\/token usage is billed the day it is used/);
+    expect(note.textContent).toMatch(/Each plan includes an AI usage allowance/);
     expect(note.textContent).not.toMatch(/10%/);
     expect(screen.getAllByText(/\$125\/mo/)).toHaveLength(1);
     expect(screen.getAllByText(/office-only Global Admins/)).toHaveLength(1);
@@ -145,7 +145,7 @@ describe('AtmospherePlanPicker', () => {
       expect(price.nextElementSibling?.className).toMatch(/text-ink-500/);
     }
     const note = screen.getByText(/Extra Field Capture seats are \$1,250\/yr each/);
-    expect(note.textContent).toMatch(/AI\/token usage is billed the day it is used/);
+    expect(note.textContent).toMatch(/Each plan includes an AI usage allowance/);
     expect(note.textContent).toMatch(/locked for the term/);
     expect(note.textContent).toMatch(/non-refundable/);
     expect(note.textContent).toMatch(/cancel at the end of the term/);

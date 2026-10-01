@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, type BillingInvoice, type BillingInvoiceLine, type WorkspaceBilling } from '../../lib/api';
+import { api, type AiAllowance, type BillingInvoice, type BillingInvoiceLine, type WorkspaceBilling } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { PlanPrice } from '../billing/AtmospherePlanPicker';
 import { AlertIcon, SpinnerIcon } from '../icons';
 import { Logo } from '../Logo';
+import { AiAllowanceSection } from './AiAllowanceSection';
 import { TokenUsageSection } from './TokenUsageSection';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -50,18 +51,21 @@ export function BillingSection() {
   const [invoicesComplimentary, setInvoicesComplimentary] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allowance, setAllowance] = useState<AiAllowance | null>(null);
 
   useEffect(() => {
     let live = true;
     Promise.all([
       api.getBillingWorkspace(),
       api.getInvoices(25).catch(() => ({ invoices: [] as BillingInvoice[], complimentary: false })),
+      api.getAiAllowance().catch(() => null),
     ])
-      .then(([next, history]) => {
+      .then(([next, history, nextAllowance]) => {
         if (!live) return;
         setWorkspace(next);
         setInvoices(history.invoices);
         setInvoicesComplimentary(history.complimentary);
+        setAllowance(nextAllowance);
       })
       .catch((err) => {
         if (!live) return;
@@ -71,6 +75,15 @@ export function BillingSection() {
       live = false;
     };
   }, []);
+
+  async function refreshAfterPlanChange() {
+    const [next, nextAllowance] = await Promise.all([
+      api.getBillingWorkspace(),
+      api.getAiAllowance().catch(() => null),
+    ]);
+    setWorkspace(next);
+    if (nextAllowance) setAllowance(nextAllowance);
+  }
 
   async function openPortal() {
     setBusy(true);
@@ -117,6 +130,15 @@ export function BillingSection() {
           Checkout cancelled. Nothing was charged.
         </p>
       )}
+
+      {allowance ? (
+        <AiAllowanceSection
+          allowance={allowance}
+          currentPlanCode={sub.code}
+          onError={setError}
+          onUpdated={refreshAfterPlanChange}
+        />
+      ) : null}
 
       <section className="rounded-xl glass-card p-5 sm:p-6">
         <header>

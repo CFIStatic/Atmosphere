@@ -220,6 +220,27 @@ export const api = {
 
     exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
+
+  aiBudgets: () =>
+    request<{
+      budgets: Array<{
+        orgId: string;
+        orgName: string | null;
+        state: string;
+        paused: boolean;
+        usedNanos: number;
+        allowanceNanos: number;
+        usedFraction: number;
+        creditBalanceNanos: number;
+        resetAt: string | null;
+      }>;
+    }>('/api/analytics/ai-budgets'),
+
+  grantAiCredits: (orgId: string, dollars: number, note?: string) =>
+    request<{ applied: boolean; balanceNanos: number }>(`/api/analytics/ai-budgets/${orgId}/credits`, {
+      method: 'POST',
+      body: JSON.stringify({ dollars, note }),
+    }),
 };
 
 export function defaultRange(): RangeParams {

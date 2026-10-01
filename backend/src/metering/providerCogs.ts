@@ -12,6 +12,8 @@
  * `private.price_usage` (`tokens * usd_per_mtok * 1000`).
  */
 
+import { modelPriceTable, tokenCostNanos } from './modelPriceTable.js';
+
 export const GEMINI_INPUT_NANOS_PER_TOKEN = 100;
 export const GEMINI_OUTPUT_NANOS_PER_TOKEN = 400;
 
@@ -25,14 +27,13 @@ export function fallbackProviderCogsNanos(
   tokens: { inputTokens?: number; outputTokens?: number; cacheTokens?: number },
 ): number {
   if (!isGeminiModel(modelId)) return 0;
-  const input = Math.max(0, Math.round(Number(tokens.inputTokens ?? 0)));
-  const output = Math.max(0, Math.round(Number(tokens.outputTokens ?? 0)));
-  const cache = Math.max(0, Math.round(Number(tokens.cacheTokens ?? 0)));
-  if (![input, output, cache].every((n) => Number.isSafeInteger(n))) return 0;
-  const nanos =
-    input * GEMINI_INPUT_NANOS_PER_TOKEN +
-    output * GEMINI_OUTPUT_NANOS_PER_TOKEN +
-    cache * GEMINI_INPUT_NANOS_PER_TOKEN;
-  if (!Number.isSafeInteger(nanos) || nanos <= 0) return 0;
-  return nanos;
+  return tokenCostNanos(modelPriceTable(), {
+    modelId,
+    provider: 'google',
+    tokens: {
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      cacheTokens: tokens.cacheTokens,
+    },
+  });
 }

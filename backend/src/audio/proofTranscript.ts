@@ -23,6 +23,8 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { shouldRunSoldPathWorkers } from '../bootFlags.js';
 import { leaseOwnerId, leaseUntilIso } from '../verification/lease.js';
+import { modelPriceTable, whisperCostNanos } from '../metering/modelPriceTable.js';
+import { recordFlatProviderCost } from '../metering/tokenUsage.js';
 import { queueSummaryRefresh } from './summaryQueue.js';
 import { staleSummaryPatch } from './summaryFreshness.js';
 import { runSafetyScanForProof } from '../safety/sample.js';
@@ -323,6 +325,20 @@ export async function transcribeProofVideo(
   // summary retry queue (never fails the Whisper write). This runs for the
   // timing backfill too — skipping it is how the Tiffany clip's summary went stale.
   await queueSummaryRefresh(admin, proofId);
+
+  const heardSeconds = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  if (heardSeconds > 0 && proof.org_id) {
+    // One charge per clip. The ledger no-ops a retry, sweep, or timing backfill.
+    recordFlatProviderCost(admin, {
+      orgId: proof.org_id,
+      requestId: `whisper:${proofId}`,
+      feature: 'transcription',
+      source: 'whisper',
+      modelId: 'whisper-1',
+      costNanos: whisperCostNanos(modelPriceTable(), heardSeconds),
+      jobId: proof.job_id ?? null,
+    });
+  }
 
   if (opts?.enrich === false) return;
 

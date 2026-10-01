@@ -262,7 +262,7 @@ describe('Railway corporate-website image', () => {
     expect(page).toContain('contact.html');
     expect(page).toContain('Extra Field Capture seats');
     expect(page).toContain('$125/mo');
-    expect(page).toContain('usage billed the day it runs');
+    expect(page).toContain('each plan includes an AI usage allowance');
     expect(page).toContain('Chest Mount');
     expect(page).toContain('$99.99');
     expect(page).toContain('Per Month');

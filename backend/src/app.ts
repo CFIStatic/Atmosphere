@@ -11,6 +11,7 @@ import { profileRouter } from './routes/profile.js';
 import { jobsRouter } from './routes/jobs.js';
 import { memoryRouter } from './routes/memory.js';
 import { billingRouter } from './routes/billing.js';
+import { aiAllowanceRouter } from './routes/aiAllowance.js';
 import { usageRouter } from './routes/usage.js';
 import { meteringRouter } from './routes/metering.js';
 import { webhookRouter } from './routes/webhooks.js';
@@ -203,6 +204,7 @@ export function createApp(): Express {
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/billing', billingRouter);
+  app.use('/api/billing/ai-allowance', aiAllowanceRouter);
   app.use('/api/usage', usageRouter);
   app.use('/api/metering', meteringRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -440,7 +441,13 @@ function TypingDots() {
 const ASSISTANT_BUBBLE =
   'max-w-[85%] rounded-2xl bg-paper-0 px-3.5 py-2 text-sm text-ink-800 shadow-card';
 
-type AskFailure = { message: string; question: string; pendingId: string };
+type AskFailure = {
+  message: string;
+  question: string;
+  pendingId: string;
+  code?: string;
+  canManage?: boolean;
+};
 
 export type JobAskFn = (
   question: string,
@@ -881,6 +888,8 @@ export function JobAskPanel({
               : 'Could not answer that from the file.',
         question: raw,
         pendingId,
+        code: err instanceof ApiError ? err.code : undefined,
+        canManage: err instanceof ApiError ? err.canManage : false,
       });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -1067,7 +1076,31 @@ export function JobAskPanel({
             {!asking && askFailure && (
               <li className="flex items-start gap-2.5" data-testid="ask-error">
                 <div role="alert" className={ASSISTANT_BUBBLE}>
-                  <p className="leading-relaxed text-danger-700">{askFailure.message}</p>
+                  <p className="leading-relaxed text-ink-800">{askFailure.message}</p>
+                  {askFailure.code === 'ai_budget_limited' ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {askFailure.canManage ? (
+                        <>
+                          <Link
+                            to="/settings?section=billing"
+                            data-testid="ask-budget-upgrade"
+                            className="rounded-full bg-brand-600 px-3 py-1 text-[11px] font-semibold text-ink-900 transition hover:bg-brand-700"
+                          >
+                            Upgrade plan
+                          </Link>
+                          <Link
+                            to="/settings?section=billing#credits"
+                            data-testid="ask-budget-credits"
+                            className="rounded-full border border-line bg-paper-0 px-3 py-1 text-[11px] font-semibold text-ink-800 transition hover:border-brand-200"
+                          >
+                            Buy credits
+                          </Link>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-ink-500">An owner can upgrade the plan or buy credits.</p>
+                      )}
+                    </div>
+                  ) : (
                   <div className="mt-2 flex gap-2">
                     <button
                       type="button"
@@ -1079,6 +1112,7 @@ export function JobAskPanel({
                       Try again
                     </button>
                   </div>
+                  )}
                 </div>
               </li>
             )}

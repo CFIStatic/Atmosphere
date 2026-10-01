@@ -8,6 +8,7 @@ const getInvoices = vi.fn();
 const openBillingPortal = vi.fn();
 const addExtraFieldCaptureSeats = vi.fn();
 const getTokenUsage = vi.fn();
+const getAiAllowance = vi.fn();
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
@@ -20,6 +21,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       openBillingPortal: (...args: unknown[]) => openBillingPortal(...args),
       addExtraFieldCaptureSeats: (...args: unknown[]) => addExtraFieldCaptureSeats(...args),
       getTokenUsage: (...args: unknown[]) => getTokenUsage(...args),
+      getAiAllowance: (...args: unknown[]) => getAiAllowance(...args),
     },
   };
 });
@@ -144,6 +146,7 @@ describe('BillingSection', () => {
     openBillingPortal.mockReset();
     addExtraFieldCaptureSeats.mockReset();
     getTokenUsage.mockReset().mockResolvedValue(tokenUsage);
+    getAiAllowance.mockReset().mockResolvedValue(null);
   });
 
   it('shows the Work Verification plan, not leftover seat billing', async () => {

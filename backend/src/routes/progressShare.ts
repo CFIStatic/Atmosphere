@@ -17,6 +17,7 @@ import {
 import { shareState } from '../verifier/library.js';
 import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
+import { assertAiFeatureAllowed } from '../metering/aiBudgetService.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
 import {
   createAskThread,
@@ -364,6 +365,7 @@ progressShareRouter.post(
           threadId: z.string().uuid().optional().nullable(),
         })
         .parse(req.body ?? {});
+      await assertAiFeatureAllowed(admin, share.org_id, { canManage: false });
       const result = await runProofAsk({
         supabase: admin,
         orgId: share.org_id,

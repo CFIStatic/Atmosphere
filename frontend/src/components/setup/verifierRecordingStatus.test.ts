@@ -184,6 +184,7 @@ describe('verifier dashboard recording status', () => {
       { analysisStatus: 'failed' },
       { analysisStatus: 'running', analysisActive: true, retrying: true },
       { uploading: true, analysisStatus: 'done' },
+      { budgetHold: true, analysisStatus: 'queued', proofState: 'uploaded' },
       { summaryState: 'failed', analysisStatus: 'done' },
       {},
     ];

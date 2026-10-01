@@ -38,7 +38,7 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells three self-serve plans plus seats and same-day usage:
+`pricing.html` sells three self-serve plans plus seats. Each plan includes an AI usage allowance:
 
 - **Starter** — $399/month, **1 Field Capture account**.
 - **Work Verification** — $849/month, **3 Field Capture accounts**. Featured /
@@ -46,16 +46,15 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 - **Scale** — $1,999/month, **10 Field Capture accounts**.
 - **Extra Field Capture seats** — $125/month per additional account beyond the
   seats included with the plan.
-- **Usage** — AI/token usage is billed the day it is used. Do not publish a
-  per-job dollar rate, a Compute Units allowance, or internal costing as the
+- **Usage** — each plan includes an AI usage allowance. Buy credits if you need more. Do not publish a
+  per-job dollar rate, a Compute Units allowance, internal margin, or provider cost as the
   customer-facing default.
 - **Enterprise** — contact sales on the pricing page only. No fourth self-serve SKU.
 - **Field Capture Chest Mount** — one-time $99.99 hardware add-on via Stripe
   Payment Link.
 
-Legacy prepaid credits (`credit_packs`, `record_usage`) remain during migration
-and should be marked legacy when mentioned. New workflows should record via
-`record_ai_usage_event` and bill the day the work runs.
+The retired prepaid wallet (`credit_packs`, `record_usage`) is not the current path.
+Optional AI credit packs in Settings are extra allowance that rolls over until used.
 
 ## Resources
 

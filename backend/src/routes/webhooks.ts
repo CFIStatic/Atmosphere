@@ -36,6 +36,9 @@ import {
   requireCreditPurchaseId,
 } from '../lib/stripeWebhook.js';
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
+import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
+import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
+import { grantAiCredits, recordSubscriptionPriceSpan, syncCreditPackClawback } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
 
@@ -124,7 +127,13 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
       break;
 
     case 'charge.refunded':
-      await onChargeRefunded(event.data.object as Stripe.Charge, admin);
+      await onChargeRefunded(event.data.object as Stripe.Charge, event.id, admin);
+      break;
+
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed':
+      await onChargeDisputed(event.data.object as Stripe.Dispute, event.id, event.created, admin);
       break;
 
     default:
@@ -143,7 +152,25 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
 
   if (session.mode !== 'payment') return; // subscriptions settle via invoice.paid
 
-  const purchaseId = requireCreditPurchaseId(session.mode, session.metadata?.purchase_id);
+  const isAiCredits = session.metadata?.kind === 'ai_credits';
+  const purchaseId = isAiCredits
+    ? null
+    : requireCreditPurchaseId(session.mode, session.metadata?.purchase_id);
+
+  if (isAiCredits) {
+    const grant = creditGrantFromCheckout(session, aiBudgetConfig().creditUsdRatio);
+    if (!grant) {
+      throw new Error(`[stripe] AI credit checkout ${session.id} is not paid`);
+    }
+    await grantAiCredits(admin, {
+      orgId,
+      deltaNanos: grant.creditNanos,
+      kind: 'purchase',
+      stripeEventId: session.id,
+      stripeSessionId: session.id,
+      note: `AI credits ${grant.paidCents} cents`,
+    });
+  }
   const paymentIntentId =
     typeof session.payment_intent === 'string'
       ? session.payment_intent
@@ -174,7 +201,7 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     p_status: 'succeeded',
     p_amount_cents: session.amount_total ?? 0,
     p_currency: session.currency ?? 'usd',
-    p_description: 'Usage credits',
+    p_description: isAiCredits ? 'AI usage credits' : 'Usage credits',
     p_payment_intent_id: paymentIntentId,
     p_charge_id: charge?.id ?? null,
     p_receipt_url: charge?.receipt_url ?? null,
@@ -256,6 +283,7 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   // versions; read whichever the account's version provides.
   const periodStart = toIso(item?.current_period_start ?? (sub as any).current_period_start);
   const periodEnd = toIso(item?.current_period_end ?? (sub as any).current_period_end);
+  await rememberRecurringPrice(admin, orgId, sub, periodStart);
 
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   const extraOnThisSub = extraSeatQuantityFromSubscription(sub);
@@ -377,14 +405,41 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
   await persistExtraFcSeats(admin, orgId, 0);
 }
 
+async function rememberRecurringPrice(
+  admin: any,
+  orgId: string,
+  sub: Stripe.Subscription,
+  periodStart: string | null,
+): Promise<void> {
+  const charge = recurringChargeFromItems(
+    (sub.items?.data ?? []).map((row) => {
+      const price = typeof row.price === 'object' && row.price ? row.price : null;
+      const interval = price?.recurring?.interval;
+      return {
+        unitAmountCents: price?.unit_amount ?? null,
+        quantity: row.quantity ?? 1,
+        interval: interval === 'year' || interval === 'month' || interval === 'week' || interval === 'day' ? interval : null,
+      };
+    }),
+  );
+  if (!charge) return;
+  await recordSubscriptionPriceSpan(admin, orgId, {
+    amountCents: charge.amountCents,
+    interval: charge.interval,
+    periodStart: periodStart ? new Date(periodStart) : null,
+  });
+}
+
 /**
  * A refund is recorded as its own history row rather than mutating the original
  * payment, so the customer's history shows both the charge and the money back.
- * Credits already spent are deliberately not clawed back automatically.
+ * A credit-pack refund debits the pack's cumulative refunded share. A later,
+ * larger refund on the same charge debits only the increase. Spent credits
+ * stop the balance at zero; the shortfall is recorded on the debit.
  */
-async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void> {
+async function onChargeRefunded(charge: Stripe.Charge, eventId: string, admin: any): Promise<void> {
   const orgId = requireAttributedOrg(
-    await resolveOrgId(admin, charge.metadata, charge.customer as string | null),
+    await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
     `charge ${charge.id}`,
   );
 
@@ -403,6 +458,55 @@ async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void
     p_card_last4: card.last4,
   });
   if (error) throw new Error(`refund record failed: ${error.message}`);
+
+  await syncCreditPackClawback(admin, orgId, {
+    eventId,
+    chargeId: charge.id,
+    chargeAmountCents: charge.amount ?? 0,
+    amountRefundedCents: charge.amount_refunded ?? 0,
+    metadata: charge.metadata,
+    note: `refund of credit pack ${charge.id}`,
+  });
+}
+
+/**
+ * An open or lost dispute claws back its share of the pack. A dispute closed
+ * as won restores that share, except the part a refund still covers. Status
+ * is kept per dispute id, so a later chargeback on the same charge still
+ * claws credits after a closed inquiry. The database keeps one running total
+ * per charge, so this cannot stack on a refund.
+ */
+async function onChargeDisputed(
+  dispute: Stripe.Dispute,
+  eventId: string,
+  eventCreated: number,
+  admin: any,
+): Promise<void> {
+  const charge =
+    typeof dispute.charge === 'string'
+      ? await stripeClient().charges.retrieve(dispute.charge)
+      : dispute.charge;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
+    `dispute ${dispute.id}`,
+  );
+  await syncCreditPackClawback(admin, orgId, {
+    eventId,
+    chargeId: charge.id,
+    chargeAmountCents: charge.amount ?? 0,
+    amountRefundedCents: charge.amount_refunded ?? 0,
+    metadata: charge.metadata,
+    disputeAmountCents: dispute.amount ?? 0,
+    disputeStatus: dispute.status,
+    disputeId: dispute.id,
+    eventAt: new Date(eventCreated * 1000),
+    note: `dispute ${dispute.id} ${dispute.status} on credit pack ${charge.id}`,
+  });
+}
+
+function stripeId(value: { id?: string } | string | null | undefined): string | null {
+  if (!value) return null;
+  return typeof value === 'string' ? value : (value.id ?? null);
 }
 
 /**

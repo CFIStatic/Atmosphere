@@ -26,6 +26,10 @@ test('one clip has one processing state on every surface', () => {
   assert.equal(clipProcessing({}).label, 'Recorded');
   assert.equal(clipProcessing({ failedChecks: 2 }).label, '2 checks failed');
   assert.equal(clipProcessing({ uploading: true, analysisStatus: 'done' }).label, 'Uploading');
+  assert.equal(
+    clipProcessing({ budgetHold: true, analysisStatus: 'queued', proofState: 'uploaded' }).label,
+    'Waiting for AI allowance',
+  );
 });
 
 test('library mismatches: a finished clip is not stuck on summary or Recorded', () => {

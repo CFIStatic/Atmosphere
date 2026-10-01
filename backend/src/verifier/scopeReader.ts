@@ -1,4 +1,4 @@
-import { anthropicClient } from '../lib/anthropic.js';
+import { anthropicClient, extractUsage, type MeasuredUsage } from '../lib/anthropic.js';
 import { config } from '../config.js';
 
 /**
@@ -34,6 +34,7 @@ export interface ScopeExtraction {
   /** Parts of the document the model could not read into lines. Owed, not hidden. */
   couldNotRead: string[];
   model: string;
+  usage?: MeasuredUsage | null;
 }
 
 export function scopeExtractionPrompt(): string {
@@ -137,5 +138,13 @@ export async function extractScopeFromDocument(input: {
     .filter((block: any) => block.type === 'text')
     .map((block: any) => block.text)
     .join('\n');
-  return parseScopeExtraction(text, response.model);
+  const parsed = parseScopeExtraction(text, response.model);
+  if (!parsed) return null;
+  let usage: MeasuredUsage | null = null;
+  try {
+    usage = extractUsage(response.usage);
+  } catch {
+    usage = null;
+  }
+  return { ...parsed, usage };
 }
