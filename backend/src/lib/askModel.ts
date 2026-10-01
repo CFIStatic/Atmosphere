@@ -24,6 +24,12 @@ import {
 import { googleVisionApiKey } from './visionProvider.js';
 import { logger } from './logger.js';
 import { isRetiredAnthropicModel, resolveAnthropicModel } from './anthropicModel.js';
+import {
+  anthropicCachedSystem,
+  asAnthropicSystem,
+  geminiCachedContentName,
+  geminiSystemPrefix,
+} from '../shared/askPromptCache.js';
 
 export type AskProvider = 'anthropic' | 'google' | 'unconfigured';
 
@@ -358,9 +364,17 @@ export function buildGeminiGenerationConfig(input: {
   return generationConfig;
 }
 
+function anthropicSystem(system: string, stable?: string | null): string | ReturnType<typeof asAnthropicSystem> {
+  const prefix = (stable ?? '').trim();
+  if (!prefix) return system;
+  return asAnthropicSystem(anthropicCachedSystem(system, prefix));
+}
+
 async function completeWithAnthropic(input: {
   apiKey: string;
   system: string;
+  /** Stable prefix cached with the system prompt. Omitted from the user text. */
+  stable?: string | null;
   user: string;
   maxTokens: number;
   onToken?: (text: string) => void;
@@ -371,6 +385,7 @@ async function completeWithAnthropic(input: {
   const model = (input.model ?? '').trim() || anthropicAskModel();
   const shaped = input.reasoning ? anthropicReasoningRequest(model) : null;
   const maxTokens = shaped?.max_tokens ?? input.maxTokens;
+  const system = anthropicSystem(input.system, input.stable);
   const extra = shaped
     ? {
         ...(shaped.thinking ? { thinking: shaped.thinking } : {}),
@@ -382,7 +397,7 @@ async function completeWithAnthropic(input: {
       {
         model,
         max_tokens: maxTokens,
-        system: input.system,
+        system,
         messages: [{ role: 'user', content: input.user }],
         ...extra,
       },
@@ -409,7 +424,7 @@ async function completeWithAnthropic(input: {
     {
       model,
       max_tokens: maxTokens,
-      system: input.system,
+      system,
       messages: [{ role: 'user', content: input.user }],
       ...extra,
     },
@@ -502,6 +517,7 @@ export async function requestGemini(input: {
 async function completeWithGemini(input: {
   apiKey: string;
   system: string;
+  stable?: string | null;
   user: string;
   maxTokens: number;
   mode: AskCompletionMode;
@@ -511,6 +527,16 @@ async function completeWithGemini(input: {
   signal?: AbortSignal;
 }): Promise<AskModelResult> {
   const requested = input.model || geminiAskModel(input.mode);
+  const stable = (input.stable ?? '').trim();
+  const cacheName = stable
+    ? geminiCachedContentName({
+        apiKey: input.apiKey,
+        model: requested,
+        system: input.system,
+        stable,
+        fetchFn: input.fetchFn,
+      })
+    : null;
   const posted = await requestGemini({
     apiKey: input.apiKey,
     model: requested,
@@ -519,10 +545,15 @@ async function completeWithGemini(input: {
     fetchFn: input.fetchFn,
     signal: input.signal,
     stream: Boolean(input.onToken),
-    body: {
-      system_instruction: { parts: [{ text: input.system }] },
-      contents: [{ role: 'user', parts: [{ text: input.user }] }],
-    },
+    body: cacheName
+      ? {
+          cachedContent: cacheName,
+          contents: [{ role: 'user', parts: [{ text: input.user }] }],
+        }
+      : {
+          system_instruction: { parts: [{ text: stable ? geminiSystemPrefix(input.system, stable) : input.system }] },
+          contents: [{ role: 'user', parts: [{ text: input.user }] }],
+        },
   });
   const model = posted.model;
   const response = posted.response;
@@ -623,12 +654,23 @@ async function completeWithGemini(input: {
 export async function completeAskText(input: {
   system: string;
   user: string;
+  /**
+   * Stable prefix cached with the system prompt (Anthropic cache_control,
+   * Gemini context cache when the prefix is long enough). The question stays
+   * in `user`.
+   */
+  stable?: string | null;
   anthropicApiKey?: string | null;
   maxTokens?: number;
   fetchFn?: typeof fetch;
   mode?: AskCompletionMode;
   onToken?: (text: string) => void;
   signal?: AbortSignal;
+  /**
+   * When set, a reasoning turn uses this absolute deadline instead of starting
+   * a new window. Research fallback passes the deadline captured when Ask began.
+   */
+  deadlineAt?: number;
   /** Overrides ANTHROPIC_MODEL for this call. Titles use the fast model. */
   anthropicModel?: string | null;
 }): Promise<AskModelResult | null> {
@@ -636,7 +678,10 @@ export async function completeAskText(input: {
   const reasoning = mode === 'reasoning';
   const { anthropicMax, geminiMax } = resolveMaxTokens({ maxTokens: input.maxTokens, mode });
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
-  const deadline = reasoning ? Date.now() + askReasoningTimeoutMs() : 0;
+  const freshDeadline = Date.now() + askReasoningTimeoutMs();
+  const deadline = reasoning ? Math.min(input.deadlineAt ?? freshDeadline, freshDeadline) : 0;
+  // Same floor as the lookup step: a turn that cannot finish is not started.
+  if (reasoning && deadline - Date.now() < 1500) return null;
   const signalFor = (): AbortSignal | undefined => {
     if (!reasoning) return input.signal;
     const left = deadline - Date.now();
@@ -649,6 +694,7 @@ export async function completeAskText(input: {
       return await completeWithAnthropic({
         apiKey: anthropicKey,
         system: input.system,
+        stable: input.stable,
         user: input.user,
         maxTokens: anthropicMax,
         onToken: input.onToken,
@@ -667,6 +713,7 @@ export async function completeAskText(input: {
       return await completeWithGemini({
         apiKey: googleKey,
         system: input.system,
+        stable: input.stable,
         user: input.user,
         maxTokens: geminiMax,
         mode: reasoning ? 'analysis' : mode,

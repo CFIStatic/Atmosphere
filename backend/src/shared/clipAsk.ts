@@ -13,7 +13,19 @@
  */
 import { isSpeechCountQuestion, speechCountContradictions, transcriptLineCount, transcriptLines } from './speechCount.js';
 import { answerQualityFailures, normalizeForMatch } from './askVerify.js';
-import { completeAskText, isAskModelConfigured } from '../lib/askModel.js';
+import { askReasoningTimeoutMs, completeAskText, isAskModelConfigured, logAskFailure } from '../lib/askModel.js';
+import { enforceQuoteGrounding } from './askQuoteGrounding.js';
+import { chunkClipTranscript } from './askTranscriptIndex.js';
+import {
+  ASK_RESEARCH_BUDGET_MS,
+  ASK_RESEARCH_SYNTHESIS_RESERVE_MS,
+  catalogFromClipRecord,
+  logAskResearch,
+  routeAskResearch,
+  runAskResearch,
+  type AskResearchTrace,
+  type ResearchComplete,
+} from './askResearch.js';
 import { activitySystemAddendum } from './mentions.js';
 import { ASK_PROSE_FORMAT_RULES, normalizeAskProse } from './askProse.js';
 import {
@@ -1613,12 +1625,27 @@ export async function answerFromClip(input: {
   supplement?: string | null;
   fetchFn?: typeof fetch;
   now?: Date;
+  /** Clip identity so research quotes name this proof. */
+  orgId?: string | null;
+  jobId?: string | null;
+  proofId?: string | null;
+  title?: string | null;
+  /** `off` keeps today's single pass. Default routes hard questions through research. */
+  researchMode?: 'auto' | 'off';
+  research?: {
+    now?: () => number;
+    maxSteps?: number;
+    budgetMs?: number;
+    synthesisReserveMs?: number;
+    complete?: ResearchComplete | null;
+  };
 }): Promise<{
   answer: string;
   model: string | null;
   usage: MeasuredUsage | null;
   webSources: AskWebSource[];
   webDerivedAnswer: boolean;
+  research?: AskResearchTrace | null;
 }> {
   input = { ...input, record: withAuthoritativeTranscript(speechSafeClipRecord(input.record)) };
   const grounded = groundedAnswerFromClip(input.question, input.record);
@@ -1629,6 +1656,50 @@ export async function answerFromClip(input: {
   }
   const talkQuestion = isWhatWasSaid(input.question) && hasUsableSpeech(input.record);
   const wantsWeb = !supplement && shouldSupplementWithWebSearch(input.question, grounded);
+  const askStarted = Date.now();
+  let researchFellBack = false;
+  if (input.researchMode !== 'off' && routeAskResearch(input.question).route === 'research') {
+    try {
+      const catalog = catalogFromClipRecord(input.record, {
+        orgId: input.orgId ?? undefined,
+        jobId: input.jobId ?? undefined,
+        proofId: input.proofId ?? undefined,
+        title: input.title ?? input.record.company ?? null,
+      });
+      const askWindow = askReasoningTimeoutMs();
+      const reserveMs = input.research?.synthesisReserveMs ?? Math.min(ASK_RESEARCH_SYNTHESIS_RESERVE_MS, askWindow);
+      const budgetMs = input.research?.budgetMs ?? Math.min(ASK_RESEARCH_BUDGET_MS, Math.max(0, askWindow - reserveMs));
+      const researched = await runAskResearch({
+        question: input.question,
+        catalog,
+        history: input.history,
+        extra: supplement || null,
+        fetchFn: input.fetchFn,
+        now: input.research?.now,
+        maxSteps: input.research?.maxSteps,
+        budgetMs,
+        synthesisReserveMs: reserveMs,
+        complete: input.research?.complete,
+      });
+      const chunks = catalog.clips.flatMap((clip) => chunkClipTranscript(clip));
+      const checked = enforceQuoteGrounding(researched.answer, { chunks, question: input.question }).answer.trim();
+      if (!checked) throw new Error('research_empty');
+      input.onToken?.(checked);
+      return {
+        answer: checked,
+        model: researched.model,
+        usage: researched.usage,
+        webSources: [],
+        webDerivedAnswer: false,
+        research: researched.meta,
+      };
+    } catch (err) {
+      logAskFailure('ask_research_fallback', err);
+      researchFellBack = true;
+      logAskResearch({ route: 'research', stopReason: 'fallback', steps: [], elapsedMs: 0 });
+    }
+  }
+  const fallbackLeft = () => askStarted + askReasoningTimeoutMs() - Date.now();
   if (!wantsWeb && !supplement && preferClipGroundedFastPath(input.question, grounded, input.record)) {
     input.onToken?.(grounded);
     return { answer: grounded, model: null, usage: null, webSources: [], webDerivedAnswer: false };
@@ -1659,8 +1730,18 @@ export async function answerFromClip(input: {
   let webAnswer = '';
   const groundedForWeb = grounded;
   if (!supplement && shouldSupplementWithWebSearch(input.question, groundedForWeb)) {
-    const outcome = await searchAskWebDetailed(input.question, {
-      fetchFn: input.fetchFn,
+    const left = researchFellBack ? fallbackLeft() : Number.POSITIVE_INFINITY;
+    const fallbackSignal = researchFellBack && left > 0 ? AbortSignal.timeout(left) : undefined;
+    const outcome = left <= 0
+      ? { hits: [], answer: '' }
+      : await searchAskWebDetailed(input.question, {
+      fetchFn: fallbackSignal
+        ? (url, init) => {
+            const base = input.fetchFn ?? fetch;
+            const signal = init?.signal ? AbortSignal.any([init.signal, fallbackSignal]) : fallbackSignal;
+            return base(url, { ...init, signal });
+          }
+        : input.fetchFn,
       limit: 5,
       includeDomains: includeDomainsForAsk(input.question),
       now: input.now,
@@ -1711,7 +1792,10 @@ export async function answerFromClip(input: {
     ? `\n\nWEB SEARCH RESULTS (public web — this clip's evidence wins and is never overridden):\n${formatAskWebContext(webHits, webAnswer)}`
     : '';
 
-  const completed = await completeAskText({
+  const clipFallbackSignal = researchFellBack ? AbortSignal.timeout(Math.max(1, fallbackLeft())) : undefined;
+  const completed = researchFellBack && fallbackLeft() < 1500
+    ? null
+    : await completeAskText({
     system:
       CLIP_QA_SYSTEM +
       `\n\n${askClockSystemRules(input.now ?? new Date(), 'America/Chicago')}` +
@@ -1734,6 +1818,7 @@ export async function answerFromClip(input: {
       `\n\nQuestion: ${input.question}`,
     mode: 'interactive',
     onToken: input.onToken,
+    signal: clipFallbackSignal,
   });
   if (!completed) {
     const fallback = jobFileFallback(webUsable);

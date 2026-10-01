@@ -1,6 +1,6 @@
 {
   "generatedFrom": {
-    "migrationCount": 173,
+    "migrationCount": 174,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
@@ -187,7 +187,8 @@
     "20260928190000_job_proofs_summary_provenance.sql",
     "20260929160000_ask_transcript_chunks.sql",
     "20260929203000_speaker_identification.sql",
-    "20260930180000_ask_web_sources.sql"
+    "20260930180000_ask_web_sources.sql",
+    "20261001120000_ask_research_trace.sql"
   ],
   "migrations": [
     {
@@ -5763,6 +5764,18 @@
       "indistinguishableReason": null,
       "expect": [
         "column|public.job_proof_questions.web_sources"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261001120000_ask_research_trace",
+      "file": "20261001120000_ask_research_trace.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "column|public.job_proof_questions.research_trace"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

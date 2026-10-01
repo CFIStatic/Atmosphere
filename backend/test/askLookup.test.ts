@@ -13,6 +13,7 @@ import {
   scrubProviderDetail,
 } from '../src/lib/askModel.js';
 import {
+  asksAboutCrossJob,
   asksAboutOtherJobs,
   buildLookupUserPrompt,
   continueAskLookup,
@@ -821,7 +822,7 @@ test('opus-5 lookup sends adaptive thinking and gemini retries without thinkingB
 
     anthropicBodies.length = 0;
     await answerFromAskLookup({
-      question: 'Compare the visits and draft an email to the homeowner',
+      question: 'Draft an email to the homeowner',
       catalog: file,
       anthropicApiKey: 'sk-ant-test-shape-key',
       fetchFn,
@@ -934,6 +935,10 @@ test('continueAskLookup opens a search hit and searches other jobs only when ask
   assert.ok(asked.some((step) => step.name === 'search_other_jobs'));
   assert.equal(asksAboutOtherJobs('what did El Presidente say about the tarp'), false);
   assert.equal(asksAboutOtherJobs('have we seen a tarp on other jobs'), true);
+  assert.equal(asksAboutOtherJobs('Compare this job to the last similar job.'), false);
+  assert.equal(asksAboutCrossJob('Compare this job to the last similar job.'), true);
+  assert.equal(asksAboutCrossJob('what about the last job'), true);
+  assert.equal(asksAboutCrossJob('compare the two visits'), false);
 });
 
 test('an email and an estimate do not invent a price or quote a redacted code', async () => {

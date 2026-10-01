@@ -62,7 +62,7 @@ import { prepareMentionAsk, recordContentMentions } from '../shared/mentionConte
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
 import {
   askLookupCatalogFromJob,
-  asksAboutOtherJobs,
+  asksAboutCrossJob,
   clipFromProofRow,
   lookupPeopleFromContexts,
   mergeJobAskPeople,
@@ -2832,7 +2832,7 @@ export async function runProofAsk(input: {
     })();
 
     const otherJobsPromise =
-      askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted
+      askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted
         ? supabase
             .from('job_proofs')
             .select(
@@ -3278,7 +3278,7 @@ export async function runProofAsk(input: {
         clips: memoryClips,
       }),
     });
-    if (askAccess === 'org' && asksAboutOtherJobs(input.question) && !input.signal?.aborted) {
+    if (askAccess === 'org' && asksAboutCrossJob(input.question) && !input.signal?.aborted) {
       const rows = ((otherJobsRes?.data ?? []) as Array<Record<string, unknown>>).filter((row) => !row.deleted_at);
       const jobIds = [...new Set(rows.map((row) => String(row.job_id ?? '')).filter(Boolean))];
       const titles = new Map<string, string>();
@@ -3314,6 +3314,7 @@ export async function runProofAsk(input: {
           toolResults: [] as unknown[],
           answeredFromLookup: false,
           webDerivedAnswer: false,
+          research: null,
         }
       : await answerFromJobFile({
       question: input.question,
@@ -3400,6 +3401,7 @@ export async function runProofAsk(input: {
         model: result.model,
         grounded_on: groundedOn,
         web_sources: webSources,
+        research_trace: result.research ?? null,
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
       })

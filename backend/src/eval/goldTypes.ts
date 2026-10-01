@@ -13,7 +13,8 @@ export type GoldQuestionType =
   | 'temporal_order'
   | 'negative'
   | 'false_premise'
-  | 'speaker_source';
+  | 'speaker_source'
+  | 'multi_hop';
 
 export type GoldCategory =
   | 'walkthrough'
@@ -83,6 +84,8 @@ export type GoldJob = {
     job: { id: string; org_id: string; title: string };
     parties: Array<Record<string, unknown>>;
     proofs: Array<Record<string, unknown>>;
+    /** Other jobs in the same org. Synthetic only. Ask may read these on a cross-job question. */
+    orgProofs?: Array<Record<string, unknown>>;
   };
   questions: GoldQuestion[];
 };

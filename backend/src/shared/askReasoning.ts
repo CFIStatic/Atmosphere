@@ -69,6 +69,15 @@ import { normalizeAskSources, parseSourceTrailerIds } from './askSources.js';
 import { formatThreadMemoryForPrompt, type LongThreadMemory } from './askMemory.js';
 import { fastAnswerNeedsDeepFallback, routeAskQuestion, type AskModelRoute } from './askRoute.js';
 import {
+  ASK_RESEARCH_BUDGET_MS,
+  ASK_RESEARCH_SYNTHESIS_RESERVE_MS,
+  logAskResearch,
+  routeAskResearch,
+  runAskResearch,
+  type AskResearchTrace,
+  type ResearchComplete,
+} from './askResearch.js';
+import {
   anthropicCachedSystem,
   asAnthropicSystem,
   geminiCachedContentName,
@@ -82,7 +91,7 @@ import {
   retrievedChunksFor,
 } from './askEvidenceAnswer.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
+import { chunkClipTranscript, retrieveAskEvidence, type TranscriptChunk } from './askTranscriptIndex.js';
 import {
   ASK_REPAIR_SYSTEM,
   buildGroundingIndex,
@@ -626,6 +635,12 @@ async function geminiLookupTurn(input: {
   return turn;
 }
 
+/** Absolute time the single pass must stop. Fast turns stay inside 18s of the Ask timeout. */
+export function askLookupDeadlineAt(startedAt: number, route: AskModelRoute, timeoutMs = askReasoningTimeoutMs()): number {
+  const windowMs = route === 'fast' ? Math.min(timeoutMs, 18_000) : timeoutMs;
+  return startedAt + windowMs;
+}
+
 export function providerLookupStep(input: {
   anthropicApiKey?: string | null;
   fetchFn?: typeof fetch;
@@ -633,6 +648,11 @@ export function providerLookupStep(input: {
   /** Fast turns skip thinking. Deep turns keep adaptive thinking, then Gemini. */
   route?: AskModelRoute;
   onCache?: (state: 'hit' | 'miss' | 'skip') => void;
+  /**
+   * When set, the turn uses this absolute deadline instead of starting a new
+   * window. Research fallback passes the deadline captured when Ask began.
+   */
+  deadlineAt?: number;
 }): LookupModelStep {
   const route = input.route ?? 'deep';
   const anthropicKey = (input.anthropicApiKey ?? anthropicAskApiKey()).trim();
@@ -655,7 +675,7 @@ export function providerLookupStep(input: {
     : googleVisionApiKey()
       ? 'google'
       : 'none';
-  const deadline = Date.now() + (route === 'fast' ? Math.min(askReasoningTimeoutMs(), 18_000) : askReasoningTimeoutMs());
+  const deadline = input.deadlineAt ?? askLookupDeadlineAt(Date.now(), route);
   return async (state) => {
     const left = deadline - Date.now();
     if (left < 1500) return null;
@@ -870,6 +890,19 @@ export async function answerFromAskLookup(input: {
   timing?: AskTurnClock | null;
   /** Test double for the one grounding repair pass. Production uses the Ask model. */
   repair?: (input: { system: string; user: string }) => Promise<string | null>;
+  /**
+   * `off` keeps the single pass (latency comparisons). Default routes hard
+   * questions through the research loop.
+   */
+  researchMode?: 'auto' | 'off';
+  /** Test doubles for the research loop. Production leaves these unset. */
+  research?: {
+    now?: () => number;
+    maxSteps?: number;
+    budgetMs?: number;
+    synthesisReserveMs?: number;
+    complete?: ResearchComplete | null;
+  };
 }): Promise<{
   answer: string;
   model: string | null;
@@ -879,6 +912,8 @@ export async function answerFromAskLookup(input: {
   answeredFromLookup: true;
   /** Transcript chunks this Ask retrieved. The final quote check verifies against these. */
   retrievedChunks: TranscriptChunk[];
+  /** Compact research trace for debugging. Absent on the single pass. */
+  research?: AskResearchTrace | null;
 }> {
   const resolved = resolveAskQuestion(input.question, input.history, input.catalog);
   const memoryBlock = formatThreadMemoryForPrompt(input.memory, input.catalog.timeZone);
@@ -924,8 +959,55 @@ export async function answerFromAskLookup(input: {
     );
     trace.push(...rows);
   };
-  input.onStatus?.('Looking through clips…');
   let forcedOther = false;
+  let researchMeta: AskResearchTrace | null = null;
+  let researchFellBack = false;
+  const askStarted = Date.now();
+  const researchDecision =
+    input.researchMode === 'off' ? { route: 'single' as const, reason: 'off' } : routeAskResearch(resolved);
+  if (researchDecision.route === 'research' && !stopped()) {
+    try {
+      const askWindow = askReasoningTimeoutMs();
+      const reserveMs =
+        input.research?.synthesisReserveMs ?? Math.min(ASK_RESEARCH_SYNTHESIS_RESERVE_MS, askWindow);
+      const budgetMs =
+        input.research?.budgetMs ?? Math.min(ASK_RESEARCH_BUDGET_MS, Math.max(0, askWindow - reserveMs));
+      const researched = await runAskResearch({
+        question: resolved,
+        catalog: input.catalog,
+        history: input.history,
+        memory: input.memory,
+        extra: input.extra,
+        anthropicApiKey: input.anthropicApiKey,
+        fetchFn: input.fetchFn,
+        signal: input.signal,
+        now: input.research?.now,
+        maxSteps: input.research?.maxSteps,
+        budgetMs,
+        synthesisReserveMs: reserveMs,
+        complete: input.research?.complete,
+      });
+      if (!researched.answer.trim()) throw new Error('research_empty');
+      prose = researched.answer;
+      model = researched.model;
+      usage = researched.usage;
+      if (model) input.timing?.noteModel(model);
+      trace.push(...researched.traceSteps);
+      researchMeta = researched.meta;
+      streamed = false;
+      input.timing?.noteRoute('deep', `research_${researched.meta.stopReason}`);
+    } catch (err) {
+      logAskFailure('ask_research_fallback', err);
+      prose = '';
+      model = null;
+      researchFellBack = true;
+      researchMeta = { route: 'research', stopReason: 'fallback', steps: [], elapsedMs: 0 };
+      logAskResearch(researchMeta);
+      input.timing?.noteRoute('deep', 'research_fallback', true);
+    }
+  }
+  if (!prose) {
+  input.onStatus?.('Looking through clips…');
   const consume = async (
     active: LookupModelStep,
     userText: string,
@@ -987,6 +1069,7 @@ export async function answerFromAskLookup(input: {
         fetchFn: input.fetchFn,
         onToken,
         onCache: (state) => input.timing?.noteGeminiCache(state),
+        deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, route) : undefined,
       });
     if (decision.route === 'fast') {
       await consume(stepFor('fast'), parts.volatile, 3, withAskSituation(LOOKUP_SYSTEM_FAST, input.catalog.timeZone));
@@ -1025,6 +1108,7 @@ export async function answerFromAskLookup(input: {
       anthropicApiKey: input.anthropicApiKey,
       fetchFn: input.fetchFn,
       mode: 'reasoning',
+      deadlineAt: researchFellBack ? askLookupDeadlineAt(askStarted, 'deep') : undefined,
       onToken,
     });
     if (completed?.text) {
@@ -1040,8 +1124,23 @@ export async function answerFromAskLookup(input: {
       streamed = false;
     }
   }
+  }
 
   const retrievedChunks = retrievedChunksFor(evidence, trace, `${fullUser}\n\n${formatTrace(trace)}`);
+  if (input.catalog.access !== 'viewer') {
+    const opened = new Set<string>();
+    for (const step of trace) {
+      if (step.tool !== 'get_clip' || !step.result.ok) continue;
+      const id = (step.result.data as { proofId?: unknown } | undefined)?.proofId;
+      if (typeof id === 'string' && id) opened.add(id);
+    }
+    for (const clip of input.catalog.orgClips ?? []) {
+      if (clip.orgId !== input.catalog.orgId || !opened.has(clip.proofId)) continue;
+      for (const chunk of chunkClipTranscript(clip)) {
+        if (!retrievedChunks.some((row) => row.key === chunk.key)) retrievedChunks.push(chunk);
+      }
+    }
+  }
   if (stopped()) {
     return {
       answer: stripExternalAskLinks(scrubStoredAskText(prose, input.catalog.clips)),
@@ -1051,6 +1150,7 @@ export async function answerFromAskLookup(input: {
       followUps: [],
       answeredFromLookup: true,
       retrievedChunks,
+      research: researchMeta,
     };
   }
 
@@ -1090,5 +1190,6 @@ export async function answerFromAskLookup(input: {
     followUps: finalized.followUps,
     answeredFromLookup: true,
     retrievedChunks,
+    research: researchMeta,
   };
 }

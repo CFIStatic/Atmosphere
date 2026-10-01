@@ -8,7 +8,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { collectionClipsFromRows } from '../shared/proofAnalyst.js';
-import { askLookupCatalogFromJob } from '../shared/askLookup.js';
+import { askLookupCatalogFromJob, clipFromProofRow } from '../shared/askLookup.js';
 import { answerFromJobFile, type JobFileAskContext } from '../shared/jobFileAsk.js';
 import { answerFromAskLookup } from '../shared/askReasoning.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
@@ -66,6 +66,13 @@ export const defaultJobAnswerFn: JobAnswerFn = async (question, job) => {
     jobTitle: fixture.job.title,
     timeZone: job.timeZone ?? 'America/Chicago',
     people: [],
+    orgClips: (fixture.orgProofs ?? []).map((row) =>
+      clipFromProofRow(row, {
+        orgId: String(row.org_id ?? fixture.job.org_id),
+        jobId: String(row.job_id ?? ''),
+        jobTitle: row.job_title ? String(row.job_title) : null,
+      }),
+    ),
   } as any);
   if (!isAskModelConfigured()) {
     // Deterministic run: the job Ask lookup pipeline with every model call
@@ -108,7 +115,7 @@ export const defaultJobAnswerFn: JobAnswerFn = async (question, job) => {
 /** The whole job's transcript as one record, so the clip scorer can check grounding. */
 export function jobEvidenceRecord(job: GoldJob): ClipAskRecord {
   const lines: string[] = [];
-  for (const row of job.fixture.proofs) {
+  for (const row of [...job.fixture.proofs, ...(job.fixture.orgProofs ?? [])]) {
     const segments = askTimed(row.transcript_segments);
     if (segments.length) {
       for (const seg of segments) lines.push(`[${formatAskClock(seg.start)}] ${seg.text}`);
