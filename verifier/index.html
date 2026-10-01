@@ -2016,12 +2016,33 @@
     0%, 80%, 100% { transform: translateY(0); opacity: .4; }
     40% { transform: translateY(-3px); opacity: 1; }
   }
-  .ask-doc {
-    align-self: stretch; border: 1px solid var(--line); border-radius: 12px;
-    padding: 8px 10px; background: var(--panel); font-size: 12.5px; line-height: 1.45;
+  .ask-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+  .ask-chips.message { justify-content: flex-end; margin: 0 0 6px; }
+  .ask-chip {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--panel); color: var(--ink);
+    padding: 4px 10px; font-size: 12px; line-height: 1.2;
+    box-shadow: 0 1px 1px rgba(28, 25, 23, .04);
   }
-  .ask-doc strong { display: block; font-size: 13px; }
-  .ask-doc .ask-doc-kind { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .ask-chip svg { flex: none; }
+  .ask-chip-name {
+    max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 650;
+  }
+  .ask-chip-type {
+    flex: none; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; opacity: .7;
+  }
+  .ask-chip-x {
+    display: grid; place-items: center; width: 16px; height: 16px; flex: none;
+    border: 0; border-radius: 999px; background: transparent; color: var(--ink-2);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .ask-chip-x:hover { background: var(--line-soft); color: var(--ink); }
+  .ask-bubble.user .ask-chip {
+    border-color: rgba(255,255,255,.15); background: rgba(255,255,255,.1); color: #fff;
+    box-shadow: none;
+  }
   .ask-attach {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
     border-radius: 999px; width: 34px; height: 34px; flex: none;
@@ -7865,16 +7886,87 @@
     return out;
   }
 
-  function chatDocCard(doc) {
+  var ASK_FILE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M7 3.5h7l5 5V20a1.5 1.5 0 01-1.5 1.5H7A1.5 1.5 0 015.5 20V5A1.5 1.5 0 017 3.5z" stroke="currentColor" stroke-width="1.6"></path>' +
+    '<path d="M14 3.5V9h5.5" stroke="currentColor" stroke-width="1.6"></path></svg>';
+  var QUIET_DOCUMENT_NOTE = "This document doesn't appear to be about this job.";
+
+  function askUuid(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''))
+      ? String(value) : null;
+  }
+
+  function askChipTypeLabel(doc) {
+    var filename = String((doc && doc.filename) || '');
+    var ext = '';
+    var dot = filename.lastIndexOf('.');
+    if (dot > 0 && dot < filename.length - 1) ext = filename.slice(dot + 1).trim().toUpperCase();
+    if (ext && ext.length <= 5 && ext !== filename.toUpperCase()) return ext;
+    var kind = String((doc && doc.kindLabel) || '').trim();
+    return kind ? kind.toUpperCase() : 'FILE';
+  }
+
+  function askChipVisibleType(label) {
+    var value = String(label || '').trim();
+    if (!value || /^(document|file|other)$/i.test(value)) return '';
+    return value;
+  }
+
+  function askAttachmentChip(doc, opts) {
     if (!doc) return '';
-    var verdict = doc.relevance === 'related'
-      ? 'Related to this job'
-      : doc.relevance === 'pending_confirm'
-        ? 'Confirm before attaching'
-        : 'Not related';
-    return '<div class="ask-doc" data-testid="ask-document-card"><strong>' + esc(doc.filename || 'Document') +
-      '</strong><div class="ask-doc-kind">' + esc(doc.kindLabel || 'Document') + ' · ' + esc(verdict) +
-      '</div><div>' + esc(doc.summary || doc.relevanceReason || '') + '</div></div>';
+    var filename = String(doc.filename || 'Document');
+    var remove = Boolean(opts && opts.remove);
+    var typeLabel = remove ? '' : askChipVisibleType(askChipTypeLabel(doc));
+    return '<span class="ask-chip" data-testid="ask-attachment-chip" data-filename="' + esc(filename) + '">' +
+      ASK_FILE_ICON +
+      '<span class="ask-chip-name">' + esc(filename) + '</span>' +
+      (typeLabel ? '<span class="ask-chip-type">' + esc(typeLabel) + '</span>' : '') +
+      (remove
+        ? '<button type="button" class="ask-chip-x" data-remove-doc="' + esc(String(doc.id || '')) + '" aria-label="Remove ' + esc(filename) + '">×</button>'
+        : '') +
+      '</span>';
+  }
+
+  function askChipsHtml(docs, opts) {
+    var list = docs || [];
+    if (!list.length) return '';
+    var chips = '';
+    for (var i = 0; i < list.length; i++) chips += askAttachmentChip(list[i], opts);
+    var testid = opts && opts.remove ? 'ask-composer-attachments' : 'ask-message-attachments';
+    var cls = 'ask-chips' + (opts && opts.message ? ' message' : '');
+    return '<div class="' + cls + '" data-testid="' + testid + '">' + chips + '</div>';
+  }
+
+  function rememberSessionDocs(item, docs) {
+    var session = ((item && item._chatDocs) || []).slice();
+    (docs || []).forEach(function (doc) {
+      if (!doc || session.length >= 8) return;
+      var id = String(doc.id || '');
+      if (session.some(function (row) { return row && String(row.id || '') === id; })) return;
+      session.push(doc);
+    });
+    item._chatDocs = session;
+  }
+
+  function sessionAskDocumentIds(item) {
+    var ids = [];
+    var seen = {};
+    var list = (item && item._chatDocs) || [];
+    for (var i = 0; i < list.length && ids.length < 8; i++) {
+      var id = String((list[i] && list[i].id) || '');
+      if (!askUuid(id) || seen[id]) continue;
+      seen[id] = true;
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function threadAlreadyQuiet(thread) {
+    var list = thread || [];
+    for (var i = 0; i < list.length; i++) {
+      if (String((list[i] && list[i].text) || '').indexOf(QUIET_DOCUMENT_NOTE) >= 0) return true;
+    }
+    return false;
   }
 
   function renderAsk(item) {
@@ -7895,12 +7987,14 @@
         '</div>';
     } else {
       thread.forEach(function (m) {
-        html += '<div class="ask-bubble ' + esc(m.role) + '">' +
-          (m.role === 'user' ? renderMentionHtml(m.text) : renderAskMarkdown(m.text, [item.customTitle, item.aiTitle, item.title]) + renderAskWebResults(m.webSources)) + '</div>';
+        var body = m.role === 'user'
+          ? askChipsHtml(m.attachments, { message: true }) + renderMentionHtml(m.text)
+          : renderAskMarkdown(m.text, [item.customTitle, item.aiTitle, item.title]) + renderAskWebResults(m.webSources);
+        html += '<div class="ask-bubble ' + esc(m.role) + '">' + body + '</div>';
       });
     }
     html += '</div>';
-    (item._chatDocs || []).forEach(function (doc) { html += chatDocCard(doc); });
+    html += askChipsHtml(item._pendingDocs, { remove: true });
     html += '<form id="ask-form" class="ask-form">' +
       '<input id="ask-file" type="file" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.md,.rtf,.jpg,.jpeg,.png,.heic,.webp" />' +
       '<button type="button" id="ask-attach" class="ask-attach" aria-label="Attach a document">+</button>' +
@@ -7918,11 +8012,8 @@
     function uploadChatFiles(fileList) {
       var files = Array.prototype.slice.call(fileList || []);
       if (!files.length || !ORG_MODE) return;
-          var job = item && (item.jobId || item.job);
-          function asUuid(value) {
-            return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '')) ? String(value) : null;
-          }
-          files.forEach(function (file) {
+      var job = item && (item.jobId || item.job);
+      files.forEach(function (file) {
         var reader = new FileReader();
         reader.onload = function () {
           var result = String(reader.result || '');
@@ -7934,16 +8025,16 @@
             body: JSON.stringify({
               filename: file.name,
               contentBase64: contentBase64,
-              jobId: asUuid(job),
-              proofId: asUuid(item && item.id)
+              jobId: askUuid(job),
+              proofId: askUuid(item && item.id)
             })
           }).then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
             .then(function (res) {
-              if (!res.ok) {
+              if (!res.ok || !res.body || !res.body.document) {
                 window.alert((res.body && res.body.error) || 'Could not read that file.');
                 return;
               }
-              item._chatDocs = (item._chatDocs || []).concat([res.body.document]);
+              item._pendingDocs = (item._pendingDocs || []).concat([res.body.document]).slice(0, 8);
               if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
             })
             .catch(function () { window.alert('Could not read that file.'); });
@@ -7978,13 +8069,25 @@
         uploadChatFiles(files);
       });
     }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-remove-doc]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-remove-doc') || '';
+        item._pendingDocs = (item._pendingDocs || []).filter(function (doc) {
+          return String((doc && doc.id) || '') !== id;
+        });
+        if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
+      });
+    });
     function send(text) {
       var q = String(text || '').trim();
       if (q.length < 3) return;
       if (item._askBusy) return;
       item._askBusy = true;
+      var pendingDocs = (item._pendingDocs || []).slice();
+      item._pendingDocs = [];
+      rememberSessionDocs(item, pendingDocs);
       var thread = ASK_THREADS[item.id] || [];
-      thread.push({ role: 'user', text: q });
+      thread.push({ role: 'user', text: q, attachments: pendingDocs });
       ASK_THREADS[item.id] = thread;
       var history = thread.slice(0, -1).map(function (m) {
         return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
@@ -7993,8 +8096,9 @@
       var host = document.getElementById('ask-thread');
       var formEl = document.getElementById('ask-form');
       var submitBtn = formEl && formEl.querySelector('button[type="submit"]');
+      var liveInput = document.getElementById('ask-input');
       if (submitBtn) submitBtn.disabled = true;
-      if (input) input.disabled = true;
+      if (liveInput) liveInput.disabled = true;
       if (host) {
         var pending = document.createElement('div');
         pending.className = 'ask-bubble assistant pending';
@@ -8002,17 +8106,47 @@
         pending.id = 'ask-pending';
         host.appendChild(pending);
       }
-      askClip(item, q, history, function (_err, answer, webSources) {
+      function finishAsk(answer, webSources) {
         item._askBusy = false;
-        if (submitBtn) submitBtn.disabled = false;
-        if (input) {
-          input.disabled = false;
-          input.focus();
+        var doneInput = document.getElementById('ask-input');
+        var doneSubmit = document.querySelector('#ask-form button[type="submit"]');
+        if (doneSubmit) doneSubmit.disabled = false;
+        if (doneInput) {
+          doneInput.disabled = false;
+          doneInput.focus();
         }
         thread.push({ role: 'assistant', text: answer, webSources: webSources || [] });
         ASK_THREADS[item.id] = thread;
         if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
-      });
+      }
+      function askTheClip() {
+        askClip(item, q, history, function (_err, answer, webSources) {
+          finishAsk(answer, webSources);
+        });
+      }
+      var sessionIds = sessionAskDocumentIds(item);
+      if (ORG_MODE && sessionIds.length) {
+        var payload = {
+          question: q,
+          documentIds: sessionIds,
+          quietNote: !threadAlreadyQuiet(history)
+        };
+        var jobUuid = askUuid(item && (item.jobId || item.job));
+        if (jobUuid) payload.jobId = jobUuid;
+        apiFetch('/api/operations/documents/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (r) {
+          return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+        }).then(function (res) {
+          var answer = res.ok && res.body && typeof res.body.answer === 'string' ? res.body.answer.trim() : '';
+          if (answer) finishAsk(answer, []);
+          else askTheClip();
+        }).catch(function () { askTheClip(); });
+        return;
+      }
+      askTheClip();
     }
     var roster = [];
     var rosterLoaded = false;
