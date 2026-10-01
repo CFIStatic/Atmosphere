@@ -1344,8 +1344,106 @@
     color: var(--faint);
   }
 
-  /* Phone All videos: one compact card per job, not a stacked desktop table. */
+  /* Desktop All videos: fixed tracks so opening a job folder cannot
+     remeasure columns from clip thumbnails or long titles. Folder rows
+     keep the same type size, padding, and height either way. Clip titles
+     truncate in the job-name track. Action icons stay in the uploader track.
+     Percentages (sum 84%) are the tracks from 641px up. Table-layout:fixed
+     ignores min()/max(), and the old 128+196+132+228px tracks (684px) run
+     past the pane once the rail and .tablewrap padding are subtracted.
+     !important beats the inline preview/recorded widths on the ths. */
+  @media (min-width: 641px) {
+    #clip-table {
+      table-layout: fixed;
+      width: 100%;
+      max-width: 100%;
+    }
+    #clip-table .col-preview,
+    #clip-table th[data-sort-key="preview"] { width: 18% !important; }
+    #clip-table .col-status,
+    #clip-table th[data-sort-key="status"] { width: 20% !important; }
+    #clip-table .col-recorded,
+    #clip-table th[data-sort-key="recorded"] { width: 14% !important; }
+    #clip-table .col-uploader,
+    #clip-table th[data-sort-key="uploader"] { width: 32% !important; }
+    #clip-table .titlecell { min-width: 0; }
+    #clip-table th,
+    #clip-table td { overflow: hidden; }
+    #clip-table tr.jobrow td {
+      height: 49px;
+      padding: 7px 10px;
+      box-sizing: border-box;
+    }
+    #clip-table tr.jobrow td.jobpreview { width: auto; padding-right: 4px; }
+    #clip-table tr.jobrow td.titlecell .t {
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    #clip-table tr.cliprow > td:first-child {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    #clip-table tr.cliprow .thumb {
+      width: 112px;
+      max-width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+    }
+    #clip-table td.job-status .chip {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #clip-table td.titlecell,
+    #clip-table th:nth-child(2) {
+      overflow: hidden;
+    }
+    #clip-table .clip-title-row { min-width: 0; }
+    #clip-table tr.cliprow td.titlecell .t,
+    #clip-table .clip-title-row .t {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #clip-table td.job-who .cellrow {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+    }
+    #clip-table td.job-who .cellrow > span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #clip-table td.job-who .job-acts,
+    #clip-table td.job-who .cellrow > .kebab {
+      margin-left: auto;
+      flex: none;
+    }
+  }
+
+  /* Wide desktop: the 684px tracks fit beside the rail with a job-name
+     column left over. Below this, those pixels overflow the pane. */
+  @media (min-width: 1200px) {
+    #clip-table .col-preview,
+    #clip-table th[data-sort-key="preview"] { width: 128px !important; }
+    #clip-table .col-status,
+    #clip-table th[data-sort-key="status"] { width: 196px !important; }
+    #clip-table .col-recorded,
+    #clip-table th[data-sort-key="recorded"] { width: 132px !important; }
+    #clip-table .col-uploader,
+    #clip-table th[data-sort-key="uploader"] { width: 228px !important; }
+  }
+
+  /* Phone All videos: one compact card per job, not a stacked desktop table.
+     Desktop column tracks must not participate — a colgroup pins each
+     grid row to the preview track and the card collapses. */
   @media (max-width: 640px) {
+    #clip-table colgroup,
+    #clip-table col { display: none !important; }
     .toolbar { padding: 10px 14px 8px; gap: 6px 10px; }
     .toolbar h1 { font-size: 18px; }
     .tablewrap { padding: 10px 12px 36px; }
@@ -2139,6 +2237,13 @@
   <main class="main">
     <div class="tablewrap">
       <table id="clip-table">
+        <colgroup>
+          <col class="col-preview" />
+          <col class="col-job" />
+          <col class="col-status" />
+          <col class="col-recorded" />
+          <col class="col-uploader" />
+        </colgroup>
         <thead>
           <tr id="colheads">
             <th style="width:128px" data-sort-key="preview" aria-sort="none"><button type="button">Preview <span class="sortcaret" aria-hidden="true">↕</span></button></th>
