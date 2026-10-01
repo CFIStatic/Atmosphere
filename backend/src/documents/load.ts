@@ -2,8 +2,22 @@
  * Rows from job_chat_documents, shaped for Ask.
  * A missing table returns nothing so Ask still answers while a migration is applying.
  */
-import type { AskDocumentView } from './answer.js';
+import { chatDocumentInJobScope, type AskDocumentView } from './answer.js';
 import type { DocumentFacts, ExtractedChunk } from './types.js';
+
+/**
+ * Job-file Ask, including a progress-share link, only sees documents attached
+ * to this job. A file left unattached, or attached to a different job, adds
+ * nothing — not its text, name, or relevance note.
+ */
+export function chatDocumentsForJobFile(rows: unknown, jobId: string): AskDocumentView[] {
+  if (!Array.isArray(rows)) return [];
+  const scoped = rows.filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    return chatDocumentInJobScope(row as { job_id?: string | null }, jobId);
+  });
+  return viewsFromChatRows(scoped);
+}
 
 export function viewsFromChatRows(rows: unknown): AskDocumentView[] {
   if (!Array.isArray(rows)) return [];

@@ -57,7 +57,7 @@ import {
   type JobFileAskContext,
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
-import { viewsFromChatRows } from '../documents/load.js';
+import { chatDocumentsForJobFile } from '../documents/load.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -2936,7 +2936,7 @@ export async function runProofAsk(input: {
         .from('job_chat_documents')
         .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id')
         .eq('org_id', orgId)
-        .or(`job_id.eq.${jobId},context_job_id.eq.${jobId}`)
+        .eq('job_id', jobId)
         .order('created_at', { ascending: false })
         .limit(24),
       (async () => {
@@ -3168,7 +3168,7 @@ export async function runProofAsk(input: {
             extractedText: extractedDocumentText(row.extracted),
           }))
           .filter((doc) => doc.extractedText),
-        ...viewsFromChatRows(chatDocRes.error ? [] : chatDocRes.data),
+        ...chatDocumentsForJobFile(chatDocRes.error ? [] : chatDocRes.data, jobId),
       ],
       clips,
     };

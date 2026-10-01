@@ -111,6 +111,7 @@ function parseObjects(bytes: Buffer): Map<number, PdfObj> {
   let match: RegExpExecArray | null;
   while ((match = re.exec(src))) starts.push({ id: Number(match[1]), index: match.index + match[0].length });
   const objects = new Map<number, PdfObj>();
+  let produced = 0;
   for (let i = 0; i < starts.length; i += 1) {
     const start = starts[i]!.index;
     const end = src.indexOf('endobj', start);
@@ -128,21 +129,51 @@ function parseObjects(bytes: Buffer): Map<number, PdfObj> {
     if (bytes[dataEnd - 1] === 0x0a) dataEnd -= 1;
     if (bytes[dataEnd - 1] === 0x0d) dataEnd -= 1;
     const raw = bytes.slice(dataStart, Math.max(dataStart, dataEnd));
-    objects.set(starts[i]!.id, { body, stream: decodeStream(body, raw) });
+    const stream = decodeStream(body, raw, DOCUMENT_LIMITS.maxUnzippedBytes - produced);
+    produced += stream.length;
+    if (produced > DOCUMENT_LIMITS.maxUnzippedBytes) throw streamTooLarge();
+    objects.set(starts[i]!.id, { body, stream });
   }
   return objects;
 }
 
-function decodeStream(body: string, raw: Buffer): Buffer {
-  if (!/\/FlateDecode\b/.test(body) || !raw.length) return raw;
+function streamTooLarge(): DocumentReadError {
+  const mb = Math.round(DOCUMENT_LIMITS.maxUnzippedBytes / (1024 * 1024));
+  return new DocumentReadError(`This file is over the ${mb} MB limit.`, 'too_large');
+}
+
+function outputCapped(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && 'code' in err && (err as { code?: unknown }).code === 'ERR_BUFFER_TOO_LARGE');
+}
+
+/** Inflate one stream inside the same per-entry and total caps as a zip part. */
+function decodeStream(body: string, raw: Buffer, room: number): Buffer {
+  if (room < 1) throw streamTooLarge();
+  const cap = Math.min(DOCUMENT_LIMITS.maxZipEntryBytes, room);
+  if (!/\/FlateDecode\b/.test(body) || raw.length === 0) {
+    if (raw.length > cap) throw streamTooLarge();
+    return raw;
+  }
+  const inflated = inflateFlate(raw, cap);
+  if (inflated) {
+    if (inflated.length > cap) throw streamTooLarge();
+    return inflated;
+  }
+  if (raw.length > cap) throw streamTooLarge();
+  return raw;
+}
+
+function inflateFlate(raw: Buffer, cap: number): Buffer | null {
   try {
-    return inflateSync(raw);
-  } catch {
-    try {
-      return inflateRawSync(raw);
-    } catch {
-      return raw;
-    }
+    return inflateSync(raw, { maxOutputLength: cap });
+  } catch (err) {
+    if (outputCapped(err)) throw streamTooLarge();
+  }
+  try {
+    return inflateRawSync(raw, { maxOutputLength: cap });
+  } catch (err) {
+    if (outputCapped(err)) throw streamTooLarge();
+    return null;
   }
 }
 

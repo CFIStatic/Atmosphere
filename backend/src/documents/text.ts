@@ -2,11 +2,12 @@
  * Plain text, markdown, CSV, and RTF.
  * RTF control words are stripped. Embedded objects are dropped, never opened.
  */
+import { stripWebControlMarkers } from '../shared/askWebSearch.js';
 import { DOCUMENT_LIMITS } from './limits.js';
 import { DocumentReadError, type ExtractedChunk, type ExtractionResult } from './types.js';
 
 export function sanitizeExtractedText(value: string): string {
-  return value
+  return stripWebControlMarkers(value)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
