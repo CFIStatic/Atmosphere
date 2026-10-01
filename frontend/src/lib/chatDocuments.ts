@@ -29,6 +29,39 @@ const MAX_BYTES = 25 * 1024 * 1024;
 
 export type UploadPhase = 'reading' | 'uploading' | 'checking';
 
+export type AskAttachment = {
+  id: string;
+  filename: string;
+  typeLabel: string;
+};
+
+/** Quiet line the answer may add when the upload is not about this job. */
+export const QUIET_DOCUMENT_NOTE = "This document doesn't appear to be about this job.";
+
+export function attachmentTypeLabel(filename: string, kindLabel?: string | null): string {
+  const ext = filename.includes('.') ? filename.split('.').pop()?.trim().toUpperCase() ?? '' : '';
+  if (ext && ext.length <= 5 && ext !== filename.toUpperCase()) return ext;
+  const kind = (kindLabel ?? '').trim();
+  return kind ? kind.toUpperCase() : 'FILE';
+}
+
+export function chipFromDocument(doc: ChatDocumentCard): AskAttachment {
+  return {
+    id: doc.id,
+    filename: doc.filename,
+    typeLabel: attachmentTypeLabel(doc.filename, doc.kindLabel),
+  };
+}
+
+export function splitQuietDocumentNote(text: string): { answer: string; note: string | null } {
+  const trimmed = text.trim();
+  if (!trimmed.endsWith(QUIET_DOCUMENT_NOTE)) return { answer: trimmed, note: null };
+  return {
+    answer: trimmed.slice(0, -QUIET_DOCUMENT_NOTE.length).trim(),
+    note: QUIET_DOCUMENT_NOTE,
+  };
+}
+
 async function readError(res: Response): Promise<string> {
   const body = (await res.json().catch(() => null)) as { error?: string } | null;
   if (body && typeof body.error === 'string' && body.error.trim()) return body.error;
@@ -103,12 +136,22 @@ export async function attachChatDocument(id: string, jobId: string): Promise<Cha
 }
 
 /** Null means the question is not about these uploads, so the job assistant should answer. */
-export async function askChatDocuments(question: string, documentIds: string[]): Promise<string | null> {
+export async function askChatDocuments(
+  question: string,
+  documentIds: string[],
+  jobId?: string | null,
+  opts?: { quietNote?: boolean },
+): Promise<string | null> {
   const res = await fetch('/api/operations/documents/ask', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, documentIds }),
+    body: JSON.stringify({
+      question,
+      documentIds,
+      jobId: jobId ?? undefined,
+      ...(opts?.quietNote === false ? { quietNote: false } : {}),
+    }),
   });
   if (!res.ok) throw new Error(await readError(res));
   const body = (await res.json()) as { answer?: string | null };

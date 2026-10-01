@@ -26,8 +26,22 @@ const KIND_RULES: Array<{ kind: DocumentKind; pattern: RegExp; weight: number }>
   { kind: 'photo', pattern: /\b(visible\s+text|photo|photograph)\b/i, weight: 1 },
 ];
 
+/**
+ * A sentence that says the file is *not* an invoice (or estimate, claim, …)
+ * must not count as that type. Only positive mentions classify the file.
+ */
+function textForKind(text: string): string {
+  return text
+    .split(/(?<=[.!?\n])/)
+    .filter((part) => {
+      if (!/\bnot\b/i.test(part)) return true;
+      return !/\b(invoice|estimate|contract|permit|claim|sketch|scope|photo|agreement|change\s+orders?)\b/i.test(part);
+    })
+    .join(' ');
+}
+
 export function classifyDocument(filename: string, text: string): DocumentKind {
-  const hay = `${filename}\n${text}`;
+  const hay = `${filename}\n${textForKind(text)}`;
   let best: DocumentKind = 'other';
   let score = 0;
   for (const rule of KIND_RULES) {

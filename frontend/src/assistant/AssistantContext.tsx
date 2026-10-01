@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,7 @@ import {
 } from '../domain/routing';
 import { dataClient } from '../data/client';
 import type { ApprovalRequest } from '../domain/types';
-import { askChatDocuments } from '../lib/chatDocuments';
+import { askChatDocuments, QUIET_DOCUMENT_NOTE, type AskAttachment } from '../lib/chatDocuments';
 
 /**
  * The single Atmosphere assistant.
@@ -43,6 +44,7 @@ export interface AssistantMessage {
   proposal?: ApprovalRequest;
   /** A grounded answer about an uploaded document. Routing chrome stays off. */
   grounded?: boolean;
+  attachments?: AskAttachment[];
 }
 
 interface AssistantValue {
@@ -53,7 +55,11 @@ interface AssistantValue {
   /** document: animated dots, then the answer. route: the existing capability router. */
   thinkingMode: 'route' | 'document';
   send: (text: string) => void;
-  askAboutDocuments: (text: string, documentIds: string[]) => void;
+  askAboutDocuments: (
+    text: string,
+    documentIds: string[],
+    opts?: { jobId?: string | null; attachments?: AskAttachment[] },
+  ) => void;
   clear: () => void;
   /** What the panel should describe itself as being about, per route. */
   contextLabel: string;
@@ -72,6 +78,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [thinkingMode, setThinkingMode] = useState<'route' | 'document'>('route');
   const [contextLabel, setContextLabel] = useState('Atmosphere');
   const timers = useRef<number[]>([]);
+  const messagesRef = useRef<AssistantMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const send = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -109,12 +119,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     timers.current.push(timer);
   }, []);
 
-  const askAboutDocuments = useCallback((text: string, documentIds: string[]) => {
+  const askAboutDocuments = useCallback((text: string, documentIds: string[], opts?: { jobId?: string | null; attachments?: AskAttachment[] }) => {
     const trimmed = text.trim();
     if (!trimmed || !documentIds.length) return;
     setMessages((prev) => [
       ...prev,
-      { id: nextId(), author: 'user', text: trimmed, at: new Date().toISOString() },
+      {
+        id: nextId(),
+        author: 'user',
+        text: trimmed,
+        at: new Date().toISOString(),
+        attachments: opts?.attachments,
+      },
     ]);
     setThinkingMode('document');
     setThinking(true);
@@ -122,11 +138,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(async () => {
       let answer: string | null = null;
       try {
-        answer = await askChatDocuments(trimmed, documentIds);
+        const quietAlready = messagesRef.current.some(
+          (message) => message.author === 'atmosphere' && message.text.includes(QUIET_DOCUMENT_NOTE),
+        );
+        answer = await askChatDocuments(trimmed, documentIds, opts?.jobId, { quietNote: !quietAlready });
       } catch (err) {
         answer = err instanceof Error ? err.message : 'This document does not show that.';
       }
       if (!answer) {
+        setThinkingMode('route');
         const routing = routeRequest(trimmed);
         const approvals = await dataClient.approvals.list().catch(() => []);
         const match = approvals.find(

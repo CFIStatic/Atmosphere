@@ -49,6 +49,10 @@ export interface JobFileTurn {
   model?: string | null;
   at: string;
   webSources?: Array<{ title: string; url: string; snippet: string }>;
+  /** Files sent with this user message. */
+  attachments?: Array<{ id: string; filename: string; typeLabel: string }>;
+  /** Uploads in the session when this question was sent. */
+  documentIds?: string[];
 }
 
 function formatWorkDate(isoDate: string): string {
@@ -253,16 +257,76 @@ export function hasVideoOnFile(proofs: ProofResponse | null): boolean {
   return Boolean((proofs?.videos?.length ?? 0) > 0 || (proofs?.days?.length ?? 0) > 0);
 }
 
+function documentIdsFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const id = item.trim();
+    if (!id || ids.includes(id)) continue;
+    ids.push(id);
+    if (ids.length >= 8) break;
+  }
+  return ids;
+}
+
+export type SessionUploadChip = { id: string; filename: string; typeLabel: string };
+
+/**
+ * Rebuild message chips and the upload session from stored document ids.
+ * Chips appear only on the turn that introduced a file. The session is every
+ * id in the thread, named from the job's document list when that has loaded.
+ */
+export function restoreSessionUploads(
+  turns: JobFileTurn[],
+  catalog: SessionUploadChip[],
+): { turns: JobFileTurn[]; session: SessionUploadChip[] } {
+  const catalogById = new Map(catalog.map((file) => [file.id, file]));
+  const seen = new Set<string>();
+  const session: SessionUploadChip[] = [];
+  const next = turns.map((turn) => {
+    if (turn.role !== 'user') return turn;
+    const ids = (turn.documentIds ?? []).filter(Boolean).slice(0, 8);
+    const introduced = ids.filter((id) => !seen.has(id));
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      session.push(catalogById.get(id) ?? { id, filename: '', typeLabel: 'FILE' });
+    }
+    if (turn.attachments?.length || !introduced.length) return turn;
+    const attachments = introduced.flatMap((id) => {
+      const known = catalogById.get(id);
+      return known ? [known] : [];
+    });
+    if (!attachments.length) return turn;
+    return { ...turn, attachments };
+  });
+  return { turns: next, session: session.slice(-8) };
+}
+
 export function turnsFromQuestions(questions: ProofQuestion[]): JobFileTurn[] {
-  return [...questions]
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .flatMap((question) => {
+  const sorted = [...questions].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const unique: ProofQuestion[] = [];
+  for (const question of sorted) {
+    const prev = unique[unique.length - 1];
+    if (
+      prev &&
+      prev.question.trim() === question.question.trim() &&
+      (prev.answer ?? '').trim() === (question.answer ?? '').trim()
+    ) {
+      continue;
+    }
+    unique.push(question);
+  }
+  return unique.flatMap((question) => {
+      const documentIds = documentIdsFrom(question.document_ids);
       const turns: JobFileTurn[] = [
         {
           id: `${question.id}-q`,
           role: 'user',
           content: question.question,
           at: question.created_at,
+          ...(documentIds.length ? { documentIds } : {}),
         },
       ];
       if (question.answer) {

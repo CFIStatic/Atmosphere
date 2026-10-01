@@ -12,7 +12,7 @@ import { askLookupCatalogFromJob, clipFromProofRow } from '../shared/askLookup.j
 import { answerFromJobFile, type JobFileAskContext } from '../shared/jobFileAsk.js';
 import { answerFromAskLookup } from '../shared/askReasoning.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
-import { answerFromJobDocuments, documentChunksForGrounding, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, documentChunksForGrounding, documentIsJobKnowledge, type AskDocumentView } from '../documents/answer.js';
 import { normalizeAskProse } from '../shared/askProse.js';
 import { isAskModelConfigured } from '../lib/askModel.js';
 import { parseMomentSource, parseQuoteTrailer } from '../shared/askMoments.js';
@@ -45,8 +45,9 @@ export const defaultJobAnswerFn: JobAnswerFn = async (question, job) => {
     const direct = answerFromJobDocuments(question, uploaded, []);
     if (direct) {
       const prose = normalizeAskProse(direct);
+      const includeUploads = !uploaded.some((doc) => documentIsJobKnowledge(doc));
       return enforceQuoteGrounding(prose, {
-        chunks: documentChunksForGrounding(uploaded),
+        chunks: documentChunksForGrounding(uploaded, { includeUploads }),
         question,
       }).answer;
     }
@@ -135,9 +136,15 @@ export function jobEvidenceRecord(job: GoldJob): ClipAskRecord {
       lines.push(...String(row.transcript_text).split('\n'));
     }
   }
-  for (const doc of job.fixture.documents ?? []) {
-    const row = doc as { extractedText?: unknown; attached?: boolean | null; relevance?: string | null };
-    if (row.attached === false || row.relevance === 'not_related' || row.relevance === 'pending_confirm') continue;
+  const fixtureDocs = (job.fixture.documents ?? []) as Array<{
+    extractedText?: unknown;
+    attached?: boolean | null;
+    relevance?: string | null;
+  }>;
+  const jobKnowledge = fixtureDocs.filter((row) => documentIsJobKnowledge(row));
+  // An unrelated upload is not job evidence when the job already has documents.
+  // A chat whose only file is that upload still has to ground quotes against it.
+  for (const row of jobKnowledge.length ? jobKnowledge : fixtureDocs) {
     const text = String(row.extractedText ?? '').trim();
     if (text) lines.push(text);
   }

@@ -1303,6 +1303,8 @@ export interface ProofQuestion {
   model?: string | null;
   grounded_on: string[];
   web_sources?: Array<{ title: string; url: string; snippet: string }> | null;
+  /** Chat uploads sent with this turn. Office thread reloads only. */
+  document_ids?: string[] | null;
   created_at: string;
   thread_id?: string | null;
 }
@@ -4225,7 +4227,11 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  askAboutProofs: (jobId: string, question: string, opts?: { threadId?: string | null }) =>
+  askAboutProofs: (
+    jobId: string,
+    question: string,
+    opts?: { threadId?: string | null; documentIds?: string[] },
+  ) =>
     request<{
       answer: string;
       groundedOn: number;
@@ -4238,6 +4244,7 @@ export const api = {
       body: JSON.stringify({
         question,
         threadId: opts?.threadId ?? undefined,
+        documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
         timeZone: browserTimeZone(),
       }),
     }),
@@ -4253,7 +4260,7 @@ export const api = {
       onToken?: (text: string) => void;
       onStatus?: (phase: string) => void;
     } = {},
-    opts?: { threadId?: string | null; signal?: AbortSignal },
+    opts?: { threadId?: string | null; signal?: AbortSignal; documentIds?: string[] },
   ): Promise<{
     answer: string;
     groundedOn: number;
@@ -4277,6 +4284,7 @@ export const api = {
         body: JSON.stringify({
           question,
           threadId: opts?.threadId ?? undefined,
+          documentIds: opts?.documentIds?.length ? opts.documentIds : undefined,
           timeZone: browserTimeZone(),
         }),
       });

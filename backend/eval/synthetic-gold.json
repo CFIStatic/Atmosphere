@@ -1522,6 +1522,67 @@
      }
     }
    ]
+  },
+  {
+   "id": "syn-job-unrelated-upload",
+   "consent": { "status": "synthetic" },
+   "fixture": {
+    "job": {
+     "id": "00000000-0000-4000-8000-00000000d301",
+     "org_id": "00000000-0000-4000-8000-00000000d302",
+     "title": "Synthetic Upload Job"
+    },
+    "parties": [],
+    "proofs": [],
+    "documents": [
+     {
+      "id": "00000000-0000-4000-8000-00000000d303",
+      "filename": "Unrelated-Invoice.pdf",
+      "kind": "invoice",
+      "attached": false,
+      "relevance": "not_related",
+      "relevanceReason": "The address 900 Pine Avenue does not match this job.",
+      "summary": "Invoice for 900 Pine Avenue.",
+      "extractedText": "Invoice\n900 Pine Avenue\nTotal: $900.00",
+      "chunks": [
+       { "location": "page 1", "text": "Invoice\n900 Pine Avenue\nTotal: $900.00" }
+      ],
+      "facts": {
+       "totals": [
+        { "label": "Total", "value": "$900.00", "quote": "Total: $900.00", "location": "page 1" }
+       ],
+       "lineItems": [],
+       "dates": [],
+       "addresses": [],
+       "parties": [],
+       "claimNumbers": [],
+       "rooms": []
+      }
+     }
+    ]
+   },
+   "questions": [
+    {
+     "id": "doc-unrelated-about",
+     "type": "multi_hop",
+     "question": "what is this about",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["900 Pine", "invoice", "Unrelated-Invoice.pdf", "doesn't appear to be about this job"],
+      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached"]
+     }
+    },
+    {
+     "id": "doc-unrelated-followup",
+     "type": "multi_hop",
+     "question": "What's the total on it?",
+     "expect": {
+      "answerType": "answer",
+      "mustContain": ["$900.00", "page 1", "Unrelated-Invoice.pdf", "doesn't appear to be about this job"],
+      "mustNotContain": ["Not related", "Nothing on the document matches", "was not attached"]
+     }
+    }
+   ]
   }
  ]
 }

@@ -1,10 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   answerFromJobFile,
+  answerQuotesPrivateUpload,
   countJobFileSources,
   formatJobFileRecord,
   groundedJobFileAnswer,
+  historyWithoutPrivateUploads,
+  isDuplicateAskTurn,
   jobFileHasContent,
   preferJobFileGroundedFastPath,
   type JobFileAskContext,
@@ -12,6 +18,9 @@ import {
 import { ASK_TOOL_DEFINITIONS, askToolsForAccess, parseActionsTrailer, pickAskToolsHeuristically } from '../src/shared/askTools.js';
 import { parseFollowupTrailer, parseQuoteTrailer } from '../src/shared/askMoments.js';
 import { parseSourceTrailerIds } from '../src/shared/askSources.js';
+import { QUIET_UNRELATED_NOTE } from '../src/documents/answer.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const file: JobFileAskContext = {
   job: {
@@ -418,4 +427,154 @@ test('no-model web fallback drops control markers from poisoned Tavily text', as
       else process.env[key] = value;
     }
   }
+});
+
+const VISION_TEXT = [
+  'The Future',
+  'By Jack Cyganiak',
+  '8/11/2023',
+  '',
+  'My companies and vision.',
+  '',
+  'Jettx builds long distance wireless power. Energy transmission from a space based power system can deliver electricity without wires. Blox Group automates the ground stations that receive that power.',
+  '',
+  'This note is a company vision, not a construction claim, invoice, or site report.',
+].join('\n');
+
+test('a question about an uploaded document skips web search', async () => {
+  const prev = process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = 'tvly-test-not-real';
+  const vision = {
+    id: 'future',
+    filename: 'The Future.docx',
+    kind: 'invoice',
+    attached: false,
+    relevance: 'not_related',
+    extractedText: VISION_TEXT,
+    chunks: [{ location: 'document', text: VISION_TEXT }],
+  };
+  let searched = false;
+  const fetchFn: typeof fetch = async () => {
+    searched = true;
+    return new Response('should not search a document question', { status: 500 });
+  };
+  try {
+    const about = await answerFromJobFile({
+      question: 'what is this about',
+      file,
+      apiKey: null,
+      sessionDocuments: [vision],
+      fetchFn,
+    });
+    assert.equal(searched, false);
+    assert.equal(about.webHits.length, 0);
+    assert.equal(about.groundedOn, 0);
+    assert.equal(about.answeredFromSessionDocument, true);
+    assert.equal(about.officeOnly, true);
+    assert.match(about.answer, /2023 vision note by Jack Cyganiak/);
+    assert.match(about.answer, /Jettx \(long-distance wireless power, including space-based power\)/);
+    assert.match(about.answer, /Blox Group \(automated ground stations\)/);
+    assert.match(about.answer, /doesn't appear to be about this job/);
+    assert.doesNotMatch(about.answer, /is an invoice/i);
+    assert.doesNotMatch(about.answer, /The Future By Jack Cyganiak/);
+    assert.doesNotMatch(about.answer, /\(The Future\.docx, document\)/);
+
+    searched = false;
+    const wrote = await answerFromJobFile({
+      question: 'Who wrote it?',
+      file,
+      apiKey: null,
+      history: [{ role: 'assistant', text: about.answer }],
+      sessionDocuments: [vision],
+      fetchFn,
+    });
+    assert.equal(searched, false);
+    assert.equal(wrote.webHits.length, 0);
+    assert.equal(wrote.officeOnly, true);
+    assert.match(wrote.answer, /Jack Cyganiak wrote it/);
+    assert.doesNotMatch(wrote.answer, /doesn't appear to be about this job/);
+    assert.doesNotMatch(wrote.answer, /does not show/);
+  } finally {
+    if (prev === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = prev;
+  }
+});
+
+test('a private upload is not model context for a job or public question', () => {
+  const vision = {
+    id: 'future',
+    filename: 'The Future.docx',
+    attached: false,
+    relevance: 'not_related',
+    extractedText: VISION_TEXT,
+  };
+  const privateAnswer = `This is a 2023 vision note by Jack Cyganiak about Jettx.\n\n${QUIET_UNRELATED_NOTE}`;
+  assert.equal(answerQuotesPrivateUpload('Delgado Roofing is on this job.', [vision]), false);
+  assert.equal(
+    answerQuotesPrivateUpload(
+      'Jettx builds long distance wireless power. Energy transmission from a space based power system can deliver electricity without wires.',
+      [vision],
+    ),
+    true,
+  );
+  assert.equal(answerQuotesPrivateUpload(`Noted.\n\n${QUIET_UNRELATED_NOTE}`, [vision]), false);
+  const kept = historyWithoutPrivateUploads(
+    [
+      { role: 'user', text: 'what is this about' },
+      { role: 'assistant', text: privateAnswer },
+      { role: 'user', text: 'what companies are involved on this job?' },
+    ],
+    [vision],
+  );
+  assert.deepEqual(kept?.map((turn) => turn.text), [
+    'what is this about',
+    'what companies are involved on this job?',
+  ]);
+  const src = readFileSync(join(here, '../src/shared/jobFileAsk.ts'), 'utf8');
+  assert.doesNotMatch(src, /formatChatUploadsForPrompt/);
+  assert.doesNotMatch(src, /Questions about these files are answered from this text only/);
+  const authorOnly = historyWithoutPrivateUploads(
+    [
+      { role: 'assistant', text: 'Jack Cyganiak wrote it.', officeOnly: true },
+      { role: 'user', text: "what's the lockbox code?" },
+    ],
+    [],
+  );
+  assert.deepEqual(authorOnly?.map((turn) => turn.text), ["what's the lockbox code?"]);
+});
+
+test('a job question after an unrelated upload does not keep the upload text', async () => {
+  const vision = {
+    id: 'future',
+    filename: 'The Future.docx',
+    attached: false,
+    relevance: 'not_related',
+    extractedText: VISION_TEXT,
+  };
+  const result = await answerFromJobFile({
+    question: "what's the lockbox code?",
+    file,
+    apiKey: null,
+    sessionDocuments: [vision],
+    history: [
+      { role: 'user', text: 'Who wrote it?', officeOnly: true },
+      { role: 'assistant', text: 'Jack Cyganiak wrote it.', officeOnly: true },
+    ],
+    memory: {
+      summary: 'Earlier the upload said Jettx builds long distance wireless power.',
+      notes: [{ note: 'Jettx builds long distance wireless power.', sourceQuestionId: 'doc', at: null }],
+      now: '2026-10-01T00:00:00Z',
+    },
+  });
+  assert.match(result.answer, /4412/);
+  assert.doesNotMatch(result.answer, /Jettx|Cyganiak|Future\.docx/i);
+  assert.notEqual(result.officeOnly, true);
+});
+
+test('isDuplicateAskTurn reuses only the same answer in the same thread', () => {
+  const answer = 'This is a 2023 vision note by Jack Cyganiak.';
+  assert.equal(isDuplicateAskTurn({ answer, thread_id: 'thr-1' }, 'thr-1', answer), true);
+  assert.equal(isDuplicateAskTurn({ answer, thread_id: 'thr-1' }, 'thr-2', answer), false);
+  assert.equal(isDuplicateAskTurn({ answer: 'different', thread_id: 'thr-1' }, 'thr-1', answer), false);
+  assert.equal(isDuplicateAskTurn(undefined, 'thr-1', answer), false);
 });

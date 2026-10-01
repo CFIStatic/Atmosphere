@@ -15,8 +15,8 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { writerForOrg } from '../lib/scopedAdmin.js';
 import { HttpError } from '../lib/errors.js';
 import { ingestChatDocument } from '../documents/pipeline.js';
-import { viewsFromChatRows } from '../documents/load.js';
-import { answerFromJobDocuments, documentChunksForGrounding } from '../documents/answer.js';
+import { chatSessionRows, viewsFromChatRows } from '../documents/load.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding } from '../documents/answer.js';
 import { enforceQuoteGrounding } from '../shared/askQuoteGrounding.js';
 import { documentRoomRows, persistDocumentRooms } from '../documents/rooms.js';
 import {
@@ -370,16 +370,28 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
     const body = z.object({
       question: z.string().trim().min(3).max(1000),
       documentIds: z.array(z.string().uuid()).min(1).max(8),
+      jobId: z.string().uuid().nullable().optional(),
+      /** False once this chat already showed the quiet unrelated line. */
+      quietNote: z.boolean().optional(),
     }).parse(req.body ?? {});
     const { supabase, orgId } = await requireOrgContext(req);
     const { data, error } = await supabase
       .from('job_chat_documents')
-      .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id')
+      .select('id, filename, doc_kind, relevance, relevance_reason, summary, extracted_text, key_facts, chunk_index, job_id, context_job_id')
       .eq('org_id', orgId)
       .in('id', body.documentIds);
     if (error) throw new HttpError(500, 'The documents could not be read.', 'doc_read_failed');
-    const views = viewsFromChatRows(data ?? []);
-    const direct = answerFromJobDocuments(body.question, views);
+    const rows = body.jobId ? chatSessionRows(data ?? [], body.jobId) : (data ?? []);
+    const views = viewsFromChatRows(rows);
+    // Same gate as job-file Ask. A miss here would trap later capability and
+    // general questions on "this document does not show that."
+    if (!chatUploadShouldAnswer(body.question, views)) {
+      res.json({ answer: null });
+      return;
+    }
+    const direct = answerFromJobDocuments(body.question, views, [], {
+      quietNote: body.quietNote !== false,
+    });
     // Null means the question is not about these uploads. An abstain here
     // would hide the job file, clips, and room answers.
     if (!direct) {
@@ -387,7 +399,7 @@ chatDocumentsRouter.post('/documents/ask', async (req: Request, res: Response, n
       return;
     }
     const answer = enforceQuoteGrounding(direct, {
-      chunks: documentChunksForGrounding(views),
+      chunks: documentChunksForGrounding(views, { includeUploads: true }),
       question: body.question,
     }).answer;
     res.json({ answer });

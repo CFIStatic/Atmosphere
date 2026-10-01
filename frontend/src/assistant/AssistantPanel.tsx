@@ -19,9 +19,8 @@ import { ActionProposal } from '../patterns/ActionProposal';
 import { riskTone } from '../patterns/tone';
 import type { Role } from '../domain/types';
 import { useAssistant } from './AssistantContext';
-import { documentAskIds } from './documentQuestion';
-import { CHAT_DOCUMENT_ACCEPT } from '../lib/chatDocuments';
-import { AskDocumentCard, uploadPhaseLabel, useJobDocuments } from '../components/ask/ChatDocuments';
+import { CHAT_DOCUMENT_ACCEPT, chipFromDocument, type AskAttachment } from '../lib/chatDocuments';
+import { AskAttachmentChip, uploadPhaseLabel, useJobDocuments } from '../components/ask/ChatDocuments';
 
 /**
  * The persistent contextual panel.
@@ -43,6 +42,8 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
   const location = useLocation();
   const jobId = new URLSearchParams(location.search).get('job');
   const docs = useJobDocuments(jobId);
+  const [pendingFiles, setPendingFiles] = useState<AskAttachment[]>([]);
+  const [session, setSession] = useState<AskAttachment[]>([]);
 
   const { data: recommendations = [] } = useRecommendations();
   const { data: approvals = [] } = useApprovals();
@@ -56,13 +57,33 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
 
+  function keepAttachments(current: AskAttachment[], added: AskAttachment[]) {
+    const seen = new Set<string>();
+    const next: AskAttachment[] = [];
+    for (const file of [...current, ...added]) {
+      if (seen.has(file.id)) continue;
+      seen.add(file.id);
+      next.push(file);
+    }
+    return next.slice(-8);
+  }
+
+  async function attachFiles(files: File[]) {
+    const cards = await docs.upload(files);
+    if (!cards.length) return;
+    setPendingFiles((prev) => keepAttachments(prev, cards.map(chipFromDocument)));
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     const raw = draft.trim();
     if (!raw) return;
-    const documentIds = documentAskIds(raw, docs.documents, jobId);
-    if (documentIds) {
-      askAboutDocuments(raw, documentIds);
+    const sent = pendingFiles;
+    const nextSession = keepAttachments(session, sent);
+    if (nextSession.length) {
+      setPendingFiles([]);
+      setSession(nextSession);
+      askAboutDocuments(raw, nextSession.map((file) => file.id), { jobId, attachments: sent });
       setDraft('');
       return;
     }
@@ -105,6 +126,13 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
               <div key={m.id}>
                 {m.author === 'user' ? (
                   <div className="ml-6 rounded-xl rounded-br-sm bg-brand-600/20 px-3 py-2 text-sm text-fg">
+                    {m.attachments?.length ? (
+                      <div className="mb-1.5 flex flex-wrap gap-1.5" data-testid="ask-message-attachments">
+                        {m.attachments.map((file) => (
+                          <AskAttachmentChip key={file.id} file={file} />
+                        ))}
+                      </div>
+                    ) : null}
                     <MentionText text={m.text} />
                   </div>
                 ) : (
@@ -238,13 +266,17 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
           event.preventDefault();
           setDragging(false);
           const files = [...(event.dataTransfer.files ?? [])];
-          if (files.length) void docs.upload(files);
+          if (files.length) void attachFiles(files);
         }}
       >
-        {docs.documents.length > 0 && (
-          <div className="mb-2 space-y-2">
-            {docs.documents.map((doc) => (
-              <AskDocumentCard key={doc.id} doc={doc} onAttach={docs.confirm} onDismiss={docs.dismiss} />
+        {pendingFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5" data-testid="ask-composer-attachments">
+            {pendingFiles.map((file) => (
+              <AskAttachmentChip
+                key={file.id}
+                file={file}
+                onRemove={() => setPendingFiles((prev) => prev.filter((row) => row.id !== file.id))}
+              />
             ))}
           </div>
         )}
@@ -265,7 +297,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
             onChange={(event) => {
               const files = [...(event.target.files ?? [])];
               event.target.value = '';
-              if (files.length) void docs.upload(files);
+              if (files.length) void attachFiles(files);
             }}
           />
           <button
@@ -291,7 +323,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
               const files = [...(event.clipboardData?.files ?? [])];
               if (!files.length) return;
               event.preventDefault();
-              void docs.upload(files);
+              void attachFiles(files);
             }}
             className="w-full resize-none rounded-lg border border-line/10 bg-surface py-2 pl-9 pr-10 text-sm text-fg outline-none placeholder:text-fg-4"
           />
