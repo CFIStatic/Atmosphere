@@ -16,7 +16,7 @@ import { answerRoomQuestion, isRoomQuestion } from './roomIntelligence.js';
 import { roomClipsFromCatalog } from './askLookup.js';
 import type { AskResearchTrace } from './askResearch.js';
 import { enforceQuoteGrounding } from './askQuoteGrounding.js';
-import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, quietNoteAlreadySaid, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
+import { answerFromJobDocuments, chatUploadShouldAnswer, documentChunksForGrounding, documentIsJobKnowledge, quietNoteAlreadySaid, sessionAnswerIsPrivate, QUIET_UNRELATED_NOTE, type AskDocumentView } from '../documents/answer.js';
 import type { DocumentFacts } from '../documents/types.js';
 import { isLongMemoryQuestion, type LongThreadMemory } from './askMemory.js';
 import type { AskLookupCatalog } from './askLookup.js';
@@ -748,6 +748,11 @@ export async function answerFromJobFile(input: {
   answeredFromLookup?: boolean;
   /** The reply is about a chat upload, not the job file. */
   answeredFromSessionDocument?: boolean;
+  /**
+   * True when the reply quotes an upload that is not on this job. Store it on
+   * the office thread only; shared and grant listings omit it.
+   */
+  officeOnly?: boolean;
   /** The stored prose is web text. Marker parsing must not treat it as a model answer. */
   webDerivedAnswer?: boolean;
   /** Compact research trace for debugging. Absent on the single pass. */
@@ -779,16 +784,17 @@ export async function answerFromJobFile(input: {
 
   const sessionCovers = chatUploadShouldAnswer(input.question, input.sessionDocuments);
   const fromUploads = answerFromChatUploads(input.question, input.sessionDocuments, input.history);
+  const officeOnly = sessionAnswerIsPrivate(input.question, input.sessionDocuments);
   if (fromUploads) {
     emit(fromUploads);
-    return { ...empty, answer: fromUploads, groundedOn: 0, answeredFromSessionDocument: true };
+    return { ...empty, answer: fromUploads, groundedOn: 0, answeredFromSessionDocument: true, officeOnly };
   }
   if (sessionCovers) {
     const miss = quietNoteAlreadySaid(input.history)
       ? 'This document does not show that.'
       : `This document does not show that.\n\n${QUIET_UNRELATED_NOTE}`;
     emit(miss);
-    return { ...empty, answer: miss, groundedOn: 0, answeredFromSessionDocument: true };
+    return { ...empty, answer: miss, groundedOn: 0, answeredFromSessionDocument: true, officeOnly };
   }
 
   const fromDocuments = answerFromAttachedDocuments(input.question, input.file);

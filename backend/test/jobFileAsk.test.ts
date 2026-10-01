@@ -462,6 +462,7 @@ test('a question about an uploaded document skips web search', async () => {
     assert.equal(about.webHits.length, 0);
     assert.equal(about.groundedOn, 0);
     assert.equal(about.answeredFromSessionDocument, true);
+    assert.equal(about.officeOnly, true);
     assert.match(about.answer, /2023 vision note by Jack Cyganiak/);
     assert.match(about.answer, /Jettx \(long-distance wireless power, including space-based power\)/);
     assert.match(about.answer, /Blox Group \(automated ground stations\)/);
@@ -481,6 +482,7 @@ test('a question about an uploaded document skips web search', async () => {
     });
     assert.equal(searched, false);
     assert.equal(wrote.webHits.length, 0);
+    assert.equal(wrote.officeOnly, true);
     assert.match(wrote.answer, /Jack Cyganiak wrote it/);
     assert.doesNotMatch(wrote.answer, /doesn't appear to be about this job/);
     assert.doesNotMatch(wrote.answer, /does not show/);

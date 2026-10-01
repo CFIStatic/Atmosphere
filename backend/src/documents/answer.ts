@@ -115,6 +115,27 @@ export function chatUploadShouldAnswer(question: string, documents: AskDocumentV
   return refersToUpload(question, docs);
 }
 
+/**
+ * True when the reply is grounded on a chat upload that is not job knowledge
+ * (unattached, or marked not related / awaiting confirm). Those answers stay
+ * on the asking office thread. A question that names an attached job document
+ * stays on the shared record.
+ */
+export function sessionAnswerIsPrivate(
+  question: string,
+  documents: AskDocumentView[] | null | undefined,
+): boolean {
+  if (!chatUploadShouldAnswer(question, documents)) return false;
+  const readable = (documents ?? []).filter((doc) => textOf(doc).trim());
+  const privateDocs = readable.filter((doc) => !documentIsJobKnowledge(doc));
+  if (!privateDocs.length) return false;
+  if (privateDocs.length === readable.length) return true;
+  if (isAboutThisDocument(question) || isAuthorQuestion(question)) return true;
+  const jobDocs = readable.filter((doc) => documentIsJobKnowledge(doc));
+  if (namesThese(question, jobDocs) && !namesThese(question, privateDocs)) return false;
+  return true;
+}
+
 /** A public question with no pointer at the upload stays on web search. */
 function looksLikeGeneralQuestion(question: string): boolean {
   if (/\b(it|this|that|document|upload|attachment|note|file)\b/i.test(question)) return false;

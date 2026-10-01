@@ -64,6 +64,7 @@ import {
   type JobFileAskTurn,
 } from '../shared/jobFileAsk.js';
 import { chatDocumentsForJobFile, chatSessionRows, viewsFromChatRows } from '../documents/load.js';
+import { excludeOfficeOnlyRows, listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
 import { scrubWebDerivedAskAnswer, stripExternalAskLinks, webSourcesFromHits, type AskWebHit, type AskWebSource } from '../shared/askWebSearch.js';
 import { prepareMentionAsk, recordContentMentions } from '../shared/mentionContext.js';
 import { proofIdsMatchingQuestion } from '../shared/askTranscriptChunkStore.js';
@@ -3060,11 +3061,15 @@ export async function runProofAsk(input: {
           total: 0,
         };
         if (!threadId) {
-          const { data } = await supabase
-            .from('job_proof_questions')
-            .select(shape)
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
+          const { data } = await excludeOfficeOnlyRows(
+            supabase
+              .from('job_proof_questions')
+              .select(shape)
+              .eq('org_id', orgId)
+              .eq('job_id', jobId),
+            askAccess,
+            null,
+          )
             .order('created_at', { ascending: false })
             .limit(8);
           const rows = (data ?? []) as Array<Record<string, unknown>>;
@@ -3072,18 +3077,26 @@ export async function runProofAsk(input: {
           return { ...empty, rows, total: rows.length };
         }
         const [countRes, lateRes, memory, notes] = await Promise.all([
-          supabase
-            .from('job_proof_questions')
-            .select('id', { count: 'exact', head: true })
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
-            .eq('thread_id', threadId),
-          supabase
-            .from('job_proof_questions')
-            .select(shape)
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
-            .eq('thread_id', threadId)
+          excludeOfficeOnlyRows(
+            supabase
+              .from('job_proof_questions')
+              .select('id', { count: 'exact', head: true })
+              .eq('org_id', orgId)
+              .eq('job_id', jobId)
+              .eq('thread_id', threadId),
+            askAccess,
+            threadId,
+          ),
+          excludeOfficeOnlyRows(
+            supabase
+              .from('job_proof_questions')
+              .select(shape)
+              .eq('org_id', orgId)
+              .eq('job_id', jobId)
+              .eq('thread_id', threadId),
+            askAccess,
+            threadId,
+          )
             .order('created_at', { ascending: false })
             .limit(8),
           owner
@@ -3096,22 +3109,29 @@ export async function runProofAsk(input: {
         const throughId = memory?.throughId ?? null;
         const cursorLoaded = !throughId || rows.some((row) => String(row.id ?? '') === throughId);
         if (total > rows.length && !cursorLoaded && throughId) {
-          const { data: cursor } = await supabase
-            .from('job_proof_questions')
-            .select('created_at')
-            .eq('org_id', orgId)
-            .eq('job_id', jobId)
-            .eq('thread_id', threadId)
-            .eq('id', throughId)
-            .maybeSingle();
-          const createdAt = (cursor as { created_at?: string | null } | null)?.created_at ?? null;
-          if (createdAt) {
-            const { data: bridge } = await supabase
+          const { data: cursor } = await excludeOfficeOnlyRows(
+            supabase
               .from('job_proof_questions')
-              .select(shape)
+              .select('created_at')
               .eq('org_id', orgId)
               .eq('job_id', jobId)
               .eq('thread_id', threadId)
+              .eq('id', throughId),
+            askAccess,
+            threadId,
+          ).maybeSingle();
+          const createdAt = (cursor as { created_at?: string | null } | null)?.created_at ?? null;
+          if (createdAt) {
+            const { data: bridge } = await excludeOfficeOnlyRows(
+              supabase
+                .from('job_proof_questions')
+                .select(shape)
+                .eq('org_id', orgId)
+                .eq('job_id', jobId)
+                .eq('thread_id', threadId),
+              askAccess,
+              threadId,
+            )
               .gt('created_at', createdAt)
               .order('created_at', { ascending: true })
               .limit(48);
@@ -3439,6 +3459,7 @@ export async function runProofAsk(input: {
           answeredFromSessionDocument: false,
           webDerivedAnswer: false,
           research: null,
+          officeOnly: false,
         }
       : await answerFromJobFile({
       question: input.question,
@@ -3518,13 +3539,17 @@ export async function runProofAsk(input: {
     }
     const sessionDocumentAnswer = result.answeredFromSessionDocument === true;
     const since = new Date(Date.now() - 30_000).toISOString();
-    const { data: recentSame } = await supabase
-      .from('job_proof_questions')
-      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
-      .eq('org_id', orgId)
-      .eq('job_id', jobId)
-      .eq('question', storedQuestion)
-      .gte('created_at', since)
+    const { data: recentSame } = await excludeOfficeOnlyRows(
+      supabase
+        .from('job_proof_questions')
+        .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .eq('question', storedQuestion)
+        .gte('created_at', since),
+      askAccess,
+      threadId,
+    )
       .order('created_at', { ascending: false })
       .limit(1);
     const recentRow = (recentSame ?? [])[0] as {
@@ -3546,6 +3571,7 @@ export async function runProofAsk(input: {
         grounded_on: sessionDocumentAnswer ? [] : groundedOn,
         web_sources: sessionDocumentAnswer ? [] : webSources,
         research_trace: result.research ?? null,
+        office_only: result.officeOnly === true,
         asked_by: userId ?? null,
         ...(threadId ? { thread_id: threadId } : {}),
       })
@@ -3587,12 +3613,16 @@ export async function runProofAsk(input: {
           let pairs = priorPairs;
           let incomplete = recentRes.incomplete === true;
           if (incomplete) {
-            const { data } = await supabase
-              .from('job_proof_questions')
-              .select('id, question, answer, created_at')
-              .eq('org_id', orgId)
-              .eq('job_id', jobId)
-              .eq('thread_id', threadId)
+            const { data } = await excludeOfficeOnlyRows(
+              supabase
+                .from('job_proof_questions')
+                .select('id, question, answer, created_at')
+                .eq('org_id', orgId)
+                .eq('job_id', jobId)
+                .eq('thread_id', threadId),
+              askAccess,
+              threadId,
+            )
               .order('created_at', { ascending: false })
               .limit(200);
             pairs = [...((data ?? []) as Array<Record<string, unknown>>)].reverse().flatMap((row) => {
@@ -3761,16 +3791,15 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
 /** GET /api/operations/shared/:jobId/proof/questions */
 export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await resolveOrgOrViewerAccess(req, req.params.jobId);
+    const { orgId, supabase, access } = await resolveOrgOrViewerAccess(req, req.params.jobId);
     const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
-    let q = supabase
-      .from('job_proof_questions')
-      .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
-      .eq('org_id', orgId)
-      .eq('job_id', req.params.jobId);
-    if (threadId) q = q.eq('thread_id', threadId);
-    const { data } = await q.order('created_at', { ascending: false }).limit(30);
-    res.json({ questions: data ?? [] });
+    const questions = await listSharedProofQuestions(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      threadId,
+      access: access === 'org' ? 'org' : 'viewer',
+    });
+    res.json({ questions });
   } catch (err) {
     next(err);
   }

@@ -19,6 +19,7 @@ import { homeownerJobFileFromRows } from '../verifier/homeownerJobFile.js';
 import { redactProofDeviceIdentity } from '../shared/deviceIdentity.js';
 import { assertAiFeatureAllowed } from '../metering/aiBudgetService.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess, runProofAsk } from './proofOfWork.js';
+import { listSharedProofQuestions } from '../shared/askQuestionVisibility.js';
 import {
   createAskThread,
   renameAskThread,
@@ -339,14 +340,13 @@ progressShareRouter.get(
     try {
       const { share, admin } = await progressShareForToken(tokenFromProgressRequest(req));
       const threadId = typeof req.query.threadId === 'string' ? req.query.threadId : null;
-      let q = admin
-        .from('job_proof_questions')
-        .select('id, question, answer, model, grounded_on, web_sources, created_at, thread_id')
-        .eq('org_id', share.org_id)
-        .eq('job_id', share.job_id);
-      if (threadId) q = q.eq('thread_id', threadId);
-      const { data } = await q.order('created_at', { ascending: false }).limit(30);
-      res.json({ questions: data ?? [] });
+      const questions = await listSharedProofQuestions(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        threadId,
+        access: 'share',
+      });
+      res.json({ questions });
     } catch (err) {
       next(err);
     }
