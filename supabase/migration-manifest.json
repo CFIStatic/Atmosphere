@@ -6,7 +6,7 @@
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3612
+    "finalObjects": 3613
   },
   "outOfOrder": [
     {
@@ -5924,6 +5924,7 @@
         "table|public.ai_credit_pack_clawbacks",
         "index|public.ai_credit_pack_clawbacks.ai_credit_pack_clawbacks_pkey",
         "rls|public.ai_credit_pack_clawbacks",
+        "column|public.ai_credit_pack_clawbacks.dispute_event_at",
         "function|public.apply_ai_credit_clawback"
       ],
       "sharedWithOtherMigrations": [],

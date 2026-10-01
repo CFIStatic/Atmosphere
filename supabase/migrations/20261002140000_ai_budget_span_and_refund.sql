@@ -121,6 +121,7 @@ create table if not exists public.ai_credit_pack_clawbacks (
   amount_refunded_cents  integer not null default 0 check (amount_refunded_cents >= 0),
   dispute_amount_cents   integer not null default 0 check (dispute_amount_cents >= 0),
   dispute_standing       text check (dispute_standing is null or dispute_standing in ('open', 'lost', 'won')),
+  dispute_event_at       timestamptz,
   primary key (org_id, stripe_charge_id)
 );
 
@@ -140,6 +141,7 @@ create or replace function public.apply_ai_credit_clawback(
   p_amount_refunded_cents integer,
   p_dispute_amount_cents integer,
   p_dispute_standing text,
+  p_event_at timestamptz,
   p_note text
 )
 returns table (
@@ -168,6 +170,9 @@ declare
   v_restore bigint := 0;
   v_shortfall bigint := 0;
   v_note text;
+  v_apply_dispute boolean := false;
+  v_incoming_rank integer := 0;
+  v_stored_rank integer := 0;
 begin
   if p_event_id is null or length(btrim(p_event_id)) = 0 then
     raise exception 'event_id required' using errcode = '22023';
@@ -203,35 +208,74 @@ begin
   end if;
 
   v_grant := greatest(coalesce(p_granted_nanos, 0), 0);
+  v_incoming_rank := case p_dispute_standing
+    when 'won' then 2
+    when 'lost' then 2
+    when 'open' then 1
+    else 0
+  end;
 
-  insert into public.ai_credit_pack_clawbacks (
-    org_id, stripe_charge_id, granted_nanos, charge_amount_cents,
-    amount_refunded_cents, dispute_amount_cents, dispute_standing
-  ) values (
-    p_org,
-    p_charge_id,
-    v_grant,
-    greatest(coalesce(p_charge_amount_cents, 0), 0),
-    greatest(coalesce(p_amount_refunded_cents, 0), 0),
-    case when p_dispute_standing is null then 0 else greatest(coalesce(p_dispute_amount_cents, 0), 0) end,
-    p_dispute_standing
-  )
-  on conflict (org_id, stripe_charge_id) do update set
-    granted_nanos = greatest(ai_credit_pack_clawbacks.granted_nanos, excluded.granted_nanos),
-    charge_amount_cents = greatest(ai_credit_pack_clawbacks.charge_amount_cents, excluded.charge_amount_cents),
-    amount_refunded_cents = greatest(
-      ai_credit_pack_clawbacks.amount_refunded_cents,
-      excluded.amount_refunded_cents
-    ),
-    dispute_amount_cents = case
-      when p_dispute_standing is null then ai_credit_pack_clawbacks.dispute_amount_cents
-      else excluded.dispute_amount_cents
-    end,
-    dispute_standing = case
-      when p_dispute_standing is null then ai_credit_pack_clawbacks.dispute_standing
-      else excluded.dispute_standing
-    end
-  returning * into v_state;
+  select *
+    into v_state
+  from public.ai_credit_pack_clawbacks
+  where org_id = p_org
+    and stripe_charge_id = p_charge_id
+  for update;
+
+  -- Open is rank 1. Won and lost are rank 2 and are never replaced by open.
+  -- At the same rank, only a Stripe event at least as new as the stored one applies.
+  if p_dispute_standing is not null then
+    v_stored_rank := case
+      when not found or v_state.dispute_standing is null then 0
+      when v_state.dispute_standing in ('won', 'lost') then 2
+      else 1
+    end;
+    if v_incoming_rank > v_stored_rank then
+      v_apply_dispute := true;
+    elsif v_incoming_rank = v_stored_rank and v_incoming_rank > 0 then
+      v_apply_dispute := not found
+        or v_state.dispute_event_at is null
+        or p_event_at is null
+        or p_event_at >= v_state.dispute_event_at;
+    end if;
+  end if;
+
+  if not found then
+    insert into public.ai_credit_pack_clawbacks (
+      org_id, stripe_charge_id, granted_nanos, charge_amount_cents,
+      amount_refunded_cents, dispute_amount_cents, dispute_standing, dispute_event_at
+    ) values (
+      p_org,
+      p_charge_id,
+      v_grant,
+      greatest(coalesce(p_charge_amount_cents, 0), 0),
+      greatest(coalesce(p_amount_refunded_cents, 0), 0),
+      case when v_apply_dispute then greatest(coalesce(p_dispute_amount_cents, 0), 0) else 0 end,
+      case when v_apply_dispute then p_dispute_standing else null end,
+      case when v_apply_dispute then p_event_at else null end
+    )
+    returning * into v_state;
+  else
+    update public.ai_credit_pack_clawbacks
+    set granted_nanos = greatest(granted_nanos, v_grant),
+        charge_amount_cents = greatest(charge_amount_cents, greatest(coalesce(p_charge_amount_cents, 0), 0)),
+        amount_refunded_cents = greatest(amount_refunded_cents, greatest(coalesce(p_amount_refunded_cents, 0), 0)),
+        dispute_amount_cents = case
+          when v_apply_dispute then greatest(coalesce(p_dispute_amount_cents, 0), 0)
+          else dispute_amount_cents
+        end,
+        dispute_standing = case
+          when v_apply_dispute then p_dispute_standing
+          else dispute_standing
+        end,
+        dispute_event_at = case
+          when v_apply_dispute then p_event_at
+          else dispute_event_at
+        end
+    where org_id = p_org
+      and stripe_charge_id = p_charge_id
+    returning * into v_state;
+  end if;
 
   if v_state.charge_amount_cents > 0 and v_state.granted_nanos > 0 then
     v_refund_share := least(
@@ -300,6 +344,6 @@ end;
 $$;
 
 revoke all on function public.record_subscription_price_span(uuid, integer, text, timestamptz, timestamptz) from public, anon, authenticated;
-revoke all on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, text) from public, anon, authenticated;
+revoke all on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, timestamptz, text) from public, anon, authenticated;
 grant execute on function public.record_subscription_price_span(uuid, integer, text, timestamptz, timestamptz) to service_role;
-grant execute on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, text) to service_role;
+grant execute on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, timestamptz, text) to service_role;

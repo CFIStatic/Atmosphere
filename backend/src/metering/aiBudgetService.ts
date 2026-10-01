@@ -471,6 +471,7 @@ export async function applyAiCreditClawback(
     amountRefundedCents: number;
     disputeAmountCents?: number | null;
     disputeStanding?: 'open' | 'lost' | 'won' | null;
+    eventAt?: Date | string | null;
     note?: string | null;
   },
 ): Promise<{
@@ -490,6 +491,7 @@ export async function applyAiCreditClawback(
     p_amount_refunded_cents: input.amountRefundedCents,
     p_dispute_amount_cents: input.disputeAmountCents ?? null,
     p_dispute_standing: input.disputeStanding ?? null,
+    p_event_at: input.eventAt instanceof Date ? input.eventAt.toISOString() : (input.eventAt ?? null),
     p_note: input.note ?? null,
   });
   if (error) throw error;
@@ -522,6 +524,7 @@ export async function syncCreditPackClawback(
     metadata?: Record<string, string> | null;
     disputeAmountCents?: number | null;
     disputeStatus?: string | null;
+    eventAt?: Date | null;
     note: string;
   },
 ): Promise<void> {
@@ -552,6 +555,7 @@ export async function syncCreditPackClawback(
     amountRefundedCents: input.amountRefundedCents,
     disputeAmountCents: hasDispute ? (input.disputeAmountCents ?? 0) : null,
     disputeStanding: hasDispute ? creditDisputeStanding(input.disputeStatus) : null,
+    eventAt: input.eventAt ?? null,
     note: input.note,
   });
 }

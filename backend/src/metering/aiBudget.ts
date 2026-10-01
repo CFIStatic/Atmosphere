@@ -296,6 +296,33 @@ export function creditDisputeStanding(status: string | null | undefined): Credit
   return 'open';
 }
 
+/** Won and lost are terminal. Open never outranks them. */
+export function disputeStandingRank(standing: CreditDisputeStanding | null | undefined): number {
+  if (standing === 'won' || standing === 'lost') return 2;
+  if (standing === 'open') return 1;
+  return 0;
+}
+
+/**
+ * Whether an incoming dispute event may replace the stored one.
+ * A lower rank never overwrites a higher one, so open cannot reopen won or lost.
+ * At the same rank, an older Stripe event is ignored.
+ */
+export function disputeUpdateApplies(input: {
+  storedStanding: CreditDisputeStanding | null;
+  storedEventAt: Date | null;
+  incomingStanding: CreditDisputeStanding | null;
+  incomingEventAt: Date | null;
+}): boolean {
+  if (!input.incomingStanding) return false;
+  const incomingRank = disputeStandingRank(input.incomingStanding);
+  const storedRank = disputeStandingRank(input.storedStanding);
+  if (incomingRank > storedRank) return true;
+  if (incomingRank < storedRank) return false;
+  if (!input.storedEventAt || !input.incomingEventAt) return true;
+  return input.incomingEventAt.getTime() >= input.storedEventAt.getTime();
+}
+
 /**
  * Net credits a pack should have given back. Refunds and disputes overlap:
  * the charge owes the larger of the two shares, never more than the grant.

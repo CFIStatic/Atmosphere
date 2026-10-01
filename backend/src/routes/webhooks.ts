@@ -131,8 +131,9 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
       break;
 
     case 'charge.dispute.created':
+    case 'charge.dispute.updated':
     case 'charge.dispute.closed':
-      await onChargeDisputed(event.data.object as Stripe.Dispute, event.id, admin);
+      await onChargeDisputed(event.data.object as Stripe.Dispute, event.id, event.created, admin);
       break;
 
     default:
@@ -473,7 +474,12 @@ async function onChargeRefunded(charge: Stripe.Charge, eventId: string, admin: a
  * as won restores that share, except the part a refund still covers. The
  * database keeps one running total per charge, so this cannot stack on a refund.
  */
-async function onChargeDisputed(dispute: Stripe.Dispute, eventId: string, admin: any): Promise<void> {
+async function onChargeDisputed(
+  dispute: Stripe.Dispute,
+  eventId: string,
+  eventCreated: number,
+  admin: any,
+): Promise<void> {
   const charge =
     typeof dispute.charge === 'string'
       ? await stripeClient().charges.retrieve(dispute.charge)
@@ -490,6 +496,7 @@ async function onChargeDisputed(dispute: Stripe.Dispute, eventId: string, admin:
     metadata: charge.metadata,
     disputeAmountCents: dispute.amount ?? 0,
     disputeStatus: dispute.status,
+    eventAt: new Date(eventCreated * 1000),
     note: `dispute ${dispute.id} ${dispute.status} on credit pack ${charge.id}`,
   });
 }
