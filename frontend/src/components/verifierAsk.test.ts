@@ -577,6 +577,216 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(ask).toContain('loadAttachedJobDocuments');
     expect(ask).toContain('attachedJobDocumentIds(rows, jobId)');
     expect(ask).not.toContain('_chatDocs');
+    expect(ask).not.toContain('/api/operations/documents/ask');
+  });
+
+  it('renders a file chip instead of the document card', () => {
+    expect(verifierHtml).not.toContain('ask-document-card');
+    expect(verifierHtml).not.toContain('Related to this job');
+    expect(verifierHtml).not.toContain('Confirm before attaching');
+    expect(verifierHtml).not.toContain('>Not related<');
+    expect(verifierHtml).toContain('data-testid="ask-attachment-chip"');
+    expect(verifierHtml).toContain("'/api/operations/documents/ask'");
+    const escFn = verifierHtml.slice(
+      verifierHtml.indexOf('function esc(s)'),
+      verifierHtml.indexOf('function frames('),
+    );
+    const start = verifierHtml.indexOf('var ASK_FILE_ICON');
+    const end = verifierHtml.indexOf('function renderAsk(item)');
+    const { askChipsHtml, sessionAskDocumentIds, threadAlreadyQuiet } = new Function(
+      `${escFn}\n${verifierHtml.slice(start, end)}\nreturn { askChipsHtml, sessionAskDocumentIds, threadAlreadyQuiet };`,
+    )() as {
+      askChipsHtml: (docs: Array<Record<string, unknown>>, opts?: { remove?: boolean; message?: boolean }) => string;
+      sessionAskDocumentIds: (item: { _chatDocs?: Array<{ id?: string }> }) => string[];
+      threadAlreadyQuiet: (thread: Array<{ text?: string }>) => boolean;
+    };
+    const doc = {
+      id: '33333333-3333-4333-8333-333333333333',
+      filename: 'The Future.docx',
+      kindLabel: 'Document',
+      summary: 'A vision note that must not preview here.',
+      relevance: 'not_related',
+      relevanceReason: 'Not related',
+    };
+    const composer = askChipsHtml([doc], { remove: true });
+    expect(composer).toContain('data-testid="ask-composer-attachments"');
+    expect(composer).toContain('data-testid="ask-attachment-chip"');
+    expect(composer).toContain('data-filename="The Future.docx"');
+    expect(composer).toContain('aria-label="Remove The Future.docx"');
+    expect(composer).toContain('data-remove-doc="33333333-3333-4333-8333-333333333333"');
+    expect(composer).not.toContain('ask-chip-type');
+    expect(composer).not.toContain('A vision note');
+    expect(composer).not.toContain('Not related');
+    expect(composer).not.toContain('ask-document-card');
+    const message = askChipsHtml([doc], { message: true });
+    expect(message).toContain('data-testid="ask-message-attachments"');
+    expect(message).toContain('DOCX');
+    expect(message).not.toContain('data-remove-doc');
+    expect(message).not.toContain('A vision note');
+    const generic = askChipsHtml([{ id: 'b', filename: 'notes', kindLabel: 'Document' }], { message: true });
+    expect(generic).not.toContain('ask-chip-type');
+    expect(sessionAskDocumentIds({ _chatDocs: [doc, doc, { id: 'not-a-uuid', filename: 'x' }] })).toEqual([doc.id]);
+    expect(threadAlreadyQuiet([{ text: "This document doesn't appear to be about this job." }])).toBe(true);
+    expect(threadAlreadyQuiet([{ text: 'Jack Cyganiak wrote it.' }])).toBe(false);
+    const render = verifierHtml.slice(
+      verifierHtml.indexOf('function renderAsk(item)'),
+      verifierHtml.indexOf('function bindAsk(item)'),
+    );
+    expect(render).toContain('m.attachments');
+    expect(render).toContain('_pendingDocs');
+    expect(render).not.toContain('_chatDocs');
+    expect(render).not.toContain('summary');
+    const send = verifierHtml.slice(
+      verifierHtml.indexOf('function bindAsk(item)'),
+      verifierHtml.indexOf('function renderViewingHistory(item)'),
+    );
+    expect(send).toContain('/api/operations/documents/ask');
+    expect(send).toContain('quietNote: !threadAlreadyQuiet(history)');
+    expect(send).toContain('item._pendingDocs = []');
+    expect(send).toContain('rememberSessionDocs(item, pendingDocs)');
+  });
+
+  it('shows the file chip and answers an upload through the documents API', async () => {
+    const jobId = '11111111-1111-4111-8111-111111111111';
+    const clipId = '22222222-2222-4222-8222-222222222222';
+    const docId = '33333333-3333-4333-8333-333333333333';
+    const clip = {
+      id: clipId,
+      jobId,
+      jobName: 'Cedar Ridge Roof',
+      title: 'Morning walkthrough',
+      phase: 'Tear-out',
+      uploadedAt: '2026-08-05T15:00:00.000Z',
+      capturedAt: '2026-08-05T14:00:00.000Z',
+      durationSeconds: 90,
+      analysisState: 'done',
+      analysis: { summary: 'Crew removed the tarp.', dictation: 'Crew removed the tarp.' },
+    };
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.alert = () => {};
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+        const jsonResponse = (body: unknown, status = 200) =>
+          Promise.resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            json: () => Promise.resolve(body),
+          });
+        window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const method = String(init?.method || 'GET').toUpperCase();
+          if (url.includes('/api/evidence-portal/library')) {
+            return jsonResponse({
+              jobs: [{ jobId, jobName: 'Cedar Ridge Roof' }],
+              items: [clip],
+            });
+          }
+          if (url.includes('/evidence/') && url.endsWith('/video')) return jsonResponse({}, 404);
+          if (method === 'GET' && url.includes(`/api/evidence-portal/evidence/${clipId}`)) {
+            return jsonResponse({ item: clip, custody: [], frames: [] });
+          }
+          if (method === 'POST' && url.includes('/api/operations/documents/ask')) {
+            const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+            calls.push({ url, body });
+            const question = String(body.question || '');
+            if (/france/i.test(question)) return jsonResponse({ answer: null });
+            return jsonResponse({
+              answer: 'This is a 2023 vision note by Jack Cyganiak about his companies: Jettx and Blox Group.',
+            });
+          }
+          if (method === 'POST' && url.includes('/api/operations/documents')) {
+            return jsonResponse({
+              document: {
+                id: docId,
+                filename: 'The Future.docx',
+                kindLabel: 'Document',
+                summary: 'Do not show this summary.',
+                relevance: 'not_related',
+                relevanceReason: 'Not related',
+              },
+            }, 201);
+          }
+          if (method === 'POST' && url.includes('/ask')) {
+            const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+            calls.push({ url, body });
+            return jsonResponse({ answer: 'Clip fallback.' });
+          }
+          return jsonResponse({}, 404);
+        }) as typeof window.fetch;
+      },
+    });
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 120));
+    const { document } = dom.window;
+    const row = document.querySelector(`tr[data-id="${clipId}"]`) as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    document.querySelector('[data-tab="ask"]')?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const file = new dom.window.File(['The Future by Jack Cyganiak'], 'The Future.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const input = document.getElementById('ask-file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: { 0: file, length: 1, item: () => file },
+    });
+    input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+
+    const composer = document.querySelector('[data-testid="ask-composer-attachments"]');
+    expect(composer?.textContent).toContain('The Future.docx');
+    expect(composer?.querySelector('[aria-label="Remove The Future.docx"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="ask-document-card"]')).toBeNull();
+    expect(document.body.textContent).not.toContain('Do not show this summary');
+    expect(document.body.textContent).not.toContain('Not related');
+    expect(document.body.textContent).not.toContain('Related to this job');
+
+    const askInput = document.getElementById('ask-input') as HTMLTextAreaElement;
+    askInput.value = 'What is this document about?';
+    document.getElementById('ask-form')?.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+
+    const messageChip = document.querySelector('[data-testid="ask-message-attachments"]');
+    expect(messageChip?.textContent).toContain('The Future.docx');
+    expect(messageChip?.textContent).toContain('DOCX');
+    expect(messageChip?.querySelector('[data-remove-doc]')).toBeNull();
+    expect(document.querySelector('[data-testid="ask-composer-attachments"]')).toBeNull();
+    expect(document.body.textContent).toContain('Jettx');
+    const docAsk = calls.filter((call) => call.url.includes('/documents/ask'));
+    expect(docAsk).toHaveLength(1);
+    expect(docAsk[0]?.body.documentIds).toEqual([docId]);
+    expect(docAsk[0]?.body.jobId).toBe(jobId);
+    expect(docAsk[0]?.body.quietNote).toBe(true);
+    expect(calls.some((call) => call.url.includes(`/evidence/${clipId}/ask`))).toBe(false);
+
+    const follow = document.getElementById('ask-input') as HTMLTextAreaElement;
+    follow.value = 'What is the population of France?';
+    document.getElementById('ask-form')?.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const userBubbles = Array.from(document.querySelectorAll('.ask-bubble.user'));
+    expect(userBubbles).toHaveLength(2);
+    expect(userBubbles[1]?.querySelector('[data-testid="ask-attachment-chip"]')).toBeNull();
+    expect(document.body.textContent).toContain('Clip fallback.');
+    const clipAsk = calls.find((call) => call.url.includes(`/evidence/${clipId}/ask`));
+    expect(clipAsk?.body.documentIds).toEqual([]);
+    expect(JSON.stringify(clipAsk?.body)).not.toContain(docId);
+    dom.window.close();
   });
 
   it('exports clip custody as versioned JSON with filmedBy, time, job, device, integrity', () => {
