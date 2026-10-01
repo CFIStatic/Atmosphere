@@ -12,7 +12,7 @@ import { config } from '../config.js';
 import { badRequest, forbidden } from '../lib/errors.js';
 import { createUserClient } from '../lib/supabase.js';
 import { unscopedAdminOrNull } from '../lib/scopedAdmin.js';
-import { planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
+import { planChangeIdempotencyKey, planChangeInterval, planItemUpdateParams } from '../lib/planChange.js';
 import {
   ensureCustomer,
   isExtraSeatLineItem,
@@ -167,14 +167,13 @@ aiAllowanceRouter.post('/plan/checkout', async (req: Request, res: Response, nex
           },
         },
         {
-          idempotencyKey: stripeIdempotencyKey(
-            'plan-change',
-            req.orgId,
-            plan.code,
+          idempotencyKey: planChangeIdempotencyKey({
+            orgId: req.orgId!,
+            planCode: plan.code,
             interval,
             priceId,
-            randomUUID(),
-          ),
+            nonce: randomUUID(),
+          }),
         },
       );
       res.status(200).json({ checkoutUrl: null, updated: true, planCode: plan.code, billingInterval: interval });

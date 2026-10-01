@@ -154,6 +154,46 @@ test('a short credit balance does not count the call as paid by credits', async 
   assert.match(sql, /v_credit := 0/);
 });
 
+test('settle_ai_usage recomputes the included split from committed draws under the lock', () => {
+  function split(input: {
+    callerAllowance: number;
+    callerCredit: number;
+    periodAllowance: number;
+    committedAllowance: number;
+    balance: number;
+  }) {
+    const allowance = Math.min(
+      input.callerAllowance,
+      Math.max(0, input.periodAllowance - input.committedAllowance),
+    );
+    let credit = input.callerCredit + Math.max(0, input.callerAllowance - allowance);
+    if (credit > 0 && input.balance < credit) credit = 0;
+    return { allowance, credit };
+  }
+
+  const first = split({
+    callerAllowance: 100,
+    callerCredit: 0,
+    periodAllowance: 100,
+    committedAllowance: 0,
+    balance: 100,
+  });
+  assert.deepEqual(first, { allowance: 100, credit: 0 });
+  const second = split({
+    callerAllowance: 100,
+    callerCredit: 0,
+    periodAllowance: 100,
+    committedAllowance: first.allowance,
+    balance: 100,
+  });
+  assert.equal(second.allowance, 0);
+  assert.equal(second.credit, 100);
+  assert.match(sql, /pg_advisory_xact_lock\(hashtext\('ai-credit-draw'\)/);
+  assert.match(sql, /sum\(greatest\(allowance_nanos, 0\)\)/);
+  assert.match(sql, /v_allowance := least\(v_allowance, greatest\(0, p_period_allowance_nanos - v_period_used\)\)/);
+  assert.match(sql, /v_credit := v_credit \+ greatest\(0, v_caller_allowance - v_allowance\)/);
+});
+
 test('the budget hold column is server-write-only', () => {
   assert.match(sql, /revoke update on table public\.job_proofs from public, anon, authenticated/);
   assert.match(sql, /column_name not in \('ai_budget_hold', 'ai_budget_hold_reason'\)/);

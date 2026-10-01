@@ -2,6 +2,7 @@ import { badRequest } from './errors.js';
 import {
   isExtraSeatLineItem,
   recurringIntervalFromSubscription,
+  stripeIdempotencyKey,
   type AtmosphereBillingInterval,
 } from './stripe.js';
 
@@ -44,4 +45,26 @@ export function planItemUpdateParams(
     items: [{ id: plan.id, price: nextPriceId }],
     proration_behavior: 'create_prorations',
   };
+}
+
+/**
+ * Stripe replays a stable idempotency key for 24 hours. A switch back to the
+ * same plan in that window needs a new nonce or the first response is returned
+ * and the subscription stays on the other plan.
+ */
+export function planChangeIdempotencyKey(input: {
+  orgId: string;
+  planCode: string;
+  interval: string;
+  priceId: string;
+  nonce: string;
+}): string {
+  return stripeIdempotencyKey(
+    'plan-change',
+    input.orgId,
+    input.planCode,
+    input.interval,
+    input.priceId,
+    input.nonce,
+  );
 }
