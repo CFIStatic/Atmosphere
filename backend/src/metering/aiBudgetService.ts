@@ -16,8 +16,8 @@ import { aiBudgetConfig, AI_CREDIT_PACKS, creditPackPriceId, type AiBudgetConfig
 import {
   allowanceNanos,
   allocateUsage,
+  creditDisputeStanding,
   creditNanosForPaymentCents,
-  creditPackRefundLegs,
   customerAllowanceMessage,
   evaluateAllowance,
   featureLabel,
@@ -460,45 +460,68 @@ export async function recordSubscriptionPriceSpan(
   if (error && !missingSchema(error)) throw error;
 }
 
-export async function refundAiCredits(
+export async function applyAiCreditClawback(
   client: SupabaseClient,
   input: {
     orgId: string;
-    refundId: string;
-    debitNanos: number;
+    eventId: string;
+    chargeId: string;
+    chargeAmountCents: number;
+    grantedNanos: number;
+    amountRefundedCents: number;
+    disputeAmountCents?: number | null;
+    disputeStanding?: 'open' | 'lost' | 'won' | null;
     note?: string | null;
   },
-): Promise<{ applied: boolean; debitedNanos: number; shortfallNanos: number; balanceNanos: number }> {
-  const { data, error } = await client.rpc('refund_ai_credits', {
+): Promise<{
+  applied: boolean;
+  debitedNanos: number;
+  restoredNanos: number;
+  shortfallNanos: number;
+  balanceNanos: number;
+  clawedNanos: number;
+}> {
+  const { data, error } = await client.rpc('apply_ai_credit_clawback', {
     p_org: input.orgId,
-    p_refund_id: input.refundId,
-    p_debit_nanos: input.debitNanos,
+    p_event_id: input.eventId,
+    p_charge_id: input.chargeId,
+    p_charge_amount_cents: input.chargeAmountCents,
+    p_granted_nanos: input.grantedNanos,
+    p_amount_refunded_cents: input.amountRefundedCents,
+    p_dispute_amount_cents: input.disputeAmountCents ?? null,
+    p_dispute_standing: input.disputeStanding ?? null,
     p_note: input.note ?? null,
   });
   if (error) throw error;
   const row = firstRpcRow(data);
-  if (!row) throw new Error('refund_ai_credits returned no row');
+  if (!row) throw new Error('apply_ai_credit_clawback returned no row');
   return {
     applied: row.applied === true,
     debitedNanos: asNanos(row.debited_nanos),
+    restoredNanos: asNanos(row.restored_nanos),
     shortfallNanos: asNanos(row.shortfall_nanos),
     balanceNanos: asNanos(row.balance_nanos),
+    clawedNanos: asNanos(row.clawed_nanos),
   };
 }
 
 /**
- * Debit a credit-pack charge for each refund or dispute id. The database
- * floors the debit at the remaining balance and records the shortfall.
- * A charge that is not an AI credit pack is left alone.
+ * Move one credit pack's clawback to the amount the charge currently owes.
+ * Refunds pass cumulative amount_refunded and leave any dispute in place.
+ * A dispute event records that dispute; a won dispute drops its share unless
+ * a refund still covers the money. The database applies only the delta.
  */
-export async function clawBackAiCreditCharge(
+export async function syncCreditPackClawback(
   client: SupabaseClient,
   orgId: string,
   input: {
+    eventId: string;
     chargeId: string;
     chargeAmountCents: number;
+    amountRefundedCents: number;
     metadata?: Record<string, string> | null;
-    legs: Array<{ id: string; amountCents: number; status?: string | null }>;
+    disputeAmountCents?: number | null;
+    disputeStatus?: string | null;
     note: string;
   },
 ): Promise<void> {
@@ -519,19 +542,18 @@ export async function clawBackAiCreditCharge(
     granted = creditNanosForPaymentCents(input.chargeAmountCents, ratio);
   }
   if (granted == null || granted <= 0) return;
-  const legs = creditPackRefundLegs({
+  const hasDispute = input.disputeAmountCents != null || input.disputeStatus != null;
+  await applyAiCreditClawback(client, {
+    orgId,
+    eventId: input.eventId,
+    chargeId: input.chargeId,
     chargeAmountCents: input.chargeAmountCents,
-    grantedCreditNanos: granted,
-    refunds: input.legs,
+    grantedNanos: granted,
+    amountRefundedCents: input.amountRefundedCents,
+    disputeAmountCents: hasDispute ? (input.disputeAmountCents ?? 0) : null,
+    disputeStanding: hasDispute ? creditDisputeStanding(input.disputeStatus) : null,
+    note: input.note,
   });
-  for (const leg of legs) {
-    await refundAiCredits(client, {
-      orgId,
-      refundId: leg.refundId,
-      debitNanos: leg.debitNanos,
-      note: input.note,
-    });
-  }
 }
 
 export async function markProofBudgetHold(

@@ -7,9 +7,12 @@
 -- function holds the org lock, closes the current span, and inserts the next
 -- one in the same transaction.
 --
--- A refund or dispute of a credit pack debits `refund` once per refund or
--- dispute id. Spent credits are not taken from a later pack past zero; the
--- unpaid remainder is stored on the row as shortfall_nanos.
+-- Clawback is tracked per credit-pack charge. The amount owed is the larger
+-- of the cumulative refunded share and any open or lost dispute share, and it
+-- never exceeds that pack's grant. Each Stripe event debits or restores only
+-- the difference from what is already recorded for the charge. A won dispute
+-- drops its share, which restores credits unless a refund still covers them.
+-- The balance is not taken below zero; the unpaid remainder is shortfall_nanos.
 
 -- Close any raced duplicates so the index can be built on a database that
 -- already stored two open spans.
@@ -100,17 +103,52 @@ begin
 end;
 $$;
 
-create or replace function public.refund_ai_credits(
+alter table public.ai_credit_ledger
+  add column if not exists stripe_charge_id text;
+
+comment on column public.ai_credit_ledger.stripe_charge_id is
+  'Credit-pack charge this clawback debit or restore belongs to.';
+
+create index if not exists ai_credit_ledger_charge_idx
+  on public.ai_credit_ledger (org_id, stripe_charge_id)
+  where stripe_charge_id is not null;
+
+create table if not exists public.ai_credit_pack_clawbacks (
+  org_id                 uuid not null references public.orgs (id) on delete cascade,
+  stripe_charge_id       text not null,
+  granted_nanos          bigint not null check (granted_nanos >= 0),
+  charge_amount_cents    integer not null check (charge_amount_cents >= 0),
+  amount_refunded_cents  integer not null default 0 check (amount_refunded_cents >= 0),
+  dispute_amount_cents   integer not null default 0 check (dispute_amount_cents >= 0),
+  dispute_standing       text check (dispute_standing is null or dispute_standing in ('open', 'lost', 'won')),
+  primary key (org_id, stripe_charge_id)
+);
+
+comment on table public.ai_credit_pack_clawbacks is
+  'Running refund and dispute position for one credit-pack charge. The ledger holds the debits and restores; this row is what they are measured against.';
+
+alter table public.ai_credit_pack_clawbacks enable row level security;
+revoke all on public.ai_credit_pack_clawbacks from public, anon, authenticated;
+grant all on public.ai_credit_pack_clawbacks to service_role;
+
+create or replace function public.apply_ai_credit_clawback(
   p_org uuid,
-  p_refund_id text,
-  p_debit_nanos bigint,
+  p_event_id text,
+  p_charge_id text,
+  p_charge_amount_cents integer,
+  p_granted_nanos bigint,
+  p_amount_refunded_cents integer,
+  p_dispute_amount_cents integer,
+  p_dispute_standing text,
   p_note text
 )
 returns table (
   applied boolean,
   debited_nanos bigint,
+  restored_nanos bigint,
   shortfall_nanos bigint,
-  balance_nanos bigint
+  balance_nanos bigint,
+  clawed_nanos bigint
 )
 language plpgsql
 security definer
@@ -118,14 +156,27 @@ set search_path = public, pg_temp
 as $$
 declare
   v_existing public.ai_credit_ledger%rowtype;
+  v_state public.ai_credit_pack_clawbacks%rowtype;
+  v_grant bigint;
+  v_refund_share bigint := 0;
+  v_dispute_share bigint := 0;
+  v_target bigint;
+  v_clawed bigint;
+  v_delta bigint;
   v_balance bigint;
-  v_requested bigint;
-  v_debit bigint;
-  v_shortfall bigint;
+  v_debit bigint := 0;
+  v_restore bigint := 0;
+  v_shortfall bigint := 0;
   v_note text;
 begin
-  if p_refund_id is null or length(btrim(p_refund_id)) = 0 then
-    raise exception 'refund_id required' using errcode = '22023';
+  if p_event_id is null or length(btrim(p_event_id)) = 0 then
+    raise exception 'event_id required' using errcode = '22023';
+  end if;
+  if p_charge_id is null or length(btrim(p_charge_id)) = 0 then
+    raise exception 'charge_id required' using errcode = '22023';
+  end if;
+  if p_dispute_standing is not null and p_dispute_standing not in ('open', 'lost', 'won') then
+    raise exception 'dispute standing required' using errcode = '22023';
   end if;
 
   perform pg_advisory_xact_lock(hashtext('ai-credit-draw'), hashtext(p_org::text));
@@ -133,22 +184,94 @@ begin
   select *
     into v_existing
   from public.ai_credit_ledger
-  where stripe_event_id = p_refund_id;
+  where stripe_event_id = p_event_id;
 
   if found then
-    v_balance := public.ai_credit_balance(p_org);
+    select coalesce(-sum(delta_nanos), 0)
+      into v_clawed
+    from public.ai_credit_ledger
+    where org_id = p_org
+      and stripe_charge_id = p_charge_id;
     return query
       select false,
-             greatest(-v_existing.delta_nanos, 0),
+             case when v_existing.delta_nanos < 0 then -v_existing.delta_nanos else 0::bigint end,
+             case when v_existing.delta_nanos > 0 then v_existing.delta_nanos else 0::bigint end,
              0::bigint,
-             v_balance;
+             public.ai_credit_balance(p_org),
+             v_clawed;
     return;
   end if;
 
-  v_requested := greatest(coalesce(p_debit_nanos, 0), 0);
+  v_grant := greatest(coalesce(p_granted_nanos, 0), 0);
+
+  insert into public.ai_credit_pack_clawbacks (
+    org_id, stripe_charge_id, granted_nanos, charge_amount_cents,
+    amount_refunded_cents, dispute_amount_cents, dispute_standing
+  ) values (
+    p_org,
+    p_charge_id,
+    v_grant,
+    greatest(coalesce(p_charge_amount_cents, 0), 0),
+    greatest(coalesce(p_amount_refunded_cents, 0), 0),
+    case when p_dispute_standing is null then 0 else greatest(coalesce(p_dispute_amount_cents, 0), 0) end,
+    p_dispute_standing
+  )
+  on conflict (org_id, stripe_charge_id) do update set
+    granted_nanos = greatest(ai_credit_pack_clawbacks.granted_nanos, excluded.granted_nanos),
+    charge_amount_cents = greatest(ai_credit_pack_clawbacks.charge_amount_cents, excluded.charge_amount_cents),
+    amount_refunded_cents = greatest(
+      ai_credit_pack_clawbacks.amount_refunded_cents,
+      excluded.amount_refunded_cents
+    ),
+    dispute_amount_cents = case
+      when p_dispute_standing is null then ai_credit_pack_clawbacks.dispute_amount_cents
+      else excluded.dispute_amount_cents
+    end,
+    dispute_standing = case
+      when p_dispute_standing is null then ai_credit_pack_clawbacks.dispute_standing
+      else excluded.dispute_standing
+    end
+  returning * into v_state;
+
+  if v_state.charge_amount_cents > 0 and v_state.granted_nanos > 0 then
+    v_refund_share := least(
+      v_state.granted_nanos,
+      round(
+        v_state.granted_nanos
+        * least(v_state.amount_refunded_cents, v_state.charge_amount_cents)::numeric
+        / v_state.charge_amount_cents
+      )::bigint
+    );
+    if v_state.dispute_standing is not null and v_state.dispute_standing <> 'won' then
+      v_dispute_share := least(
+        v_state.granted_nanos,
+        round(
+          v_state.granted_nanos
+          * least(v_state.dispute_amount_cents, v_state.charge_amount_cents)::numeric
+          / v_state.charge_amount_cents
+        )::bigint
+      );
+    end if;
+  end if;
+
+  v_target := least(v_state.granted_nanos, greatest(v_refund_share, v_dispute_share));
+
+  select coalesce(-sum(delta_nanos), 0)
+    into v_clawed
+  from public.ai_credit_ledger
+  where org_id = p_org
+    and stripe_charge_id = p_charge_id;
+
+  v_delta := v_target - v_clawed;
   v_balance := greatest(public.ai_credit_balance(p_org), 0);
-  v_debit := least(v_requested, v_balance);
-  v_shortfall := v_requested - v_debit;
+
+  if v_delta > 0 then
+    v_debit := least(v_delta, v_balance);
+    v_shortfall := v_delta - v_debit;
+  elsif v_delta < 0 then
+    v_restore := -v_delta;
+  end if;
+
   v_note := concat_ws(
     ' ',
     nullif(btrim(coalesce(p_note, '')), ''),
@@ -156,21 +279,27 @@ begin
   );
 
   insert into public.ai_credit_ledger (
-    org_id, delta_nanos, kind, stripe_event_id, note
+    org_id, delta_nanos, kind, stripe_event_id, stripe_charge_id, note
   ) values (
     p_org,
-    -v_debit,
-    'refund',
-    p_refund_id,
+    case when v_restore > 0 then v_restore else -v_debit end,
+    case when v_restore > 0 then 'adjustment' else 'refund' end,
+    p_event_id,
+    p_charge_id,
     nullif(v_note, '')
   );
 
   return query
-    select true, v_debit, v_shortfall, v_balance - v_debit;
+    select true,
+           v_debit,
+           v_restore,
+           v_shortfall,
+           v_balance - v_debit + v_restore,
+           v_clawed + v_debit - v_restore;
 end;
 $$;
 
 revoke all on function public.record_subscription_price_span(uuid, integer, text, timestamptz, timestamptz) from public, anon, authenticated;
-revoke all on function public.refund_ai_credits(uuid, text, bigint, text) from public, anon, authenticated;
+revoke all on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, text) from public, anon, authenticated;
 grant execute on function public.record_subscription_price_span(uuid, integer, text, timestamptz, timestamptz) to service_role;
-grant execute on function public.refund_ai_credits(uuid, text, bigint, text) to service_role;
+grant execute on function public.apply_ai_credit_clawback(uuid, text, text, integer, bigint, integer, integer, text, text) to service_role;

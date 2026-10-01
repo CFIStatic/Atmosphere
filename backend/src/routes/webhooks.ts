@@ -38,7 +38,7 @@ import {
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
 import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
 import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
-import { clawBackAiCreditCharge, grantAiCredits, recordSubscriptionPriceSpan } from '../metering/aiBudgetService.js';
+import { grantAiCredits, recordSubscriptionPriceSpan, syncCreditPackClawback } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
 
@@ -127,11 +127,12 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
       break;
 
     case 'charge.refunded':
-      await onChargeRefunded(event.data.object as Stripe.Charge, admin);
+      await onChargeRefunded(event.data.object as Stripe.Charge, event.id, admin);
       break;
 
     case 'charge.dispute.created':
-      await onChargeDisputed(event.data.object as Stripe.Dispute, admin);
+    case 'charge.dispute.closed':
+      await onChargeDisputed(event.data.object as Stripe.Dispute, event.id, admin);
       break;
 
     default:
@@ -431,10 +432,11 @@ async function rememberRecurringPrice(
 /**
  * A refund is recorded as its own history row rather than mutating the original
  * payment, so the customer's history shows both the charge and the money back.
- * A credit-pack refund also debits the ledger for that refund's share. Spent
- * credits stop the balance at zero; the shortfall is recorded on the debit.
+ * A credit-pack refund debits the pack's cumulative refunded share. A later,
+ * larger refund on the same charge debits only the increase. Spent credits
+ * stop the balance at zero; the shortfall is recorded on the debit.
  */
-async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void> {
+async function onChargeRefunded(charge: Stripe.Charge, eventId: string, admin: any): Promise<void> {
   const orgId = requireAttributedOrg(
     await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
     `charge ${charge.id}`,
@@ -456,24 +458,22 @@ async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void
   });
   if (error) throw new Error(`refund record failed: ${error.message}`);
 
-  const refunds = charge.refunds?.data ?? [];
-  await clawBackAiCreditCharge(admin, orgId, {
+  await syncCreditPackClawback(admin, orgId, {
+    eventId,
     chargeId: charge.id,
     chargeAmountCents: charge.amount ?? 0,
+    amountRefundedCents: charge.amount_refunded ?? 0,
     metadata: charge.metadata,
-    legs: refunds.length
-      ? refunds.map((refund) => ({
-          id: refund.id,
-          amountCents: refund.amount ?? 0,
-          status: refund.status,
-        }))
-      : [{ id: `${charge.id}_refund`, amountCents: charge.amount_refunded ?? 0, status: 'succeeded' }],
     note: `refund of credit pack ${charge.id}`,
   });
 }
 
-/** A dispute takes the same share of a credit pack as a refund, keyed by the dispute id. */
-async function onChargeDisputed(dispute: Stripe.Dispute, admin: any): Promise<void> {
+/**
+ * An open or lost dispute claws back its share of the pack. A dispute closed
+ * as won restores that share, except the part a refund still covers. The
+ * database keeps one running total per charge, so this cannot stack on a refund.
+ */
+async function onChargeDisputed(dispute: Stripe.Dispute, eventId: string, admin: any): Promise<void> {
   const charge =
     typeof dispute.charge === 'string'
       ? await stripeClient().charges.retrieve(dispute.charge)
@@ -482,12 +482,15 @@ async function onChargeDisputed(dispute: Stripe.Dispute, admin: any): Promise<vo
     await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
     `dispute ${dispute.id}`,
   );
-  await clawBackAiCreditCharge(admin, orgId, {
+  await syncCreditPackClawback(admin, orgId, {
+    eventId,
     chargeId: charge.id,
     chargeAmountCents: charge.amount ?? 0,
+    amountRefundedCents: charge.amount_refunded ?? 0,
     metadata: charge.metadata,
-    legs: [{ id: dispute.id, amountCents: dispute.amount ?? 0, status: 'succeeded' }],
-    note: `dispute ${dispute.id} on credit pack ${charge.id}`,
+    disputeAmountCents: dispute.amount ?? 0,
+    disputeStatus: dispute.status,
+    note: `dispute ${dispute.id} ${dispute.status} on credit pack ${charge.id}`,
   });
 }
 

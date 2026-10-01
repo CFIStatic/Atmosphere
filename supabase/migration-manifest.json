@@ -6,7 +6,7 @@
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3607
+    "finalObjects": 3612
   },
   "outOfOrder": [
     {
@@ -5919,7 +5919,12 @@
       "expect": [
         "index|public.ai_budget_price_spans.ai_budget_price_spans_one_open_idx",
         "function|public.record_subscription_price_span",
-        "function|public.refund_ai_credits"
+        "column|public.ai_credit_ledger.stripe_charge_id",
+        "index|public.ai_credit_ledger.ai_credit_ledger_charge_idx",
+        "table|public.ai_credit_pack_clawbacks",
+        "index|public.ai_credit_pack_clawbacks.ai_credit_pack_clawbacks_pkey",
+        "rls|public.ai_credit_pack_clawbacks",
+        "function|public.apply_ai_credit_clawback"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

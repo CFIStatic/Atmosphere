@@ -276,7 +276,7 @@ export function grantedNanosFromCreditMetadata(
   return fromAmount > 0 ? fromAmount : null;
 }
 
-/** Share of the pack a single refund or dispute takes back. */
+/** Share of the pack a cumulative refund or dispute amount takes back, capped at the grant. */
 export function creditRefundDebitNanos(
   chargeAmountCents: number,
   refundAmountCents: number,
@@ -284,28 +284,39 @@ export function creditRefundDebitNanos(
 ): number {
   if (chargeAmountCents <= 0 || refundAmountCents <= 0 || grantedCreditNanos <= 0) return 0;
   const share = Math.min(refundAmountCents, chargeAmountCents) / chargeAmountCents;
-  return Math.round(grantedCreditNanos * share);
+  return Math.min(grantedCreditNanos, Math.round(grantedCreditNanos * share));
 }
 
-export function creditPackRefundLegs(input: {
+export type CreditDisputeStanding = 'open' | 'lost' | 'won';
+
+/** Open and lost disputes count. A won dispute, or a closed inquiry, does not. */
+export function creditDisputeStanding(status: string | null | undefined): CreditDisputeStanding {
+  if (status === 'won' || status === 'warning_closed') return 'won';
+  if (status === 'lost') return 'lost';
+  return 'open';
+}
+
+/**
+ * Net credits a pack should have given back. Refunds and disputes overlap:
+ * the charge owes the larger of the two shares, never more than the grant.
+ * A won dispute drops out, so only a refund still covering that money remains.
+ */
+export function creditPackClawbackTarget(input: {
   chargeAmountCents: number;
   grantedCreditNanos: number;
-  refunds: Array<{ id: string; amountCents: number; status?: string | null }>;
-}): Array<{ refundId: string; debitNanos: number }> {
-  const legs: Array<{ refundId: string; debitNanos: number }> = [];
-  for (const refund of input.refunds) {
-    if (!refund.id) continue;
-    const status = refund.status ?? 'succeeded';
-    if (status === 'failed' || status === 'canceled' || status === 'cancelled') continue;
-    const debitNanos = creditRefundDebitNanos(
-      input.chargeAmountCents,
-      refund.amountCents,
-      input.grantedCreditNanos,
-    );
-    if (debitNanos <= 0) continue;
-    legs.push({ refundId: refund.id, debitNanos });
-  }
-  return legs;
+  amountRefundedCents: number;
+  disputeAmountCents?: number;
+  disputeStanding?: CreditDisputeStanding | null;
+}): number {
+  const grant = Math.max(0, Math.round(input.grantedCreditNanos));
+  if (grant <= 0) return 0;
+  const refundShare = creditRefundDebitNanos(input.chargeAmountCents, input.amountRefundedCents, grant);
+  const standing = input.disputeStanding ?? null;
+  const disputeShare =
+    standing && standing !== 'won'
+      ? creditRefundDebitNanos(input.chargeAmountCents, input.disputeAmountCents ?? 0, grant)
+      : 0;
+  return Math.min(grant, Math.max(refundShare, disputeShare));
 }
 
 export interface CreditLedgerEntry {
