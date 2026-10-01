@@ -1677,6 +1677,25 @@
 
   /* ---------- recording ---------- */
 
+  function releaseCaptureTracks(stream) {
+    if (Core.releaseMediaTracks) {
+      Core.releaseMediaTracks(stream);
+      return;
+    }
+    if (!stream || typeof stream.getTracks !== 'function') return;
+    stream.getTracks().forEach(function (track) {
+      try {
+        track.stop();
+      } catch (e) {}
+    });
+  }
+
+  function armRecordButton() {
+    when('#daybtn', function (btn) {
+      btn.disabled = false;
+    });
+  }
+
   function fmt(sec) {
     var h = Math.floor(sec / 3600);
     var m = Math.floor((sec % 3600) / 60);
@@ -1813,14 +1832,23 @@
         startLiveRtcPublisher(rec);
       })
       .catch(function (err) {
-        if (stream) {
-          stream.getTracks().forEach(function (t) {
-            t.stop();
-          });
+        releaseCaptureTracks(stream);
+        if (state.recorder && typeof state.recorder.getStream === 'function') {
+          releaseCaptureTracks(state.recorder.getStream());
+        }
+        state.recorder = null;
+        state.recording = null;
+        show('s-home');
+        armRecordButton();
+        /* Don't Allow on the iOS prompt rejects with the raw NotAllowedError
+           string. Leave Today quiet and let the next tap call getUserMedia
+           again — a leftover recorder made that tap a no-op. */
+        if (Core.isCapturePermissionDenial && Core.isCapturePermissionDenial(err)) {
+          setStatus('');
+          return;
         }
         setStatus(err.message || 'Could not start camera/mic.', true);
         alert(err.message || 'Could not start camera/mic.');
-        show('s-home');
       });
   }
 

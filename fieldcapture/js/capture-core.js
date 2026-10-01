@@ -424,6 +424,30 @@
   }
 
   /**
+   * Safari's getUserMedia denial. The message is the raw NotAllowedError
+   * ("not allowed by the user agent… possibly because the user denied
+   * permission"). A retry has to be a new call — this only classifies it.
+   */
+  function isCapturePermissionDenial(err) {
+    if (!err) return false;
+    var name = String(err.name || '');
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return true;
+    var msg = String(err.message || '');
+    return /not allowed by the user agent|denied permission|permission denied|NotAllowedError/i.test(msg);
+  }
+
+  function releaseMediaTracks(stream) {
+    if (!stream || typeof stream.getTracks !== 'function') return;
+    stream.getTracks().forEach(function (track) {
+      try {
+        track.stop();
+      } catch (e) {
+        /* already ended */
+      }
+    });
+  }
+
+  /**
    * Record day film with camera + microphone into a Blob (webm/mp4).
    *
    * `opts.onChunk(blob, { mimeType, startedAt, index })` sees every chunk the
@@ -522,6 +546,16 @@
           state.timer = setInterval(function () {
             onTick(Math.floor((Date.now() - state.startedAt) / 1000));
           }, 500);
+        }).catch(function (err) {
+          /* A denied or failed start must not keep the camera. The next tap
+             calls getUserMedia again only if nothing is still held. */
+          if (state.timer) clearInterval(state.timer);
+          state.timer = null;
+          releaseMediaTracks(state.stream);
+          state.stream = null;
+          state.recorder = null;
+          if (videoEl) videoEl.srcObject = null;
+          throw err;
         });
       },
       stop: function () {
@@ -3785,6 +3819,8 @@
     DAY_FILM_VIDEO_BITS_PER_SECOND: DAY_FILM_VIDEO_BITS_PER_SECOND,
     dayFilmGetUserMediaConstraints: dayFilmGetUserMediaConstraints,
     dayFilmRecorderOptions: dayFilmRecorderOptions,
+    isCapturePermissionDenial: isCapturePermissionDenial,
+    releaseMediaTracks: releaseMediaTracks,
     filterJobs: filterJobs,
     isLocalJobId: isLocalJobId,
     draftFieldJob: draftFieldJob,

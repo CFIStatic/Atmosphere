@@ -1853,3 +1853,102 @@ assert.match(coreSrc, /CLOSED_JOB_STATUSES/, 'client skips cancelled/completed w
 assert.match(appSrc, /forceChunked:\s*Boolean\(entry\.preferChunked\)/);
 assert.match(html, /js\/capture-core\.js\?v=upload-success-simple-1/);
 assert.match(html, /js\/app\.js\?v=upload-success-simple-1/);
+
+const DENIED_GUM =
+  'The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.';
+{
+  const denied = new Error(DENIED_GUM);
+  denied.name = 'NotAllowedError';
+  assert.equal(Core.isCapturePermissionDenial(denied), true);
+  assert.equal(Core.isCapturePermissionDenial({ message: DENIED_GUM }), true);
+  assert.equal(Core.isCapturePermissionDenial({ name: 'PermissionDeniedError', message: 'Permission denied' }), true);
+  assert.equal(
+    Core.isCapturePermissionDenial(new Error('Microphone is required. Enable mic permission and try again.')),
+    false,
+  );
+  assert.equal(Core.isCapturePermissionDenial({ name: 'NotFoundError', message: 'Requested device not found' }), false);
+  assert.equal(Core.isCapturePermissionDenial(null), false);
+}
+{
+  const from = appSrc.indexOf('.catch(function (err) {', appSrc.indexOf('function startLiveDayAfterConsent'));
+  const end = appSrc.indexOf('function stopSafetySampler');
+  assert.ok(from > 0 && end > from, 'start failure catch must exist');
+  const src = appSrc.slice(from, end);
+  assert.match(src, /state\.recorder = null/, 'a failed start must drop the recorder so the next tap can retry');
+  assert.match(src, /state\.recording = null/);
+  assert.match(src, /armRecordButton\(\)/, 'the record button is armed again after a denial');
+  assert.match(src, /releaseCaptureTracks\(/);
+  const deniedAt = src.indexOf('isCapturePermissionDenial');
+  const shownAt = src.indexOf("setStatus(err.message || 'Could not start camera/mic.'");
+  assert.ok(deniedAt > 0 && shownAt > deniedAt, 'permission denial is handled before the raw error is shown');
+  const deniedBranch = src.slice(deniedAt, shownAt);
+  assert.match(deniedBranch, /setStatus\(''\)/, 'a denial clears status instead of painting the raw NotAllowedError');
+  assert.doesNotMatch(deniedBranch, /alert\(/, 'a denial must not alert the raw getUserMedia message');
+  assert.doesNotMatch(deniedBranch, /err\.message/);
+  assert.match(src, /alert\(err\.message \|\| 'Could not start camera\/mic\.'\)/, 'other start failures still surface');
+}
+
+await (async function retryGetUserMediaAfterDenial() {
+  const stops = [];
+  let calls = 0;
+  function deniedError() {
+    const err = new Error(DENIED_GUM);
+    err.name = 'NotAllowedError';
+    return err;
+  }
+  function fakeStream(label) {
+    const track = {
+      kind: 'video',
+      stop() {
+        stops.push(label);
+      },
+    };
+    return {
+      getAudioTracks() {
+        return [{ kind: 'audio', stop() {} }];
+      },
+      getVideoTracks() {
+        return [track];
+      },
+      getTracks() {
+        return [track, { kind: 'audio', stop() { stops.push(label + '-audio'); } }];
+      },
+    };
+  }
+  sandbox.MediaRecorder = function MediaRecorder() {
+    throw new Error('MediaRecorder boom');
+  };
+  sandbox.MediaRecorder.isTypeSupported = function () {
+    return false;
+  };
+  sandbox.navigator.mediaDevices = {
+    getUserMedia() {
+      calls += 1;
+      if (calls === 1) return Promise.reject(deniedError());
+      return Promise.resolve(fakeStream('second'));
+    },
+  };
+  const first = Core.recordDayFilm({});
+  await first.start().then(
+    () => {
+      throw new Error('denial should reject');
+    },
+    (err) => {
+      assert.equal(err.name, 'NotAllowedError');
+      assert.equal(Core.isCapturePermissionDenial(err), true);
+    },
+  );
+  assert.equal(first.getStream(), null, 'a denied start releases the stream');
+  const second = Core.recordDayFilm({});
+  await second.start().then(
+    () => {
+      throw new Error('recorder failure should reject');
+    },
+    (err) => {
+      assert.equal(err.message, 'MediaRecorder boom');
+    },
+  );
+  assert.equal(calls, 2, 'each start() issues a fresh getUserMedia');
+  assert.ok(stops.includes('second'), 'a failed start stops the tracks it acquired');
+  assert.equal(second.getStream(), null);
+})();
