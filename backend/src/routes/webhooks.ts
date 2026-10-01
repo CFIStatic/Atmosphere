@@ -38,7 +38,7 @@ import {
 import { invoiceWebhookRecord, invoiceWebhookShouldApply } from '../lib/stripeInvoices.js';
 import { aiBudgetConfig } from '../metering/aiBudgetConfig.js';
 import { creditGrantFromCheckout, recurringChargeFromItems } from '../metering/aiBudget.js';
-import { grantAiCredits, recordSubscriptionPriceSpan } from '../metering/aiBudgetService.js';
+import { clawBackAiCreditCharge, grantAiCredits, recordSubscriptionPriceSpan } from '../metering/aiBudgetService.js';
 
 export const webhookRouter = Router();
 
@@ -128,6 +128,10 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
 
     case 'charge.refunded':
       await onChargeRefunded(event.data.object as Stripe.Charge, admin);
+      break;
+
+    case 'charge.dispute.created':
+      await onChargeDisputed(event.data.object as Stripe.Dispute, admin);
       break;
 
     default:
@@ -427,11 +431,12 @@ async function rememberRecurringPrice(
 /**
  * A refund is recorded as its own history row rather than mutating the original
  * payment, so the customer's history shows both the charge and the money back.
- * Credits already spent are deliberately not clawed back automatically.
+ * A credit-pack refund also debits the ledger for that refund's share. Spent
+ * credits stop the balance at zero; the shortfall is recorded on the debit.
  */
 async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void> {
   const orgId = requireAttributedOrg(
-    await resolveOrgId(admin, charge.metadata, charge.customer as string | null),
+    await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
     `charge ${charge.id}`,
   );
 
@@ -450,6 +455,45 @@ async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void
     p_card_last4: card.last4,
   });
   if (error) throw new Error(`refund record failed: ${error.message}`);
+
+  const refunds = charge.refunds?.data ?? [];
+  await clawBackAiCreditCharge(admin, orgId, {
+    chargeId: charge.id,
+    chargeAmountCents: charge.amount ?? 0,
+    metadata: charge.metadata,
+    legs: refunds.length
+      ? refunds.map((refund) => ({
+          id: refund.id,
+          amountCents: refund.amount ?? 0,
+          status: refund.status,
+        }))
+      : [{ id: `${charge.id}_refund`, amountCents: charge.amount_refunded ?? 0, status: 'succeeded' }],
+    note: `refund of credit pack ${charge.id}`,
+  });
+}
+
+/** A dispute takes the same share of a credit pack as a refund, keyed by the dispute id. */
+async function onChargeDisputed(dispute: Stripe.Dispute, admin: any): Promise<void> {
+  const charge =
+    typeof dispute.charge === 'string'
+      ? await stripeClient().charges.retrieve(dispute.charge)
+      : dispute.charge;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, charge.metadata, stripeId(charge.customer)),
+    `dispute ${dispute.id}`,
+  );
+  await clawBackAiCreditCharge(admin, orgId, {
+    chargeId: charge.id,
+    chargeAmountCents: charge.amount ?? 0,
+    metadata: charge.metadata,
+    legs: [{ id: dispute.id, amountCents: dispute.amount ?? 0, status: 'succeeded' }],
+    note: `dispute ${dispute.id} on credit pack ${charge.id}`,
+  });
+}
+
+function stripeId(value: { id?: string } | string | null | undefined): string | null {
+  if (!value) return null;
+  return typeof value === 'string' ? value : (value.id ?? null);
 }
 
 /**

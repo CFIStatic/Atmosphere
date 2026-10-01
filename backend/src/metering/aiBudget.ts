@@ -85,15 +85,41 @@ export function proratedPeriodChargeCents(
   periodEnd: Date,
   spans: BudgetPriceSpan[],
 ): number {
-  const periodMs = periodEnd.getTime() - periodStart.getTime();
+  const periodStartMs = periodStart.getTime();
+  const periodEndMs = periodEnd.getTime();
+  const periodMs = periodEndMs - periodStartMs;
   if (!(periodMs > 0) || !spans.length) return 0;
+
+  // Clip to the period, then bill each instant once. Where spans overlap, the
+  // one that started later is the price that should have closed the earlier
+  // span. Summing both would inflate the allowance after a raced webhook.
+  const clipped = spans
+    .map((span, index) => {
+      const started = span.from.getTime();
+      const from = Math.max(periodStartMs, started);
+      const to = Math.min(periodEndMs, span.to ? span.to.getTime() : periodEndMs);
+      return { amountCents: span.amountCents, from, to, started, index };
+    })
+    .filter((span) => span.to > span.from);
+  if (!clipped.length) return 0;
+
+  const bounds = new Set<number>([periodStartMs, periodEndMs]);
+  for (const span of clipped) {
+    bounds.add(span.from);
+    bounds.add(span.to);
+  }
+  const points = [...bounds].filter((t) => t >= periodStartMs && t <= periodEndMs).sort((a, b) => a - b);
+
   let charge = 0;
-  for (const span of spans) {
-    const start = Math.max(periodStart.getTime(), span.from.getTime());
-    const endBound = span.to ?? periodEnd;
-    const end = Math.min(periodEnd.getTime(), endBound.getTime());
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const start = points[i]!;
+    const end = points[i + 1]!;
     if (end <= start) continue;
-    charge += span.amountCents * ((end - start) / periodMs);
+    const covering = clipped.filter((span) => span.from <= start && span.to >= end);
+    if (!covering.length) continue;
+    covering.sort((a, b) => a.started - b.started || a.index - b.index);
+    const chosen = covering[covering.length - 1]!;
+    charge += chosen.amountCents * ((end - start) / periodMs);
   }
   return Math.round(charge);
 }
@@ -235,6 +261,51 @@ export function creditNanosForPaymentCents(cents: number, ratio: number): number
   if (!Number.isFinite(cents) || cents <= 0) return 0;
   if (!Number.isFinite(ratio) || ratio <= 0) return 0;
   return Math.round(cents * NANOS_PER_CENT * ratio);
+}
+
+/** Credits originally granted for a charge whose metadata marks an AI credit pack. */
+export function grantedNanosFromCreditMetadata(
+  metadata: Record<string, string> | null | undefined,
+  chargeAmountCents: number,
+  ratio: number,
+): number | null {
+  if (metadata?.kind !== 'ai_credits') return null;
+  const fromMeta = Number(metadata.credit_nanos ?? '');
+  if (Number.isFinite(fromMeta) && fromMeta > 0) return Math.round(fromMeta);
+  const fromAmount = creditNanosForPaymentCents(chargeAmountCents, ratio);
+  return fromAmount > 0 ? fromAmount : null;
+}
+
+/** Share of the pack a single refund or dispute takes back. */
+export function creditRefundDebitNanos(
+  chargeAmountCents: number,
+  refundAmountCents: number,
+  grantedCreditNanos: number,
+): number {
+  if (chargeAmountCents <= 0 || refundAmountCents <= 0 || grantedCreditNanos <= 0) return 0;
+  const share = Math.min(refundAmountCents, chargeAmountCents) / chargeAmountCents;
+  return Math.round(grantedCreditNanos * share);
+}
+
+export function creditPackRefundLegs(input: {
+  chargeAmountCents: number;
+  grantedCreditNanos: number;
+  refunds: Array<{ id: string; amountCents: number; status?: string | null }>;
+}): Array<{ refundId: string; debitNanos: number }> {
+  const legs: Array<{ refundId: string; debitNanos: number }> = [];
+  for (const refund of input.refunds) {
+    if (!refund.id) continue;
+    const status = refund.status ?? 'succeeded';
+    if (status === 'failed' || status === 'canceled' || status === 'cancelled') continue;
+    const debitNanos = creditRefundDebitNanos(
+      input.chargeAmountCents,
+      refund.amountCents,
+      input.grantedCreditNanos,
+    );
+    if (debitNanos <= 0) continue;
+    legs.push({ refundId: refund.id, debitNanos });
+  }
+  return legs;
 }
 
 export interface CreditLedgerEntry {

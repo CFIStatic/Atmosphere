@@ -1,12 +1,12 @@
 {
   "generatedFrom": {
-    "migrationCount": 180,
+    "migrationCount": 181,
     "stubs": [
       "supabase/tests/00_local_stub.sql",
       "supabase/tests/00_supabase_platform_stub.sql"
     ],
     "baselineObjects": 89,
-    "finalObjects": 3604
+    "finalObjects": 3607
   },
   "outOfOrder": [
     {
@@ -194,7 +194,8 @@
     "20261001170000_proofs_awaiting_room_backfill.sql",
     "20261001180000_job_chat_documents.sql",
     "20261002120000_ai_usage_budgets.sql",
-    "20261002130000_ai_allowance_enforcement.sql"
+    "20261002130000_ai_allowance_enforcement.sql",
+    "20261002140000_ai_budget_span_and_refund.sql"
   ],
   "migrations": [
     {
@@ -5905,6 +5906,20 @@
         "function|public.settle_ai_usage",
         "function|private.job_proofs_guard_budget_hold",
         "trigger|public.job_proofs.job_proofs_guard_budget_hold"
+      ],
+      "sharedWithOtherMigrations": [],
+      "createdThenDroppedCount": 0,
+      "dropsCount": 0
+    },
+    {
+      "version": "20261002140000_ai_budget_span_and_refund",
+      "file": "20261002140000_ai_budget_span_and_refund.sql",
+      "structurallyVerifiable": true,
+      "indistinguishableReason": null,
+      "expect": [
+        "index|public.ai_budget_price_spans.ai_budget_price_spans_one_open_idx",
+        "function|public.record_subscription_price_span",
+        "function|public.refund_ai_credits"
       ],
       "sharedWithOtherMigrations": [],
       "createdThenDroppedCount": 0,

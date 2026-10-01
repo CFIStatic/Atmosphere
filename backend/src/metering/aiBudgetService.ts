@@ -16,12 +16,14 @@ import { aiBudgetConfig, AI_CREDIT_PACKS, creditPackPriceId, type AiBudgetConfig
 import {
   allowanceNanos,
   allocateUsage,
+  creditNanosForPaymentCents,
+  creditPackRefundLegs,
   customerAllowanceMessage,
   evaluateAllowance,
   featureLabel,
+  grantedNanosFromCreditMetadata,
   monthlyAllowanceNanos,
   proratedPeriodChargeCents,
-  spanEffectiveFrom,
   subscriptionAmountCents,
   type AllowanceEvaluation,
   type AllowanceState,
@@ -448,34 +450,88 @@ export async function recordSubscriptionPriceSpan(
   input: { amountCents: number; interval: 'month' | 'year'; at?: Date; periodStart?: Date | null },
 ): Promise<void> {
   const at = input.at ?? new Date();
-  const { data, error } = await client
-    .from('ai_budget_price_spans')
-    .select('id, amount_cents, effective_to')
-    .eq('org_id', orgId)
-    .is('effective_to', null)
-    .order('effective_from', { ascending: false })
-    .limit(1);
-  if (error) {
-    if (missingSchema(error)) return;
-    throw error;
-  }
-  const open = (data ?? [])[0] as { id: string; amount_cents: number } | undefined;
-  if (open && Number(open.amount_cents) === input.amountCents) return;
-  if (open) {
-    await client.from('ai_budget_price_spans').update({ effective_to: at.toISOString() }).eq('id', open.id);
-  }
-  const from = spanEffectiveFrom({
-    hasExistingSpan: Boolean(open),
-    periodStart: input.periodStart ?? null,
-    at,
+  const { error } = await client.rpc('record_subscription_price_span', {
+    p_org: orgId,
+    p_amount_cents: input.amountCents,
+    p_interval: input.interval,
+    p_at: at.toISOString(),
+    p_period_start: input.periodStart ? input.periodStart.toISOString() : null,
   });
-  const { error: insertError } = await client.from('ai_budget_price_spans').insert({
-    org_id: orgId,
-    amount_cents: input.amountCents,
-    billing_interval: input.interval,
-    effective_from: from.toISOString(),
+  if (error && !missingSchema(error)) throw error;
+}
+
+export async function refundAiCredits(
+  client: SupabaseClient,
+  input: {
+    orgId: string;
+    refundId: string;
+    debitNanos: number;
+    note?: string | null;
+  },
+): Promise<{ applied: boolean; debitedNanos: number; shortfallNanos: number; balanceNanos: number }> {
+  const { data, error } = await client.rpc('refund_ai_credits', {
+    p_org: input.orgId,
+    p_refund_id: input.refundId,
+    p_debit_nanos: input.debitNanos,
+    p_note: input.note ?? null,
   });
-  if (insertError && !missingSchema(insertError)) throw insertError;
+  if (error) throw error;
+  const row = firstRpcRow(data);
+  if (!row) throw new Error('refund_ai_credits returned no row');
+  return {
+    applied: row.applied === true,
+    debitedNanos: asNanos(row.debited_nanos),
+    shortfallNanos: asNanos(row.shortfall_nanos),
+    balanceNanos: asNanos(row.balance_nanos),
+  };
+}
+
+/**
+ * Debit a credit-pack charge for each refund or dispute id. The database
+ * floors the debit at the remaining balance and records the shortfall.
+ * A charge that is not an AI credit pack is left alone.
+ */
+export async function clawBackAiCreditCharge(
+  client: SupabaseClient,
+  orgId: string,
+  input: {
+    chargeId: string;
+    chargeAmountCents: number;
+    metadata?: Record<string, string> | null;
+    legs: Array<{ id: string; amountCents: number; status?: string | null }>;
+    note: string;
+  },
+): Promise<void> {
+  const ratio = aiBudgetConfig().creditUsdRatio;
+  let granted = grantedNanosFromCreditMetadata(input.metadata, input.chargeAmountCents, ratio);
+  if (granted == null) {
+    const { data, error } = await client
+      .from('payments')
+      .select('description, amount_cents')
+      .eq('stripe_charge_id', input.chargeId)
+      .maybeSingle();
+    if (error) {
+      if (missingSchema(error)) return;
+      throw error;
+    }
+    const payment = data as { description?: string | null; amount_cents?: number | null } | null;
+    if (payment?.description !== 'AI usage credits') return;
+    granted = creditNanosForPaymentCents(input.chargeAmountCents, ratio);
+  }
+  if (granted == null || granted <= 0) return;
+  const legs = creditPackRefundLegs({
+    chargeAmountCents: input.chargeAmountCents,
+    grantedCreditNanos: granted,
+    refunds: input.legs,
+  });
+  for (const leg of legs) {
+    await refundAiCredits(client, {
+      orgId,
+      refundId: leg.refundId,
+      debitNanos: leg.debitNanos,
+      note: input.note,
+    });
+  }
 }
 
 export async function markProofBudgetHold(
