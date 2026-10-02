@@ -76,3 +76,17 @@ export const testCampaign: Campaign = {
   failedCount: null,
   suppressedCount: null,
 };
+
+/** Production right after deploy: the new tracking tables have no rows yet. */
+export function emptyTrackingPayload(): unknown {
+  const raw = JSON.parse(JSON.stringify(testHealth));
+  raw.uploads.current = null;
+  raw.uploads.prior = null;
+  raw.uploads.trackingSince = null;
+  raw.uploads.topErrors = [];
+  raw.ask.current = null;
+  raw.ask.prior = null;
+  raw.ask.trackingSince = null;
+  raw.analysis.prior = null;
+  return raw;
+}

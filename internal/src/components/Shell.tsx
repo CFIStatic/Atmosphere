@@ -6,6 +6,7 @@ import { isTestData, onTestData } from '../lib/api';
 import { NAV_GROUPS } from '../lib/nav';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
+import { ErrorBoundary } from './ErrorBoundary';
 
 function useTestDataFlag(): boolean {
   return useSyncExternalStore(onTestData, isTestData, () => false);
@@ -106,7 +107,9 @@ export function Shell() {
           {nav}
         </aside>
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

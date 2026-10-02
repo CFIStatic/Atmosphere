@@ -28,6 +28,7 @@ import type {
   CampaignSendingState,
   AudienceCount,
 } from './types';
+import { normalizeProductHealth } from './productHealth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -251,8 +252,8 @@ export const api = {
     exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
 
-  productHealth: (weeks = 12) =>
-    request<ProductHealth>(`/api/analytics/product-health?weeks=${weeks}`),
+  productHealth: (weeks = 12): Promise<ProductHealth> =>
+    request<unknown>(`/api/analytics/product-health?weeks=${weeks}`).then(normalizeProductHealth),
 
   contacts: (refresh = false) =>
     request<ContactDirectory>(`/api/analytics/contacts${refresh ? '?refresh=1' : ''}`),
