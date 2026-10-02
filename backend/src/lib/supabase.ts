@@ -47,3 +47,26 @@ export function createAdminClient(): SupabaseClient | null {
   if (!config.supabase.serviceRoleKey) return null;
   return createClient(config.supabase.url, config.supabase.serviceRoleKey, baseAuthOptions);
 }
+
+/**
+ * Header read by private.analytics_actor() for service-role report RPCs.
+ * Set it only from the authenticated session user id, never from a request body.
+ */
+export const ANALYTICS_ACTOR_HEADER = 'x-analytics-user-id';
+
+/**
+ * Service-role client for Internal report RPCs.
+ *
+ * Those functions are not granted to authenticated. The database resolves the
+ * staff user from ANALYTICS_ACTOR_HEADER and still requires an analytics_staff
+ * row. Returns null when the service role key is unset.
+ */
+export function createStaffReportClient(userId: string): SupabaseClient | null {
+  if (!config.supabase.serviceRoleKey) return null;
+  return createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+    ...baseAuthOptions,
+    global: {
+      headers: { [ANALYTICS_ACTOR_HEADER]: userId },
+    },
+  });
+}

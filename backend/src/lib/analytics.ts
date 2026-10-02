@@ -1,12 +1,11 @@
 /**
  * Typed access to the analytics reporting functions.
  *
- * Every call runs under the CALLER'S JWT, never the service-role key: the
- * functions are SECURITY DEFINER because they must read across organizations,
- * and each one re-checks the caller's scope internally. Calling them as the user
- * keeps the database the single source of truth for who may see what — the API
- * layer below adds a second, earlier check so an investor-scope caller gets a
- * clean 403 instead of a database error.
+ * The report RPCs are SECURITY DEFINER and executable by service_role only.
+ * Call them with createStaffReportClient so the service-role request carries
+ * the signed-in user id. The database still requires that id to have an
+ * analytics_staff row. The access probe does not use those RPCs: it reads the
+ * caller's own analytics_staff row with the user JWT, which RLS already allows.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -226,12 +225,27 @@ const numOrNull = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value);
 
 /**
- * Translate a PostgREST error into an HTTP error. The scope checks in the
- * database raise SQLSTATE 42501, which is a 403 and not a 500.
+ * Translate a PostgREST error into an HTTP error.
+ *
+ * The staff check inside a report raises `analytics_forbidden` /
+ * `scope_insufficient` (SQLSTATE 42501). That is the report sentence.
+ * A bare 42501 is "permission denied for function" — the role cannot execute
+ * the RPC at all — and must not be described as a report the caller opened.
+ * The sign-in page displays this text verbatim.
  */
-function rpcError(error: { message: string; code?: string }, fallback: string): HttpError {
-  if (error.code === '42501' || /analytics_forbidden|scope_insufficient/.test(error.message)) {
+export function translateAnalyticsRpcError(
+  error: { message: string; code?: string },
+  fallback: string,
+): HttpError {
+  if (/analytics_forbidden|scope_insufficient/.test(error.message ?? '')) {
     return new HttpError(403, 'You do not have access to this report.', 'analytics_forbidden');
+  }
+  if (error.code === '42501' || /permission denied for function/i.test(error.message ?? '')) {
+    return new HttpError(
+      403,
+      'You do not have access to Atmosphere analytics.',
+      'analytics_forbidden',
+    );
   }
   if (error.code === '28000') {
     return new HttpError(401, 'Not authenticated', 'unauthorized');
@@ -239,9 +253,25 @@ function rpcError(error: { message: string; code?: string }, fallback: string): 
   return new HttpError(500, error.message, fallback);
 }
 
+function rpcError(error: { message: string; code?: string }, fallback: string): HttpError {
+  return translateAnalyticsRpcError(error, fallback);
+}
+
 export async function getAccess(supabase: SupabaseClient): Promise<AnalyticsAccess> {
-  const { data, error } = await supabase.rpc('analytics_whoami');
-  if (error) throw rpcError(error, 'analytics_access_failed');
+  const { data, error } = await supabase
+    .from('analytics_staff')
+    .select('scope, display_name')
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42501' || /permission denied/i.test(error.message ?? '')) {
+      throw new HttpError(
+        403,
+        'You do not have access to Atmosphere analytics.',
+        'analytics_forbidden',
+      );
+    }
+    throw new HttpError(500, error.message, 'analytics_access_failed');
+  }
   const row = (data ?? {}) as { scope?: AnalyticsScope | null; display_name?: string | null };
   return { scope: row.scope ?? null, displayName: row.display_name ?? null };
 }

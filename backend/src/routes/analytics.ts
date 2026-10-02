@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { createAdminClient, createStaffReportClient, createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import {
@@ -40,6 +40,22 @@ export const analyticsRouter = Router();
 
 analyticsRouter.use(requireAuth);
 
+function staffReports(req: Request) {
+  const userId = req.user?.id ?? '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+    throw new HttpError(401, 'Not authenticated', 'unauthorized');
+  }
+  const client = createStaffReportClient(userId);
+  if (!client) {
+    throw new HttpError(
+      503,
+      'Staff reports are not configured on this server.',
+      'analytics_unavailable',
+    );
+  }
+  return client;
+}
+
 /**
  * GET /api/analytics/access
  *
@@ -53,6 +69,10 @@ analyticsRouter.get('/access', async (req: Request, res: Response, next: NextFun
     // /analytics without a manual SQL upsert.
     await ensureAllowlistedAnalyticsAccess(req.user);
 
+    // Own analytics_staff row under the user JWT. Do not call analytics_whoami
+    // here: that RPC is service_role only, and a missing EXECUTE grant is not
+    // a report the sign-in page opened. The service-role client would bypass
+    // RLS and see every staff row.
     const supabase = createUserClient(req.accessToken!);
     const access = await getAccess(supabase);
     if (access.scope === 'internal') {
@@ -79,7 +99,7 @@ function parseRange(req: Request) {
 analyticsRouter.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { from, to, months } = parseRange(req);
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json(await getOverview(supabase, req.analyticsScope!, from, to, months));
   } catch (err) {
     next(err);
@@ -89,7 +109,7 @@ analyticsRouter.get('/overview', async (req: Request, res: Response, next: NextF
 analyticsRouter.get('/summary', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { from, to } = parseRange(req);
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json({ summary: await getSummary(supabase, from, to) });
   } catch (err) {
     next(err);
@@ -99,7 +119,7 @@ analyticsRouter.get('/summary', async (req: Request, res: Response, next: NextFu
 analyticsRouter.get('/monthly', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { months } = parseRange(req);
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json({ months: await getMonthly(supabase, months) });
   } catch (err) {
     next(err);
@@ -109,7 +129,7 @@ analyticsRouter.get('/monthly', async (req: Request, res: Response, next: NextFu
 analyticsRouter.get('/features', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { from, to } = parseRange(req);
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json({ features: await getFeatures(supabase, from, to) });
   } catch (err) {
     next(err);
@@ -118,7 +138,7 @@ analyticsRouter.get('/features', async (req: Request, res: Response, next: NextF
 
 analyticsRouter.get('/plan-mix', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json({ plans: await getPlanMix(supabase) });
   } catch (err) {
     next(err);
@@ -128,7 +148,7 @@ analyticsRouter.get('/plan-mix', async (req: Request, res: Response, next: NextF
 analyticsRouter.get('/retention', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { months } = parseRange(req);
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     res.json({ cohorts: await getRetention(supabase, Math.min(months, 36)) });
   } catch (err) {
     next(err);
@@ -142,7 +162,7 @@ analyticsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { from, to } = parseRange(req);
-      const supabase = createUserClient(req.accessToken!);
+      const supabase = staffReports(req);
       res.json({ accounts: await getAccounts(supabase, from, to, 500) });
     } catch (err) {
       next(err);
@@ -161,7 +181,7 @@ analyticsRouter.get(
         throw new HttpError(400, parsed.error.issues[0]?.message ?? 'Invalid org id', 'invalid_org');
       }
       const { from, to } = parseRange(req);
-      const supabase = createUserClient(req.accessToken!);
+      const supabase = staffReports(req);
       const detail = await getAccountDetail(supabase, parsed.data, from, to);
       if (!detail) {
         throw new HttpError(404, 'Organization not found', 'org_not_found');
@@ -181,7 +201,7 @@ analyticsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { from, to } = parseRange(req);
-      const supabase = createUserClient(req.accessToken!);
+      const supabase = staffReports(req);
       res.json(await getAdminTokenUsageAnalytics(supabase, from.toISOString(), to.toISOString()));
     } catch (err) {
       next(err);
@@ -196,7 +216,7 @@ analyticsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { from, to } = parseRange(req);
-      const supabase = createUserClient(req.accessToken!);
+      const supabase = staffReports(req);
       res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
     } catch (err) {
       next(err);
@@ -332,7 +352,7 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
       );
     }
 
-    const supabase = createUserClient(req.accessToken!);
+    const supabase = staffReports(req);
     const payload = await getOverview(supabase, scope, from, to, months);
     const workbook = buildWorkbook(payload, dataset);
     const filename = workbookFilename(payload, dataset);
