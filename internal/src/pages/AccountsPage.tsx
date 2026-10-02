@@ -31,7 +31,7 @@ export function AccountsPage() {
           placeholder="Search name, plan, or tool…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="w-full max-w-sm rounded-lg border border-line-strong bg-paper-0 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          className="w-full max-w-sm border border-line-strong bg-paper-0 px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
         <div className="flex gap-1">
           {([
@@ -44,8 +44,8 @@ export function AccountsPage() {
               key={key}
               type="button"
               onClick={() => setSort(key)}
-              className={`rounded-md px-2 py-1 text-xs ${
-                sort === key ? 'bg-brand-600 text-white' : 'text-ink-500 hover:bg-paper-200'
+              className={` px-2 py-1 text-xs ${
+                sort === key ? 'bg-ink-900 text-paper-0' : 'text-ink-500 hover:bg-paper-200'
               }`}
             >
               {label}
@@ -63,7 +63,7 @@ export function AccountsPage() {
       </div>
 
       <SectionHeading title={`${count(rows.length)} organizations`} />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -91,11 +91,11 @@ export function AccountsPage() {
                   {row.planName}
                   <span className="ml-1 text-xs text-ink-500">{row.billingInterval}</span>
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{money(row.mrrCents)}</td>
-                <td className="px-4 py-3 text-right font-mono">
+                <td className="px-4 py-3 text-right tabular-nums">{money(row.mrrCents)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">
                   {count(row.members)}/{count(row.seats)}
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{hours(row.activeHours)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{hours(row.activeHours)}</td>
                 <td className="px-4 py-3 text-ink-600">{row.topFeature ?? '—'}</td>
                 <td className="px-4 py-3 text-right text-ink-500">{dateTime(row.lastActiveAt)}</td>
               </tr>

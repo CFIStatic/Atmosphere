@@ -1,79 +1,114 @@
+import { useState, useSyncExternalStore } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canManageAccess, canSeeAccounts } from '../lib/access';
+import { isTestData, onTestData } from '../lib/api';
+import { NAV_GROUPS } from '../lib/nav';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 
-const NAV = [
-  { to: '/overview', label: 'Overview' },
-  { to: '/accounts', label: 'Accounts', internal: true },
-  { to: '/access', label: 'Access', internal: true },
-  { to: '/usage', label: 'Usage' },
-  { to: '/experiments', label: 'Experiments', internal: true },
-  { to: '/metering', label: 'Metering', internal: true },
-  { to: '/ai-budgets', label: 'AI budgets', internal: true },
-  { to: '/token-usage', label: 'Token usage', internal: true },
-  { to: '/legal', label: 'Legal', internal: true },
-  { to: '/safety', label: 'Safety', internal: true },
-  { to: '/motion-clips', label: 'Motion clips', internal: true },
-  { to: '/system', label: 'System' },
-] as const;
+function useTestDataFlag(): boolean {
+  return useSyncExternalStore(onTestData, isTestData, () => false);
+}
 
 export function Shell() {
   const { user, access, logout } = useAuth();
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const testData = useTestDataFlag();
   const internal = canSeeAccounts(access?.scope);
-  const links = NAV.filter((item) => !('internal' in item && item.internal) || internal);
   const pending = canManageAccess(access?.scope) ? (access?.pendingAccessRequests ?? 0) : 0;
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.internal || internal),
+  })).filter((group) => group.items.length > 0);
+
+  const path = location.pathname;
+
+  const nav = (
+    <nav aria-label="Reports" className="space-y-5">
+      {groups.map((group) => (
+        <div key={group.title}>
+          <p className="eyebrow px-3 pb-1">{group.title}</p>
+          <ul className="space-y-px">
+            {group.items.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center justify-between border-l-2 px-3 py-[5px] text-[13px] transition ${
+                      isActive || path.startsWith(`${item.to}/`)
+                        ? 'border-brand-500 font-medium text-ink-900'
+                        : 'border-transparent text-ink-600 hover:border-line-strong hover:text-ink-900'
+                    }`
+                  }
+                >
+                  <span>{item.label}</span>
+                  {item.to === '/access' && pending > 0 && (
+                    <span className="text-[11px] font-semibold tabular-nums text-brand-600" aria-label={`${pending} pending`}>
+                      {pending}
+                    </span>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
 
   return (
     <div className="min-h-screen bg-paper-100 text-ink-900">
-      <header className="sticky top-0 z-20 border-b border-line bg-paper-50/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-3">
-          <div className="flex items-end gap-2.5">
+      {testData && (
+        <div
+          className="sticky top-0 z-30 border-b border-caution-600/40 bg-paper-0 px-4 py-1 text-center text-[10.5px] font-semibold uppercase tracking-[0.16em] text-caution-600"
+          role="status"
+          data-testid="test-data-ribbon"
+        >
+          TEST DATA · mock API · not production figures
+        </div>
+      )}
+      <header className={`sticky ${testData ? 'top-[23px]' : 'top-0'} z-20 border-b border-line bg-paper-0`}>
+        <div className="flex items-center gap-4 px-4 py-2.5 lg:px-6">
+          <button
+            type="button"
+            className="btn px-2 py-1 lg:hidden"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? 'Close' : 'Menu'}
+          </button>
+          <div className="flex min-w-0 items-end gap-2.5">
             <Logo />
-            <span className="mb-px rounded border border-line bg-paper-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-500">
-              Internal
+            <span className="mb-[1px] hidden border-l border-line-strong pl-2.5 font-display text-[19px] leading-none text-ink-700 sm:inline">
+              Analytics
             </span>
           </div>
-          <nav className="flex flex-1 flex-wrap items-center gap-1">
-            {links.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `rounded-md px-3 py-1.5 text-sm transition ${
-                    isActive || location.pathname.startsWith(item.to)
-                      ? 'bg-paper-200 text-ink-900'
-                      : 'text-ink-600 hover:bg-paper-200/70 hover:text-ink-800'
-                  }`
-                }
-              >
-                {item.label}
-                {item.to === '/access' && pending > 0 && (
-                  <span className="ml-1.5 rounded-full bg-brand-600 px-1.5 text-[10px] font-medium text-white">
-                    {pending}
-                  </span>
-                )}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3 text-sm text-ink-600">
+          <div className="ml-auto flex items-center gap-3 text-[13px] text-ink-600">
             <ThemeToggle />
-            <span className="hidden sm:inline">{access?.displayName ?? user?.email}</span>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-md px-2 py-1 text-ink-500 hover:bg-paper-200 hover:text-ink-800"
-            >
+            <span className="hidden max-w-[16rem] truncate md:inline">{access?.displayName ?? user?.email}</span>
+            <button type="button" onClick={() => void logout()} className="text-ink-500 hover:text-ink-900">
               Sign out
             </button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <Outlet />
-      </main>
+      {menuOpen && (
+        <div id="mobile-nav" className="border-b border-line bg-paper-0 px-1 py-4 lg:hidden">
+          {nav}
+        </div>
+      )}
+      <div className="mx-auto flex max-w-[1440px]">
+        <aside className="sticky top-[53px] hidden h-[calc(100vh-53px)] w-60 shrink-0 overflow-y-auto border-r border-line py-6 pr-2 lg:block">
+          {nav}
+        </aside>
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

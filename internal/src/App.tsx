@@ -17,6 +17,13 @@ import { LegalPage } from './pages/LegalPage';
 import { JobLegalPage } from './pages/JobLegalPage';
 import { SafetyAlertsPage } from './pages/SafetyAlertsPage';
 import { MotionClipsPage } from './pages/MotionClipsPage';
+import { GrowthPage } from './pages/GrowthPage';
+import { CapturePage } from './pages/CapturePage';
+import { AiPage } from './pages/AiPage';
+import { ContactsPage } from './pages/ContactsPage';
+import { CampaignsPage } from './pages/CampaignsPage';
+import { CampaignBuilderPage } from './pages/CampaignBuilderPage';
+import { RequireInternal } from './components/RequireInternal';
 
 export function App() {
   return (
@@ -34,6 +41,13 @@ export function App() {
           >
             <Route index element={<Navigate to="/overview" replace />} />
             <Route path="overview" element={<OverviewPage />} />
+            <Route path="growth" element={<GrowthPage />} />
+            <Route path="capture" element={<CapturePage />} />
+            <Route path="ai" element={<AiPage />} />
+            <Route path="contacts" element={<RequireInternal><ContactsPage /></RequireInternal>} />
+            <Route path="campaigns" element={<RequireInternal><CampaignsPage /></RequireInternal>} />
+            <Route path="campaigns/new" element={<RequireInternal><CampaignBuilderPage /></RequireInternal>} />
+            <Route path="campaigns/:id" element={<RequireInternal><CampaignBuilderPage /></RequireInternal>} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="accounts/:orgId" element={<AccountDetailPage />} />
             <Route path="access" element={<AccessPage />} />

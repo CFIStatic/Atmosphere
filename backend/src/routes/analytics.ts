@@ -35,6 +35,21 @@ import {
 import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics, getAdminTokenUsageAnalytics } from '../metering/periodAggregation.js';
+import { getProductHealth } from '../analytics/productHealth.js';
+import { contactRegistry, normalizeAudience } from '../analytics/contacts/registry.js';
+import {
+  campaignSendBlocker,
+  deleteCampaign,
+  getCampaign,
+  listCampaigns,
+  resolveAudience,
+  saveCampaign,
+  sendCampaign,
+  suppressedEmails,
+} from '../analytics/campaigns.js';
+import { sendSystemMail } from '../lib/systemMail.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { config } from '../config.js';
 
 export const analyticsRouter = Router();
 
@@ -428,6 +443,211 @@ analyticsRouter.post(
         requestId: `admin-grant:${req.user?.id ?? 'staff'}:${Date.now()}`,
       });
       res.status(201).json(granted);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * North star, capture pipeline, analysis time, evidence and Ask health.
+ * Investor scope; analytics_product_health re-checks it in the database.
+ */
+analyticsRouter.get('/product-health', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const weeks = z.coerce.number().int().min(4).max(52).catch(12).parse(req.query.weeks ?? 12);
+    const supabase = staffReports(req);
+    res.json(await getProductHealth(supabase, weeks));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Contacts and campaigns. Internal staff only, here and in every RPC.
+// Contacts come from Stripe server-side (the key never leaves the backend)
+// and are cached in memory, not stored.
+// ---------------------------------------------------------------------------
+
+const campaignIdSchema = z.string().uuid();
+const audienceSchema = z
+  .object({
+    plans: z.array(z.string().max(64)).max(20).default([]),
+    statuses: z.array(z.string().max(32)).max(10).default([]),
+    sources: z.array(z.string().max(32)).max(10).default([]),
+  })
+  .default({ plans: [], statuses: [], sources: [] })
+  .transform((a) => normalizeAudience(a));
+const campaignDraftSchema = z.object({
+  name: z.string().trim().max(200).default(''),
+  subject: z.string().max(200).default(''),
+  bodyMarkdown: z.string().max(50_000).default(''),
+  audience: audienceSchema,
+});
+
+function parseCampaignId(raw: unknown): string {
+  const parsed = campaignIdSchema.safeParse(raw);
+  if (!parsed.success) throw new HttpError(400, 'Invalid campaign id', 'invalid_campaign');
+  return parsed.data;
+}
+
+function sendingState() {
+  const blocker = campaignSendBlocker(process.env, config.isProduction);
+  return { enabled: blocker === null, reason: blocker?.message ?? null, code: blocker?.code ?? null };
+}
+
+analyticsRouter.get(
+  '/contacts',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = staffReports(req);
+      const directory = await contactRegistry().load({ refresh: req.query.refresh === '1' });
+      const suppressed = await suppressedEmails(
+        supabase,
+        directory.contacts.map((c) => c.email),
+      );
+      res.json({
+        ...directory,
+        contacts: directory.contacts.map((c) => ({ ...c, suppressed: suppressed.has(c.email) })),
+        suppressedCount: suppressed.size,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.get(
+  '/campaigns',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = staffReports(req);
+      res.json({ ...(await listCampaigns(supabase)), sending: sendingState() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.post(
+  '/campaigns',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = campaignDraftSchema.parse(req.body ?? {});
+      const supabase = staffReports(req);
+      res.status(201).json({ campaign: await saveCampaign(supabase, null, body) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Recipient count for an audience after suppressions. No email is sent. */
+analyticsRouter.post(
+  '/campaigns/audience',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const audience = audienceSchema.parse(req.body?.audience);
+      const supabase = staffReports(req);
+      const directory = await contactRegistry().load();
+      const result = await resolveAudience(supabase, directory.contacts, audience);
+      res.json({
+        matched: result.matched,
+        suppressed: result.suppressed,
+        recipients: result.recipients.length,
+        fetchedAt: directory.fetchedAt,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.get(
+  '/campaigns/:id',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = staffReports(req);
+      res.json({ campaign: await getCampaign(supabase, parseCampaignId(req.params.id)), sending: sendingState() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.put(
+  '/campaigns/:id',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = parseCampaignId(req.params.id);
+      const body = campaignDraftSchema.parse(req.body ?? {});
+      const supabase = staffReports(req);
+      res.json({ campaign: await saveCampaign(supabase, id, body) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.delete(
+  '/campaigns/:id',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = staffReports(req);
+      const deleted = await deleteCampaign(supabase, parseCampaignId(req.params.id));
+      if (!deleted) throw new HttpError(409, 'Only draft campaigns can be deleted.', 'campaign_not_editable');
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * Send a draft. Refused (403 campaign_sending_disabled) unless
+ * CAMPAIGN_SENDING_ENABLED=true, and the body must repeat the recipient count
+ * the person confirmed.
+ */
+analyticsRouter.post(
+  '/campaigns/:id/send',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = parseCampaignId(req.params.id);
+      const blocker = campaignSendBlocker(process.env, config.isProduction);
+      if (blocker) throw new HttpError(403, blocker.message, blocker.code);
+      const { confirmRecipientCount } = z
+        .object({ confirmRecipientCount: z.number().int().min(1).max(100_000) })
+        .parse(req.body ?? {});
+      const supabase = staffReports(req);
+      const result = await sendCampaign(
+        {
+          supabase,
+          contacts: async () => (await contactRegistry().load({ refresh: true })).contacts,
+          mailer: (mail) =>
+            sendSystemMail({
+              to: mail.to,
+              subject: mail.subject,
+              text: mail.text,
+              html: mail.html,
+              kind: 'marketing',
+              unsubscribeUrl: mail.unsubscribeUrl,
+            }),
+          origin: publicAppOrigin(),
+          env: process.env,
+          isProduction: config.isProduction,
+        },
+        id,
+        confirmRecipientCount,
+      );
+      res.json(result);
     } catch (err) {
       next(err);
     }

@@ -66,14 +66,14 @@ export function SafetyAlertsPage() {
       <div className="mt-4 flex gap-2">
         <button
           type="button"
-          className={`rounded-md px-3 py-1.5 text-sm ${status === 'open' ? 'bg-paper-200' : 'text-ink-600'}`}
+          className={` px-3 py-1.5 text-sm ${status === 'open' ? 'bg-paper-200' : 'text-ink-600'}`}
           onClick={() => setStatus('open')}
         >
           Open
         </button>
         <button
           type="button"
-          className={`rounded-md px-3 py-1.5 text-sm ${status === 'all' ? 'bg-paper-200' : 'text-ink-600'}`}
+          className={` px-3 py-1.5 text-sm ${status === 'all' ? 'bg-paper-200' : 'text-ink-600'}`}
           onClick={() => setStatus('all')}
         >
           All
@@ -89,7 +89,7 @@ export function SafetyAlertsPage() {
           {incidents.map((incident) => (
             <li
               key={incident.id}
-              className="rounded-lg border border-line bg-paper-50 p-4"
+              className="border border-line bg-paper-50 p-4"
               data-testid="safety-incident-row"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -118,14 +118,14 @@ export function SafetyAlertsPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white"
+                      className="bg-ink-900 px-3 py-1.5 text-sm text-paper-0"
                       onClick={() => void ack(incident.id)}
                     >
                       Ack
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border border-line px-3 py-1.5 text-sm"
+                      className="border border-line px-3 py-1.5 text-sm"
                       onClick={() => void dismiss(incident.id)}
                     >
                       Dismiss

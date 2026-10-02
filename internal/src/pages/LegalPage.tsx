@@ -100,25 +100,25 @@ export function LegalPage() {
           value={jobPortalId}
           onChange={(event) => setJobPortalId(event.target.value)}
           placeholder="Job uuid"
-          className="w-full max-w-md rounded-lg border border-line-strong bg-paper-0 px-3 py-2 font-mono text-xs"
+          className="w-full max-w-md border border-line-strong bg-paper-0 px-3 py-2 font-mono text-xs"
         />
         <button
           type="submit"
-          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          className="bg-ink-900 px-4 py-2 text-sm font-medium text-paper-0 hover:bg-ink-800"
         >
           Open job
         </button>
       </form>
 
       <SectionHeading title="Open a hold" hint="Staff only. Needs at least one subject." />
-      <form onSubmit={(event: FormEvent) => void onCreate(event)} className="grid gap-3 rounded-xl border border-line bg-paper-0 p-5 sm:grid-cols-2">
+      <form onSubmit={(event: FormEvent) => void onCreate(event)} className="grid gap-3 border border-line bg-paper-0 p-5 sm:grid-cols-2">
         <label className="text-sm">
           Case number
           <input
             required
             value={caseNumber}
             onChange={(e) => setCaseNumber(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2"
           />
         </label>
         <label className="text-sm">
@@ -126,7 +126,7 @@ export function LegalPage() {
           <select
             value={kind}
             onChange={(e) => setKind(e.target.value as LegalHoldKind)}
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2"
           >
             {KINDS.map((item) => (
               <option key={item} value={item}>
@@ -141,7 +141,7 @@ export function LegalPage() {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2"
           />
         </label>
         <label className="text-sm sm:col-span-2">
@@ -150,7 +150,7 @@ export function LegalPage() {
             required
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2"
             rows={3}
           />
         </label>
@@ -159,7 +159,7 @@ export function LegalPage() {
           <select
             value={subjectType}
             onChange={(e) => setSubjectType(e.target.value as LegalSubjectType)}
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2"
           >
             {SUBJECTS.map((item) => (
               <option key={item} value={item}>
@@ -175,13 +175,13 @@ export function LegalPage() {
             value={subjectId}
             onChange={(e) => setSubjectId(e.target.value)}
             placeholder="uuid"
-            className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 font-mono text-xs"
+            className="mt-1 w-full border border-line-strong bg-paper-50 px-3 py-2 font-mono text-xs"
           />
         </label>
         <div className="sm:col-span-2">
           <button
             type="submit"
-            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="bg-ink-900 px-4 py-2 text-sm font-medium text-paper-0 hover:bg-ink-800"
           >
             Open hold
           </button>
@@ -194,7 +194,7 @@ export function LegalPage() {
       ) : (
         <ul className="grid gap-3">
           {holds.map((hold) => (
-            <li key={hold.id} className="rounded-xl border border-line bg-paper-0 p-4">
+            <li key={hold.id} className="border border-line bg-paper-0 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="font-medium">{hold.title}</h3>
                 <StatusPill status={hold.status} />
@@ -209,7 +209,7 @@ export function LegalPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="rounded-md border border-line-strong px-3 py-1.5 text-sm hover:bg-paper-200"
+                    className="border border-line-strong px-3 py-1.5 text-sm hover:bg-paper-200"
                     onClick={() =>
                       void api
                         .produceLegalHold(hold.id, 'Staff production')
@@ -223,7 +223,7 @@ export function LegalPage() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-line-strong px-3 py-1.5 text-sm hover:bg-paper-200"
+                    className="border border-line-strong px-3 py-1.5 text-sm hover:bg-paper-200"
                     onClick={() => {
                       const why = window.prompt('Why is this hold being released?');
                       if (!why) return;
@@ -252,7 +252,7 @@ export function LegalPage() {
           />
           <ul className="grid gap-2">
             {production.videos.map((video) => (
-              <li key={video.id} className="rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm">
+              <li key={video.id} className="border border-line bg-paper-0 px-4 py-3 text-sm">
                 <span className="font-mono text-xs">{video.id}</span>
                 {video.userDeleted && (
                   <span className="ml-2 text-xs text-danger-600">customer deleted — still available</span>
@@ -284,12 +284,12 @@ export function LegalPage() {
               );
           }
         }}
-        className="mb-4 w-full max-w-sm rounded-lg border border-line-strong bg-paper-0 px-3 py-2 text-sm outline-none focus:border-brand-500"
+        className="mb-4 w-full max-w-sm border border-line-strong bg-paper-0 px-3 py-2 text-sm outline-none focus:border-brand-500"
       />
       {events.length === 0 ? (
         <EmptyState title="No actions yet" body="The monitor writes a row after each signed-in request." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-paper-0">
+        <div className="overflow-x-auto border border-line bg-paper-0">
           <table className="w-full text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-ink-500">
               <tr>

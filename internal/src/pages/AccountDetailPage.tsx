@@ -81,7 +81,7 @@ export function AccountDetailPage() {
       </div>
 
       <SectionHeading title="Members" hint={`${count(data.members.length)} people`} />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -109,12 +109,12 @@ export function AccountDetailPage() {
       <SectionHeading title="Jobs" hint={`${count(data.jobs.total)} on file`} />
       <div className="mb-4 flex flex-wrap gap-2">
         {data.jobs.byStatus.map((row) => (
-          <span key={row.status} className="rounded-full border border-line px-3 py-1 text-xs text-ink-600">
+          <span key={row.status} className="border border-line px-3 py-1 text-xs text-ink-600">
             {row.status} · {row.count}
           </span>
         ))}
       </div>
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -145,7 +145,7 @@ export function AccountDetailPage() {
       </div>
 
       <SectionHeading title="Product time" hint="This period" />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -158,8 +158,8 @@ export function AccountDetailPage() {
             {data.features.map((feature) => (
               <tr key={feature.featureKey} className="border-t border-line">
                 <td className="px-4 py-3">{feature.label}</td>
-                <td className="px-4 py-3 text-right font-mono">{hours(feature.activeHours)}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(feature.sessions)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{hours(feature.activeHours)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(feature.sessions)}</td>
               </tr>
             ))}
           </tbody>

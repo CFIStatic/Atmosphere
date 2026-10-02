@@ -42,7 +42,7 @@ export function MeteringPage() {
         </div>
       )}
       <SectionHeading title="By customer" />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -56,16 +56,16 @@ export function MeteringPage() {
             {(data?.byCustomer ?? []).map((row) => (
               <tr key={row.orgId} className="border-t border-line">
                 <td className="px-4 py-3 font-medium">{row.orgName}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.distinctJobs)}</td>
-                <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.aiCostNanos)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctJobs)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.aiCostNanos)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <SectionHeading title="By model" />
-      <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+      <div className="overflow-hidden border border-line bg-paper-0">
         <table className="w-full text-sm">
           <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
             <tr>
@@ -80,8 +80,8 @@ export function MeteringPage() {
               <tr key={`${row.provider}-${row.model}`} className="border-t border-line">
                 <td className="px-4 py-3">{row.provider}</td>
                 <td className="px-4 py-3 font-mono text-sm">{row.model}</td>
-                <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.aiCostNanos)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.aiCostNanos)}</td>
               </tr>
             ))}
           </tbody>

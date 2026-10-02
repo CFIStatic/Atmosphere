@@ -1,5 +1,5 @@
 /**
- * Light / dark appearance for Atmosphere Internal.
+ * Light / dark appearance for Atmosphere Analytics.
  *
  * Same storage keys as the office app (`atmosphere.theme`) so a choice can
  * follow the person across Atmosphere surfaces on the same origin.

@@ -59,7 +59,7 @@ export function TokenUsagePage() {
             ) — org, user, and model per call. Metering remains the cost view.
           </p>
         </div>
-        <div className="flex rounded-lg border border-line bg-paper-0 p-0.5" role="tablist" aria-label="Usage window">
+        <div className="flex border border-line bg-paper-0 p-0.5" role="tablist" aria-label="Usage window">
           {WINDOWS.map((option) => {
             const active = windowId === option.id;
             return (
@@ -69,7 +69,7 @@ export function TokenUsagePage() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setWindowId(option.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                className={` px-3 py-1.5 text-xs font-semibold transition ${
                   active ? 'bg-paper-200 text-ink-900' : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
@@ -116,7 +116,7 @@ export function TokenUsagePage() {
       {!empty && (
         <>
           <SectionHeading title="By customer" hint="Organizations ranked by tokens" />
-          <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+          <div className="overflow-hidden border border-line bg-paper-0">
             <table className="w-full text-sm">
               <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
                 <tr>
@@ -132,11 +132,11 @@ export function TokenUsagePage() {
                 {(data?.byCustomer ?? []).map((row) => (
                   <tr key={row.orgId} className="border-t border-line">
                     <td className="px-4 py-3 font-medium">{row.orgName}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{tokens(row.totalTokens)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.distinctUsers)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.distinctModels)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.priceNanos)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{tokens(row.totalTokens)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctUsers)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctModels)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.priceNanos)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -144,7 +144,7 @@ export function TokenUsagePage() {
           </div>
 
           <SectionHeading title="By user" hint="Attributed teammates across orgs" />
-          <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+          <div className="overflow-hidden border border-line bg-paper-0">
             <table className="w-full text-sm">
               <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
                 <tr>
@@ -163,9 +163,9 @@ export function TokenUsagePage() {
                       {row.email && <div className="text-xs text-ink-500">{row.email}</div>}
                     </td>
                     <td className="px-4 py-3 text-ink-600">{row.orgName}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{tokens(row.totalTokens)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.priceNanos)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{tokens(row.totalTokens)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.priceNanos)}</td>
                   </tr>
                 ))}
                 {(data?.byUser ?? []).length === 0 && (
@@ -180,7 +180,7 @@ export function TokenUsagePage() {
           </div>
 
           <SectionHeading title="By model" hint="Model id recorded on each call" />
-          <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+          <div className="overflow-hidden border border-line bg-paper-0">
             <table className="w-full text-sm">
               <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
                 <tr>
@@ -196,11 +196,11 @@ export function TokenUsagePage() {
                 {(data?.byModel ?? []).map((row) => (
                   <tr key={row.model} className="border-t border-line">
                     <td className="px-4 py-3 font-mono text-sm">{row.model}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{tokens(row.totalTokens)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.distinctOrgs)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{count(row.distinctUsers)}</td>
-                    <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.priceNanos)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{tokens(row.totalTokens)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctOrgs)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{count(row.distinctUsers)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.priceNanos)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -210,7 +210,7 @@ export function TokenUsagePage() {
           {(data?.byFeature?.length ?? 0) > 0 && (
             <>
               <SectionHeading title="By feature" hint="video_analysis · ask · chat · other" />
-              <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+              <div className="overflow-hidden border border-line bg-paper-0">
                 <table className="w-full text-sm">
                   <thead className="bg-paper-50 text-left text-[11px] uppercase tracking-wide text-ink-500">
                     <tr>
@@ -226,9 +226,9 @@ export function TokenUsagePage() {
                         <td className="px-4 py-3 font-medium">
                           {FEATURE_LABELS[row.feature] ?? row.feature}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono">{count(row.eventCount)}</td>
-                        <td className="px-4 py-3 text-right font-mono">{tokens(row.totalTokens)}</td>
-                        <td className="px-4 py-3 text-right font-mono">{nanosToMoney(row.priceNanos)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{count(row.eventCount)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{tokens(row.totalTokens)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{nanosToMoney(row.priceNanos)}</td>
                       </tr>
                     ))}
                   </tbody>

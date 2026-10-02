@@ -32,7 +32,7 @@ export function ExperimentsPage() {
       <SectionHeading title={`${count(experiments.length)} tests`} />
       <div className="grid gap-4">
         {experiments.map((experiment) => (
-          <article key={experiment.experimentKey} className="rounded-xl border border-line bg-paper-0 p-5">
+          <article key={experiment.experimentKey} className="border border-line bg-paper-0 p-5">
             <div className="flex items-center gap-3">
               <h2 className="font-semibold">{experiment.name}</h2>
               <StatusPill status={experiment.status} />
@@ -54,10 +54,10 @@ export function ExperimentsPage() {
                 {experiment.variants.map((variant) => (
                   <tr key={variant.variantKey} className="border-t border-line">
                     <td className="py-2">{variant.label}</td>
-                    <td className="py-2 text-right font-mono">{count(variant.assignments)}</td>
-                    <td className="py-2 text-right font-mono">{count(variant.exposures)}</td>
-                    <td className="py-2 text-right font-mono">{count(variant.conversions)}</td>
-                    <td className="py-2 text-right font-mono">
+                    <td className="py-2 text-right tabular-nums">{count(variant.assignments)}</td>
+                    <td className="py-2 text-right tabular-nums">{count(variant.exposures)}</td>
+                    <td className="py-2 text-right tabular-nums">{count(variant.conversions)}</td>
+                    <td className="py-2 text-right tabular-nums">
                       {percent(variant.exposures ? (variant.conversions / variant.exposures) * 100 : null)}
                     </td>
                   </tr>

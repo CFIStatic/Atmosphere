@@ -59,7 +59,7 @@ export function MotionClipsPage() {
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
-          className={`rounded-md px-3 py-1.5 text-sm ${motion === 'all' ? 'bg-paper-200' : 'text-ink-600'}`}
+          className={` px-3 py-1.5 text-sm ${motion === 'all' ? 'bg-paper-200' : 'text-ink-600'}`}
           onClick={() => setMotion('all')}
         >
           All
@@ -68,7 +68,7 @@ export function MotionClipsPage() {
           <button
             key={t.motion}
             type="button"
-            className={`rounded-md px-3 py-1.5 text-sm ${
+            className={` px-3 py-1.5 text-sm ${
               motion === t.motion ? 'bg-paper-200' : 'text-ink-600'
             }`}
             onClick={() => setMotion(t.motion)}
@@ -85,7 +85,7 @@ export function MotionClipsPage() {
       )}
       <div className="grid gap-4">
         {buckets.map((bucket) => (
-          <article key={bucket.motion} className="rounded-xl border border-line bg-paper-0 p-5">
+          <article key={bucket.motion} className="border border-line bg-paper-0 p-5">
             <div className="flex items-baseline gap-2">
               <h2 className="font-semibold">{bucket.motion}</h2>
               {bucket.action && bucket.action !== bucket.motion && (

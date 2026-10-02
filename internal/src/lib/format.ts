@@ -70,3 +70,59 @@ export function tokens(value: number | null | undefined): string {
   if (abs >= 10_000) return `${Math.round(value / 1000).toLocaleString('en-US')}k`;
   return value.toLocaleString('en-US');
 }
+
+/** "18.4 min", "42 s", "2.3 h". Input in seconds. */
+export function duration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—';
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 3600) return `${(seconds / 60).toFixed(1)} min`;
+  return `${(seconds / 3600).toFixed(1)} h`;
+}
+
+/** Milliseconds as seconds with one decimal: "2.4 s". */
+export function msAsSeconds(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—';
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** "Oct 2, 2026". */
+export function shortDate(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value.length === 10 ? `${value}T00:00:00Z` : value) : value;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: value && typeof value === 'string' && value.length === 10 ? 'UTC' : undefined });
+}
+
+/** Week label for a Monday-UTC date: "Sep 21". */
+export function weekLabel(isoDate: string): string {
+  return new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** "Oct 2, 2026, 10:42 AM CDT" — the as-of stamp on every report. */
+export function asOf(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
+/** Percent change from prior to current; null when prior is 0 or missing. */
+export function pctChange(current: number | null | undefined, prior: number | null | undefined): number | null {
+  if (current === null || current === undefined || prior === null || prior === undefined || prior === 0) return null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
+/** "1.75" with fixed decimals, or an em dash. */
+export function decimal(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}

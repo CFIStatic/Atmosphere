@@ -20,6 +20,13 @@ import type {
   LegalSubjectType,
   LegalProductionPackage,
   UserActivityEvent,
+  ProductHealth,
+  ContactDirectory,
+  Campaign,
+  CampaignAudience,
+  CampaignDraft,
+  CampaignSendingState,
+  AudienceCount,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -33,6 +40,27 @@ export class ApiError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+/**
+ * The dev-only mock API (scripts/mock-api.mjs) stamps every response with
+ * x-atmosphere-test-data: 1. The shell shows a TEST DATA ribbon when it sees
+ * it. The production BFF never sends this header.
+ */
+let testDataSeen = false;
+const testDataListeners = new Set<() => void>();
+function noteTestData(res: Response) {
+  if (!testDataSeen && res.headers?.get?.('x-atmosphere-test-data') === '1') {
+    testDataSeen = true;
+    testDataListeners.forEach((fn) => fn());
+  }
+}
+export function isTestData(): boolean {
+  return testDataSeen;
+}
+export function onTestData(fn: () => void): () => void {
+  testDataListeners.add(fn);
+  return () => testDataListeners.delete(fn);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,6 +89,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
 
+  noteTestData(res);
+
   if (!res.ok) {
     const explicit = typeof body.error === 'string' ? body.error.trim() : '';
     const gateway = res.status === 502 || res.status === 503 || res.status === 504;
@@ -68,7 +98,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       res.status,
       explicit ||
         (gateway
-          ? 'Atmosphere API is not reachable. Set API_UPSTREAM on Internal Growth Metrics to the Atmosphere APIs private HTTP URL.'
+          ? 'Atmosphere API is not reachable. Set API_UPSTREAM on the Internal Growth Metrics Railway service to the Atmosphere APIs private HTTP URL.'
           : `Request failed (${res.status})`),
       typeof body.code === 'string' ? body.code : gateway ? 'backend_unreachable' : 'error',
     );
@@ -220,6 +250,47 @@ export const api = {
 
     exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,
+
+  productHealth: (weeks = 12) =>
+    request<ProductHealth>(`/api/analytics/product-health?weeks=${weeks}`),
+
+  contacts: (refresh = false) =>
+    request<ContactDirectory>(`/api/analytics/contacts${refresh ? '?refresh=1' : ''}`),
+
+  campaigns: () =>
+    request<{ campaigns: Campaign[]; suppressed: number; sending: CampaignSendingState }>(
+      '/api/analytics/campaigns',
+    ),
+
+  campaign: (id: string) =>
+    request<{ campaign: Campaign; sending: CampaignSendingState }>(`/api/analytics/campaigns/${id}`),
+
+  createCampaign: (draft: CampaignDraft) =>
+    request<{ campaign: Campaign }>('/api/analytics/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    }),
+
+  updateCampaign: (id: string, draft: CampaignDraft) =>
+    request<{ campaign: Campaign }>(`/api/analytics/campaigns/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(draft),
+    }),
+
+  deleteCampaign: (id: string) =>
+    request<Record<string, never>>(`/api/analytics/campaigns/${id}`, { method: 'DELETE' }),
+
+  audienceCount: (audience: CampaignAudience) =>
+    request<AudienceCount>('/api/analytics/campaigns/audience', {
+      method: 'POST',
+      body: JSON.stringify({ audience }),
+    }),
+
+  sendCampaign: (id: string, confirmRecipientCount: number) =>
+    request<{ campaign: Campaign; attempted: number; sent: number; failed: number; suppressed: number }>(
+      `/api/analytics/campaigns/${id}/send`,
+      { method: 'POST', body: JSON.stringify({ confirmRecipientCount }) },
+    ),
 
   aiBudgets: () =>
     request<{
