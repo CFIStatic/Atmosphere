@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { OverviewPage } from './OverviewPage';
 import { CapturePage } from './CapturePage';
 import { AiPage } from './AiPage';
+import { NorthStarPage } from './NorthStarPage';
 import { demoOverview } from '../lib/demo';
 import { normalizeProductHealth } from '../lib/productHealth';
 import { emptyTrackingPayload } from '../test/fixtures';
@@ -27,6 +28,7 @@ describe('product-health pages with no tracking rows yet', () => {
     ['Overview', OverviewPage],
     ['Capture pipeline', CapturePage],
     ['AI & Ask', AiPage],
+    ['North star', NorthStarPage],
   ])('%s renders', (_name, Page) => {
     render(
       <MemoryRouter>
@@ -34,6 +36,6 @@ describe('product-health pages with no tracking rows yet', () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByRole('heading').length).toBeGreaterThan(0);
-    expect(document.body.textContent).toContain('Sources and definitions');
+    expect(screen.getByTestId('as-of')).toBeInTheDocument();
   });
 });

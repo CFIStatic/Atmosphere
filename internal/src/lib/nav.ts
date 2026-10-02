@@ -11,7 +11,13 @@ interface NavGroup {
 
 /** Grouped like a report's table of contents. Internal-only rows hide for investors. */
 export const NAV_GROUPS: NavGroup[] = [
-  { title: 'Summary', items: [{ to: '/overview', label: 'Overview' }] },
+  {
+    title: 'Summary',
+    items: [
+      { to: '/overview', label: 'Overview' },
+      { to: '/north-star', label: 'North star' },
+    ],
+  },
   {
     title: 'Growth & revenue',
     items: [

@@ -103,7 +103,7 @@ export function Shell() {
         </div>
       )}
       <div className="mx-auto flex max-w-[1440px]">
-        <aside className="sticky top-[53px] hidden h-[calc(100vh-53px)] w-60 shrink-0 overflow-y-auto border-r border-line py-6 pr-2 lg:block">
+        <aside className={`sticky ${testData ? 'top-[78px] h-[calc(100vh-78px)]' : 'top-[53px] h-[calc(100vh-53px)]'} hidden w-60 shrink-0 overflow-y-auto border-r border-line py-6 pr-2 lg:block`}>
           {nav}
         </aside>
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">

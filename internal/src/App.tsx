@@ -4,6 +4,7 @@ import { RequireStaff } from './components/RequireStaff';
 import { Shell } from './components/Shell';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { NorthStarPage } from './pages/NorthStarPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
 import { UsagePage } from './pages/UsagePage';
@@ -41,6 +42,7 @@ export function App() {
           >
             <Route index element={<Navigate to="/overview" replace />} />
             <Route path="overview" element={<OverviewPage />} />
+            <Route path="north-star" element={<NorthStarPage />} />
             <Route path="growth" element={<GrowthPage />} />
             <Route path="capture" element={<CapturePage />} />
             <Route path="ai" element={<AiPage />} />
