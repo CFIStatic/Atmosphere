@@ -1,7 +1,7 @@
 /**
  * Atmosphere Analytics report primitives.
  *
- * Pitch-book conventions: serif headings, thin rules instead of cards, every
+ * Pitch-book conventions: Arial throughout, thin rules instead of cards, every
  * label carries its unit and period, every number is tabular and
  * right-aligned in tables, red/green only on deltas, footnoted sources and an
  * as-of stamp on every page.

@@ -46,9 +46,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['"Source Serif 4"', '"Source Serif Pro"', 'Georgia', '"Times New Roman"', 'serif'],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        sans: ['Arial', '"Helvetica Neue"', 'Helvetica', 'sans-serif'],
+        display: ['Arial', '"Helvetica Neue"', 'Helvetica', 'sans-serif'],
+        mono: ['Arial', '"Helvetica Neue"', 'Helvetica', 'sans-serif'],
       },
     },
   },
